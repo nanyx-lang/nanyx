@@ -20,6 +20,7 @@
     <Compile Include="Features\Core\CoreIrTests.fs" />
     <Compile Include="Features\Core\InliningTests.fs" />
     <Compile Include="Features\Core\RunLexicalTests.fs" />
+    <Compile Include="Features\Core\ReachTests.fs" />
     <Compile Include="Features\ControlFlow\BoolMatchTests.fs" />
     <Compile Include="Features\ControlFlow\BottomTypeTests.fs" />
     <Compile Include="Features\ControlFlow\ControlFlowFixtureTests.fs" />
@@ -60,6 +61,8 @@
     <Compile Include="Features\Functions\RunUnitFunctionValueTests.fs" />
     <Compile Include="Features\Hashing\RunHashTests.fs" />
     <Compile Include="Features\Hosts\RunConsoleHostTests.fs" />
+    <Compile Include="Features\Hosts\RunEnvTests.fs" />
+    <Compile Include="Features\Hosts\ChooseHostTests.fs" />
     <Compile Include="Features\Hosts\RunScriptTests.fs" />
     <Compile Include="Features\Lists\RunListTests.fs" />
     <Compile Include="Features\Lists\RunListKeyTests.fs" />
@@ -76,6 +79,7 @@
     <Compile Include="Features\Memory\ExampleMemoryTests.fs" />
     <Compile Include="Features\Memory\MemoryCheckTests.fs" />
     <Compile Include="Features\Memory\ReuseTests.fs" />
+    <Compile Include="Features\Memory\RecordUpdateTests.fs" />
     <Compile Include="Features\Memory\MemoryDeclarationTests.fs" />
     <Compile Include="Features\Memory\CellTests.fs" />
     <Compile Include="Features\Memory\StaticClosureTests.fs" />

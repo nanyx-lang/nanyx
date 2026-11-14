@@ -48,7 +48,7 @@ def main = {
     | #error(_) -> eprintln("no input")
 }
 """
-    let wat = transpileWat source
+    let wat = transpileWatNotInlined source
     // `main` takes the members of `Console`, which `run` passes from its `use`: it is not closed over
     // `nanyx/console`'s instance and adapted to the type `run` takes.
     Assert.Contains("(func $main (param $__ctx_flush i32)", wat)

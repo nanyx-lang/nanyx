@@ -61,12 +61,12 @@
   )
   (export "boolToInt" (func $boolToInt))
 
-  (func $main (result i64) (local $__arg46 i32) (local $b0_i64 i64) (local $__arg47 i32) (local $b1_i64 i64) (local $__arg48 i32) (local $b2_i64 i64) (local $__arg49 i32) (local $b3_i64 i64) (local $__arg50 i32) (local $b4_i64 i64) (local $__arg51 i32) (local $b5_i64 i64) (local $__arg52 i32) (local $b6_i64 i64) (local $__arg53 i32) (local $b7_i64 i64) (local $__arg54 i32) (local $b8_i64 i64) (local $__arg55 i32) (local $b9_i64 i64) (local $__arg56 i32) (local $b10_i64 i64) (local $__arg57 i32) (local $b11_i64 i64)
+  (func $main (result i64) (local $__inlined46 i32) (local $b0_i64 i64) (local $__inlined47 i32) (local $b1_i64 i64) (local $__inlined48 i32) (local $b2_i64 i64) (local $__inlined49 i32) (local $b3_i64 i64) (local $__inlined50 i32) (local $b4_i64 i64) (local $__inlined51 i32) (local $b5_i64 i64) (local $__inlined52 i32) (local $b6_i64 i64) (local $__inlined53 i32) (local $b7_i64 i64) (local $__inlined54 i32) (local $b8_i64 i64) (local $__inlined55 i32) (local $b9_i64 i64) (local $__inlined56 i32) (local $b10_i64 i64) (local $__inlined57 i32) (local $b11_i64 i64)
     i64.const 5
     i64.const 10
     i64.lt_s
-    local.set $__arg46
-    local.get $__arg46
+    local.set $__inlined46
+    local.get $__inlined46
     (if (result i64)
       (then
         i64.const 1
@@ -79,8 +79,8 @@
     i64.const 10
     i64.const 5
     i64.lt_s
-    local.set $__arg47
-    local.get $__arg47
+    local.set $__inlined47
+    local.get $__inlined47
     (if (result i64)
       (then
         i64.const 1
@@ -93,8 +93,8 @@
     i64.const 5
     i64.const 10
     i64.gt_s
-    local.set $__arg48
-    local.get $__arg48
+    local.set $__inlined48
+    local.get $__inlined48
     (if (result i64)
       (then
         i64.const 1
@@ -107,8 +107,8 @@
     i64.const 10
     i64.const 5
     i64.gt_s
-    local.set $__arg49
-    local.get $__arg49
+    local.set $__inlined49
+    local.get $__inlined49
     (if (result i64)
       (then
         i64.const 1
@@ -121,8 +121,8 @@
     i64.const 5
     i64.const 5
     i64.le_s
-    local.set $__arg50
-    local.get $__arg50
+    local.set $__inlined50
+    local.get $__inlined50
     (if (result i64)
       (then
         i64.const 1
@@ -135,8 +135,8 @@
     i64.const 5
     i64.const 4
     i64.le_s
-    local.set $__arg51
-    local.get $__arg51
+    local.set $__inlined51
+    local.get $__inlined51
     (if (result i64)
       (then
         i64.const 1
@@ -149,8 +149,8 @@
     i64.const 5
     i64.const 5
     i64.ge_s
-    local.set $__arg52
-    local.get $__arg52
+    local.set $__inlined52
+    local.get $__inlined52
     (if (result i64)
       (then
         i64.const 1
@@ -163,8 +163,8 @@
     i64.const 4
     i64.const 5
     i64.ge_s
-    local.set $__arg53
-    local.get $__arg53
+    local.set $__inlined53
+    local.get $__inlined53
     (if (result i64)
       (then
         i64.const 1
@@ -177,8 +177,8 @@
     i64.const 5
     i64.const 5
     i64.eq
-    local.set $__arg54
-    local.get $__arg54
+    local.set $__inlined54
+    local.get $__inlined54
     (if (result i64)
       (then
         i64.const 1
@@ -191,8 +191,8 @@
     i64.const 5
     i64.const 6
     i64.eq
-    local.set $__arg55
-    local.get $__arg55
+    local.set $__inlined55
+    local.get $__inlined55
     (if (result i64)
       (then
         i64.const 1
@@ -205,8 +205,8 @@
     i64.const 5
     i64.const 6
     i64.ne
-    local.set $__arg56
-    local.get $__arg56
+    local.set $__inlined56
+    local.get $__inlined56
     (if (result i64)
       (then
         i64.const 1
@@ -219,8 +219,8 @@
     i64.const 5
     i64.const 5
     i64.ne
-    local.set $__arg57
-    local.get $__arg57
+    local.set $__inlined57
+    local.get $__inlined57
     (if (result i64)
       (then
         i64.const 1

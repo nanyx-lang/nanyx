@@ -18,11 +18,11 @@ module Attributes =
     let internal hostImport (host: Host) =
         TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport host.Module) (Some Hosts.importAlias) ])
 
-    /// The imports the module that declares the entry point gets from `host`: the modules of the contexts it provides,
-    /// which the module sees without importing them, and the host itself (see `hostImport`).
+    /// The imports the module that declares the entry point gets from `host`: the modules of the contexts it provides
+    /// that the module sees without importing them, and the host itself (see `hostImport`).
     let private hostImports (host: Host) (module': Module) =
         let provided =
-            host.ProvidedModules
+            host.ImplicitModules
             |> List.filter (fun moduleName -> not (importsModule moduleName module'))
             |> List.map (fun moduleName -> TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport moduleName) None ]))
         provided @ [ hostImport host ]
@@ -30,9 +30,9 @@ module Attributes =
     /// Resolves `@attribute` lines. `@entry` on a definition appends a call of the host's `run` with that definition
     /// at the end of the module, so it runs as the program's start function, and imports the host and the modules of
     /// the contexts it provides (see `Host`); any other attribute, or an attribute that does not precede a value
-    /// definition, is an error. `@entry` takes no argument. With the module, each entry point (see `EntryPoint`).
-    let applyAttributes (module': Module) : Result<Module * EntryPoint list, Diagnostic list> =
-        let host = Hosts.console
+    /// definition, is an error. `@entry` takes no argument. The host is `host`: the package's, or the console host for a
+    /// file in no package. With the module, each entry point (see `EntryPoint`).
+    let applyAttributes (host: Host) (module': Module) : Result<Module * EntryPoint list, Diagnostic list> =
         let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entries: (EntryPoint * TopLevelItem) list) (errors: Diagnostic list) =
             match remaining with
             | [] -> List.rev acc, List.rev entries, List.rev errors

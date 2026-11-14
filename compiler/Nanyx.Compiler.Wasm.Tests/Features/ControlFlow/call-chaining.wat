@@ -62,14 +62,14 @@
   )
   (export "double" (func $double))
 
-  (func $main (result i64) (local $x__in2_i64 i64) (local $__arg2_i64 i64)
+  (func $main (result i64) (local $x__in1_i64 i64) (local $__inlined3_i64 i64)
     i64.const 5
-    local.set $x__in2_i64
-    local.get $x__in2_i64
+    local.set $x__in1_i64
+    local.get $x__in1_i64
     i64.const 1
     call $__nanyx_int_add
-    local.set $__arg2_i64
-    local.get $__arg2_i64
+    local.set $__inlined3_i64
+    local.get $__inlined3_i64
     i64.const 2
     call $__nanyx_int_mul
   )

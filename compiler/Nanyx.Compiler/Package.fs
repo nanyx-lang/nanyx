@@ -9,7 +9,8 @@ open Tomlyn
 open Tomlyn.Model
 
 /// A package's `.nyxp` manifest, as far as it is read so far: what the package is called, which files are its
-/// sources, and which linters check them. The `[formatter]` table is the formatter's, which reads it itself.
+/// sources, which linters check them, and which host runs its `@entry`. The `[formatter]` table is the formatter's,
+/// which reads it itself.
 type Manifest =
     { /// The manifest's full path.
       Path: string
@@ -20,7 +21,9 @@ type Manifest =
       /// Globs relative to `Root`: `**/*.nyx` unless the manifest says otherwise.
       Sources: string list
       /// The linters the manifest turns on, each with a table under `[linters]`, and the severities it sets.
-      Linters: LinterOptions }
+      Linters: LinterOptions
+      /// The host `[host] use` names, or the console host when the manifest has no `[host]`.
+      Host: Host }
 
 module Manifest =
     /// The manifest's file extension.
@@ -28,7 +31,7 @@ module Manifest =
 
     /// The top-level tables a manifest may have. Those not read yet are refused when they say anything, rather
     /// than ignored, so a manifest never seems to work when it does not.
-    let private tables = [ "package"; "dependencies"; "project-references"; "linters"; "formatter" ]
+    let private tables = [ "package"; "dependencies"; "project-references"; "linters"; "formatter"; "host" ]
 
     let private packageKeys = [ "name"; "version"; "sources"; "public-modules" ]
 
@@ -72,6 +75,45 @@ module Manifest =
 
     let private quoted (names: string seq) = names |> Seq.map (fun name -> $"'{name}'") |> String.concat ", "
 
+    /// Where `key` of the table `[tableName]` is written in `text`, a manifest's: `path:line:column`, from 1, or `path`
+    /// when it can't be found.
+    let private keyLocation (path: string) (text: string) (tableName: string) (key: string) =
+        let keyPattern = Regex($@"^\s*(""?){Regex.Escape key}\1\s*=")
+        let lines = text.Split('\n')
+        let mutable table = ""
+        let mutable found = None
+        for index in 0 .. lines.Length - 1 do
+            let line = lines.[index].TrimEnd '\r'
+            let header = Regex.Match(line, @"^\s*\[\s*([^\]]+?)\s*\]")
+            if header.Success then table <- header.Groups.[1].Value
+            elif found.IsNone && table = tableName && keyPattern.IsMatch line then
+                found <- Some (index + 1, line.Length - line.TrimStart().Length + 1)
+        match found with
+        | Some (line, column) -> $"{path}:{line}:{column}"
+        | None -> path
+
+    /// The host a `[host]` table names with `use`, or what is wrong with the table. Any other key would be the host's
+    /// configuration, which no host declares yet, so it is an error.
+    let private readHost (path: string) (text: string) (table: TomlTable) : Result<Host, string list> =
+        let at (key: string) = keyLocation path text "host" key
+        let example = Hosts.console.Module
+        let atUse = at "use"
+        let configuration =
+            table
+            |> Seq.filter (fun entry -> entry.Key <> "use")
+            |> Seq.map (fun entry ->
+                $"{at entry.Key}: [host] {entry.Key} would configure the host, but no host takes configuration yet; the only key is 'use'")
+            |> List.ofSeq
+        let host =
+            match table.TryGetValue "use" with
+            | true, (:? string as name) -> Hosts.tryFind name |> Result.mapError (fun message -> [ $"{atUse}: [host] use: {message}" ])
+            | true, value -> Result.Error [ $"{atUse}: [host] use must be a string naming the host's module, not {describe value}" ]
+            | false, _ -> Result.Error [ $"""{path}: [host] has no use, which names the host's module: use = "{example}" """.TrimEnd() ]
+        match host with
+        | Result.Ok host when configuration.IsEmpty -> Result.Ok host
+        | Result.Ok _ -> Result.Error configuration
+        | Result.Error errors -> Result.Error (errors @ configuration)
+
     /// The linter options of a `[linters]` table: one table per linter to run, of rule ids and severities.
     let private readLinters (path: string) (table: TomlTable) : Result<LinterOptions, string list> =
         let configured =
@@ -112,8 +154,9 @@ module Manifest =
     /// The manifest at `path`, or every problem with it, each naming the manifest and the key.
     let read (path: string) : Result<Manifest, string list> =
         let path = Path.GetFullPath path
+        let source = File.ReadAllText path
         let document =
-            try Result.Ok(TomlSerializer.Deserialize<TomlTable>(File.ReadAllText path, TomlSerializerOptions()))
+            try Result.Ok(TomlSerializer.Deserialize<TomlTable>(source, TomlSerializerOptions()))
             with :? TomlException as e -> Result.Error [ $"{path}: not valid TOML: {e.Message}" ]
         match document with
         | Result.Error errors -> Result.Error errors
@@ -173,6 +216,13 @@ module Manifest =
                     errors.AddRange problems
                     { Linters = []; Severities = Map.empty }
                 | None -> { Linters = []; Severities = Map.empty }
+            let host =
+                match table "host" |> Option.map (readHost path source) with
+                | Some (Result.Ok host) -> host
+                | Some (Result.Error problems) ->
+                    errors.AddRange problems
+                    Hosts.console
+                | None -> Hosts.console
             if errors.Count > 0 then
                 Result.Error(List.ofSeq errors)
             else
@@ -182,7 +232,8 @@ module Manifest =
                       Name = name
                       Version = version
                       Sources = sources
-                      Linters = linters }
+                      Linters = linters
+                      Host = host }
 
 /// A package on disk: its manifest, its source files, and the one that declares its `@entry`, if any.
 type Package =
@@ -236,6 +287,10 @@ module Package =
                 | several ->
                     Result.Error [ $"""{manifest.Path}: a package can have one @entry, but these files each declare one: {several |> List.map display |> String.concat ", "}""" ])
 
+    /// `package` run under `host` in place of its manifest's, as `--host` chooses.
+    let withHost (host: Host) (package: Package) : Package =
+        { package with Manifest = { package.Manifest with Host = host } }
+
     /// The package `path` names: a manifest, or a directory in or under the package. An error says why there is none.
     let find (path: string) : Result<Package, string list> =
         let full = Path.GetFullPath path
@@ -271,7 +326,7 @@ module Package =
 
     /// The modules of `package`, by the names its source files declare.
     let modules (package: Package) : PackageModules =
-        PackageModules.ofFiles package.Manifest.Name package.Manifest.Root package.Sources
+        PackageModules.ofFiles package.Manifest.Name package.Manifest.Root package.Manifest.Host package.Sources
 
     /// The modules of the package the file at `filePath` is a source file of, if it is one of a package whose
     /// manifest reads. A file the manifest selects that is not on disk yet (an editor's new buffer) is one of them.
@@ -282,7 +337,7 @@ module Package =
         | Result.Ok (Some manifestPath) ->
             match Manifest.read manifestPath with
             | Result.Ok manifest when selects manifest filePath ->
-                let modules = PackageModules.ofFiles manifest.Name manifest.Root (sources manifest)
+                let modules = PackageModules.ofFiles manifest.Name manifest.Root manifest.Host (sources manifest)
                 Some (if PackageModules.contains modules filePath then modules else { modules with Files = modules.Files @ [ filePath ] })
             | _ -> None
         | _ -> None

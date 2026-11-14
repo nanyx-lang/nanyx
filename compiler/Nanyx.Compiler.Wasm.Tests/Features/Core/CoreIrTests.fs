@@ -301,7 +301,7 @@ dbg(fine(1))
 dbg(broken(2))
 """
     let result = Compiler.compile source
-    let wat, report = transpileTypedModuleWithReport result.Typed.Value
+    let wat, report = transpileTypedModuleWithOptions { WasmOptions.Default with Inline = false } result.Typed.Value
     // The script's statements are its entry point, run by the console host's `run`, which the module has too.
     let functions = withoutPrinters report.Functions
     Assert.Equal<string list>([ "broken"; "fine" ], functions |> List.filter (fun name -> name = "broken" || name = "fine"))

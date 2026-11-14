@@ -79,9 +79,9 @@ type RunOutcome =
       StandardError: string }
 
 /// Runs `command` in this process, in a shell (see `Shell`) whose directory is `workingDirectory` and whose program
-/// reads `standardInput`. What the command and the program write to stdout is captured, and so is what they write to
-/// stderr, in the order written.
-let private inProcess (workingDirectory: string) (standardInput: string) (command: Shell -> int) : RunOutcome =
+/// reads `standardInput` and sees the environment variables `variables`. What the command and the program write to
+/// stdout is captured, and so is what they write to stderr, in the order written.
+let private inProcess (workingDirectory: string) (standardInput: string) (variables: (string * string) list) (command: Shell -> int) : RunOutcome =
     let inputFile = Path.Combine(Path.GetTempPath(), $"nanyx-stdin-{Guid.NewGuid():N}.txt")
     File.WriteAllText(inputFile, standardInput)
     try
@@ -90,7 +90,7 @@ let private inProcess (workingDirectory: string) (standardInput: string) (comman
         // Flushed at every write, so that the CLI's messages and the program's own output stay in the order written.
         use outputs = new StreamWriter(output, Text.UTF8Encoding(false), AutoFlush = true)
         use errors = new StreamWriter(error, Text.UTF8Encoding(false), AutoFlush = true)
-        let exitCode = command (Shell(workingDirectory, outputs, errors, Nanyx.Runtime.ProgramIo.Redirected(inputFile, output, error)))
+        let exitCode = command (Shell(workingDirectory, outputs, errors, Nanyx.Runtime.ProgramIo.Redirected(inputFile, output, error, variables)))
         { ExitCode = exitCode
           StandardOutput = Text.Encoding.UTF8.GetString(output.ToArray())
           StandardError = Text.Encoding.UTF8.GetString(error.ToArray()) }
@@ -100,44 +100,49 @@ let private inProcess (workingDirectory: string) (standardInput: string) (comman
 /// The `nanyx` command `arguments` names, with its options, as a call of what the CLI runs for it (see `CliCommands`).
 /// Only the commands and options the tests use are read.
 let private command (arguments: string list) : Shell -> int =
-    let rec options (outputPath: string, release: bool, timings: bool, paths: string list) (rest: string list) =
+    let rec options (outputPath: string, release: bool, timings: bool, host: string, paths: string list) (rest: string list) =
         match rest with
-        | ("--out" | "-o") :: path :: rest -> options (path, release, timings, paths) rest
-        | "--release" :: rest -> options (outputPath, true, timings, paths) rest
-        | "--timings" :: rest -> options (outputPath, release, true, paths) rest
-        | path :: rest -> options (outputPath, release, timings, paths @ [ path ]) rest
-        | [] -> outputPath, release, timings, Array.ofList paths
+        | ("--out" | "-o") :: path :: rest -> options (path, release, timings, host, paths) rest
+        | "--release" :: rest -> options (outputPath, true, timings, host, paths) rest
+        | "--timings" :: rest -> options (outputPath, release, true, host, paths) rest
+        | "--host" :: name :: rest -> options (outputPath, release, timings, name, paths) rest
+        | path :: rest -> options (outputPath, release, timings, host, paths @ [ path ]) rest
+        | [] -> outputPath, release, timings, host, Array.ofList paths
     match arguments with
     | "new" :: name :: directory -> fun shell -> CliCommands.NewIn(shell, name, Array.ofList directory)
     | "check" :: rest ->
-        let _, _, timings, path = options (null, false, false, []) rest
-        fun shell -> CliCommands.CheckIn(shell, path, timings)
+        let _, _, timings, host, path = options (null, false, false, null, []) rest
+        fun shell -> CliCommands.CheckIn(shell, path, timings, host)
     | "run" :: rest ->
-        let _, _, timings, path = options (null, false, false, []) (List.except [ "--no-inline" ] rest)
-        fun shell -> CliCommands.RunIn(shell, false, path, timings, not (List.contains "--no-inline" rest))
+        let _, _, timings, host, path = options (null, false, false, null, []) (List.except [ "--no-inline" ] rest)
+        fun shell -> CliCommands.RunIn(shell, false, path, timings, host, not (List.contains "--no-inline" rest))
     | "build" :: rest ->
-        let outputPath, release, timings, path = options (null, false, false, []) (List.except [ "--no-inline" ] rest)
-        fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings, not (List.contains "--no-inline" rest))
+        let outputPath, release, timings, host, path = options (null, false, false, null, []) (List.except [ "--no-inline" ] rest)
+        fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings, host, not (List.contains "--no-inline" rest))
     | "wasm" :: inputFile :: rest ->
-        let outputPath, release, _, _ = options (null, false, false, []) rest
+        let outputPath, release, _, _, _ = options (null, false, false, null, []) rest
         fun shell -> CliCommands.WasmIn(shell, inputFile, outputPath, release)
     | _ -> failwith $"""The tests do not run `nanyx {String.concat " " arguments}`"""
 
 /// Does what `nanyx` does with `arguments`, through the same code (`CliCommands`) but in this process, which saves
 /// starting the CLI and checking the standard library again for every command. `standardInput` is a program's stdin.
 let nanyxWithInput (standardInput: string) (arguments: string list) : RunOutcome =
-    inProcess (Directory.GetCurrentDirectory()) standardInput (command arguments)
+    inProcess (Directory.GetCurrentDirectory()) standardInput [] (command arguments)
+
+/// Does what `nanyx` does with `arguments`, with the environment variables `variables` (see `nanyxWithInput`).
+let nanyxWithVariables (variables: (string * string) list) (arguments: string list) : RunOutcome =
+    inProcess (Directory.GetCurrentDirectory()) "" variables (command arguments)
 
 /// Does what `nanyx` does with `arguments` in `directory`, as a user does who has changed to it (see `nanyxWithInput`).
 let nanyxIn (directory: string) (arguments: string list) : RunOutcome =
-    inProcess directory "" (command arguments)
+    inProcess directory "" [] (command arguments)
 
 /// Does what `nanyx run <inputPath>` does, with `--check-memory` when `checkMemory` is set (see `nanyxWithInput`).
 /// `standardInput` is the program's stdin. Its stdout is captured, and so is its stderr, with the compiler's diagnostics
 /// and the run's own errors in it as the CLI prints them.
 /// Without `inlineCalls`, as `--no-inline` does, every call is compiled as a call.
 let runScriptWithOptions (checkMemory: bool) (inlineCalls: bool) (standardInput: string) (inputPath: string) : RunOutcome =
-    inProcess (Directory.GetCurrentDirectory()) standardInput (fun shell -> CliCommands.RunScript(shell, inputPath, checkMemory, false, inlineCalls))
+    inProcess (Directory.GetCurrentDirectory()) standardInput [] (fun shell -> CliCommands.RunScript(shell, inputPath, checkMemory, false, null, inlineCalls))
 
 let runScriptWith (checkMemory: bool) (standardInput: string) (inputPath: string) : RunOutcome =
     runScriptWithOptions checkMemory true standardInput inputPath

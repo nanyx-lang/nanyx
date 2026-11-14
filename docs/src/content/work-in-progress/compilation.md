@@ -53,7 +53,9 @@ The parser, type checker, WebAssembly backend and runtime are libraries; the `na
 [Memory management](./memory-management#core-ir)) and today covers:
 
 - top-level `def` values exported as wasm functions; top-level expressions (and the `@entry` definition) run from a
-  WebAssembly start function
+  WebAssembly start function. A module with a start function emits only the functions the start reaches, through
+  calls and closures, and binds no static closure that nothing reads, such as a member of a `use` that no call
+  needs (`CoreIrReach.fs`); a module without one emits every definition
 - integer literals and integer binary operators (`+`, `-`, `*`, `/`, `%`, comparisons)
 - bare tag literals (`#ok`, `#error`, etc.) lowered to deterministic, odd `i32` codes; a tag with a payload
   (`#some(x)`) is a pointer to a heap cell of (code, payload)

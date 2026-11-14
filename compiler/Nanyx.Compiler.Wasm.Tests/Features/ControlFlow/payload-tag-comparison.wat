@@ -196,18 +196,18 @@
     )
   )
 
-  (func $main (result i64) (local $__arg2 i32) (local $__owned_0 i32)
+  (func $main (result i64) (local $__inlined2 i32) (local $__owned_0 i32)
     i32.const 3
     i64.const 3
     call $__nanyx_tag_box_i64
-    local.set $__arg2
-    local.get $__arg2
+    local.set $__inlined2
+    local.get $__inlined2
     i32.const 3
     i64.const 3
     call $__nanyx_tag_box_i64
     local.tee $__owned_0
     call $__nanyx_equals_tags_some_int
-    local.get $__arg2
+    local.get $__inlined2
     call $__nanyx_drop_tags_some_int
     local.get $__owned_0
     call $__nanyx_drop_tags_some_int

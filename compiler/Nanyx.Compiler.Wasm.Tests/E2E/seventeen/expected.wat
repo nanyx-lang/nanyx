@@ -206,7 +206,7 @@
   )
   (export "f" (func $f))
 
-  (func $main (result i64) (local $x__in1_i64 i64) (local $y__in1_i64 i64) (local $r1_i64 i64) (local $args i32) (local $__arg8_i64 i64) (local $__arg9_i64 i64) (local $r2_i64 i64)
+  (func $main (result i64) (local $x__in1_i64 i64) (local $y__in1_i64 i64) (local $r1_i64 i64) (local $args i32) (local $__inlined8_i64 i64) (local $__inlined9_i64 i64) (local $r2_i64 i64)
     i64.const 3
     local.set $x__in1_i64
     i64.const 4
@@ -227,14 +227,14 @@
     local.set $args
     local.get $args
     i64.load
-    local.set $__arg8_i64
+    local.set $__inlined8_i64
     local.get $args
     i64.load offset=8
     local.get $args
     call $__nanyx_drop_rec_0_int_1_int
-    local.set $__arg9_i64
-    local.get $__arg8_i64
-    local.get $__arg9_i64
+    local.set $__inlined9_i64
+    local.get $__inlined8_i64
+    local.get $__inlined9_i64
     call $__nanyx_int_add
     local.set $r2_i64
     local.get $r1_i64

@@ -23,7 +23,7 @@ def label: [Show(a)] a -> string = { value -> "point " ++ describe(value) }
 
 println(label(Point(x = 1, y = 2)))
 """
-    let wat = transpileWat source
+    let wat = transpileWatNotInlined source
     // The instance built from `Point.show` is known where `label` is called, and `label` passes it on as known to
     // `describe`, which calls it directly: neither is passed the member, and neither makes a closure.
     let label = functionText "label__rec_x_int_y_int__known" wat
@@ -56,7 +56,7 @@ def main = {
 
 main()
 """
-    let wat = transpileWat source
+    let wat = transpileWatNotInlined source
     Assert.Contains("""call $Point_show""", wat)
     Assert.Contains("""call $Size_show""", wat)
     Assert.Equal(2, countOccurrences "(func $describe__" wat)
@@ -83,7 +83,7 @@ def main = {
 
 main()
 """
-    let wat = transpileWat source
+    let wat = transpileWatNotInlined source
     // `showAll` is not passed the member, but makes the closure over it that `list.map` takes.
     Assert.Contains("""(func $showAll__rec_x_int_y_int__known (param $values i32) (result i32)""", wat)
     Assert.Contains("__fn_Point_show", wat)
@@ -105,7 +105,7 @@ def main = {
 
 main()
 """
-    let wat = transpileWat source
+    let wat = transpileWatNotInlined source
     Assert.Contains("""(func $shout (param $name i32) (param $__ctx_greet i32) (result i32)""", wat)
     Assert.Contains("call_indirect", wat)
     runSource source |> assertRan "a?!\n"
@@ -135,7 +135,7 @@ def main = {
   println(use Counter(bump = addThree, limit = 1000003) in run(2000, 0))
 }
 """
-    let wat = transpileWat source
+    let wat = transpileWatNotInlined source
     // `run` and `stepOnce` are specialised on both members (#1299): `addThree` is called directly and the limit is a
     // constant, so neither is passed a member.
     Assert.Contains("""(func $run__known (param $n_i64 i64) (param $acc_i64 i64) (result i64)""", wat)
@@ -164,7 +164,7 @@ def main = {
 
 main()
 """
-    let wat = transpileWat source
+    let wat = transpileWatNotInlined source
     Assert.Equal(3, countOccurrences "(func $clamp__known" wat)
     runSource source |> assertRan "5\n9\n10\n"
 [<Fact>]

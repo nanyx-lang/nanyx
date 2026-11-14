@@ -130,15 +130,18 @@ calls, and goes over each one up to four times, each time inlining what the time
   `let` gives a closure over a lifted lambda, when that local is named nowhere else, or the lambda is small. Once a
   handler is inlined, its parameter is the caller's closure, so the next time over the block is inlined too.
 - **What is not.** A function in a cycle of calls, found with Tarjan's algorithm over calls and the closures a function
-  makes. The start function, whose body must stay a sequence of top-level expressions, takes nothing inlined. A call
-  is only inlined as what a chain ends in or as a `let`'s or `do`'s value, not inside a temporary's value or a
-  guard. A function stops taking more once it has 4,000 nodes.
+  makes. The start function, whose body must stay a sequence of top-level expressions, takes nothing inlined, and
+  nothing is inlined into a guard. A function stops taking more once it has 4,000 nodes.
 - **How.** The callee's body is copied in with every variable it binds made new, with a new name, so that none shares a
   local with the caller's: variables of the same kind and name share one. A parameter is the caller's variable when the
   argument is one of its type, and a new local let-bound to the argument otherwise (a lambda's environment, which it
-  reads as a record, is bound to the closure). A temporary the call takes becomes a local, since the inlined body
-  stores before it reads it. Its loops are numbered inside the caller's, and a chain that is a `let`'s value is
-  flattened into the chain around it.
+  reads as a record, is bound to the closure). A call is inlined as what a chain ends in or as a `let`'s or `do`'s
+  value, a temporary's among them (`acc + double(n)`). Every temporary of the chain still waiting to be used becomes
+  a local first, since the inlined body stores before it reads what it is given, and nothing may be stored while a
+  temporary waits; temporaries are bound in the order they are evaluated, so the order holds. The body's loops are
+  numbered inside the caller's, and a chain that is a `let`'s value is flattened into the chain around it.
+- **What is left.** A function inlined wherever it is called is no longer reached from the start, so it is not
+  emitted (`CoreIrReach`, which runs after inlining).
 - **Tail calls and traps.** A call in tail position in the callee is still in tail position where the call was in
   the caller's tail, so it is still a tail call. A trap's message has its span in it from lowering, so it reports the
   line it was written on.

@@ -12,8 +12,9 @@ module Scripts =
     /// lambda's type stays as it is when a value is moved in after the last statement (see `asDefinition`). A statement
     /// in a module block (`inBlock`) is left where it is, to be reported. In a module with `@entry`s (`entries`), whose
     /// calls of their host's `run` are not statements, the statements run before them, as they would at the top level,
-    /// and the host is imported once. With the entry point and the lambda's node, if there are any statements.
-    let asEntry (inBlock: SourceSpan -> bool) (entries: EntryPoint list) (module': Module) : Module * (EntryPoint * NodeId) option =
+    /// and the host is imported once. The host is `host`: a package's, or the console host for a loose script. With the
+    /// entry point and the lambda's node, if there are any statements.
+    let asEntry (host: Host) (inBlock: SourceSpan -> bool) (entries: EntryPoint list) (module': Module) : Module * (EntryPoint * NodeId) option =
         let entryCalls = entries |> List.collect _.Call |> Set.ofList
         let isEntryCall (item: TopLevelItem) =
             match item.Kind with
@@ -26,7 +27,6 @@ module Scripts =
         match module' |> List.filter isStatement with
         | [] -> module', None
         | statements ->
-            let host = Hosts.console
             let body =
                 (statements |> List.choose (function Kind (Expr expr) -> Some (Statement.from expr (ExprStatement expr)) | _ -> None))
                 @ [ Statement.synthetic (ExprStatement (Expression.synthetic UnitExpr)) ]
@@ -45,6 +45,16 @@ module Scripts =
     /// The name of the def a script's entry point is made into once it is typed (see `asDefinition`). No code can write
     /// a name that starts with `__`.
     let definitionName = "__script"
+
+    /// `entryTy`, the type of a script's entry point, requiring of the plain contexts only those that are ambient in the
+    /// module (`ambient`, by name): the statements run in those, and in no other. A statement that calls a function whose
+    /// type is an error leaves the entry point's contexts open, to take on all those the host's `run` provides, `Env` among
+    /// them where the script doesn't import `nanyx/env`; the backend would then look for members that nothing supplies.
+    let withAmbientContextsOnly (ambient: Set<Identifier>) (entryTy: Ty) : Ty =
+        match entryTy with
+        | TyFunc(input, output, own) ->
+            TyFunc(input, output, own |> List.filter (function TyApply(name, []) -> ambient.Contains name | _ -> true))
+        | _ -> entryTy
 
     /// `module'`, a script typed as `asEntry` made it, with each of its values in `entryValues` moved from the top level
     /// into the entry point `entry`, as a local def among the statements in the order they are written, and the entry

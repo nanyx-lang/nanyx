@@ -473,12 +473,14 @@ module Compiler =
                 match WorkflowDesugaring.desugarWithDiagnostics items with
                 | _, (_ :: _ as errors), _, _ -> Error (Desugared, errors)
                 | desugaredAst, [], memberPlaces, lowered ->
-                    Attributes.applyAttributes desugaredAst
+                    // A package's files run under its host (see `PackageModules.Host`); a loose script, under the console host.
+                    let host = checkedModules.Package |> Option.map _.Host |> Option.defaultValue Hosts.console
+                    Attributes.applyAttributes host desugaredAst
                     |> Result.map (fun (desugared, entries) ->
                         // A module's statements run as an entry point of their own (see `Scripts`).
                         let desugared, script =
                             match origin, entries with
-                            | (SourceFile _ | InMemory), _ -> Scripts.asEntry (fun span -> (NyxCompiler.InferState.blockAround moduleBlocks span).IsSome) entries desugared
+                            | (SourceFile _ | InMemory), _ -> Scripts.asEntry host (fun span -> (NyxCompiler.InferState.blockAround moduleBlocks span).IsSome) entries desugared
                             | _ -> desugared, None
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
                         let nameErrors = TypeNames.definitionErrors declared @ nameErrors
@@ -650,7 +652,9 @@ module Compiler =
                 let own, resolvedTypes, state =
                     match script with
                     | Some (entry, lambda) ->
-                        let entryTy = state.ExprTypes |> Map.tryFind lambda |> Option.map (Unifier.apply subst) |> Option.defaultValue Unifier.errorType
+                        let entryTy =
+                            state.ExprTypes |> Map.tryFind lambda |> Option.map (Unifier.apply subst) |> Option.defaultValue Unifier.errorType
+                            |> Scripts.withAmbientContextsOnly (state.AmbientMembers |> Map.values |> Seq.map snd |> Set.ofSeq)
                         let own, named = Scripts.asDefinition entry state.ScriptEntryValues entryTy own
                         own, resolvedTypes |> Map.add Scripts.definitionName entryTy, { state with ExprTypes = state.ExprTypes |> Map.add named entryTy }
                     | None -> own, resolvedTypes, state

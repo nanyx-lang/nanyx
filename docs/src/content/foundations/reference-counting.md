@@ -83,6 +83,17 @@ An arm reuses a value's memory when:
 So to get reuse, hand a function the only reference to what it transforms, and build the new value directly in the
 arm that took the old one apart. Strings are not reused.
 
+A `with` on a record nothing else refers to updates it in place too, with no pattern needed:
+
+```nanyx
+def step: Particle -> Particle = { p ->
+  p with (x = p.x + p.vx, y = p.y + p.vy)
+}
+```
+
+Handed the only reference to `p`, `step` writes the new `x` and `y` into `p` and gives it back. When something else
+still refers to the record, `with` copies it and leaves the original as it was.
+
 # What it costs
 
 Each value on the heap carries a count in a header before it, and taking or giving up a reference updates that count.

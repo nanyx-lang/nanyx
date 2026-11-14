@@ -5,8 +5,9 @@
 ///
 /// The callee's body is placed where the call was, with its parameters bound to the call's arguments and every variable
 /// it binds made new, so that none shares a local with the caller's, and its loops numbered inside the caller's. A call
-/// is inlined only where a sequence can hold the body: as what a chain ends in, or as the value of a `let` or a `do`. A
-/// temporary the call takes as an argument becomes a local, since the body stores before it reads its parameters.
+/// is inlined where a sequence can hold the body: as what a chain ends in, or as the value of a `let` or a `do`, a
+/// temporary's among them. Every temporary of the chain still waiting to be used becomes a local first, since the body
+/// stores before it reads what it is given.
 module internal Transpiler.Wasm.CoreIrInline
 
 open System.Collections.Generic
@@ -349,49 +350,65 @@ type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string
         let rec sequence (loopDepth: int) (e: Expr) : Expr =
             let links, last = Chain.split e
             let rebuilt = ResizeArray<Expr -> Expr>()
-            // Where each temporary in the chain so far is bound: its place among the links, and its value.
-            let temps = Dictionary<int, int * Var * Expr>()
-            // The arguments, with each temporary among them made a local where the chain binds it, if every one is bound
-            // in this chain.
-            let localArgs (args: Atom list) =
-                let tempArgs = args |> List.choose (function AVar v when v.Kind = Temp -> Some v | _ -> None)
-                if tempArgs |> List.forall (fun v -> temps.ContainsKey v.Id) then
-                    let made =
-                        tempArgs
-                        |> List.map (fun temp ->
-                            let place, _, value = temps.[temp.Id]
-                            let local = { temp with Id = newId (); Name = $"__arg{nextId}"; Kind = Local }
-                            rebuilt.[place] <- (fun next -> bindValue local value next)
-                            temps.Remove temp.Id |> ignore
-                            temp.Id, local)
-                        |> Map.ofList
-                    Some(args |> List.map (function AVar v when made.ContainsKey v.Id -> AVar made.[v.Id] | other -> other))
-                else None
+            // The temporaries bound so far in the chain that nothing has used yet, in the order they are bound, each with
+            // its place among the links and its value.
+            let waiting = ResizeArray<Var * int * Expr>()
+            // The temporaries made locals, which what follows names by their new variables.
+            let madeLocal = Dictionary<int, Var>()
+            let renamed (e: Expr) =
+                if madeLocal.Count = 0 then e
+                else mapVars (fun v -> match madeLocal.TryGetValue v.Id with | true, local -> local | _ -> v) id e
+            let claim (value: Expr) =
+                let used = (directAtoms value |> List.choose (function AVar v -> Some v.Id | _ -> None)) @ (directVars value |> List.map _.Id)
+                waiting.RemoveAll(fun (v, _, _) -> List.contains v.Id used) |> ignore
+            let newLocal (temp: Var) =
+                let local = { temp with Id = newId (); Name = $"__inlined{nextId}"; Kind = Local }
+                madeLocal.[temp.Id] <- local
+                local
+            // The body of the function `call` calls, if it is to be inlined. Every temporary still waiting is made a local
+            // first, since the body stores before it reads what it is given, and nothing is stored while a temporary
+            // waits to be used. Temporaries are bound in the order they are evaluated, so evaluating each where it is
+            // bound keeps that order.
             let inlined (call: Expr) =
-                site call
-                |> Option.bind (fun (callee, args) ->
-                    localArgs args |> Option.map (fun args -> this.Instantiate callee args loopDepth))
-                |> Option.map (fun body ->
-                    changed <- true
-                    body)
+                let waitingIds = waiting |> Seq.map (fun (v, _, _) -> v.Id) |> Set.ofSeq
+                let argTemps = directAtoms call |> List.choose (function AVar v when v.Kind = Temp -> Some v.Id | _ -> None)
+                if argTemps |> List.forall waitingIds.Contains then
+                    site call
+                    |> Option.map (fun (callee, args) ->
+                        for temp, place, value in waiting do
+                            let local = newLocal temp
+                            rebuilt.[place] <- (fun next -> bindValue local value next)
+                        waiting.Clear()
+                        let args = args |> List.map (function AVar v when madeLocal.ContainsKey v.Id -> AVar madeLocal.[v.Id] | other -> other)
+                        changed <- true
+                        this.Instantiate callee args loopDepth)
+                else None
             for link in links do
                 match link.Kind with
-                | Let(v, value, _) when v.Kind = Temp ->
-                    temps.[v.Id] <- (rebuilt.Count, v, value)
-                    rebuilt.Add(fun next -> Chain.relink link next)
                 | Let(v, value, _) ->
+                    let value = renamed value
                     match inlined value with
-                    | Some body -> rebuilt.Add(fun next -> bindValue v body next)
+                    | Some body ->
+                        let v = if v.Kind = Temp then newLocal v else v
+                        rebuilt.Add(fun next -> bindValue v body next)
+                    | None when v.Kind = Temp ->
+                        claim value
+                        waiting.Add((v, rebuilt.Count, value))
+                        rebuilt.Add(fun next -> Expr.make (Let(v, value, next)) next.Type)
                     | None ->
+                        claim value
                         let value = nested loopDepth value
                         rebuilt.Add(fun next -> Expr.make (Let(v, value, next)) next.Type)
                 | Do(value, _) ->
+                    let value = renamed value
                     match inlined value with
                     | Some body -> rebuilt.Add(fun next -> doValue body next)
                     | None ->
+                        claim value
                         let value = nested loopDepth value
                         rebuilt.Add(fun next -> Expr.make (Do(value, next)) next.Type)
                 | _ -> rebuilt.Add(fun next -> Chain.relink link next)
+            let last = renamed last
             let last =
                 match inlined last with
                 | Some body -> body

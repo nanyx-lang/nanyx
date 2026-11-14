@@ -1,5 +1,6 @@
 /// Inlining in the core IR (#745, see `docs/src/content/work-in-progress/inlining.md`): which calls are replaced by the
-/// body of the function they call, and that the inlined code does what the call did.
+/// body of the function they call, and that the inlined code does what the call did. The functions the tests look into
+/// call themselves, so that they are not inlined in turn: a function inlined wherever it is called is not emitted.
 module TranspilerWasmTests.Features.Core.Inlining
 
 open System
@@ -14,14 +15,15 @@ let ``A small function is inlined into its caller`` () =
 
 def double: int -> int = { n -> n * 2 }
 
-@entry
-def main = {
-  println("{double(21)}")
-}
+def sum: int, int -> int = { n, acc -> if n == 0 then acc else sum(n - 1, acc + double(n)) }
+
+println("{sum(3, 0)}")
 """
-    Assert.DoesNotContain("call $double", functionText "main" (transpileWat source))
-    Assert.Contains("call $double", functionText "main" (transpileWatNotInlined source))
-    runSource source |> assertRan "42\n"
+    let wat = transpileWat source
+    Assert.DoesNotContain("call $double", functionText "sum" wat)
+    Assert.DoesNotContain("(func $double ", wat)
+    Assert.Contains("call $double", functionText "sum" (transpileWatNotInlined source))
+    runSource source |> assertRan "12\n"
 
 [<Fact>]
 let ``A recursive function is not inlined`` () =
@@ -30,14 +32,9 @@ let ``A recursive function is not inlined`` () =
 
 def countdown: int -> int = { n -> if n == 0 then 0 else countdown(n - 1) }
 
-@entry
-def main = {
-  println("{countdown(5)}")
-}
+println("{countdown(5)}")
 """
-    let wat = transpileWat source
-    Assert.Contains("call $countdown", functionText "main" wat)
-    Assert.Contains("return_call $countdown", functionText "countdown" wat)
+    Assert.Contains("return_call $countdown", functionText "countdown" (transpileWat source))
     runSource source |> assertRan "0\n"
 
 [<Fact>]
@@ -51,13 +48,12 @@ STEPS
   a20
 }
 
-@entry
-def main = {
-  println("{long(1)}")
-}
+def go: int -> int = { n -> if n == 0 then long(1) else go(n - 1) }
+
+println("{go(2)}")
 """
     let source = template.Replace("STEPS", steps)
-    Assert.Contains("call $long", functionText "main" (transpileWat source))
+    Assert.Contains("call $long", functionText "go" (transpileWat source))
 
 [<Fact>]
 let ``A handler and the lambda it is given are inlined`` () =
@@ -66,9 +62,9 @@ let ``A handler and the lambda it is given are inlined`` () =
 
 def apply: (int -> int), int -> int = { f, x -> f(x) }
 
-def answer: () -> int = { apply({ n -> n + 1 }, 41) }
+def answer: int -> int = { n -> if n == 0 then apply({ m -> m + 1 }, 41) else answer(n - 1) }
 
-println("{answer()}")
+println("{answer(2)}")
 """
     // `apply` ends in a call of its lambda parameter, so it is inlined whatever its size, and then the lambda, which is
     // called once: `answer` calls neither.
@@ -107,12 +103,11 @@ let ``A trap in inlined code reports the line it is written on`` () =
 
 def broken: int -> int = { n -> n + missing }
 
-@entry
-def main = {
-  println("{broken(1)}")
-}
+def run: int -> int = { n -> if n == 0 then broken(1) else run(n - 1) }
+
+println("{run(2)}")
 """
-    Assert.DoesNotContain("call $broken", functionText "main" (transpileWat source))
+    Assert.DoesNotContain("call $broken", functionText "run" (transpileWat source))
     let outcome = runSource source
     Assert.NotEqual(0, outcome.ExitCode)
     Assert.Contains(":3:37: error NYX0101: Unknown identifier 'missing' (deferred from compile time)", outcome.StandardError)
@@ -169,6 +164,6 @@ def run: int -> int = { n -> go(n, 0) }
     let notInlinedAllocations, notInlinedResult = allocationsOfRun notInlined
     Assert.Equal(15450, inlinedResult)
     Assert.Equal(notInlinedResult, inlinedResult)
-    // `proc` and the block are inlined into `block`, but the members still reach the block through adapters and boxes,
-    // so both make 29 allocations a block: removing those is the next steps on the Inlining page.
+    // `proc` and the block are inlined, but the members still reach the block through adapters and boxes, so both make
+    // 29 allocations a block: removing those is the next steps on the Inlining page.
     Assert.True(inlinedAllocations <= notInlinedAllocations, $"{inlinedAllocations} allocations inlined, {notInlinedAllocations} not")
