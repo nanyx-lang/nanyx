@@ -78,7 +78,8 @@ let private notAttached (env: TypeEnv) (state: InferState) (isTypeName: string -
         $"'{Unifier.tyToString lookup.PipedType}' has no attached '{name}', and there is no function '{name}' in scope{hint}"
 
 /// The error for piping a value of a named type that attaches nothing under the pipe's name to the plain function of
-/// that name, when the function does not take the value: what it takes instead. None when it does, when the pipe
+/// that name, when the function does not take the value: what it takes instead. For a qualified name, which is never
+/// an attached one, only what the function takes. None when it does, when the pipe
 /// found an attached definition, or when the value's type is not known yet. `hasArguments` says whether the pipe
 /// passes more arguments after the value, which makes the value the first of the function's parameters.
 let misfit (env: TypeEnv) (state: InferState) (lookup: Lookup) (hasArguments: bool) : Diagnostic option =
@@ -97,8 +98,11 @@ let misfit (env: TypeEnv) (state: InferState) (lookup: Lookup) (hasArguments: bo
         |> Option.map (fun takes ->
             let name = lookup.Written
             let piped = Unifier.tyToString lookup.PipedType
-            Diagnostics.at DiagnosticCodes.TypeMismatch lookup.At
-                $"'{piped}' has no attached '{name}', and the function '{name}' in scope takes '{Unifier.tyToString takes}', not '{piped}'")
+            // A qualified name (`s \string.isEmpty`) names its function, and is never an attached name.
+            let message =
+                if name.Contains "." then $"'{name}' takes '{Unifier.tyToString takes}', not '{piped}'"
+                else $"'{piped}' has no attached '{name}', and the function '{name}' in scope takes '{Unifier.tyToString takes}', not '{piped}'"
+            Diagnostics.at DiagnosticCodes.TypeMismatch lookup.At message)
     | _ -> None
 
 /// The error for a pipe that found nothing to call: none when it looked for nothing more than a plain name, which the

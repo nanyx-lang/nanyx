@@ -18,7 +18,15 @@ def Point.length = { p ->
 }
 ```
 
-Attached functions are inferred exactly like any other function; attaching a definition to a type says nothing about the types of its parameters. In the example above, `p` is inferred to be a `Point` because the body accesses `p.x` and `p.y`.
+Attached functions are inferred from their bodies like any other function. Only where the body leaves a single parameter open (it could be anything, or any record with the fields it reads) does the parameter take the type the definition is attached to. In the example above, `p` is a `Point`: the body reads `p.x` and `p.y`, which a `Point` has. A parameter the body uses as something else keeps that type, so a constructor function takes what it builds from:
+
+```nanyx
+def Point.diagonal = { n -> Point(x = n, y = n) }
+
+def d = Point.diagonal(3)
+```
+
+Here `n` is an `int`, and `Point.diagonal` is an `int -> Point`.
 
 Call it in a qualified way like any other function:
 

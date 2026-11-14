@@ -1197,12 +1197,31 @@ and internal inferTypeOfValues (env: TypeEnv) (state: InferState) (typeExpr: Typ
     |> List.fold (fun result value -> result |> Result.bind (fun current -> inferExpr env current value |> Result.map snd)) (Ok state)
 
 /// Infers `expr`, the value of a def whose written type was read as `annotation`: a lambda against the input and
-/// result the type expects of it.
+/// result the type expects of it. An attached def's lambda is inferred from its body like any other. Where the body
+/// leaves its parameter open (any type, or any record with some fields), the parameter is then the type it is attached
+/// to, if that fits: `def Point.show = { p -> "{p.x}" }` takes a `Point`, while `def Point.origin = { n -> Point(x = n,
+/// y = n) }` takes an int, and `def UserId.new = { s -> ... s \string.isEmpty ... }` a string.
 and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression) (annotation: DefAnnotations.ReadAnnotation) : Result<TypedExpr * InferState, Diagnostic list> =
     match expr.Kind with
     | Lambda(args, body, _) when annotation.ExpectedInput.IsSome || annotation.ExpectedReturn.IsSome ->
         inferLambdaWithExpected env state expr args body annotation.ExpectedInput annotation.ExpectedReturn
-    | _ -> inferExpr env state expr
+    | _ ->
+        inferExpr env state expr
+        |> Result.map (fun (typed, next) ->
+            let isOpen (input: Ty) =
+                match Unifier.unify next.Constraints with
+                | Ok subst ->
+                    match Unifier.unalias (Unifier.apply subst input) with
+                    | TyVar _
+                    | TyOpenRecord _ -> true
+                    | _ -> false
+                | Error _ -> false
+            match annotation.AttachedInput, Unifier.unalias typed.Type with
+            | Some attached, TyFunc(input, _, _) when
+                isOpen input && Unifier.unify ((input, attached, Equal, expr.Span) :: next.Constraints) |> Result.isOk
+                ->
+                typed, addConstraintAt expr.Span input attached next
+            | _ -> typed, next)
 
 and inferLambdaWithExpected (env: TypeEnv) (state: InferState) (lambda: Expression) (args: (Identifier * TypeExpr option) list) (body: Expression) (expectedInputOpt: Ty option) (expectedReturnOpt: Ty option) : Result<TypedExpr * InferState, Diagnostic list> =
     // The parameters' annotations are read only when nothing else gives their types, but each must name types.
