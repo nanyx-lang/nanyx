@@ -873,8 +873,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // Anything that writes to stdout or stderr, or reads stdin, shares the WASI import, the memory and the
     // newline byte.
     let moduleUsesIoHelpers = facts.UsesDbgHelpers || moduleUsesStandardStreams
-    // Everything that allocates does it through `$alloc`.
-    let moduleUsesHeap = usedHelperSet.Contains Helpers.alloc
+    // Everything that allocates does it through `$alloc`, and `$free` gives the top of the heap back to it.
+    let moduleUsesHeap = usedHelperSet.Contains Helpers.alloc || usedHelperSet.Contains Helpers.free
     let renderedHelpers =
         let helpers = if options.CheckMemory then checkedRuntimeHelpers heapBase else runtimeHelpers heapBase
         [ yield!

@@ -183,16 +183,23 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
   bytes per object but keeps `free` independent of types, and lets the large list hand out a bigger block than
   asked for and still take all of it back.
 - **Classes.** Each size from 4 to 32 bytes (8 words) has its own list, so a freed block goes back to exactly the
-  size Perceus will next ask for. Larger blocks share one list, searched first-fit; a block found there is not
-  split and keeps its own size.
+  size Perceus will next ask for. Larger blocks share one list, kept in address order and searched first-fit.
 - **Lists.** The heads are a table of 9 words at the start of the heap, and `$heap_ptr` starts after it. The
   string literals and static closures run from address 256, and the table goes at 4096 or, when they end past that,
   after them,
-  8-byte aligned (`heapBaseAfter`); the module starts with enough pages of memory to hold them. A free block keeps the next block of its list in its first word. `free` pushes onto the front of the
-  list and `alloc` takes from the front, so the most recently freed block is reused first.
+  8-byte aligned (`heapBaseAfter`); the module starts with enough pages of memory to hold them. A free block keeps the next block of its list in its first word. On a small size's list, `free` pushes onto the
+  front and `alloc` takes from the front, so the most recently freed block is reused first.
+- **Large blocks.** `free` puts a large block into its place on the large list and joins it with the free large
+  blocks just before and after it, and a block that then ends at `$heap_ptr` goes back to the heap instead
+  ([#1290](https://github.com/nanyx-lang/nanyx/issues/1290), done). `alloc` splits a block it takes from the list
+  when the rest would be a large block too; otherwise the block keeps its own size. This is what a string grown
+  by `++` needs: each copy is freed after the next is made, the copies before it join into a block the one after
+  fits in, so the heap holds about two copies of the string, not every copy there was.
+- **Out of memory.** Past 4 GB, the end of a new block wraps around; `alloc` checks for that, and for `memory.grow`
+  failing, and traps with `unreachable`.
 
-Nothing coalesces adjacent free blocks or returns memory to the host; neither matters for the small,
-same-sized objects that dominate, and both can come later if measurements on the examples call for them.
+Small free blocks are never joined, with each other or with large ones, and the heap never shrinks: memory once
+grown is not given back to the host.
 
 ## Core IR
 
