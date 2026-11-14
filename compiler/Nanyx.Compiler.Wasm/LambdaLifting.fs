@@ -119,12 +119,16 @@ let private annotateFromMemberType (memberType: TypeExpr option) (args: (string 
 ///
 /// `useContexts` is the instance of a parameterised context each `use` loads, by the node of its value (see
 /// `TypedModule.UseContexts`): its members are keyed by it, and read from the value one by one. A `use` left behind
-/// binds such a member by its key's text, and the key of each such name is returned too.
-let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKey list>) (requiresContexts: string -> bool) (passedMembers: Expression -> Set<ContextMemberKey>) (useContexts: Map<NodeId, TypeExpr>) (ambientDefinitions: string list) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> * Map<string, ContextMemberKey> =
+/// binds such a member by its key's text, and the key of each such name is returned too. So is the plain context each
+/// local a `use` binding is evaluated into binds a member of, where the `use` names it (`use Proc(...)`), by the local's
+/// name: two plain contexts may have members of the same name.
+let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKey list>) (requiresContexts: string -> bool) (passedMembers: Expression -> Set<ContextMemberKey>) (useContexts: Map<NodeId, TypeExpr>) (ambientDefinitions: string list) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> * Map<string, ContextMemberKey> * Map<string, string> =
     let lifted = System.Collections.Generic.List<TopLevelItem>()
     let origins = System.Collections.Generic.Dictionary<string, LiftedOrigin>()
     let wrappers = System.Collections.Generic.Dictionary<string, string>()
     let useKeys = System.Collections.Generic.Dictionary<string, ContextMemberKey>()
+    // The plain context each local a `use` binding is evaluated into binds a member of, where the `use` names it.
+    let bindingContexts = System.Collections.Generic.Dictionary<string, string>()
     let mutable owner = ""
     // The context members of `owner`: the name each is captured by, and its key.
     let mutable ownerMembers: (string * ContextMemberKey) list = []
@@ -393,6 +397,9 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
                                 let key = contextMemberKey contextType memberName
                                 let local = $"__use_{sanitizeIdentifier (ContextMemberKey.text key)}_{counter}"
                                 counter <- counter + 1
+                                match contextType with
+                                | Some (Kind (TypeName contextName)) -> bindingContexts.[local] <- contextName
+                                | _ -> ()
                                 memberName, key, local, liftMember contextType memberName value)
                         // Each member by its key, and by its own name too, as the block can call it by that (`a == b`
                         // after `use ignoringCase` calls its `==`).
@@ -489,4 +496,5 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
     items @ List.ofSeq lifted,
     origins |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq,
     wrappers |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq,
-    useKeys |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq
+    useKeys |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq,
+    bindingContexts |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq

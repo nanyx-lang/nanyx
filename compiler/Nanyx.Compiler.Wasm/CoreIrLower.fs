@@ -52,6 +52,13 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     let toIrType = toIrTypeIn input.ContextLayouts
     let declaredMemberTypes = declaredMemberTypes input.ContextLayouts
 
+    /// The type the member of the key `key` that a `use` binds to the local `local` has: the one in the layout of the
+    /// context the `use` names, or else the one context that has a member of the key declares.
+    let bindingMemberType (key: ContextMemberKey) (local: string) =
+        match input.UseBindingContexts |> Map.tryFind local |> Option.bind (fun context -> input.ContextLayouts |> Map.tryFind context) with
+        | Some layout -> layout |> List.tryFind (fst >> (=) key) |> Option.map snd
+        | None -> declaredMemberTypes |> Map.tryFind key
+
     /// What a `dbg` printer needs from this function's lowering (see `CoreIrLowerDbg`).
     let printerTools: CoreIrLowerDbg.PrinterTools =
         { NewVar = fun name kind ty -> newVar (uniqueName name) kind ty
@@ -1144,7 +1151,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     restScope.Value <- { scope with Members = members; Vars = vars }
                     hole
                 | (key, local) :: others ->
-                    match declaredMemberTypes |> Map.tryFind key with
+                    match bindingMemberType key local with
                     | Some memberTy when vars.[local] = scope.Vars.[local] ->
                         this.Coerce scope (AVar vars.[local]) (toIrType memberTy) (function
                             | AVar var when var = vars.[local] -> adapt others vars
@@ -1175,7 +1182,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 |> List.exists (function
                     | NamedField(memberName, Kind (IdentifierExpr local)) when local = name ->
                         let key = input.UseKeys |> Map.tryFind memberName |> Option.defaultValue (NamedMember memberName)
-                        declaredMemberTypes |> Map.tryFind key |> Option.exists (toIrType >> CoreIrLowerBoxes.holdsBox)
+                        bindingMemberType key local |> Option.exists (toIrType >> CoreIrLowerBoxes.holdsBox)
                     | _ -> false)
             | _ -> false)
 

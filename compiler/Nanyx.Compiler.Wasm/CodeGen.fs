@@ -437,7 +437,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         match checkedTypes |> Map.tryFind lambda.Id with
         | Some (TyFunc(_, _, contexts)) -> CoreIrLowerTypes.contextMembersOf contextLayouts contexts |> List.map fst |> Set.ofList
         | _ -> Set.empty
-    let module', liftedOrigins, functionWrappers, useKeys = LambdaLifting.lift synthesizedMembers memberCaptures requiresContexts passedMembers typed.UseContexts (typed.AmbientMembers |> List.map _.Definition) module'
+    let module', liftedOrigins, functionWrappers, useKeys, useBindingContexts = LambdaLifting.lift synthesizedMembers memberCaptures requiresContexts passedMembers typed.UseContexts (typed.AmbientMembers |> List.map _.Definition) module'
     let defs =
         module'
         |> List.choose (function
@@ -676,6 +676,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               ContextLayouts = contextLayouts
               AmbientMembers = ambientContextMembers
               UseKeys = useKeys
+              UseBindingContexts = useBindingContexts
               BuiltInHoles =
                 contextInstances |> Map.filter (fun _ found -> found = [ Some InstanceBuiltIn ]) |> Map.keys |> Set.ofSeq
               RecordConstructors = typeLayouts.Keys |> Set.ofSeq

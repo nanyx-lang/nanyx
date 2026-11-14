@@ -365,8 +365,13 @@ let ``Hover inside a match arm shows the innermost expression`` () =
 [<Fact>]
 let ``A workflow bind is not given the type of the rest of the workflow`` () =
     let source =
-        normalized """context AsyncWorkflow = (await: (string, (string -> int)) -> int return: int -> int)
-def async: AsyncWorkflow = (await = { x, f -> f(x) }, return = { x -> x })
+        normalized """context AsyncWorkflow = (
+  await: [c] (string, ([c] string -> int)) -> int
+  return: int -> int
+)
+def async: [c] ([AsyncWorkflow & c] () -> int) -> int = { block ->
+  use AsyncWorkflow(await = { x, f -> f(x) }, return = { x -> x }) in block()
+}
 def result = async {
   def x = await! "a"
   return! 1

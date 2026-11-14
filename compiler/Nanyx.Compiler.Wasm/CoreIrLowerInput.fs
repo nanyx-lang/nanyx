@@ -67,6 +67,9 @@ type LowerInput =
       /// The key of each name a `use` lambda lifting left behind binds a member of a parameterised context by (see
       /// `LambdaLifting.lift`). Any other name a `use` binds is a named member's.
       UseKeys: Map<string, ContextMemberKey>
+      /// The plain context each local a `use` binding is evaluated into binds a member of, where the `use` names it
+      /// (`use Proc(...)`), by the local's name (see `LambdaLifting.lift`).
+      UseBindingContexts: Map<string, string>
       /// The calls of interpolation holes that use the compiler's own `ToString` (see `InterpolationHoles`), by node: the
       /// value is written into the string as it is.
       BuiltInHoles: Set<NodeId>
