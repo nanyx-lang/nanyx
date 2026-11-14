@@ -45,6 +45,13 @@ module Hosts =
     /// The hosts the standard library ships.
     let all = [ console ]
 
+    /// Whether the module `origin` declares contexts a host provides, as `nanyx/console` declares `Console`.
+    let providesContexts (origin: ModuleOrigin) =
+        match origin with
+        | StandardLibraryModule name -> all |> List.exists (fun host -> host.ProvidedModules |> List.contains (StandardLibrary.importPrefix + name))
+        | SourceFile _
+        | InMemory -> false
+
     /// Whether the module `origin` may require `HostRuntime`: a host, or the module that declares it.
     let mayRequireRuntime (origin: ModuleOrigin) =
         match origin with

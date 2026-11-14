@@ -206,7 +206,29 @@ module Compiler =
         let state = merged.State
         let importedKey = originKey importedOrigin
         let qualifier = ModuleLinking.importQualifier item
-        let exportedValues = SyntaxTree.exportedValueNames imported.Own
+        // The members of each context a host provides, `nanyx/console`'s `Console`, are brought in as the module's
+        // exports would be, each a name of its own, so that the context is an ambient one (see `InferModule`): code at a
+        // script's top level, or in a def that infers the context, calls `readLine()`. The host supplies the instance.
+        let hostMembers =
+            if Hosts.providesContexts importedOrigin then
+                imported.Typed.TypeDefs
+                |> Map.filter (fun name info -> info.IsContext && info.Parameters.IsEmpty && (ModuleLinking.exportedTypeNames imported.Own).Contains name)
+                |> Map.values
+                |> Seq.collect (fun info ->
+                    match Unifier.unalias info.Underlying with
+                    | TyRecord members ->
+                        members
+                        |> Map.toSeq
+                        |> Seq.choose (fun (memberName, ty) ->
+                            info.Members
+                            |> Map.tryFind memberName
+                            |> Option.bind (fun memberSymbol -> imported.Typed.Symbols |> Map.tryFind memberSymbol)
+                            |> Option.map (fun declared ->
+                                memberName, ty, { Id = SymbolId.next (); Name = memberName; Kind = TopLevelValue; Declaration = declared.Declaration; IsExported = true }))
+                    | _ -> Seq.empty)
+                |> List.ofSeq
+            else []
+        let exportedValues = SyntaxTree.exportedValueNames imported.Own |> Set.union (hostMembers |> List.map (fun (name, _, _) -> name) |> Set.ofList)
         // An import brings in every export, or only those it selects.
         let selected = item.Selection |> Option.map (ModuleLinking.selectedExports imported)
         let isSelected (name: string) = selected |> Option.forall (fun selected -> selected.Contains name)
@@ -227,12 +249,14 @@ module Compiler =
                 merged.UnqualifiedSources
         let exportedTypes = ModuleLinking.exportedTypeNames imported.Own
         let exportedValueTypes =
-            imported.Typed.Types |> Map.filter (fun name _ -> exportedValues.Contains name)
+            hostMembers
+            |> List.fold (fun acc (name, ty, _) -> acc |> Map.add name ty) (imported.Typed.Types |> Map.filter (fun name _ -> exportedValues.Contains name))
         let exportedTypeDefs =
             imported.Typed.TypeDefs |> Map.filter (fun name _ -> exportedTypes.Contains name)
+        let exports = hostMembers |> List.fold (fun acc (name, _, symbol) -> acc |> Map.add name symbol) imported.Exports
         // The exported definitions, declared in the imported module's file.
         let exportedSymbols =
-            imported.Exports
+            exports
             |> Map.filter (fun name _ -> exportedValues.Contains name)
             |> Map.values
             |> Seq.map (fun symbol -> symbol.Id, symbol)
@@ -245,7 +269,7 @@ module Compiler =
             |> Seq.choose (fun id -> imported.Typed.Symbols |> Map.tryFind id)
             |> Seq.map (fun symbol -> symbol.Id, symbol)
             |> Map.ofSeq
-        let env = ModuleLinking.extendEnvWithImport merged.Env qualifier (exportedValueTypes |> Map.filter (fun name _ -> isSelected name)) (imported.Exports |> Map.map (fun _ symbol -> symbol.Id))
+        let env = ModuleLinking.extendEnvWithImport merged.Env qualifier (exportedValueTypes |> Map.filter (fun name _ -> isSelected name)) (exports |> Map.map (fun _ symbol -> symbol.Id))
         // The import is a symbol of its own, unless the compiler made it up (for `@entry`).
         let importedThroughSymbol (importId: SymbolId) =
             Seq.append exportedSymbols exportedTypeSymbols
@@ -608,8 +632,15 @@ module Compiler =
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
                 let own, placed = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.OperatorInstances state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems
                 let own = own |> ModuleLinking.writeBlockAliases state |> writeCells state |> nameIgnoredParameters state.ExprTypes subst
-                // The script's values that need a context run in its entry point.
-                let own = match script with Some (entry, _) -> Scripts.withEntryValues entry state.ScriptEntryValues own | None -> own
+                // A script's entry point is a def of its own, with the values that need a context in it (see `Scripts`),
+                // which the call of the host's `run` names: typed as the entry point's lambda is.
+                let own, resolvedTypes, state =
+                    match script with
+                    | Some (entry, lambda) ->
+                        let entryTy = state.ExprTypes |> Map.tryFind lambda |> Option.map (Unifier.apply subst) |> Option.defaultValue Unifier.errorType
+                        let own, named = Scripts.asDefinition entry state.ScriptEntryValues entryTy own
+                        own, resolvedTypes |> Map.add Scripts.definitionName entryTy, { state with ExprTypes = state.ExprTypes |> Map.add named entryTy }
+                    | None -> own, resolvedTypes, state
                 // An error is deferred when the diagnostic itself was placed, its place included.
                 let placed = Set.ofList placed
                 let undeferred = moduleErrors |> List.filter (placed.Contains >> not)
