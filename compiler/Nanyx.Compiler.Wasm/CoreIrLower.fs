@@ -36,6 +36,8 @@ type internal Lowering =
     /// As a function value of the second type that calls one of the first, which its closure holds, with the members
     /// the first requires: each passed to it, or captured after the value where it was made (see `Coerce`).
     | Adapting of IrType * IrType
+    /// As the function a box of a value of this type is a closure over (see `CoreIrLowerBoxes`).
+    | BoxReading of IrType
     /// As a function that writes values as text for `dbg` (see `CoreIrLowerDbg`).
     | Printing of CoreIrLowerDbg.Printer
     /// As the start function, from the module's top-level expressions.
@@ -139,26 +141,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         |> List.filter (fst >> declared.Contains >> not)
 
 
-    /// Stops at a call, at the node `node`, to the member of the key `key` of a context without parameters, when the call
-    /// has one of the member's own type variables at another type than unit. The member's value is made once, where its
-    /// instance is, at the type the context declares with those variables unit (see `unconstrainedAsUnit`), so the call
-    /// would pass and read its values as unit's: `ret: a -> #some(a) | r` called as `ret(1)` (#1152). The rests of its
-    /// unions and records, and its context variables, change nothing in how its values are laid out.
-    let checkMemberCall (key: ContextMemberKey) (node: NodeId) =
-        match declaredMemberTypes |> Map.tryFind key, input.CalleeTypes |> Map.tryFind node with
-        | Some memberTy, Some calledTy when not (freeVars memberTy).IsEmpty ->
-            let layoutFree = Set.union (Unifier.restVarIds true memberTy) (FunctionContexts.variablesIn memberTy |> Map.keys |> Set.ofSeq)
-            let bindings =
-                try bindScheme Map.empty memberTy (substitute subst calledTy)
-                with CannotLower _ -> Map.empty
-            bindings
-            |> Map.iter (fun id ty ->
-                let irTy = toIrType (unconstrainedAsUnit ty)
-                if not (layoutFree.Contains id) && irTy <> IrUnit then
-                    cannot $"a call to the context member '{ContextMemberKey.text key}' with one of its own type variables at {IrType.show irTy}")
-        | _ -> ()
-
-
     let tyOf (expr: Expression) : IrType =
         match input.ExprTypes |> Map.tryFind expr.Id with
         | Some ty -> toIrType (substitute subst ty)
@@ -244,6 +226,20 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let temp = newTemp value.Type
         let body = k (AVar temp)
         Expr.make (Let(temp, value, body)) body.Type
+
+    /// `value` bound to a local named `name`, made unique, passed to `k`.
+    let bindLocal (name: string) (value: Expr) (k: Atom -> Expr) : Expr =
+        let local = newVar (uniqueName name) Local value.Type
+        let body = k (AVar local)
+        Expr.make (Let(local, value, body)) body.Type
+
+    /// `value` as an atom that can wait while code that stores runs before it is used: an atom that is not a temporary
+    /// as it is, and anything else in a local.
+    let settle (value: Expr) (k: Atom -> Expr) : Expr =
+        match value.Kind with
+        | Atom (AVar var) when var.Kind = Temp -> bindLocal "__held" value k
+        | Atom atom -> k atom
+        | _ -> bindLocal "__held" value k
 
     /// Where the expression being lowered is written, for reporting what cannot be lowered.
     member _.CurrentSpan = current
@@ -436,7 +432,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | FunctionCall(name, _, args) when scope.Members.ContainsKey (NamedMember name) ->
             // A context member in scope: a function value like any other.
             let ty = tyOf expr
-            checkMemberCall (NamedMember name) expr.Id
             this.CallValue scope scope.Members.[NamedMember name] args ty k
         | FunctionCall(name, _, [ value ]) when Intrinsics.reinterpretations.Contains name && not (scope.Vars.ContainsKey name) ->
             // A map and the list of its entries are held the same way: the value is its argument.
@@ -603,7 +598,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // `C(T).f(args)`: the member of that instance of the context, which must be in scope.
             let key = contextMemberKey (Some contextType) memberName
             let ty = tyOf expr
-            checkMemberCall key expr.Id
             match scope.Members |> Map.tryFind key with
             | Some memberVar -> this.CallValue scope memberVar args ty k
             | None -> cannot $"the context member {ContextMemberKey.text key}, which is not in scope"
@@ -741,25 +735,41 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         go members []
 
     /// `atoms`, each adapted to the type in `tys` in its place (see `Coerce`); as they are when `tys` is empty.
+    /// Where one of them is converted to or from boxes, which stores (see `CoreIrLowerBoxes`), each adapted value waits
+    /// in a local.
     member this.CoerceAll (scope: Scope) (atoms: Atom list) (tys: IrType list) (k: Atom list -> Expr) : Expr =
+        let converting = tys.Length = atoms.Length && List.exists2 (fun atom ty -> CoreIrLowerBoxes.needsConversion (atomType atom) ty) atoms tys
         let rec go (remaining: (Atom * IrType) list) (acc: Atom list) =
             match remaining with
             | [] -> k (List.rev acc)
-            | (atom, ty) :: rest -> this.Coerce scope atom ty (fun atom -> go rest (atom :: acc))
+            | (atom, ty) :: rest ->
+                this.Coerce scope atom ty (fun atom ->
+                    if converting then settle (Expr.make (Atom atom) (atomType atom)) (fun atom -> go rest (atom :: acc))
+                    else go rest (atom :: acc))
         if tys.IsEmpty then k atoms else go (List.zip atoms tys) []
 
-    /// `atom`, a function value, as one of type `expected` where it requires other contexts' members where it is called:
-    /// a closure over an adapter that holds it and calls it with the members it requires, those `expected` requires
-    /// passed on, and the others captured here. A value whose type requires them all is left as it is.
+    /// `atom` as a value of type `expected`. A function value where it requires other contexts' members where it is
+    /// called, or takes or returns values boxed where `expected` does not or the other way round, is a closure over an
+    /// adapter that holds it and calls it with the members it requires, those `expected` requires passed on, and the
+    /// others captured here, converting its arguments and its result. Any other value with values boxed where `expected`
+    /// does not, or the other way round, is converted (see `CoreIrLowerBoxes`). A value of `expected`'s layout is left as
+    /// it is.
     member this.Coerce (scope: Scope) (atom: Atom) (expected: IrType) (k: Atom -> Expr) : Expr =
         match atomType atom, expected with
-        | IrFunction(_, _, given) as givenTy, IrFunction(_, _, wanted) when given <> wanted ->
+        | IrFunction(_, _, given) as givenTy, IrFunction(_, _, wanted) when given <> wanted || CoreIrLowerBoxes.needsConversion givenTy expected ->
             let missing = given |> List.filter (fun (key, _) -> not (wanted |> List.exists (fst >> (=) key)))
             this.MemberAtoms scope missing (fun captured ->
                 let name = request (SpecKey.plain $"__adapt_{IrType.mangle givenTy}_to_{IrType.mangle expected}" []) subst (Adapting(givenTy, expected))
                 let arity = 1 + (adaptedValueTypes givenTy expected).Length + wanted.Length
                 bindTemp (Expr.make (MakeClosure(name, arity, atom :: captured)) expected) k)
+        | givenTy, _ when CoreIrLowerBoxes.needsConversion givenTy expected -> CoreIrLowerBoxes.convert (this.BoxTools scope) atom expected k
         | _ -> k atom
+
+    /// What converting a value to or from boxes needs, where `scope` is in scope (see `CoreIrLowerBoxes`).
+    member private this.BoxTools (scope: Scope) : CoreIrLowerBoxes.BoxTools =
+        { NewLocal = fun name ty -> newVar (uniqueName name) Local ty
+          Reader = fun ty -> request (SpecKey.plain $"__box_{IrType.mangle ty}" []) subst (BoxReading ty)
+          Convert = fun atom ty k -> this.Coerce scope atom ty k }
 
     /// The closure over the wrapper `wrapper` of a top-level function, as a context member of type `memberTy` (see
     /// `wrappedAt`): static data, since it captures nothing.
@@ -997,6 +1007,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// of the contexts the value requires follow, as they are in scope here. A known function a specialisation stands
     /// in for with `closure` is called directly (see `CoreIrLowerKnown`).
     member this.CallValue (scope: Scope) (closure: Var) (args: Expression list) (ty: IrType) (k: Expr -> Expr) : Expr =
+        // The arguments of a context member whose type has values boxed are held in locals, since converting them stores
+        // (see `CoreIrLowerBoxes`).
+        let boxing = CoreIrLowerBoxes.holdsBox closure.Type
+        let atomsOf = if boxing then this.AtomsInLocals else this.Atoms
+        let bindElement = if boxing then bindLocal "__element" else bindTemp
         let members, parameterTys =
             match closure.Type with
             | IrFunction(input, _, members) ->
@@ -1007,7 +1022,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match known.TryGetValue closure.Id, closure.Type with
                 | (true, (_, KnownFunction(wrapper, wrapped, at))), IrFunction(input, _, _) ->
                     directArguments bindTemp (parameterNames wrapper).Tail.Length input atoms (fun atoms -> k (Expr.make (Call(callee wrapped at, atoms)) ty))
-                | _ -> this.MemberAtoms scope members (fun memberAtoms -> k (Expr.make (CallClosure(closure, atoms @ memberAtoms)) ty)))
+                | _ ->
+                    this.MemberAtoms scope members (fun memberAtoms ->
+                        // A context member's result with values boxed is converted to the type the call has it at.
+                        match closure.Type with
+                        | IrFunction(_, output, _) when CoreIrLowerBoxes.needsConversion output ty ->
+                            bindTemp (Expr.make (CallClosure(closure, atoms @ memberAtoms)) output) (fun result ->
+                                this.Coerce scope result ty (fun atom -> k (Expr.make (Atom atom) ty)))
+                        | _ -> k (Expr.make (CallClosure(closure, atoms @ memberAtoms)) ty)))
         let elements =
             match closure.Type with
             | IrFunction(input, _, _) -> IrType.tupleElements input
@@ -1022,14 +1044,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | arg :: rest -> this.Complex scope arg (fun value -> let after = run rest in Expr.make (Do(value, after)) after.Type)
             run flatArgs
         | Some elements, [ tuple ] ->
-            this.Atoms scope [ tuple ] (fun atoms ->
+            atomsOf scope [ tuple ] (fun atoms ->
                 let rec loadElements (remaining: (int * IrType) list) (acc: Atom list) =
                     match remaining with
                     | [] -> call (List.rev acc)
                     | (slot, elementTy) :: rest ->
-                        bindTemp (Expr.make (Field(atoms.Head, slot)) elementTy) (fun atom -> loadElements rest (atom :: acc))
+                        bindElement (Expr.make (Field(atoms.Head, slot)) elementTy) (fun atom -> loadElements rest (atom :: acc))
                 loadElements elements [])
-        | _, flatArgs -> this.Atoms scope flatArgs call
+        | _, flatArgs -> atomsOf scope flatArgs call
 
     /// The parameters a lifted function takes for its parameters `names` of types `tys` (its environment aside), and
     /// how to bind those names around its body. A lone parameter whose type is a tuple takes the tuple's elements, which
@@ -1078,6 +1100,15 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | _ -> bindTemp value (fun atom -> go (atom :: acc) rest))
         go [] exprs
 
+    /// `Atoms`, but binding each value that is not an atom to a local, so that code that stores can come between them
+    /// and where they are used.
+    member this.AtomsInLocals (scope: Scope) (exprs: Expression list) (k: Atom list -> Expr) : Expr =
+        let rec go (acc: Atom list) (remaining: Expression list) =
+            match remaining with
+            | [] -> k (List.rev acc)
+            | expr :: rest -> this.Complex scope expr (fun value -> settle value (fun atom -> go (atom :: acc) rest))
+        go [] exprs
+
     /// Lowers a block, its value passed to `k`, a statement at a time (see `CoreIrLowerHoles`).
     member this.Block (scope: Scope) (statements: StatementKind list) (k: Expr -> Expr) : Expr =
         CoreIrLowerHoles.lowerBlock (fun scope statements -> this.Statement scope statements k) scope statements
@@ -1086,6 +1117,16 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     member private this.Statement (scope: Scope) (statements: StatementKind list) (k: Expr -> Expr) : Expr * (Expr * Scope * StatementKind list) option =
         let hole = CoreIrLowerHoles.hole ()
         let restScope = ref scope
+        // A value a `use` below binds to a context member whose type has values boxed is lowered with its own type
+        // variables boxed, as the member's are (see `CoreIrLowerBoxes`), and the rests of its unions without tags.
+        match statements with
+        | DefStatement(_, name, _, rhs) :: rest when this.BindsBoxingMember name rest ->
+            match input.ExprTypes |> Map.tryFind rhs.Id |> Option.map (substitute subst) with
+            | Some ty ->
+                let values = valueVariables ty |> Set.ofList
+                subst <- freeVars ty |> List.fold (fun acc id -> acc |> Map.add id (if values.Contains id then boxedTy else TyUnion [])) subst
+            | None -> ()
+        | _ -> ()
         match statements with
         | [] -> cannot "an empty block"
         | [ ExprStatement last ] -> this.Complex scope last k, None
@@ -1170,6 +1211,19 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             hole, Some (hole, scope, rest)
         | UseStatement _ :: _ -> cannot "this kind of `use`"
         | _ -> cannot "this kind of statement"
+
+    /// Whether a `use` among `statements` binds the local `name` to a context member whose type has values boxed.
+    member private this.BindsBoxingMember (name: string) (statements: StatementKind list) =
+        statements
+        |> List.exists (function
+            | UseStatement(Kind (RecordExpr fields)) ->
+                fields
+                |> List.exists (function
+                    | NamedField(memberName, Kind (IdentifierExpr local)) when local = name ->
+                        let key = input.UseKeys |> Map.tryFind memberName |> Option.defaultValue (NamedMember memberName)
+                        declaredMemberTypes |> Map.tryFind key |> Option.exists (toIrType >> CoreIrLowerBoxes.holdsBox)
+                    | _ -> false)
+            | _ -> false)
 
     member this.Match (scope: Scope) (expr: Expression) (values: Expression list) (arms: (Parser.Program.Pattern list * Expression) list) (k: Expr -> Expr) : Expr =
         let ty = tyOf expr
@@ -1338,6 +1392,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         match lowering with
         | AsStart -> this.StartFunction ()
         | Adapting(givenTy, expectedTy) -> this.Adapter functionName givenTy expectedTy
+        | BoxReading ty -> CoreIrLowerBoxes.readerFunction newVar functionName ty
         | Printing printer -> CoreIrLowerDbg.printerFunction printerTools functionName printer
         | _ ->
         let expr = definitions.[name]
@@ -1454,6 +1509,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | None, None -> internalError $"the context member {ContextMemberKey.text key} of '{wrapped}' is neither captured nor passed"
             make (environmentParameter :: valueParameters @ List.map snd passed) (toIrType resultTy) (bind (call order []))
         | Adapting _ -> internalError "an adapter lowered as a definition"
+        | BoxReading _ -> internalError "a box's function lowered as a definition"
         | Printing _ -> internalError "a printer lowered as a definition"
         | AsStart -> internalError "the start function lowered as a definition"
 
@@ -1461,11 +1517,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// `Coerce`): it takes an environment that holds the value, then the members `givenTy` requires that `expectedTy`
     /// does not, and its arguments and the members `expectedTy` requires; and calls the value with the arguments and
     /// the members it requires. An argument that is a function is adapted in turn to the type the value takes it at, as
-    /// a continuation that requires no contexts is passed to a function that calls it with its members.
+    /// a continuation that requires no contexts is passed to a function that calls it with its members. An argument or
+    /// a result boxed where the other type has the value, or the other way round, is converted (see
+    /// `CoreIrLowerBoxes`): a box of unit is passed where the value takes one and the adapter is given nothing, and none
+    /// where the adapter is given one and the value takes nothing.
     member private this.Adapter (functionName: string) (givenTy: IrType) (expectedTy: IrType) : Function =
-        let givenInput, given, result, wanted =
+        let givenInput, givenOutput, given, result, wanted =
             match givenTy, expectedTy with
-            | IrFunction(givenInput, _, given), IrFunction(_, result, wanted) -> givenInput, given, result, wanted
+            | IrFunction(givenInput, givenOutput, given), IrFunction(_, result, wanted) -> givenInput, givenOutput, given, result, wanted
             | _ -> internalError $"an adapter from {IrType.show givenTy} to {IrType.show expectedTy}"
         let missing = given |> List.filter (fun (key, _) -> not (wanted |> List.exists (fst >> (=) key)))
         let environment = newVar ClosureSyntax.envParameter Param (IrRecord(("0", IrWord) :: ("1", givenTy) :: (missing |> List.mapi (fun index (_, ty) -> string (index + 2), ty))))
@@ -1475,16 +1534,29 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let scope = { emptyScope with Members = passed |> Map.ofList }
         let adapted = newVar "__adapted" Local givenTy
         let givenValueTys = valuesOf givenInput
+        let boxing = CoreIrLowerBoxes.needsConversion givenTy expectedTy
         let rec call (remaining: (ContextMemberKey * IrType) list) (members: Atom list) =
             match remaining with
             | [] ->
                 let arguments = values |> List.map AVar
-                let call arguments = Expr.make (CallClosure(adapted, arguments @ List.rev members)) result
-                if givenValueTys.Length = values.Length then this.CoerceAll scope arguments givenValueTys call else call arguments
+                let call arguments =
+                    let called = Expr.make (CallClosure(adapted, arguments @ List.rev members)) givenOutput
+                    if CoreIrLowerBoxes.needsConversion givenOutput result then
+                        bindTemp called (fun value -> this.Coerce scope value result (fun atom -> Expr.make (Atom atom) result))
+                    else { called with Type = result }
+                match givenValueTys, valueTys with
+                | _ when givenValueTys.Length = values.Length -> this.CoerceAll scope arguments givenValueTys call
+                | [ IrBox ], [] -> this.CoerceAll scope [ AUnit ] givenValueTys call
+                | [], [ IrBox ] -> call []
+                | _ -> call arguments
             | (key, ty) :: rest ->
+                // The members wait in locals while arguments are converted to or from boxes, which stores.
+                let next (atom: Atom) =
+                    if boxing then settle (Expr.make (Atom atom) (atomType atom)) (fun atom -> call rest (atom :: members))
+                    else call rest (atom :: members)
                 match missing |> List.tryFindIndex (fst >> (=) key) with
-                | Some index -> bindTemp (Expr.make (Field(AVar environment, index + 2)) ty) (fun atom -> call rest (atom :: members))
-                | None -> this.Coerce scope (AVar scope.Members.[key]) ty (fun atom -> call rest (atom :: members))
+                | Some index -> (if boxing then bindLocal "__member" else bindTemp) (Expr.make (Field(AVar environment, index + 2)) ty) next
+                | None -> this.Coerce scope (AVar scope.Members.[key]) ty next
         let body = Expr.make (Let(adapted, Expr.make (Field(AVar environment, 1)) givenTy, call given [])) result
         { Name = functionName
           Source = functionName

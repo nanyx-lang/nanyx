@@ -95,6 +95,12 @@ takes their members as parameters after its others, and each call passes the one
   holds it, drops the members it doesn't take and captures the ones it needs that the expected type doesn't pass, as
   they are where it is given. That is how `use (write = { s -> write(...) })` calls the outer `write`, and how a
   builder's `try`, whose context variable no call binds, takes a continuation that prints.
+- A member of a context without parameters that is generic in type variables of its own (`ret: a -> #some(a) | r`)
+  is made once, at its `use`, and called at many types, so its context's layout has the values of those variables
+  boxed (`IrBox`: a closure whose function returns the value), and so does the lambda a `use` binds to it. A call
+  boxes what it passes and unboxes what it is given back, rebuilding a tag's cell or a record around a converted part,
+  and a function passed to the member or returned by it is adapted the same way (`CoreIrLowerBoxes`,
+  [#1160](https://github.com/nanyx-lang/nanyx/issues/1160)).
 
 So a lambda that uses a context may leave the scope that supplies it, and a function may be named as a value where
 its contexts aren't available. A lambda that leaves still requires the context where it is called, as its type says.

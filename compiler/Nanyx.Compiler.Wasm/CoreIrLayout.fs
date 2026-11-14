@@ -77,7 +77,8 @@ let headerSize (ty: IrType) =
     match IrType.unfold ty with
     | IrString
     | IrRecord _
-    | IrFunction _ -> Header.withInfo
+    | IrFunction _
+    | IrBox -> Header.withInfo
     | _ -> Header.countOnly
 
 /// Where each value a closure block holds is: its function's table slot, then what it captures, of `captured`.

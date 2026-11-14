@@ -3,6 +3,10 @@ module TranspilerWasmTests.Features.Contexts.RunGenericContextMember
 open Xunit
 open TranspilerWasmTestHelpers
 
+// A context member generic in type variables of its own has its value made once, where its instance is, with those
+// values boxed, and each call boxes what it passes and unboxes what it is given back (#1160). `runSource` checks
+// that every box is freed.
+
 /// A program whose context `Proc` has the member types `members`, which a function loads with `use` and a block calls
 /// through it, as a workflow builder's are (#1152).
 let private procProgram (members: string) =
@@ -42,19 +46,19 @@ def main = {
         .Replace("MEMBERS", members)
         .ReplaceLineEndings "\n"
 
+let private genericProc = """context Proc = (
+  bind: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r
+  ret: a -> #some(a) | r
+)
+"""
+
 [<Fact>]
-let ``Run - a context member generic over its payload, called at int, is reported at the call`` () =
-    // #1152: the member's value is made once, with its own type variables unit, so the call trapped.
-    let outcome =
-        procProgram
-            """  bind: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r
+let ``Run - a context member generic over its payload runs called at int`` () =
+    procProgram
+        """  bind: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r
   ret: a -> #some(a) | r"""
-        |> runSource
-    Assert.Equal(1, outcome.ExitCode)
-    Assert.Equal("", outcome.StandardOutput)
-    Assert.Matches(
-        ":21:11: error NYX0301: The WebAssembly backend cannot compile a call to the context member 'bind' with one of its own type variables at int yet\\r?\\n",
-        outcome.StandardError)
+    |> runSource
+    |> assertRan "4\n"
 
 [<Fact>]
 let ``Run - the same context member written at int runs`` () =
@@ -63,3 +67,59 @@ let ``Run - the same context member written at int runs`` () =
   ret: int -> #some(int) | #error(string)"""
     |> runSource
     |> assertRan "4\n"
+
+[<Fact>]
+let ``Run - a context member is called at a string payload and then an int one`` () =
+    // #1304: each call has the member's own type variables at its own types.
+    let source = "import nanyx/console\nimport nanyx/text\n\n" + genericProc + """
+def name: int -> #some(string) | #missing = { i -> if i < 0 then #missing else #some("item {i}") }
+def size: string -> #some(int) | #missing = { s -> #some(string.length(s)) }
+
+def lookup: [Proc] int -> #some(int) | #missing = { i ->
+  bind(name(i), { s -> bind(size(s), { n -> ret(n) }) })
+}
+
+def display: [Proc & Console] int -> () = { i ->
+  match lookup(i)
+    | #some(n) -> println("{n}")
+    | #missing -> println("missing")
+}
+
+@entry
+def main = {
+  use Proc(
+    bind = {
+      | #some(value), continue -> continue(value)
+      | failure, _ -> failure
+    }
+    ret = { value -> #some(value) }
+  )
+  display(3)
+  display(-1)
+  display(42)
+}
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "6\nmissing\n7\n"
+
+[<Fact>]
+let ``Run - a context member's boxed values may be records, strings and unit`` () =
+    let source = "import nanyx/console\n\n" + genericProc + """
+def pair: [Proc] string -> #some((name: string, size: int)) | #missing = { s ->
+  bind(ret(s), { t -> bind(ret(()), { _ -> ret((name = t, size = 2)) }) })
+}
+
+@entry
+def main = {
+  use Proc(
+    bind = {
+      | #some(value), continue -> continue(value)
+      | failure, _ -> failure
+    }
+    ret = { value -> #some(value) }
+  )
+  match pair("ab")
+    | #some(p) -> println("{p.name} {p.size}")
+    | #missing -> println("missing")
+}
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "ab 2\n"
