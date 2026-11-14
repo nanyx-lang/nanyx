@@ -30,7 +30,6 @@ public sealed class SemanticTokensTests : LanguageServerTestBase
             def raw: Email -> string = { Email(s) -> s }
             def id: UserId = UserId(1)
             def p: Point = (x = 1, y = 2)
-            def old: $Email = $Email("a")
             """.ReplaceLineEndings("\n") + "\n";
         Open(uri, source);
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -45,9 +44,7 @@ public sealed class SemanticTokensTests : LanguageServerTestBase
                 (4, 9, "Email", "nominal"),
                 (4, 29, "Email", "nominal"),
                 (5, 8, "UserId", "nominal private"),
-                (5, 17, "UserId", "nominal private"),
-                (7, 10, "Email", "nominal"),
-                (7, 19, "Email", "nominal")
+                (5, 17, "UserId", "nominal private")
             ],
             await TokensIn(uri, source));
     }

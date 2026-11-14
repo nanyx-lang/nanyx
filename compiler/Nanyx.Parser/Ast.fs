@@ -87,7 +87,7 @@ type TypeDefModifier =
     /// `type UserId = private int`: a nominal type whose shape is hidden outside its home module.
     | Private
     /// `type Email = protected string`: a nominal type whose shape is visible everywhere, though only its home module
-    /// constructs one. A `$` before the declared name (`type $Email = string`) says the same.
+    /// constructs one.
     | Protected
     /// `scoped context`: nothing that requires the context can leave the scope that supplies it. The span is the
     /// `scoped` keyword's.

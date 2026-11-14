@@ -28,19 +28,19 @@ def main = {
 
 [<Fact>]
 let ``Run - an operator on a type that attaches it calls the attached definition`` () =
-    // #527: `` def $V.`+` = ... `` parsed, but `a + b` on a `$V` was the built-in `+` and a type mismatch.
+    // #527: `` def V.`+` = ... `` parsed, but `a + b` on a `V` was the built-in `+` and a type mismatch.
     let source =
         normalized """import nanyx/console
 
-type $V = (x: int, y: int)
-def $V.`+`: $V, $V -> $V = { p, q -> $V(x = p.x + q.x, y = p.y + q.y) }
-def $V.`==`: $V, $V -> bool = { p, q -> p.x == q.x }
+type V = protected (x: int, y: int)
+def V.`+`: V, V -> V = { p, q -> V(x = p.x + q.x, y = p.y + q.y) }
+def V.`==`: V, V -> bool = { p, q -> p.x == q.x }
 @entry
 def main = {
-  def v = $V(x = 1, y = 2) + $V(x = 3, y = 4)
+  def v = V(x = 1, y = 2) + V(x = 3, y = 4)
   println("{v.x} {v.y}")
-  println(if v == $V(x = 4, y = 0) then "same x" else "different x")
-  println(if v != $V(x = 4, y = 0) then "different x" else "same x")
+  println(if v == V(x = 4, y = 0) then "same x" else "different x")
+  println(if v != V(x = 4, y = 0) then "different x" else "same x")
 }
 """
     runSource source |> assertRan "4 6\nsame x\nsame x\n"
@@ -82,17 +82,17 @@ let ``Run - generic code adds through Add, at ints, floats and a type that attac
     let source =
         normalized """import nanyx/console
 
-type $Money = (pence: int)
-def $Money.zero: $Money = $Money(pence = 0)
-def $Money.`+`: $Money, $Money -> $Money = { a, b -> $Money(pence = a.pence + b.pence) }
-def $Money.`-`: $Money, $Money -> $Money = { a, b -> $Money(pence = a.pence - b.pence) }
-def $Money.negate: $Money -> $Money = { a -> $Money(pence = -a.pence) }
+type Money = protected (pence: int)
+def Money.zero: Money = Money(pence = 0)
+def Money.`+`: Money, Money -> Money = { a, b -> Money(pence = a.pence + b.pence) }
+def Money.`-`: Money, Money -> Money = { a, b -> Money(pence = a.pence - b.pence) }
+def Money.negate: Money -> Money = { a -> Money(pence = -a.pence) }
 def orZero: [Add(a)] a -> a = { x -> x + 0 }
 def twiceLess: [Add(a)] a, a -> a = { x, y -> -(x - y - y) }
 def none: list(int) = []
 @entry
 def main = {
-  def m = [$Money(pence = 150), $Money(pence = 250)] \list.sum
+  def m = [Money(pence = 150), Money(pence = 250)] \list.sum
   println("{[1, 2, 3] \list.sum} {[1.5, 2.5] \list.sum} {list.sum(none)} {m.pence} {(-m).pence}")
   println("{orZero(4)} {orZero(2.5)} {twiceLess(1, 3)} {twiceLess(m, m).pence}")
 }

@@ -178,12 +178,12 @@ def main = {
 [<Fact>]
 let ``Run - a function that compares its type variable uses the == attached to a type`` () =
     comparing
-        [ "type $Email = string"
-          "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }"
+        [ "type Email = protected string"
+          "def Email.`==`: Email, Email -> bool = { a, b -> true }"
           "def same = { x, y -> x == y }"
           "def differ = { x, y -> x != y }" ]
-        [ """same($Email("a"), $Email("b"))"""
-          """differ($Email("a"), $Email("b"))""" ]
+        [ """same(Email("a"), Email("b"))"""
+          """differ(Email("a"), Email("b"))""" ]
     |> runSource
     |> assertRan "T\nF\n"
 
@@ -201,21 +201,21 @@ let ``Run - comparing with a tag takes a value of any union that has it`` () =
 let ``Run - comparing an open union with a tag compares its payload with the == attached to the payload's type`` () =
     // The tags the union does not name, and two different tags, are compared by the compiler's own == (#830).
     comparing
-        [ "type $Email = string"
-          "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }"
-          """def same = { o -> o == #some($Email("a")) }"""
-          """def differ = { o -> o != #some($Email("a")) }"""
-          """def either = { o -> o == #some($Email("a")) or o == #other(2) }"""
-          """def sameClosed: #some($Email) -> bool = { o -> o == #some($Email("a")) }"""
+        [ "type Email = protected string"
+          "def Email.`==`: Email, Email -> bool = { a, b -> true }"
+          """def same = { o -> o == #some(Email("a")) }"""
+          """def differ = { o -> o != #some(Email("a")) }"""
+          """def either = { o -> o == #some(Email("a")) or o == #other(2) }"""
+          """def sameClosed: #some(Email) -> bool = { o -> o == #some(Email("a")) }"""
           "def opened: [Eq(a)] (#x(a) | r), (#x(a) | r) -> bool = { v, w -> v == w }" ]
-        [ """same(#some($Email("b")))"""
+        [ """same(#some(Email("b")))"""
           "same(#none)"
-          """differ(#some($Email("b")))"""
+          """differ(#some(Email("b")))"""
           "differ(#other(1))"
           "either(#other(2))"
           "either(#other(3))"
-          """sameClosed(#some($Email("b")))"""
-          """opened(#x($Email("a")), #x($Email("b")))"""
+          """sameClosed(#some(Email("b")))"""
+          """opened(#x(Email("a")), #x(Email("b")))"""
           "opened(#x(1), #y)" ]
     |> runSource
     |> assertRan "T\nF\nF\nT\nT\nF\nT\nT\nF\n"
@@ -236,11 +236,11 @@ let ``Run - a function that passes a union on to one that compares it with a tag
 [<Fact>]
 let ``Run - a concrete comparison uses the == attached to a nominal type`` () =
     comparing
-        [ "type $Point = (x: int, y: int)"
-          "def $Point.`==`: $Point, $Point -> bool = { p, q -> p.x == q.x }" ]
-        [ "$Point(x = 1, y = 2) == $Point(x = 1, y = 3)"
-          "$Point(x = 1, y = 2) != $Point(x = 1, y = 3)"
-          "$Point(x = 1, y = 2) == $Point(x = 2, y = 2)" ]
+        [ "type Point = protected (x: int, y: int)"
+          "def Point.`==`: Point, Point -> bool = { p, q -> p.x == q.x }" ]
+        [ "Point(x = 1, y = 2) == Point(x = 1, y = 3)"
+          "Point(x = 1, y = 2) != Point(x = 1, y = 3)"
+          "Point(x = 1, y = 2) == Point(x = 2, y = 2)" ]
     |> runSource
     |> assertRan "T\nF\nF\n"
 
@@ -266,18 +266,18 @@ let ``Run - an Eq loaded with use changes a concrete comparison in its block`` (
 [<Fact>]
 let ``Run - a list of a type with its own == is compared through it, element by element`` () =
     comparing
-        [ "type $Email = string"
-          "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }"
+        [ "type Email = protected string"
+          "def Email.`==`: Email, Email -> bool = { a, b -> true }"
           "def always: Eq(string) = (`==` = { a, b -> true })"
           "def loose: list(string), list(string) -> bool = { xs, ys ->"
           "  use always"
           "  xs == ys"
           "}"
           "def same: [Eq(a)] list(a), list(a) -> bool = { xs, ys -> xs == ys }" ]
-        [ """[$Email("a")] == [$Email("b")]"""
-          """[$Email("a")] != [$Email("b")]"""
-          """[$Email("a")] == [$Email("a"), $Email("b")]"""
-          """same([$Email("a")], [$Email("b")])"""
+        [ """[Email("a")] == [Email("b")]"""
+          """[Email("a")] != [Email("b")]"""
+          """[Email("a")] == [Email("a"), Email("b")]"""
+          """same([Email("a")], [Email("b")])"""
           """loose(["a"], ["b"])"""
           """["a"] == ["b"]""" ]
     |> runSource

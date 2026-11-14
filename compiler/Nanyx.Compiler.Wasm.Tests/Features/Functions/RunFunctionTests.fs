@@ -11,16 +11,16 @@ let ``Run - a lambda's parameters may be patterns that take its argument apart``
     let source =
         normalized """import nanyx/console
 
-type $Email = string
+type Email = protected string
 
-def address: $Email -> string = { $Email(s) -> s }
+def address: Email -> string = { Email(s) -> s }
 def weigh = { (a, b), c -> a + b * c }
 def answer = { () -> 42 }
 def middle = { (), (_, (m, _)) -> m }
 
 @entry
 def main = {
-  println(address($Email("ada@example.com")))
+  println(address(Email("ada@example.com")))
   println("{weigh((1, 2), 3)} {answer()} {middle((), (0, ("mid", 1)))}")
   def sums = [(1, 2), (30, 40)] \map { (x, y) -> x + y }
   for sums | n -> println("{n}")

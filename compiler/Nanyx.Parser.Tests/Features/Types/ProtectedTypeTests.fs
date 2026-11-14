@@ -30,25 +30,18 @@ let ``A scoped context is declared protected after its =`` () =
         Assert.True(TypeDefModifier.isNominal modifiers)
     | other -> failwith $"Unexpected parse: %A{other}"
 
-[<Fact>]
-let ``A $ before a declared name declares a protected type, and is not part of the name`` () =
-    match parsed "type $Email = string\ncontext $Memory = ()" with
-    | [ Def (TypeDef ("Email", [ Protected ], [], _)); Def (TypeDef ("Memory", [ Protected; Context ], [], _)) ] -> ()
-    | other -> failwith $"Unexpected parse: %A{other}"
-
-[<Fact>]
-let ``A $ before a private type's name declares only a private type`` () =
-    match parsed "type $UserId = private int" with
-    | [ Def (TypeDef ("UserId", [ Private ], [], _)) ] -> ()
-    | other -> failwith $"Unexpected parse: %A{other}"
-
-[<Fact>]
-let ``A $ before a type's name where it is used is not part of the name`` () =
-    match parsed "def wrap: string -> $Email = { s -> $Email(s) }\ndef $Email.parse = { s -> s }\ndef e: m.$Email = x" with
-    | [ Def (ValueDef (_, "wrap", Some (Kind (TypeFunc (_, Kind (TypeName "Email")))), Kind (Lambda (_, Kind (FunctionCall ("Email", _, _)), _))))
-        Def (ValueDef (_, "Email.parse", None, _))
-        Def (ValueDef (_, "e", Some (Kind (TypeName "m.Email")), _)) ] -> ()
-    | other -> failwith $"Unexpected parse: %A{other}"
+[<Theory>]
+[<InlineData("type $Email = string", "$Email = string")>]
+[<InlineData("context $Email = ()", "$Email = ()")>]
+[<InlineData("def wrap: string -> $Email = { s -> s }", "$Email = { s -> s }")>]
+[<InlineData("def e = $Email(s)", "$Email(s)")>]
+[<InlineData("def $Email.parse = { s -> s }", "$Email.parse = { s -> s }")>]
+[<InlineData("def e: m.$Email = x", "$Email = x")>]
+[<InlineData("def f = { x -> match x | $Email(s) -> s }", "$Email(s) -> s }")>]
+let ``A $ before a type's name is an error at the $`` (source: string) (at: string) =
+    let reported, text = parseErrorOf source
+    Assert.Contains("A type's name is written without a `$`: write `Email`, and declare a nominal type with `protected` after its `=`, as in `type Email = protected string`", reported)
+    Assert.Equal(at, text)
 
 [<Fact>]
 let ``A type with no protected or private is not nominal`` () =

@@ -106,7 +106,7 @@ let typeDefCore: Parser<Definition, ParseState> =
     let declaringTypeName (defStart: Position) ((start: Position, name), def) =
         match def with
         | TypeDef(_, _, _, body) ->
-            writtenNameSpan start name >>= fun span -> declare TypeDefBody body.Id [ name, span ] >>. noteDocumentable defStart (int start.Index) >>% def
+            declare TypeDefBody body.Id [ name, nameSpan start name ] >>. noteDocumentable defStart (int start.Index) >>% def
         | ValueDef _ -> preturn def
 
     /// What a type's declaration says after its `=`, before its body: `private`, `protected`, or neither. Both is an
@@ -125,20 +125,15 @@ let typeDefCore: Parser<Definition, ParseState> =
                     | None -> preturn (Some first)
             | None -> preturn None
 
-    /// The modifiers of a type declared `name`, `$` before it or not (see `declaredTypeName`), and `kind` after its
-    /// `=`: a `$` declares a protected type, as `protected` does, unless the type is private.
-    let withKind modifiers (dollar: bool) (kind: TypeDefModifier option) =
-        match kind with
-        | Some kind -> kind :: modifiers
-        | None when dollar -> Protected :: modifiers
-        | None -> modifiers
+    /// The modifiers of a type, with `kind`, what its declaration says after its `=`.
+    let withKind modifiers (kind: TypeDefModifier option) = Option.toList kind @ modifiers
 
     let contextName =
-        declaredTypeName >>= fun (name, dollar) ->
+        typeNameIdentifier >>= fun name ->
             if name = "type" then
                 fail "expected context name"
             else
-                preturn (name, dollar)
+                preturn name
 
     // `scoped export context Memory = protected ()`: `scoped` comes first, then `export`.
     let contextModifiers =
@@ -153,22 +148,22 @@ let typeDefCore: Parser<Definition, ParseState> =
             (opt (attempt (wsInline >>. typeParams)))
             (wsInline >>. pstring "=" >>. ws >>. kindModifier)
             typeExprWithWhere
-            (fun baseMods (start, (name, dollar)) paramsOpt kind typeValue ->
+            (fun baseMods (start, name) paramsOpt kind typeValue ->
                 let typeParams = defaultArg paramsOpt []
-                let modifiers = withKind (Context :: baseMods) dollar kind
+                let modifiers = withKind (Context :: baseMods) kind
                 (start, name), TypeDef(name, modifiers, typeParams, typeValue))
         >>= declaringTypeName defStart
 
     let typeDefWithModifiers defStart =
         pipe5
             typeModifiers
-            (pstring "type" >>. ws >>. (getPosition .>>. declaredTypeName))
+            (pstring "type" >>. ws >>. (getPosition .>>. typeNameIdentifier))
             (opt (attempt (wsInline >>. typeParams)))
             (wsInline >>. pstring "=" >>. ws >>. kindModifier)
             typeExprWithWhere
-            (fun modifiers (start, (name, dollar)) paramsOpt kind typeValue ->
+            (fun modifiers (start, name) paramsOpt kind typeValue ->
                 let typeParams = defaultArg paramsOpt []
-                let modifiers = withKind modifiers dollar kind
+                let modifiers = withKind modifiers kind
                 (start, name), TypeDef(name, modifiers, typeParams, typeValue))
         >>= declaringTypeName defStart
 

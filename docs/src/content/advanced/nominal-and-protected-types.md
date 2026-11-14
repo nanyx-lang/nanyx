@@ -153,7 +153,3 @@ Put another way:
 - Use a **private** type when you want a hard abstraction boundary, or a guarantee that changing the internal representation will not affect external users. Examples: `UserId`, `OrderId`, `Token`, `Handle`.
 
 Combine nominal types with contexts and workflows to make safe domain-specific APIs.
-
-# Before `protected`
-
-Earlier versions of Nanyx declared a protected type with a `$` before its name, `type $Email = string`, and wrote the `$` wherever the name was used. The compiler still reads it, as `protected` where a type is declared and as nothing where its name is used, and the official linter's [`dollarPrefixedType`](../standard-tools/official-linter#type-name-written-with-) rule reports it with a fix. A later release will make it an error.
