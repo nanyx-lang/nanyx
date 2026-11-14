@@ -1,0 +1,102 @@
+/// How the WebAssembly runtime joins a list of strings (`__nanyx_string_join`): it adds up the pieces' lengths,
+/// allocates the result once, and copies each piece and separator into it once, where joining with `++` would copy
+/// the result so far for every piece.
+module internal Transpiler.Wasm.StringJoin
+
+/// The runtime helpers the join calls, which are defined with the rest of the runtime, and where a list cell of
+/// strings keeps its tail.
+type Calls =
+    { StringLength: string
+      StringAlloc: string
+      CopyBytes: string
+      CellTail: int }
+
+/// The helper `name`: `pieces separator -> joined`. It borrows both, as every helper does, and walks the list twice in
+/// loops, so a long list does not run out of stack.
+let helper (name: string) (calls: Calls) =
+    [ $"(func ${name} (param $pieces i32) (param $separator i32) (result i32)"
+      "  (local $separatorLength i32)"
+      "  (local $total i32)"
+      "  (local $cell i32)"
+      "  (local $piece i32)"
+      "  (local $length i32)"
+      "  (local $out i32)"
+      "  (local $at i32)"
+      "  local.get $separator"
+      $"  call ${calls.StringLength}"
+      "  local.set $separatorLength"
+      // The length of the result: each piece and a separator after it, less the separator after the last.
+      "  local.get $pieces"
+      "  local.set $cell"
+      "  block $measured"
+      "    loop $measure"
+      "      local.get $cell"
+      "      i32.eqz"
+      "      br_if $measured"
+      "      local.get $total"
+      "      local.get $cell"
+      "      i32.load"
+      $"      call ${calls.StringLength}"
+      "      i32.add"
+      "      local.get $separatorLength"
+      "      i32.add"
+      "      local.set $total"
+      "      local.get $cell"
+      $"      i32.load offset={calls.CellTail}"
+      "      local.set $cell"
+      "      br $measure"
+      "    end"
+      "  end"
+      "  local.get $pieces"
+      "  if"
+      "    local.get $total"
+      "    local.get $separatorLength"
+      "    i32.sub"
+      "    local.set $total"
+      "  end"
+      "  local.get $total"
+      $"  call ${calls.StringAlloc}"
+      "  local.tee $out"
+      "  local.set $at"
+      // Each piece, with the separator before every one but the first.
+      "  local.get $pieces"
+      "  local.set $cell"
+      "  block $copied"
+      "    loop $copy"
+      "      local.get $cell"
+      "      i32.eqz"
+      "      br_if $copied"
+      "      local.get $cell"
+      "      local.get $pieces"
+      "      i32.ne"
+      "      if"
+      "        local.get $at"
+      "        local.get $separator"
+      "        local.get $separatorLength"
+      $"        call ${calls.CopyBytes}"
+      "        local.get $at"
+      "        local.get $separatorLength"
+      "        i32.add"
+      "        local.set $at"
+      "      end"
+      "      local.get $cell"
+      "      i32.load"
+      "      local.tee $piece"
+      $"      call ${calls.StringLength}"
+      "      local.set $length"
+      "      local.get $at"
+      "      local.get $piece"
+      "      local.get $length"
+      $"      call ${calls.CopyBytes}"
+      "      local.get $at"
+      "      local.get $length"
+      "      i32.add"
+      "      local.set $at"
+      "      local.get $cell"
+      $"      i32.load offset={calls.CellTail}"
+      "      local.set $cell"
+      "      br $copy"
+      "    end"
+      "  end"
+      "  local.get $out"
+      ")" ]

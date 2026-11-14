@@ -108,6 +108,7 @@ module Helpers =
     let stringByteAt = NyxCompiler.Intrinsics.stringByteAt
     let stringSlice = NyxCompiler.Intrinsics.stringSlice
     let stringFromByte = NyxCompiler.Intrinsics.stringFromByte
+    let stringJoin = NyxCompiler.Intrinsics.stringJoin
     let listCons = NyxCompiler.Intrinsics.listCons
     let floatSqrt = NyxCompiler.Intrinsics.floatSqrt
     let floatFloor = NyxCompiler.Intrinsics.floatFloor
@@ -844,6 +845,15 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  i32.store8"
             "  local.get $out"
             ")" ]
+      Helpers.stringJoin,
+      lines (
+          StringJoin.helper
+              Helpers.stringJoin
+              { StringLength = Helpers.stringLength
+                StringAlloc = Helpers.stringAlloc
+                CopyBytes = Helpers.copyBytes
+                CellTail = Word.Bytes }
+      )
       Helpers.stringConcat,
       lines
           [ $"(func ${Helpers.stringConcat} (param $a i32) (param $b i32) (result i32)"
@@ -1340,7 +1350,8 @@ let helperDependencies =
       Helpers.intAdd, []
       Helpers.intSub, []
       Helpers.intMul, []
-      Helpers.intToIndex, [] ]
+      Helpers.intToIndex, []
+      Helpers.stringJoin, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.copyBytes ] ]
     @ (SizedIntegerCode.helpers |> List.map (fun (name, _) -> name, []))
 
 /// The helpers that read and write no linear memory themselves: they compute on their operands, or leave that to the

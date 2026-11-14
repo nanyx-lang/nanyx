@@ -42,6 +42,8 @@ module Intrinsics =
     let stringSlice = prefix + "string_slice"
     /// A new one-byte string.
     let stringFromByte = prefix + "string_from_byte"
+    /// A new string holding a list's strings with a separator between each pair, each copied once.
+    let stringJoin = prefix + "string_join"
     /// A list with an element added at the front.
     let listCons = prefix + "list_cons"
     /// The square root of a float (NaN for a negative one).
@@ -109,6 +111,7 @@ module Intrinsics =
           stringByteAt, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy ], intTy, []))
           stringSlice, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; intTy ], stringTy, []))
           stringFromByte, TypeEnv.mono (TyFunc(intTy, stringTy, []))
+          stringJoin, TypeEnv.mono (TyFunc(tuple [ listOf stringTy; stringTy ], stringTy, []))
           floatSqrt, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
           floatFloor, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
           floatCeil, TypeEnv.mono (TyFunc(floatTy, floatTy, []))

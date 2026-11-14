@@ -17,10 +17,12 @@
   position, so it works on a string of any length.
 module text
 
--- Everything here is written over four compiler intrinsics: `__nanyx_string_length`,
--- `__nanyx_string_byte_at`, `__nanyx_string_slice` and `__nanyx_string_from_byte`; `split` and
--- `words` also build their results with `__nanyx_list_cons`, last first, and reverse them with the
--- prelude's `list.reverse`. `++` (concatenation) and `==` on strings are language operators.
+-- Everything here is written over five compiler intrinsics: `__nanyx_string_length`,
+-- `__nanyx_string_byte_at`, `__nanyx_string_slice`, `__nanyx_string_from_byte` and
+-- `__nanyx_string_join`, which copies each piece of its result once; `split` and `words` also build
+-- their results with `__nanyx_list_cons`, last first, and reverse them with the prelude's
+-- `list.reverse`. `++` (concatenation) and `==` on strings are language operators. A string built
+-- from many pieces is built as a list of them and joined once, since `++` copies both its operands.
 
 --| The number of bytes in `s`.
 export def string.length: string -> int = { s ->
@@ -137,34 +139,27 @@ def lowerByte: int -> int = { b ->
   if b >= 65 then (if b <= 90 then b + 32 else b) else b
 }
 
-def toUpperFrom: string, int, string -> string = { s, i, acc ->
-  if i >= string.length(s)
+--| The bytes of `s` before byte `i`, each changed by `f` and made a string of its own, in order, in
+  front of `acc`.
+def mappedBytesBefore: string, int, (int -> int), list(string) -> list(string) = { s, i, f, acc ->
+  if i <= 0
     then acc
-    else toUpperFrom(
+    else mappedBytesBefore(
       s
-      i + 1
-      acc ++ __nanyx_string_from_byte(upperByte(__nanyx_string_byte_at(s, i)))
-    )
-}
-
-def toLowerFrom: string, int, string -> string = { s, i, acc ->
-  if i >= string.length(s)
-    then acc
-    else toLowerFrom(
-      s
-      i + 1
-      acc ++ __nanyx_string_from_byte(lowerByte(__nanyx_string_byte_at(s, i)))
+      i - 1
+      f
+      __nanyx_list_cons(__nanyx_string_from_byte(f(__nanyx_string_byte_at(s, i - 1))), acc)
     )
 }
 
 --| `s` with every ASCII letter upper-cased.
 export def string.uppercase: string -> string = { s ->
-  toUpperFrom(s, 0, "")
+  __nanyx_string_join(mappedBytesBefore(s, string.length(s), upperByte, []), "")
 }
 
 --| `s` with every ASCII letter lower-cased.
 export def string.lowercase: string -> string = { s ->
-  toLowerFrom(s, 0, "")
+  __nanyx_string_join(mappedBytesBefore(s, string.length(s), lowerByte, []), "")
 }
 
 --| Whether byte `b` is a space, tab, line feed or carriage return.
@@ -293,17 +288,10 @@ export def string.splitOnce: (string, on: string) -> #some(string, string) | #no
     )
 }
 
-def joinRest: list(string), string, string -> string = { pieces, separator, acc ->
-  match pieces
-    | [] -> acc
-    | [piece, ...rest] -> joinRest(rest, separator, (acc ++ separator) ++ piece)
-}
-
---| The `pieces` concatenated with `separator` between each pair.
+--| The `pieces` concatenated with `separator` between each pair. Each piece is copied once, so it
+  takes time in proportion to the length of the result.
 export def string.join: list(string), string -> string = { pieces, separator ->
-  match pieces
-    | [] -> ""
-    | [first, ...rest] -> joinRest(rest, separator, first)
+  __nanyx_string_join(pieces, separator)
 }
 
 --| The `pieces` concatenated end to end.
@@ -405,28 +393,10 @@ def charsReversedFrom: string, int, list(string) -> list(string) = { s, start, a
     )
 }
 
---| `pieces` joined two at a time (the first with the second, the third with the fourth, and so on),
-  last first, in front of `acc`.
-def pairUp: list(string), list(string) -> list(string) = { pieces, acc ->
-  match pieces
-    | [first, second, ...rest] -> pairUp(rest, __nanyx_list_cons(first ++ second, acc))
-    | [last] -> __nanyx_list_cons(last, acc)
-    | [] -> acc
-}
-
---| `pieces` concatenated end to end, joined in pairs pass by pass, so that each byte is copied only as
-  many times as the number of pieces can be halved.
-def concatInPairs: list(string) -> string = { pieces ->
-  match pieces
-    | [] -> ""
-    | [piece] -> piece
-    | _ -> concatInPairs(list.reverse(pairUp(pieces, [])))
-}
-
 --| `s` with its characters (code points, not bytes) in reverse order, so it never cuts a character in
   half. Stack-safe: it works on a string of any length.
 export def string.reverse: string -> string = { s ->
-  concatInPairs(charsReversedFrom(s, 0, []))
+  __nanyx_string_join(charsReversedFrom(s, 0, []), "")
 }
 
 --| The bits a character's lead byte `b` holds, for a character `length` bytes long.

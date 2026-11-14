@@ -2,7 +2,9 @@
 /// known members" in `docs/src/content/work-in-progress/context-calls.md`).
 ///
 /// A member is known when a call finds it as a closure over the wrapper of a top-level function (a member of the
-/// ambient instance, or of an instance built from attached definitions) or as a top-level definition's value. A call
+/// ambient instance, or of an instance built from attached definitions), as a top-level definition's value, or in a
+/// local that a `def` gave a top-level function or a constant, as a `use` does with `use C(bump = addThree, limit = 3)`
+/// (see `FunctionLowering.NoteDefinedKnown`). A call
 /// does not pass its callee the members it knows: it calls a specialisation of the callee on them instead, whose key
 /// names them. In the specialisation, a known member is a local that a call to it never reads, since the call goes
 /// straight to the function (see `directArguments`), and that a call passing it on passes as known in turn. Only where
@@ -22,6 +24,8 @@ type KnownMember =
     | KnownFunction of wrapper: string * wrapped: string * at: Ty
     /// The value of the top-level definition of this name, which is of this type.
     | KnownValue of definition: string * Ty
+    /// A constant, an int or a bool, of this type: what a `use` binds a member to when it is given a literal.
+    | KnownConstant of Atom * IrType
 
 /// What a function is lowered for: a definition, at type arguments (none when it is not generic), and specialised on the
 /// members known for some of the contexts it requires, by their keys. The others it takes as parameters.

@@ -133,10 +133,13 @@ to 7, as predicted.
 The monomorphiser specialises a generic definition on its type arguments (`println__string`), and a definition that
 requires contexts on its context members too (`CoreIrLowerKnown.fs`):
 
-- A specialisation's key is the definition, its type arguments, and, for each context member, either the top-level
-  function it is known to be or "unknown". A member is known when the call finds it as a closure over a top-level
-  function's wrapper (the ambient instance, an instance built from attached definitions) or as a top-level
-  definition's value.
+- A specialisation's key is the definition, its type arguments, and, for each context member, either what it is known
+  to be (a top-level function, a top-level value or a constant) or "unknown". A member is known when the call finds it
+  as a closure over a top-level function's wrapper (the ambient instance, an instance built from attached
+  definitions), as a top-level definition's value, or bound by a `use` to a top-level function that is not generic and
+  requires no contexts, or to an int or bool literal: `use Counter(bump = addThree, limit = 1000003)` makes both
+  members known ([#1299](https://github.com/nanyx-lang/nanyx/issues/1299)). A `use` of a generic function, of a cell's
+  value or of any other expression leaves the member unknown.
 - In a specialisation, a known member is not a parameter. A call to it is a direct `call` or `return_call`. A call that
   passes it on passes it as known, so the callee is specialised on it too.
 - A member that is not known stays a closure parameter, as today: a `use` of a lambda that captures locals, or a member
@@ -169,6 +172,12 @@ How it is built:
 - Anywhere else the local is read, it is a value: a lambda captures it, or it is passed to `list.map`. Only then is
   the local given the member's value, a closure over the wrapper or the top-level value, at the top of the function
   (`WithKnownValues`, which looks for the locals the body names with `usedOf`).
+- Lambda lifting turns each binding of a `use` into a local `def`, so a `use`'s member is a local. A `def` whose value
+  is a top-level function named as a value, a literal, or a local known already records its local as known
+  (`FunctionLowering.NoteDefinedKnown`): such a local never changes, as a cell is a `def` of `mut(...)`. A call that
+  finds a member in scope in such a local finds it known, and a call through the local is a direct call.
+- A `use` of a lambda that captures nothing is still passed as a closure. The callee could be specialised on the lifted
+  function and passed only its environment; that is not done yet.
 
 ([#744](https://github.com/nanyx-lang/nanyx/issues/744))
 
