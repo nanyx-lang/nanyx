@@ -209,7 +209,7 @@ export def string.substring: (string, start: int, length: int) -> string = { s, 
 ```
 
 The text is Markdown. A blank line stays in the comment while the text after it is still indented, so a doc comment
-can have paragraphs and code examples. A name in backticks and square brackets, like `` [`string.slice`] ``, links to that
+can have paragraphs and code examples. A name in backticks and square brackets, like `` [`string.substring`] ``, links to that
 definition: the editor shows the link when you hover over the name the comment documents.
 
 ```nanyx

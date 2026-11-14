@@ -6,14 +6,15 @@ open Nanyx.Compiler.Tests.TestSupport
 
 // #183: two steps that fail with different tags.
 let private steps =
-    "def parseDigit: string -> #some(int) | #invalidInt = {\n" +
-    "  | \"1\" -> #some(1)\n" +
-    "  | _ -> #invalidInt\n" +
-    "}\n" +
-    "def find: int -> #some(string) | #notFound = {\n" +
-    "  | 1 -> #some(\"1\")\n" +
-    "  | _ -> #notFound\n" +
-    "}\n"
+    normalized """def parseDigit: string -> #some(int) | #invalidInt = {
+  | "1" -> #some(1)
+  | _ -> #invalidInt
+}
+def find: int -> #some(string) | #notFound = {
+  | 1 -> #some("1")
+  | _ -> #notFound
+}
+"""
 
 let private tagsOf (ty: Ty) =
     match Unifier.unalias ty with
@@ -25,9 +26,9 @@ let ``bindSome keeps the other tags of both steps, piped or called`` () =
     let typed =
         compileClean (
             steps +
-            "def piped = find(1) \\bindSome(parseDigit)\n" +
-            "def called = bindSome(find(1), parseDigit)\n" +
-            "def withLambda = bindSome(find(1), { s -> parseDigit(s) })\n")
+            withFinalNewline """def piped = find(1) \bindSome(parseDigit)
+def called = bindSome(find(1), parseDigit)
+def withLambda = bindSome(find(1), { s -> parseDigit(s) })""")
     let expected = [ "#invalidInt"; "#notFound"; "#some(int)" ]
     Assert.Equal<string list>(expected, tagsOf typed.Types.["piped"])
     Assert.Equal<string list>(expected, tagsOf typed.Types.["called"])
@@ -36,10 +37,11 @@ let ``bindSome keeps the other tags of both steps, piped or called`` () =
 [<Fact>]
 let ``The result of bindSome is matched on each step's tags with no catch-all`` () =
     let arms =
-        "    | #some(n) -> \"some\"\n" +
-        "    | #notFound -> \"not found\"\n" +
-        "    | #invalidInt -> \"invalid\"\n" +
-        "}\n"
+        normalized """    | #some(n) -> "some"
+    | #notFound -> "not found"
+    | #invalidInt -> "invalid"
+}
+"""
     compileClean (steps + "def piped: int -> string = { n ->\n  match find(n) \\bindSome(parseDigit)\n" + arms) |> ignore
     compileClean (steps + "def called: int -> string = { n ->\n  match bindSome(find(n), parseDigit)\n" + arms) |> ignore
     compileClean (steps + "def viaLocal: int -> string = { n ->\n  def b = bindSome(find(n), parseDigit)\n  match b\n" + arms) |> ignore
@@ -48,12 +50,13 @@ let ``The result of bindSome is matched on each step's tags with no catch-all`` 
 let ``A match on the result of bindSome that leaves out a step's tag says which`` () =
     let source =
         steps +
-        "def partial: int -> string = { n ->\n" +
-        "  def b = bindSome(find(n), parseDigit)\n" +
-        "  match b\n" +
-        "    | #some(n) -> \"some\"\n" +
-        "    | #notFound -> \"not found\"\n" +
-        "}\n"
+        normalized """def partial: int -> string = { n ->
+  def b = bindSome(find(n), parseDigit)
+  match b
+    | #some(n) -> "some"
+    | #notFound -> "not found"
+}
+"""
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
     Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, diagnostic.Code)
     Assert.Equal("Non-exhaustive match, missing tags: invalidInt", diagnostic.Message)
@@ -62,9 +65,9 @@ let ``A match on the result of bindSome that leaves out a step's tag says which`
 let ``Result.bind of two steps with one error type keeps it`` () =
     let typed =
         compileClean (
-            "def read: string -> Result(int, string) = { s -> int.fromString(s) \\someToResult(\"not a number\") }\n" +
-            "def half: int -> Result(int, string) = { n -> if n % 2 == 0 then #some(n / 2) else #error(\"odd\") }\n" +
-            "def piped = read(\"42\") \\Result.bind(half)\n" +
-            "def called = Result.bind(read(\"42\"), half)\n")
+            withFinalNewline """def read: string -> Result(int, string) = { s -> int.fromString(s) \someToResult("not a number") }
+def half: int -> Result(int, string) = { n -> if n % 2 == 0 then #some(n / 2) else #error("odd") }
+def piped = read("42") \Result.bind(half)
+def called = Result.bind(read("42"), half)""")
     Assert.Equal("Result(int, string)", Unifier.tyToString typed.Types.["piped"])
     Assert.Equal("Result(int, string)", Unifier.tyToString typed.Types.["called"])

@@ -10,9 +10,9 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``Typecheck treats union order as assignable`` () =
     let source =
-        "def f: (#some(int) | #notFound) -> int = { x -> 1 }\n" +
-        "def g: (#notFound | #some(int)) -> int = f\n" +
-        "def result = g(#some(1))"
+        normalized """def f: (#some(int) | #notFound) -> int = { x -> 1 }
+def g: (#notFound | #some(int)) -> int = f
+def result = g(#some(1))"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
@@ -21,29 +21,29 @@ let ``Typecheck treats union order as assignable`` () =
 [<Fact>]
 let ``A function that takes a wider union can be given where one that takes a narrower union is expected`` () =
     let source =
-        "def f: (#some(int) | #notFound | #error(string)) -> int = { x -> 1 }\n" +
-        "def g: (#some(int) | #notFound) -> int = f\n" +
-        "def result = g(#notFound)"
+        normalized """def f: (#some(int) | #notFound | #error(string)) -> int = { x -> 1 }
+def g: (#some(int) | #notFound) -> int = f
+def result = g(#notFound)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
     Assert.Equal(TyPrimitive "int", typed.Types.["result"])
     // The reverse would give `f` a tag it does not handle (#354).
     let narrower =
-        "def f: (#some(int) | #notFound) -> int = { x -> 1 }\n" +
-        "def g: (#some(int) | #notFound | #error(string)) -> int = f"
+        normalized """def f: (#some(int) | #notFound) -> int = { x -> 1 }
+def g: (#some(int) | #notFound | #error(string)) -> int = f"""
     let diagnostic = Assert.Single((Compiler.compile narrower).Diagnostics)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
 
 [<Fact>]
 let ``Typecheck supports tag union rest parameter`` () =
     let source =
-        "def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = { o, f ->\n" +
-        "  match o\n" +
-        "  | #some(v) -> #some(f(v))\n" +
-        "  | other -> other\n" +
-        "}\n" +
-        "def result = mapSome(#some(1), { x -> x })"
+        normalized """def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = { o, f ->
+  match o
+  | #some(v) -> #some(f(v))
+  | other -> other
+}
+def result = mapSome(#some(1), { x -> x })"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
@@ -53,10 +53,11 @@ let ``Typecheck supports tag union rest parameter`` () =
 [<Fact>]
 let ``Typecheck requires catch-all for tag union rest`` () =
     let source =
-        "def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = { o, f ->\n" +
-        "  match o\n" +
-        "  | #some(v) -> #some(f(v))\n" +
-        "}\n"
+        normalized """def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = { o, f ->
+  match o
+  | #some(v) -> #some(f(v))
+}
+"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.MissingCatchAllArm result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
@@ -65,17 +66,17 @@ let ``Typecheck requires catch-all for tag union rest`` () =
 [<Fact>]
 let ``Typecheck tag union width and rest regression`` () =
     let source =
-        "def u: #some(string) | #nil = #nil\n" +
-        "def g: (#some(string) | #nil | #notFound) -> string = { o -> \"\" }\n" +
-        "def _ = g(u)\n" +
-        "def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = { o, f ->\n" +
-        "  match o\n" +
-        "  | #some(v) -> #some(f(v))\n" +
-        "  | other -> other\n" +
-        "}\n" +
-        "def l: #some(string) | #nil = #some(\"\")\n" +
-        "def mapper: string -> int = { s -> 1 }\n" +
-        "def l2 = l \\mapSome(mapper)"
+        normalized """def u: #some(string) | #nil = #nil
+def g: (#some(string) | #nil | #notFound) -> string = { o -> "" }
+def _ = g(u)
+def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = { o, f ->
+  match o
+  | #some(v) -> #some(f(v))
+  | other -> other
+}
+def l: #some(string) | #nil = #some("")
+def mapper: string -> int = { s -> 1 }
+def l2 = l \mapSome(mapper)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
@@ -88,13 +89,13 @@ let ``A piped lambda can match only the tags left of a union's rest`` () =
     // `parsed` widens into `#some(α) | ω`, which leaves `ω` as `#invalidInt` and room for more. The lambda handles
     // `#invalidInt` alone, as it may when the same call is written with its arguments in parentheses (#452).
     let source =
-        "def mapError: #some(α) | ω, (ω -> #some(α) | b) -> #some(α) | b = {\n" +
-        "  | #some(x), _ -> #some(x)\n" +
-        "  | other, f -> f(other)\n" +
-        "}\n" +
-        "def parsed: #some(int) | #invalidInt = #invalidInt\n" +
-        "def direct = mapError(parsed, { #invalidInt -> #bad(\"y\") })\n" +
-        "def piped = parsed \\mapError({ #invalidInt -> #bad(\"y\") })"
+        normalized """def mapError: #some(α) | ω, (ω -> #some(α) | b) -> #some(α) | b = {
+  | #some(x), _ -> #some(x)
+  | other, f -> f(other)
+}
+def parsed: #some(int) | #invalidInt = #invalidInt
+def direct = mapError(parsed, { #invalidInt -> #bad("y") })
+def piped = parsed \mapError({ #invalidInt -> #bad("y") })"""
     let result = Compiler.compile source
     Assert.Empty(result.Diagnostics)
     let typed = result.Typed.Value
@@ -107,12 +108,12 @@ let ``A match arm of a type not known yet joins the other arms' tags as the unio
     // `f(other)` is of no known type when the arms are joined, so it adds a rest to `#some(x)` rather than being
     // made a `#some`: `f` can give back other tags, as the annotated `mapError` above says it can.
     let source =
-        "def mapOther = {\n" +
-        "  | #some(x), _ -> #some(x)\n" +
-        "  | other, f -> f(other)\n" +
-        "}\n" +
-        "def parsed: #some(int) | #invalidInt = #invalidInt\n" +
-        "def mapped = mapOther(parsed, { _ -> #bad(\"y\") })"
+        normalized """def mapOther = {
+  | #some(x), _ -> #some(x)
+  | other, f -> f(other)
+}
+def parsed: #some(int) | #invalidInt = #invalidInt
+def mapped = mapOther(parsed, { _ -> #bad("y") })"""
     let result = Compiler.compile source
     Assert.Empty(result.Diagnostics)
     let typed = result.Typed.Value
@@ -135,17 +136,18 @@ let ``A recursive call's arm joins the tags of the arms around it`` () =
     // `loop(rest)` is of no known type inside `loop`: the `if` makes it `#found(string) | s`, and the match around
     // it adds `#missing` to that `s` rather than asking `s` to hold itself.
     let source =
-        "def find = { xs, name ->\n" +
-        "  rec loop = {\n" +
-        "    | [] -> #missing\n" +
-        "    | [x, ...rest] -> if x == name then #found(x) else loop(rest)\n" +
-        "  }\n" +
-        "  loop(xs)\n" +
-        "}\n" +
-        "def found = find([\"a\", \"b\"], \"b\")\n" +
-        "def described = match found\n" +
-        "  | #missing -> \"missing\"\n" +
-        "  | #found(x) -> x\n"
+        normalized """def find = { xs, name ->
+  rec loop = {
+    | [] -> #missing
+    | [x, ...rest] -> if x == name then #found(x) else loop(rest)
+  }
+  loop(xs)
+}
+def found = find(["a", "b"], "b")
+def described = match found
+  | #missing -> "missing"
+  | #found(x) -> x
+"""
     let result = Compiler.compile source
     Assert.Empty(result.Diagnostics)
     let typed = result.Typed.Value
@@ -155,10 +157,11 @@ let ``A recursive call's arm joins the tags of the arms around it`` () =
 let ``A match arm whose type is an annotation's variable is not made a union`` () =
     // `b` stands for any type, so the arm cannot join `#some(x)` as a rest: the annotation is too general.
     let source =
-        "def broken: #some(α) | ω, (ω -> b) -> #some(α) | b = {\n" +
-        "  | #some(x), _ -> #some(x)\n" +
-        "  | other, f -> f(other)\n" +
-        "}\n"
+        normalized """def broken: #some(α) | ω, (ω -> b) -> #some(α) | b = {
+  | #some(x), _ -> #some(x)
+  | other, f -> f(other)
+}
+"""
     let result = Compiler.compile source
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal("NYX0202", diagnostic.Code)
@@ -167,12 +170,12 @@ let ``A match arm whose type is an annotation's variable is not made a union`` (
 let ``Typecheck binds a catch-all after a tag arm at the union's rest`` () =
     // `other` cannot be a `#some`, so it is the rest `r`: returning it does not force `a` and `b` together.
     let source =
-        "def mapSome\n" +
-        "  : (#some(a) | r), (a -> b) -> (#some(b) | r)\n" +
-        "  = { | #some(a), f -> #some(f(a))\n" +
-        "      | other, _ -> other }\n" +
-        "def x: #some(int) | #notFound | #error = #some(1)\n" +
-        "def y = mapSome(x, { n -> \"{n}\" })"
+        normalized """def mapSome
+  : (#some(a) | r), (a -> b) -> (#some(b) | r)
+  = { | #some(a), f -> #some(f(a))
+      | other, _ -> other }
+def x: #some(int) | #notFound | #error = #some(1)
+def y = mapSome(x, { n -> "{n}" })"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typed = result.Typed.Value
@@ -194,28 +197,31 @@ let ``Typecheck binds a catch-all after a tag arm at the union's rest`` () =
 let ``Typecheck matches a call's result whose union rest is already solved`` () =
     // `mapSome`'s result is `#some(b) | r`, but here `r` is `#notFound`, so naming both tags is exhaustive.
     let mapSome =
-        "def mapSome\n" +
-        "  : (#some(a) | r), (a -> b) -> (#some(b) | r)\n" +
-        "  = { | #some(a), f -> #some(f(a))\n" +
-        "      | other, _ -> other }\n" +
-        "def x: #some(int) | #notFound = #notFound\n"
+        normalized """def mapSome
+  : (#some(a) | r), (a -> b) -> (#some(b) | r)
+  = { | #some(a), f -> #some(f(a))
+      | other, _ -> other }
+def x: #some(int) | #notFound = #notFound
+"""
     let exhaustive =
         mapSome +
-        "def y = {\n" +
-        "  def a = x \\mapSome { n -> n + 1 }\n" +
-        "  match a\n" +
-        "    | #some(n) -> n\n" +
-        "    | #notFound -> 0\n" +
-        "}\n"
+        normalized """def y = {
+  def a = x \mapSome { n -> n + 1 }
+  match a
+    | #some(n) -> n
+    | #notFound -> 0
+}
+"""
     let result = Compiler.compile exhaustive
     Assert.True(result.Diagnostics.IsEmpty, $"%A{result.Diagnostics}")
     let missing =
         mapSome +
-        "def y = {\n" +
-        "  def a = x \\mapSome { n -> n + 1 }\n" +
-        "  match a\n" +
-        "    | #some(n) -> n\n" +
-        "}\n"
+        normalized """def y = {
+  def a = x \mapSome { n -> n + 1 }
+  match a
+    | #some(n) -> n
+}
+"""
     let result = Compiler.compile missing
     assertReports DiagnosticCodes.NonExhaustiveMatch result
     Assert.Contains("missing tags: notFound", (List.head result.Diagnostics).Message)
@@ -224,13 +230,13 @@ let ``Typecheck matches a call's result whose union rest is already solved`` () 
 let ``Typecheck rejects a tag union with a rest where a string is expected`` () =
     // The rest `r` stands for more tags, so it cannot make `#some(string) | r` a `string`.
     let source =
-        "def mapSome\n" +
-        "  : (#some(a) | r), (a -> b) -> (#some(b) | r)\n" +
-        "  = { | #some(a), f -> #some(f(a))\n" +
-        "      | other, _ -> other }\n" +
-        "def takesString: string -> string = { s -> s }\n" +
-        "def x: #some(int) | #notFound = #notFound\n" +
-        "def y = takesString(x \\mapSome { n -> \"{n}\" })"
+        normalized """def mapSome
+  : (#some(a) | r), (a -> b) -> (#some(b) | r)
+  = { | #some(a), f -> #some(f(a))
+      | other, _ -> other }
+def takesString: string -> string = { s -> s }
+def x: #some(int) | #notFound = #notFound
+def y = takesString(x \mapSome { n -> "{n}" })"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.TypeMismatch result
     Assert.Contains("mismatch", (List.head result.Diagnostics).Message)
@@ -238,11 +244,11 @@ let ``Typecheck rejects a tag union with a rest where a string is expected`` () 
 [<Fact>]
 let ``Typecheck joins the tags of if branches into a union`` () =
     let source =
-        "def getMessage = {\n" +
-        "  def message = \"Hello\"\n" +
-        "  if false then #some(message)\n" +
-        "  else #noMessage\n" +
-        "}"
+        normalized """def getMessage = {
+  def message = "Hello"
+  if false then #some(message)
+  else #noMessage
+}"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -252,12 +258,12 @@ let ``Typecheck joins the tags of if branches into a union`` () =
 [<Fact>]
 let ``Typecheck joins the tags of match arms into a union`` () =
     let source =
-        "def classify = { n ->\n" +
-        "  match n\n" +
-        "    | 0 -> #zero\n" +
-        "    | 1 -> #one(n)\n" +
-        "    | _ -> #many(n)\n" +
-        "}"
+        normalized """def classify = { n ->
+  match n
+    | 0 -> #zero
+    | 1 -> #one(n)
+    | _ -> #many(n)
+}"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -268,12 +274,12 @@ let ``Typecheck joins the tags of match arms into a union`` () =
 [<Fact>]
 let ``Typecheck joins nested if branches and repeated tags once`` () =
     let source =
-        "def pick = { n ->\n" +
-        "  if n == 0 then #zero\n" +
-        "  else if n == 1 then #small(n)\n" +
-        "  else if n == 2 then #small(n)\n" +
-        "  else #big\n" +
-        "}"
+        normalized """def pick = { n ->
+  if n == 0 then #zero
+  else if n == 1 then #small(n)
+  else if n == 2 then #small(n)
+  else #big
+}"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -283,30 +289,30 @@ let ``Typecheck joins nested if branches and repeated tags once`` () =
 [<Fact>]
 let ``Typecheck joins the tags inside tuple branches field by field`` () =
     let source =
-        "def splitOnce: (string, string) -> (string, #some(string) | #none) = { s, separator ->\n" +
-        "  match s == separator\n" +
-        "    | true -> (\"\", #some(s))\n" +
-        "    | false -> (s, #none)\n" +
-        "}"
+        normalized """def splitOnce: (string, string) -> (string, #some(string) | #none) = { s, separator ->
+  match s == separator
+    | true -> ("", #some(s))
+    | false -> (s, #none)
+}"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
 [<Fact>]
 let ``Typecheck still rejects tuple branches whose fields disagree`` () =
-    let source = "def f = { c -> if c then (1, #a) else (\"one\", #b) }"
+    let source = """def f = { c -> if c then (1, #a) else ("one", #b) }"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.TypeMismatch result
 
 [<Fact>]
 let ``Typecheck still rejects same-named tags with different payloads across branches`` () =
-    let source = "def f = { c -> if c then #some(1) else #some(\"one\") }"
+    let source = """def f = { c -> if c then #some(1) else #some("one") }"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.TypeMismatch result
     Assert.Contains("mismatch", (List.head result.Diagnostics).Message)
 
 [<Fact>]
 let ``Typecheck still rejects branches of different non-tag types`` () =
-    let source = "def f = { c -> if c then 1 else \"one\" }"
+    let source = """def f = { c -> if c then 1 else "one" }"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.TypeMismatch result
     Assert.Contains("Type mismatch", (List.head result.Diagnostics).Message)
@@ -316,12 +322,12 @@ let ``Typecheck leaves the scrutinee union open when a match has a catch-all arm
     // `| #some(v) -> ... | _ -> ...` names only one tag; the scrutinee may still be a wider union.
     let result =
         Compiler.compile (
-            "def get: int -> #some(int) | #none = { n -> #some(n) }\n" +
-            "def d = { n -> match get(n)\n" +
-            "  | #some(v) -> v\n" +
-            "  | _ -> 0\n" +
-            "}\n" +
-            "def e = if get(1) is #some(v) then v else 0\n")
+            withFinalNewline """def get: int -> #some(int) | #none = { n -> #some(n) }
+def d = { n -> match get(n)
+  | #some(v) -> v
+  | _ -> 0
+}
+def e = if get(1) is #some(v) then v else 0""")
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
 
 [<Fact>]
@@ -329,8 +335,8 @@ let ``A call to a def that matches on a tag union keeps the argument's payload t
     // Regression: the def's type was generalized before its constraints were solved, so its input came out
     // as a fresh variable unrelated to its result, and `y` had a payload of no particular type.
     let source =
-        "def mapId = { | #some(a) -> #some(a) | other -> other }\n" +
-        "def y = mapId(#some(5))"
+        normalized """def mapId = { | #some(a) -> #some(a) | other -> other }
+def y = mapId(#some(5))"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     // `#some(5)` has no other tags, so neither has `y`.

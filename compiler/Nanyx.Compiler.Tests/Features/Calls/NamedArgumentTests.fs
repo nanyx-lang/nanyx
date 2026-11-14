@@ -23,8 +23,9 @@ let ``A named parameter passed by position says which parameters to name`` () =
 [<Fact>]
 let ``Arguments that each fit one named parameter are named in the call's order, with a fix`` () =
     let source =
-        "def pad: (string, width: int, fill: string) -> string = { s, width, fill -> s }\n" +
-        "def p = pad(\"7\", 3, \"0\")\n"
+        normalized """def pad: (string, width: int, fill: string) -> string = { s, width, fill -> s }
+def p = pad("7", 3, "0")
+"""
     let diagnostic = positionalForNamed source
     Assert.Equal("'pad' takes 'width' and 'fill' by name, not by position: write 'width = ...' and 'fill = ...'", diagnostic.Message)
     let fixedSource = applyFix source (List.exactlyOne diagnostic.Fixes)
@@ -34,16 +35,18 @@ let ``Arguments that each fit one named parameter are named in the call's order,
 [<Fact>]
 let ``A piped call that passes a named parameter by position says which parameters to name`` () =
     let source =
-        "def pad: (string, width: int, fill: string) -> string = { s, width, fill -> s }\n" +
-        "def p = \"7\" \\pad(3, \"0\")\n"
+        normalized """def pad: (string, width: int, fill: string) -> string = { s, width, fill -> s }
+def p = "7" \pad(3, "0")
+"""
     let diagnostic = positionalForNamed source
     Assert.Equal("'pad' takes 'width' and 'fill' by name, not by position: write 'width = ...' and 'fill = ...'", diagnostic.Message)
 
 [<Fact>]
 let ``Only the named parameters the call leaves out are listed`` () =
     let source =
-        "def pad: (string, width: int, fill: string) -> string = { s, width, fill -> s }\n" +
-        "def p = pad(\"7\", 3, fill = \"0\")\n"
+        normalized """def pad: (string, width: int, fill: string) -> string = { s, width, fill -> s }
+def p = pad("7", 3, fill = "0")
+"""
     let diagnostic = positionalForNamed source
     Assert.Equal("'pad' takes 'width' by name, not by position: write 'width = ...'", diagnostic.Message)
 
@@ -59,9 +62,9 @@ let ``A call that names its named parameters has no diagnostics`` () =
     Assert.True(named.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{named.Diagnostics}")
     let mixed =
         Compiler.compile (
-            "def pad: (string, width: int, fill: string) -> string = { s, width, fill -> s }\n" +
-            "def p = pad(\"7\", width = 3, fill = \"0\")\n" +
-            "def q = \"7\" \\pad(fill = \"0\", width = 3)\n")
+            withFinalNewline """def pad: (string, width: int, fill: string) -> string = { s, width, fill -> s }
+def p = pad("7", width = 3, fill = "0")
+def q = "7" \pad(fill = "0", width = 3)""")
     Assert.True(mixed.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{mixed.Diagnostics}")
 
 [<Fact>]
@@ -69,7 +72,7 @@ let ``A record passed whole to a function that takes its fields by name has no d
     let result =
         Compiler.compile (
             areaSource +
-            "def size = (width = 3, height = 4)\n" +
-            "def a = area(size)\n" +
-            "def b = size \\area\n")
+            withFinalNewline """def size = (width = 3, height = 4)
+def a = area(size)
+def b = size \area""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")

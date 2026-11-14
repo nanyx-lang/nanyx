@@ -27,6 +27,7 @@
     <Compile Include="Features\If\IfTests.fs" />
     <Compile Include="Features\Imports\ImportTests.fs" />
     <Compile Include="Features\Integration\IntegrationTests.fs" />
+    <Compile Include="Features\Keywords\GrammarKeywordTests.fs" />
     <Compile Include="Features\Lambdas\LambdaTests.fs" />
     <Compile Include="Features\Literals\LiteralsTests.fs" />
     <Compile Include="Features\Literals\StringEscapeTests.fs" />

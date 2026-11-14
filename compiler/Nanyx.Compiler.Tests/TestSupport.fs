@@ -12,6 +12,13 @@ let (|IntLit64|_|) (literal: Literal) =
     | IntLit value when value >= bigint System.Int64.MinValue && value <= bigint System.Int64.MaxValue -> Some (int64 value)
     | _ -> None
 
+/// `source` with `\n` line breaks, whatever the line endings of the test file's checkout.
+let normalized (source: string) = source.ReplaceLineEndings "\n"
+
+/// `normalized source` with a line break after it: for a source that ends in a line break, written with its closing
+/// quotes, and the code after them, on its last line.
+let withFinalNewline (source: string) = normalized source + "\n"
+
 let withTempDir (action: string -> unit) =
     let dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))
     Directory.CreateDirectory dir |> ignore

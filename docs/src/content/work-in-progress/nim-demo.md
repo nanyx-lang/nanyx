@@ -17,17 +17,19 @@ rows and handlers" (TyDe 2016), reworked for Nanyx contexts:
 - A strategy is a context, `context Move = (move: (Player, int) -> int)`: how many sticks a player takes from a heap.
   `game: [Move] int -> Player` plays a game from a heap of `n` and gives back the winner. It doesn't know who is
   playing.
-- `perfect` and `cheating` are two instances of `Move`, used as `use perfect in game(7)`.
+- `perfect` and `cheating` are two strategies, plain functions of type `(Player, int) -> int`, given to the game as
+  `use Move(move = perfect) in game(7)`.
 - `checkedGame` wraps every move in a check, so an illegal move ends the game with `#cheated(player)`.
-- `bobChooses` builds a strategy from another context, `Choose`, so the same game runs once per choice.
+- `bobChooses` is a strategy that requires another context, `Choose`, so the same game runs once per choice.
 - `gameTree` builds the tree of every possible game, as figure 1 of the paper shows it.
-- A scoreboard plays rounds against a coin-flipping Bob and counts wins.
+- A scoreboard plays a round for each of Bob's choices and counts wins. Until there is a `Random` context, Bob's
+  choices are a fixed list rather than coin flips.
 
-**It doesn't compile today.** It predates several language changes. It calls attached definitions with a dot
-(`player.other` and `p.show`, which are now `player \other` and `p \show`), it calls `Math.max` (now `math.max` from
-`nanyx/math`), and it uses a `Random` context the standard library doesn't have. Under the
-[contexts-are-not-types proposal](./context-escape#proposal-contexts-are-not-types), its named instances (`perfect`,
-`cheating`) and `bobChooses` would become handler functions too.
+It compiles and runs with `nanyx run examples/Nim.nyx`. The strategies were once named instances of `Move`
+(`def perfect = Move(move = ...)`, then `use perfect`), but the WebAssembly backend compiles only a `use` of a
+constructor written in place ([#1137](https://github.com/nanyx-lang/nanyx/issues/1137), on hold under the
+[contexts-are-not-types proposal](./context-escape#proposal-contexts-are-not-types), which would make them handler
+functions instead).
 
 # The demo
 
@@ -71,8 +73,8 @@ worth an issue of its own; the demo is one user.
 
 # Plan
 
-1. **Make `examples/Nim.nyx` compile and run** on the current language, without `Random` at first (Bob chooses from a
-   fixed list) ([#1238](https://github.com/nanyx-lang/nanyx/issues/1238)).
+1. ~~**Make `examples/Nim.nyx` compile and run** on the current language, without `Random` at first (Bob chooses from
+   a fixed list)~~ ([#1238](https://github.com/nanyx-lang/nanyx/issues/1238)). Done.
 2. **A `Random` context** in the standard library, supplied by the CLI's host and seedable in tests
    ([#1237](https://github.com/nanyx-lang/nanyx/issues/1237)). Then the coin-flip
    scoreboard comes back.

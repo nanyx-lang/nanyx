@@ -35,7 +35,7 @@ x \math.clamp(min = 0, max = 10)
 "nanyx" \startsWith("nan")
 ```
 
-The functions with named parameters are `string.split`, `string.substring`, `string.padStart`, `string.padEnd`, `string.replace` and `math.clamp`. Everything else takes its arguments by position.
+The functions with named parameters are `string.split`, `string.substring`, `string.padStart`, `string.padEnd`, `string.replace`, `math.clamp` and `list.replicate`. Everything else takes its arguments by position.
 
 Passing one of these by position is an error that names the parameters to write:
 

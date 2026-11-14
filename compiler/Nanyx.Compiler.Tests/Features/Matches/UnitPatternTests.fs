@@ -10,12 +10,17 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``#some() matches a tag carrying (), and () the unit value`` () =
     let save = "def save: int -> #some() | #failed = { n -> if n > 0 then #some() else #failed }\n"
-    let both = save + "def f: int -> string = { n -> match save(n)\n  | #some() -> \"saved\"\n  | #failed -> \"failed\"\n}\n"
+    let both = save + (withFinalNewline """def f: int -> string = { n -> match save(n)
+  | #some() -> "saved"
+  | #failed -> "failed"
+}""")
     Assert.Empty((Compiler.compile both).Diagnostics)
     let unit = "def g: () -> int = { u -> match u\n  | () -> 1\n}\n"
     Assert.Empty((Compiler.compile unit).Diagnostics)
     // `#some()` covers `#some` whole, so leaving out `#failed` is the only gap.
-    let partial = save + "def f: int -> string = { n -> match save(n)\n  | #some() -> \"saved\"\n}\n"
+    let partial = save + (withFinalNewline """def f: int -> string = { n -> match save(n)
+  | #some() -> "saved"
+}""")
     let diagnostic = Assert.Single((Compiler.compile partial).Diagnostics)
     Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, diagnostic.Code)
     Assert.Contains("failed", diagnostic.Message)

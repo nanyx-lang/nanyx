@@ -21,7 +21,11 @@ let private unreachableIn (source: string) =
 [<Fact>]
 let ``An arm after a catch-all or a variable is unreachable`` () =
     // The example from the official linter's page in the docs.
-    let afterWildcard = "def f: int -> string = { n ->\n  match n\n    | _ -> \"always\"\n    | 0 -> \"never reached\"\n}"
+    let afterWildcard = normalized """def f: int -> string = { n ->
+  match n
+    | _ -> "always"
+    | 0 -> "never reached"
+}"""
     Assert.Equal<(string * string list) list>([ "0", [ "_" ] ], unreachableIn afterWildcard)
     let diagnostic = (compileWithOfficial afterWildcard).Diagnostics |> List.find (fun d -> d.Code = "default/unreachableArms")
     Assert.Equal("This arm can never match: an arm before it matches every value it does.", diagnostic.Message)
@@ -96,7 +100,11 @@ let ``The else of an if-is after a pattern that always matches is unreachable, b
 
 [<Fact>]
 let ``The fix for an unreachable arm removes it, with its line when it has one to itself`` () =
-    let ownLine = "def f: int -> string = { n ->\n  match n\n    | _ -> \"always\"\n    | 0 -> \"never\" -- dead\n}"
+    let ownLine = normalized """def f: int -> string = { n ->
+  match n
+    | _ -> "always"
+    | 0 -> "never" -- dead
+}"""
     let text, title = fixed' ownLine
     Assert.Equal("Remove the unreachable arm", title)
     Assert.Equal("def f: int -> string = { n ->\n  match n\n    | _ -> \"always\"\n}", text)

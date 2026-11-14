@@ -158,11 +158,12 @@
           }
         },
         {
-          "comment": "type Name, context Name",
-          "match": "\\b(type|context)\\s+([A-Z][A-Za-z0-9_]*)",
+          "comment": "type Name, context Name, scoped context Name",
+          "match": "\\b(?:(scoped)\\s+)?(type|context)\\s+([A-Z][A-Za-z0-9_]*)",
           "captures": {
             "1": { "name": "keyword.declaration.nanyx" },
-            "2": { "name": "entity.name.type.nanyx" }
+            "2": { "name": "keyword.declaration.nanyx" },
+            "3": { "name": "entity.name.type.nanyx" }
           }
         },
         {
@@ -225,7 +226,7 @@
       "patterns": [
         {
           "name": "keyword.declaration.nanyx",
-          "match": "\\b(def|type|context|module|import|export|use|rec|mut|private|protected|as|in|typeof)\\b"
+          "match": "\\b(def|type|context|scoped|module|import|export|use|rec|mut|private|protected|as|in|typeof|where)\\b"
         },
         {
           "name": "keyword.control.nanyx",
@@ -238,7 +239,7 @@
         },
         {
           "name": "keyword.operator.logical.nanyx",
-          "match": "\\b(and|or|not)\\b"
+          "match": "\\b(and|or|not|is)\\b"
         }
       ]
     },

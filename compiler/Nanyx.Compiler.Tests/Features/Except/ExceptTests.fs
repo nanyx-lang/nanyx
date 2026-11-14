@@ -27,27 +27,30 @@ let ``an except arm may give a tag the union already has`` () =
 [<Fact>]
 let ``except takes a tag out of a tag's payload`` () =
     let source =
-        "def f: () -> #some(int) | #error(#notFound | #io(string)) = { -> #some(1) }\n" +
-        "def v = f() except #error(#notFound) -> #some(0)\n"
+        normalized """def f: () -> #some(int) | #error(#notFound | #io(string)) = { -> #some(1) }
+def v = f() except #error(#notFound) -> #some(0)
+"""
     Assert.Equal<Set<string>>(set [ "#some(int)"; "#error(#io(string))" ], membersOf source "v")
 
 [<Fact>]
 let ``a tag whose payload's tags are all taken out leaves the union`` () =
     let source =
-        "def f: () -> #some(int) | #error(#notFound | #io(string)) = { -> #some(1) }\n" +
-        "def v = f() except\n" +
-        "  | #error(#notFound) -> #some(0)\n" +
-        "  | #error(#io(message)) -> #some(1)\n"
+        normalized """def f: () -> #some(int) | #error(#notFound | #io(string)) = { -> #some(1) }
+def v = f() except
+  | #error(#notFound) -> #some(0)
+  | #error(#io(message)) -> #some(1)
+"""
     Assert.Equal<Set<string>>(set [ "#some(int)" ], membersOf source "v")
 
 [<Fact>]
 let ``except leaves one case for a destructuring def to take apart`` () =
     let source =
-        "def f: () -> #some(int) | #error(#notFound) = { -> #some(1) }\n" +
-        "def g = { ->\n" +
-        "  def #some(result) = f() except #error(#notFound) -> #some(0)\n" +
-        "  result\n" +
-        "}\n"
+        normalized """def f: () -> #some(int) | #error(#notFound) = { -> #some(1) }
+def g = { ->
+  def #some(result) = f() except #error(#notFound) -> #some(0)
+  result
+}
+"""
     Assert.Equal<Set<string>>(set [ "() -> int" ], membersOf source "g")
 
 [<Fact>]
@@ -84,8 +87,9 @@ let ``an except pattern of the wrong kind is an error`` () =
 [<Fact>]
 let ``a name an except arm binds hovers as the payload it takes`` () =
     let source =
-        "def f: () -> #some(int) | #error(#io(string)) = { -> #some(1) }\n" +
-        "def v = f() except #error(#io(message)) -> #some(message)\n"
+        normalized """def f: () -> #some(int) | #error(#io(string)) = { -> #some(1) }
+def v = f() except #error(#io(message)) -> #some(message)
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let hovered = Hover.typeAt Unicode result (offsetOf source "#some(message)" 0 6)

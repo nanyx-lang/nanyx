@@ -78,7 +78,7 @@ def c: int -> int = { n ->
         [ "p with (x = 3)", "This `with` update, of type '(x: int, y: int)', is never used: bind it to a name, or pass it to `ignore`"
           "(...base, b = 1)", "This record, of type '(a: int, b: int)', is never used: bind it to a name, or pass it to `ignore`"
           "1..n", "This range, of type 'seq(int)', is never used: bind it to a name, or pass it to `ignore`"
-          "[n => \"n\"]", "This map, of type 'map(int, string)', is never used: bind it to a name, or pass it to `ignore`" ],
+          """[n => "n"]""", "This map, of type 'map(int, string)', is never used: bind it to a name, or pass it to `ignore`" ],
         messages)
 
 [<Fact>]

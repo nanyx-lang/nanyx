@@ -4,6 +4,7 @@ open System
 open System.IO
 open Xunit
 open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
 
 let private repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", ".."))
 
@@ -13,7 +14,12 @@ let private scriptPath () =
     Directory.CreateDirectory directory |> ignore
     Path.Combine(directory, "script.nyx")
 
-let private unusedBinding = "import nanyx/console\n\nexport def main: [Console] () -> () = {\n  def unused = 1\n  println(\"hi\")\n}\n"
+let private unusedBinding = withFinalNewline """import nanyx/console
+
+export def main: [Console] () -> () = {
+  def unused = 1
+  println("hi")
+}"""
 
 let private compile (source: string) = Script.compileSource (scriptPath ()) source
 
@@ -30,7 +36,9 @@ let ``Without directives a script runs no linters, as a manifest without a linte
 
 [<Fact>]
 let ``A linter directive turns the linter on, as an empty table in a manifest does`` () =
-    let directives = Script.read "" "::linters.default\n\nprintln(\"hi\")\n"
+    let directives = Script.read "" (withFinalNewline """::linters.default
+
+println("hi")""")
     Assert.Empty(directives.Diagnostics)
     Assert.Equal<string list>([ "default" ], directives.Linters.Value.Linters |> List.map _.Name)
     Assert.Empty(directives.Linters.Value.Severities)
@@ -70,7 +78,8 @@ let ``A #! line, comments and blank lines can come among the directives`` () =
 [<InlineData("::linter default", "NYX0009", "a directive is a manifest's dotted key after '::'")>]
 [<InlineData("::", "NYX0009", "a directive is a manifest's dotted key after '::'")>]
 let ``A directive that is not valid is an error at its line`` (directive: string, code: string, message: string) =
-    let result = compile ("-- A script.\n" + directive + "\nprintln(\"hi\")\n")
+    let result = compile ("-- A script.\n" + directive + (withFinalNewline """
+println("hi")"""))
     let diagnostic = result.Diagnostics |> List.head
     Assert.Equal(code, diagnostic.Code)
     Assert.Equal(Severity.Error, diagnostic.Severity)
@@ -87,7 +96,8 @@ let ``A directive that is not valid leaves the others in force`` () =
 
 [<Fact>]
 let ``A directive after the first line of code is a syntax error saying where directives go`` () =
-    let result = compile "println(\"hi\")\n::linters.default\n"
+    let result = compile (withFinalNewline """println("hi")
+::linters.default""")
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.SyntaxError.Code, diagnostic.Code)
     Assert.Contains("must come before the first line of code", diagnostic.Message)

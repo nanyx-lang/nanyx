@@ -15,7 +15,7 @@ let ``An annotated lambda parameter is bracketed`` () =
 [<Fact>]
 let ``A lambda's result annotation is printed after its parameters`` () =
     unchanged "def f = { (x: int): int -> x * 2 }\n"
-    unchanged "def g = { (): string -> \"u\" }\n"
+    unchanged (normalized """def g = { (): string -> "u" }""")
     unchanged "def h = { (a, b): int -> a + b }\n"
     unchanged (lines [ "def k = { (x: int): int ->"; "  def y = x + 1"; "  y * 2"; "}" ])
     Assert.Equal("def f = { (x: int): int -> x }\n", format "def f = {(x:int):int->x}")
@@ -33,7 +33,9 @@ let ``Pattern parameters are printed as written`` () =
 let ``A unit parameter is printed as written`` () =
     unchanged "def a = { () -> 5 }\n"
     unchanged "def b = { () -> -1 }\n"
-    unchanged (lines [ "def main = { () ->"; "  println(\"Hello, world!\")"; "}" ])
+    unchanged (normalized """def main = { () ->
+  println("Hello, world!")
+}""")
     unchanged "def c = { 5 }\n"
 
 [<Fact>]
@@ -70,8 +72,10 @@ let ``A lambda argument stays in brackets or after them, as written`` () =
 [<Fact>]
 let ``An annotated def's lambda body goes on the line after the arrow`` () =
     Assert.Equal(
-        lines [ "def heading: [Log] string -> () = { title ->"; "  log(\"== \" ++ string.uppercase(title) ++ \" ==\")"; "}" ],
-        format "def heading: [Log] string -> () = { title -> log(\"== \" ++ string.uppercase(title) ++ \" ==\") }")
+        normalized """def heading: [Log] string -> () = { title ->
+  log("== " ++ string.uppercase(title) ++ " ==")
+}""",
+        format """def heading: [Log] string -> () = { title -> log("== " ++ string.uppercase(title) ++ " ==") }""")
     Assert.Equal(
         lines [ "def main = {"; "  def double: int -> int = { x ->"; "    x * 2"; "  }"; ""; "  double(2)"; "}" ],
         format (lines [ "def main = {"; "  def double: int -> int = { x -> x * 2 }"; "  double(2)"; "}" ]))

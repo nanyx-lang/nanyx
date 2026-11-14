@@ -32,11 +32,11 @@ let ``Typecheck rejects a non-function annotation more general than its value`` 
 [<Fact>]
 let ``Typecheck accepts annotations the body proves`` () =
     let source =
-        "def id: a -> a = { x -> x }\n" +
-        "def first: (a, b) -> a = { x, y -> x }\n" +
-        "def apply: (a -> b), a -> b = { f, x -> f(x) }\n" +
-        "def mapSome: (#some(a) | r), (a -> b) -> (#some(b) | r) = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +
-        "def result = mapSome(#some(first(1, \"\")), { x -> apply(id, x) })"
+        normalized """def id: a -> a = { x -> x }
+def first: (a, b) -> a = { x, y -> x }
+def apply: (a -> b), a -> b = { f, x -> f(x) }
+def mapSome: (#some(a) | r), (a -> b) -> (#some(b) | r) = { | #some(a), f -> #some(f(a)) | other, _ -> other }
+def result = mapSome(#some(first(1, "")), { x -> apply(id, x) })"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"%A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -45,8 +45,8 @@ let ``Typecheck accepts annotations the body proves`` () =
 [<Fact>]
 let ``Typecheck lets an annotation name a type declared later`` () =
     let source =
-        "def favourite: Color = #green\n" +
-        "type Color = #red | #green | #blue"
+        normalized """def favourite: Color = #green
+type Color = #red | #green | #blue"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
@@ -80,7 +80,8 @@ let ``Typecheck rejects a lambda annotated with a type variable alone`` () =
 
 [<Fact>]
 let ``Typecheck checks a lambda against the function a nominal type wraps`` () =
-    let source = "type Handler = protected int -> int\ndef h: Handler = { x -> x ++ \"a\" }"
+    let source = normalized """type Handler = protected int -> int
+def h: Handler = { x -> x ++ "a" }"""
     match (Compiler.compile source).Diagnostics with
     | [ diagnostic ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     | other -> failwith $"Expected one diagnostic, got %A{other}"
@@ -89,8 +90,8 @@ let ``Typecheck checks a lambda against the function a nominal type wraps`` () =
 let ``Typecheck accepts a lambda that matches its annotation`` () =
     let typed =
         compileClean (
-            "type Handler = protected int -> int\n" +
-            "def h: Handler = { x -> x + 1 }\n" +
-            "def g: int -> int = { x -> x + 1 }\n" +
-            "def n = g(2)")
+            normalized """type Handler = protected int -> int
+def h: Handler = { x -> x + 1 }
+def g: int -> int = { x -> x + 1 }
+def n = g(2)""")
     Assert.Equal(TyPrimitive "int", typed.Types.["n"])

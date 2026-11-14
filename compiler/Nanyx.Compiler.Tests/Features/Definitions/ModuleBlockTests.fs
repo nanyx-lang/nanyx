@@ -9,12 +9,14 @@ open Nanyx.Compiler.Tests.TestSupport
 
 /// A `module money =` block with a nominal `Money`, its constructor and printer, an exported value and a private one.
 let private moneyBlock =
-    "module money =\n" +
-    "  export type Money = protected (pence: int)\n" +
-    "  export def Money.new: int -> Money = { pence -> Money(pence = pence) }\n" +
-    "  export def Money.toString: Money -> string = { m -> \"{m.pence}p\" }\n" +
-    "  export def zero: Money = Money.new(0)\n" +
-    "  def secret = 42\n\n"
+    normalized """module money =
+  export type Money = protected (pence: int)
+  export def Money.new: int -> Money = { pence -> Money(pence = pence) }
+  export def Money.toString: Money -> string = { m -> "{m.pence}p" }
+  export def zero: Money = Money.new(0)
+  def secret = 42
+
+"""
 
 /// The diagnostics compiling `source` gives: each one's code and the text it is reported at.
 let private codesAt (source: string) =
@@ -46,11 +48,13 @@ let ``A nominal type in a module block can only be constructed in the block`` ()
 
 /// A `module ids =` block with a protected `UserId`, whose shape only the block can see.
 let private idsBlock =
-    "module ids =\n" +
-    "  export type UserId = private int\n" +
-    "  export def UserId.of: int -> UserId = { n -> UserId(n) }\n" +
-    "  export def UserId.value: UserId -> int = { id -> match id | UserId(n) -> n }\n" +
-    "  export def first: UserId = UserId.of(1)\n\n"
+    normalized """module ids =
+  export type UserId = private int
+  export def UserId.of: int -> UserId = { n -> UserId(n) }
+  export def UserId.value: UserId -> int = { id -> match id | UserId(n) -> n }
+  export def first: UserId = UserId.of(1)
+
+"""
 
 [<Fact>]
 let ``A protected type can only be taken apart in the module that defines it`` () =
@@ -67,11 +71,11 @@ let ``A module block cannot use its file's definitions`` () =
 
 [<Fact>]
 let ``A module block's imports are its own`` () =
-    let fileImport = "import nanyx/console\n\n" + moneyBlock.Replace("def secret = 42", "def secret = { println(\"x\") }")
-    Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, "println(\"x\")" ], codesAt fileImport)
-    let blockImport = moneyBlock.Replace("module money =\n", "module money =\n  import nanyx/console\n").Replace("def secret = 42", "def secret = { println(\"x\") }")
+    let fileImport = "import nanyx/console\n\n" + moneyBlock.Replace("def secret = 42", """def secret = { println("x") }""")
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, """println("x")""" ], codesAt fileImport)
+    let blockImport = moneyBlock.Replace("module money =\n", "module money =\n  import nanyx/console\n").Replace("def secret = 42", """def secret = { println("x") }""")
     Assert.Empty(codesAt blockImport)
-    Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, "println(\"y\")" ], codesAt (blockImport + "println(\"y\")\n"))
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, """println("y")""" ], codesAt (blockImport + "println(\"y\")\n"))
 
 [<Fact>]
 let ``A module block can import the block beside it, but not reach it without an import`` () =

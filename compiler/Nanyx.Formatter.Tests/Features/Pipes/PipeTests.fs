@@ -6,16 +6,33 @@ open Nanyx.Formatter.Tests.TestHelpers
 
 [<Fact>]
 let ``A piped match stays piped, and a pipe after its arms goes on a line of its own`` () =
-    unchanged (lines [ "def r = s \\trim \\match"; "  | \"\" -> 0"; "  | _ -> 1" ])
-    unchanged (lines [ "def f = { n ->"; "  n \\match"; "    | 0 -> \"zero\""; "    | _ -> \"other\""; "    \\println"; "}" ])
+    unchanged (normalized """def r = s \trim \match
+  | "" -> 0
+  | _ -> 1""")
+    unchanged (normalized """def f = { n ->
+  n \match
+    | 0 -> "zero"
+    | _ -> "other"
+    \println
+}""")
 
 [<Fact>]
 let ``A pipe chain written over several lines keeps each step on a line of its own`` () =
-    unchanged (lines [ "def r ="; "  rules"; "    \\map { x -> f(x) }"; "    \\string.join(\"\")" ])
-    unchanged (lines [ "def r = rules"; "  \\map { x -> f(x) }"; "  \\string.join(\"\")" ])
+    unchanged (normalized """def r =
+  rules
+    \map { x -> f(x) }
+    \string.join("")""")
+    unchanged (normalized """def r = rules
+  \map { x -> f(x) }
+  \string.join("")""")
     // One step on a line of its own puts them all on lines of their own.
-    Assert.Equal(lines [ "def r = rules"; "  \\map { x -> f(x) }"; "  \\string.join(\"\")" ], format (lines [ "def r = rules \\map { x -> f(x) }"; "      \\string.join(\"\")" ]))
-    unchanged "def r = rules \\map { x -> f(x) } \\string.join(\"\")\n"
+    Assert.Equal(
+        normalized """def r = rules
+  \map { x -> f(x) }
+  \string.join("")""",
+        format (normalized """def r = rules \map { x -> f(x) }
+      \string.join("")"""))
+    unchanged (normalized """def r = rules \map { x -> f(x) } \string.join("")""")
 
 [<Fact>]
 let ``A pipe chain over several lines in a lambda body is indented once from its line`` () =
@@ -25,8 +42,21 @@ let ``A pipe chain over several lines in a lambda body is indented once from its
 
 [<Fact>]
 let ``A pipe chain over several lines can go through a \match`` () =
-    unchanged (lines [ "def f = { n ->"; "  n"; "    \\trim"; "    \\match"; "      | \"\" -> \"empty\""; "      | s -> s"; "    \\toUpper"; "    \\println"; "}" ])
-    unchanged (lines [ "def f = { n ->"; "  n \\match"; "    | 0 -> \"zero\""; "    | _ -> \"other\""; "    \\trim \\println"; "}" ])
+    unchanged (normalized """def f = { n ->
+  n
+    \trim
+    \match
+      | "" -> "empty"
+      | s -> s
+    \toUpper
+    \println
+}""")
+    unchanged (normalized """def f = { n ->
+  n \match
+    | 0 -> "zero"
+    | _ -> "other"
+    \trim \println
+}""")
 
 [<Fact>]
 let ``A pipe chain that spans lines keeps a multi-line lambda and the comments between its steps`` () =

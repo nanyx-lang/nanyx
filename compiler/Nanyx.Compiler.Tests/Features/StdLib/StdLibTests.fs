@@ -10,14 +10,17 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``Typecheck accepts the Console context from nanyx/console`` () =
     let source =
-        "import nanyx/console\n\n" +
-        "def greet: [Console] string -> () = { name -> println(name) }"
+        normalized """import nanyx/console
+
+def greet: [Console] string -> () = { name -> println(name) }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
 [<Fact>]
 let ``println comes from nanyx/console and gives unit`` () =
-    let result = Compiler.compile "import nanyx/console\n\ndef result = println(\"hi\")"
+    let result = Compiler.compile (normalized """import nanyx/console
+
+def result = println("hi")""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "unit", result.Typed.Value.Types.["result"])
 
@@ -64,7 +67,7 @@ println(Id(3))
 
 [<Fact>]
 let ``println is not in scope without importing nanyx/console`` () =
-    let result = Compiler.compile "def main = { println(\"hi\") }"
+    let result = Compiler.compile """def main = { println("hi") }"""
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("Unknown function 'println'", message)
 
@@ -72,7 +75,9 @@ let ``println is not in scope without importing nanyx/console`` () =
 let ``Standard library import is resolved without a file`` () =
     withTempDir (fun dir ->
         let mainPath = Path.Combine(dir, "main.nyx")
-        File.WriteAllText(mainPath, "import nanyx/console\n\nprintln(\"Hello, Nanyx!\")\n")
+        File.WriteAllText(mainPath, (withFinalNewline """import nanyx/console
+
+println("Hello, Nanyx!")"""))
         let result = Compiler.compileFile mainPath
         Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
         // The module is compiled together with the program: the backend sees its definitions, not the import.
@@ -84,9 +89,9 @@ let ``Standard library import is resolved without a file`` () =
 [<Fact>]
 let ``nanyx/console declares the Console context`` () =
     let source =
-        "import nanyx/console\n" +
-        "def greet: [Console] string -> () = { name -> println(name) }\n" +
-        "def main = { greet(\"hi\") }"
+        normalized """import nanyx/console
+def greet: [Console] string -> () = { name -> println(name) }
+def main = { greet("hi") }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.True(result.Typed.Value.TypeDefs.ContainsKey "Console")
@@ -94,20 +99,20 @@ let ``nanyx/console declares the Console context`` () =
 [<Fact>]
 let ``nanyx/text exports string functions with their types`` () =
     let source =
-        "import nanyx/text\n" +
-        "def shout = string.uppercase(\"hi\")\n" +
-        "def n = string.length(\"hi\")\n" +
-        "def parts = string.split(\"a,b\", on = \",\")\n" +
-        "def joined = string.join(parts, \"-\")\n" +
-        "def yes = string.startsWith(\"nanyx\", \"nan\")\n" +
-        "def found = string.indexOf(\"nanyx\", \"yx\")\n" +
-        "def lastFound = string.lastIndexOf(\"nanyx\", \"n\")\n" +
-        "def times = string.count(\"nanyx\", \"n\")\n" +
-        "def replaced = string.replace(\"nanyx\", pattern = \"n\", replacement = \"N\")\n" +
-        "def padded = string.padStart(\"7\", width = 3, fill = \"0\")\n" +
-        "def blank = string.isBlank(\" \")\n" +
-        "def allLines = string.lines(\"a\")\n" +
-        "def allWords = string.words(\"a b\")"
+        normalized """import nanyx/text
+def shout = string.uppercase("hi")
+def n = string.length("hi")
+def parts = string.split("a,b", on = ",")
+def joined = string.join(parts, "-")
+def yes = string.startsWith("nanyx", "nan")
+def found = string.indexOf("nanyx", "yx")
+def lastFound = string.lastIndexOf("nanyx", "n")
+def times = string.count("nanyx", "n")
+def replaced = string.replace("nanyx", pattern = "n", replacement = "N")
+def padded = string.padStart("7", width = 3, fill = "0")
+def blank = string.isBlank(" ")
+def allLines = string.lines("a")
+def allWords = string.words("a b")"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let types = result.Typed.Value.Types
@@ -128,18 +133,24 @@ let ``nanyx/text exports string functions with their types`` () =
 
 [<Fact>]
 let ``nanyx/text rejects a wrongly typed argument`` () =
-    let result = Compiler.compile "import nanyx/text\n\ndef bad = string.repeat(\"ab\", \"twice\")"
+    let result = Compiler.compile (normalized """import nanyx/text
+
+def bad = string.repeat("ab", "twice")""")
     assertReports DiagnosticCodes.TypeMismatch result
 
 [<Fact>]
 let ``Standard library private helpers are not imported`` () =
-    let result = Compiler.compile "import nanyx/text\n\ndef bad = indexFrom(\"abc\", \"b\", 0)"
+    let result = Compiler.compile (normalized """import nanyx/text
+
+def bad = indexFrom("abc", "b", 0)""")
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("Unknown function 'indexFrom'", message)
 
 [<Fact>]
 let ``Compiler intrinsics are not in scope in user code`` () =
-    let result = Compiler.compile "import nanyx/text\n\ndef bad = __nanyx_string_length(\"abc\")"
+    let result = Compiler.compile (normalized """import nanyx/text
+
+def bad = __nanyx_string_length("abc")""")
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("Unknown function '__nanyx_string_length'", message)
 
@@ -165,21 +176,27 @@ let ``A standard-library module still checks its calls to intrinsics`` () =
 [<Fact>]
 let ``Standard library import with alias is qualified`` () =
     let source =
-        "import nanyx/text as t\n" +
-        "def shout = t.string.uppercase(\"hi\")"
+        normalized """import nanyx/text as t
+def shout = t.string.uppercase("hi")"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["shout"])
-    let unqualified = Compiler.compile "import nanyx/text as t\n\ndef shout = string.uppercase(\"hi\")"
+    let unqualified = Compiler.compile (normalized """import nanyx/text as t
+
+def shout = string.uppercase("hi")""")
     assertReports DiagnosticCodes.UnknownFunction unqualified
 
 [<Fact>]
 let ``nanyx/text functions are attached to String`` () =
-    let result = Compiler.compile "import nanyx/text\ndef s = \" a \"\ndef piped = s \\ trim\ndef called = string.trim(s)"
+    let result = Compiler.compile (normalized """import nanyx/text
+def s = " a "
+def piped = s \ trim
+def called = string.trim(s)""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["piped"])
     Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["called"])
-    let bare = Compiler.compile "import nanyx/text\ndef x = trim(\" a \")"
+    let bare = Compiler.compile (normalized """import nanyx/text
+def x = trim(" a ")""")
     Assert.Contains("Unknown function 'trim'", (List.head bare.Diagnostics).Message)
 
 [<Fact>]
@@ -195,26 +212,31 @@ let ``Unknown standard library module is an error`` () =
 [<Fact>]
 let ``Entry point module sees nanyx/console without importing it`` () =
     let source =
-        "module main\n" +
-        "@entry\n" +
-        "def main = {\n" +
-        "  println(\"Hello, World!\")\n" +
-        "}\n"
+        normalized """module main
+@entry
+def main = {
+  println("Hello, World!")
+}
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    let withoutEntry = Compiler.compile "module main\n\ndef main = {\n  println(\"Hello, World!\")\n}\n"
+    let withoutEntry = Compiler.compile (withFinalNewline """module main
+
+def main = {
+  println("Hello, World!")
+}""")
     assertReports DiagnosticCodes.UnknownFunction withoutEntry
 
 [<Fact>]
 let ``nanyx/math exports int functions with their types`` () =
     let result =
         Compiler.compile (
-            "import nanyx/math as math\n" +
-            "def a = math.abs(-3)\n" +
-            "def b = math.min(1, 2)\n" +
-            "def c = math.max(1, 2)\n" +
-            "def d = math.clamp(5, min = 0, max = 3)\n" +
-            "def e = math.pow(2, 3)")
+            normalized """import nanyx/math as math
+def a = math.abs(-3)
+def b = math.min(1, 2)
+def c = math.max(1, 2)
+def d = math.clamp(5, min = 0, max = 3)
+def e = math.pow(2, 3)""")
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     for name in [ "a"; "b"; "c"; "d"; "e" ] do
         Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.[name])
@@ -224,13 +246,13 @@ let ``nanyx/math abs, min, max and clamp give the type they are called with`` ()
     // #610: they took an `int` only.
     let result =
         Compiler.compile (
-            "import nanyx/math as math\n" +
-            "def a = math.abs(-2.5)\n" +
-            "def b = math.min(1.5, 2.0)\n" +
-            "def c = math.max(1.5, 2.0)\n" +
-            "def d = math.clamp(1.5, min = 0.0, max = 1.0)\n" +
-            "def e = math.min(\"pear\", \"apple\")\n" +
-            "def f = math.clamp(\"m\", min = \"a\", max = \"f\")")
+            normalized """import nanyx/math as math
+def a = math.abs(-2.5)
+def b = math.min(1.5, 2.0)
+def c = math.max(1.5, 2.0)
+def d = math.clamp(1.5, min = 0.0, max = 1.0)
+def e = math.min("pear", "apple")
+def f = math.clamp("m", min = "a", max = "f")""")
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     for name in [ "a"; "b"; "c"; "d" ] do
         Assert.Equal(TyPrimitive "float", result.Typed.Value.Types.[name])
@@ -260,7 +282,9 @@ let ``nanyx/math minMax of an int and a float is an error`` () =
 
 [<Fact>]
 let ``nanyx/math abs of a string is an error, and so is min of an int and a float`` () =
-    let notANumber = Compiler.compile "import nanyx/math as math\n\ndef a = math.abs(\"x\")"
+    let notANumber = Compiler.compile (normalized """import nanyx/math as math
+
+def a = math.abs("x")""")
     Assert.Equal<string list>([ DiagnosticCodes.MissingContextMembers.Code ], notANumber.Diagnostics |> List.map (fun d -> d.Code))
     let mixed = Compiler.compile "import nanyx/math as math\n\ndef a = math.min(1, 2.5)"
     Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], mixed.Diagnostics |> List.map (fun d -> d.Code))
@@ -269,12 +293,12 @@ let ``nanyx/math abs of a string is an error, and so is min of an int and a floa
 let ``nanyx/math exports float functions with their types`` () =
     let result =
         Compiler.compile (
-            "import nanyx/math as math\n" +
-            "def s = math.sqrt(81.0)\n" +
-            "def f = math.floor(3.9)\n" +
-            "def c = math.ceil(3.1)\n" +
-            "def r = math.round(3.5)\n" +
-            "def t = math.truncate(-3.9)")
+            normalized """import nanyx/math as math
+def s = math.sqrt(81.0)
+def f = math.floor(3.9)
+def c = math.ceil(3.1)
+def r = math.round(3.5)
+def t = math.truncate(-3.9)""")
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal(TyPrimitive "float", result.Typed.Value.Types.["s"])
     for name in [ "f"; "c"; "r"; "t" ] do
@@ -282,13 +306,17 @@ let ``nanyx/math exports float functions with their types`` () =
 
 [<Fact>]
 let ``nanyx/text rejects a labelled argument passed by position`` () =
-    let result = Compiler.compile "import nanyx/text\n\ndef parts = string.split(\"a,b\", \",\")"
+    let result = Compiler.compile (normalized """import nanyx/text
+
+def parts = string.split("a,b", ",")""")
     let diagnostic = List.exactlyOne result.Diagnostics
     Assert.Equal(DiagnosticCodes.PositionalForNamedArgument.Code, diagnostic.Code)
     Assert.Equal("'string.split' takes 'on' by name, not by position: write 'on = ...'", diagnostic.Message)
     let piped = List.exactlyOne (Compiler.compile "import nanyx/text\n\ndef parts = \"a,b\" \\split(\",\")").Diagnostics
     Assert.Equal(diagnostic.Message, piped.Message)
-    let named = Compiler.compile "import nanyx/text\n\ndef parts = string.split(\"a,b\", on = \",\")"
+    let named = Compiler.compile (normalized """import nanyx/text
+
+def parts = string.split("a,b", on = ",")""")
     Assert.True(named.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{named.Diagnostics}")
 
 [<Fact>]
@@ -296,12 +324,14 @@ let ``nanyx/text reports a labelled argument passed by position once, not in the
     // As `shop.nyx` wrote it before `padStart`'s `width` and `fill` had to be named: the matches after it were
     // reported as errors too.
     let source =
-        "import nanyx/text\n\n" +
-        "def pad = { n -> string.padStart(\"{n}\", 2, \"0\") }\n" +
-        "def quantity = { s -> match int.fromString(s)\n" +
-        "  | #some(n) -> n\n" +
-        "  | #invalidInt -> 0\n" +
-        "}\n"
+        normalized """import nanyx/text
+
+def pad = { n -> string.padStart("{n}", 2, "0") }
+def quantity = { s -> match int.fromString(s)
+  | #some(n) -> n
+  | #invalidInt -> 0
+}
+"""
     let diagnostic = List.exactlyOne (Compiler.compile source).Diagnostics
     Assert.Equal(DiagnosticCodes.PositionalForNamedArgument.Code, diagnostic.Code)
     Assert.Equal("'string.padStart' takes 'width' and 'fill' by name, not by position: write 'width = ...' and 'fill = ...'", diagnostic.Message)

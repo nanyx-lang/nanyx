@@ -43,15 +43,18 @@ comment and what fits no topic: `panic`, `ignore`, booleans and memory blocks.
 
 # What is written
 
+This table names each module's topics, not its functions. The [Standard Library](../stdlib/standard-library) pages
+list every function a module exports.
+
 | Module          | What it holds                                                                                     |
 | --------------- | ------------------------------------------------------------------------------------------------- |
-| `nanyx/prelude` | Imported automatically. `proc`, the result workflow: in `proc { ... }`, `try x` continues with the payload of `#some` or gives back any other tag (the block's type collects them), and `return x` is `#some(x)`. The `Result(a, e)` type (`#some(a) \| #error(e)`) with `Result.map`, `mapError`, `bind`, `defaultValue`, `mapOr`, `orElse`, `isOk`, `isError`. The helpers for option-like unions, plain functions named for the `#some` tag: `mapSome`, `bindSome`, `someOr`, `someOrElse` (what `a ?? b` calls, by its reserved name `__someOrElse`), `isSome`, `isNone`, `someToResult`, `mapSomeOr`, `mapSomeOrElse`, `orElseSome`, `someToList`, `somes`. `int.fromString`, which reads a decimal integer (`#some(int) \| #invalidInt`). `float.fromString`, which reads a decimal with an optional point and exponent (`#some(float) \| #invalidFloat`). `bool.fromString`, which reads `true` or `false` (`#some(bool) \| #invalidBool`). `int.toFloat`, which turns an `int` into a `float`. The `ToString(a)` context every interpolation hole goes through (`"{x}"` is a call to `__interpolate(x)`, which requires it), and `int.toString`, `float.toString`, `bool.toString` and `string.toString`, which write a value as interpolation does. The `FromString(a, e)` context, which an attached `fromString` gives a type, as `int.fromString`, `float.fromString` and `bool.fromString` give `int`, `float` and `bool`. The `List` functions: `list.length`, `head`, `map`, `filter`, `find`, `all`, `any`, `fold`, `foldBack`, `reverse`, `append`, `flatten`, `take`, `skip`, `zip`, `get`, `partition`, `skipWhile`, `unzip` |
-| `nanyx/console` | The `Console` context (`write`, `writeError`, `readLine`, `readToEnd`, `flush`), the `IoError` type, the instance the runtime supplies to the top level of a module, and `print`, `println`, `eprint` and `eprintln`, which write any value with a `ToString` through it |
+| `nanyx/prelude` | Imported automatically. `proc`, the result workflow: in `proc { ... }`, `try x` continues with the payload of `#some` or gives back any other tag (the block's type collects them), and `return x` is `#some(x)`. The `Result(a, e)` type and its functions ([result](../stdlib/result)), and the helpers for option-like unions, named for the `#some` tag, among them `someOrElse`, which `a ?? b` calls by its reserved name `__someOrElse` ([option](../stdlib/option)). The contexts for equality, ordering, hashing and joining. `ToString(a)`, which every interpolation hole goes through (`"{x}"` is a call to `__interpolate(x)`, which requires it), and `FromString(a, e)`, with the `toString` and `fromString` attached to the built-in types. `int` and `float`, the number contexts (`Add`, `Num`) and powers, the sized number types, and conversions between them. Lists ([collections](../stdlib/collections)), maps ([map](../stdlib/map)) and sets ([set](../stdlib/set)) |
+| `nanyx/console` | The `Console` context (`write`, `writeError`, `readLine`, `readToEnd`, `flush`), the `IoError` type, the instance the runtime supplies to the top level of a module, and `print`, `println`, `eprint` and `eprintln`, which write any value with a `ToString` through it ([io](../stdlib/io)) |
 | `nanyx/console.host` | The [console host](./hosts): `run`, which takes the program's `@entry` and runs it with a `Console` built on `HostRuntime` |
 | `nanyx/host.runtime` | The `HostRuntime` context (`writeStdout`, `writeStderr`, `readStdinByte`) and the instance the toolchain provides to hosts; anywhere else, requiring it is an error (`NYX0238`) |
-| `nanyx/math`    | `abs` and `pow` over `Num(a)`, so on `int` and `float`; `min`, `max` and `clamp` over `Ord(a)`; `sqrt`, `floor`, `ceil`, `round` and `truncate` on `float` |
+| `nanyx/math`    | Arithmetic over `Num(a)`, so on `int` and `float`; comparisons over `Ord(a)` (`min`, `max`, `clamp` and the like); square roots, exponentials, logarithms and rounding on `float`; the constants `pi` and `e` ([math](../stdlib/math)) |
 | `nanyx/result`  | Nothing: kept so that `import nanyx/result` still compiles now that `proc` is in the prelude      |
-| `nanyx/text`    | Attached to `String`: `string.length`, `substring`, `startsWith`, `endsWith`, `indexOf`, `lastIndexOf`, `contains`, `count`, `removePrefix`, `removeSuffix`, `uppercase`, `lowercase`, `trim`, `trimStart`, `trimEnd`, `isEmpty`, `isBlank`, `repeat`, `padStart`, `padEnd`, `split`, `join`, `concat`, `replace`, `lines`, `words`; called as `string.trim(s)` or `s \trim` |
+| `nanyx/text`    | Functions attached to `String`: measuring, searching, slicing, case, trimming, padding, splitting and joining, replacing, and characters; called as `string.trim(s)` or `s \trim` ([string](../stdlib/string)) |
 
 `println` comes from `nanyx/console`. A script imports it explicitly; the module that declares `@entry` gets it
 implicitly, because its host, `nanyx/console.host`, provides `Console` to the entry point.
@@ -59,8 +62,9 @@ implicitly, because its host, `nanyx/console.host`, provides `Console` to the en
 Strings are UTF-8 and this first slice of `nanyx/text` works byte by byte: `length` counts bytes,
 indices and widths are byte offsets, `uppercase`/`lowercase` only change ASCII letters and the trimming
 functions and `words` only treat ASCII whitespace as whitespace. `indexOf` and `lastIndexOf` return
-`#some(index)` or `#notFound`, as the language docs specify; `split`, `replace`, `substring` and `join`
-take their arguments positionally, where the docs name them. `++` (concatenation) and `==`
+`#some(index)` or `#notFound`, as the language docs specify. `split`, `substring`, `replace`, `padStart` and
+`padEnd` take their arguments after the string by name, as in `s \split(on = ",")`, and `join` takes its separator by
+position ([Named parameters](../stdlib/standard-library#named-parameters)). `++` (concatenation) and `==`
 on strings are language operators, lowered by the backend. (The language docs call this module
 `string`; it is imported as `nanyx/text`.)
 

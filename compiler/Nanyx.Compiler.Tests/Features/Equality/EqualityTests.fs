@@ -50,10 +50,10 @@ let ``A def that writes its type must require Eq of a type variable it compares`
 [<Fact>]
 let ``A def that requires Eq of a type variable can compare it, and types built from it`` () =
     compileClean (
-        "def same: [Eq(a)] a, a -> bool = { x, y -> x == y }\n" +
-        "def differ: [Eq(a)] a, a -> bool = { x, y -> x != y }\n" +
-        "def holds: [Eq(a)] list(a), a -> bool = { xs, x -> x != x or xs == [x] }\n" +
-        "def b = same(1, 2) or differ(\"a\", \"b\") or holds([#red], #red)\n")
+        withFinalNewline """def same: [Eq(a)] a, a -> bool = { x, y -> x == y }
+def differ: [Eq(a)] a, a -> bool = { x, y -> x != y }
+def holds: [Eq(a)] list(a), a -> bool = { xs, x -> x != x or xs == [x] }
+def b = same(1, 2) or differ("a", "b") or holds([#red], #red)""")
     |> ignore
 
 [<Fact>]
@@ -65,9 +65,9 @@ let ``A def that requires an imported context checks after one that had a contex
 let ``Comparing values with no type variable in their type requires nothing`` () =
     let typed =
         compileClean (
-            "type Point = (x: int, y: int)\n" +
-            "def same: Point, Point -> bool = { p, q -> p == q }\n" +
-            "def firsts: list(int) -> bool = { xs -> xs \\list.any({ x -> x == 1 }) }\n")
+            withFinalNewline """type Point = (x: int, y: int)
+def same: Point, Point -> bool = { p, q -> p == q }
+def firsts: list(int) -> bool = { xs -> xs \list.any({ x -> x == 1 }) }""")
     Assert.True(typed.InferredContextTypes.IsEmpty)
 
 [<Fact>]
@@ -163,7 +163,8 @@ let ``Passing functions to a def that requires Eq is an error at the call`` () =
 
 [<Fact>]
 let ``A call that requires Eq of a type with no == attached passes the compiler's own`` () =
-    let typed = compileClean "def same = { x, y -> x == y }\ndef b = same(1, 2) or same([\"a\"], [\"b\"])\n"
+    let typed = compileClean (withFinalNewline """def same = { x, y -> x == y }
+def b = same(1, 2) or same(["a"], ["b"])""")
     Assert.Equal<ContextInstance list>(
         [ InstanceSynthesized [ "==", "__equals" ]; InstanceSynthesized [ "==", "__equals" ] ],
         instancesOf typed |> List.filter (function InstanceSynthesized _ -> true | _ -> false))
@@ -172,18 +173,18 @@ let ``A call that requires Eq of a type with no == attached passes the compiler'
 let ``A call that requires Eq of a type with == attached passes that`` () =
     let typed =
         compileClean (
-            "type Email = protected string\n" +
-            "def Email.`==`: Email, Email -> bool = { a, b -> true }\n" +
-            "def same = { x, y -> x == y }\n" +
-            "def b = same(Email(\"a\"), Email(\"b\"))\n")
+            withFinalNewline """type Email = protected string
+def Email.`==`: Email, Email -> bool = { a, b -> true }
+def same = { x, y -> x == y }
+def b = same(Email("a"), Email("b"))""")
     Assert.Contains(InstanceSynthesized [ "==", "Email.==" ], instancesOf typed)
 
 [<Fact>]
 let ``A call that requires Eq of a list of a type variable needs Eq of the variable`` () =
     let message, at =
         missingContext (
-            "def same: [Eq(a)] a, a -> bool = { x, y -> x == y }\n" +
-            "def wrapped: a, a -> bool = { x, y -> same([x], [y]) }\n")
+            withFinalNewline """def same: [Eq(a)] a, a -> bool = { x, y -> x == y }
+def wrapped: a, a -> bool = { x, y -> same([x], [y]) }""")
     Assert.Equal("'same' requires the context 'Eq(list(a))', which needs 'Eq(a)', not available here: add [Eq(a)] to the type of 'wrapped'", message)
     Assert.Equal("same", at)
 
@@ -196,16 +197,16 @@ let ``Comparing with a tag joins the operands, leaving the other open to more ta
 
 [<Fact>]
 let ``Comparing tags with payloads of different types is still an error`` () =
-    let diagnostic = Assert.Single((Compiler.compile "def b = #some(1) == #some(\"a\")\n").Diagnostics)
+    let diagnostic = Assert.Single((Compiler.compile (withFinalNewline """def b = #some(1) == #some("a")""")).Diagnostics)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
 
 [<Fact>]
 let ``A concrete comparison calls the == attached to its type, except in that definition`` () =
     let typed =
         compileClean (
-            "type Point = protected (x: int, y: int)\n" +
-            "def Point.`==`: Point, Point -> bool = { p, q -> p == q }\n" +
-            "def b = Point(x = 1, y = 2) != Point(x = 1, y = 3)\n")
+            withFinalNewline """type Point = protected (x: int, y: int)
+def Point.`==`: Point, Point -> bool = { p, q -> p == q }
+def b = Point(x = 1, y = 2) != Point(x = 1, y = 3)""")
     let calls =
         typed.Module
         |> List.collect (function
@@ -225,10 +226,10 @@ let ``A concrete comparison calls the == attached to its type, except in that de
 let ``A list of a type with its own == is compared through it, element by element`` () =
     let typed =
         compileClean (
-            "type Email = protected string\n" +
-            "def Email.`==`: Email, Email -> bool = { a, b -> true }\n" +
-            "def b = [Email(\"a\")] != [Email(\"b\")]\n" +
-            "def same: [Eq(a)] list(a), list(a) -> bool = { xs, ys -> xs == ys }\n")
+            withFinalNewline """type Email = protected string
+def Email.`==`: Email, Email -> bool = { a, b -> true }
+def b = [Email("a")] != [Email("b")]
+def same: [Eq(a)] list(a), list(a) -> bool = { xs, ys -> xs == ys }""")
     Assert.Contains(InstanceSynthesized [ "==", "Email.==" ], instancesOf typed)
     let instances = typed.ContextInstances |> Map.values |> Seq.concat |> Seq.choose id |> List.ofSeq
     Assert.Contains(instances, function InstanceInScope(Kind (TypeApply("Eq", [ Kind (TypeVar "a") ])), _) -> true | _ -> false)

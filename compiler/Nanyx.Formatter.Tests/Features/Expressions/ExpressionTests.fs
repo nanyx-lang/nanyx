@@ -50,8 +50,10 @@ let ``A statement or an arm's body takes every operator but a range without pare
 [<Fact>]
 let ``Literals are printed from the source`` () =
     unchanged "def a = 'single'\n"
-    unchanged "def b = \"one\n\ntwo\"\n"
-    unchanged "def c = \"{a} and {b}\"\n"
+    unchanged (normalized """def b = "one
+
+two" """)
+    unchanged (normalized """def c = "{a} and {b}" """)
 
 [<Fact>]
 let ``Names that are operators keep their backticks`` () =
@@ -76,7 +78,7 @@ let ``Names that are sentences keep their backticks, and an identifier loses the
     unchanged "def `adds two points` = 1\n"
     unchanged "def `is it empty?` = `adds two points`(1)\n"
     unchanged "def builder = (try = { m, f -> f(m) }, return = { v -> v })\n"
-    unchanged "def r = (`first name` = \"Ada\")\n"
+    unchanged (normalized """def r = (`first name` = "Ada")""")
     unchanged "def n = r.`first name`\n"
     Assert.Equal("def plain = 1\n", format "def `plain` = 1")
     unchanged "def x = t.0\n"
@@ -85,4 +87,4 @@ let ``Names that are sentences keep their backticks, and an identifier loses the
 let ``An instance written out in a use is printed as written`` () =
     unchanged (lines [ "def main = {"; "  use Eq(int)(`==` = { a, b -> true })"; "  1"; "}" ])
     unchanged (lines [ "def main = {"; "  use Add(Point)(zero = origin, `+` = plus, `-` = minus, negate = flip)"; "  1"; "}" ])
-    unchanged (lines [ "def shown = use ToString(int)(toString = { n -> \"#\" }) in \"{1}\"" ])
+    unchanged (normalized """def shown = use ToString(int)(toString = { n -> "#" }) in "{1}" """)

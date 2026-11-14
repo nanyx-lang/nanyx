@@ -6,7 +6,12 @@ open Nanyx.Formatter.Tests.TestHelpers
 
 [<Fact>]
 let ``Imports and module blocks are printed as written`` () =
-    unchanged (lines [ "import nanyx/console"; ""; "import ("; "  nanyx/text as t"; "  \"./local.nyx\""; ")" ])
+    unchanged (normalized """import nanyx/console
+
+import (
+  nanyx/text as t
+  "./local.nyx"
+)""")
     unchanged (lines [ "module app"; ""; "module geometry ="; "  def origin = 0"; "  def unit = 1"; ""; "def p = geometry.origin" ])
 
 [<Fact>]
