@@ -720,7 +720,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     member private this.BoxTools (scope: Scope) : CoreIrLowerBoxes.BoxTools =
         { NewLocal = fun name ty -> newVar (uniqueName name) Local ty
           Reader = fun ty -> request (SpecKey.plain $"__box_{IrType.mangle ty}" []) subst (BoxReading ty)
-          Convert = fun atom ty k -> this.Coerce scope atom ty k }
+          ListConverter =
+            fun given expected ->
+                request (SpecKey.plain $"__convert_list_{IrType.mangle given}_to_{IrType.mangle expected}" []) subst (ListConverting(given, expected))
+          Convert = fun atom ty k -> this.Coerce scope atom ty (fun atom -> settle (Expr.make (Atom atom) (atomType atom)) k) }
 
     /// The closure over the wrapper `wrapper` of a top-level function, as a context member of type `memberTy` (see
     /// `wrappedAt`): static data, since it captures nothing.
@@ -1344,6 +1347,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | AsStart -> this.StartFunction ()
         | Adapting(givenTy, expectedTy) -> this.Adapter functionName givenTy expectedTy
         | BoxReading ty -> CoreIrLowerBoxes.readerFunction newVar functionName ty
+        | ListConverting(given, expected) -> CoreIrLowerBoxes.listConverterFunction (this.BoxTools emptyScope) newVar functionName given expected
         | Printing printer -> CoreIrLowerDbg.printerFunction printerTools functionName printer
         | _ ->
         let expr = definitions.[name]
@@ -1461,6 +1465,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             make (environmentParameter :: valueParameters @ List.map snd passed) (toIrType resultTy) (bind (call order []))
         | Adapting _ -> internalError "an adapter lowered as a definition"
         | BoxReading _ -> internalError "a box's function lowered as a definition"
+        | ListConverting _ -> internalError "a list's conversion lowered as a definition"
         | Printing _ -> internalError "a printer lowered as a definition"
         | AsStart -> internalError "the start function lowered as a definition"
 
