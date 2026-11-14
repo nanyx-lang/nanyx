@@ -12,11 +12,15 @@ let private assertExit (expected: int) (message: string) (directory: string) (ar
 
 [<Theory>]
 [<InlineData("check")>]
-[<InlineData("run")>]
 [<InlineData("build")>]
 let ``Exit codes - more than one path is a usage error, 2, for every command that takes one`` (command: string) =
     use directory = new TempDirectory()
     assertExit 2 "Give one file, directory or manifest, not 2." directory.Path [ command; "a"; "b" ]
+
+[<Fact>]
+let ``Exit codes - run takes what follows the path as the program's arguments, not as more paths`` () =
+    use directory = new TempDirectory()
+    assertExit 2 "File not found: a.nyx" directory.Path [ "run"; "a.nyx"; "b" ]
 
 [<Fact>]
 let ``Exit codes - new given two directories is a usage error, 2`` () =

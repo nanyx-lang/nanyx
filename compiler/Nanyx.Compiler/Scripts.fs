@@ -46,6 +46,16 @@ module Scripts =
     /// a name that starts with `__`.
     let definitionName = "__script"
 
+    /// `entryTy`, the type of a script's entry point, requiring of the plain contexts only those that are ambient in the
+    /// module (`ambient`, by name): the statements run in those, and in no other. A statement that calls a function whose
+    /// type is an error leaves the entry point's contexts open, to take on all those the host's `run` provides, `Env` among
+    /// them where the script doesn't import `nanyx/env`; the backend would then look for members that nothing supplies.
+    let withAmbientContextsOnly (ambient: Set<Identifier>) (entryTy: Ty) : Ty =
+        match entryTy with
+        | TyFunc(input, output, own) ->
+            TyFunc(input, output, own |> List.filter (function TyApply(name, []) -> ambient.Contains name | _ -> true))
+        | _ -> entryTy
+
     /// `module'`, a script typed as `asEntry` made it, with each of its values in `entryValues` moved from the top level
     /// into the entry point `entry`, as a local def among the statements in the order they are written, and the entry
     /// point made a def of its own, `__script`, which the call of the host's `run` names. Its type, `entryTy`, writes the

@@ -36,22 +36,31 @@ def readToEndAfter: [HostRuntime] string -> string = { acc ->
   if byte < 0 then acc else readToEndAfter(acc ++ __nanyx_string_from_byte(byte))
 }
 
---| The position of the first zero byte in `block` from `index`, or of its end when there is none.
-def zeroFrom: string, int -> int = { block, index ->
-  if __nanyx_string_byte_at(block, index) <= 0 then index else zeroFrom(block, index + 1)
+--| Where the entry of `block` that holds the byte at `index` starts: after the zero byte before it,
+  or at the start of `block`.
+def entryStart: string, int -> int = { block, index ->
+  if index <= 0 or __nanyx_string_byte_at(block, index - 1) == 0
+    then index
+    else entryStart(block, index - 1)
 }
 
---| The entries of `block` from `start`, each ended by a zero byte, as the runtime lays out the
-  arguments and the environment.
-def entriesFrom: string, int -> list(string) = { block, start ->
-  def end = zeroFrom(block, start)
+--| The entries of `block` before `end`, each ended by a zero byte as the runtime lays out the
+  arguments and the environment, in front of `acc`.
+def entriesBefore: string, int, list(string) -> list(string) = { block, end, acc ->
+  def start = entryStart(block, end - 1)
 
-  if start >= __nanyx_string_length(block)
-    then []
-    else __nanyx_list_cons(
-      __nanyx_string_slice(block, start, end - start)
-      entriesFrom(block, end + 1)
+  if end <= 0
+    then acc
+    else entriesBefore(
+      block
+      start
+      __nanyx_list_cons(__nanyx_string_slice(block, start, end - 1 - start), acc)
     )
+}
+
+--| The entries of `block`, each ended by a zero byte.
+def entriesOf: string -> list(string) = { block ->
+  entriesBefore(block, __nanyx_string_length(block), [])
 }
 
 --| The value in `entries`, each written `NAME=value`, of the variable `name`.
@@ -72,14 +81,14 @@ def variableIn: list(string), string -> #some(string) | #notSet = {
 
 --| The program's command-line arguments, after its name.
 def arguments: () -> list(string) = { _ ->
-  match entriesFrom(__nanyx_arguments(), 0)
+  match entriesOf(__nanyx_arguments())
     | [] -> []
     | [_, ...rest] -> rest
 }
 
 --| The value of the environment variable `name`, or `#notSet` when it has none.
 def environmentVariable: string -> #some(string) | #notSet = { name ->
-  variableIn(entriesFrom(__nanyx_environment(), 0), name)
+  variableIn(entriesOf(__nanyx_environment()), name)
 }
 
 --| Ends the program with the exit code `code`.
