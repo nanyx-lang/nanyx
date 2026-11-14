@@ -832,7 +832,7 @@
     local.get $__inlined15__in1__in1
     call $__nanyx_drop_string
     drop
-    local.get $__dbg_value__in1__in1_i64
+    local.get $__for___for_element_0__in1__in1_i64
         drop
         local.get $__for_cursor_0__in1__in1
         i32.load offset=8

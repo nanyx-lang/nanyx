@@ -4,9 +4,10 @@ description: "The inliner in the WebAssembly backend, aggressive for workflows, 
 order: 25
 ---
 
-This page describes the inliner of the WebAssembly backend: its first two steps are built (`CoreIrInline.fs`,
+This page describes the inliner of the WebAssembly backend: its first three steps are built (`CoreIrInline.fs`,
 [#745](https://github.com/nanyx-lang/nanyx/issues/745), and `CoreIrSimplify.fs`,
-[#1339](https://github.com/nanyx-lang/nanyx/issues/1339)), and the rest is the plan below. It is part of the [compilation](./compilation) workstream, and builds on
+[#1339](https://github.com/nanyx-lang/nanyx/issues/1339) and [#1340](https://github.com/nanyx-lang/nanyx/issues/1340)),
+and the rest is the plan below. It is part of the [compilation](./compilation) workstream, and builds on
 [context calls](./context-calls), where static closures ([#743](https://github.com/nanyx-lang/nanyx/issues/743)) and
 specialising on known members ([#744](https://github.com/nanyx-lang/nanyx/issues/744)) are done.
 
@@ -36,8 +37,8 @@ match getA()
 ```
 
 That means: no closure for the block, none for each continuation, no call through `Proc`'s members, and no boxing of
-the members' generic values. The block makes 29 allocations without inlining, and 17 with the steps built so far,
-which leave the boxing. Before builders became a context and a function
+the members' generic values. The block makes 29 allocations without inlining, and with the steps built so far none
+but the `#some` it returns. Before builders became a context and a function
 ([#1305](https://github.com/nanyx-lang/nanyx/issues/1305)) it made 15: the uniform representation for a member's own
 type variables ([#1160](https://github.com/nanyx-lang/nanyx/issues/1160)) boxes each value that crosses a member.
 
@@ -72,7 +73,10 @@ The block desugars to calls of `Proc`'s members, each keyword's continuation a l
 5. **Inline the continuations.** Each continuation is a lambda written at the call and called once, in the match arm,
    so it is replaced by its body (beta reduction).
 6. **Unbox.** The members' generic values are now at known types (`int` here), so the boxing from #1160 isn't needed
-   and isn't made.
+   and isn't made. A box is a closure whose function returns the value, so this needs no rule of its own: once a box
+   is made and read in the same branch, reading it is a call through a known closure, inlined, and the box is left
+   unread. What brings the two into one branch is copying a `match` into the branches of the `if` or `match` whose tag
+   it tests: `getA`'s `if` gives `#some(n)` in one branch, where `try`'s match then takes its arm.
 7. **Remove what's left.** The `use`'s member lambdas, now unused, aren't made. `zero` and `for`, which this block
    doesn't use, go too.
 
@@ -101,6 +105,7 @@ behind, and reuse sees the simplified code.
 - a call through a closure known at that point becomes a direct call, or is inlined in turn;
 - a closure or record that nothing reads any more isn't made;
 - a `match` on a value whose tag is known at that point takes its one arm;
+- a `match` on what an `if` or another `match` gives is copied into its branches, where that is known;
 - a member's boxed value at a known type is unboxed.
 
 **Tail calls stay tail calls.** Every call in tail position is a tail call ([Tail calls](./tail-calls)). An inlined
@@ -168,6 +173,12 @@ tests and the tags the arms before it tested and failed. From that:
   adapter of #1160, reads the caller's variables and not the block.
 - **A `match` on known scrutinees** takes the arm they match, binding the names its patterns bind; an arm they cannot
   match is left out, and a scrutinee every arm matches whatever it is is no longer tested.
+- **The code after a branch** (an `if` or a `match`) that gives a tag in one of its branches is copied into each
+  branch when it matches on that tag, so that each copy knows which tag it is (case-of-case). Each copy but the first
+  has its variables made new. It is kept only when the copies, simplified, grow the code by no more than `copyLimit`
+  (40) nodes, as when all but one of them come to little. Within a copy being tried nothing more is copied, so a trial
+  cannot grow without end; the next pass goes on from there.
+- **A chain that ends in a variable** it gave another variable's value, or a constant, ends in that value.
 - **A binding that nothing reads** is not made when its value has no effect (no call, no write, and no operator that
   can trap), and a closure, tag or record that only it held goes with it.
 
@@ -181,23 +192,25 @@ evaluated where it is used.
 
 Measured as the [Context escape](./context-escape#what-it-costs) page measures it, by the allocation counter of a
 `--check-memory` build over 100 blocks, a `proc` block of three `try`s and a `return` on `int` payloads makes 29
-allocations a block without inlining and 17 with it (`A proc block allocates fewer inlined` in `InliningTests.fs`).
-`proc`, the block, the members and the continuations are inlined, and none of them is a closure any more, but the
-members' generic values are still boxed (#1160): each `try` boxes its payload and unboxes it again in the
-continuation, and boxes and unboxes the result it returns. Timed by `run(100000)` from the host, the block takes about
-92 ns inlined and 231 ns not.
+allocations a block without inlining, and 1 with it: the `#some` the block returns (`A proc block allocates fewer
+inlined` in `InliningTests.fs`). `proc`, the block, the members and the continuations are inlined, none of them is a
+closure, and nothing is boxed: the block is three nested `if`s, on `n > 0`, `n + 1 > 0` and `n + 2 > 0`. Timed by
+`run(100000)` from the host, the block takes about 9 ns inlined and 240 ns not. With simplifying alone (#1339) it made
+17 allocations and took about 92 ns, the boxing being all that was left.
 
 Inlining with simplifying also leaves out of a program what only unused closures needed: a host whose `use` binds
 members the program never calls no longer makes their closures, so their functions and the helpers they use are not
 emitted.
+
 # Plan
 
 1. ~~**The inliner and its first rules**~~ ([#745](https://github.com/nanyx-lang/nanyx/issues/745), done): lambdas
    called once, small functions, handlers, the recursion check, keeping tail calls and spans, in every build, and
    `--no-inline`. Tests show a call inlined and one that isn't (`InliningTests.fs`).
 2. ~~**Simplification after inlining**~~ ([#1339](https://github.com/nanyx-lang/nanyx/issues/1339), done): known
-   calls, unused closures, known matches (CoreIrSimplify.fs, tests in InliningTests.fs).
-3. **Unboxing members at known types,** after #1160.
+   calls, unused closures, known matches (`CoreIrSimplify.fs`, tests in `InliningTests.fs`).
+3. ~~**Unboxing members at known types**~~ ([#1340](https://github.com/nanyx-lang/nanyx/issues/1340), done): by
+   copying a match into the branches whose tag it tests, which brings each box and its reading into one branch.
 4. **The `proc` block above compiles to its nested match,** checked against the WAT of the hand-written match, with
    the allocation count of the generated-code performance review's `proc` benchmark going to zero for the block.
 5. **Tune the size limit** against the generated-code benchmarks.

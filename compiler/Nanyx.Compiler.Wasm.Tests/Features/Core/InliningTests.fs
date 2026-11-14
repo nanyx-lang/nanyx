@@ -174,6 +174,27 @@ def run: int -> int = { n -> orZero(#some(n + 1)) }
     Assert.Equal(0, inlinedAllocations)
 
 [<Fact>]
+let ``A match on what an if gives is copied into its branches`` () =
+    let source =
+        normalized """def classify: int -> #positive(int) | #other = { n -> if n > 0 then #positive(n) else #other }
+
+def run: int -> int = { n ->
+  match classify(n)
+    | #positive(value) -> value
+    | #other -> 0
+}
+"""
+    use inlined = instantiateWasm source []
+    use notInlined = instantiateWat (transpileWatWith { checkedOptions with Inline = false } source) []
+    let inlinedAllocations, inlinedResult = allocationsOfRun inlined
+    let notInlinedAllocations, _ = allocationsOfRun notInlined
+    Assert.Equal(100, inlinedResult)
+    // Inlined, the match is on the tag `classify`'s `if` gives. Copied into each branch, it is on a known tag there, so
+    // it takes its arm, and no tag is made.
+    Assert.Equal(1, notInlinedAllocations)
+    Assert.Equal(0, inlinedAllocations)
+
+[<Fact>]
 let ``A proc block allocates fewer inlined`` () =
     let source =
         normalized """def getA: int -> #some(int) | #none = { n -> if n > 0 then #some(n) else #none }
@@ -204,6 +225,10 @@ def run: int -> int = { n -> go(n, 0) }
     Assert.Equal(15450, inlinedResult)
     Assert.Equal(notInlinedResult, inlinedResult)
     // Not inlined, the block makes 29 allocations. Inlined, `proc`, the block, the members and the continuations are
-    // inlined, and no closure is made for any of them, but the members' generic values are still boxed: 17.
+    // inlined, no closure is made for any of them, and each `try`'s match is copied into both branches of `getA`'s `if`,
+    // where the payload is known, so nothing is boxed: the one allocation left is the `#some` the block returns.
     Assert.Equal(2900, notInlinedAllocations)
-    Assert.Equal(1700, inlinedAllocations)
+    Assert.Equal(100, inlinedAllocations)
+    let go = functionText "go" (transpileWat source)
+    Assert.DoesNotContain("$__box_", go)
+    Assert.DoesNotContain("call_indirect", go)
