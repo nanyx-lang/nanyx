@@ -237,16 +237,41 @@ The language server resolves imports exactly as the CLI does, from the manifest,
 manifest changes, the extension offers to run `nanyx restore`. Go-to-definition into a dependency opens the
 cached source read-only.
 
+## Local packages first
+
+Decided by the maintainer. Packaging is built in two halves, so that hosts and linters can become packages
+([Built-ins as packages](./built-ins-as-packages)) without waiting for the parts that only downloaded packages need:
+
+- **Local packages, now.** A dependency is a package in a directory on disk, a path dependency
+  (`"acme.util" = { path = "../util" }` in `[dependencies]`), or a package shipped with the compiler. Nothing is
+  downloaded, so there is nothing to choose between and no solver is needed.
+  - **Shipped packages** (the console host, then the official linter) are source directories in the compiler's
+    distribution, each with its `.nyxp` and sources, compiled like a path dependency. They become `.nyxpkg` once the
+    cache exists.
+  - **Versions.** A manifest names a shipped package with the version the compiler ships, exactly. Anything else is
+    an error saying which version is available, and `nanyx new` writes the right one.
+  - **Projects** (`.nyxproj`, project references) wait until a workspace of several packages needs them
+    ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
+- **Remote packages, later:** `.nyxpkg`, the cache, `nanyx.lock`, resolving versions, `nanyx add` and `restore`,
+  publishing and `api.json`. None of this page's open questions block the local half.
+
 # Plan
 
-_To do._ Candidate items, not yet filed, roughly in order. Each produces something usable on its own:
+Local packages first (items 3a to 3c), then remote packages. Each produces something usable on its own:
 
 1. **Imports by module name within a package.** Done ([#287](https://github.com/nanyx-lang/nanyx/issues/287)) but
    for `public-modules`, which only matters once another package can import this one.
 2. **The rest of the import syntax.** Done ([#289](https://github.com/nanyx-lang/nanyx/issues/289)): selections and
    re-exports, which `public-modules` relies on.
-3. **Local dependencies and projects.** `.nyxproj`, project references and path dependencies; one version per
-   package; only direct dependencies importable; diagnostics for each rule.
+3. **Local packages:**
+   - **3a. Path dependencies** ([#862](https://github.com/nanyx-lang/nanyx/issues/862)): a dependency on a package in
+     a directory, importing its `public-modules` as `acme.util/strings`, one version of each package per build, only
+     direct dependencies importable, with an error for each rule.
+   - **3b. Packages shipped with the compiler** ([#1342](https://github.com/nanyx-lang/nanyx/issues/1342)): source
+     directories in the distribution, named with an exact version.
+   - **3c. The console host as a shipped package** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)), then the
+     official linter once its contract exists ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)).
+   - Projects (`.nyxproj`) later ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
 4. **The lockfile and the cache.** `nanyx.lock`, the `.nyxpkg` format, verification and the per-user cache, tested
    against a local directory acting as an index.
 5. **Resolution.** PubGrub over the index protocol, with error messages for conflicts; `nanyx add` and `restore`.
@@ -272,7 +297,5 @@ _To do._ Candidate items, not yet filed, roughly in order. Each produces somethi
   exhaustive matches in dependants)? Elm says yes.
 - **Hosts and capabilities.** Should a package declare the contexts it requires in its manifest, so the index can
   show "this package needs `FileSystem`" before anyone installs it?
-- **Linters as packages.** [Linters](./linters) wants linters distributed as packages. Are they
-  ordinary dependencies, or a separate `[linters]` table resolved the same way?
 - **Private packages.** Should the client support more than one index (a company's own) from the start? The
   static protocol makes it cheap: a list of index URLs in user configuration.
