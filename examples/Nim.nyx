@@ -127,10 +127,10 @@ def bobChooses: [Choose] Player, int -> int = { player, n ->
   if player == #bob and choose() then cheating(player, n) else perfect(player, n)
 }
 
--- One game, with Bob's choice made for him. The lambda calls `bobChooses` with the `Choose` above it.
+-- One game, with Bob's choice made for him. `bobChooses` runs with the `Choose` above it.
 def exampleRound: bool -> Outcome = { cheats ->
   use Choose(choose = { cheats })
-  use Move(move = { player, n -> bobChooses(player, n) })
+  use Move(move = bobChooses)
   checkedGame(7)
 }
 

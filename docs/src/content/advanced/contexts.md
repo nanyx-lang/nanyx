@@ -74,6 +74,8 @@ def main = {
 
 `log` keeps its type, `string -> ()`, so `greet` knows nothing of `Console`, and `message` is a `string`. The member runs with the instances in scope at the `use`, so `use Log(log = { m -> log("[app] {m}") })` calls the `Log` loaded before it.
 
+A function given by its name works the same way, when an instance of each context it needs besides is in scope at the `use`: with `def shout: [Console] string -> ()`, `use Log(log = shout)` runs `shout` with the `Console` there. When one is not, it is an error (`NYX0227`), as it would be anywhere else a function that needs a context is given where one that doesn't is expected.
+
 This works only for an instance written at the `use`. One built as a value, `def inst = Log(log = { m -> println(m) })`, is an error (`NYX0227`): it has nowhere to say that it needs `Console`. To make such a value, say so on the member, `context Log = (log: [Console] string -> ())`; calling `log` then requires `Console` as well as `Log`.
 
 You can also load a context for a single expression with `use ... in`. The context is loaded for that expression only, which can start on the next line:
