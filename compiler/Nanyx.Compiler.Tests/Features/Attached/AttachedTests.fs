@@ -73,6 +73,50 @@ def Email.toDisplay = { e -> e }"""
     | other -> Assert.True(false, $"Unexpected inferred nominal identity attached def type: %A{other}")
 
 [<Fact>]
+let ``An attached def whose parameter its body uses as another type takes that type`` () =
+    let source =
+        """type Point = (x: int, y: int)
+
+def Point.origin = { n -> Point(x = n, y = n) }
+
+def p = Point.origin(3)
+"""
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    Assert.Equal("int -> Point", Unifier.tyToString result.Typed.Value.Types.["Point.origin"])
+
+[<Fact>]
+let ``An attached constructor of a protected string takes a string`` () =
+    let source =
+        """module ids
+
+import nanyx/text
+
+export type UserId = protected string
+
+export def UserId.new = { s ->
+  if s \string.isEmpty then #invalidUserId else #some(UserId(s))
+}
+"""
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    Assert.Equal("string -> #invalidUserId | #some(UserId)", Unifier.tyToString result.Typed.Value.Types.["UserId.new"])
+
+[<Fact>]
+let ``An attached def whose body reads its parameter's fields takes the type, and a pipe finds it`` () =
+    let source =
+        """type Point = (x: int, y: int)
+
+def Point.sum = { p -> p.x + p.y }
+
+def total = Point(x = 1, y = 2) \sum
+"""
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    Assert.Equal("(x: int, y: int) -> int", Unifier.tyToString result.Typed.Value.Types.["Point.sum"])
+    Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.["total"])
+
+[<Fact>]
 let ``Typecheck rejects attached def with missing type`` () =
     let source = "def A.a = { s -> s }"
     let result = Compiler.compile source

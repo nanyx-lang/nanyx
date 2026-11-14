@@ -167,6 +167,8 @@ let internal constructedType (state: InferState) (name: string) (info: TypeDefIn
 let internal tryFindTypeDef (name: string) (state: InferState) : TypeDefInfo option =
     if state.HiddenTypeNames.Contains name then None else state.TypeDefs |> Map.tryFind name
 
+/// The type the def `name` is attached to, when its value `expr` is a lambda of one parameter: what the parameter is
+/// taken to be if its body allows (see `Infer.inferDefValue`).
 let internal tryInferAttachedLambdaInput (state: InferState) (name: Identifier) (expr: Expression) : Ty option =
     match expr.Kind with
     | Lambda(args, _, _) when name.Contains(".") && args.Length = 1 ->
