@@ -113,19 +113,19 @@ def theirs: p.Person = (name = "Ada")
     Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], compiledWithPeople ids |> List.map fst)
 
 [<Fact>]
-let ``A type declared with a $ before its name is protected, and its name is written with or without the $`` () =
+let ``A $ before a type's name is a syntax error at the $ that shows the protected form`` () =
     let source =
         """
-type $Email = string
-def wrap: string -> Email = { s -> $Email(s) }
-def email: $Email = wrap("a@b.com")
-def raw: string = match email | Email(s) -> s
+type Email = protected string
+def email: $Email = Email("a@b.com")
 """
-    let result = Compiler.compile (source.ReplaceLineEndings "\n")
-    Assert.Empty(result.Diagnostics)
-    match result.Typed.Value.Types.["email"] with
-    | TyNominal({ Name = name }, TyPrimitive "string", false) -> Assert.Equal("Email", name)
-    | other -> Assert.Fail($"Unexpected type: %A{other}")
+    let source = source.ReplaceLineEndings "\n"
+    match (Compiler.compile source).Diagnostics with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.SyntaxError.Code, diagnostic.Code)
+        Assert.Contains("write `Email`, and declare a nominal type with `protected` after its `=`, as in `type Email = protected string`", diagnostic.Message.ReplaceLineEndings " ")
+        Assert.Equal(source.IndexOf '$', diagnostic.Span.Value.Start)
+    | other -> Assert.Fail($"Unexpected diagnostics: %A{other}")
 
 [<Fact>]
 let ``A protected type is constructed only in its home module, which the error names`` () =

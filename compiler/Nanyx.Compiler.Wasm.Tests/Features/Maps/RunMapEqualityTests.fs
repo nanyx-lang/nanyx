@@ -52,12 +52,12 @@ let ``Run - nested maps, and records and lists that hold maps, compare the maps 
 [<Fact>]
 let ``Run - a map's values are compared by their own ==`` () =
     comparing
-        [ """type $Loose = int"""
-          """def $Loose.`==`: $Loose, $Loose -> bool = { a, b -> true }"""
-          """def $Loose.hash: $Loose -> int = { a -> 0 }""" ]
-        [ """[1 => $Loose(1)] == [1 => $Loose(2)]"""
-          """[1 => $Loose(1)] == [2 => $Loose(1)]"""
-          """[$Loose(1) => "a"] == [$Loose(2) => "a"]""" ]
+        [ """type Loose = protected int"""
+          """def Loose.`==`: Loose, Loose -> bool = { a, b -> true }"""
+          """def Loose.hash: Loose -> int = { a -> 0 }""" ]
+        [ """[1 => Loose(1)] == [1 => Loose(2)]"""
+          """[1 => Loose(1)] == [2 => Loose(1)]"""
+          """[Loose(1) => "a"] == [Loose(2) => "a"]""" ]
     |> runSource
     |> assertRan "T\nF\nT\n"
 

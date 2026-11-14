@@ -18,7 +18,6 @@ let ``A definition can be named by an operator in backticks`` () =
 [<Theory>]
 [<InlineData("def `+++` = { a, b -> a }", "`+++` = { a, b -> a }", "+++")>]
 [<InlineData("def Money.`<=>` = { a, b -> a }", "`<=>` = { a, b -> a }", "<=>")>]
-[<InlineData("def $Money.`<=>` = { a, b -> a }", "`<=>` = { a, b -> a }", "<=>")>]
 [<InlineData("def f = {\n  def `!` = { a -> a }\n  1\n}", "`!` = { a -> a }", "!")>]
 [<InlineData("def f = {\n  rec `**!` = { a -> a }\n  1\n}", "`**!` = { a -> a }", "**!")>]
 let ``An operator Nanyx does not have cannot be defined`` (source: string) (at: string) (operator: string) =

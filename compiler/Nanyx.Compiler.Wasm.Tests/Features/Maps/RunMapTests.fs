@@ -159,12 +159,12 @@ let ``Run - a for loop walks a map's entries, in the order their keys were added
 [<Fact>]
 let ``Run - a nominal type with its own == and hash can be a key, compared by its own ==`` () =
     program
-        [ "type $Code = string"
-          "def $Code.`==`: $Code, $Code -> bool = { a, b -> true }"
-          "def $Code.hash: $Code -> int = { c -> 0 }" ]
-        [ """def m = [$Code("ab") => 1] \insert($Code("xy"), 2)"""
+        [ "type Code = protected string"
+          "def Code.`==`: Code, Code -> bool = { a, b -> true }"
+          "def Code.hash: Code -> int = { c -> 0 }" ]
+        [ """def m = [Code("ab") => 1] \insert(Code("xy"), 2)"""
           """println("{map.count(m)}")"""
-          """found(m($Code("zz")))""" ]
+          """found(m(Code("zz")))""" ]
     |> runSource
     |> assertRan "1\n2\n"
 

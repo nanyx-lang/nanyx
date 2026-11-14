@@ -111,7 +111,7 @@ let ``Records, tuples and nominal values go through the core IR`` () =
     let source =
         normalized """type Person = (name: string, age: int)
 
-type $Money = private int
+type Money = private int
 
 def make = { n -> Person(name = "Ada", age = n) }
 
@@ -122,8 +122,8 @@ def swapped: (int, int) -> (int, int) = { t ->
     | (a, b) -> (b, a)
 }
 
-def pence: $Money -> int = { m ->
-  def $Money(p) = m
+def pence: Money -> int = { m ->
+  def Money(p) = m
   p
 }
 
@@ -134,7 +134,7 @@ def stepped: (int, step: int) -> int = { a, step -> a * 10 + step }
 def main = {
   def pair = (1, 2)
   def named = stepped(1, step = 2)
-  older(make(3)).age + pence($Money(250)) + add(pair) + named + swapped(pair).0
+  older(make(3)).age + pence(Money(250)) + add(pair) + named + swapped(pair).0
 }
 """
     let _, report = compileWithReport source

@@ -22,7 +22,7 @@ def p: point = (x = 1)
 let ``A nominal type, a context and a local type are named with a capital letter too`` () =
     let source =
         """
-type $money = int
+type money = protected int
 
 context log = (write: string -> ())
 
@@ -32,7 +32,7 @@ def f = {
 }
 """
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.InvalidTypeName.Code, "$money"; DiagnosticCodes.InvalidTypeName.Code, "log"; DiagnosticCodes.InvalidTypeName.Code, "pair" ],
+        [ DiagnosticCodes.InvalidTypeName.Code, "money"; DiagnosticCodes.InvalidTypeName.Code, "log"; DiagnosticCodes.InvalidTypeName.Code, "pair" ],
         compiled source |> List.map (fun (code, _, text) -> code, text))
     Assert.Contains("write 'Money'", (compiled source).Head |> fun (_, message, _) -> message)
 

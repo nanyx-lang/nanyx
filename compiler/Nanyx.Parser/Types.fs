@@ -299,9 +299,8 @@ let defNameAndType (lineStartCol: int64) (identParser: Parser<Identifier * TypeE
 let definableName (start: Position) (name: Identifier) : Parser<unit, ParseState> =
     let last = name.Substring(name.LastIndexOf '.' + 1)
     let reportAtOperator message =
-        writtenNameSpan start name >>= fun span ->
-            let offset = int64 (span.End - (Names.written last).Length) - start.Index
-            reportFocused (Position(start.StreamName, start.Index + offset, start.Line, start.Column + offset)) message
+        let offset = int64 ((Names.written name).Length - (Names.written last).Length)
+        reportFocused (Position(start.StreamName, start.Index + offset, start.Line, start.Column + offset)) message
     if last = coalesceOperator then
         reportAtOperator $"`{last}` is built in, so it cannot be defined: `a ?? b` is the value inside `a`'s `#some`, or else `b`"
     elif Names.isOperator last && not (isDefinableOperator last) then
@@ -318,7 +317,7 @@ let parseDefWith (lineStart: Position) (identParser: Parser<Identifier * TypeExp
         definableName start name
         >>. defEqualsContinuation lineStart.Column >>. pstring "=" >>. wsInline >>. exprParser
         >>= fun expr ->
-            writtenNameSpan start name >>= fun span -> declare DefValue expr.Id [ name, span ]
+            declare DefValue expr.Id [ name, nameSpan start name ]
             >>. noteDocumentable lineStart (int start.Index)
             >>% (name, typeOpt, expr)
 

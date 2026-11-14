@@ -55,7 +55,7 @@ do
                 >>. defEqualsContinuation lineStart.Column >>. pstring "=" >>. wsInline >>. defExprParser
                 >>= fun expr ->
                     let value = Expression.from expr (FunctionCall(RecSyntax.builtIn, None, [ expr ]))
-                    writtenNameSpan start name >>= fun span -> declare DefValue value.Id [ name, span ]
+                    declare DefValue value.Id [ name, nameSpan start name ]
                     >>. noteDocumentable lineStart (int start.Index)
                     >>% DefStatement(false, name, typeOpt, value)
 

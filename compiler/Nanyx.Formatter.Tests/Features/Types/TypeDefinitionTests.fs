@@ -38,10 +38,3 @@ let ``A protected or private type keeps its word after the =`` () =
     unchanged "type Email = protected string\n"
     unchanged "export type User = protected (name: string, age: int)\n"
     unchanged "type UserId = private int\n"
-
-[<Fact>]
-let ``A $ before a type's name is written as protected`` () =
-    Assert.Equal("type Email = protected string\n", format "type $Email = string")
-    Assert.Equal("scoped export context Memory = protected ()\n", format "scoped export context $Memory = ()")
-    Assert.Equal("type UserId = private int\n", format "type $UserId = private int")
-    Assert.Equal(normalized """def e: Email = Email("a")""", format """def e: $Email = $Email("a")""")

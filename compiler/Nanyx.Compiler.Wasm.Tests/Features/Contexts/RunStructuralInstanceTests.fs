@@ -15,14 +15,14 @@ let private printing (definitions: string list) (values: string list) =
       "}" ]
     |> String.concat "\n"
 
-/// A program with an `==` attached to `$Ci` that holds for any two values, which prints whether each of `comparisons`
+/// A program with an `==` attached to `Ci` that holds for any two values, which prints whether each of `comparisons`
 /// holds, one per line, after the definitions in `definitions`.
 let private comparing (definitions: string list) (comparisons: string list) =
     printing
-        [ "type $Ci = string"
-          "def $Ci.`==`: $Ci, $Ci -> bool = { _, _ -> true }"
-          """def a = $Ci("a")"""
-          """def b = $Ci("b")"""
+        [ "type Ci = protected string"
+          "def Ci.`==`: Ci, Ci -> bool = { _, _ -> true }"
+          """def a = Ci("a")"""
+          """def b = Ci("b")"""
           yield! definitions ]
         comparisons
 

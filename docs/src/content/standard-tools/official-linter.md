@@ -128,15 +128,6 @@ def both: [Eq(a) + Hash(a)] a, a -> bool = { x, y -> x == y and hash(x) == hash(
 
 The rule (`plusBetweenContexts`) reports a `+` between the contexts a function requires. Contexts are joined with `&`, as in `[Eq(a) & Hash(a)]` (see [Contexts](../advanced/contexts)); `+` is what an earlier version of the language wrote, and the compiler still reads it. Its fix replaces the `+` with `&`, and the formatter writes `&` too. A member's type runs on past a `&`, so the fix also brackets a member before the `+`: `` [`+`: a, a -> a + Eq(a)] `` becomes `` [(`+`: a, a -> a) & Eq(a)] ``.
 
-## Type name written with `$`
-
-```nanyx
-type $Email = string -- Linter warning: Declare a protected type with `protected` after its `=`
-def e: $Email = $Email("ada@example.com") -- Linter warning: A type's name is written without a `$`
-```
-
-The rule (`dollarPrefixedType`) reports a `$` before a type's name. A [nominal type](../advanced/nominal-and-protected-types) is declared with `protected` after its `=`, `type Email = protected string`, and its name is written like any other's; a `$` on its name is what an earlier version of the language wrote, and the compiler still reads it, as a protected type where it is declared and as nothing where the name is used. On a declaration the fix removes the `$` and writes `protected` after the `=` (a `private` type keeps `private`, which says it is nominal already); anywhere else it removes the `$`. The formatter writes the new form too.
-
 ## Unreachable code path
 
 ```nanyx

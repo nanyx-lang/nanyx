@@ -50,9 +50,8 @@ Everything the bracketed list could hold has a form.
 | `[Console] () -> ()` | `@Console () -> ()` | A context without arguments. |
 | `[ToString(a)] a -> string` | `@ToString(a) a -> string` | A context with arguments. |
 | `[Eq(k) & Hash(k)] k -> int` | `@Eq(k) @Hash(k) k -> int` | Several contexts, one attribute each. |
-| `[$Memory] string -> ()` | `@$Memory string -> ()` | A nominal context keeps its `$`, until [Protected types without the sigil](./protected-types) removes it: `@Memory string -> ()`. |
 | `[c] ([c] () -> a) -> a` | `@c (@c () -> a) -> a` | A context variable. |
-| `[$Memory & c] () -> a` | `@$Memory @c () -> a` | A nominal context and a variable. |
+| `[Memory & c] () -> a` | `@Memory @c () -> a` | A nominal context and a variable. |
 | `` [`+`: a, a -> a] a, a -> a `` | `` @(`+`: a, a -> a) a, a -> a `` | A member requirement is a nameless attribute whose argument is the member. |
 | `` [(`+`: a, a -> a) & Eq(a)] a, a -> a `` | `` @(`+`: a, a -> a) @Eq(a) a, a -> a `` | Among other contexts it needs no extra brackets, since each attribute ends where the next `@` begins. |
 | `[] int -> int` | `@() int -> int` | A pure function, said on purpose. |
