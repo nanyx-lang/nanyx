@@ -836,55 +836,33 @@ let private declaredLocals (body: Expr) : (string * string) list =
             found.Add var
             walk guard
         | _ -> Pattern.parts p |> List.iter pattern
+    // What the expression declares itself, then the expressions inside it (see `Expr.children`), the last in tail
+    // position, so that a chain as long as a function takes no stack to walk.
     and walk (expr: Expr) =
         match expr.Kind with
-        | Let(var, value, body) ->
-            match var.Kind with
-            | Temp -> ()
-            | InterpolationHole(depth, index) -> holes.Add((depth, index, var))
-            | _ -> found.Add var
-            walk value
-            walk body
-        | Do(value, rest) ->
-            walk value
-            walk rest
-        | If(_, ifTrue, ifFalse) ->
-            walk ifTrue
-            walk ifFalse
+        // What a pattern binds is declared in its place among its guards' locals, so a match walks its arms' patterns
+        // itself.
         | Match(_, arms) ->
             for arm in arms do
                 arm.Patterns |> List.iter pattern
                 walk arm.Body
-        | Dup(_, body)
-        | Drop(_, body)
-        | DropAfter(body, _)
-        | Reuse(_, body) -> walk body
-        | Release(released, body) ->
-            released.Token |> Option.iter found.Add
-            walk body
-        | Atom _
-        | Prim _
-        | Call _
-        | MakeTag _
-        | MakeRecord _
-        | Field _
-        | UpdateRecord _
-        | Assign _
-        | SetField _
-        | MakeList _
-        | CallRuntime _
-        | MakeClosure _
-        | CallClosure _
-        | Dbg _
-        | BoxFloat _
-        | Panic _ -> ()
-        | Interpolate _ -> interpolates.Value <- true
-        | ForEach loop ->
-            ForLoop.locals loop |> List.iter loops.Add
-            walk loop.Body
-        | While loop ->
-            walk loop.Condition
-            walk loop.Body
+        | _ ->
+            match expr.Kind with
+            | Let(var, _, _) ->
+                match var.Kind with
+                | Temp -> ()
+                | InterpolationHole(depth, index) -> holes.Add((depth, index, var))
+                | _ -> found.Add var
+            | Release(released, _) -> released.Token |> Option.iter found.Add
+            | Interpolate _ -> interpolates.Value <- true
+            | ForEach loop -> ForLoop.locals loop |> List.iter loops.Add
+            | _ -> ()
+            match Expr.children expr with
+            | [] -> ()
+            | children ->
+                for child in List.take (children.Length - 1) children do
+                    walk child
+                walk (List.last children)
     walk body
     let declared (var: Var) = localName var, CoreIrLayout.valueType var.Type
     let ofKind kind = found |> Seq.filter (fun var -> var.Kind = kind) |> Seq.map declared |> List.ofSeq
