@@ -18,6 +18,9 @@ public sealed class StandardLibrarySource
     private readonly string _root;
     private readonly object _lock = new();
 
+    /// <summary>The files this instance has written or found up to date, which it reads no more.</summary>
+    private readonly HashSet<string> _current = [];
+
     /// <summary>Writes the library under the user's local application data, by compiler version.</summary>
     public StandardLibrarySource()
         : this(Path.Combine(
@@ -55,6 +58,11 @@ public sealed class StandardLibrarySource
         var path = Path.Combine(_root, StandardLibrary.packageName, importPath[prefix.Length..]);
         lock (_lock)
         {
+            if (_current.Contains(path) && File.Exists(path))
+            {
+                return path;
+            }
+
             // A file left by a build of the same version with a different library is rewritten.
             if (!File.Exists(path) || File.ReadAllText(path) != source.Value)
             {
@@ -68,6 +76,8 @@ public sealed class StandardLibrarySource
                 // Read-only, since an edit would change nothing the compiler reads.
                 File.SetAttributes(path, FileAttributes.ReadOnly);
             }
+
+            _current.Add(path);
         }
 
         return path;
