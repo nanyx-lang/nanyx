@@ -60,6 +60,8 @@ port = 3000
 
 Keys other than `use` are host configuration, passed to the host at startup. The CLI can override the host, for example `nanyx run --host nanyx/console.host`. Until packages resolve, the hosts that can be chosen are the standard library's, such as `nanyx/console.host`.
 
+Once hosts are packages, this table names the host package and holds its settings, `[host."nanyx.http"]` with `version` and `port = 3000`, and there is no default host: a manifest with no `[host]` can't be run, and `nanyx new` writes one ([Built-ins as packages](./built-ins-as-packages#the-manifest)).
+
 Loose script files, which run top-level statements without a manifest, always run under `ConsoleHost`.
 
 # The entry shape is just a type

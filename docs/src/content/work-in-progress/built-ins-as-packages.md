@@ -43,15 +43,56 @@ than to a list the compiler keeps. The table of hosts in `Hosts.fs` goes. The st
 program needs, whatever its host. ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344))
 
 **Shipped, but not special.** The compiler's distribution includes both packages, built and pinned to its release, so
-an offline install with nothing downloaded builds and runs a program and lints it. They're defaults, not special
-cases:
-
-- a manifest with no `[host]` gets the shipped console host;
-- a program with no linter configuration gets the shipped official linter;
-- a manifest can name another version, or another package, as it would any dependency;
-- the lockfile records them like any other package.
-
+an offline install with nothing downloaded builds, runs and lints a program. They are not defaults either: a package
+uses a linter or a host only when its manifest names it. `nanyx new` writes both lines into a new project, so a new
+project is linted and runs from the start. The lockfile records them like any other package.
 ([#1342](https://github.com/nanyx-lang/nanyx/issues/1342))
+
+# The manifest
+
+Decided by the maintainer. The manifest has a small, fixed set of top-level sections, and a package's settings sit
+under its own entry, never at the top level, so a section is never mistaken for a package's configuration:
+
+```toml
+[package]
+name = "emails"
+version = "0.1.0"
+sources = ["src/**/*.nyx"]
+
+[dependencies]
+"acme.web" = "1.2"
+
+[linters."nanyx.lint"]
+version = "0.27.0"
+lineWidth = 100
+rules.unusedBindings = "error"
+rules.nonTailRecursion = "off"
+
+[host."nanyx.console"]
+version = "0.27.0"
+```
+
+- **Top-level sections.** `[package]`, `[dependencies]`, `[linters]` and `[host]` are the only ones. Any other is an
+  error.
+- **Linters are not dependencies.** `[dependencies]` are packages the code imports, which end up in the program. A
+  linter runs at compile time and is never imported, like Cargo's build dependencies or npm's dev dependencies, so it
+  has a section of its own.
+- **Quote a package's name.** A name with a dot is quoted: in TOML, `[linters.nanyx.lint]` would be a table `lint`
+  inside a table `nanyx`.
+- **A package's settings go under its entry,** with `version`. A linter's rule severities are `rules.<name>`, which
+  replaces today's `[linters.default]`. A linter or host declares the settings it accepts, so a misspelt key is an
+  error naming the package. For linters that's part of their contract
+  ([#107](https://github.com/nanyx-lang/nanyx/issues/107)); for hosts it settles the Hosts page's question on typed
+  host configuration. `[host."nanyx.http"]` with `version` and `port = 3000` replaces `[host] use = ...`.
+- **The short form** works when there are no settings: `"nanyx.lint" = "0.27.0"` under `[linters]`, as under
+  `[dependencies]`.
+- **Nothing implicit.**
+  - With no `[linters]`, no linter runs.
+  - With no `[host]`, a package has no host. `nanyx run` and `nanyx build` refuse it with an error that says to add
+    one, while `nanyx check` and library packages need none.
+  - `nanyx new` writes both entries, at the compiler's version.
+- **Scripts.** A loose script has no manifest. It runs under the console host, and runs the linters its `::linters`
+  directives name, if any.
 
 # What it needs
 
