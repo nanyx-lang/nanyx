@@ -1196,7 +1196,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         selfName <- functionName
         match lowering with
         | AsStart -> this.StartFunction ()
-        | Adapting(givenTy, expectedTy) -> this.Adapter functionName givenTy expectedTy
+        | Adapting(givenTy, expectedTy) -> CoreIrLowerLifted.adapter this.LiftedTools functionName givenTy expectedTy
         | BoxReading ty -> CoreIrLowerBoxes.readerFunction newVar functionName ty
         | StandingIn ty -> CoreIrLowerInstances.standInFunction newVar functionName ty
         | ListConverting(given, expected) -> CoreIrLowerBoxes.listConverterFunction (this.BoxTools emptyScope) newVar functionName given expected
@@ -1255,68 +1255,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let parameters = parameters @ (members |> List.map snd |> List.filter (fun var -> var.Kind = Param))
             make parameters result (this.WithKnownValues (this.Complex scope body adapted))
         | LiftedCapturing(capturedTys, capturedLocals) ->
-            // The environment first: the function's table slot, then what it captures. The rest are the lambda's
-            // parameters, typed as the lambda was where it was written.
-            let lambda, owner, written =
-                match input.Lifted |> Map.tryFind name with
-                | Some (LiftedLambda(lambda, _, owner, written)) -> lambda, owner, written
-                | _ -> cannot $"'{name}' is not a lifted lambda"
-            let lambdaTy =
-                match input.ExprTypes |> Map.tryFind lambda.Id with
-                | Some ty -> substitute subst ty
-                | None -> cannot "a lambda without a type"
-            let environment = IrRecord(("0", IrWord) :: (capturedTys |> List.mapi (fun index ty -> string (index + 1), ty)))
-            let parameterTys, resultTy = this.LiftedParameterTypes name lambdaTy
-            let environmentParameter = parameterOf parameterNames.Head environment
-            let valueParameters, bind, named = this.ValueParameters parameterNames.Tail (List.map toIrType parameterTys)
-            // The owner's context members are bound from the environment with what else it captures.
-            let capturedMembers =
-                let contextParameters, aliases = input.ContextParameters |> Map.tryFind owner |> Option.defaultValue ([], Map.empty)
-                contextParameters
-                |> List.map (fun parameter ->
-                    let otherNames = aliases |> Map.filter (fun _ key -> key = parameter.Key) |> Map.keys |> Seq.map NamedMember |> List.ofSeq
-                    parameter.Name, parameter.Key :: otherNames)
-                |> Map.ofList
-            // The members of the contexts the lambda requires where it is called follow its other parameters.
-            // They stand for the owner's members of those keys, which it may still capture to make a closure that does
-            // not take them.
-            let members =
-                membersOf (requiredContexts lambdaTy) |> List.map (fun (key, ty) -> key, newVar (uniqueName (contextMemberParameter key)) Param ty)
-            selfMembers <- members |> List.map (fun (key, var) -> key, var.Type)
-            // A parameterised context's members are in scope by the key its type writes too, which its body finds them by.
-            let written = CoreIrLowerInstances.byWrittenKeys input.ContextLayouts (requiredContexts lambdaTy) written members
-            let passed = members @ written |> List.map fst |> Set.ofList
-            let capturedMembers = capturedMembers |> Map.map (fun _ keys -> keys |> List.filter (passed.Contains >> not))
-            let scope = { scopeOf (environmentParameter :: named) with CapturedMembers = capturedMembers; CapturedLocals = capturedLocals }
-            let scope =
-                { scope with
-                    Members = members @ written |> List.fold (fun acc (key, var) -> acc |> Map.add key var) scope.Members
-                    Vars = members |> List.fold (fun acc (key, var) -> acc |> Map.add (contextMemberParameter key) var) scope.Vars }
-            make (environmentParameter :: valueParameters @ List.map snd members) (toIrType resultTy) (bind (this.Tail scope body))
+            CoreIrLowerLifted.liftedCapturing this.LiftedTools name parameterNames body scopeOf make capturedTys capturedLocals
         | WrapperCalling(wrapped, instanceTy, captured) ->
-            // Takes an environment, which holds after its table slot the members of the contexts the function requires
-            // that the closure captured, and after its other parameters those its value's type requires; and calls the
-            // function with the rest and them all, in the order it takes them.
-            let parameterTys, resultTy = parameterTypes parameterNames.Tail instanceTy true
-            let environment = IrRecord(("0", IrWord) :: (captured |> List.mapi (fun index (_, ty) -> string (index + 1), ty)))
-            let environmentParameter = parameterOf parameterNames.Head environment
-            let valueParameters, bind, named = this.ValueParameters parameterNames.Tail (List.map toIrType parameterTys)
-            let passed =
-                match toIrType instanceTy with
-                | IrFunction(_, _, members) -> members |> List.map (fun (key, ty) -> key, newVar (contextMemberParameter key) Param ty)
-                | _ -> []
-            let declared = input.ContextParameters |> Map.tryFind wrapped |> Option.map (fst >> List.map _.Key) |> Option.defaultValue []
-            let order = declared @ (variableMembers wrapped (bindingsAt wrapped instanceTy) |> List.map fst)
-            let rec call (remaining: ContextMemberKey list) (members: Atom list) =
-                match remaining with
-                | [] -> Expr.make (Call(callee wrapped instanceTy, (named |> List.map AVar) @ List.rev members)) (toIrType resultTy)
-                | key :: rest ->
-                    match captured |> List.tryFindIndex (fst >> (=) key), passed |> List.tryFind (fst >> (=) key) with
-                    | Some index, _ ->
-                        bindTemp (Expr.make (Field(AVar environmentParameter, index + 1)) (snd captured.[index])) (fun atom -> call rest (atom :: members))
-                    | None, Some (_, var) -> call rest (AVar var :: members)
-                    | None, None -> internalError $"the context member {ContextMemberKey.text key} of '{wrapped}' is neither captured nor passed"
-            make (environmentParameter :: valueParameters @ List.map snd passed) (toIrType resultTy) (bind (call order []))
+            CoreIrLowerLifted.wrapperCalling this.LiftedTools wrapped instanceTy captured parameterNames make
         | Adapting _ -> internalError "an adapter lowered as a definition"
         | BoxReading _ -> internalError "a box's function lowered as a definition"
         | StandingIn _ -> internalError "a stand-in lowered as a definition"
@@ -1324,54 +1265,25 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | Printing _ -> internalError "a printer lowered as a definition"
         | AsStart -> internalError "the start function lowered as a definition"
 
-    /// The adapter `functionName` that lets a function value of type `givenTy` be called as one of `expectedTy` (see
-    /// `Coerce`): it takes an environment that holds the value, then the members `givenTy` requires that `expectedTy`
-    /// does not, and its arguments and the members `expectedTy` requires; and calls the value with the arguments and
-    /// the members it requires. An argument that is a function is adapted in turn to the type the value takes it at, as
-    /// a continuation that requires no contexts is passed to a function that calls it with its members. An argument or
-    /// a result boxed where the other type has the value, or the other way round, is converted (see
-    /// `CoreIrLowerBoxes`): a box of unit is passed where the value takes one and the adapter is given nothing, and none
-    /// where the adapter is given one and the value takes nothing.
-    member private this.Adapter (functionName: string) (givenTy: IrType) (expectedTy: IrType) : Function =
-        let givenInput, givenOutput, given, result, wanted =
-            match givenTy, expectedTy with
-            | IrFunction(givenInput, givenOutput, given), IrFunction(_, result, wanted) -> givenInput, givenOutput, given, result, wanted
-            | _ -> internalError $"an adapter from {IrType.show givenTy} to {IrType.show expectedTy}"
-        let missing = given |> List.filter (fun (key, _) -> not (wanted |> List.exists (fst >> (=) key)))
-        let environment = newVar ClosureSyntax.envParameter Param (IrRecord(("0", IrWord) :: ("1", givenTy) :: (missing |> List.mapi (fun index (_, ty) -> string (index + 2), ty))))
-        let valueTys = adaptedValueTypes givenTy expectedTy
-        let values = valueTys |> List.mapi (fun index ty -> newVar $"__arg{index + 1}" Param ty)
-        let passed = wanted |> List.map (fun (key, ty) -> key, newVar (contextMemberParameter key) Param ty)
-        let scope = { emptyScope with Members = passed |> Map.ofList }
-        let adapted = newVar "__adapted" Local givenTy
-        let givenValueTys = valuesOf givenInput
-        let boxing = CoreIrLowerBoxes.needsConversion givenTy expectedTy
-        let rec call (remaining: (ContextMemberKey * IrType) list) (members: Atom list) =
-            match remaining with
-            | [] ->
-                let arguments = values |> List.map AVar
-                let call arguments =
-                    let called = Expr.make (CallClosure(adapted, arguments @ List.rev members)) givenOutput
-                    if CoreIrLowerBoxes.needsConversion givenOutput result then
-                        bindTemp called (fun value -> this.Coerce scope value result (fun atom -> Expr.make (Atom atom) result))
-                    else { called with Type = result }
-                match givenValueTys, valueTys with
-                | _ when givenValueTys.Length = values.Length -> this.CoerceAll scope arguments givenValueTys call
-                | [ IrBox ], [] -> this.CoerceAll scope [ AUnit ] givenValueTys call
-                | [], [ IrBox ] -> call []
-                | _ -> call arguments
-            | (key, ty) :: rest ->
-                // The members wait in locals while arguments are converted to or from boxes, which stores.
-                let next (atom: Atom) =
-                    if boxing then settle (Expr.make (Atom atom) (atomType atom)) (fun atom -> call rest (atom :: members))
-                    else call rest (atom :: members)
-                match missing |> List.tryFindIndex (fst >> (=) key) with
-                | Some index -> (if boxing then bindLocal "__member" else bindTemp) (Expr.make (Field(AVar environment, index + 2)) ty) next
-                | None -> this.Coerce scope (AVar scope.Members.[key]) ty next
-        let body = Expr.make (Let(adapted, Expr.make (Field(AVar environment, 1)) givenTy, call given [])) result
-        { Name = functionName
-          Source = functionName
-          TypeArguments = []
-          Params = environment :: values @ List.map snd passed
-          Result = result
-          Body = body }
+    /// What lowering a lifted lambda, a wrapper or an adapter needs from this function's lowering (see
+    /// `CoreIrLowerLifted`).
+    member private this.LiftedTools : CoreIrLowerLifted.LiftedTools =
+        { Input = input
+          NewVar = newVar
+          UniqueName = uniqueName
+          Substitute = fun ty -> substitute subst ty
+          ToIrType = toIrType
+          MembersOf = membersOf
+          EmptyScope = emptyScope
+          BindTemp = bindTemp
+          BindLocal = bindLocal
+          Settle = settle
+          Coerce = this.Coerce
+          CoerceAll = this.CoerceAll
+          ValueParameters = this.ValueParameters
+          LiftedParameterTypes = this.LiftedParameterTypes
+          Callee = callee
+          BindingsAt = bindingsAt
+          VariableMembers = variableMembers
+          SetSelfMembers = fun members -> selfMembers <- members
+          Tail = this.Tail }
