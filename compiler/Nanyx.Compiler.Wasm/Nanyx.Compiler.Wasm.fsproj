@@ -42,6 +42,7 @@
     <Compile Include="CoreIrReuse.fs" />
     <Compile Include="CoreIrReach.fs" />
     <Compile Include="CoreIrEmit.fs" />
+    <Compile Include="CoreIrCachedValues.fs" />
     <Compile Include="CodeGen.fs" />
   </ItemGroup>
 

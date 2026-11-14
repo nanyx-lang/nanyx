@@ -923,8 +923,8 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
     { Text = text; Helpers = emitter.Helpers; UsesMemory = emitter.UsesMemory }
 
 /// The start function, `func` (see `CoreIrLower.StartFunction`): each top-level expression in turn, its value
-/// dropped. It takes nothing and returns nothing.
-let emitStart (context: EmitContext) (func: Function) : Emitted =
+/// dropped, then the code `after`. It takes nothing and returns nothing.
+let emitStart (context: EmitContext) (func: Function) (after: string list) : Emitted =
     let emitter = FunctionEmitter(context)
     let notExpressions () = internalError "the start function is not a sequence of top-level expressions"
     let expressions =
@@ -934,6 +934,7 @@ let emitStart (context: EmitContext) (func: Function) : Emitted =
     let bodyCode =
         expressions
         |> List.map (fun value -> $"{emitter.Sequence false value}\n    {dropValue value.Type}")
+        |> fun code -> code @ after
         |> String.concat "\n    "
     let header =
         match localDeclarations (declaredLocals func.Body @ emitter.ExtraLocals) with
