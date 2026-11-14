@@ -118,7 +118,10 @@ To add a module: create `stdlib/nanyx/<name>.nyx` declaring `module <name>`, mar
 `stdlib/nanyx/<name>.nyx` and each other file of it (`stdlib/nanyx/<name>.<part>.nyx`, say) with
 `@partial module <name>`. Definitions inside a
 module must be written before the definitions that use them (self-recursion is fine). Add an intrinsic
-only when a function genuinely cannot be written in Nanyx: give it a name and type in `Intrinsics`, and
+only when a function genuinely cannot be written in Nanyx, or not without copying far more than it needs
+to: `__nanyx_string_join` joins a list of strings with one allocation (its body is in
+`Nanyx.Compiler.Wasm/StringJoin.fs`), where `++` would copy the result so far for every piece, so a
+string built from many pieces is built as a list of them and joined once. Give it a name and type in `Intrinsics`, and
 a WebAssembly body of the same name in `runtimeHelpers`, and list it, with the helpers it calls, in
 `helperDependencies` (the order of that list is the order helpers are emitted in, so add new ones at the end).
 
