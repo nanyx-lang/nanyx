@@ -102,6 +102,7 @@
     <Compile Include="Features\StdLib\RunStackSafeTests.fs" />
     <Compile Include="Features\StdLib\RunMathExpTests.fs" />
     <Compile Include="Features\StdLib\RunStringTakeSkipTests.fs" />
+    <Compile Include="Features\StdLib\RunStringJoinTests.fs" />
     <Compile Include="Features\StdLib\RunListInitReplicateTests.fs" />
     <Compile Include="Features\StdLib\RunStringCodePointTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />

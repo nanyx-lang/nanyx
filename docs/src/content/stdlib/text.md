@@ -245,7 +245,8 @@ contain `on`. An empty `on` is found at the start, so it gives `("", s)`.
 def string.join: list(string), string -> string
 ```
 
-The `pieces` concatenated with `separator` between each pair.
+The `pieces` concatenated with `separator` between each pair. Each piece is copied once, so it
+takes time in proportion to the length of the result.
 
 ## `string.concat`
 
