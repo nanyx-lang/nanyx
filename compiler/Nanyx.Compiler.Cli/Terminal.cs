@@ -41,6 +41,19 @@ internal static class Terminal
     public static bool InColour(TextWriter writer) =>
         string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NO_COLOR")) && TakesEscapes(writer);
 
+    /// <summary>The terminal's width and height in characters, or a common size when the console can't say.</summary>
+    public static (int Width, int Height) Size()
+    {
+        try
+        {
+            return (Math.Max(Console.WindowWidth, 20), Math.Max(Console.WindowHeight, 3));
+        }
+        catch (IOException)
+        {
+            return (80, 24);
+        }
+    }
+
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern IntPtr GetStdHandle(int handle);
 

@@ -80,7 +80,9 @@ file's compile is checking a module it imports, the stopwatch names it too, as a
 nanyx/list… 1.2s` is the first file paying for the standard-library modules the whole build will share. When the
 compile finishes it is replaced by `Compiled greeter (12 files) in 4.7s`, or `Compiled main.nyx in 1.2s` for a
 script, and the diagnostics follow. It is shown only when stderr is a terminal: a pipe, a log file and CI see
-nothing, and the command's other output is the same either way (`CompileProgress.cs`).
+nothing, and the command's other output is the same either way (`CompileProgress.cs`). Its line is cut to the
+terminal's width, so it never wraps onto a line it can't rewrite. For `run`, it is drawn in
+[the run's box](#the-runs-box) when there is one.
 
 The compiler reports to the CLI through a `CompileListener` (`CompileListener.fs`): a package build says which file
 it is on, and every compile says when each module's check starts and ends, by the module's full path or
@@ -140,6 +142,41 @@ The frame is built by `ModuleCheck.live` from `CompileTimings.SoFar`, the checks
 and `CompileProgress` draws it with ANSI escapes (cursor up, clear line), cutting each line to the terminal's width so
 none wraps. On Windows it turns on virtual terminal processing for the console first; where that can't be done, the
 stopwatch stays the single line it is without `--timings`. A pipe or a log sees only the finished tree, as before.
+
+## The run's box
+
+`run` writes the compiler's output and the program's to the same terminal. When stderr is a terminal and the compiler
+writes more than its stopwatch's line, what it writes goes in an open-sided box, and the program's output follows it
+unmarked:
+
+```
+╭─ nanyx run emails ───────────────────
+│ Compiled emails (3 files) in 1.9s
+│ src/main.nyx:12:5: error NYX0102: Unknown function 'lookup'
+│    |
+│ 12 |     lookup(id)
+│    |     ^^^^^^
+│ Running with 1 deferred error
+╰─ output ─────────────────────────────
+invalid user id
+23
+```
+
+The top rule is titled with the command, `nanyx run <package or file>`, and each line the compiler writes has a `│ `
+gutter: the stopwatch, the timings tree and its live view, diagnostics, `Emitted …` and `Running with …`. There is no
+right border, so a long line or a resized terminal can't break the box, and the rules span the terminal's width (or 80
+columns when the console can't say). On a terminal in colour, the gutter, the rules and the compiler's own lines are
+dimmed; diagnostics keep their colours, and their underlines stay aligned, since every line moves two columns right.
+Where the console's code page has no rounded corners, as code page 437 on Windows hasn't, the corners are `┌` and `└`.
+When the program doesn't run, because of an error that can't be deferred, the box ends with a plain rule. What the run
+reports after the program, such as `Runtime error: …`, follows the program's output, unmarked.
+
+A plain run, with nothing to say but `Compiled … in`, gets no box. The compiler doesn't know that until the compile has
+finished, so the stopwatch leaves its final line open, without its line ending: if the compiler writes nothing more,
+the line is ended before the program runs, and if it writes a line, the top rule is written over the stopwatch's and
+the stopwatch's line moves into the box. With `--timings`, the tree always follows, so the top rule is written when
+the compile starts and the live view is drawn inside the box. A pipe or a log sees no box, and the same bytes as
+before (`RunBox.cs`, `RunBoxTests.fs`).
 
 # Packages
 

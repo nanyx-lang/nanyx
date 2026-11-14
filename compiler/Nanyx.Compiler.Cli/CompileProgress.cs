@@ -11,6 +11,8 @@ using NyxCompiler;
 /// <c>timings</c>, it also records how long each module's check took and writes them as a tree to stderr after the final
 /// line, whether or not stderr is a terminal; on a terminal that can be redrawn with ANSI escapes, the stopwatch's line
 /// is then the live view of that tree instead (<see cref="ModuleCheckModule.live"/>), erased when the compile finishes.
+/// Given the writer of a run's <see cref="RunBox"/> for stderr, it draws inside the box: from the start with timings,
+/// since the tree will follow, and otherwise leaves its final line for the box to take in if the box opens.
 /// Stop it with <see cref="Finish"/> before anything else is written, or the next line lands on top of the stopwatch.
 /// Give the compiler <see cref="Listener"/> to hear from it.
 /// </summary>
@@ -20,6 +22,7 @@ internal sealed class CompileProgress : CompileListener, IDisposable
 
     private readonly TextWriter _errors;
     private readonly TextWriter? _terminal;
+    private readonly RunBox? _box;
     private readonly Func<string, string> _display;
     private readonly string _what;
     private readonly CompileTimings? _timings;
@@ -36,12 +39,20 @@ internal sealed class CompileProgress : CompileListener, IDisposable
     private CompileProgress(TextWriter errors, string what, Func<string, string> display, bool timings)
     {
         _errors = errors;
-        _terminal = errors == Console.Error && Terminal.IsTerminal(errors) ? errors : null;
+        _box = (errors as RunBox.Writer)?.Box;
+        var screen = _box?.Screen ?? errors;
+        _terminal = screen == Console.Error && Terminal.IsTerminal(screen) ? screen : null;
         _display = display;
         _what = what;
         _current = what;
         _timings = timings ? new CompileTimings(this) : null;
         _live = _timings is not null && _terminal is not null && Terminal.TakesEscapes(_terminal);
+        // The tree of module checks will follow the stopwatch's line, so the run's box is wanted from the start.
+        if (_timings is not null)
+        {
+            _box?.Open();
+        }
+
         if (_terminal is not null)
         {
             _timer = new Timer(_ => Redraw(), null, Tick, Tick);
@@ -144,8 +155,18 @@ internal sealed class CompileProgress : CompileListener, IDisposable
                     Draw(Array.Empty<string>());
                 }
 
-                Overwrite($"Compiled {_what} in {Elapsed}");
-                _terminal.WriteLine();
+                var compiled = Fitted([$"Compiled {_what} in {Elapsed}"], Terminal.Size().Width)[0];
+                Overwrite(compiled);
+                if (_box is { IsOpen: false })
+                {
+                    // Whether the box is wanted depends on what the compiler writes next, so the line is left open.
+                    _box.Pending(compiled);
+                }
+                else
+                {
+                    _terminal.WriteLine();
+                }
+
                 _written = 0;
             }
 
@@ -174,17 +195,30 @@ internal sealed class CompileProgress : CompileListener, IDisposable
 
             if (_live)
             {
-                var (width, height) = WindowSize();
+                var (width, height) = Terminal.Size();
                 var frame = ModuleCheckModule.live(FuncConvert.FromFunc(_display), _timings!.SoFar, height - 1).ToList();
                 // Until the first module's check starts there is no tree, so the stopwatch says what is being compiled.
-                Draw(frame.Count > 0 ? frame : [$"Compiling {_current}… {Elapsed}"], width);
+                Draw(Fitted(frame.Count > 0 ? frame : [$"Compiling {_current}… {Elapsed}"], width));
                 return;
             }
 
             // The file's own module is checked first, under its own name: only its imports are worth a mention.
             var imports = string.Concat(_checking.Where(name => name != _current).Select(name => $" › {name}"));
-            Overwrite($"Compiling {_current}{imports}… {Elapsed}");
+            Overwrite(Fitted([$"Compiling {_current}{imports}… {Elapsed}"], Terminal.Size().Width)[0]);
         }
+    }
+
+    /// <summary><paramref name="line"/> as the stopwatch shows it: in the run's box, dimmed, once that is open.</summary>
+    private string InBox(string line) => _box is { IsOpen: true } ? RunBox.Line(line, dimmed: true, _box.InColour) : line;
+
+    /// <summary>
+    /// <paramref name="lines"/> each cut to the terminal's <paramref name="width"/>, less the box's gutter when they are in
+    /// it, so that none wraps: a carriage return or the next frame could then only redraw its last row.
+    /// </summary>
+    private IReadOnlyList<string> Fitted(IEnumerable<string> lines, int width)
+    {
+        var room = _box is { IsOpen: true } ? width - RunBox.GutterWidth : width;
+        return lines.Select(line => InBox(line.Length < room ? line : line[..Math.Max(0, room - 1)])).ToList();
     }
 
     /// <summary>Replaces the stopwatch's line with <paramref name="text"/>, blanking what was longer. Call under the gate.</summary>
@@ -201,11 +235,11 @@ internal sealed class CompileProgress : CompileListener, IDisposable
     }
 
     /// <summary>
-    /// Replaces the live view with <paramref name="lines"/>, each cut to the terminal's <paramref name="width"/> so that
-    /// none wraps onto a line the next frame doesn't know of, leaving the cursor at the end of the last. With no lines,
-    /// the view is erased and the cursor left where its first line began. Call under the gate.
+    /// Replaces the live view with <paramref name="lines"/>, each already cut to fit the terminal (see
+    /// <see cref="Fitted"/>), leaving the cursor at the end of the last. With no lines, the view is erased and the cursor
+    /// left where its first line began. Call under the gate.
     /// </summary>
-    private void Draw(IReadOnlyList<string> lines, int width = int.MaxValue)
+    private void Draw(IReadOnlyList<string> lines)
     {
         var text = new StringBuilder("\r");
         if (_drawn > 1)
@@ -216,24 +250,11 @@ internal sealed class CompileProgress : CompileListener, IDisposable
         for (var index = 0; index < lines.Count; index++)
         {
             var line = lines[index];
-            text.Append(index > 0 ? "\n" : "").Append(line.Length < width ? line : line[..Math.Max(0, width - 1)]).Append("\u001b[K");
+            text.Append(index > 0 ? "\n" : "").Append(line).Append("\u001b[K");
         }
 
         text.Append("\u001b[J");
         _terminal!.Write(text.ToString());
         _drawn = lines.Count;
-    }
-
-    /// <summary>The terminal's width and height in characters, or a common size when the console can't say.</summary>
-    private static (int Width, int Height) WindowSize()
-    {
-        try
-        {
-            return (Math.Max(Console.WindowWidth, 20), Math.Max(Console.WindowHeight, 3));
-        }
-        catch (IOException)
-        {
-            return (80, 24);
-        }
     }
 }
