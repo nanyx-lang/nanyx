@@ -429,11 +429,12 @@ type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string
         let result = sequence 0 body
         result, changed
 
-/// `functions` with calls inlined into each but the start function, `start`.
-let inlineCalls (start: string option) (functions: Function list) : Function list =
+/// `functions` with calls inlined into each but the start function, `start`. The functions in `kept` are never inlined
+/// themselves: a cached value's (see `CoreIrCachedValues`), which a call reads rather than computes.
+let inlineCalls (start: string option) (kept: Set<string>) (functions: Function list) : Function list =
     let byName = functions |> List.map (fun f -> f.Name, f) |> Map.ofList
     let edges = byName |> Map.map (fun _ f -> references f.Body)
-    let cyclic = inCycles byName edges
+    let cyclic = inCycles byName edges + kept
     let current = Dictionary<string, Function>()
     for f in functions do
         current.[f.Name] <- f

@@ -523,6 +523,9 @@
   (data (i32.const 304) "\00\00\00\00\00\00\00\00\06\00\00\00")
   (data (i32.const 316) "\00\00\00\00\00\00\00\00\07\00\00\00")
 
+  (global $items__built (mut i32) (i32.const 0))
+  (global $items__value (mut i32) (i32.const 0))
+
   (func $console_host_readLineAfter (param $acc i32) (param $__ctx_readStdinByte i32) (param $__ctx_writeStderr i32) (param $__ctx_writeStdout i32) (result i32) (local $byte_i64 i64) (local $length__in1_i64 i64) (local $__inlined20 i32) (local $__owned_0 i32)
     local.get $__ctx_readStdinByte
     call $__nanyx_dup_fn_unit_to_int
@@ -889,6 +892,44 @@
     )
   )
 
+  (func $items__build (result i32)
+    i64.const 1
+    i64.const 2
+    i64.const 3
+    i64.const 4
+    i64.const 5
+    i64.const 6
+    i64.const 7
+    i64.const 8
+    i64.const 9
+    i64.const 10
+    i32.const 0
+    call $__nanyx_list_cons_i64
+    call $__nanyx_list_cons_i64
+    call $__nanyx_list_cons_i64
+    call $__nanyx_list_cons_i64
+    call $__nanyx_list_cons_i64
+    call $__nanyx_list_cons_i64
+    call $__nanyx_list_cons_i64
+    call $__nanyx_list_cons_i64
+    call $__nanyx_list_cons_i64
+    call $__nanyx_list_cons_i64
+  )
+
+  (func $items (result i32)
+    global.get $items__built
+    i32.eqz
+    if
+      call $items__build
+      global.set $items__value
+      i32.const 1
+      global.set $items__built
+    end
+    global.get $items__value
+    call $__nanyx_dup_list_int
+  )
+  (export "items" (func $items))
+
   (func $__fn_writeStdout (param $__env i32) (param $__arg1 i32) (result i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
@@ -988,35 +1029,15 @@
   )
   (export "__lambda_11" (func $__lambda_11))
 
-  (func $__fn___script (param $__env i32) (result i32) (local $__inlined9__in1__in1 i32) (local $keep__in2__in1__in1 i32) (local $__inlined14__in1__in1 i32) (local $__dbg_value__in1__in1_i64 i64) (local $__match_tmp_0__in1__in1_i64 i64) (local $__for_cursor_0__in1__in1 i32) (local $__for_end_0__in1__in1_i64 i64) (local $__for___for_element_0__in1__in1_i64 i64) (local $__owned_0 i32)
+  (func $__fn___script (param $__env i32) (result i32) (local $__inlined9__in1__in1 i32) (local $keep__in1__in1__in1 i32) (local $__inlined14__in1__in1 i32) (local $__dbg_value__in1__in1_i64 i64) (local $__match_tmp_0__in1__in1_i64 i64) (local $__for_cursor_0__in1__in1 i32) (local $__for_end_0__in1__in1_i64 i64) (local $__for___for_element_0__in1__in1_i64 i64) (local $__owned_0 i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
-    i64.const 1
-    i64.const 2
-    i64.const 3
-    i64.const 4
-    i64.const 5
-    i64.const 6
-    i64.const 7
-    i64.const 8
-    i64.const 9
-    i64.const 10
-    i32.const 0
-    call $__nanyx_list_cons_i64
-    call $__nanyx_list_cons_i64
-    call $__nanyx_list_cons_i64
-    call $__nanyx_list_cons_i64
-    call $__nanyx_list_cons_i64
-    call $__nanyx_list_cons_i64
-    call $__nanyx_list_cons_i64
-    call $__nanyx_list_cons_i64
-    call $__nanyx_list_cons_i64
-    call $__nanyx_list_cons_i64
+    call $items
     local.set $__inlined9__in1__in1
     i32.const 312
-    local.set $keep__in2__in1__in1
+    local.set $keep__in1__in1__in1
     local.get $__inlined9__in1__in1
-    local.get $keep__in2__in1__in1
+    local.get $keep__in1__in1__in1
     i32.const 0
     call $prelude_filterReversed__int
     i32.const 0
@@ -1652,6 +1673,13 @@
     i32.const 324
     call $__host_run__unit__known
     drop
+    global.get $items__built
+    if
+      global.get $items__value
+      call $__nanyx_drop_list_int
+      i32.const 0
+      global.set $items__built
+    end
   )
 
   (start $__nanyx_start)
