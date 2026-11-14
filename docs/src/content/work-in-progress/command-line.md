@@ -21,6 +21,7 @@ nanyx <run|check> [<directory or .nyxp>] [--timings]
 nanyx build [<directory or .nyxp>] [--out <path>] [--timings]
 nanyx new <name> [<directory>]
 nanyx format [--check | --write] <files or directories>
+nanyx stdlib-docs [--check] <directory>
 nanyx lsp
 nanyx hello
 ```
@@ -35,6 +36,10 @@ nanyx hello
 - `parse` prints the AST.
 - `format` rewrites the files that are not formatted, or with `--check` lists them and exits with 1 (see
   [Formatter](./formatter)).
+- `stdlib-docs` writes the generated reference of each standard-library page in the directory it is given,
+  `docs/src/content/stdlib`, from the library's doc comments, or with `--check` lists the pages that are out of date
+  and exits with 1. It also fails for a file of the library that has no page, and a page that has no file (see
+  [Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)).
 - `lsp` runs the language server over standard input and output (see
   [Language server and editor](./language-server)).
 

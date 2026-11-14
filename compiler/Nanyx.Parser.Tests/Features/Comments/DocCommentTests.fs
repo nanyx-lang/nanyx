@@ -162,6 +162,10 @@ let ``A doc comment at the top of the file before module or an import documents 
     Assert.Equal<_ list>([ "A.", "a" ], documented "--| A.\ndef a = 1\n")
 
 [<Fact>]
+let ``A doc comment before a partial module's declaration documents the module`` () =
+    Assert.Equal<_ list>([ "Shapes.", "module" ], documented "--| Shapes.\n@partial module shapes\n\ndef a = 1\n")
+
+[<Fact>]
 let ``A doc comment skips the attributes before what it documents`` () =
     Assert.Equal<_ list>([ "The entry point.", "main" ], documented "--| The entry point.\n@entry\ndef main = 1\n")
 

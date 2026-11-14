@@ -335,7 +335,9 @@ export def list.sortBy: [Ord(b) & c] list(a), ([c] a -> b) -> list(a) = { xs, ke
   mergeRuns(list.map(xs, { x -> [x] }), key)
 }
 
---| The elements in ascending order. The sort is stable. Stack-safe: it works on a list of any length.
+--| The elements in ascending order of their `Ord`: numbers numerically, strings by their bytes,
+  tuples and lists position by position. The sort is stable. Records and tags have no order, so a
+  list of them is sorted with [`list.sortBy`] and a key. Stack-safe: it works on a list of any length.
 export def list.sort: [Ord(a)] list(a) -> list(a) = { xs ->
   list.sortBy(xs, { x -> x })
 }
@@ -358,7 +360,8 @@ export def list.min: [Ord(a)] list(a) -> #some(a) | #emptyList = {
   | [x, ...rest] -> #some(leastOf(rest, x))
 }
 
---| The greatest element, or `#emptyList`. Of several greatest elements, the first.
+--| The greatest element, or `#emptyList`. Of several greatest elements, the first. Elements are
+  ordered by their `Ord`, so a list of records has none: use [`list.maxBy`] with a key.
 export def list.max: [Ord(a)] list(a) -> #some(a) | #emptyList = {
   | [] -> #emptyList
   | [x, ...rest] -> #some(greatestOf(rest, x))

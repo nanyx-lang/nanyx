@@ -169,7 +169,7 @@ def magnitude: (x: int, y: int) -> float = { x = innerX, y = innerY ->
 
 # Callable values
 
-Any value with a function type can be called like a function. A [map](../stdlib/map) can be called too, and calling it is a lookup, which gives `#some(v) | #notFound`:
+Any value with a function type can be called like a function. A [map](../stdlib/prelude-maps) can be called too, and calling it is a lookup, which gives `#some(v) | #notFound`:
 
 ```nanyx
 def dict: map(string, string) =

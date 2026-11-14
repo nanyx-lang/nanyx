@@ -124,7 +124,7 @@ def json = '{"name": "Alice", "age": 30}'
 def emailPattern = '[^@]+@\w+\.\w+'
 ```
 
-For library string operations (`length`, `split`, `trim`, etc.), see [string stdlib](../stdlib/string).
+For library string operations (`length`, `split`, `trim`, etc.), see [text](../stdlib/text).
 
 # Equality and comparison
 

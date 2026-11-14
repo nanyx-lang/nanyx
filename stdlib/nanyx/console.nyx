@@ -22,12 +22,14 @@ export context Console = (
   readLine: () -> #some(string) | #error(IoError)
   --| Everything left on standard input (the empty string when nothing is).
   readToEnd: () -> #some(string) | #error(IoError)
-  --| Writes out anything the streams hold back.
+  --| Writes out anything the streams hold back. The console host holds nothing back, so there it
+    does nothing.
   flush: () -> ()
 )
 
 --| Writes `value` to standard output as its `toString` writes it: a string as it is, `print(42)`
-  as `42`, `print([1, 2])` as `[1, 2]`.
+  as `42`, `print([1, 2])` as `[1, 2]`. A value with no `ToString`, such as a function, is an error
+  at the call.
 export def print: [Console & ToString(a)] a -> () = { value ->
   write(toString(value))
 }

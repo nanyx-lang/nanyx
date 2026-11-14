@@ -75,6 +75,15 @@ label.
   out can leave `stdlib/` unformatted. Run
   `dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -- format --check ../stdlib` from
   `compiler/` before you push.
+- **Write the standard library's pages after changing it.** The reference on each page in
+  `docs/src/content/stdlib` is generated from the library's doc comments, and a test fails when it is out of date.
+  After you change a doc comment or what the library exports, run, from `compiler/`:
+
+  ```bash
+  dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -- stdlib-docs ../docs/src/content/stdlib
+  ```
+
+  Explain a function in its doc comment, not in a page's prose.
 - **Keep the prelude's contexts unambiguous.** An operator on a value of a type variable is read through the
   prelude's context with the fewest members that has the member it reads, so `+` is `Add`'s, though `Num` has
   one too ([Operator contexts](docs/src/content/work-in-progress/operator-contexts.md)). Before you add a

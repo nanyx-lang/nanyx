@@ -71,7 +71,7 @@ def iterStrings: [Iter(c): (elem = string)] c -> () = { items ->
 }
 ```
 
-Elsewhere in the signature the associated type is written `Iter(c).elem`, or just `elem` where only one constraint has a member of that name, as the [`iter` module](../stdlib/iter) assumes:
+Elsewhere in the signature the associated type is written `Iter(c).elem`, or just `elem` where only one constraint has a member of that name, as the planned `iter` module assumed (see [Lazy sequences](./lazy-sequences), which replaces it with `Iterable(c, a)`):
 
 ```nanyx
 def headOr: [Iter(c)] (c, Iter(c).elem) -> Iter(c).elem = { items, fallback ->
@@ -239,7 +239,7 @@ C#'s source generators run user code at compile time that emits more source. The
 - **Nominal types.** A [nominal type](../advanced/nominal-and-protected-types) such as `Email` can only be created by its home module. Its description must not offer `build` elsewhere, or decoding could create values that bypass the type's invariants. Does a nominal type appear as a closed case (for example `#nominal(name)`) whose encoding must come from attached definitions or a context, or does it expose its structure only for reading? Is `Typed` synthesised for it at all?
 - **One name in two namespaces.** In `(string, into: type) -> into`, `into` is a type in the signature, and a field holding a `Type(into)` value at the call site. Is that pun clear enough?
 - **`type` at the call site.** A constraint writes `(elem = string)`, but a call writes `into = type Point`. The keyword is needed because arguments are expressions and `Point` could be a value or a constructor. Can the checker do without it when the parameter is known to be a type member, or is the difference worth keeping?
-- **Bare associated type names.** When can a signature write `elem` rather than `Iter(c).elem`? The [`iter` module](../stdlib/iter) assumes it can whenever only one constraint has an `elem`.
+- **Bare associated type names.** When can a signature write `elem` rather than `Iter(c).elem`? The planned `iter` module assumed it can whenever only one constraint has an `elem`.
 - **Customisation.** How does a type change how it is encoded, for example to rename a field or use a different representation? This probably ties in with attached definitions and with explicit `use` taking priority over synthesis.
 - **Rank-2 types.** Are rank-2 functions acceptable for `build`, or should decoding be limited to an applicative-style `build` that the compiler provides?
 - **How much narrowing.** Is narrowing on `Type` matches enough, or would full GADTs be needed?

@@ -50,7 +50,7 @@ def lookup = ["a" => 1, "b" => 2]
 def unique = set.fromList([1, 2, 2, 3])
 ```
 
-The functions on them are on the [collections](../stdlib/collections), [map](../stdlib/map) and [set](../stdlib/set) pages.
+The functions on them are on the standard library's [lists](../stdlib/prelude-lists) and [maps and sets](../stdlib/prelude-maps) pages.
 
 ## Literal types
 

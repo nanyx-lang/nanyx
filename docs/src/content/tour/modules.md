@@ -443,7 +443,7 @@ import (
 )
 ```
 
-One module is never imported by name: the **prelude**, `nanyx/prelude`, is imported into every module automatically, so what it defines is in scope in a file with no imports at all. It holds `proc`, [`panic`](./error-handling), [`ignore`](../stdlib/standard-library#discarding-a-value), the `Result(a, e)` type and the [`Result`](../stdlib/result) and [`Option`](../stdlib/option) helpers. A module's own definitions and its explicit imports take precedence over the prelude's, so defining your own `proc` is fine.
+One module is never imported by name: the **prelude**, `nanyx/prelude`, is imported into every module automatically, so what it defines is in scope in a file with no imports at all. It holds `proc`, [`panic`](./error-handling), [`ignore`](../stdlib/prelude#ignore), the `Result(a, e)` type and the [`Result`](../stdlib/prelude-results#results) and [option](../stdlib/prelude-results#options) helpers. A module's own definitions and its explicit imports take precedence over the prelude's, so defining your own `proc` is fine.
 
 # Example: User management module
 

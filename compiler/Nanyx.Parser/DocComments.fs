@@ -105,8 +105,17 @@ module DocComments =
             items |> List.collect typeDefBodies |> List.collect walk
         let targets = declarations @ tags
 
-        // The first item written, which a doc comment before it documents the module by if it is `module` or an import.
-        let firstItem = items |> List.filter (fun item -> not (SourceSpan.isNone item.Span)) |> List.sortBy _.Span.Start |> List.tryHead
+        // The first item written but for attributes (as `codeAfter` skips them), which a doc comment before it
+        // documents the module by if it is `module` or an import: `@partial module prelude` is a module declaration.
+        let firstItem =
+            items
+            |> List.filter (fun item ->
+                not (SourceSpan.isNone item.Span)
+                && (match item.Kind with
+                    | Attribute _ -> false
+                    | _ -> true))
+            |> List.sortBy _.Span.Start
+            |> List.tryHead
 
         // Where the code after `offset` starts: past blank lines and `@attribute` lines. `None` at the end of the file.
         let rec codeAfter offset =
