@@ -63,7 +63,8 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | Drop _
     | DropAfter _
     | Release _
-    | Reuse _ -> []
+    | Reuse _
+    | FreeToken _ -> []
 
 /// Every expression in `e` that is a node of its own: `e`, the values and bodies of its lets, branches, arms, guards
 /// and loop bodies, and so on down (see `Expr.children`). The last child is yielded in tail position, so a chain as long
@@ -207,7 +208,8 @@ type private Counter(ownership: Ownership, func: Function) =
                     Set.union source (Set.difference (this.Free loop.Body) loopVars)
                 | While loop -> Set.union (this.Free loop.Condition) (this.Free loop.Body)
                 | DropAfter(body, dropped) -> Set.union (dropped |> List.map _.Id |> Set.ofList) (this.Free body)
-                | Reuse(_, body) -> this.Free body
+                | Reuse(_, body)
+                | FreeToken(_, body) -> this.Free body
                 | _ -> operands ownership e |> List.map (fst >> this.FreeIn) |> Set.unionMany
             free.[e] <- found
             found
@@ -304,7 +306,8 @@ type private Counter(ownership: Ownership, func: Function) =
         | Drop _
         | DropAfter _
         | Release _
-        | Reuse _ -> internalError "the core IR is counted twice"
+        | Reuse _
+        | FreeToken _ -> internalError "the core IR is counted twice"
         | _ ->
             let dups, drops = this.Operands owned after (operands ownership e)
             this.Wrap dups drops e

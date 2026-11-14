@@ -92,3 +92,49 @@ def run: int -> int = { n ->
     let allocations, result = allocationsOf program "run" 100
     Assert.Equal(1, allocations)
     Assert.Equal(100, result)
+
+[<Fact>]
+let ``Reuse - filtering a list held once keeps the cells of the elements it keeps`` () =
+    let source = lists + "def run: int -> int = { n -> sum(list.filter(build(n), { x -> x % 3 == 0 })) }\n"
+    use program = instantiateWasm source []
+    let buildAllocations, _ = allocationsOf program "built" 100
+    let liveBefore = program.LiveBlocks
+    let filterAllocations, kept = allocationsOf program "run" 100
+    // As many blocks as building it: the cells of the elements dropped are freed, and the others reused.
+    Assert.Equal(buildAllocations, filterAllocations)
+    Assert.Equal(List.sum [ 3..3..99 ], kept)
+    Assert.Equal(liveBefore, program.LiveBlocks)
+
+[<Fact>]
+let ``Reuse - an allocation in one branch of an if reuses the block, and the other branch frees it`` () =
+    let source =
+        lists +
+        normalized """def evens: list(int), list(int) -> list(int) = {
+  | [], acc -> acc
+  | [x, ...rest], acc -> evens(rest, if x % 2 == 0 then [x, ...acc] else acc)
+}
+def run: int -> int = { n -> sum(evens(build(n), [])) }
+"""
+    use program = instantiateWasm source []
+    let liveBefore = program.LiveBlocks
+    let allocations, result = allocationsOf program "run" 100
+    Assert.Equal(100, allocations)
+    Assert.Equal(2550, result)
+    Assert.Equal(liveBefore, program.LiveBlocks)
+
+[<Fact>]
+let ``Reuse - partitioning a list held once reuses a cell in either branch`` () =
+    let source =
+        lists +
+        normalized """def run: int -> int = { n ->
+  def (small, large) = list.partition(build(n), { x -> x <= 10 })
+  sum(small) * 10000 + sum(large)
+}
+"""
+    use program = instantiateWasm source []
+    let liveBefore = program.LiveBlocks
+    let allocations, result = allocationsOf program "run" 100
+    // Building the list, and the pair partition returns.
+    Assert.Equal(101, allocations)
+    Assert.Equal(55 * 10000 + (5050 - 55), result)
+    Assert.Equal(liveBefore, program.LiveBlocks)

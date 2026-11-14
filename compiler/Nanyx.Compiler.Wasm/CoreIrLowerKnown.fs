@@ -142,7 +142,8 @@ let usedOf (ids: Set<int>) (body: Expr) : Set<int> =
         | Drop(vars, _)
         | DropAfter(_, vars) -> List.iter var vars
         | Release(released, _) -> var released.Object
-        | Reuse(token, _) -> var token
+        | Reuse(token, _)
+        | FreeToken(token, _) -> var token
         | Let _
         | Do _
         | While _

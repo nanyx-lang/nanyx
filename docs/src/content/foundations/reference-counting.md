@@ -77,8 +77,9 @@ An arm reuses a value's memory when:
 - it takes apart one value: the first cell of a list (`[x, ...rest]`), a tag with its payload (`#some(v)`), or a
   tuple or record whose fields it binds;
 - it does not use that value itself afterwards; and
-- it always builds a list cell, a tag with a payload, or a tuple or record of the same size, not only in one branch
-  of an `if` or `match`.
+- it builds a list cell, a tag with a payload, or a tuple or record of the same size. When that is in only some
+  branches of an `if` or `match`, those branches reuse the memory and the others free it, so `list.filter` keeps
+  the cells of the elements it keeps.
 
 So to get reuse, hand a function the only reference to what it transforms, and build the new value directly in the
 arm that took the old one apart. Strings are not reused.

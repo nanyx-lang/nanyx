@@ -4,9 +4,10 @@
 /// A `match` arm that takes an object apart and does not use it itself takes a reference to each name it binds, then
 /// drops the object (see `CoreIrCounting`). When the arm holds the only reference, both are wasted: the names can take
 /// the object's references over, and the object can be freed without touching them. A `Release` checks the count and
-/// does one or the other. When the arm then always allocates an object of the same size, the release hands it the
-/// block instead of freeing it (a reuse token), and the allocation writes into it: mapping over a list held once
-/// rewrites its cells in place.
+/// does one or the other. When the arm then allocates an object of the same size, the release hands it the block
+/// instead of freeing it (a reuse token), and the allocation writes into it: mapping over a list held once rewrites its
+/// cells in place. When only some branches of an `if` or `match` allocate one, the others free the block (see
+/// `FreeToken`): filtering a list held once keeps the cells of the elements it keeps.
 module Transpiler.Wasm.CoreIrReuse
 
 open Transpiler.Wasm.WasmRuntime
@@ -53,13 +54,26 @@ let private allocationSize (value: Expr) =
     | MakeRecord fields -> Some(Header.withInfo + CoreIrLayout.totalSize (fields |> List.map (snd >> atomType)))
     | _ -> None
 
-/// `e` with the first allocation of a block of `size` that it always makes (not one in a branch, a loop or a guard)
-/// writing into the block `token` holds, if there is one.
-let private reuseFirst (token: Var) (size: int) (e: Expr) : Expr option =
+/// `e` with the first allocation of a block of `size` that it makes (not one in a loop or a guard) writing into the
+/// block `token` holds, if there is one. An `if` or `match` whose branches make one gives the token to each branch: a
+/// branch that makes one writes into the block, and one that makes none frees it first, so the block is used or freed
+/// once on every path.
+let rec private reuseFirst (token: Var) (size: int) (e: Expr) : Expr option =
+    let inBranches (branches: Expr list) =
+        let reused = branches |> List.map (reuseFirst token size)
+        if reused |> List.exists Option.isSome then
+            Some(List.map2 (fun reused (branch: Expr) -> reused |> Option.defaultWith (fun () -> Expr.make (FreeToken(token, branch)) branch.Type)) reused branches)
+        else None
     let rec here (value: Expr) =
         match value.Kind with
         | Dup(vars, inner) -> here inner |> Option.map (fun inner -> Expr.make (Dup(vars, inner)) value.Type)
         | _ when allocationSize value = Some size -> Some(Expr.make (Reuse(token, value)) value.Type)
+        | If(cond, ifTrue, ifFalse) ->
+            inBranches [ ifTrue; ifFalse ]
+            |> Option.map (fun branches -> Expr.make (If(cond, branches[0], branches[1])) value.Type)
+        | Match(scrutinees, arms) ->
+            inBranches (arms |> List.map _.Body)
+            |> Option.map (fun bodies -> Expr.make (Match(scrutinees, List.map2 (fun arm body -> { arm with Body = body }) arms bodies)) value.Type)
         | _ -> None
     // The links of the chain passed on the way to the allocation, innermost first, and the link that makes it.
     let mutable passed = []

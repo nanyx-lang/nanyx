@@ -536,7 +536,7 @@
     )
   )
 
-  (func $prelude_filterReversed__int (param $arg1 i32) (param $arg2 i32) (param $arg3 i32) (result i32) (local $__match_tmp_0 i32) (local $__match_tmp_1 i32) (local $__match_tmp_2 i32) (local $__payload_x_i64 i64) (local $__payload_rest i32)
+  (func $prelude_filterReversed__int (param $arg1 i32) (param $arg2 i32) (param $arg3 i32) (result i32) (local $__match_tmp_0 i32) (local $__match_tmp_1 i32) (local $__match_tmp_2 i32) (local $__payload_x_i64 i64) (local $__payload_rest i32) (local $__reuse_1 i32)
     local.get $arg1
     local.set $__match_tmp_0
     local.get $arg2
@@ -575,7 +575,7 @@
       local.get $__match_tmp_0
       i32.const 4
       i32.sub
-      call $__nanyx_free
+      local.set $__reuse_1
     else
       local.get $__payload_rest
     call $__nanyx_dup_list_int
@@ -585,6 +585,8 @@
       i32.sub
       call $__nanyx_release
       drop
+      i32.const 0
+      local.set $__reuse_1
     end
     local.get $__match_tmp_1
     call $__nanyx_dup_fn_int_to_bool
@@ -598,12 +600,18 @@
     call_indirect (type $ctx_fn_2_i32_i64_to_i32)
     (if (result i32)
       (then
-        local.get $__payload_x_i64
+        local.get $__reuse_1
+    local.get $__payload_x_i64
     local.get $__match_tmp_2
-    call $__nanyx_list_cons_i64
+    call $__nanyx_list_cons_at_i64
       )
       (else
-        local.get $__match_tmp_2
+        local.get $__reuse_1
+    if
+      local.get $__reuse_1
+      call $__nanyx_free
+    end
+    local.get $__match_tmp_2
       )
     )
     return_call $prelude_filterReversed__int

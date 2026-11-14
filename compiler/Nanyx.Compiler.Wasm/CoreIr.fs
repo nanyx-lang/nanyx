@@ -184,6 +184,9 @@ and ExprKind =
     | Release of Released * Expr
     /// An allocation that writes into the block the token holds, if it holds one, instead of allocating.
     | Reuse of token: Var * Expr
+    /// Frees the block the token holds, if it holds one, then evaluates the expression: a branch that makes no
+    /// allocation to reuse the block in, where another branch does (see `CoreIrReuse`).
+    | FreeToken of token: Var * Expr
 
 /// An object a `match` arm releases (see `Release`).
 and Released =
@@ -524,7 +527,8 @@ module Expr =
         | Drop(_, body)
         | DropAfter(body, _)
         | Release(_, body)
-        | Reuse(_, body) -> [ body ]
+        | Reuse(_, body)
+        | FreeToken(_, body) -> [ body ]
         | Atom _
         | Prim _
         | Call _
@@ -561,6 +565,7 @@ module Expr =
             | DropAfter(body, vars) -> DropAfter(f body, vars)
             | Release(released, body) -> Release(released, f body)
             | Reuse(token, body) -> Reuse(token, f body)
+            | FreeToken(token, body) -> FreeToken(token, f body)
             | Atom _
             | Prim _
             | Call _
@@ -580,7 +585,7 @@ module Expr =
             | Panic _ -> e.Kind
         { e with Kind = kind }
 
-/// The statements of a block: a chain of `Let`s, `Do`s, `Dup`s, `Drop`s and `Release`s, each followed by the next. A
+/// The statements of a block: a chain of `Let`s, `Do`s, `Dup`s, `Drop`s, `Release`s and `FreeToken`s, each followed by the next. A
 /// function's body is a chain as long as the function, so a pass walks one in a loop, and recurses only as deep as an
 /// expression nests.
 module Chain =
@@ -591,7 +596,8 @@ module Chain =
         | Do(_, next)
         | Dup(_, next)
         | Drop(_, next)
-        | Release(_, next) -> Some next
+        | Release(_, next)
+        | FreeToken(_, next) -> Some next
         | _ -> None
 
     /// The links of the chain `e` starts, outermost first, and the expression the chain ends in (`e` itself when it
@@ -615,6 +621,7 @@ module Chain =
             | Dup(vars, _) -> Dup(vars, following)
             | Drop(vars, _) -> Drop(vars, following)
             | Release(released, _) -> Release(released, following)
+            | FreeToken(token, _) -> FreeToken(token, following)
             | _ -> internalError "only a link of a chain is relinked"
         { link with Kind = kind }
 
@@ -724,6 +731,7 @@ module Print =
             let token = released.Token |> Option.map (fun token -> $" into {token.Name}") |> Option.defaultValue ""
             $"release {released.Object.Name}{token}\n{indent}{expr indent body}"
         | Reuse(token, value) -> $"{expr indent value} reusing {token.Name}"
+        | FreeToken(token, body) -> $"free {token.Name}\n{indent}{expr indent body}"
 
     let func (f: Function) =
         let parameters = f.Params |> List.map (fun p -> $"{p.Name}: {IrType.show p.Type}") |> String.concat ", "
