@@ -179,3 +179,23 @@ def main = {
 main()
 """
     runSource source |> assertRan "small\nbig\nnegative\n1: 4.5\n2: 4.5\nyes\n"
+
+[<Fact>]
+let ``Run - a loop body goes on after a match whose arms are on the lines that follow`` () =
+    // The match's arms ended the loop body, so `println(s)` fell outside the loop (#1311).
+    let source =
+        normalized """import nanyx/console
+
+def main = {
+  for [1, 2] | x ->
+    def s = match x
+      | 1 -> "one"
+      | _ -> "other"
+
+    println(s)
+  ()
+}
+
+main()
+"""
+    runSource source |> assertRan "one\nother\n"
