@@ -169,4 +169,33 @@ public sealed class DefinitionTests : LanguageServerTestBase
             Assert.EndsWith(name, line[location.Range.Start.Character..location.Range.End.Character]);
         }
     }
+
+    [Fact]
+    public void A_copy_of_the_standard_library_s_source_is_written_and_compared_once()
+    {
+        var root = Directory.CreateTempSubdirectory("nanyx-stdlib-");
+        try
+        {
+            var standardLibrary = new StandardLibrarySource(root.FullName);
+            var path = standardLibrary.TryGetPath("nanyx/text.nyx")!;
+            File.SetAttributes(path, FileAttributes.Normal);
+            File.WriteAllText(path, "changed");
+
+            // The second time, the copy is neither read nor written again.
+            Assert.Equal(path, standardLibrary.TryGetPath("nanyx/text.nyx"));
+            Assert.Equal("changed", File.ReadAllText(path));
+            // Another instance, as a new process would have, compares the copy and writes it again.
+            Assert.Equal(path, new StandardLibrarySource(root.FullName).TryGetPath("nanyx/text.nyx"));
+            Assert.Equal(NyxCompiler.StandardLibrary.tryLoadFile("nanyx/text.nyx").Value, File.ReadAllText(path));
+        }
+        finally
+        {
+            foreach (var file in root.EnumerateFiles("*", SearchOption.AllDirectories))
+            {
+                file.Attributes = FileAttributes.Normal;
+            }
+
+            root.Delete(recursive: true);
+        }
+    }
 }

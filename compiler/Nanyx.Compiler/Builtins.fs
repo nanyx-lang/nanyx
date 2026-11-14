@@ -179,14 +179,20 @@ module StandardLibrary =
 
     let private assembly = Assembly.GetExecutingAssembly()
 
-    /// The text of the library's file `name` (its resource name, as `nanyx/list.nyx`), if it has one.
+    /// The text of each of the library's files read so far, by resource name: the library is embedded, so it never
+    /// changes while the process runs, and the editor asks for a file's text for every doc comment it shows.
+    let private loaded = System.Collections.Concurrent.ConcurrentDictionary<string, string option>()
+
+    /// The text of the library's file `name` (its resource name, as `nanyx/list.nyx`), if it has one. It is read once
+    /// per process.
     let tryLoadFile (name: string) : string option =
-        use stream = assembly.GetManifestResourceStream name
-        if isNull stream then
-            None
-        else
-            use reader = new StreamReader(stream)
-            Some (reader.ReadToEnd())
+        loaded.GetOrAdd(name, fun name ->
+            use stream = assembly.GetManifestResourceStream name
+            if isNull stream then
+                None
+            else
+                use reader = new StreamReader(stream)
+                Some (reader.ReadToEnd()))
 
     /// A file's module declaration, `module list` or `@partial module list`: the first line that is one.
     let private declaration = Regex(@"^(@partial\s+)?module\s+([A-Za-z_][A-Za-z0-9_.]*)\s*$", RegexOptions.Multiline)
