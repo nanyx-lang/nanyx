@@ -286,6 +286,8 @@ type WasmProgram(engine: Wasmtime.Engine, store: Wasmtime.Store, instance: Wasmt
     member _.HeapPointer = counter CheckedExports.heapPointer
     member _.Allocations = counter CheckedExports.allocations
     member _.LiveBlocks = counter CheckedExports.liveBlocks
+    /// The size of the memory in bytes, which never shrinks: how far the heap has ever reached, to the page.
+    member _.MemoryBytes = memory.GetSize() * 65536L
     member _.Word(address: int) = memory.ReadInt32(int64 address)
     member _.Text(pointer: int) = memory.ReadString(int64 pointer, memory.ReadInt32(int64 (pointer - 4)))
     interface IDisposable with
