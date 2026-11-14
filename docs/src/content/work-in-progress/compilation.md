@@ -119,7 +119,9 @@ counting over a core IR ([Memory management](./memory-management)), a tail call 
 ([Closed and open records](./closed-and-open-records)). Those pages say what is left of each.
 
 1. **Docs coverage beyond the tour.** Only the tour's examples are compiled. The other docs sections, such as the
-   standard library pages, are not. The tour's blocks marked `skip=` wait on the issues they name.
+   standard library pages, are not; Getting started comes first
+   ([#1256](https://github.com/nanyx-lang/nanyx/issues/1256)). The tour's blocks marked `skip=` wait on the issues
+   they name.
 2. **Parser error recovery.** Keep parsing after a syntax error so later errors (and later analysis) are not
    lost. Shared with the language server.
 3. **Backend coverage.** Close the remaining value types and constructs the type checker accepts.
