@@ -22,7 +22,7 @@ place. Generic code is monomorphised, so every object's layout is known when it 
 # Where we are today
 
 The WebAssembly backend's allocator can free (`__nanyx_alloc` and `__nanyx_free` in
-`compiler/Nanyx.Compiler.Wasm/WasmRuntime.fs`; see Allocator below), every object on the heap has a reference count
+`compiler/Nanyx.Compiler.Wasm/WasmAllocator.fs`; see Allocator below), every object on the heap has a reference count
 and a drop function for its type (see Object header below), and the compiler inserts `dup` and `drop` (see
 Inserting counts below), so a program frees each object once nothing refers to it, and reuses an object it takes
 apart and holds the only reference to for a new one of the same size.
@@ -302,6 +302,19 @@ already. A definition (or top-level expression) that holds such errors and canno
 lowered to a trap that reports them as soon as it is called. A definition that is generic only because an error left
 its type open, and is not specialised, is lowered with its type variables defaulted, so that it still exists.
 
+**Top-level values.** A top-level value that is not a lambda is lowered to a function of no parameters, one for each
+type it is used at when it is generic (`proc` once per instance). Each one that computes its value is built once, on
+its first read (`CoreIrCachedValues.fs`, [#1257](https://github.com/nanyx-lang/nanyx/issues/1257),
+[#1151](https://github.com/nanyx-lang/nanyx/issues/1151)): the function is emitted as `<name>__build`, and its own name
+is a getter that calls it the first time, keeps the value in a global, and hands each read one more reference to it.
+So a `dbg` in a value prints once, at the value's first read rather than where it is written, and a list or record a
+value builds is allocated once. The inliner leaves the getters alone (it would put the building back at each read). A
+value that is a constant (a literal, a closure that captures nothing) is not cached, and is inlined as before. A value
+that takes a context's members as parameters is built at each read, as a function is. The start function ends by
+dropping each value that was built and marking it unbuilt, so a program run with memory checks frees everything. A
+script's values that need a context are not top-level values by then: they are local defs of its entry point
+([Hosts](./hosts)).
+
 **Generating code.** `CoreIrEmit.fs` writes WebAssembly text from the IR, with each value in the WebAssembly type of
 its type (see Value representation above). A temporary is not stored: it is used exactly once, by the next instruction that needs
 it, so its value is computed where it is used. An operand that stores to a local on its way to its value (a `match`
@@ -392,7 +405,7 @@ that the examples that compile free every block they allocate, and, counting wha
 mapping over a list, a tuple or a tag's cell held once allocates nothing, and nor does `with` on a record held once.
 
 **Memory checks.** `nanyx run --check-memory` (`WasmOptions.CheckMemory`) compiles the program with an allocator
-and counts that check themselves (`checkedRuntimeHelpers` and `MemoryChecks` in `WasmRuntime.fs`):
+and counts that check themselves (`checkedRuntimeHelpers` in `WasmRuntime.fs` and `MemoryChecks` in `WasmAllocator.fs`):
 
 - `alloc` and `free` count the blocks still in use. The program's start function is exported rather than run on
   instantiation, so the CLI can read the count once the program has finished. A count above 0 fails the run.

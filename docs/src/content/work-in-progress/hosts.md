@@ -352,7 +352,8 @@ The composite host runs each part under the right sub-host and coordinates start
   needs; once the module is inferred, those values (`InferState.ScriptEntryValues`) move into the entry point as local
   defs, in the order written, so each is computed once
   ([#1257](https://github.com/nanyx-lang/nanyx/issues/1257)). A value that needs no context stays at the top level,
-  where a function can name it. A function that names a value that moved, or a statement that reads one before its def,
+  where a function can name it, and is built on its first read
+  ([Memory management](./memory-management#core-ir)). A function that names a value that moved, or a statement that reads one before its def,
   is `NYX0239`. The ambient contexts the statements and the moved values need through unannotated functions are
   only known once the module is inferred, so the lambda's type is given them then (`InferModule.withEntryContexts`),
   and the host passes their members. Once typed, the entry point is a def of its own, `def __script: [Console] = { ... }`,

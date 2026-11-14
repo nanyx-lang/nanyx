@@ -253,8 +253,8 @@ export def proc: [c] ([Proc & c] () -> #some(b) | r) -> #some(b) | r = { block -
 
 There is no instance at run time. The backend passes a context's members one by one, as closures, to each function
 that requires it ([Context calls](./context-calls)), and a `use` binds each member's lambda to a local. `proc` no
-longer rebuilds a record at each keyword, so [#1151](https://github.com/nanyx-lang/nanyx/issues/1151) no longer applies
-to it, though it still does to other generic top-level values. But each keyword's call now boxes what it passes and
+longer rebuilds a record at each keyword, and a generic top-level value is now built once for each type it is read at
+([#1151](https://github.com/nanyx-lang/nanyx/issues/1151)). But each keyword's call now boxes what it passes and
 unboxes what it is given back, until inlining ([#745](https://github.com/nanyx-lang/nanyx/issues/745)) removes the boxes
 where every call is known.
 

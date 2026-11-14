@@ -676,6 +676,9 @@
   (data (i32.const 292) "\00\00\00\00\00\00\00\00\02\00\00\00")
   (data (i32.const 304) "\00\00\00\00\00\00\00\00\06\00\00\00")
 
+  (global $r__built (mut i32) (i32.const 0))
+  (global $r__value (mut i64) (i64.const 0))
+
   (func $console_host_readLineAfter (param $acc i32) (param $__ctx_readStdinByte i32) (param $__ctx_writeStderr i32) (param $__ctx_writeStdout i32) (result i32) (local $byte_i64 i64) (local $length__in1_i64 i64) (local $__inlined20 i32) (local $__owned_0 i32)
     local.get $__ctx_readStdinByte
     call $__nanyx_dup_fn_unit_to_int
@@ -938,6 +941,24 @@
   )
   (export "f" (func $f))
 
+  (func $r__build (result i64)
+    i32.const 3
+    return_call $f
+  )
+
+  (func $r (result i64)
+    global.get $r__built
+    i32.eqz
+    if
+      call $r__build
+      global.set $r__value
+      i32.const 1
+      global.set $r__built
+    end
+    global.get $r__value
+  )
+  (export "r" (func $r))
+
   (func $__fn_writeStdout (param $__env i32) (param $__arg1 i32) (result i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
@@ -1029,8 +1050,7 @@
   (func $__fn___script (param $__env i32) (result i32) (local $__dbg_value__in1_i64 i64) (local $__owned_0 i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
-    i32.const 3
-    call $f
+    call $r
     local.set $__dbg_value__in1_i64
     local.get $__dbg_value__in1_i64
     call $__dbg_show_int
@@ -1558,6 +1578,11 @@
     i32.const 312
     call $__host_run__unit__known
     drop
+    global.get $r__built
+    if
+      i32.const 0
+      global.set $r__built
+    end
   )
 
   (start $__nanyx_start)
