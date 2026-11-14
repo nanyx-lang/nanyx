@@ -10,17 +10,17 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``A workflow keyword in a branch of an if or match statement has the rest of the block as its continuation`` () =
     // Each branch goes on to the rest of the block (#348): a `try` in one branch widens the block's failures, and the
-    // value a branch ends with is what a `def` of the statement binds.
+    // value a branch ends with is what a `def` of the statement binds. In `label`, a failure only one branch adds is in
+    // an annotation too.
     let source =
-        "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n" +
-        "def negative: int -> #some(int) | #negative = { n -> if n < 0 then #negative else #some(n) }\n" +
-        "def check = { n -> proc {\n" +
-        "  if n < 0 then try negative(n)\n" +
-        "  def half = try halve(n)\n" +
-        "  return half\n" +
-        "} }\n" +
-        // A failure only one branch adds is in an annotation too.
-        normalized """def label: int -> #some(string) | #odd = { n -> proc {
+        normalized """def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+def negative: int -> #some(int) | #negative = { n -> if n < 0 then #negative else #some(n) }
+def check = { n -> proc {
+  if n < 0 then try negative(n)
+  def half = try halve(n)
+  return half
+} }
+def label: int -> #some(string) | #odd = { n -> proc {
   def text = match n
     | 0 -> "zero"
     | _ ->
