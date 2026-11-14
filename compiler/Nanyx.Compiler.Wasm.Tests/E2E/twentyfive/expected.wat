@@ -527,7 +527,7 @@
   )
   (export "sum" (func $sum))
 
-  (func $__fn___script (param $__env i32) (result i32) (local $__dbg_value__in1__in1_i64 i64) (local $__inlined4__in1__in1 i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64)
+  (func $__fn___script (param $__env i32) (result i32) (local $__dbg_value__in1__in1_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64) (local $__owned_0 i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
     i64.const 1
@@ -671,11 +671,10 @@
       end
     end
     local.get $__interp_base
-    local.set $__inlined4__in1__in1
-    local.get $__inlined4__in1__in1
+    local.tee $__owned_0
     call $dbg_str
     i32.const 0
-    local.get $__inlined4__in1__in1
+    local.get $__owned_0
     call $__nanyx_drop_string
     drop
     i32.const 0

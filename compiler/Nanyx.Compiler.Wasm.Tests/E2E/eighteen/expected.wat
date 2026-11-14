@@ -263,7 +263,7 @@
   )
   (export "f" (func $f))
 
-  (func $main (result i64) (local $x__in1_i64 i64) (local $y__in1_i64 i64) (local $s__in2 i32) (local $__dbg_value__in2 i32) (local $__owned_0 i32)
+  (func $main (result i64) (local $x__in1_i64 i64) (local $y__in1_i64 i64) (local $s__in2 i32) (local $__owned_0 i32)
     i64.const 3
     local.set $x__in1_i64
     i64.const 4
@@ -271,8 +271,6 @@
     i32.const 264
     local.set $s__in2
     local.get $s__in2
-    local.set $__dbg_value__in2
-    local.get $__dbg_value__in2
     call $__dbg_show_unit
     local.tee $__owned_0
     call $dbg_str

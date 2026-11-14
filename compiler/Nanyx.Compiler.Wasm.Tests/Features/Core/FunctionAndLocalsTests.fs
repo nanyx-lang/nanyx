@@ -96,7 +96,7 @@ def incTwice = { x ->
   y + 1
 }"""
 
-    let wat = transpileWat source
+    let wat = transpileWatNotInlined source
 
     Assert.Contains("(func $incTwice (param $x_i64 i64) (result i64) (local $y_i64 i64)", wat)
     Assert.Contains("local.set $y_i64", wat)

@@ -302,4 +302,7 @@ let inlineCalls (start: string option) (kept: Set<string>) (functions: Function 
                 changed <- didSimplify || didInline
                 round <- round + 1
             current.[name] <- { f with Body = fst (CoreIrSimplify.simplify current { f with Body = body }) }
-    functions |> List.map (fun f -> current.[f.Name])
+    // Only once nothing more is inlined: a temporary can be read only where it is computed, which would hide its value
+    // from a caller that inlines the function.
+    functions
+    |> List.map (fun f -> if Some f.Name = start then f else { current.[f.Name] with Body = CoreIrSimplify.withTemporaries current.[f.Name].Body })

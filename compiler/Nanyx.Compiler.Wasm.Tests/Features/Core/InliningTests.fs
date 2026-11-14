@@ -195,6 +195,39 @@ def run: int -> int = { n ->
     Assert.Equal(0, inlinedAllocations)
 
 [<Fact>]
+let ``A proc block compiles to the nested match written by hand`` () =
+    let getA = "def getA: int -> #some(int) | #none = { n -> if n > 0 then #some(n) else #none }\n\n"
+    let procBlock =
+        getA
+        + normalized """def block: int -> #some(int) | #none = { n ->
+  proc {
+    def a = try getA(n)
+    def b = try getA(n + 1)
+    def c = try getA(n + 2)
+    return a + b + c
+  }
+}
+"""
+    let handWritten =
+        getA
+        + normalized """def block: int -> #some(int) | #none = { n ->
+  match getA(n)
+    | #some(a) ->
+      match getA(n + 1)
+        | #some(b) ->
+          match getA(n + 2)
+            | #some(c) -> #some(a + b + c)
+            | other -> other
+        | other -> other
+    | other -> other
+}
+"""
+    // `proc`, its block, the members, the continuations and `getA` are inlined, nothing is boxed, and what is left is
+    // the code of the nested match: the same instructions, on locals named differently.
+    let block source = functionText "block" (transpileWat source) |> withLocalsNumbered
+    Assert.Equal(block handWritten, block procBlock)
+
+[<Fact>]
 let ``A proc block allocates fewer inlined`` () =
     let source =
         normalized """def getA: int -> #some(int) | #none = { n -> if n > 0 then #some(n) else #none }
@@ -226,9 +259,10 @@ def run: int -> int = { n -> go(n, 0) }
     Assert.Equal(notInlinedResult, inlinedResult)
     // Not inlined, the block makes 29 allocations. Inlined, `proc`, the block, the members and the continuations are
     // inlined, no closure is made for any of them, and each `try`'s match is copied into both branches of `getA`'s `if`,
-    // where the payload is known, so nothing is boxed: the one allocation left is the `#some` the block returns.
+    // where the payload is known, so nothing is boxed. The block is inlined into `go` as well, whose match on the
+    // `#some` it returns is copied in the same way, so not even that is made.
     Assert.Equal(2900, notInlinedAllocations)
-    Assert.Equal(100, inlinedAllocations)
+    Assert.Equal(0, inlinedAllocations)
     let go = functionText "go" (transpileWat source)
     Assert.DoesNotContain("$__box_", go)
     Assert.DoesNotContain("call_indirect", go)

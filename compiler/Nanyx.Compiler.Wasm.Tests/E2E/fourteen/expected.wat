@@ -221,21 +221,15 @@
     local.get $r
   )
 
-  (func $main (result i64) (local $x__in1_i64 i64) (local $__inlined7_i64 i64) (local $x__in2_i64 i64) (local $__inlined10_i64 i64)
+  (func $main (result i64) (local $__inlined7_i64 i64)
     i64.const 5
-    local.set $x__in1_i64
-    local.get $x__in1_i64
     i64.const 2
     call $__nanyx_int_mul
     local.set $__inlined7_i64
+    local.get $__inlined7_i64
     i64.const 10
-    local.set $x__in2_i64
-    local.get $x__in2_i64
     i64.const 3
     call $__nanyx_int_mul
-    local.set $__inlined10_i64
-    local.get $__inlined7_i64
-    local.get $__inlined10_i64
     call $__nanyx_int_add
   )
   (export "main" (func $main))

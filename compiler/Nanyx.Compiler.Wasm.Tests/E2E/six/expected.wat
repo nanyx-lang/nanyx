@@ -32,7 +32,7 @@
   )
   (export "isEven" (func $isEven))
 
-  (func $fizzbuzz (param $n_i64 i64) (result i64) (local $mod3_i64 i64) (local $mod5_i64 i64) (local $__match_tmp_0_i64 i64) (local $__match_tmp_1_i64 i64)
+  (func $fizzbuzz (param $n_i64 i64) (result i64) (local $mod3_i64 i64) (local $mod5_i64 i64)
     local.get $n_i64
     i64.const 3
     i64.rem_s
@@ -42,13 +42,9 @@
     i64.rem_s
     local.set $mod5_i64
     local.get $mod3_i64
-    local.set $__match_tmp_0_i64
-    local.get $mod5_i64
-    local.set $__match_tmp_1_i64
-    local.get $__match_tmp_0_i64
       i64.const 0
       i64.eq
-      local.get $__match_tmp_1_i64
+      local.get $mod5_i64
       i64.const 0
       i64.eq
       i32.and
@@ -57,7 +53,7 @@
         i64.const 15
       )
       (else
-        local.get $__match_tmp_0_i64
+        local.get $mod3_i64
       i64.const 0
       i64.eq
       i32.const 1
@@ -68,7 +64,7 @@
       )
       (else
         i32.const 1
-      local.get $__match_tmp_1_i64
+      local.get $mod5_i64
       i64.const 0
       i64.eq
       i32.and
@@ -97,7 +93,7 @@
   )
   (export "fizzbuzz" (func $fizzbuzz))
 
-  (func $main (result i64) (local $n__in1_i64 i64) (local $mod3__in1_i64 i64) (local $mod5__in1_i64 i64) (local $a_i64 i64) (local $n__in2_i64 i64) (local $mod3__in2_i64 i64) (local $mod5__in2_i64 i64) (local $b_i64 i64) (local $n__in3_i64 i64) (local $mod3__in3_i64 i64) (local $mod5__in3_i64 i64) (local $c_i64 i64) (local $n__in4_i64 i64) (local $mod3__in4_i64 i64) (local $mod5__in4_i64 i64) (local $d_i64 i64) (local $__match_tmp_0__in1_i64 i64) (local $__match_tmp_1__in1_i64 i64) (local $__match_tmp_0__in2_i64 i64) (local $__match_tmp_1__in2_i64 i64) (local $__match_tmp_0__in3_i64 i64) (local $__match_tmp_1__in3_i64 i64) (local $__match_tmp_0__in4_i64 i64) (local $__match_tmp_1__in4_i64 i64)
+  (func $main (result i64) (local $n__in1_i64 i64) (local $mod3__in1_i64 i64) (local $mod5__in1_i64 i64) (local $a_i64 i64) (local $n__in2_i64 i64) (local $mod3__in2_i64 i64) (local $mod5__in2_i64 i64) (local $b_i64 i64) (local $n__in3_i64 i64) (local $mod3__in3_i64 i64) (local $mod5__in3_i64 i64) (local $c_i64 i64) (local $n__in4_i64 i64) (local $mod3__in4_i64 i64) (local $mod5__in4_i64 i64) (local $d_i64 i64)
     i64.const 15
     local.set $n__in1_i64
     local.get $n__in1_i64
@@ -109,13 +105,9 @@
     i64.rem_s
     local.set $mod5__in1_i64
     local.get $mod3__in1_i64
-    local.set $__match_tmp_0__in1_i64
-    local.get $mod5__in1_i64
-    local.set $__match_tmp_1__in1_i64
-    local.get $__match_tmp_0__in1_i64
       i64.const 0
       i64.eq
-      local.get $__match_tmp_1__in1_i64
+      local.get $mod5__in1_i64
       i64.const 0
       i64.eq
       i32.and
@@ -124,7 +116,7 @@
         i64.const 15
       )
       (else
-        local.get $__match_tmp_0__in1_i64
+        local.get $mod3__in1_i64
       i64.const 0
       i64.eq
       i32.const 1
@@ -135,7 +127,7 @@
       )
       (else
         i32.const 1
-      local.get $__match_tmp_1__in1_i64
+      local.get $mod5__in1_i64
       i64.const 0
       i64.eq
       i32.and
@@ -173,13 +165,9 @@
     i64.rem_s
     local.set $mod5__in2_i64
     local.get $mod3__in2_i64
-    local.set $__match_tmp_0__in2_i64
-    local.get $mod5__in2_i64
-    local.set $__match_tmp_1__in2_i64
-    local.get $__match_tmp_0__in2_i64
       i64.const 0
       i64.eq
-      local.get $__match_tmp_1__in2_i64
+      local.get $mod5__in2_i64
       i64.const 0
       i64.eq
       i32.and
@@ -188,7 +176,7 @@
         i64.const 15
       )
       (else
-        local.get $__match_tmp_0__in2_i64
+        local.get $mod3__in2_i64
       i64.const 0
       i64.eq
       i32.const 1
@@ -199,7 +187,7 @@
       )
       (else
         i32.const 1
-      local.get $__match_tmp_1__in2_i64
+      local.get $mod5__in2_i64
       i64.const 0
       i64.eq
       i32.and
@@ -237,13 +225,9 @@
     i64.rem_s
     local.set $mod5__in3_i64
     local.get $mod3__in3_i64
-    local.set $__match_tmp_0__in3_i64
-    local.get $mod5__in3_i64
-    local.set $__match_tmp_1__in3_i64
-    local.get $__match_tmp_0__in3_i64
       i64.const 0
       i64.eq
-      local.get $__match_tmp_1__in3_i64
+      local.get $mod5__in3_i64
       i64.const 0
       i64.eq
       i32.and
@@ -252,7 +236,7 @@
         i64.const 15
       )
       (else
-        local.get $__match_tmp_0__in3_i64
+        local.get $mod3__in3_i64
       i64.const 0
       i64.eq
       i32.const 1
@@ -263,7 +247,7 @@
       )
       (else
         i32.const 1
-      local.get $__match_tmp_1__in3_i64
+      local.get $mod5__in3_i64
       i64.const 0
       i64.eq
       i32.and
@@ -301,13 +285,9 @@
     i64.rem_s
     local.set $mod5__in4_i64
     local.get $mod3__in4_i64
-    local.set $__match_tmp_0__in4_i64
-    local.get $mod5__in4_i64
-    local.set $__match_tmp_1__in4_i64
-    local.get $__match_tmp_0__in4_i64
       i64.const 0
       i64.eq
-      local.get $__match_tmp_1__in4_i64
+      local.get $mod5__in4_i64
       i64.const 0
       i64.eq
       i32.and
@@ -316,7 +296,7 @@
         i64.const 15
       )
       (else
-        local.get $__match_tmp_0__in4_i64
+        local.get $mod3__in4_i64
       i64.const 0
       i64.eq
       i32.const 1
@@ -327,7 +307,7 @@
       )
       (else
         i32.const 1
-      local.get $__match_tmp_1__in4_i64
+      local.get $mod5__in4_i64
       i64.const 0
       i64.eq
       i32.and

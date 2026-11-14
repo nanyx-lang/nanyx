@@ -50,6 +50,16 @@ let functionText (name: string) (wat: string) =
     Assert.True(start >= 0, $"no function {name}")
     wat.Substring(start, wat.IndexOf("\n  )", start) - start)
 
+/// A function's text with each local it declares named by its place among them, so that two functions whose code
+/// differs only in their locals' names compare equal.
+let withLocalsNumbered (text: string) =
+    Text.RegularExpressions.Regex.Matches(text, @"\(local \$(\w+)")
+    |> Seq.mapi (fun index found -> index, found.Groups.[1].Value)
+    |> Seq.fold
+        (fun (text: string) (index, name) ->
+            Text.RegularExpressions.Regex.Replace(text, @"\$" + Text.RegularExpressions.Regex.Escape name + @"\b", $"$$__local{index}"))
+        text
+
 /// How many times `text` occurs in `wat`.
 let countOccurrences (text: string) (wat: string) = Text.RegularExpressions.Regex.Matches(wat, Text.RegularExpressions.Regex.Escape text).Count
 

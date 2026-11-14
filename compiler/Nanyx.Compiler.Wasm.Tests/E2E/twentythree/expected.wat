@@ -773,7 +773,7 @@
   )
   (export "console_host.readToEndAfter" (func $console_host_readToEndAfter))
 
-  (func $__host_run__unit__known (param $entry i32) (result i32) (local $__ctx_writeStdout i32) (local $__ctx_writeStderr i32) (local $__ctx_readStdinByte i32) (local $__use_write_0 i32) (local $__use_writeError_1 i32) (local $__use_readLine_2 i32) (local $__use_readToEnd_4 i32) (local $__use_flush_6 i32) (local $__use_readLine_2_1 i32) (local $__use_readToEnd_4_1 i32) (local $__inlined18 i32)
+  (func $__host_run__unit__known (param $entry i32) (result i32) (local $__ctx_writeStdout i32) (local $__ctx_writeStderr i32) (local $__ctx_readStdinByte i32) (local $__use_write_0 i32) (local $__use_writeError_1 i32) (local $__use_readLine_2 i32) (local $__use_readToEnd_4 i32) (local $__use_flush_6 i32) (local $__use_readLine_2_1 i32) (local $__inlined18 i32)
     i32.const 300
     local.set $__ctx_writeStdout
     i32.const 312
@@ -864,6 +864,9 @@
     i32.const 16
     call $__nanyx_record_set
     local.set $__use_readLine_2_1
+    local.get $entry
+    local.get $__use_flush_6
+    local.get $__use_readLine_2_1
     i32.const 20
     i32.const 10
     call $__nanyx_new_object
@@ -882,11 +885,6 @@
     local.get $__ctx_writeStdout
     i32.const 16
     call $__nanyx_record_set
-    local.set $__use_readToEnd_4_1
-    local.get $entry
-    local.get $__use_flush_6
-    local.get $__use_readLine_2_1
-    local.get $__use_readToEnd_4_1
     local.get $__use_write_0
     local.get $__use_writeError_1
     local.get $entry
@@ -950,7 +948,7 @@
     i32.const 0
   )
 
-  (func $__fn___script (param $__env i32) (param $__ctx_flush i32) (param $__ctx_readLine i32) (param $__ctx_readToEnd i32) (param $__ctx_write i32) (param $__ctx_writeError i32) (result i32) (local $value__in1__in1 i32) (local $__inlined10__in1__in1 i32)
+  (func $__fn___script (param $__env i32) (param $__ctx_flush i32) (param $__ctx_readLine i32) (param $__ctx_readToEnd i32) (param $__ctx_write i32) (param $__ctx_writeError i32) (result i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
     local.get $__ctx_flush
@@ -961,15 +959,11 @@
     call $__nanyx_drop_fn_unit_to_tags_error_tags_endOfInput_some_string
     local.get $__ctx_writeError
     call $__nanyx_drop_fn_string_to_unit
-    i32.const 276
-    local.set $value__in1__in1
-    local.get $value__in1__in1
-    local.set $__inlined10__in1__in1
     local.get $__ctx_write
     call $__nanyx_dup_fn_string_to_unit
     drop
     local.get $__ctx_write
-    local.get $__inlined10__in1__in1
+    i32.const 276
     local.get $__ctx_write
     i32.load
     call_indirect (type $ctx_fn_2)

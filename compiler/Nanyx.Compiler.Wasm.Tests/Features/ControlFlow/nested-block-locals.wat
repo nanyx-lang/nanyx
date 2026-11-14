@@ -26,33 +26,23 @@
   (global $main__built (mut i32) (i32.const 0))
   (global $main__value (mut i64) (i64.const 0))
 
-  (func $nested (param $x_i64 i64) (result i64) (local $y_i64 i64) (local $z_i64 i64)
+  (func $nested (param $x_i64 i64) (result i64)
     local.get $x_i64
     i64.const 1
     call $__nanyx_int_add
-    local.set $y_i64
-    local.get $y_i64
     i64.const 2
     call $__nanyx_int_add
-    local.set $z_i64
-    local.get $z_i64
     i64.const 3
     call $__nanyx_int_add
   )
   (export "nested" (func $nested))
 
-  (func $main__build (result i64) (local $x__in1_i64 i64) (local $y__in1_i64 i64) (local $z__in1_i64 i64)
+  (func $main__build (result i64)
     i64.const 5
-    local.set $x__in1_i64
-    local.get $x__in1_i64
     i64.const 1
     call $__nanyx_int_add
-    local.set $y__in1_i64
-    local.get $y__in1_i64
     i64.const 2
     call $__nanyx_int_add
-    local.set $z__in1_i64
-    local.get $z__in1_i64
     i64.const 3
     call $__nanyx_int_add
   )

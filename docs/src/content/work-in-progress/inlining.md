@@ -4,10 +4,11 @@ description: "The inliner in the WebAssembly backend, aggressive for workflows, 
 order: 25
 ---
 
-This page describes the inliner of the WebAssembly backend: its first three steps are built (`CoreIrInline.fs`,
+This page describes the inliner of the WebAssembly backend: its first four steps are built (`CoreIrInline.fs`,
 [#745](https://github.com/nanyx-lang/nanyx/issues/745), and `CoreIrSimplify.fs`,
-[#1339](https://github.com/nanyx-lang/nanyx/issues/1339) and [#1340](https://github.com/nanyx-lang/nanyx/issues/1340)),
-and the rest is the plan below. It is part of the [compilation](./compilation) workstream, and builds on
+[#1339](https://github.com/nanyx-lang/nanyx/issues/1339), [#1340](https://github.com/nanyx-lang/nanyx/issues/1340) and
+[#1341](https://github.com/nanyx-lang/nanyx/issues/1341)), so the `proc` block below compiles to its nested match, and
+the rest is the plan below. It is part of the [compilation](./compilation) workstream, and builds on
 [context calls](./context-calls), where static closures ([#743](https://github.com/nanyx-lang/nanyx/issues/743)) and
 specialising on known members ([#744](https://github.com/nanyx-lang/nanyx/issues/744)) are done.
 
@@ -37,8 +38,8 @@ match getA()
 ```
 
 That means: no closure for the block, none for each continuation, no call through `Proc`'s members, and no boxing of
-the members' generic values. The block makes 29 allocations without inlining, and with the steps built so far none
-but the `#some` it returns. Before builders became a context and a function
+the members' generic values. The block makes 29 allocations without inlining, and with it none of its own: it compiles
+to the same WebAssembly as the match. Before builders became a context and a function
 ([#1305](https://github.com/nanyx-lang/nanyx/issues/1305)) it made 15: the uniform representation for a member's own
 type variables ([#1160](https://github.com/nanyx-lang/nanyx/issues/1160)) boxes each value that crosses a member.
 
@@ -131,7 +132,8 @@ no behaviour either:
 `CoreIrInline.inlineCalls` runs over every function of the module after lowering, in `CodeGen.fs`, and before
 counting, unless `WasmOptions.Inline` is off (`--no-inline`). It takes the functions so that each comes after those it
 calls, and goes over each one up to sixteen times, each time simplifying (`CoreIrSimplify.simplify`) and then inlining
-what the time before exposed, and simplifies it once more at the end.
+what the time before exposed, and simplifies it once more at the end. Once nothing more is inlined anywhere, each
+function's locals that are read once, at once, are made temporaries (`CoreIrSimplify.withTemporaries`).
 
 ## Inlining
 
@@ -178,7 +180,11 @@ tests and the tags the arms before it tested and failed. From that:
   has its variables made new. It is kept only when the copies, simplified, grow the code by no more than `copyLimit`
   (40) nodes, as when all but one of them come to little. Within a copy being tried nothing more is copied, so a trial
   cannot grow without end; the next pass goes on from there.
-- **A chain that ends in a variable** it gave another variable's value, or a constant, ends in that value.
+- **A variable given another variable's value** of its type is that variable: what follows reads the other, and the
+  binding goes. Not a parameter on the heap, which its function may only borrow: a match on the variable that takes it
+  over can reuse its memory, and a match on the parameter could not.
+- **A chain that ends in a variable** it gave another variable's value, or a constant, or the value of its last link,
+  ends in that value.
 - **A binding that nothing reads** is not made when its value has no effect (no call, no write, and no operator that
   can trap), and a closure, tag or record that only it held goes with it.
 
@@ -186,17 +192,31 @@ A value is only read again somewhere new from a constant, or from a variable tha
 to itself (no other variable of its kind has its name), and that is not a temporary. Two rules make temporaries into
 what can be read: a temporary given at once to a variable is that variable's value, and a temporary a tag is made of,
 given at once to a variable, becomes a local. A temporary whose value is a chain keeps the chain whole, since it is
-evaluated where it is used.
+evaluated where it is used. A loop's own locals are not read anywhere new either: its body reads them through bindings
+of its own.
+
+**Locals read at once.** After inlining, a local that is read once, by what the very next link stores or does or by
+what the chain ends in, is a temporary: it is computed where it is read, on the stack, with no local. Nothing happens
+between the two, so nothing moves. The reader may not be a temporary from lowering, whose value is computed later
+still, where it is read, but may be one made by this rule. It runs only once nothing more is inlined, since a temporary
+can be read only where it is computed, and would hide its value from a caller inlining the function. A local the
+source names (a block's `def`) is made one too: `y` in `def y = x + 1` followed by `y + 1`.
 
 ## What it costs
 
 Measured as the [Context escape](./context-escape#what-it-costs) page measures it, by the allocation counter of a
 `--check-memory` build over 100 blocks, a `proc` block of three `try`s and a `return` on `int` payloads makes 29
-allocations a block without inlining, and 1 with it: the `#some` the block returns (`A proc block allocates fewer
-inlined` in `InliningTests.fs`). `proc`, the block, the members and the continuations are inlined, none of them is a
-closure, and nothing is boxed: the block is three nested `if`s, on `n > 0`, `n + 1 > 0` and `n + 2 > 0`. Timed by
-`run(100000)` from the host, the block takes about 9 ns inlined and 240 ns not. With simplifying alone (#1339) it made
-17 allocations and took about 92 ns, the boxing being all that was left.
+allocations a block without inlining, and none with it (`A proc block allocates fewer inlined` in `InliningTests.fs`).
+`proc`, the block, the members, the continuations and `getA` are inlined, none of them is a closure, and nothing is
+boxed: the block is three nested `if`s, on `n > 0`, `n + 1 > 0` and `n + 2 > 0`, and its function is the same
+WebAssembly as the nested match written by hand, but for the names of its locals (`A proc block compiles to the nested
+match written by hand`). On its own it allocates only the `#some` it returns; the benchmark's loop inlines it too, and
+its match on that `#some` is copied into the block's branches, so not even that is made. Timed by `run(100000)` from the
+host, the block takes about 3 ns inlined and 244 ns not.
+
+Step by step: 29 allocations with the first step (#745); 17, and about 92 ns, with simplifying (#1339), the boxing
+being all that was left; 1, and about 9 ns, with case-of-case (#1340); none, and about 3 ns, with copying variables and
+locals read at once (#1341).
 
 Inlining with simplifying also leaves out of a program what only unused closures needed: a host whose `use` binds
 members the program never calls no longer makes their closures, so their functions and the helpers they use are not
@@ -211,8 +231,9 @@ emitted.
    calls, unused closures, known matches (`CoreIrSimplify.fs`, tests in `InliningTests.fs`).
 3. ~~**Unboxing members at known types**~~ ([#1340](https://github.com/nanyx-lang/nanyx/issues/1340), done): by
    copying a match into the branches whose tag it tests, which brings each box and its reading into one branch.
-4. **The `proc` block above compiles to its nested match,** checked against the WAT of the hand-written match, with
-   the allocation count of the generated-code performance review's `proc` benchmark going to zero for the block.
+4. ~~**The `proc` block above compiles to its nested match**~~
+   ([#1341](https://github.com/nanyx-lang/nanyx/issues/1341), done): checked against the WAT of the hand-written match,
+   with the `proc` benchmark's allocations at zero.
 5. **Tune the size limit** against the generated-code benchmarks.
 6. **Later:** inlining across modules, and the other builders and handlers in the standard library.
 
