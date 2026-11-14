@@ -439,7 +439,6 @@ import (
   nanyx/string
   nanyx/math
   nanyx/option
-  nanyx/result
 )
 ```
 
