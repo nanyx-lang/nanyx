@@ -413,3 +413,26 @@ def unfoldReversed
 export def list.unfold: [c] b, ([c] b -> #some(a, b) | #done) -> list(a) = { state, step ->
   reverseOnto(unfoldReversed(state, step, []), [])
 }
+
+--| `f` applied to each position from `index` up to `count - 1`, last first, in front of `acc`.
+def initReversed: [c] int, int, ([c] int -> a), list(a) -> list(a) = { index, count, f, acc ->
+  if index >= count then acc else initReversed(index + 1, count, f, [f(index), ...acc])
+}
+
+--| The list of `count` elements whose element at each position is `f` applied to the position:
+  `list.init(3, { i -> i * 2 })` is `[0, 2, 4]`. `f` is called on the positions in order, and a
+  `count` of zero or less gives `[]`. Stack-safe: it works for any `count`.
+export def list.init: [c] int, ([c] int -> a) -> list(a) = { count, f ->
+  reverseOnto(initReversed(0, count, f, []), [])
+}
+
+--| `count` copies of `x` in front of `acc`.
+def replicateOnto: int, a, list(a) -> list(a) = { count, x, acc ->
+  if count <= 0 then acc else replicateOnto(count - 1, x, [x, ...acc])
+}
+
+--| `count` copies of `x`: `list.replicate(0, count = 3)` is `[0, 0, 0]`. A `count` of zero or less
+  gives `[]`. Stack-safe: it works for any `count`.
+export def list.replicate: (a, count: int) -> list(a) = { x, count ->
+  replicateOnto(count, x, [])
+}
