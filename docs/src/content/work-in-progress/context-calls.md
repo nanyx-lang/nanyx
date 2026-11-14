@@ -180,26 +180,8 @@ type class dictionaries.
 The backend has no inliner. After specialising, `println("hi")` is a call to a function that calls
 `string.toString`, which returns its argument, and calls `write` twice. Inlining would fold that into the caller.
 
-An inliner would run on the core IR before reference counting (`CoreIrCounting.fs`) and reuse, so it never has to
-cancel the dup and drop pairs it would otherwise leave behind. It replaces a direct call to a small function that does
-not call itself with the function's body, then simplifies what that exposes: a call through a closure known at that
-point becomes a direct call, and a closure nothing uses any more is not made. With that simplification, inlining alone
-would remove much of what specialising removes, but only where it inlines.
-([#745](https://github.com/nanyx-lang/nanyx/issues/745))
-
-# Open questions
-
-These are about inlining, which waits on them; [#745](https://github.com/nanyx-lang/nanyx/issues/745) is labelled
-`needs decision`.
-
-- **Whether to inline at all, for now.** Static closures and specialising remove most of the cost. What is left is a
-  direct call per member, which WebAssembly engines often inline themselves.
-- **Which calls to inline.** A limit on the size of the inlined body, functions with one caller, functions marked by an
-  attribute, or a mix.
-- **Debug builds.** Inline in every build, or only with `--release`. Inlining moves where a trap happens into the
-  caller, which changes what a debug build reports.
-- **Tail calls.** Every call in tail position is a tail call ([Tail calls](./tail-calls)). An inlined body's tail calls
-  must stay in tail position in the caller, and a function must not be inlined into itself.
+The design is on its own page, [Inlining](./inlining): what is inlined, and how a workflow's block compiles down to the
+code you would write by hand.
 
 # Plan
 
@@ -207,5 +189,5 @@ These are about inlining, which waits on them; [#745](https://github.com/nanyx-l
    ([#743](https://github.com/nanyx-lang/nanyx/issues/743), done).
 2. ~~Specialise a function on the context members known where it is called~~
    ([#744](https://github.com/nanyx-lang/nanyx/issues/744), done: `CoreIrLowerKnown.fs`).
-3. Inline small functions in the core IR, once the open questions are settled
+3. Inline small functions in the core IR: see [Inlining](./inlining)
    ([#745](https://github.com/nanyx-lang/nanyx/issues/745)).
