@@ -47,7 +47,8 @@ and costs what it did. How members are passed is described under Monomorphisatio
 
 A top-level function that requires contexts can be passed as a value where they are all available, as in
 `[1, 2] \list.map(println)` or `apply(say, "hi")`. Its value's type requires its contexts without parameters, such as
-`Console`, and each call passes their members, as it does to any function value whose type requires contexts
+`Console`, those a def that doesn't write its type was inferred to require among them (`carryPlainContexts` in
+`CodeGen.fs`), and each call passes their members, as it does to any function value whose type requires contexts
 ([#836](https://github.com/nanyx-lang/nanyx/issues/836), see [below](#function-values-that-require-contexts)). It is
 passed as a closure over its wrapper
 that takes those members after its other parameters and captures the members of its parameterised contexts, found
@@ -143,6 +144,14 @@ value. The cost is code size: a definition called with several instances has a s
 trade monomorphisation already makes for types. A definition that is not generic is still lowered as it is, taking
 all its members, and exported; a specialisation of it on known members is named with `__known`
 (`greet__known`), and is not exported.
+
+A def that doesn't write its type and infers an ambient context, such as `def greet = { name -> println(name) }`,
+takes the context's members as one that writes `[Console]` does
+([#1245](https://github.com/nanyx-lang/nanyx/issues/1245)). At a script's top level the members are the ambient
+instance's, so the call is to `greet__known`, which calls them directly; the unspecialised `greet` is lowered and
+exported too, with the drop and dup functions of its members' types. An `@entry` is called by its host's `run`, with the
+members of the `Console` the host `use`s, which are not known there: so `println` in an entry calls the host's `write`
+through the table.
 
 How it is built:
 

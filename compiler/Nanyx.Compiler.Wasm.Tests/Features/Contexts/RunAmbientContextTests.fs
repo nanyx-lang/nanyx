@@ -41,3 +41,29 @@ import nanyx/console as c
 export def greet: [c.Console] string -> () = { name -> c.println("hello {name}") }
 """
     |> assertRan "hello Ada\n"
+
+// A function that does not write its type, and is inferred to require the ambient `Console`, is passed the members of
+// the instance where it is called, as one that declares `[Console]` is (#1245).
+
+[<Fact>]
+let ``Run - a function inferred to require Console writes through the instance a use loads where it is called`` () =
+    let source =
+        """import nanyx/console
+
+def shout = { text -> println(text ++ "!") }
+
+def main = {
+  shout("plain")
+  use Console(
+    write = { text -> write("[" ++ text ++ "]") }
+    writeError = writeError
+    readLine = readLine
+    readToEnd = readToEnd
+    flush = flush
+  )
+  shout("framed")
+}
+
+main()
+"""
+    runSource source |> assertRan "plain!\n[framed!][\n]"

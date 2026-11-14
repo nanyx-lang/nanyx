@@ -258,11 +258,13 @@ let private contextArguments
 
     // Where the type checker found each context the callee requires, as each required member's instance, in the order
     // of `required`: none for a call it found nothing for. A function that does not write its type may also require
-    // ambient contexts, after the parameterised ones its type is given (see `ContextInference`): they are not passed.
+    // ambient contexts, after the parameterised ones its type is given (see `ContextInference`): the call has found no
+    // instance of those, which are found by their members' names.
     let instances =
         match contextInstances |> Map.tryFind callId, contextTypes |> Map.tryFind name with
-        | Some found, Some types when found.Length >= types.Length ->
-            List.zip types (List.truncate types.Length found)
+        | Some found, Some types ->
+            let found = if found.Length >= types.Length then List.truncate types.Length found else found @ List.replicate (types.Length - found.Length) None
+            List.zip types found
             |> List.collect (fun (contextType, instance) ->
                 let baseName = match contextType.Kind with TypeName n | TypeApply(n, _) -> n | _ -> "unknown"
                 typeLayouts |> Map.tryFind baseName |> Option.defaultValue [] |> List.map (fun memberName -> memberName, instance))
@@ -352,6 +354,40 @@ let private contextLayoutsOf (typeDefs: Map<string, TypeDefInfo>) (typeLayouts: 
         | _ -> None)
     |> Map.ofList
 
+/// `exprTypes` with the type of each function `module'` names as a value (a closure over its wrapper: `wrapped` gives
+/// the function each wrapper calls) requiring the contexts without parameters that the function requires
+/// (`contextTypes`), as the value of a function whose type writes them already does (see
+/// `ContextVariables.ofNamedValue`): its callers pass their members. A function that does not write its type is named
+/// at a type without the ambient contexts it was inferred to require, and this is how they reach it from where it is
+/// called, as the host's `use` reaches an `@entry`.
+let private carryPlainContexts
+    (typeDefs: Map<string, TypeDefInfo>)
+    (contextTypes: Map<string, TypeExpr list>)
+    (wrapped: Map<string, string>)
+    (module': Module)
+    (exprTypes: Map<NodeId, Ty>)
+    : Map<NodeId, Ty> =
+    let plainContexts (name: string) =
+        contextTypes
+        |> Map.tryFind name
+        |> Option.defaultValue []
+        |> List.choose (fun context ->
+            match context.Kind with
+            | TypeName contextName when typeDefs |> Map.tryFind contextName |> Option.exists (fun info -> info.IsContext && info.Parameters.IsEmpty) ->
+                Some (TyApply(contextName, []))
+            | _ -> None)
+    module'
+    |> List.collect (function
+        | Kind (Def (ValueDef(_, _, _, value))) | Kind (Expr value) -> SyntaxTree.expressionsWithin value
+        | _ -> [])
+    |> List.fold (fun (acc: Map<NodeId, Ty>) expr ->
+        match expr.Kind with
+        | ClosureSyntax.Closure(target, _) ->
+            match wrapped |> Map.tryFind target |> Option.map plainContexts, acc |> Map.tryFind expr.Id with
+            | Some (_ :: _ as plain), Some (TyFunc(input, output, own)) -> acc |> Map.add expr.Id (TyFunc(input, output, own @ plain |> List.distinct))
+            | _ -> acc
+        | _ -> acc) exprTypes
+
 /// The functions a module was compiled into, from the core IR (see "Core IR" in `docs/src/content/work-in-progress/memory-management.md`).
 type BackendReport =
     { /// The functions, by their names in WebAssembly text, specialisations and the start function included.
@@ -429,7 +465,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // (`TypedModule.AmbientMembers`) stands in for that member whenever a callee requires the context and the caller
     // has nothing else to supply.
     // This is how the runtime-provided `Console` (the functions `nanyx/console` exports) reaches the top level of a
-    // module, and an `@entry` that doesn't write its type; one that writes `[Console]` is passed its host's instance.
+    // module. A function that requires the context, as its type writes or as it was inferred to, is passed the members
+    // of the instance where it is called: an `@entry` is passed its host's.
     // Closure conversion made a wrapper for each such function, so the member is a closure over it.
     // Lambda lifting made those wrappers only where something may need them.
     let ambientContextMembers =
@@ -608,7 +645,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let lowered =
         let input: CoreIrLowerInput.LowerInput =
             { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
-              ExprTypes = typed.InlinedExprTypes |> Map.fold (fun acc id ty -> acc |> Map.add id ty) checkedTypes
+              ExprTypes =
+                typed.InlinedExprTypes
+                |> Map.fold (fun acc id ty -> acc |> Map.add id ty) checkedTypes
+                |> carryPlainContexts typed.TypeDefs functionContextTypes (functionWrappers |> Map.toList |> List.map (fun (function', wrapper) -> wrapper, function') |> Map.ofList) module'
               CalleeTypes = typed.InlinedCalleeTypes |> Map.fold (fun acc id ty -> acc |> Map.add id ty) typed.CalleeTypes
               DefinitionTypes = typed.Types
               ContextParameters =

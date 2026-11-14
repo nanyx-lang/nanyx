@@ -62,7 +62,10 @@ main()
     Assert.Contains("""call $Point_show""", wat)
     Assert.Contains("""call $Size_show""", wat)
     Assert.Equal(2, countOccurrences "(func $describe__" wat)
-    Assert.DoesNotContain("call_indirect", wat)
+    // `main`, called where the ambient `Console` is known, calls each specialisation directly, and each calls its
+    // instance's member directly.
+    for specialisation in [ "main__known"; "describe__rec_x_int_y_int__known"; "describe__rec_height_int_width_int__known" ] do
+        Assert.DoesNotContain("call_indirect", functionText specialisation wat)
     runSource source |> assertRan "<point 1,2>\n<size 3x4>\n"
 
 [<Fact>]
