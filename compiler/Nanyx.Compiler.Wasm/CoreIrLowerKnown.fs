@@ -91,7 +91,8 @@ let knownAmong (input: LowerInput) (parameters: ContextParameter list) (argument
         | DefinitionValue definition -> Some (parameter.Key, knownValue input definition)
         | MemberInScope key -> inScope key |> Option.map (fun known -> parameter.Key, known)
         | DerivedClosure _
-        | PassedByCaller -> None)
+        | PassedByCaller
+        | Unfound _ -> None)
 
 /// The arguments of a direct call to a function that takes `count` parameters, given those a call through a closure
 /// of input type `input` over its wrapper passes (see `CallValue`), as the wrapper passes them on (see

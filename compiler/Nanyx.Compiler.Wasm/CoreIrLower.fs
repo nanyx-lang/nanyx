@@ -662,6 +662,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | (key, _, _) :: rest when knownMembers |> List.exists (fst >> (=) key) -> pass rest acc
                 // A member that is a value (`Point.`0``) is passed as it is.
                 | (key, (DefinitionValue _ as argument), _) :: rest -> this.ArgumentAtom scope argument None (fun atom -> pass rest ((key, atom) :: acc))
+                | (key, Unfound _, Some memberTy) :: rest when CoreIrLowerInstances.neverCalled (substitute subst instanceTy) ->
+                    let ty = toIrType (unconstrainedAsUnit memberTy)
+                    let standIn = request (SpecKey.plain $"__stand_in_{IrType.mangle ty}" []) subst (StandingIn ty)
+                    next key (AStaticClosure(standIn, CoreIrLowerInstances.standInArity ty, ty)) (Some memberTy) rest
                 | (key, argument, memberTy) :: rest -> this.ArgumentAtom scope argument memberTy (fun atom -> next key atom memberTy rest)
             if arguments.Length <> memberTys.Length then
                 internalError $"{arguments.Length} context members found for the {memberTys.Length} '{name}' requires"
@@ -711,6 +715,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         // A member that is a value (`Point.`0``): the top-level value, evaluated.
         | DefinitionValue definition -> this.ValueOfKnown (knownValue input definition) k
         | PassedByCaller -> internalError "a member its callers pass, found where it is called"
+        // The type checker found every context a call requires, so one missing here is the backend's bug.
+        | Unfound key ->
+            let available = (scope.Members |> Map.keys |> List.ofSeq) @ (input.AmbientMembers |> Map.keys |> List.ofSeq) |> List.distinct |> List.map ContextMemberKey.text |> String.concat ", "
+            internalError $"the context member {ContextMemberKey.text key} is not in scope; those in scope are [{available}]"
 
     /// `atoms`, each adapted to the type in `tys` in its place (see `Coerce`); as they are when `tys` is empty.
     /// Where one of them is converted to or from boxes, which stores (see `CoreIrLowerBoxes`), each adapted value waits
@@ -1398,6 +1406,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | AsStart -> this.StartFunction ()
         | Adapting(givenTy, expectedTy) -> this.Adapter functionName givenTy expectedTy
         | BoxReading ty -> CoreIrLowerBoxes.readerFunction newVar functionName ty
+        | StandingIn ty -> CoreIrLowerInstances.standInFunction newVar functionName ty
         | ListConverting(given, expected) -> CoreIrLowerBoxes.listConverterFunction (this.BoxTools emptyScope) newVar functionName given expected
         | Printing printer -> CoreIrLowerDbg.printerFunction printerTools functionName printer
         | _ ->
@@ -1518,6 +1527,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             make (environmentParameter :: valueParameters @ List.map snd passed) (toIrType resultTy) (bind (call order []))
         | Adapting _ -> internalError "an adapter lowered as a definition"
         | BoxReading _ -> internalError "a box's function lowered as a definition"
+        | StandingIn _ -> internalError "a stand-in lowered as a definition"
         | ListConverting _ -> internalError "a list's conversion lowered as a definition"
         | Printing _ -> internalError "a printer lowered as a definition"
         | AsStart -> internalError "the start function lowered as a definition"
