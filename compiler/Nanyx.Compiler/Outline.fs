@@ -52,7 +52,8 @@ let private fieldsOf (declared: DeclaredNames) (record: TypeExpr) =
         |> List.choose (function
             | TypeField(name, _, typeOpt, _) ->
                 names |> List.tryFind (fun (declaredName, _) -> declaredName = name) |> Option.map (fun (_, span) -> name, typeOpt, span)
-            | TypeMember _ -> None)
+            | TypeMember _
+            | TypeFieldAttribute _ -> None)
     | _ -> []
 
 let private typeItem (declared: DeclaredNames) (span: SourceSpan) (modifiers: TypeDefModifier list) (body: TypeExpr) =

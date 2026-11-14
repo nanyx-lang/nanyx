@@ -305,6 +305,12 @@ type WasmProgram(engine: Wasmtime.Engine, store: Wasmtime.Store, instance: Wasmt
             store.Dispose()
             engine.Dispose()
 
+/// How many blocks `name(argument)` allocates in `program`, and what it returns.
+let allocationsOf (program: WasmProgram) (name: string) (argument: int) =
+    let before = program.Allocations
+    let result = program.Call(name, argument)
+    program.Allocations - before, result
+
 /// `wat`, a module compiled with `checkedOptions`, instantiated and run (see `WasmProgram`), with the drop functions of `dropped`
 /// exported.
 let instantiateWat (wat: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =

@@ -23,6 +23,7 @@ nanyx check [<directory or .nyxp>] [--timings] [--host <module>]
 nanyx build [<directory or .nyxp>] [--out <path>] [--timings] [--host <module>] [--no-inline]
 nanyx new <name> [<directory>]
 nanyx format [--check | --write] <files or directories>
+nanyx format [--check] --stdin
 nanyx stdlib-docs [--check] <directory>
 nanyx lsp
 nanyx hello
@@ -40,8 +41,8 @@ nanyx hello
   `twice : [ToString(a)] a -> string` for a def that requires a context. It prints nothing from the prelude or
   the file's imports (`TypeHints.topLevelTypes`).
 - `parse` prints the AST.
-- `format` rewrites the files that are not formatted, or with `--check` lists them and exits with 1 (see
-  [Formatter](./formatter)).
+- `format` rewrites the files that are not formatted, or with `--check` lists them and exits with 1. With `--stdin`
+  it formats standard input to standard output (see [Formatter](./formatter)).
 - `stdlib-docs` writes the generated reference of each standard-library page in the directory it is given,
   `docs/src/content/stdlib`, from the library's doc comments, or with `--check` lists the pages that are out of date
   and exits with 1. It also fails for a file of the library that has no page, and a page that has no file (see

@@ -33,7 +33,11 @@ what the compiler keeps: exact spans, resolved names and types.
   ([#794](https://github.com/nanyx-lang/nanyx/issues/794)). The compiler records that import on each diagnostic it
   passes up from an imported module (`Diagnostic.Import`). An imported file the editor has open shows only its own
   compile's diagnostics; one that is not open shows what the latest compile of a document importing it found, and is
-  cleared when that compile finds nothing there, or when the importer is closed (`DiagnosticsPublisher`). An error in
+  cleared when that compile finds nothing there, or when the importer is closed (`DiagnosticsPublisher`). A change to a
+  file compiles again the open documents that import it, directly or through other modules, and only those
+  ([#1375](https://github.com/nanyx-lang/nanyx/issues/1375)): a change in the editor, a save, closing it, and a change
+  on disk, which the server asks the client to watch for (`workspace/didChangeWatchedFiles` on `**/*.nyx`). A compile
+  reads an open imported file's text from the editor, so diagnostics follow what is on screen. An error in
   a standard library module, which is not a file on disk, is described in the diagnostic at the import. A diagnostic
   about the whole compilation is shown at the start of the file. See [How the server is built](#how-the-server-is-built).
 - **Hover shows inferred types** ([#120](https://github.com/nanyx-lang/nanyx/issues/120)). Inference records the
@@ -223,6 +227,17 @@ what the compiler keeps: exact spans, resolved names and types.
   recorded for it (`TypedModule.ContextInstances` and `ContextProviders`,
   [#989](https://github.com/nanyx-lang/nanyx/issues/989)). The extension shows it in a webview view in the secondary side bar (see
   [Info view and library browser](./info-view-and-library-browser)).
+- **The standard library's modules and exports** ([#712](https://github.com/nanyx-lang/nanyx/issues/712)), two
+  requests of the server's own, for the library browser. `nanyx/libraryModules` returns each module's import path
+  (`nanyx/text`) and doc comment, the prelude first. `nanyx/libraryModule`, given a module's import path, returns
+  what it exports in the order its files declare them, less the reserved `__` names, or `null` for no module: each
+  export's name, its kind (`function`, `value`, `type`, `context`, or `attached` with the type it attaches to), its
+  declaration as hover writes it, its doc comment, the import it needs (none for the prelude's), and its location in
+  the copy of the library's source `StandardLibrarySource` writes. `NyxCompiler.LibraryCatalog` reads them from the
+  same compile of each module as the generated reference (`StandardLibraryDocs`), made once per process. A third,
+  `nanyx/addImport` ([#713](https://github.com/nanyx-lang/nanyx/issues/713)), gives the edit that imports a module into
+  an open document, placed as the missing-import quick fix places it: none if the document imports it already, `null`
+  if it does not parse. The extension's *Library* view lists them and uses it.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
 - **The extension** highlights syntax, finds `nanyx` (setting, `PATH`, or a downloaded release) and offers
   *Download the compiler* and *Restart the language server*, and shows the info view. Its settings are described for users on the
@@ -243,7 +258,10 @@ and compiles the document when it has gone unchanged for 150 ms (`ServerSettings
 ([#697](https://github.com/nanyx-lang/nanyx/issues/697)). A compile cannot be stopped, so a change during one waits for
 it, and that compile's result, already out of date, is neither recorded nor published. Until the latest text is
 compiled, requests read the last text that was typed (`OpenDocument.LastGood`); go-to-definition, references and code
-actions, which read only the latest text's own compile, find nothing in that pause. Standard-library imports resolve because the
+actions, which read only the latest text's own compile, find nothing in that pause. The compile reads each other source
+file it needs through the reader `DocumentStore` gives it (`Package.compileSourceReading`): the editor's text of an open
+file, or else the file on disk. It records what it read in `OpenDocument.Sources`, and a change to one of those files
+schedules the document as a change to it would (`CompileScheduler.FileChanged`). Standard-library imports resolve because the
 library is embedded in the compiler, and each of its modules is checked once for the life of the server, not on
 every change (see [Standard library implementation](./standard-library-implementation)); imports by path resolve relative to the file as they do for `nanyx check`. A
 compiler exception is reported as a diagnostic rather than taking the server down.

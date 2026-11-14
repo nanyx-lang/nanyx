@@ -1,11 +1,23 @@
 /// The helpers the formatter's tests share.
 module Nanyx.Formatter.Tests.TestHelpers
 
+open System
+open System.IO
 open Xunit
 open Nanyx.Formatter
 open Nanyx.Formatter.FormatCommand
 
 let lines (ls: string list) = String.concat "\n" ls + "\n"
+
+/// A new empty directory for one test, with the given files (path relative to it, and text) in it.
+let directoryWith (files: (string * string) list) =
+    let directory = Path.Combine(Path.GetTempPath(), "nanyx-format-tests", Guid.NewGuid().ToString("N"))
+    Directory.CreateDirectory directory |> ignore
+    for path, text in files do
+        let full = Path.Combine(directory, path)
+        Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
+        File.WriteAllText(full, text)
+    directory
 
 /// `source` with `\n` line breaks, whatever the line endings of the test file's checkout, without spaces at its end,
 /// and with a final line break. A triple-quoted string that ends in `"` is written with a space before its closing

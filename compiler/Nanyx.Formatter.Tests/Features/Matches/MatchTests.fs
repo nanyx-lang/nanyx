@@ -57,6 +57,15 @@ let ``Record patterns by member name keep their ...`` () =
     Assert.Equal("def g = { | (a = 1, ...) -> 1 }\n", format "def g = { | ( a = 1 ,... ) -> 1 }")
 
 [<Fact>]
+let ``A tag's record payload pattern is written in the tag's brackets`` () =
+    unchanged (normalized """def f = {
+  | #some(count = 0, ...) -> 0
+  | #some(item) -> 1
+  | #none -> 2
+}""")
+    Assert.Equal("def g = { | #some(a = 1, ...) -> 1 }\n", format "def g = { | #some((a = 1, ...)) -> 1 }")
+
+[<Fact>]
 let ``if, if-is and multi-branch if are printed as written`` () =
     unchanged "def a = { x -> if x > 0 then 1 else 0 }\n"
     unchanged "def b = { x -> if x is #some(y) then y else 0 }\n"

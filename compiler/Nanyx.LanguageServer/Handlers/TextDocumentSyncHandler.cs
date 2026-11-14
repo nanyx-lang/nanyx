@@ -10,7 +10,8 @@ namespace Nanyx.LanguageServer.Handlers;
 /// <summary>
 /// Keeps <see cref="DocumentStore"/> in step with the editor (full-text sync: the client sends the whole
 /// document on every change). A document is compiled, and its diagnostics published, when it is opened, and after a
-/// change once the user pauses (see <see cref="CompileScheduler"/>).
+/// change once the user pauses (see <see cref="CompileScheduler"/>). The documents that import it are compiled again
+/// after a change, a save, and when it is closed, since then they read it from disk again.
 /// </summary>
 public sealed class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 {
@@ -50,7 +51,9 @@ public sealed class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
     public override Task<Unit> Handle(DidSaveTextDocumentParams request, CancellationToken cancellationToken)
     {
-        // Diagnostics already follow every change once the user pauses; saving adds nothing.
+        // The document's own diagnostics already follow every change once the user pauses, and its importers read its
+        // text from the editor; they are compiled again all the same, as after a change on disk.
+        _compiles.FileChanged(DocumentStore.FileNameOf(request.TextDocument.Uri));
         return Unit.Task;
     }
 
@@ -59,6 +62,8 @@ public sealed class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _compiles.Closed(request.TextDocument.Uri);
         _documents.Remove(request.TextDocument.Uri);
         _diagnostics.Closed(request.TextDocument.Uri);
+        // The documents that import it read it from disk now, without its unsaved changes.
+        _compiles.FileChanged(DocumentStore.FileNameOf(request.TextDocument.Uri));
         return Unit.Task;
     }
 

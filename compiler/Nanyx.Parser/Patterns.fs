@@ -164,7 +164,10 @@ let tagPattern =
             skipMany1 (skipAnyOf " \t") >>. singlePattern |>> fun p -> [p], p.Span
         // Empty brackets, `#some()`, carry the unit value, as they do in a value.
         let unitPayload = unitPattern |>> fun p -> [p], p.Span
-        opt (attempt unitPayload <|> attempt parenPayload <|> attempt inlinePayload) >>= fun patternsOpt ->
+        // Brackets of named fields are the payload's record pattern, as they are its record in a value:
+        // `#some(count = 0, ...)` is `#some((count = 0, ...))`.
+        let recordPayload = recordMemberPattern |>> fun p -> [p], p.Span
+        opt (attempt unitPayload <|> attempt recordPayload <|> attempt parenPayload <|> attempt inlinePayload) >>= fun patternsOpt ->
         match patternsOpt with
         | None -> preturn (TagPattern(tagName, None))
         | Some ([single], _) -> preturn (TagPattern(tagName, Some single))

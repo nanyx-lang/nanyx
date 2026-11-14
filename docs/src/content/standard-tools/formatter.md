@@ -54,6 +54,14 @@ nanyx format src/
 nanyx format src/file1.nyx src/file2.nyx
 ```
 
+## Standard input
+
+`--stdin` formats what it reads from standard input and writes the result to standard output, so an editor can format a buffer without saving it first. The input is formatted as a file in the current directory, with that directory's settings; run it from the file's directory. If the input can't be formatted, nothing is written to standard output and the error goes to standard error.
+
+```bash
+nanyx format --stdin < src/file1.nyx
+```
+
 ## Files and exit codes
 
 A directory means every `.nyx` file under it, leaving out `bin`, `obj`, `node_modules` and hidden directories. Each file keeps its line endings.

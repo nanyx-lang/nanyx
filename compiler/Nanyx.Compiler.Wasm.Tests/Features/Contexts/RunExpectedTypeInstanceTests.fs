@@ -1,0 +1,38 @@
+module TranspilerWasmTests.Features.Contexts.RunExpectedTypeInstances
+
+open Xunit
+open TranspilerWasmTestHelpers
+
+[<Fact>]
+let ``Run - a call finds its instance at the type its result is expected to have`` () =
+    let source =
+        """import nanyx/console
+
+context Default(a) = (default: string -> a)
+def int.default: string -> int = { s -> 7 }
+def string.default: string -> string = { s -> "<" ++ s ++ ">" }
+def get: [Default(a)] string -> a = { s -> default(s) }
+
+def n: int = get("x")
+def m: string -> int = { s -> get(s) }
+def k = { xs -> [get("x")] \List.map({ v -> v + 1 }) }
+def j = { s -> get(s) + 1 }
+def t: string = get("y")
+
+@entry
+def main = {
+  println("{n} {m("a")} {k(())} {j("b")} {t}")
+}
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "7 7 [8] 8 <y>\n"
+
+[<Fact>]
+let ``Run - a call finds an instance of FromString at the type a def writes`` () =
+    let source =
+        """def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { texts -> texts \List.map({ t -> FromString(a, e).fromString(t) }) }
+def ints: list(#some(int) | #invalidInt) = readAll(["1", "x"])
+
+@entry
+def main = { dbg(ints) }
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "dbg: [#some(1), #invalidInt]\n"

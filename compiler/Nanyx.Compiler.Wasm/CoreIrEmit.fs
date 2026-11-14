@@ -107,7 +107,8 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | Drop(_, body)
     | DropAfter(body, _)
     | Release(_, body)
-    | Reuse(_, body) -> tempsUsedBy body
+    | Reuse(_, body)
+    | FreeToken(_, body) -> tempsUsedBy body
     | Let _
     | Do _
     | Match _
@@ -196,6 +197,10 @@ type private FunctionEmitter(context: EmitContext) =
         let lines (code: string list) = code |> List.filter ((<>) "") |> String.concat "\n      "
         let count = $"local.get ${object}\n    i32.const {released.CountOffset}\n    i32.sub\n    " + touching "i32.load"
         $"{count}\n    i32.const 1\n    i32.eq\n    if\n      {lines unique}\n    else\n      {lines shared}\n    end"
+
+    /// The code that frees the block a reuse token holds, if it holds one (see `FreeToken`).
+    member _.FreeToken (token: Var) =
+        $"local.get ${localName token}\n    if\n      local.get ${localName token}\n      call ${helper Helpers.free}\n    end"
 
     /// How a hole of type `holeType` is measured and written (see `Interpolation`).
     member _.HoleKind (holeType: HoleType) : Interpolation.HoleKind =
@@ -288,6 +293,9 @@ type private FunctionEmitter(context: EmitContext) =
                 walk body
             | Release(released, body) ->
                 parts.Add(this.Release released)
+                walk body
+            | FreeToken(token, body) ->
+                parts.Add(this.FreeToken token)
                 walk body
             | _ ->
                 claim expr
@@ -542,6 +550,7 @@ type private FunctionEmitter(context: EmitContext) =
         | Dup(vars, body) -> join "\n    " [ this.DupVars vars; this.Value tail deferred onStack body ]
         | Drop(vars, body) -> join "\n    " [ dropVars localOf vars; this.Value tail deferred onStack body ]
         | Release(released, body) -> join "\n    " [ this.Release released; this.Value tail deferred onStack body ]
+        | FreeToken(token, body) -> join "\n    " [ this.FreeToken token; this.Value tail deferred onStack body ]
         // An allocation into the block a reuse token holds, if it holds one (see `CoreIrReuse`).
         | Reuse(token, { Kind = CallRuntime(name, ([ head; _ ] as args), _) }) when Helpers.reusingVariant name = Some Helpers.listConsAt ->
             join "\n    " [ $"local.get ${localName token}"; atomsAfter true args; $"call ${storing Helpers.listConsAt (atomType head)}" ]

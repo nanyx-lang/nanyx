@@ -489,6 +489,10 @@ and private inferPipe (env: TypeEnv) (state: InferState) (expr: Expression) (val
         | None ->
         match inferExpr env nextState { expr with Kind = FunctionCall(resolvedName, spanOpt, callArgs) } with
         | Ok (typedCall, finalState) ->
+            // The call infers the value again, as its first argument. A call in the value that was left to find its
+            // instance later is left again at the types the call settles, so the one left the first time, at types
+            // nothing settles, goes.
+            let finalState = withoutRepeatedPending state.PendingContextInstances nextState.PendingContextInstances finalState
             // The call failed if it recorded itself as failed. Its error for a name it found nothing for, or more
             // than one of, is the pipe's, which says what the pipe looked for.
             let finalState =
@@ -859,8 +863,10 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
             | Error err -> Error err
             | Ok (typedBase, afterBase) ->
                 // An open record's fields are the ones it lists: its other fields are kept, and can't be updated.
+                // The record's type may be known only from constraints not yet applied to it: a payload a match
+                // binds of a call's result.
                 let updatable =
-                    match Unifier.unalias typedBase.Type with
+                    match Unifier.unalias (resolveSoFar afterBase typedBase.Type) with
                     | TyOpenRecord(fields, _) -> Some fields
                     | ty -> recordFieldsOf ty
                 match updatable with

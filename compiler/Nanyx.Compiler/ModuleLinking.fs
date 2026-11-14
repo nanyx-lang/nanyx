@@ -112,7 +112,7 @@ module internal ModuleLinking =
             inlined @ own
             |> List.collect (function
                 | Kind (Def (TypeDef(_, modifiers, parameters, Kind (TypeRecord fields)))) when modifiers |> List.contains Context && included parameters ->
-                    fields |> List.map (function TypeField(fieldName, _, _, _) | TypeMember(fieldName, _) -> fieldName)
+                    fields |> List.choose (function TypeField(fieldName, _, _, _) | TypeMember(fieldName, _) -> Some fieldName | TypeFieldAttribute _ -> None)
                 | _ -> [])
             |> Set.ofList
         let contextMembers = membersOfContexts (fun _ -> true)

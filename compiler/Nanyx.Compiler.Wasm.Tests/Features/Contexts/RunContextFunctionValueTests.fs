@@ -224,3 +224,27 @@ def main = {
 }
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "1\n2\n7\n"
+
+let private twice = """context Show(a) = (show: a -> string)
+def describe: [Show(a)] a -> string = { v -> show(v) }
+def twice = { v -> describe(v) ++ describe(v) }
+"""
+
+[<Fact>]
+let ``Run - a function that requires a parameterised context named as a value at a type nothing constrains`` () =
+    let source = twice + """@entry
+def main = {
+  dbg(twice)
+}
+"""
+    runSource (normalized source) |> assertRan "dbg: <function () -> string>\n"
+
+[<Fact>]
+let ``Run - a local def whose value is such a function, never called`` () =
+    let source = twice + """@entry
+def main = {
+  def g = twice
+  println("ok")
+}
+"""
+    runSource (normalized source) |> assertRan "ok\n"

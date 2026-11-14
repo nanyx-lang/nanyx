@@ -175,6 +175,10 @@ and TypeRecordField =
     /// A named field: its name, whether it is `mut`, its type and its default value.
     | TypeField of Identifier * bool * TypeExpr option * Expression option
     | TypeMember of Identifier * TypeExpr option
+    /// An `@name` attribute before a named field, written where it is: it applies to the field that follows it, as
+    /// `@customKeywordType(#bind)` does to a member of a `context` declaration. Its argument is written as a top-level
+    /// attribute's is.
+    | TypeFieldAttribute of Identifier * Expression option * SourceSpan
 
 /// A pattern and where it came from. Like `Expression`, equality and comparison look only at `Kind`, and it is
 /// printed (`%A`) as its kind alone. It is declared before `Expression` so that a `.Kind` or `{ Kind = ... }` whose
@@ -610,6 +614,17 @@ module WorkflowSyntax =
     /// The member that runs a `for` loop whose body uses a keyword: `for(items, { item, next -> ... }, { _ -> ... })`.
     let forMember = "for"
 
+module TypeRecordField =
+    /// The attributes of a record type's fields: each field, with the attributes written before it (see
+    /// `TypeFieldAttribute`) as their names, arguments and spans. The parser reads an attribute only before a field.
+    let withAttributes (fields: TypeRecordField list) : ((Identifier * Expression option * SourceSpan) list * TypeRecordField) list =
+        let rec loop pending fields =
+            match fields with
+            | [] -> []
+            | TypeFieldAttribute(name, argument, span) :: rest -> loop ((name, argument, span) :: pending) rest
+            | field :: rest -> (List.rev pending, field) :: loop [] rest
+        loop [] fields
+
 module TypeExpr =
     /// A type expression written at `span`.
     let at (span: SourceSpan) (kind: TypeExprKind) : TypeExpr =
@@ -633,7 +648,7 @@ module TypeExpr =
         | TypeApply(_, items) -> items
         | TypeRecord fields
         | TypeOpenRecord(fields, _) ->
-            fields |> List.choose (function TypeField(_, _, typeOpt, _) | TypeMember(_, typeOpt) -> typeOpt)
+            fields |> List.choose (function TypeField(_, _, typeOpt, _) | TypeMember(_, typeOpt) -> typeOpt | TypeFieldAttribute _ -> None)
         | TypeFunc(arg, ret) -> [ arg; ret ]
         | TypeTag(_, payload) -> Option.toList payload
         | TypeWithContext(contexts, inner) -> contexts @ [ inner ]
@@ -644,6 +659,7 @@ module TypeExpr =
         match field with
         | TypeField(name, isMutable, typeOpt, defaultOpt) -> TypeField(name, isMutable, Option.map f typeOpt, defaultOpt)
         | TypeMember(name, typeOpt) -> TypeMember(name, Option.map f typeOpt)
+        | TypeFieldAttribute _ -> field
     /// `typeExpr` with `f` applied to each type expression directly inside it: those `children` gives. One with none,
     /// a `typeof` among them, is returned as it is.
     let mapChildren (f: TypeExpr -> TypeExpr) (typeExpr: TypeExpr) : TypeExpr =

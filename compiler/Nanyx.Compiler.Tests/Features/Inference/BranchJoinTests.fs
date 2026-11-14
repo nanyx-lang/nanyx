@@ -48,3 +48,44 @@ def f = { g, n ->
 def r = f({ n -> #c }, 3)
 """
     Assert.Equal("#a | #b | #c", typeOfR source)
+
+[<Fact>]
+let ``Same-named tags with tuple payloads join the tags in the tuples' parts`` () =
+    let source = """
+def r = if true then #a(#x, 1) else #a(#y, 2)
+"""
+    Assert.Equal("#a(#x | #y, int)", typeOfR source)
+
+[<Fact>]
+let ``Same-named tags with record payloads join the tags in the records' fields`` () =
+    let source = """
+def r = if true then #a(kind = #x, n = 1) else #a(kind = #y, n = 2)
+"""
+    Assert.Equal("#a(kind: #x | #y, n: int)", typeOfR source)
+
+[<Fact>]
+let ``Branches and list elements giving a tag with differing tuple payloads check against a union that allows both`` () =
+    let source = """
+type T = #a(#x | #y, int) | #b
+
+def xs: list(T) = [ #a(#x, 1), #a(#y, 2) ]
+def r: T = if true then #a(#x, 1) else #a(#y, 2)
+"""
+    compileClean (source.ReplaceLineEndings "\n") |> ignore
+
+[<Fact>]
+let ``A recursive alias's tags with differing tuple payloads join in a list`` () =
+    let source = """
+type Expr = #num(int) | #add(Expr, Expr)
+
+def r: list(Expr) = [ #num(1), #add(#num(2), #num(3)), #add(#add(#num(4), #num(5)), #num(6)) ]
+"""
+    compileClean (source.ReplaceLineEndings "\n") |> ignore
+
+[<Fact>]
+let ``Same-named tags whose tuple payloads have parts of different types are still a mismatch`` () =
+    let source = """
+def r = if true then #a(#x, 1) else #a(#y, "one")
+"""
+    let code, _ = singleError (source.ReplaceLineEndings "\n")
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)

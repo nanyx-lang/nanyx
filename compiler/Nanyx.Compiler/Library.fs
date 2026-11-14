@@ -137,13 +137,16 @@ module Compiler =
     /// checked once and every importer sees the same symbols; with the package whose files' imports are resolved
     /// through its module table, if the compilation is of a package's file; with the standard-library file open in
     /// the editor, if the compilation is of one (see `compileStandardLibraryFile`); and the listener each module's check
-    /// is reported to.
-    type internal CheckedModules(package: PackageModules option, edited: EditedLibraryFile option, listener: CompileListener) =
+    /// is reported to; and how the compilation reads the text of a source file other than the one it compiles, given its
+    /// full path (from disk, or an editor's unsaved buffer).
+    type internal CheckedModules(package: PackageModules option, edited: EditedLibraryFile option, listener: CompileListener, readFile: string -> string) =
         inherit System.Collections.Generic.Dictionary<string, Result<CheckedModule, CompilationPhase * Diagnostic list>>()
+        new(package, edited, listener) = CheckedModules(package, edited, listener, File.ReadAllText)
         new(package) = CheckedModules(package, None, CompileListener.none)
         member _.Package = package
         member _.Listener = listener
         member _.Edited = edited
+        member _.ReadFile(path: string) = readFile path
 
         /// The file the syntax nodes of the module from `origin` are reported in: the editor's, for the file it has open.
         member _.FileName(origin: ModuleOrigin) =
@@ -461,7 +464,7 @@ module Compiler =
             parseWithDocs (checkedModules.FileName origin) source
             // A module split across files is checked as one: its other files' items join this one's.
             |> Result.bind (fun (parsed, docComments) ->
-                PartialModules.assemble parseWithDiagnostics (PartialModules.otherFragments checkedModules.Package checkedModules.Edited origin) parsed
+                PartialModules.assemble parseWithDiagnostics (PartialModules.otherFragments checkedModules.ReadFile checkedModules.Package checkedModules.Edited origin) parsed
                 |> Result.map (fun assembled -> (let ast, _, _ = parsed in ast), docComments, assembled))
             |> Result.mapError (fun diagnostics -> Parsed, diagnostics)
             // A record that names a field twice is reported before anything is inferred from it (see `DuplicateFields`).
@@ -566,7 +569,7 @@ module Compiler =
                             | Some diag, _
                             | None, Error diag -> fail [ diag ]
                             | None, Ok importPath ->
-                                match checkImport (SourceFile importPath) (fun () -> File.ReadAllText importPath) with
+                                match checkImport (SourceFile importPath) (fun () -> checkedModules.ReadFile importPath) with
                                 | Error (_, diags) -> fail diags
                                 | Ok imported ->
                                     match FileImports.importedFile item imported.Name imported.Syntax with
@@ -854,24 +857,24 @@ module Compiler =
               DocComments = checkedModule.DocComments }
 
     /// The module from `origin`, in no package, checked and compiled (see `compileChecked`), with each module's check
-    /// reported to `listener`.
-    let compileFromReporting (listener: CompileListener) (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
-        let checkedModules = CheckedModules(None, None, listener)
+    /// reported to `listener`, and the other source files it imports read by `readFile`, given each one's full path.
+    let compileFromReporting (listener: CompileListener) (readFile: string -> string) (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
+        let checkedModules = CheckedModules(None, None, listener, readFile)
         Nanyx.LargeStack.run (fun () -> compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty))
 
-    /// `compileFromReporting`, telling nobody.
+    /// `compileFromReporting`, telling nobody, with the files it imports read from disk.
     let compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
-        compileFromReporting CompileListener.none options origin source
+        compileFromReporting CompileListener.none File.ReadAllText options origin source
 
     /// `compileSourceWith` for a source file of the package `package`, whose imports name its modules, with each
-    /// module's check reported to `listener`.
-    let compileSourceInReporting (listener: CompileListener) (package: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
-        let origin, checkedModules = SourceFile (Path.GetFullPath filePath), CheckedModules(Some package, None, listener)
+    /// module's check reported to `listener`, and the package's other files it needs read by `readFile`.
+    let compileSourceInReporting (listener: CompileListener) (readFile: string -> string) (package: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        let origin, checkedModules = SourceFile (Path.GetFullPath filePath), CheckedModules(Some package, None, listener, readFile)
         Nanyx.LargeStack.run (fun () -> compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty))
 
-    /// `compileSourceInReporting`, telling nobody.
+    /// `compileSourceInReporting`, telling nobody, with the package's files read from disk.
     let compileSourceIn (package: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
-        compileSourceInReporting CompileListener.none package options filePath source
+        compileSourceInReporting CompileListener.none File.ReadAllText package options filePath source
 
     /// `compileFile` with the linters and severities `options` gives.
     let compileFileWith (options: LinterOptions) (filePath: string) : CompileResult =
@@ -921,7 +924,7 @@ module Compiler =
 
     /// `compileWith`, with each module's check reported to `listener`.
     let compileReporting (listener: CompileListener) (options: LinterOptions) (source: string) : CompileResult =
-        compileFromReporting listener options InMemory source
+        compileFromReporting listener File.ReadAllText options InMemory source
 
     /// `compile` with the linters and severities `options` gives.
     let compileWith (options: LinterOptions) (source: string) : CompileResult =

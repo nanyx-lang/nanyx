@@ -286,7 +286,8 @@ and private expressionsOfType (typeExpr: TypeExpr) =
             | TypeField (_, _, fieldType, defaultValue) ->
                 (fieldType |> Option.toList |> List.collect expressionsOfType)
                 @ (defaultValue |> Option.toList |> List.collect expressions)
-            | TypeMember (_, memberType) -> memberType |> Option.toList |> List.collect expressionsOfType)
+            | TypeMember (_, memberType) -> memberType |> Option.toList |> List.collect expressionsOfType
+            | TypeFieldAttribute (_, argument, _) -> argument |> Option.toList |> List.collect expressions)
     | TypeFunc (input, output) -> expressionsOfType input @ expressionsOfType output
     | TypeTag (_, payload) -> payload |> Option.toList |> List.collect expressionsOfType
     | TypeWithContext (contexts, inner) -> (contexts |> List.collect expressionsOfType) @ expressionsOfType inner
@@ -387,7 +388,8 @@ let rec private typesWithin (typeExpr: TypeExpr) : TypeExpr list =
         | TypeOpenRecord (fields, _) ->
             fields |> List.collect (function
                 | TypeField (_, _, fieldType, _)
-                | TypeMember (_, fieldType) -> fieldType |> Option.toList |> List.collect typesWithin)
+                | TypeMember (_, fieldType) -> fieldType |> Option.toList |> List.collect typesWithin
+                | TypeFieldAttribute _ -> [])
         | TypeFunc (input, output) -> typesWithin input @ typesWithin output
         | TypeTag (_, payload) -> payload |> Option.toList |> List.collect typesWithin
         | TypeConstraint (_, inner, _)

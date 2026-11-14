@@ -51,7 +51,8 @@ let directAtoms (e: Expr) : Atom list =
     | Drop _
     | DropAfter _
     | Release _
-    | Reuse _ -> []
+    | Reuse _
+    | FreeToken _ -> []
 
 /// The variables `e` reads directly, other than through its atoms.
 let directVars (e: Expr) : Var list =
@@ -138,7 +139,8 @@ let rec mapVars (var: Var -> Var) (depth: int -> int) (e: Expr) : Expr =
         | Drop _
         | DropAfter _
         | Release _
-        | Reuse _ -> internalError "rewriting the core IR after reference counting"
+        | Reuse _
+        | FreeToken _ -> internalError "rewriting the core IR after reference counting"
     { e with Kind = kind }
 
 /// `e` with `f` applied to each expression directly inside it that is not what follows a link of a chain.

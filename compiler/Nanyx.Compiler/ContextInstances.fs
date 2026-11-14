@@ -533,12 +533,43 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                                 { Def = defName; Call = call.Id; Callee = name; Index = found.Length; Count = contexts.Length
                                   Context = ctxName; ArgTys = argTysAsRead; Span = calleeSpan; Errors = errors; ChecksOnly = false }
                             Ok (found @ [ None ], { current with PendingContextInstances = pending :: current.PendingContextInstances })
+                        // Anywhere else, the type the call's result is expected to have may settle it, such as the
+                        // type a def writes, which is constrained once its value is inferred: it is found once the
+                        // module is, as a structure's is, and is the same error then if nothing has. Arguments that
+                        // do not fit the callee are the error instead (see `inferExpr`).
+                        | Error errors, scope when
+                            argTys |> List.exists (TypeEnv.freeTyVars >> Set.isEmpty >> not)
+                            && not (snd (Unifier.solve current.Constraints) |> List.exists (snd >> SourceSpan.contains call.Span)) ->
+                            let annotatedDef =
+                                match scope with
+                                | DefScope(defName, _) -> Some defName
+                                | AmbientScope
+                                | ScriptValueScope _
+                                | ValueScope _ -> None
+                            let pending =
+                                { Def = InterpolationHoles.moduleEnd; Call = call.Id; Callee = name; Index = found.Length; Count = contexts.Length
+                                  Context = ctxName; ArgTys = argTysAsRead; Span = calleeSpan; Errors = errors; ChecksOnly = false }
+                            Ok (found @ [ None ],
+                                { current with
+                                    PendingContextInstances = pending :: current.PendingContextInstances
+                                    HoleScopes = current.HoleScopes |> Map.add call.Id (env, annotatedDef) })
                         | Error errors, _ -> Error errors
                 | _ -> Ok (found @ [ None ], current))) (Ok ([], state))
         |> Result.map (fun (found, current) ->
             if found |> List.forall Option.isNone then current
             else { current with ContextInstances = current.ContextInstances |> Map.add call.Id found })
     | _ -> Ok state
+
+/// `state` without the calls left to find their instances later (see `PendingContextInstance`) that were left between
+/// `before` and `firstPass`, when an expression inferred again since has left the same ones again: a pipe's value, which
+/// is inferred once on its own and again as the call's first argument.
+let internal withoutRepeatedPending (before: PendingContextInstance list) (firstPass: PendingContextInstance list) (state: InferState) =
+    let added (earlier: PendingContextInstance list) (later: PendingContextInstance list) = List.truncate (later.Length - earlier.Length) later
+    let first = added before firstPass
+    let again = added firstPass state.PendingContextInstances |> List.map (fun p -> p.Call, p.Index) |> Set.ofList
+    let repeated = first |> List.filter (fun p -> again.Contains (p.Call, p.Index))
+    if repeated.IsEmpty then state
+    else { state with PendingContextInstances = state.PendingContextInstances |> List.filter (fun p -> not (repeated |> List.exists (fun r -> obj.ReferenceEquals(r, p)))) }
 
 /// `resolveInstancesAt` for `call`, a call to `name` that inference has just typed.
 let internal resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =

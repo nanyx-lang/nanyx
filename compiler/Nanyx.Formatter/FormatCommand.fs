@@ -105,6 +105,18 @@ let findFiles (currentDirectory: string) (paths: string list) : Result<string li
 
 let private utf8Bom = [| 0xEFuy; 0xBBuy; 0xBFuy |]
 
+/// The text of a file's bytes, read as UTF-8, and whether they start with a byte order mark.
+let private decode (bytes: byte array) =
+    let hasBom = bytes.Length >= 3 && bytes[0..2] = utf8Bom
+    Encoding.UTF8.GetString(bytes, (if hasBom then 3 else 0), bytes.Length - (if hasBom then 3 else 0)), hasBom
+
+/// Formats `text`, the source of the file at `file`, with the options `settings` gives for it (see `Settings.cached`)
+/// and its `::formatter` directives give (see `Settings.withDirectives`).
+let private formatWith (settings: string -> Result<Formatter.Options, string>) (file: string) (text: string) : Formatting =
+    match settings file |> Result.bind (Settings.withDirectives file text) with
+    | Result.Error message -> BadSettings message
+    | Result.Ok options -> formatText options file text
+
 /// Formats each file with the options `settings` gives for it (see `Settings.cached`) and its `::formatter` directives
 /// give (see `Settings.withDirectives`), rewriting the ones that change
 /// in write mode (keeping a byte order mark if there was one), and leaving alone any whose settings are not valid, that
@@ -112,20 +124,43 @@ let private utf8Bom = [| 0xEFuy; 0xBBuy; 0xBFuy |]
 let run (settings: string -> Result<Formatter.Options, string>) (mode: Mode) (files: string list) : (string * FileResult) list =
     files
     |> List.map (fun file ->
-        let bytes = File.ReadAllBytes file
-        let hasBom = bytes.Length >= 3 && bytes[0..2] = utf8Bom
-        let text = Encoding.UTF8.GetString(bytes, (if hasBom then 3 else 0), bytes.Length - (if hasBom then 3 else 0))
-        match settings file |> Result.bind (Settings.withDirectives file text) with
-        | Result.Error message -> file, Failed(BadSettings message)
-        | Result.Ok options ->
-            match formatText options file text with
-            | Formatted formatted when formatted = text -> file, Unchanged
-            | Formatted formatted ->
-                if mode = Write then File.WriteAllText(file, formatted, UTF8Encoding(hasBom))
-                file, Changed
-            | failure -> file, Failed failure)
+        let text, hasBom = decode (File.ReadAllBytes file)
+        match formatWith settings file text with
+        | Formatted formatted when formatted = text -> file, Unchanged
+        | Formatted formatted ->
+            if mode = Write then File.WriteAllText(file, formatted, UTF8Encoding(hasBom))
+            file, Changed
+        | failure -> file, Failed failure)
 
-/// 2 if any file could not be formatted, 1 in check mode if any file is not formatted, and 0 otherwise.
+/// What messages call standard input, as if it were a file of that name in the current directory.
+let inputName = "<stdin>"
+
+/// `nanyx format -`, for an editor to format a buffer without writing it to a file: formats the text read from `input`
+/// (standard input) as a file named `inputName` in `directory` (the current one), with the settings of a file there, and
+/// its own `::formatter` directives. In write mode it writes the result to `output` (standard output): the text as it
+/// was if it is formatted already, with the byte order mark it had, and nothing if it could not be formatted. Check
+/// mode writes nothing.
+let runInput (settings: string -> Result<Formatter.Options, string>) (mode: Mode) (directory: string) (input: Stream) (output: Stream) : string * FileResult =
+    let file = Path.Combine(directory, inputName)
+    use read = new MemoryStream()
+    input.CopyTo read
+    let text, hasBom = decode (read.ToArray())
+    let write (text: string) =
+        if mode = Write then
+            let encoding = UTF8Encoding(hasBom)
+            let bytes = Array.append (encoding.GetPreamble()) (encoding.GetBytes text)
+            output.Write(bytes, 0, bytes.Length)
+            output.Flush()
+    match formatWith settings file text with
+    | Formatted formatted when formatted = text ->
+        write text
+        file, Unchanged
+    | Formatted formatted ->
+        write formatted
+        file, Changed
+    | failure -> file, Failed failure
+
+/// 2 if any file (or standard input) could not be formatted, 1 in check mode if any is not formatted, and 0 otherwise.
 let exitCode (mode: Mode) (results: (string * FileResult) list) =
     if results |> List.exists (fun (_, result) -> match result with Failed _ -> true | _ -> false) then 2
     elif mode = Check && results |> List.exists (fun (_, result) -> result = Changed) then 1

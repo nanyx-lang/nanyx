@@ -14,7 +14,9 @@ namespace Nanyx.LanguageServer;
 /// in inlay hints after other unannotated names, goes to definitions, finds references, outlines documents,
 /// completes the names in scope, offers diagnostics' fixes as quick fixes, formats documents, and marks the names of
 /// nominal types as semantic tokens. It also answers
-/// <c>nanyx/infoView</c>, a request of its own for the extension's info view (see <see cref="InfoViewHandler"/>). Each editor
+/// <c>nanyx/infoView</c>, a request of its own for the extension's info view (see <see cref="InfoViewHandler"/>), and
+/// <c>nanyx/libraryModules</c> and <c>nanyx/libraryModule</c>, which list the standard library's modules and what each
+/// exports (see <see cref="LibraryModulesHandler"/>), and <c>nanyx/addImport</c>, which imports one. Each editor
 /// feature is one handler class in <c>Handlers/</c>, registered in <see cref="Configure"/>, reading the document's
 /// last compile from <see cref="DocumentStore"/>. To add a feature, add a handler that derives from the matching
 /// OmniSharp base class and register it: <c>textDocument/rename</c>, for one, would be a <c>RenameHandlerBase</c>.
@@ -64,6 +66,7 @@ public static class NanyxLanguageServer
                 logging.AddFilter("Nanyx.LanguageServer", LogLevel.Information);
             })
             .WithHandler<TextDocumentSyncHandler>()
+            .WithHandler<WatchedFilesHandler>()
             .WithHandler<HoverHandler>()
             .WithHandler<DefinitionHandler>()
             .WithHandler<ReferencesHandler>()
@@ -74,5 +77,8 @@ public static class NanyxLanguageServer
             .WithHandler<CompletionHandler>()
             .WithHandler<FormattingHandler>()
             .WithHandler<SemanticTokensHandler>()
-            .WithHandler<InfoViewHandler>();
+            .WithHandler<InfoViewHandler>()
+            .WithHandler<LibraryModulesHandler>()
+            .WithHandler<LibraryModuleHandler>()
+            .WithHandler<AddImportHandler>();
 }

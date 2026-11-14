@@ -10,8 +10,9 @@ type LiftedFunction =
     /// A lambda, or a `rec` local function, lifted out of a definition: the lambda as written (which the type checker
     /// typed), the names it captures, in the order its environment holds them, and the definition it was lifted out of.
     /// It captures that definition's context members under the names of the parameters they come in, but those of the
-    /// contexts its own type requires, which each call passes it.
-    | LiftedLambda of Expression * string list * owner: string
+    /// contexts its own type requires, which each call passes it. Those of a local function written with its type are
+    /// the contexts the type writes, as written (see `LambdaLifting.LiftedOrigin`).
+    | LiftedLambda of Expression * string list * owner: string * written: TypeExpr list
     /// What lets the top-level function of this name be passed as a value: it takes an environment and ignores it.
     | FunctionWrapper of string
 
@@ -41,6 +42,10 @@ type ContextArgument =
     /// None where the function is named: a member of a context its value requires where it is called, which each call
     /// passes (see `IrFunction`).
     | PassedByCaller
+    /// Nowhere: the type checker found no instance of the member's context, and nothing in scope supplies the member of
+    /// this key. That is only right for a member at a type nothing constrains, which is never called (see
+    /// `CoreIrLowerInstances.standInType`).
+    | Unfound of ContextMemberKey
 
 /// What the lowering reads from the typed module.
 type LowerInput =
@@ -59,8 +64,16 @@ type LowerInput =
       /// Where a call to the definition of this name, at this node, finds each context member it requires, given the
       /// keys of the members in scope there and of those its callers pass instead (`PassedByCaller`); or why it cannot.
       ContextArguments: string -> NodeId -> Set<ContextMemberKey> -> Set<ContextMemberKey> -> Result<ContextArgument list, string>
-      /// The members of each context without parameters (see `CoreIrLowerTypes.ContextLayouts`).
-      ContextLayouts: Map<string, (ContextMemberKey * Ty) list>
+      /// Where a call through a function value, at this node, finds the member of this name of the context at this place
+      /// among those the value's type writes (see `LocalCallees`), given the keys of the members in scope there:
+      /// the key of a member in scope, or else where else it is, where the type checker found the context at the call.
+      FoundMember: NodeId -> int -> string -> Set<ContextMemberKey> -> Choice<ContextMemberKey, ContextArgument> option
+      /// Each name that refers to a local function written with a type that requires parameterised contexts, by its
+      /// node: the contexts the type writes, in order, and the type of the function's lambda, both in the lambda's own
+      /// type variables. The lambda's type in `ExprTypes` requires the parameterised ones.
+      LocalCallees: Map<NodeId, Ty list * Ty>
+      /// The members of each context (see `ContextLayouts`).
+      ContextLayouts: ContextLayouts
       /// The wrapper of the ambient instance's member of each key (the runtime's `Console`), which stands in for it where
       /// nothing in scope supplies it.
       AmbientMembers: Map<ContextMemberKey, string>

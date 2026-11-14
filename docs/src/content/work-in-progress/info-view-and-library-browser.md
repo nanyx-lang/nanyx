@@ -225,9 +225,9 @@ A tree view in VS Code's sidebar (*Nanyx library*):
 Go-to-definition on a standard-library type already works. The browser adds a way in for when there is no use of
 the name to click on yet.
 
-The server provides two requests: `nanyx/libraryModules` (each module's name and doc) and `nanyx/libraryModule`
-(one module's exports, each with kind, name, type, doc and location). The library is checked once per server
-process, so these are cheap. The packages a workspace depends on could be listed the same way later.
+The server provides two requests: `nanyx/libraryModules` (each module's import path and doc) and `nanyx/libraryModule`
+(one module's exports, each with kind, name, signature, doc, import and location). The library is checked once per
+server process, so these are cheap. The packages a workspace depends on could be listed the same way later.
 
 ## Search by type
 
@@ -278,10 +278,12 @@ In order. Each item is one PR:
 1. **Doc comments** ([#711](https://github.com/nanyx-lang/nanyx/issues/711)). Done, as
    [#719](https://github.com/nanyx-lang/nanyx/issues/719) designed them: hover and completion show them. Recording
    them by symbol is still open (see [Doc comments](#2-doc-comments)).
-2. **Library requests** ([#712](https://github.com/nanyx-lang/nanyx/issues/712)). `nanyx/libraryModules` and
-   `nanyx/libraryModule`, from the export index, with types and docs.
-3. **Library browser** ([#713](https://github.com/nanyx-lang/nanyx/issues/713)). The tree view in the extension,
-   opening definitions and inserting imports.
+2. **Library requests** ([#712](https://github.com/nanyx-lang/nanyx/issues/712)). Done: `nanyx/libraryModules` and
+   `nanyx/libraryModule`, with signatures and docs (see
+   [Language server](./language-server#where-it-is-today)).
+3. **Library browser** ([#713](https://github.com/nanyx-lang/nanyx/issues/713)). Done: the *Library* tree view in
+   the extension (`extension/src/library.ts`), opening definitions and inserting imports through `nanyx/addImport`,
+   which places the import as the quick fix does (`ImportFixes.insertion`).
 4. **Search by type** ([#714](https://github.com/nanyx-lang/nanyx/issues/714)). The matcher and ranking in the
    compiler (as a module beside `Completion`), `nanyx search`, then the search box and the quick pick.
 5. **Info view, first cut** ([#715](https://github.com/nanyx-lang/nanyx/issues/715)). Done: `nanyx/infoView` with

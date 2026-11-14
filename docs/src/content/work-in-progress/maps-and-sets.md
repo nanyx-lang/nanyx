@@ -57,8 +57,6 @@ Known gaps:
 - An unannotated chain of inserts whose keys are tags of different names is a type error: the keys are not joined.
   A literal, `[#red => 1, #green => 2]`, is a `map(#red | #green, int)`, as a list literal's items are joined, and
   writing the key type, `map(#red | #green, int)` or a function typed with it, works.
-- `examples/vendingMachine.nyx` type-checks its maps but does not compile for other reasons
-  ([#619](https://github.com/nanyx-lang/nanyx/issues/619)).
 - A signature joins its contexts with `+`, while the docs write `&`
   ([#645](https://github.com/nanyx-lang/nanyx/issues/645)).
 

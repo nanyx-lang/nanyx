@@ -62,11 +62,19 @@ let internal fillTypeRefs () =
         many (attempt (typeExpr .>> ws .>> pstring "," .>> ws))
         |>> List.mapi (fun index typeValue -> TypeField(string index, false, Some typeValue, None))
 
+    // `@customKeywordType(#bind)` before a field, on its line or the one above (see `TypeFieldAttribute`).
+    let fieldAttribute =
+        withSpan (pchar '@' >>. identifierNoWs .>>. opt attributeArgument) .>> ws
+        |>> fun ((name, argument), span) -> TypeFieldAttribute(name, argument, span)
+
+    let namedTypeField =
+        pipe2 (many (attempt fieldAttribute)) (attempt typeMemberField <|> typeField) (fun attributes field -> attributes @ [ field ])
+
     let namedTypeFields =
         pipe2
-            (attempt typeMemberField <|> typeField)
-            (many (attempt (recordFieldSeparator >>. (attempt typeMemberField <|> typeField))))
-            (fun first rest -> first :: rest)
+            namedTypeField
+            (many (attempt (recordFieldSeparator >>. namedTypeField)))
+            (fun first rest -> List.concat (first :: rest))
 
     // The names noted while a record type is parsed are its named fields: a record nested in it takes its own.
     let declaringFields (record: Parser<TypeExpr, ParseState>) =

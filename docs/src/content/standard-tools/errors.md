@@ -107,7 +107,8 @@ To fix it, correct the attribute's name, or remove it.
 
 # NYX0008: Misplaced attribute
 
-An attribute is not followed by a definition, the only thing it can be written on.
+An attribute is written where it can't be. An attribute line must be followed by a definition, and an attribute in a
+type can only come before a member of a context declaration.
 
 ```nanyx
 def double: int -> int = { x -> x * 2 }
@@ -115,7 +116,7 @@ def double: int -> int = { x -> x * 2 }
 @entry  -- error NYX0008: Attribute '@entry' must be followed by a definition
 ```
 
-To fix it, write the attribute on the line before the definition it marks.
+To fix it, write the attribute on the line before the definition or context member it marks.
 
 # NYX0009: Invalid directive
 
@@ -287,6 +288,20 @@ sources = ["*.nyx"]
 
 To fix it, rename one of the modules, or start each file with `@partial module shapes` to make them parts of one
 module ([Modules](../tour/modules)).
+
+# NYX0019: Unknown keyword kind
+
+A workflow keyword's `@customKeywordType` names a kind the compiler does not know, or names none. The kinds are listed
+in [Workflows](../advanced/workflows#keyword-kinds).
+
+```nanyx
+context Lazy = (
+  @customKeywordType(#later)  -- error NYX0019: Unknown keyword kind '#later': the kinds are `#bind`
+  force: [c] (int, ([c] int -> int)) -> int
+)
+```
+
+To fix it, write a kind from the list, as `@customKeywordType(#bind)`.
 
 # NYX0101: Unknown identifier
 

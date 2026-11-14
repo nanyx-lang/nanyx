@@ -12,7 +12,7 @@ interface LspPosition {
   character: number;
 }
 
-interface LspLocation {
+export interface LspLocation {
   uri: string;
   range: { start: LspPosition; end: LspPosition };
 }
@@ -192,7 +192,7 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
       this.pinned = this.pinned ? undefined : this.cursor();
       this.schedule();
     } else if (message.type === "open" && message.location) {
-      void open(message.location);
+      void openLocation(message.location);
     } else if (message.type === "openLink" && message.href) {
       void openLink(message.href);
     }
@@ -259,7 +259,7 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
 }
 
 /** Opens a location an item links to, in the editor that already shows its document, or else the first one. */
-async function open(location: LspLocation): Promise<void> {
+export async function openLocation(location: LspLocation): Promise<void> {
   const { start, end } = location.range;
   const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(location.uri));
   const visible = vscode.window.visibleTextEditors.find((editor) => editor.document === document);
@@ -280,7 +280,7 @@ async function openLink(href: string): Promise<void> {
     const line = Number(place[1]) - 1;
     const character = Number(place[2]) - 1;
     const range = { start: { line, character }, end: { line, character } };
-    await open({ uri: uri.with({ fragment: "" }).toString(), range });
+    await openLocation({ uri: uri.with({ fragment: "" }).toString(), range });
   } else {
     await vscode.commands.executeCommand("vscode.open", uri);
   }

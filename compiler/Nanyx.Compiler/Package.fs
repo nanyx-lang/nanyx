@@ -351,9 +351,9 @@ module Package =
 
     /// Compiles `source` as the source file at `filePath` of the package `modules`: its imports name the package's
     /// modules, and it must be a named module of its own (see `PackageModules.fileErrors`). Each module's check is
-    /// reported to `listener`.
-    let private compileIn (listener: CompileListener) (modules: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
-        Compiler.compileSourceInReporting listener modules options filePath source |> withFileErrors modules filePath source
+    /// reported to `listener`, and the package's other files it needs are read by `readFile`.
+    let private compileIn (listener: CompileListener) (readFile: string -> string) (modules: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        Compiler.compileSourceInReporting listener readFile modules options filePath source |> withFileErrors modules filePath source
 
     /// Each of `files`, a source file of the package `modules` with its text, compiled as `compileIn` compiles one, but
     /// with each module checked once (#698). A module that checked, for one file or as an import of one, is not checked
@@ -384,13 +384,18 @@ module Package =
                 | Result.Error _ -> ()
             file, Compiler.compileChecked checkedModules options origin source checkedModule |> withFileErrors modules file source)
 
-    /// Compiles `source` as the file at `filePath` (which need not hold it yet: an editor's unsaved buffer, say) with
+    /// Compiles `source` as the file at `filePath` (which need not hold it yet: an editor's unsaved buffer, say), with
     /// the linters `options` gives: as a source file of the package it is in, if it is in one, or else on its own.
-    /// Each module's check is reported to `listener`.
-    let compileSourceReporting (listener: CompileListener) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+    /// Each module's check is reported to `listener`, and each other source file it needs is read by `readFile`, given
+    /// the file's full path: an editor passes one that reads the text of a file it has open from its buffer.
+    let compileSourceReading (listener: CompileListener) (readFile: string -> string) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
         match modulesFor filePath with
-        | Some modules -> compileIn listener modules options filePath source
-        | None -> Compiler.compileFromReporting listener options (SourceFile (Path.GetFullPath filePath)) source
+        | Some modules -> compileIn listener readFile modules options filePath source
+        | None -> Compiler.compileFromReporting listener readFile options (SourceFile (Path.GetFullPath filePath)) source
+
+    /// `compileSourceReading`, with the other source files read from disk.
+    let compileSourceReporting (listener: CompileListener) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        compileSourceReading listener File.ReadAllText options filePath source
 
     /// `compileSourceReporting`, telling nobody.
     let compileSourceWith (options: LinterOptions) (filePath: string) (source: string) : CompileResult =

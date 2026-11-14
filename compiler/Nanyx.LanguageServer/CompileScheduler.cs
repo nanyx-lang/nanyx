@@ -8,7 +8,9 @@ namespace Nanyx.LanguageServer;
 /// the latest text of each document is. A compile cannot be stopped once it has started, so a change that arrives
 /// during one waits for it: that compile's result, which is already out of date, is neither recorded nor published,
 /// and the latest text is compiled next. Until then, requests read the last text that was typed (see
-/// <see cref="OpenDocument.LastGood"/>).
+/// <see cref="OpenDocument.LastGood"/>). A change to a file, whether in the editor, saved, closed or on disk, compiles
+/// again, in the same way, each open document whose last compile read it (see <see cref="OpenDocument.Sources"/>), so
+/// that a document's diagnostics follow the files it imports.
 /// </summary>
 public sealed class CompileScheduler : IDisposable
 {
@@ -43,25 +45,58 @@ public sealed class CompileScheduler : IDisposable
 
     /// <summary>
     /// Records a document's new text, and compiles it, and publishes its diagnostics, once the document has gone
-    /// unchanged for the delay.
+    /// unchanged for the delay; and the same for the documents that import it.
     /// </summary>
     public void Changed(DocumentUri uri, string text, int? version)
     {
         lock (_lock)
         {
-            if (!_pending.TryGetValue(uri, out var pending))
-            {
-                pending = new Pending(new Timer(_ => Elapsed(uri)));
-                _pending[uri] = pending;
-            }
-
-            pending.Text = text;
-            pending.Version = version;
-            pending.Generation++;
-            pending.Due = false;
-            pending.Timer.Change(_delay, Timeout.InfiniteTimeSpan);
+            Schedule(uri, text, version);
             _documents.Edit(uri, text);
+            FileChanged(DocumentStore.FileNameOf(uri));
         }
+    }
+
+    /// <summary>
+    /// Compiles again, once the delay has passed, each open document whose last compile read the file at the full path
+    /// <paramref name="file"/>, and publishes its diagnostics: the file has changed, or its text to be read has (it was
+    /// saved, or closed in the editor).
+    /// </summary>
+    public void FileChanged(string file)
+    {
+        if (file.Length == 0)
+        {
+            return;
+        }
+
+        lock (_lock)
+        {
+            foreach (var importer in _documents.Importers(file))
+            {
+                // A document waiting to be compiled already has its latest text here; any other, in the store.
+                var pending = _pending.GetValueOrDefault(importer);
+                if ((pending?.Text ?? _documents.TryGet(importer)?.Text) is { } text)
+                {
+                    Schedule(importer, text, pending?.Version);
+                }
+            }
+        }
+    }
+
+    /// <summary>Records a text of a document to compile once the document has gone unchanged for the delay.</summary>
+    private void Schedule(DocumentUri uri, string text, int? version)
+    {
+        if (!_pending.TryGetValue(uri, out var pending))
+        {
+            pending = new Pending(new Timer(_ => Elapsed(uri)));
+            _pending[uri] = pending;
+        }
+
+        pending.Text = text;
+        pending.Version = version;
+        pending.Generation++;
+        pending.Due = false;
+        pending.Timer.Change(_delay, Timeout.InfiniteTimeSpan);
     }
 
     /// <summary>
