@@ -388,10 +388,13 @@ allocation `reusing` a token.
   reference to each name and dropping it. The release checks the count: when it is one, the names keep the fields'
   references, the fields no name the arm uses are dropped, and the block is freed; otherwise the names take
   references of their own and the count goes down.
-- **Reuse.** When the arm then always allocates a block of the same size (not in a branch, a loop or a guard), the
-  release keeps the block in a token instead of freeing it, or sets the token to 0 when the object was shared, and
-  the allocation writes into the block when the token holds one (`__nanyx_list_cons_at`, `__nanyx_tag_box_at`,
-  `__nanyx_reuse_object`). Mapping over a list held once rewrites its cells in place.
+- **Reuse.** When the arm then allocates a block of the same size (not in a loop or a guard), the release keeps the
+  block in a token instead of freeing it, or sets the token to 0 when the object was shared, and the allocation
+  writes into the block when the token holds one (`__nanyx_list_cons_at`, `__nanyx_tag_box_at`,
+  `__nanyx_reuse_object`). Mapping over a list held once rewrites its cells in place. When the first such allocation
+  is in some branches of an `if` or `match` and not others, each branch that has one writes into the block, and each
+  that has none frees it first (`FreeToken`), so the block is used or freed once on every path, as in Perceus.
+  Filtering a list held once keeps the cells of the elements it keeps.
 - **`with` updates in place.** `updateRecord` takes its record over, counted after the new values, which may read
   its fields. Its code computes the new values into locals, then releases the record: when the count was one, it
   drops the old value of each field on the heap it replaces and stores the new ones into the same block; otherwise
