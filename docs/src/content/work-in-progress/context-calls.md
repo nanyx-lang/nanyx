@@ -53,7 +53,7 @@ A top-level function that requires contexts can be passed as a value where they 
 passed as a closure over its wrapper
 that takes those members after its other parameters and captures the members of its parameterised contexts, found
 where it is named; the wrapper calls the function with its arguments and them all
-(`Lowering.WrapperCalling` in `CoreIrLower.fs`). The captured members are found as a call finds them: the type checker records
+(`Lowering.WrapperCalling`, lowered in `CoreIrLowerLifted.fs`). The captured members are found as a call finds them: the type checker records
 where a function named as an argument of a call, by its name or qualified (`math.max`), finds each parameterised
 context, once that call has settled its type (`resolveReferenceInstances` in `ContextInstances.fs`), so `println` at
 `int` is passed `ToString(int)`, `math.max` passed to `fold` over a `list(int)` is passed `Ord(int)`, and at a type
