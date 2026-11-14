@@ -117,17 +117,9 @@ let usedOf (ids: Set<int>) (body: Expr) : Set<int> =
         match atom with
         | AVar v -> var v
         | _ -> ()
-    let rec visit (e: Expr) =
-        let links, last = Chain.split e
-        for link in links do
-            match link.Kind with
-            | Let(_, value, _)
-            | Do(value, _) -> visit value
-            | Dup(vars, _)
-            | Drop(vars, _) -> List.iter var vars
-            | Release(released, _) -> var released.Object
-            | _ -> ()
-        match last.Kind with
+    // The variables an expression names itself; the expressions inside it are walked from `Expr.children`.
+    let own (e: Expr) =
+        match e.Kind with
         | Atom a
         | MakeTag(_, a)
         | Field(a, _)
@@ -143,23 +135,25 @@ let usedOf (ids: Set<int>) (body: Expr) : Set<int> =
         | SetField(target, _, value) -> var target; atom value
         | CallClosure(closure, args) -> var closure; List.iter atom args
         | Interpolate parts -> parts |> List.iter (function Hole(hole, _) -> var hole | Text _ -> ())
-        | ForEach loop -> ForLoop.sourceAtoms loop |> List.iter atom; visit loop.Body
-        | While loop -> visit loop.Condition; visit loop.Body
-        | If(cond, ifTrue, ifFalse) -> atom cond; visit ifTrue; visit ifFalse
-        | Match(scrutinees, arms) ->
-            List.iter var scrutinees
-            for arm in arms do
-                for _, guard in arm.Patterns |> List.collect Pattern.guards do
-                    visit guard
-                visit arm.Body
-        | DropAfter(inner, vars) -> List.iter var vars; visit inner
-        | Reuse(token, inner) -> var token; visit inner
-        | BoxFloat _
-        | Panic _
+        | ForEach loop -> ForLoop.sourceAtoms loop |> List.iter atom
+        | If(cond, _, _) -> atom cond
+        | Match(scrutinees, _) -> List.iter var scrutinees
+        | Dup(vars, _)
+        | Drop(vars, _)
+        | DropAfter(_, vars) -> List.iter var vars
+        | Release(released, _) -> var released.Object
+        | Reuse(token, _) -> var token
         | Let _
         | Do _
-        | Dup _
-        | Drop _
-        | Release _ -> ()
-    if not ids.IsEmpty then visit body
+        | While _
+        | BoxFloat _
+        | Panic _ -> ()
+    if not ids.IsEmpty then
+        // In no particular order, from a stack, so that a chain as long as a function takes no stack to walk.
+        let pending = System.Collections.Generic.Stack<Expr>([ body ])
+        while pending.Count > 0 do
+            let e = pending.Pop()
+            own e
+            for child in Expr.children e do
+                pending.Push child
     Set.ofSeq used
