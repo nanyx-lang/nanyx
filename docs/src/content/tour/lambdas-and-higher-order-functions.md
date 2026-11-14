@@ -148,6 +148,7 @@ def f: [Console] list(int) -> list(int) = { numbers ->
 }
 ```
 
+A function that returns a function can leave a context variable to the function it returns, which binds it where it is called. Composition works this way:  >> g is a call to a function of type ([c] a -> b), ([c] b -> d) -> [c] a -> d, so making the composition requires nothing, and calling it requires whatever  and g require, there. Only the returned function may call  and g; the function that makes it would need [c] in its own contexts to call them itself.
 A higher-order function that doesn't write its type gets a context variable for each function it calls or passes on, so `def apply = { f, x -> f(x) }` is `[c] ([c] a -> b), a -> b`. One that writes its type without one only takes pure functions:
 
 ```nanyx

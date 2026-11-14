@@ -89,3 +89,40 @@ let ``An unannotated def infers the contexts a context variable is bound to`` ()
 def run = { (g: [Console] int -> int) -> apply(g, 1) }
 """
     Assert.Equal(Some "def run: [Console] ([Console] int -> int) -> int", hoverType source "run =")
+
+[<Fact>]
+let ``A context variable the function a def returns requires is bound by that function`` () =
+    // Whoever calls the returned function binds `c`, so the lambda that makes it may call `f` and `g`.
+    compileClean
+        """
+def compose: ([c] a -> b), ([c] b -> d) -> [c] a -> d = { f, g -> { x -> g(f(x)) } }
+"""
+    |> ignore
+
+[<Fact>]
+let ``A def that calls a function for a variable only the function it returns requires must still declare it`` () =
+    let code, text =
+        singleError
+            """
+def runNow: ([c] int -> int) -> [c] int -> int = { f ->
+  def n = f(1)
+  { x -> x + n }
+}
+"""
+    Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, code)
+    Assert.Equal("f", text)
+
+[<Fact>]
+let ``A value that is not a lambda cannot write only contexts`` () =
+    let code, message, text =
+        onlyDiagnostic
+            """
+import nanyx/console
+
+def shout: [Console] string -> () = { s -> println(s ++ "!") }
+
+def greet: [Console] = { name -> "hello " ++ name } >> shout
+"""
+    Assert.Equal(DiagnosticCodes.ContextsWithoutType.Code, code)
+    Assert.Equal("'greet' is not a lambda, so it does not run in the contexts its annotation writes: write them on its function type, as in '[Console] string -> ()'", message)
+    Assert.Equal("[Console]", text)

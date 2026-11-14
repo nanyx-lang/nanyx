@@ -50,8 +50,17 @@ let internal read
         match fst (extractContextFromTypeExpr typeOpt) with
         | Some contexts -> ensureContextsExist state name span contexts
         | None -> Ok ()
+    // Only a lambda runs in the contexts an annotation writes on their own (`def main: [Console] = { ... }`): a value
+    // that is a function written point-free requires them, so they go on its function type.
+    let onlyContextsOnValue =
+        match typeOpt, expr.Kind with
+        | Some ({ Kind = TypeContext _ } as annotation), kind when (match kind with Lambda _ -> false | _ -> true) ->
+            Error [ Diagnostics.at DiagnosticCodes.ContextsWithoutType annotation.Span
+                        $"'{name}' is not a lambda, so it does not run in the contexts its annotation writes: write them on its function type, as in '[Console] string -> ()'" ]
+        | _ -> Ok ()
     let contextsExist =
-        contextsExist
+        onlyContextsOnValue
+        |> Result.bind (fun () -> contextsExist)
         |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt)
         |> Result.bind (fun () -> ensureContextTypesDetermined name typeOpt)
         |> Result.bind (fun () -> MemoryCells.checkCellTypes state name typeOpt)

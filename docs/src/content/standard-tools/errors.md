@@ -821,7 +821,8 @@ To fix it, assign a value of the cell's type.
 # NYX0226: Unbound context variable
 
 A context variable, which stands for any contexts, as `c` does in `[c] int -> int`, is used in a definition's type
-but is not among the contexts of the definition itself.
+but is not among the contexts of the definition itself, or of the function it returns (as `c` is in
+`([c] a -> b), ([c] b -> d) -> [c] a -> d`, where whoever calls that function binds it).
 
 ```nanyx
 def g: [d] ([c] int -> int) -> int = { f -> 1 }  -- error NYX0226: The context variable 'c' is not bound: add it to the contexts of 'g', as in '[c] ...'
@@ -997,6 +998,21 @@ greet("Ada")
 To fix it, pass the value to the function as an argument, `greet("Ada", line)`, or move the def above the statements
 that read it.
 
+# NYX0240: Contexts written without a type on a value
+
+An annotation that writes only contexts, `def main: [Console] = { ... }`, says the lambda runs in them. A value that is
+not a lambda doesn't run: a function written point-free, such as a composition, requires its contexts where it is
+called, so they belong on its function type.
+
+```nanyx
+import nanyx/console
+
+def shout: [Console] string -> () = { s -> println(s ++ "!") }
+
+def greet: [Console] = { name -> "hello " ++ name } >> shout  -- error NYX0240: 'greet' is not a lambda, so it does not run in the contexts its annotation writes: write them on its function type, as in '[Console] string -> ()'
+```
+
+To fix it, write the function type with its contexts, `def greet: [Console] string -> () = ...`.
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it
