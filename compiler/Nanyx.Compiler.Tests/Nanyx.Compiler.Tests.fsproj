@@ -43,6 +43,7 @@
     <Compile Include="Features\Contexts\ShadowedDefContextTests.fs" />
     <Compile Include="Features\Contexts\UnderscoreContextNameTests.fs" />
     <Compile Include="Features\Contexts\ContextTypeParameterTests.fs" />
+    <Compile Include="Features\Contexts\GenericContextMemberTests.fs" />
     <Compile Include="Features\Contexts\UndeclaredContextTests.fs" />
     <Compile Include="Features\Contexts\ModuleValueContextTests.fs" />
     <Compile Include="Features\Contexts\ContextProviderTests.fs" />

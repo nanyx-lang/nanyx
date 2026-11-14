@@ -35,7 +35,8 @@ let internal readInlineContexts (state: InferState) (typeOpt: TypeExpr option) :
 /// `env` with the members of the instance a `use` of a value of type `ty` loads, each bound by its name. When the
 /// type names a plain context, as `Foo(bar = ...)`'s does, each member has the symbol the context's definition
 /// declared, as in a def that declares the context, so a lambda that calls it requires the context (see
-/// `LambdaContexts.contextOfMember`). Each member is provided by `provider`, the `use`.
+/// `LambdaContexts.contextOfMember`). Such a member's type variables are its own, so each call instantiates them
+/// afresh, as in a def that declares the context. Each member is provided by `provider`, the `use`.
 let internal extendEnvWithRecordFields (provider: ContextProvider) (state: InferState) (env: TypeEnv) (ty: Ty) =
     let context =
         let plain (info: TypeDefInfo) = info.IsContext && info.Parameters.IsEmpty
@@ -49,7 +50,8 @@ let internal extendEnvWithRecordFields (provider: ContextProvider) (state: Infer
         fields
         |> Map.fold (fun acc name fieldTy ->
             let symbol = context |> Option.bind (fun info -> info.Members |> Map.tryFind name)
-            TypeEnv.extend name { TypeEnv.mono fieldTy with Symbol = symbol; ProvidedBy = Some provider } acc) env
+            let quantified = if context.IsSome then TypeEnv.freeTyVars fieldTy else Set.empty
+            TypeEnv.extend name { TypeEnv.mono fieldTy with Quantified = quantified; Symbol = symbol; ProvidedBy = Some provider } acc) env
     match Unifier.unalias ty with
     | TyRecord fields -> addFields fields
     | TyNominal(_, underlying, _) ->
@@ -142,14 +144,34 @@ let internal memberType (state: InferState) (ctxExpr: TypeExpr) (memberName: Ide
         | _ -> None
     | _ -> None
 
-/// `env` with the members of each of `contexts`, each provided by what `provider` says provides it.
+/// The type variables of the members of `ctx` that its instance fixes: those of the types a parameterised context is
+/// applied to (`a` in `Eq(a)`). None when every one of them is fixed, as for a parameterised context written without
+/// its arguments.
+let private instanceFixedVars (state: InferState) (ctx: TypeExpr) : Set<int> option =
+    match ctx.Kind with
+    | TypeApply(_, args) -> args |> List.mapFold typeExprToTy state |> fst |> List.map TypeEnv.freeTyVars |> Set.unionMany |> Some
+    | TypeName name ->
+        match tryFindTypeDef name state with
+        | Some info when not info.Parameters.IsEmpty -> None
+        | _ -> Some Set.empty
+    | _ -> Some Set.empty
+
+/// `env` with the members of each of `contexts`, each provided by what `provider` says provides it. A member's own type
+/// variables, those the instance does not fix, are quantified, so each call instantiates them afresh, as a call of a
+/// generic top-level function does: `bind` in `Proc` can be called at a `string` payload and then at an `int` one.
 let private extendEnvWithContextsFrom (provider: TypeExpr -> ContextProvider) (env: TypeEnv) (state: InferState) (contexts: TypeExpr list) =
     let mutable current = state
     let mutable env' = env
     for ctx in contexts do
         let members, next = collectContextMembers current ctx
         current <- next
-        let memberScheme ty = { TypeEnv.mono ty with ProvidedBy = Some (provider ctx) }
+        let fixedVars = instanceFixedVars current ctx
+        let memberScheme ty =
+            let quantified =
+                match fixedVars with
+                | Some fixedVars -> Set.difference (TypeEnv.freeTyVars ty) fixedVars
+                | None -> Set.empty
+            { TypeEnv.mono ty with Quantified = quantified; ProvidedBy = Some (provider ctx) }
         // A context named through an import's alias (`c.Console`) also supplies its members under the alias
         // (`c.println`), which would otherwise still be the ambient instance's.
         let qualifier =
