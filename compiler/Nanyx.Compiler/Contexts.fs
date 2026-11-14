@@ -199,21 +199,28 @@ let internal extendEnvForLambdaArgument (env: TypeEnv) (state: InferState) (lamb
         let env, next = extendEnvWithContextsFrom (fun _ -> FromSignature lambda.Span) env state required
         env, { state with NextId = next.NextId }
 
-let rec private unknownContextNames (state: InferState) (ctxExpr: TypeExpr) : Identifier list =
+/// The contexts `ctxExpr` names that do not exist, each with where its name is written, if the parser recorded it.
+let rec private unknownContextNames (state: InferState) (ctxExpr: TypeExpr) : (Identifier * SourceSpan option) list =
     match ctxExpr.Kind with
     | TypeContext contexts -> contexts |> List.collect (unknownContextNames state)
     | TypeName name
     | TypeApply(name, _) ->
-        if state.ContextDefs.ContainsKey name || (tryFindTypeDef name state).IsSome then [] else [ name ]
+        if state.ContextDefs.ContainsKey name || (tryFindTypeDef name state).IsSome then []
+        elif SourceSpan.isNone ctxExpr.Span then [ name, None ]
+        else [ name, Some { ctxExpr.Span with End = ctxExpr.Span.Start + name.Length } ]
     | _ -> []
 
-/// Whether every context in the signature of `name` exists; `span` is where the definition's name is written.
+/// Whether every context in the signature of `name` exists. The error for one that does not is written at the
+/// context's name, or at `span`, where the definition's name is written, when the context's is not known. It says
+/// which import brings the context in when a standard-library module exports it.
 let internal ensureContextsExist (state: InferState) (name: Identifier) (span: SourceSpan) (contexts: TypeExpr list) : Result<unit, Diagnostic list> =
-    match contexts |> List.collect (unknownContextNames state) |> List.distinct with
+    match contexts |> List.collect (unknownContextNames state) |> List.distinctBy fst with
     | [] -> Ok ()
     | unknown ->
         unknown
-        |> List.map (fun ctxName -> Diagnostics.at DiagnosticCodes.UnknownContext span $"Unknown context '{ctxName}' in the signature of '{name}'")
+        |> List.map (fun (ctxName, at) ->
+            let message = $"Unknown context '{ctxName}' in the signature of '{name}'" + StandardLibraryImports.hint state.StandardLibraryExports.Value ctxName
+            Diagnostics.at DiagnosticCodes.UnknownContext (at |> Option.defaultValue span) message)
         |> Error
 
 /// Whether each type variable a context in `typeOpt`, the annotation of `name`, is applied to is written in its type

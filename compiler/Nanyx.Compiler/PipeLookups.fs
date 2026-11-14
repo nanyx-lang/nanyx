@@ -60,9 +60,9 @@ let private notAttached (env: TypeEnv) (state: InferState) (isTypeName: string -
     let inStandardLibrary () =
         attachedNames
         |> List.tryPick (fun attachedName ->
-            match state.StandardLibraryExports.Value |> Map.tryFind attachedName with
-            | Some (path :: _) -> Some $". '{attachedName}' is defined in '{path}': add `import {path}`"
-            | _ -> None)
+            match StandardLibraryImports.hint state.StandardLibraryExports.Value attachedName with
+            | "" -> None
+            | hint -> Some hint)
     let elsewhere () =
         match attachedAnywhere env isTypeName name |> List.map (fun candidate -> $"'{candidate}'") with
         | [] -> None

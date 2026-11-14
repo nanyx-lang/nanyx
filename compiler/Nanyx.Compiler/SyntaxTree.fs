@@ -154,6 +154,14 @@ module SyntaxTree =
             | _ -> None)
         |> Set.ofList
 
+    /// The names of the types and contexts `module'` exports: each `export type` and `export context`.
+    let exportedTypeNames (module': Module) : Set<Identifier> =
+        module'
+        |> List.choose (function
+            | Kind (Def (TypeDef(name, modifiers, _, _))) when List.contains Export modifiers -> Some name
+            | _ -> None)
+        |> Set.ofList
+
     /// The names a module writes as values of their own rather than calls: `add` in `fold(0, add)`, not in
     /// `add(1, 2)` or `1 \add(2)`.
     let namedAsValues (items: Module) : Set<Identifier> =

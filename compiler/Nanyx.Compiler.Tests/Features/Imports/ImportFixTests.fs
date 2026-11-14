@@ -77,7 +77,7 @@ let ``An unknown identifier offers its import too`` () =
 let ``A name several modules export offers one fix for each`` () =
     let source = "import nanyx/console\n\ndef n = frobnicate(1)\n"
     let result = Compiler.compile source
-    let exports = Map.ofList [ "frobnicate", [ "alpha"; "beta" ] ]
+    let exports = Map.ofList [ "frobnicate", [ "nanyx/alpha"; "nanyx/beta" ] ]
     let diagnostic = ImportFixes.addWith exports source result.Syntax.Value result.Diagnostics |> List.exactlyOne
     Assert.Equal<(string * string) list>(
         [ "Add `import nanyx/alpha`", "import nanyx/console\nimport nanyx/alpha\n\ndef n = frobnicate(1)\n"
