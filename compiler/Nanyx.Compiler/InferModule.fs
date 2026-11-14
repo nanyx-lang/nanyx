@@ -85,6 +85,7 @@ let private withEntryContexts (required: Map<Identifier, Set<Identifier>>) (uses
             @ (state.ScriptEntryValues |> Seq.map (fun name -> required.[name]) |> List.ofSeq)
             |> Set.unionMany
             |> Set.toList
+            |> List.filter (WrittenContexts.isScoped state >> not)
             |> List.map (fun ctxName -> TyApply(ctxName, []))
             |> List.filter (fun context -> not (List.contains context own))
         if needed.IsEmpty then state
@@ -152,10 +153,10 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     let withoutTopLevel (name: string) (env: TypeEnv) =
         aliasesOf |> Map.tryFind name |> Option.defaultValue [] |> List.fold (fun acc alias -> acc |> Map.remove alias) (env |> Map.remove name)
 
-    // A value of a script is computed at the top level, unless it is in a module block, which is a named module.
+    // A value of a module without a `module` line is a script's, computed at the top level, unless it is in a module
+    // block, which is a named module.
     let isScriptValue (value: Expression) =
-        state.ScriptEntry.IsSome
-        && not (module' |> List.exists (function Kind (ModuleDecl _) -> true | _ -> false))
+        not (module' |> List.exists (function Kind (ModuleDecl _) -> true | _ -> false))
         && (blockAround state.ModuleBlocks value.Span).IsNone
 
     let mutable preboundFreshVars: Map<string, Ty> = Map.empty
@@ -245,7 +246,8 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     | Some contexts -> registerContextRequirement written name contexts declaredTypeExprOpt
                     | None -> written
                 // A function runs in the contexts its type declares, or infers them. A script's value is computed at
-                // the top level, in the ambient ones; a named module's is built where there are none.
+                // the top level, in the ambient ones, and runs in its entry point if it needs any; any other module's is
+                // built where there are none.
                 let bodyState =
                     match expr.Kind with
                     | Lambda _ -> { nextStateWithReq with ContextScope = DefScope(name, typeOpt.IsNone) } |> LambdaContexts.markBody expr
@@ -416,9 +418,15 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 | _ -> ()
         // The script's values that need a context run in its entry point, in the order written: one is not computed in
         // a function, or before its def.
-        let entryValues = state.ScriptValues |> Map.filter (fun name _ -> not required.[name].IsEmpty)
+        // A scoped context, Memory, is supplied by the block the value is built in, not by where it runs.
+        let needed name = required.[name] |> Set.filter (WrittenContexts.isScoped state >> not)
+        let entryValues = state.ScriptValues |> Map.filter (fun name _ -> not (needed name).IsEmpty)
+        // A module without statements has no entry point for them to run in.
+        if state.ScriptEntry.IsNone then
+            for KeyValue(name, symbol) in entryValues do
+                errors <- errors @ [ valueWithoutEntry name (Set.minElement (needed name)) state.Symbols.[symbol].Declaration ]
         for used in uses do
-            match entryValues |> Map.tryFind used.Callee, used.Caller with
+            match (if state.ScriptEntry.IsSome then entryValues |> Map.tryFind used.Callee else None), used.Caller with
             | Some _, (DefScope _ | ValueScope _) -> errors <- errors @ [ scriptRunValue used.Callee true used.Span ]
             | Some symbol, _ when used.Span.Start < state.Symbols.[symbol].Declaration.Start ->
                 errors <- errors @ [ scriptRunValue used.Callee false used.Span ]

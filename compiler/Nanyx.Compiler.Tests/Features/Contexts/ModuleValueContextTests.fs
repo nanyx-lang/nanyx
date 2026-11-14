@@ -21,6 +21,8 @@ module config
 import nanyx/console
 
 def greeting = println("Hi")
+
+dbg(0)
 """
     Assert.Equal<(string * string * string) list>(
         [ undeclared,
@@ -85,5 +87,7 @@ let ``A script's value runs where the runtime's Console is`` () =
 import nanyx/console
 
 def greeting = println("Hi")
+
+dbg(0)
 """
     |> ignore

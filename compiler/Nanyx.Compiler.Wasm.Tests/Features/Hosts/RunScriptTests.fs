@@ -57,3 +57,19 @@ println(small(3))
 println(small(12))
 """
     runSource source |> assertRan "true\nfalse\n"
+
+[<Fact>]
+let ``Statements beside an entry point run through the host before it`` () =
+    let source =
+        """import nanyx/console
+
+def line = readLine()
+
+println("first {line}")
+
+@entry
+def main = { println("then main") }
+"""
+    let wat = transpileWat source
+    Assert.Equal(2, countOccurrences "call $__host_run" wat)
+    runSourceWithInput "a\n" source |> assertRan "first #some(a)\nthen main\n"

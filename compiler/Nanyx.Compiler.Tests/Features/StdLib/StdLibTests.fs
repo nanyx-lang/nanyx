@@ -20,7 +20,9 @@ def greet: [Console] string -> () = { name -> println(name) }"""
 let ``println comes from nanyx/console and gives unit`` () =
     let result = Compiler.compile (normalized """import nanyx/console
 
-def result = println("hi")""")
+def result = println("hi")
+
+dbg(0)""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "unit", result.Typed.Value.Types.["result"])
 

@@ -64,6 +64,37 @@ module internal ModuleLinking =
                 | Expr value -> { item with Kind = Expr (rewrite value) }
                 | _ -> item)
 
+    /// `module'` with each context member named under an import's alias (`c.write`, of `c.Console`) written by its own
+    /// name (`write`), the key the backend passes it by: a member of a context a def declares, or of one a host provides.
+    /// Only a name inference resolved to the member is rewritten.
+    let internal writeMemberAliases (state: NyxCompiler.Infer.InferState) (module': Module) : Module =
+        let members =
+            Seq.append
+                (state.TypeDefs |> Map.values |> Seq.filter _.IsContext |> Seq.collect (fun info -> info.Members.Values))
+                (state.AmbientMembers |> Map.values |> Seq.filter (fun (_, context) -> state.HostContexts.Contains context) |> Seq.map fst)
+            |> Set.ofSeq
+        let resolved (node: Expression) (name: string) =
+            match state.References |> Map.tryFind node.Id with
+            | Some id when name.Contains '.' && members.Contains id ->
+                let own = name.Substring(name.LastIndexOf '.' + 1)
+                match state.Symbols |> Map.tryFind id with
+                | Some symbol when symbol.Name = own -> own
+                | _ -> name
+            | _ -> name
+        let rewrite =
+            mapExpressionKinds (fun current kind ->
+                match kind with
+                | IdentifierExpr name -> IdentifierExpr(resolved current name)
+                | FunctionCall(name, rangeOpt, args) -> FunctionCall(resolved current name, rangeOpt, args)
+                | Pipe(value, name, rangeOpt, args) -> Pipe(value, resolved current name, rangeOpt, args)
+                | other -> other)
+        module'
+        |> List.map (fun item ->
+            match item.Kind with
+            | Def (ValueDef(isExport, name, typeOpt, value)) -> { item with Kind = Def (ValueDef(isExport, name, typeOpt, rewrite value)) }
+            | Expr value -> { item with Kind = Expr (rewrite value) }
+            | _ -> item)
+
     /// The inlined items `own` uses: the value definitions it reaches, directly or through other inlined
     /// definitions, and every type definition, in their original order. A definition named like a member of a
     /// context is always kept, because the backend supplies it as the ambient instance of that context (the
