@@ -616,11 +616,12 @@
 
   (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
   (data (i32.const 268) "\00\00\00\00\0d\00\00\00Hello, Nanyx!\00\00\00")
-  (data (i32.const 292) "\00\00\00\00\00\00\00\00\00\00\00\00")
-  (data (i32.const 304) "\00\00\00\00\00\00\00\00\01\00\00\00")
-  (data (i32.const 316) "\00\00\00\00\00\00\00\00\02\00\00\00")
-  (data (i32.const 328) "\00\00\00\00\00\00\00\00\06\00\00\00")
-  (data (i32.const 340) "\00\00\00\00\00\00\00\00\0b\00\00\00")
+  (data (i32.const 292) "\00\00\00\00\01\00\00\00\0a\00\00\00")
+  (data (i32.const 304) "\00\00\00\00\00\00\00\00\00\00\00\00")
+  (data (i32.const 316) "\00\00\00\00\00\00\00\00\01\00\00\00")
+  (data (i32.const 328) "\00\00\00\00\00\00\00\00\02\00\00\00")
+  (data (i32.const 340) "\00\00\00\00\00\00\00\00\06\00\00\00")
+  (data (i32.const 352) "\00\00\00\00\00\00\00\00\0b\00\00\00")
 
   (func $console_host_readLineAfter (param $acc i32) (param $__ctx_readStdinByte i32) (param $__ctx_writeStderr i32) (param $__ctx_writeStdout i32) (result i32) (local $byte_i64 i64) (local $length__in1_i64 i64) (local $__inlined20 i32) (local $__owned_0 i32)
     local.get $__ctx_readStdinByte
@@ -774,15 +775,15 @@
   (export "console_host.readToEndAfter" (func $console_host_readToEndAfter))
 
   (func $__host_run__unit__known (param $entry i32) (result i32) (local $__ctx_writeStdout i32) (local $__ctx_writeStderr i32) (local $__ctx_readStdinByte i32) (local $__use_write_0 i32) (local $__use_writeError_1 i32) (local $__use_readLine_2 i32) (local $__use_readToEnd_4 i32) (local $__use_flush_6 i32) (local $__use_readLine_2_1 i32) (local $__inlined18 i32)
-    i32.const 300
+    i32.const 312
     local.set $__ctx_writeStdout
-    i32.const 312
-    local.set $__ctx_writeStderr
     i32.const 324
+    local.set $__ctx_writeStderr
+    i32.const 336
     local.set $__ctx_readStdinByte
-    i32.const 300
-    local.set $__use_write_0
     i32.const 312
+    local.set $__use_write_0
+    i32.const 324
     local.set $__use_writeError_1
     local.get $__ctx_readStdinByte
     call $__nanyx_dup_fn_unit_to_int
@@ -834,7 +835,7 @@
     i32.const 12
     call $__nanyx_record_set
     local.set $__use_readToEnd_4
-    i32.const 336
+    i32.const 348
     local.set $__use_flush_6
     local.get $__ctx_readStdinByte
     call $__nanyx_dup_fn_unit_to_int
@@ -948,7 +949,7 @@
     i32.const 0
   )
 
-  (func $__fn___script (param $__env i32) (param $__ctx_flush i32) (param $__ctx_readLine i32) (param $__ctx_readToEnd i32) (param $__ctx_write i32) (param $__ctx_writeError i32) (result i32)
+  (func $__fn___script (param $__env i32) (param $__ctx_flush i32) (param $__ctx_readLine i32) (param $__ctx_readToEnd i32) (param $__ctx_write i32) (param $__ctx_writeError i32) (result i32) (local $value__in1__in1 i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
     local.get $__ctx_flush
@@ -959,19 +960,14 @@
     call $__nanyx_drop_fn_unit_to_tags_error_tags_endOfInput_some_string
     local.get $__ctx_writeError
     call $__nanyx_drop_fn_string_to_unit
-    local.get $__ctx_write
-    call $__nanyx_dup_fn_string_to_unit
-    drop
-    local.get $__ctx_write
     i32.const 276
+    local.set $value__in1__in1
     local.get $__ctx_write
-    i32.load
-    call_indirect (type $ctx_fn_2)
-    drop
-    local.get $__ctx_write
-    i64.const 10
-    i32.wrap_i64
-    call $__nanyx_string_from_byte
+    local.get $value__in1__in1
+    i32.const 300
+    call $__nanyx_string_concat
+    local.get $value__in1__in1
+    call $__nanyx_drop_string
     local.get $__ctx_write
     i32.load
     call_indirect (type $ctx_fn_2)
@@ -1564,7 +1560,7 @@
   )
 
   (func $__nanyx_start
-    i32.const 348
+    i32.const 360
     call $__host_run__unit__known
     drop
   )
