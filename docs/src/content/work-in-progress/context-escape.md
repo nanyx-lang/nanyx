@@ -393,11 +393,12 @@ member's own type variables unit, so it reports a call that has one of them at a
   context it would mean only its home module can write its constructor in a `use`, which is what `Memory` and a
   `scoped context` need.
 - **Generic members.** Each `try` in a block has its own `a` and `b`, so `Proc`'s `try` must be polymorphic per call.
-  It isn't today: a context member's type variables are fixed once in a function that requires the context, so
-  `bind(name(i), { s -> bind(size(s), ...) })`, on a `string` payload and then an `int` one, is NYX0201 (`int vs
-  string`). Today's `proc` takes the same block, because each keyword reads `proc.try` into a local of its own. Settled:
-  a member is instantiated afresh at each call ([#1304](https://github.com/nanyx-lang/nanyx/issues/1304)), and the
-  backend gives the values of its own type variables a uniform, boxed representation
+  Done in the checker ([#1304](https://github.com/nanyx-lang/nanyx/issues/1304)): a member's own type variables, those
+  the context's parameters don't give it, are instantiated afresh at each call, in a function that requires the
+  context and after a `use` of a plain one (`Contexts.extendEnvWithContextsFrom`, `extendEnvWithRecordFields`), so
+  `bind(name(i), { s -> bind(size(s), ...) })`, on a `string` payload and then an `int` one, type-checks. The
+  context's own parameters (`a` in `Eq(a)`) stay fixed by the instance. Settled, not done yet: the backend gives the
+  values of a member's own type variables a uniform, boxed representation
   ([#1160](https://github.com/nanyx-lang/nanyx/issues/1160)).
 
 # Open questions
