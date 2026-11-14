@@ -682,6 +682,16 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               UseBindingContexts = useBindingContexts
               BuiltInHoles =
                 contextInstances |> Map.filter (fun _ found -> found = [ Some InstanceBuiltIn ]) |> Map.keys |> Set.ofSeq
+              TopLevelReferences =
+                typed.References
+                |> Map.filter (fun node _ -> not (typed.ImportReferences.ContainsKey node))
+                |> Map.toSeq
+                |> Seq.choose (fun (node, symbol) ->
+                    typed.Symbols
+                    |> Map.tryFind symbol
+                    |> Option.filter (fun declared -> declared.Kind = TopLevelValue)
+                    |> Option.map (fun declared -> node, declared.Declaration))
+                |> Map.ofSeq
               RecordConstructors = typeLayouts.Keys |> Set.ofSeq
               NominalWrappers = nominalWrappers
               NominalTypes = typed.TypeDefs |> Map.filter (fun _ info -> info.IsNominal) |> Map.keys |> Set.ofSeq

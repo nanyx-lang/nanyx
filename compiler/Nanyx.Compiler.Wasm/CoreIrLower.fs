@@ -232,7 +232,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 let var = this.LocalAt scope var (input.ExprTypes |> Map.tryFind expr.Id)
                 k (Expr.make (Atom(AVar var)) var.Type)
             // A context member in scope, named as a value (`` `0` ``, or a function member passed on).
-            | None when scope.Members.ContainsKey (NamedMember name) ->
+            | None when scope.Members.ContainsKey (NamedMember name) && not (namesOwnDefinition input expr) ->
                 let memberVar = scope.Members.[NamedMember name]
                 k (Expr.make (Atom(AVar memberVar)) memberVar.Type)
             | None when definitions.ContainsKey name && not (isFunction name) ->
@@ -397,7 +397,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             match SyntaxTree.flattenCallArgs args with
             | [ Kind (RecordExpr fields) ] -> this.Record scope (recordExprFields fields |> sortFields) (tyOf expr) k
             | _ -> cannot $"the type constructor {name} without a record of its fields"
-        | FunctionCall(name, _, args) when scope.Members.ContainsKey (NamedMember name) ->
+        | FunctionCall(name, _, args) when scope.Members.ContainsKey (NamedMember name) && not (namesOwnDefinition input expr) ->
             // A context member in scope: a function value like any other.
             let ty = tyOf expr
             this.CallValue scope scope.Members.[NamedMember name] args ty k

@@ -71,6 +71,11 @@ contexts the variable stands for at each call, which it takes after its other pa
 value it calls. So `apply(say, "hi")` and `apply(double, 2)` call two specialisations of `apply`, one of which takes
 `Console`'s members.
 
+A name that a member in scope has calls that member, unless the type checker found it to name one of the module's own
+top-level defs, declared in the file the name is written in (`LowerInput.TopLevelReferences`): a script's `def write = ...` shadows `Console`'s `write`, and
+its calls run the def, though the script's statements run in `Console`
+([#1278](https://github.com/nanyx-lang/nanyx/issues/1278)).
+
 ### Function values that require contexts
 
 A function value whose type requires contexts ([Parametric contexts](../tour/lambdas-and-higher-order-functions#parametric-contexts))
