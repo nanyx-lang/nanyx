@@ -12,14 +12,14 @@ type RunError =
     /// has written itself to stderr.
     | Exited of int
 
-/// Where a program's standard streams are.
+/// Where a program's standard streams are, and which environment variables it sees.
 type ProgramIo =
-    /// This process's own stdin, stdout and stderr.
+    /// This process's own stdin, stdout, stderr and environment variables.
     | Inherited
     /// Stdin is the file `input`. What the program writes to stdout goes to `output`, and
-    /// what it writes to stderr goes to `error`, each in the order it was written. Tests use this to run a program in
-    /// their own process.
-    | Redirected of input: string * output: IO.Stream * error: IO.Stream
+    /// what it writes to stderr goes to `error`, each in the order it was written. The program's environment variables
+    /// are `variables`, each a name and its value. Tests use this to run a program in their own process.
+    | Redirected of input: string * output: IO.Stream * error: IO.Stream * variables: (string * string) list
 
 /// Runs WebAssembly text emitted by the Nanyx backend on an embedded Wasmtime engine.
 ///
@@ -41,18 +41,21 @@ module WasmRunner =
     /// WASI's `errno` for a file descriptor that is not open.
     let private badFileDescriptor = 8
 
-    /// Sets up the program's standard streams. Redirected output is written by a `fd_write` of our own, in place of
-    /// WASI's, so that it lands in the caller's streams.
-    let private configureIo (io: ProgramIo) (linker: Linker) (store: Store) =
+    /// Sets up the program's command-line arguments (`arguments`, its name first), standard streams and environment
+    /// variables. Redirected output is written by a `fd_write` of our own, in place of WASI's, so that it lands in the
+    /// caller's streams.
+    let private configureIo (io: ProgramIo) (arguments: string list) (linker: Linker) (store: Store) =
+        let wasi = WasiConfiguration().WithArgs(arguments)
         match io with
         | Inherited ->
             store.SetWasiConfiguration(
-                WasiConfiguration()
+                wasi
                     .WithInheritedStandardInput()
                     .WithInheritedStandardOutput()
-                    .WithInheritedStandardError())
-        | Redirected(input, output, error) ->
-            store.SetWasiConfiguration(WasiConfiguration().WithStandardInput(input))
+                    .WithInheritedStandardError()
+                    .WithInheritedEnvironment())
+        | Redirected(input, output, error, variables) ->
+            store.SetWasiConfiguration(wasi.WithStandardInput(input).WithEnvironmentVariables(variables |> List.map (fun (name, value) -> struct (name, value))))
             linker.AllowShadowing <- true
             linker.DefineFunction(
                 "wasi_snapshot_preview1",
@@ -69,9 +72,9 @@ module WasmRunner =
     let private exitedCleanly (ex: WasmtimeException) = ex.ExitCode.HasValue && ex.ExitCode.Value = 0
 
     /// Instantiates the module described by `wat`, which runs its start function, then calls its export `start` if it
-    /// is given and the module exports it, and gives what `read` makes of the instance afterwards: `None` when the program ended itself while it
-    /// was being instantiated, so there is no instance.
-    let private execute (io: ProgramIo) (wat: string) (start: string option) (read: Instance option -> 'a) : Result<'a, RunError> =
+    /// is given and the module exports it, and gives what `read` makes of the instance afterwards: `None` when the program ended itself,
+    /// through `proc_exit` with exit code 0, so there is no instance or it stopped without freeing what it held.
+    let private execute (io: ProgramIo) (arguments: string list) (wat: string) (start: string option) (read: Instance option -> 'a) : Result<'a, RunError> =
         use engine = new Engine()
         let moduleResult =
             try Ok (Module.FromText(engine, "nanyx", wat))
@@ -83,30 +86,33 @@ module WasmRunner =
             use linker = new Linker(engine)
             use store = new Store(engine)
             linker.DefineWasi()
-            configureIo io linker store
+            configureIo io arguments linker store
             try
                 let instance = linker.Instantiate(store, module')
                 // A program with no top-level code has no start function to export.
                 match start |> Option.map instance.GetAction with
                 | Some null
-                | None -> ()
+                | None -> Ok (read (Some instance))
                 | Some action ->
-                    try action.Invoke()
-                    with :? WasmtimeException as ex when exitedCleanly ex -> ()
-                Ok (read (Some instance))
+                    try
+                        action.Invoke()
+                        Ok (read (Some instance))
+                    with :? WasmtimeException as ex when exitedCleanly ex -> Ok (read None)
             with
             | :? WasmtimeException as ex when exitedCleanly ex -> Ok (read None)
             | :? WasmtimeException as ex when ex.ExitCode.HasValue -> Error (Exited ex.ExitCode.Value)
             | :? WasmtimeException as ex -> Error (Trapped ex.Message)
 
-    /// Instantiates (and therefore runs) the module described by `wat`, with its standard streams `io`.
-    let run (io: ProgramIo) (wat: string) : Result<unit, RunError> = execute io wat None ignore
+    /// Instantiates (and therefore runs) the module described by `wat`, with its standard streams `io` and its
+    /// command-line arguments `arguments`, its name first.
+    let run (io: ProgramIo) (arguments: string list) (wat: string) : Result<unit, RunError> = execute io arguments wat None ignore
 
     /// Runs the module described by `wat`, which exports its start function as `start` rather than running it when
     /// instantiated, and gives the values of its exported `i32` globals `globals` once `start` has returned. A global
-    /// the module does not export counts as 0: a module that never allocates has no allocation counters.
-    let runReading (io: ProgramIo) (start: string) (globals: string array) (wat: string) : Result<int array, RunError> =
-        execute io wat (Some start) (fun instance ->
+    /// the module does not export counts as 0: a module that never allocates has no allocation counters. So does every
+    /// global of a program that ended itself with exit code 0, which leaves what it allocated as it is.
+    let runReading (io: ProgramIo) (arguments: string list) (start: string) (globals: string array) (wat: string) : Result<int array, RunError> =
+        execute io arguments wat (Some start) (fun instance ->
             globals |> Array.map (fun name ->
                 match instance |> Option.map _.GetGlobal(name) with
                 | Some null | None -> 0

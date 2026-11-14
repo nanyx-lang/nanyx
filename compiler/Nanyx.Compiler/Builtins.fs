@@ -34,6 +34,10 @@ module Intrinsics =
     let writeStderr = prefix + "write_stderr"
     /// The next byte of standard input, or -1 at its end (or when it cannot be read).
     let readStdinByte = prefix + "read_stdin_byte"
+    /// The program's command-line arguments, its own name first, as one string: each argument followed by a zero byte.
+    let arguments = prefix + "arguments"
+    /// The program's environment variables as one string: each `NAME=value` followed by a zero byte.
+    let environment = prefix + "environment"
     /// The number of bytes in a string.
     let stringLength = prefix + "string_length"
     /// The byte at an index of a string, or -1 when the index is out of range.
@@ -104,6 +108,8 @@ module Intrinsics =
         [ writeStdout, TypeEnv.mono (TyFunc(stringTy, unitTy, []))
           writeStderr, TypeEnv.mono (TyFunc(stringTy, unitTy, []))
           readStdinByte, TypeEnv.mono (TyFunc(unitTy, intTy, []))
+          arguments, TypeEnv.mono (TyFunc(unitTy, stringTy, []))
+          environment, TypeEnv.mono (TyFunc(unitTy, stringTy, []))
           exit, TypeEnv.mono (TyFunc(intTy, Unifier.bottomType, []))
           stringLength, TypeEnv.mono (TyFunc(stringTy, intTy, []))
           stringByteAt, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy ], intTy, []))

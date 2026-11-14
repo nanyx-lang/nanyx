@@ -7,9 +7,12 @@ open Parser.Program
 type Host =
     { /// The standard-library module that is the host, as it is imported: `nanyx/console.host`.
       Module: string
-      /// The modules of the contexts the host provides to the entry point, which the module that declares the entry
-      /// point sees without importing them: `nanyx/console` for `Console`.
-      ProvidedModules: string list }
+      /// The modules of the contexts the host provides to the entry point: `nanyx/console` for `Console` and
+      /// `nanyx/env` for `Env`.
+      ProvidedModules: string list
+      /// The provided modules that the module declaring the entry point sees without importing them: `nanyx/console`,
+      /// so that `println` is in scope. A program imports the others itself, as `import nanyx/env`.
+      ImplicitModules: string list }
 
 /// A definition marked `@entry`, and the call of its host's `run` with it that `Attributes.applyAttributes` made up.
 type EntryPoint =
@@ -37,10 +40,11 @@ module Hosts =
     /// The context a host is written on: raw reads and writes, which only a host may require.
     let runtimeContext = "HostRuntime"
 
-    /// The host a program runs under when it names none: a command-line program, with `Console`.
+    /// The host a program runs under when it names none: a command-line program, with `Console` and `Env`.
     let console =
         { Module = StandardLibrary.importPrefix + "console.host"
-          ProvidedModules = [ StandardLibrary.importPrefix + "console" ] }
+          ProvidedModules = [ StandardLibrary.importPrefix + "console"; StandardLibrary.importPrefix + "env" ]
+          ImplicitModules = [ StandardLibrary.importPrefix + "console" ] }
 
     /// The hosts the standard library ships.
     let all = [ console ]

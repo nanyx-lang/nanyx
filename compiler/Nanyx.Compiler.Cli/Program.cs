@@ -134,7 +134,7 @@ internal static class CliCommands
     /// <summary>
     /// Run a Nanyx program: a .nyx file, or the @entry of a package.
     /// </summary>
-    /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
+    /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest, followed by the program's arguments; none means the package the current directory is in.</param>
     /// <param name="checkMemory">Check the program's reference counting as it runs: stop at a block freed twice or an object used after it was freed, and fail if anything is left on the heap at the end.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
     [Consolo("run")]
@@ -149,14 +149,13 @@ internal static class CliCommands
     /// <summary>What <c>nanyx run</c> does, run in <paramref name="shell"/>.</summary>
     internal static int RunIn(Shell shell, bool checkMemory, string[] path, bool timings = false)
     {
-        if (!TrySinglePath(shell, path, out var single))
-        {
-            return UsageError;
-        }
+        // What follows the program is its own: its arguments, which it reads through `Env`.
+        var single = path.FirstOrDefault();
+        var programArguments = path.Skip(1).ToArray();
 
         if (single is not null && !IsPackagePath(shell, single))
         {
-            return Execute(shell, single, Target.Run, outputPath: null, checkMemory: checkMemory, timings: timings);
+            return Execute(shell, single, Target.Run, outputPath: null, checkMemory: checkMemory, timings: timings, programArguments: programArguments);
         }
 
         if (!TryFindPackage(shell, single, out var package, out var failed))
@@ -181,7 +180,7 @@ internal static class CliCommands
         }
 
         ReportDeferredRun(shell, deferred, build.Diagnostics);
-        return RunProgram(shell, entry.Value, deferred, checkMemory, timings);
+        return RunProgram(shell, entry.Value, deferred, checkMemory, timings, [package.Manifest.Name, .. programArguments]);
     }
 
     /// <summary>
@@ -534,7 +533,7 @@ internal static class CliCommands
         return $"{count} deferred error{(count == 1 ? "" : "s")}";
     }
 
-    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, bool checkMemory = false, bool timings = false)
+    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, bool checkMemory = false, bool timings = false, string[]? programArguments = null)
     {
         if (string.IsNullOrWhiteSpace(inputFile))
         {
@@ -555,7 +554,7 @@ internal static class CliCommands
 
         if (target == Target.Run)
         {
-            return RunScript(shell, inputFile, checkMemory, timings);
+            return RunScript(shell, inputFile, checkMemory, timings, programArguments);
         }
 
         // Script mode: the file's :: directives say what a package's manifest would.
@@ -575,9 +574,10 @@ internal static class CliCommands
     /// <summary>
     /// What <c>nanyx run</c> does with the script <paramref name="inputFile"/>, which exists: compiles and runs it in
     /// <paramref name="shell"/>, and gives the exit code. The compiler's diagnostics and the run's own errors go to the
-    /// shell's stderr. The Wasm tests call this to run programs in their own process.
+    /// shell's stderr. The program's command-line arguments are <paramref name="inputFile"/> followed by
+    /// <paramref name="programArguments"/>. The Wasm tests call this to run programs in their own process.
     /// </summary>
-    internal static int RunScript(Shell shell, string inputFile, bool checkMemory, bool timings = false)
+    internal static int RunScript(Shell shell, string inputFile, bool checkMemory, bool timings = false, string[]? programArguments = null)
     {
         // Script mode: the file's :: directives say what a package's manifest would.
         var result = CompileScript(shell, inputFile, timings);
@@ -588,7 +588,7 @@ internal static class CliCommands
         // program reaches it.
         var deferred = ErrorsDeferred(result);
         ReportDeferredRun(shell, deferred, result.Diagnostics);
-        return RunProgram(shell, result, deferred, checkMemory, timings);
+        return RunProgram(shell, result, deferred, checkMemory, timings, [inputFile, .. programArguments ?? []]);
     }
 
     private static int RunParse(Shell shell, string inputFile)
@@ -726,11 +726,13 @@ internal static class CliCommands
     }
 
     /// <summary>
-    /// Runs a compiled program with the shell's standard streams, reporting what stops it to the shell's stderr, and
-    /// gives the exit code.
+    /// Runs a compiled program with the shell's standard streams and the command-line arguments
+    /// <paramref name="arguments"/>, its name first, reporting what stops it to the shell's stderr, and gives the exit
+    /// code.
     /// </summary>
-    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, bool checkMemory = false, bool timings = false)
+    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, bool checkMemory = false, bool timings = false, string[]? arguments = null)
     {
+        var programArguments = ListModule.OfSeq(arguments ?? ["nanyx"]);
         var errors = shell.Error;
         var options = new CodeGen.WasmOptions(checkMemory);
         if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred, timings))
@@ -740,12 +742,13 @@ internal static class CliCommands
 
         if (!checkMemory)
         {
-            var outcome = WasmRunner.run(shell.Io, wat);
+            var outcome = WasmRunner.run(shell.Io, programArguments, wat);
             return outcome.IsOk ? 0 : ReportRunError(outcome.ErrorValue, errors);
         }
 
         var counted = WasmRunner.runReading(
             shell.Io,
+            programArguments,
             CodeGen.CheckedExports.start,
             new[] { CodeGen.CheckedExports.liveBlocks, CodeGen.CheckedExports.allocations },
             wat);
