@@ -293,6 +293,11 @@ let internal declare (declarer: Declarer) (holder: NodeId) (names: (Identifier *
             let existing = state.Declared |> Map.tryFind key |> Option.defaultValue []
             { state with Declared = state.Declared |> Map.add key (existing @ names |> List.distinctBy fst) })
 
+/// Records that `holder`, what the named field `name`, written at `start`, is written with (its value, type or
+/// pattern), declares the field's name (see `NamedFieldValue`).
+let internal declareField (start: Position) (name: Identifier) (holder: NodeId) : Parser<unit, ParseState> =
+    declare NamedFieldValue holder [ name, nameSpan start name ]
+
 /// Notes that a construct a doc comment can document starts at `start` and declares the name or tag that starts at
 /// the offset `target`: a doc comment just before `start` documents that (see `DocComments.attach`). A construct that
 /// starts at what it declares, as a record field does, needs no note.

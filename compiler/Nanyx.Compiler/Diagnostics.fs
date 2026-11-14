@@ -91,6 +91,7 @@ module DiagnosticCodes =
     let NotABuiltInType = code 114 "Not a built-in type" Severity.Error
     let InitialisationCycle = code 115 "Initialisation cycle" Severity.Error
     let InvalidTypeName = code 116 "Invalid type name" Severity.Error
+    let DuplicateField = code 117 "Duplicate field" Severity.Error
 
     // Types.
     let TypeMismatch = code 201 "Type mismatch" Severity.Error
@@ -144,7 +145,7 @@ module DiagnosticCodes =
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
-          DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName
+          DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
           MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule; WrongPatternCount

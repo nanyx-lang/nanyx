@@ -45,12 +45,13 @@ let internal fillTypeRefs () =
             >>= fun ((fieldStart, mutOpt), (start, name)) ->
                 noteName start name >>. noOptionalField name
                 >>. (if mutOpt.IsSome then noteDocumentable fieldStart (int start.Index) else preturn ())
-                >>% (mutOpt.IsSome, name)
-        pipe3
+                >>% (mutOpt.IsSome, name, start)
+        tuple3
             mutAndName
             (wsInline >>. (pstring ":" <|> pstring "::") >>. ws >>. typeExpr)
             (opt (attempt (ws >>. pstring "=" >>. ws >>. expression)))
-            (fun (isMut, name) typeValue defaultOpt -> TypeField(name, isMut, Some typeValue, defaultOpt))
+        >>= fun ((isMut, name, start), typeValue, defaultOpt) ->
+            declareField start name typeValue.Id >>% TypeField(name, isMut, Some typeValue, defaultOpt)
 
     let recordFieldSeparator =
         attempt (pstring "," >>. ws >>% ()) <|> (skipMany1 (skipAnyOf " \t\r\n") >>. ws)

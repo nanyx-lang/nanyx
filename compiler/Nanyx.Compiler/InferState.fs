@@ -436,7 +436,8 @@ let internal declareSymbol (declarer: Declarer) (holder: NodeId) (name: string) 
                 | TypeDefBody -> List.tryHead names
                 | LambdaParameters
                 | ArmBody
-                | RecordTypeFields -> names |> List.tryFind (fun (declaredName, _) -> declaredName = name))
+                | RecordTypeFields
+                | NamedFieldValue -> names |> List.tryFind (fun (declaredName, _) -> declaredName = name))
         match declared with
         | None -> None, state
         | Some (_, span) ->

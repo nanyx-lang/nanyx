@@ -57,10 +57,8 @@ let recordPatternByPosition =
 // others out: (member1 = pat1, ...)
 let recordMemberPattern =
     let memberPattern =
-        pipe2
-            (ws >>. identifierNoWs .>> ws)
-            (pstring "=" >>. ws >>. pattern)
-            (fun name pat -> (name, pat))
+        (ws >>. getPosition .>>. identifierNoWs .>> ws) .>>. (pstring "=" >>. ws >>. pattern)
+        >>= fun ((start, name), pat) -> declareField start name pat.Id >>% (name, pat)
     let rest = ws >>. pstring "..." .>> ws
     between
         (pstring "(")
