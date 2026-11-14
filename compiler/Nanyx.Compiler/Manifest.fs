@@ -132,15 +132,23 @@ module Manifest =
     let private anyText = Regex ".*"
 
     /// The entry `value` of `linters`, or `host`, as `what`: the package it names, which `known` finds, if the entry
-    /// is right. Its `settings`, if any, are left to `settings`.
+    /// is right. The linters and hosts are the ones the compiler ships, so the version must be the compiler's own. Its `settings`, if any, are left to `settings`.
     let private entry (problems: Problems) (what: string) (known: string -> Result<'a, string>) (value: DataValue) : (DataField list * 'a) option =
         problems.Record what entryFields value
         |> Option.bind (fun fields ->
-            problems.RequiredText what value.Location fields "version" versionPattern "a semantic version: 1.2.0" |> ignore
+            let version = problems.RequiredText what value.Location fields "version" versionPattern "a semantic version: 1.2.0"
             match problems.RequiredText what value.Location fields "package" anyText "" with
             | Some name ->
                 match known name with
-                | Result.Ok found -> Some(fields, found)
+                | Result.Ok found ->
+                    match version with
+                    | Some version when version <> Toolchain.version ->
+                        problems.Add
+                            DiagnosticCodes.VersionNotShipped
+                            (DataValue.field "version" fields).Value.Value.Location
+                            $"the compiler ships {name} {Toolchain.version}, not {version}: a package the compiler ships is named at its version exactly"
+                    | _ -> ()
+                    Some(fields, found)
                 | Result.Error message ->
                     problems.Add DiagnosticCodes.InvalidManifestValue (DataValue.field "package" fields).Value.Value.Location message
                     None

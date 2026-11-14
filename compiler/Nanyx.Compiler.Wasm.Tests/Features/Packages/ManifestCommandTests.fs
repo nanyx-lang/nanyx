@@ -3,6 +3,7 @@ module TranspilerWasmTests.Features.Packages.ManifestCommand
 
 open System.IO
 open Xunit
+open NyxCompiler
 open TranspilerWasmTestHelpers
 
 /// What `nanyx` printed for `arguments` in a directory holding the manifest `demo.nyxp` with the text `manifest`.
@@ -18,9 +19,9 @@ let private withManifest (manifest: string) (arguments: string list) =
 let ``The manifest is printed as JSON, a tag as a string`` () =
     let outcome =
         withManifest
-            """(
+            $"""(
   package = (name = "demo", version = "0.1.0", sources = ["src/**/*.nyx"])
-  linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (unusedBindings = #error)))]
+  linters = [(package = "nanyx.lint", version = "{Toolchain.version}", settings = (rules = (unusedBindings = #error)))]
   formatter = (lineWidth = 100)
 )
 """
@@ -39,7 +40,7 @@ let ``The manifest is printed as JSON, a tag as a string`` () =
   "linters": [
     {
       "package": "nanyx.lint",
-      "version": "0.28.0",
+      "version": "<toolchain>",
       "settings": {
         "rules": {
           "unusedBindings": "#error"
@@ -52,6 +53,7 @@ let ``The manifest is printed as JSON, a tag as a string`` () =
   }
 }
 """
+            .Replace("<toolchain>", Toolchain.version)
             .ReplaceLineEndings "\n",
         outcome.StandardOutput
     )

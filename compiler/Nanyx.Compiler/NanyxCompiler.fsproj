@@ -82,6 +82,7 @@
     <Compile Include="InferModule.fs" />
     <Compile Include="RequiredContexts.fs" />
     <Compile Include="Builtins.fs" />
+    <Compile Include="Toolchain.fs" />
     <Compile Include="Hosts.fs" />
     <Compile Include="Attributes.fs" />
     <Compile Include="Scripts.fs" />

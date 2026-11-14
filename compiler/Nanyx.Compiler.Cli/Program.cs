@@ -167,7 +167,7 @@ internal static class CliCommands
             return UsageError;
         }
 
-        var created = NewPackage.create(name, ReleaseVersion, shell.FullPath(single ?? NewPackage.defaultDirectory(name)));
+        var created = NewPackage.create(name, Toolchain.version, shell.FullPath(single ?? NewPackage.defaultDirectory(name)));
         if (created.IsError)
         {
             shell.Error.WriteLine(created.ErrorValue);
@@ -468,26 +468,12 @@ internal static class CliCommands
     public static int PrintVersion() => VersionIn(Shell.Process);
 
     /// <summary>
-    /// Print the release version, the &lt;Version&gt; in the project file (such as 0.27.0): the assembly's
-    /// informational version without the commit the SDK appends after a '+'. The assembly version always has four
-    /// parts, so it is not the one printed.
+    /// Print the release version, the &lt;Version&gt; in Directory.Build.props, such as 0.28.0 (see <c>Toolchain.version</c>).
     /// </summary>
     internal static int VersionIn(Shell shell)
     {
-        shell.Out.WriteLine(ReleaseVersion);
+        shell.Out.WriteLine(Toolchain.version);
         return 0;
-    }
-
-    /// <summary>The release version, as <c>--version</c> prints it.</summary>
-    private static string ReleaseVersion
-    {
-        get
-        {
-            var informational = typeof(CliCommands).Assembly
-                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "";
-            var plus = informational.IndexOf('+');
-            return plus < 0 ? informational : informational[..plus];
-        }
     }
 
     /// <summary>

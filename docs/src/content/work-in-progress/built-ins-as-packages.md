@@ -99,8 +99,12 @@ level, so a field is never mistaken for a package's configuration:
 
 # Plan
 
-1. **Ship packages with the compiler** ([#1342](https://github.com/nanyx-lang/nanyx/issues/1342)), once the
-   `.nyxpkg` format and the cache exist.
+1. **Ship packages with the compiler** ([#1342](https://github.com/nanyx-lang/nanyx/issues/1342)), as source
+   directories in the distribution (`.nyxpkg` once [#863](https://github.com/nanyx-lang/nanyx/issues/863) lands), each
+   named at the compiler's version. A manifest names a shipped package at that version exactly: anything else is
+   `NYX0029`, naming the version shipped. That check is done (`Toolchain.version`, the `<Version>` in
+   `compiler/Directory.Build.props`, which every compiler project has); the console host as the first shipped source
+   directory is next.
 2. **The console host as a package** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)), once packages
    resolve.
 3. **The official linter as a package** ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)), once the linter

@@ -84,6 +84,7 @@ module DiagnosticCodes =
     let IndirectDependency = code 26 "Package is not a direct dependency" Severity.Error
     let PackageCycle = code 27 "Packages depend on each other in a cycle" Severity.Error
     let PackageReachedTwice = code 28 "Package reached by two paths" Severity.Error
+    let VersionNotShipped = code 29 "Version not shipped" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -155,7 +156,7 @@ module DiagnosticCodes =
           UnsupportedDirective; CodeInModuleBlock; UnexpectedAttributeArgument; PathImportWithoutAlias
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
-          ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice
+          ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField

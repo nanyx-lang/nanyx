@@ -83,7 +83,7 @@ let ``Without linters no linter runs`` () =
 let ``The manifest's linters check every source file at the severities it sets`` () =
     use package =
         new TempPackage(
-            [ "demo.nyxp", (manifest """linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (unusedBindings = #error)))]""")
+            [ "demo.nyxp", (manifest $"""linters = [(package = "nanyx.lint", version = "{Toolchain.version}", settings = (rules = (unusedBindings = #error)))]""")
               "main.nyx", entrySource ])
     let build = Package.build (okOf (Package.find package.Root))
     let diagnostic = Assert.Single(build.Diagnostics)
