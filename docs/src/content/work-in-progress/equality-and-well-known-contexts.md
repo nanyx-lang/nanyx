@@ -38,7 +38,7 @@ operators call, and `Hash(a)` and `__hash`.
   built-in type such as `string`, is `NYX0219`, and so is attaching `!=` to anything. `AttachedOperators.fs` holds
   the rule, with a list of the members it covers: `==`, `compare` and `hash`.
 - **Local functions are checked at each call.** A local function requires no contexts: the backend compiles it again
-  at each type it is used at, a closure for each (`FunctionLowering.GenericLocal` in `CoreIrLower.fs`), so its `==`
+  at each type it is used at, a closure for each (`genericLocal` in `CoreIrLowerLocals.fs`), so its `==`
   compares and frees a string or a list as that type does. A lambda that captures the local captures a closure for
   each type the lambda uses it at (`FunctionLowering.CapturedInstances`); where the lambda is itself generic, the
   closure at each of its types is made where the lambda's is. A use the backend cannot type reads the closure compiled
