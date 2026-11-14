@@ -5,9 +5,9 @@ module Parser.Program.Header
 open System
 open Parser.Program
 
-/// A `::` directive at the top of a script, which says what a package manifest would, as the manifest's own dotted key
-/// would: `::linters.default` is the table `[linters.default]`, and `::formatter.lineWidth = 80` sets `lineWidth = 80`
-/// in `[formatter]`.
+/// A `::` directive at the top of a script, which says what a package manifest would: `::linters.default` turns on the
+/// official linter, and `::formatter.lineWidth = 80` sets the formatter's `lineWidth`. A directive is a dotted key and
+/// a TOML value.
 type Directive =
     { /// The parts of the dotted key after `::`: `[ "linters"; "default" ]`. Empty when the key is missing or is not
       /// a dotted key of names.

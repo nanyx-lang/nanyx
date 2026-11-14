@@ -16,7 +16,7 @@ later (Python, early Go, C and C++) never fully recover from the years without i
 the first release, and built alongside the compiler.
 
 The [Packages and projects](../tour/packages) page already describes the user's side:
-`.nyxp` and `.nyxproj` TOML manifests, imports of the form `acme.web/http`, `public-modules`, project
+`.nyxp` and `.nyxproj` manifests, imports of the form `acme.web/http`, `publicModules`, project
 references and script mode. This page is about what that page leaves out: who owns a package name, how versions
 are chosen, what a published package is, and where it lives.
 
@@ -25,7 +25,7 @@ are chosen, what a published package is, and where it lives.
 | Area | Where |
 |------|-------|
 | Manifests | Reading `.nyxp` and `.nyxproj`, checked against the docs |
-| Module resolution | Imports by package and module name, `public-modules`, direct-dependency-only imports |
+| Module resolution | Imports by package and module name, `publicModules`, direct-dependency-only imports |
 | Version resolution | Choosing one version of each package, the lockfile, error messages when no choice works |
 | Package cache | Downloading, verifying and storing packages on the user's machine |
 | CLI | `nanyx new`, `add`, `restore`, `build`, `run` (without a file), `publish`, `yank` |
@@ -39,20 +39,21 @@ Out of scope here:
 - The standard library's contents: the [`stdlib`](https://github.com/nanyx-lang/nanyx/labels/stdlib) issues. How it is
   *packaged* is in scope.
 - Hosts and the contexts they provide: [Hosts](./hosts). Packaging has to
-  carry a package's `[host]` table, but what a host is belongs to that design.
+  carry a package's `host` field, but what a host is belongs to that design.
 
 # Where the compiler is today
 
 A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issues/279)); the rest is only in the docs.
 
-- **A package can be built and run** (`Package.fs`). The manifest's `[package]` table (`name`, `version`,
-  `sources`; `public-modules` is accepted but not used) and `[linters]` table are read, with an error naming the
-  key for anything wrong or unknown. `nanyx build`, `nanyx check` and `nanyx run` without a file (or with a
+- **A package can be built and run** (`Package.fs`). The manifest is one Nanyx record written as data, read by
+  `Manifest.check` ([The package manifest](./package-manifest)). Its `package` (`name`, `version`, `sources`;
+  `publicModules` is accepted but not used), `linters` and `host` are read, with an error at the field for anything
+  wrong or unknown (`NYX0020` to `NYX0024`). `nanyx build`, `nanyx check` and `nanyx run` without a file (or with a
   directory or manifest) check every source file, each module once however many files import it (`Package.build`,
   [#698](https://github.com/nanyx-lang/nanyx/issues/698)), and `run` runs the one `@entry`; `build` writes it to
   `out/<name>.wat`. `nanyx new` makes a package (`NewPackage.fs`). The language server reads the manifest's linter
-  configuration too. `[dependencies]` and `[project-references]` are refused when non-empty, and there is no
-  `.nyxproj` or `restore`. The formatter still reads its `[formatter]` table itself.
+  configuration too. A non-empty `dependencies` is refused, and there is no `.nyxproj` or `restore`. The formatter
+  reads the manifest's `formatter` field itself.
 - **A package's imports go through its module table** (`PackageModules.fs`). Every source file the manifest
   selects is keyed by the module name it declares (`PackageModules.ofFiles`), and in those files `import greetings`
   and `import acme.web/greetings` both reach the file that declares `module greetings`, wherever it is
@@ -122,7 +123,7 @@ how a claim survives a GitHub rename (it is kept by account ID), how organisatio
 
 ## Versions and resolution
 
-- Versions are semantic versions. In a manifest, `acme.core = "2.1"` means "2.1 or later, before 3.0", the
+- Versions are semantic versions. In a manifest, `(package = "acme.core", version = "2.1")` means "2.1 or later, before 3.0", the
   caret range used by Cargo; an exact or wider range can be written explicitly.
 - A build has **one version of each package**. A program is compiled into a single WebAssembly module and types
   from a dependency must unify wherever they are used, so two copies of `acme.core` would mean two incompatible
@@ -138,7 +139,7 @@ how a claim survives a GitHub rename (it is kept by account ID), how organisatio
 ## Enforced semantic versioning
 
 Publishing compares the new version's public API with the previous version's: the exported definitions of every
-module in `public-modules`, with their types. Removing or changing a definition requires a major version;
+module in `publicModules`, with their types. Removing or changing a definition requires a major version;
 adding one requires at least a minor. `nanyx publish` proposes the version number and refuses a wrong one.
 
 This needs the type of every exported definition, which inference already has, and it is one more reason for the
@@ -153,7 +154,7 @@ manifest selects, the readme and licence, and a generated `api.json` describing 
 - Packages ship **source**. The compiler inlines imported modules into one WebAssembly module, so there is no
   compiled form to ship yet, and source works for every compiler version that supports the package's language
   level. A cached compiled form can be added later, as an optimisation the cache owns.
-- The manifest gains `nanyx = "0.14"` (the minimum compiler version) and `license`, `description` and
+- The manifest's `package` gains `nanyx = "0.14"` (the minimum compiler version) and `license`, `description` and
   `repository`, which the index requires.
 - `api.json` is what the API comparison and the package website read, so neither has to compile the package.
 
@@ -210,7 +211,7 @@ Alternatives considered:
   someone on call, before there is an ecosystem to justify it. The static index gets the same client experience
   now and leaves this as an upgrade.
 - **Dependencies as git URLs** (Go modules, early Swift). There is no index to run, but names are URLs, which
-  contradicts the documented `acme.core = "2.1"`; tags can be moved, so it needs a checksum database anyway; and
+  contradicts the documented `(package = "acme.core", version = "2.1")`; tags can be moved, so it needs a checksum database anyway; and
   every build depends on the source host staying up.
 - **An OCI registry** (GitHub Container Registry). Content-addressed and free for public packages, but names would
   be tied to the registry's paths and every client would need an OCI client. It remains an option for artifact
@@ -243,7 +244,7 @@ Decided by the maintainer. Packaging is built in two halves, so that hosts and l
 ([Built-ins as packages](./built-ins-as-packages)) without waiting for the parts that only downloaded packages need:
 
 - **Local packages, now.** A dependency is a package in a directory on disk, a path dependency
-  (`"acme.util" = { path = "../util" }` in `[dependencies]`), or a package shipped with the compiler. Nothing is
+  (`(package = "acme.util", path = "../util")` in `dependencies`), or a package shipped with the compiler. Nothing is
   downloaded, so there is nothing to choose between and no solver is needed.
   - **Shipped packages** (the console host, then the official linter) are source directories in the compiler's
     distribution, each with its `.nyxp` and sources, compiled like a path dependency. They become `.nyxpkg` once the
@@ -252,7 +253,7 @@ Decided by the maintainer. Packaging is built in two halves, so that hosts and l
     an error saying which version is available, and `nanyx new` writes the right one.
   - **Projects** (`.nyxproj`, project references) wait until a workspace of several packages needs them
     ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
-- **The manifest moves to Nanyx first** ([The package manifest](./package-manifest)), before path dependencies add to the TOML form.
+- **The manifest is Nanyx** ([The package manifest](./package-manifest)), so path dependencies are added to that form.
 - **Remote packages, later:** `.nyxpkg`, the cache, `nanyx.lock`, resolving versions, `nanyx add` and `restore`,
   publishing and `api.json`. None of this page's open questions block the local half.
 
@@ -261,12 +262,12 @@ Decided by the maintainer. Packaging is built in two halves, so that hosts and l
 Local packages first (items 3a to 3c), then remote packages. Each produces something usable on its own:
 
 1. **Imports by module name within a package.** Done ([#287](https://github.com/nanyx-lang/nanyx/issues/287)) but
-   for `public-modules`, which only matters once another package can import this one.
+   for `publicModules`, which only matters once another package can import this one.
 2. **The rest of the import syntax.** Done ([#289](https://github.com/nanyx-lang/nanyx/issues/289)): selections and
-   re-exports, which `public-modules` relies on.
+   re-exports, which `publicModules` relies on.
 3. **Local packages:**
    - **3a. Path dependencies** ([#862](https://github.com/nanyx-lang/nanyx/issues/862)): a dependency on a package in
-     a directory, importing its `public-modules` as `acme.util/strings`, one version of each package per build, only
+     a directory, importing its `publicModules` as `acme.util/strings`, one version of each package per build, only
      direct dependencies importable, with an error for each rule.
    - **3b. Packages shipped with the compiler** ([#1342](https://github.com/nanyx-lang/nanyx/issues/1342)): source
      directories in the distribution, named with an exact version.

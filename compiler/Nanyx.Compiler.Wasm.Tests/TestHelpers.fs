@@ -178,7 +178,7 @@ let nanyxOnPackage (files: (string * string) list) (arguments: string list) : Ru
     use directory = new TempDirectory()
     let root = directory.Path
     Directory.CreateDirectory(Path.Combine(root, "src")) |> ignore
-    File.WriteAllText(Path.Combine(root, "app.nyxp"), "[package]\nname = \"app\"\nversion = \"0.1.0\"\nsources = [\"src/**/*.nyx\"]\n")
+    File.WriteAllText(Path.Combine(root, "app.nyxp"), """(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]))""")
     for path, text in files do
         File.WriteAllText(Path.Combine(root, "src", path), text)
     let outcome = nanyxWithInput "" (arguments |> List.map (fun argument -> argument.Replace("{package}", root)))

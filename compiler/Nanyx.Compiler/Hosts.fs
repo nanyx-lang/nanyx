@@ -5,7 +5,9 @@ open Parser.Program
 /// A host: the standard-library module that runs the program's entry point, under `use`s of the contexts it provides
 /// (see the Hosts page of the docs). The program's `@entry` is passed to the host's `run`, which is the module's start.
 type Host =
-    { /// The standard-library module that is the host, as it is imported: `nanyx/console.host`.
+    { /// The package a manifest's `host` names it by: `nanyx.console`.
+      Package: string
+      /// The standard-library module that is the host, as it is imported: `nanyx/console.host`.
       Module: string
       /// The modules of the contexts the host provides to the entry point: `nanyx/console` for `Console` and
       /// `nanyx/env` for `Env`.
@@ -42,7 +44,8 @@ module Hosts =
 
     /// The host a program runs under when it names none: a command-line program, with `Console` and `Env`.
     let console =
-        { Module = StandardLibrary.importPrefix + "console.host"
+        { Package = "nanyx.console"
+          Module = StandardLibrary.importPrefix + "console.host"
           ProvidedModules = [ StandardLibrary.importPrefix + "console"; StandardLibrary.importPrefix + "env" ]
           ImplicitModules = [ StandardLibrary.importPrefix + "console" ] }
 
@@ -52,7 +55,7 @@ module Hosts =
     /// The hosts that can be chosen, as a message lists them.
     let private choices () = all |> List.map (fun host -> $"'{host.Module}'") |> String.concat ", "
 
-    /// The host that is the module `name`, as a manifest's `[host] use` and `--host` write it (`nanyx/console.host`), or
+    /// The host that is the module `name`, as `--host` writes it (`nanyx/console.host`), or
     /// why there is none: no such module, or a module that isn't a host. Until packages resolve, only the standard
     /// library's hosts can be chosen.
     let tryFind (name: string) : Result<Host, string> =

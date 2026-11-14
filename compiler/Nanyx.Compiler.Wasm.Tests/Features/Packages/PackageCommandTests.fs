@@ -31,6 +31,25 @@ let ``New - makes a package that runs its greeting and builds cleanly`` () =
     Assert.Contains("No diagnostics.", built.StandardOutput)
 
 [<Fact>]
+let ``New - writes a formatted manifest naming the compiler's version for its linter and host`` () =
+    use directory = new TempDirectory()
+    assertSucceeded (nanyxIn directory.Path [ "new"; "acme.demo" ])
+    let manifest = Path.Combine(directory.Path, "demo", "acme.demo.nyxp")
+    let version = (nanyxIn directory.Path [ "--version" ]).StandardOutput.Trim()
+    Assert.Equal(
+        $"""(
+  package = (name = "acme.demo", version = "0.1.0", sources = ["src/**/*.nyx"])
+  linters = [(package = "nanyx.lint", version = "{version}")]
+  host = (package = "nanyx.console", version = "{version}")
+)
+"""
+            .ReplaceLineEndings "\n",
+        File.ReadAllText manifest
+    )
+    let text = File.ReadAllText manifest
+    Assert.Equal(Nanyx.Formatter.FormatCommand.Formatted text, Nanyx.Formatter.FormatCommand.formatText Nanyx.Formatter.Formatter.Options.defaults manifest text)
+
+[<Fact>]
 let ``New - makes the package in the directory it is given`` () =
     use directory = new TempDirectory()
     assertSucceeded (nanyxIn directory.Path [ "new"; "hello_world"; "here" ])

@@ -13,6 +13,7 @@ let private rule id severity =
 /// Reports every top-level def under `everyDef`, at a warning unless configured otherwise.
 let private everyDef =
     { Name = "test"
+      Package = "test.lint"
       Rules = [ rule "everyDef" Severity.Warning; rule "neverReported" Severity.Hint ]
       Lint =
         fun model ->
@@ -23,7 +24,7 @@ let private everyDef =
                 | _ -> None) }
 
 let private throwing =
-    { Name = "broken"; Rules = [ rule "anything" Severity.Warning ]; Lint = fun _ -> failwith "boom" }
+    { Name = "broken"; Package = "broken.lint"; Rules = [ rule "anything" Severity.Warning ]; Lint = fun _ -> failwith "boom" }
 
 let private options linters severities =
     { Linters = linters; Severities = Map.ofList severities }
@@ -119,6 +120,7 @@ let ``The model is the module as written, with what type checking found`` () =
     let mutable seen = None
     let recorder =
         { Name = "recorder"
+          Package = "recorder.lint"
           Rules = []
           Lint = fun model -> seen <- Some model; [] }
     let source = "@entry\ndef main = {\n  def x = 1\n  x + 1\n}"

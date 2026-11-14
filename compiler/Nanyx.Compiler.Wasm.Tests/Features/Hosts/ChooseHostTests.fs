@@ -1,4 +1,4 @@
-/// A package chooses its host with a `[host]` table in its manifest, or `--host` on `run`, `build` and `check` (#1247,
+/// A package chooses its host with the `host` field of its manifest, or `--host` on `run`, `build` and `check` (#1247,
 /// see docs/src/content/work-in-progress/hosts.md).
 module TranspilerWasmTests.Features.Hosts.ChooseHost
 
@@ -17,18 +17,13 @@ def main = {
 """
 
 /// What `nanyx` printed for `arguments` (`{package}` standing for the package's directory) on a package whose manifest
-/// ends with `host`, and whose one source file is `source`.
+/// has the field `host` after its `package`, and whose one source file is `source`.
 let private onPackage (host: string) (source: string) (arguments: string list) =
     use directory = new TempDirectory()
     let root = directory.Path
     Directory.CreateDirectory(Path.Combine(root, "src")) |> ignore
-    let manifest =
-        """[package]
-name = "app"
-version = "0.1.0"
-sources = ["src/**/*.nyx"]
-"""
-    File.WriteAllText(Path.Combine(root, "app.nyxp"), manifest + host)
+    let manifest = $"(\n  package = (name = \"app\", version = \"0.1.0\", sources = [\"src/**/*.nyx\"])\n  {host}\n)\n"
+    File.WriteAllText(Path.Combine(root, "app.nyxp"), manifest)
     File.WriteAllText(Path.Combine(root, "src", "main.nyx"), source)
     let outcome = nanyxIn root (arguments |> List.map (fun argument -> argument.Replace("{package}", root)))
     { outcome with
@@ -36,65 +31,29 @@ sources = ["src/**/*.nyx"]
         StandardError = outcome.StandardError.Replace(root + string Path.DirectorySeparatorChar, "").ReplaceLineEndings "\n" }
 
 [<Fact>]
-let ``A package whose host table uses the console host runs under it`` () =
-    let outcome =
-        onPackage
-            """
-[host]
-use = "nanyx/console.host"
-"""
-            main
-            [ "run" ]
+let ``A package whose host is the console host runs under it`` () =
+    let outcome = onPackage """host = (package = "nanyx.console", version = "0.28.0")""" main [ "run" ]
     Assert.Equal("", outcome.StandardError)
     Assert.Equal("hello\n", outcome.StandardOutput)
     Assert.Equal(0, outcome.ExitCode)
 
 [<Fact>]
-let ``A host table that uses a module that isn't a host is an error naming it`` () =
-    let outcome =
-        onPackage
-            """
-[host]
-use = "nanyx/console"
-"""
-            main
-            [ "run" ]
+let ``A host that isn't one is an error naming it`` () =
+    let outcome = onPackage """host = (package = "nanyx.nope", version = "0.28.0")""" main [ "check" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("app.nyxp:7:1: [host] use: 'nanyx/console' is not a host: it has no 'run' that runs an entry point", outcome.StandardError)
+    Assert.Contains("app.nyxp:3:21: error NYX0023: there is no host 'nanyx.nope'; the hosts are 'nanyx.console'", outcome.StandardError)
 
 [<Fact>]
-let ``A host table that uses a module that doesn't exist is an error naming it`` () =
-    let outcome =
-        onPackage
-            """
-[host]
-use = "nanyx/nope.host"
-"""
-            main
-            [ "check" ]
+let ``A host's settings are an error at the field, until hosts take settings`` () =
+    let outcome = onPackage """host = (package = "nanyx.console", version = "0.28.0", settings = (port = 3000))""" main [ "build" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("app.nyxp:7:1: [host] use: There is no host 'nanyx/nope.host'", outcome.StandardError)
+    Assert.Contains("app.nyxp:3:58: error NYX0024: nanyx.console takes no settings", outcome.StandardError)
 
 [<Fact>]
-let ``A host table's other keys are an error at the key, until hosts take configuration`` () =
-    let outcome =
-        onPackage
-            """
-[host]
-use = "nanyx/console.host"
-port = 3000
-"""
-            main
-            [ "build" ]
+let ``A host without a package is an error`` () =
+    let outcome = onPackage """host = (version = "0.28.0")""" main [ "run" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("app.nyxp:8:1: [host] port would configure the host, but no host takes configuration yet", outcome.StandardError)
-
-[<Fact>]
-let ``A host table without use is an error`` () =
-    let outcome = onPackage "\n[host]\n" main [ "run" ]
-    Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("[host] has no use", outcome.StandardError)
-
+    Assert.Contains("error NYX0022: the host has no package, which it needs", outcome.StandardError)
 [<Theory>]
 [<InlineData("run")>]
 [<InlineData("build")>]
@@ -127,13 +86,10 @@ let ``An entry that doesn't fit the package's host names the host, in the editor
     let root = directory.Path
     Directory.CreateDirectory(Path.Combine(root, "src")) |> ignore
     let manifest =
-        """[package]
-name = "app"
-version = "0.1.0"
-sources = ["src/**/*.nyx"]
-
-[host]
-use = "nanyx/console.host"
+        """(
+  package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"])
+  host = (package = "nanyx.console", version = "0.28.0")
+)
 """
     File.WriteAllText(Path.Combine(root, "app.nyxp"), manifest)
     let path = Path.Combine(root, "src", "main.nyx")

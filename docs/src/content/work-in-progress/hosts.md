@@ -44,24 +44,16 @@ def main = {
 
 A program's host is a deployment concern. It decides which runtime gets linked, so it's declared in the `.nyxp` manifest rather than in source:
 
-```toml
-[package]
-name = "my_server"
-version = "0.1.0"
-sources = ["src/**/*.nyx"]
-
-[dependencies]
-"nanyx.http" = "1.0.0"
-
-[host]
-use = "nanyx.http/host"
-port = 3000
+```nanyx fragment
+(
+  package = (name = "my_server", version = "0.1.0", sources = ["src/**/*.nyx"])
+  host = (package = "nanyx.http", version = "1.0.0", settings = (port = 3000))
+)
 ```
 
-Keys other than `use` are host configuration, passed to the host at startup. The CLI can override the host, for example `nanyx run --host nanyx/console.host`. Until packages resolve, the hosts that can be chosen are the standard library's, such as `nanyx/console.host`.
+`host` names the host's package and its version, and its `settings` are the host's configuration, passed to the host at startup. The CLI can override the host, for example `nanyx run --host nanyx/console.host`. Until packages resolve, the only host a manifest can name is `nanyx.console`, the standard library's `nanyx/console.host`, and it takes no `settings` yet (`NYX0024`).
 
-Once hosts are packages, this table names the host package and holds its settings, `[host."nanyx.http"]` with `version` and `port = 3000`, and there is no default host: a manifest with no `[host]` can't be run, and `nanyx new` writes one ([Built-ins as packages](./built-ins-as-packages#the-manifest)).
-
+Once hosts are packages, there is no default host: a manifest with no `host` can't be run, and `nanyx new` writes one ([Built-ins as packages](./built-ins-as-packages#the-manifest)). Until then, a package with no `host` runs under the console host.
 Loose script files, which run top-level statements without a manifest, always run under `ConsoleHost`.
 
 # The entry shape is just a type
@@ -237,7 +229,7 @@ a `Request -> Response`. That is the next section's rule.
 - The host itself, on the machinery ConsoleHost builds ([#1245](https://github.com/nanyx-lang/nanyx/issues/1245)).
 - Something to serve with. On WASI, that's the `wasi:http` incoming-handler world. That is the largest piece: the
   backend emits a WASI preview 1 core module today, and `wasi:http` is a preview 2 component. Before that, the CLI can
-  serve without WASI: `nanyx run` listens on a port (from the manifest's `[host]` table) and calls the handler for
+  serve without WASI: `nanyx run` listens on a port (from the `settings` of the manifest's `host`) and calls the handler for
   each request, which is enough for local development and for the [HTTP server cookbook](../cookbook/http-server).
 
 # Hosts are not frameworks
@@ -288,7 +280,7 @@ The composite host runs each part under the right sub-host and coordinates start
   can be built without async. Async is a separate design, for later.
 - **Hosts live in the standard library until packages resolve**, and then become ordinary packages that the compiler
   ships but doesn't treat specially ([Built-ins as packages](./built-ins-as-packages)): `nanyx/console.host` first, then
-  `nanyx/browser.host`. They are chosen with a `[host]` table in the manifest or `--host` on the CLI. (The issues
+  `nanyx/browser.host`. They are chosen with the manifest's `host` field or `--host` on the CLI. (The issues
   wrote `nanyx/console/host`; a module path has one `/`, between the package and the module, so the module is
   `console.host`.)
 - **ConsoleHost written in Nanyx comes first.** It replaces the compiler's hard-coded entry wiring with no change for
@@ -302,7 +294,7 @@ The composite host runs each part under the right sub-host and coordinates start
    the only `Console` a program has (see [What's built](#whats-built)).
 2. **`Env`** ([#1246](https://github.com/nanyx-lang/nanyx/issues/1246)): arguments, environment variables and the
    exit code, provided by ConsoleHost. Done (see [What's built](#whats-built)).
-3. **Choosing a host** ([#1247](https://github.com/nanyx-lang/nanyx/issues/1247)): `[host]` in the manifest and
+3. **Choosing a host** ([#1247](https://github.com/nanyx-lang/nanyx/issues/1247)): `host` in the manifest and
    `--host` on the CLI, with errors that name the host. Done (see [What's built](#whats-built)).
 4. **More contexts for ConsoleHost**, as they are added: [`Random`](https://github.com/nanyx-lang/nanyx/issues/1237),
    then `Clock` and `FileSystem`.
@@ -317,11 +309,12 @@ The composite host runs each part under the right sub-host and coordinates start
 # What's built
 
 - **The host is a module the compiler resolves.** `Hosts.fs` describes each host the standard library ships (`Host`:
-  the module, and the modules of the contexts it provides) and names the default, `Hosts.console`. Choosing another
+  the package a manifest names it by, `nanyx.console`, the module, and the modules of the contexts it provides) and names the default, `Hosts.console`. Choosing another
   host is choosing another `Host` there: `Hosts.tryFind` gives the one a module name (`nanyx/console.host`) is, or an
   error that names it, for a module that doesn't exist or isn't a host.
-- **A package chooses its host.** `Manifest.read` reads `[host] use` into `Manifest.Host` (the console host without a
-  `[host]` table), and any other key of the table is an error at its line, since no host takes configuration yet.
+- **A package chooses its host.** `Manifest.check` reads the manifest's `host`, `(package = "nanyx.console", version
+  = "0.28.0")`, into `Manifest.Host` (the console host without a `host` field). A package that isn't a host is
+  `NYX0023`, and `settings` is `NYX0024`, since no host takes configuration yet.
   `--host` on `run`, `build` and `check` replaces it (`Package.withHost`); on a script it is a usage error. The host
   travels with the package's module table (`PackageModules.Host`), so every compile of a package's file, the language
   server's included, passes `@entry` to that host's `run`; a file in no package runs under the console host.
@@ -389,7 +382,7 @@ The composite host runs each part under the right sub-host and coordinates start
 
 # Open questions
 
-- **Host configuration typing.** The `[host]` table in the manifest should be checked against a record type the host exports, so that misspelt keys are errors.
+- **Host configuration typing.** The `settings` of the manifest's `host` should be checked against a record type the host exports, so that misspelt keys are errors.
 - **Async and workflows.** Can a host change how the entry runs, for example by running it as a [workflow](../advanced/workflows) or on an event loop, without changing the entry's written type?
 - **Libraries that require a host.** Should a library be able to say "I only make sense under an HTTP host", or is requiring the right contexts always enough?
 - **Host code in another language.** A browser host needs JavaScript beside the module. How does a host package carry it, and how does the build write it out?

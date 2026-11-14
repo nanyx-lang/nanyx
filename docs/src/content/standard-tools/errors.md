@@ -145,10 +145,7 @@ module main
 
 export def total = 1
 -- file: app.nyxp
-[package]
-name = "app"
-version = "0.1.0"
-sources = ["*.nyx"]
+(package = (name = "app", version = "0.1.0", sources = ["*.nyx"]))
 ```
 
 To fix it, move the setting to the package's manifest, and remove the directive.
@@ -250,10 +247,7 @@ every file is a module, and the program starts at the package's `@entry` definit
 -- file: main.nyx
 def total = 1  -- error NYX0017: 'main.nyx' is in the package 'app', so it must declare a module name: start it with module main
 -- file: app.nyxp
-[package]
-name = "app"
-version = "0.1.0"
-sources = ["*.nyx"]
+(package = (name = "app", version = "0.1.0", sources = ["*.nyx"]))
 ```
 
 To fix it, start the file with the `module` line the message suggests, and move top-level statements into a
@@ -280,10 +274,7 @@ module shapes
 
 export def two = 2
 -- file: app.nyxp
-[package]
-name = "app"
-version = "0.1.0"
-sources = ["*.nyx"]
+(package = (name = "app", version = "0.1.0", sources = ["*.nyx"]))
 ```
 
 To fix it, rename one of the modules, or start each file with `@partial module shapes` to make them parts of one
@@ -302,6 +293,82 @@ context Lazy = (
 ```
 
 To fix it, write a kind from the list, as `@customKeywordType(#bind)`.
+
+# NYX0020: Code in a manifest
+
+A package's `.nyxp` manifest holds code, or is empty. A manifest is one record written as data: record, list and
+tuple literals, strings, numbers, `true` and `false`, and tags such as `#error`
+([Packages](../tour/packages#package-manifests)). A name, a call, an operator, a lambda, an interpolated string, a
+definition, an import or a `::` directive is code. A manifest that is not Nanyx at all is a syntax error, `NYX0001`.
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "demo", version = "0.1.0")
+  formatter = (lineWidth = 80 + 20)  -- error NYX0020: the operator '+' is code, but this file holds only data
+)
+```
+
+To fix it, write the value itself: `lineWidth = 100`.
+
+# NYX0021: Unknown manifest field
+
+A record in the manifest has a field it doesn't take: the manifest itself, its `package`, a linter or host entry, a
+linter's `settings`, or its `rules`. The message lists the fields it takes.
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "demo", version = "0.1.0", src = ["*.nyx"])  -- error NYX0021: package has no field 'src'; its fields are 'name', 'version', 'sources', 'publicModules'
+)
+```
+
+To fix it, correct the field's name, or remove it.
+
+# NYX0022: Missing manifest field
+
+The manifest has no `package`, its `package` has no `name` or `version`, or a linter or host entry has no `package`
+or `version`.
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "demo")  -- error NYX0022: package has no version, which it needs
+)
+```
+
+To fix it, add the field: `version = "0.1.0"`.
+
+# NYX0023: Invalid manifest value
+
+A field of the manifest has a value of the wrong kind, such as a string where a list is expected, or a value its rule
+does not allow: a package name that isn't lower case with words separated by dots, a version that isn't a semantic
+version, a severity that isn't `#error`, `#warning`, `#info`, `#hint` or `#off`, or a linter or host package the
+compiler doesn't have.
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "demo", version = "0.1.0", sources = "*.nyx")  -- error NYX0023: package's sources must be a list of strings, not the string "*.nyx"
+)
+```
+
+To fix it, write the value the message asks for: `sources = ["*.nyx"]`.
+
+# NYX0024: Manifest field not supported yet
+
+The manifest uses a field the compiler knows, but does not support yet: a `dependencies` list that isn't empty, or
+`settings` for a host.
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "demo", version = "0.1.0")
+  dependencies = [(package = "acme.util", path = "../util")]  -- error NYX0024: dependencies are not supported yet: ...
+)
+```
+
+To fix it, remove the field. A package can use only the standard library and its own files for now.
 
 # NYX0101: Unknown identifier
 

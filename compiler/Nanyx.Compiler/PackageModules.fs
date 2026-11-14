@@ -18,7 +18,7 @@ type PackageModules =
       /// Each module name the package's files declare, with the files that declare it, in order: several for a module
       /// split across files, each marked `@partial` (see `PartialModules`).
       Modules: Map<string, string list>
-      /// The host the package's `@entry` runs under: its manifest's `[host]`, or `--host`.
+      /// The host the package's `@entry` runs under: its manifest's `host`, or `--host`.
       Host: Host }
 
 module PackageModules =

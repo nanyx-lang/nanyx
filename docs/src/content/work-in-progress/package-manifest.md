@@ -1,13 +1,12 @@
 ---
 title: "The package manifest"
-description: "Proposal: the .nyxp manifest becomes a data-only Nanyx record instead of TOML"
+description: "The .nyxp manifest: a data-only Nanyx record"
 order: 32
 ---
 
-A package's manifest, its `.nyxp` file, is TOML today. This page proposes writing it in Nanyx instead, as a single
-record value with no code in it. The maintainer decided the switch, before path dependencies
-([#862](https://github.com/nanyx-lang/nanyx/issues/862)) add `[dependencies]` to the TOML form. It is part of the
-[packaging](./packaging) workstream.
+A package's manifest, its `.nyxp` file, is written in Nanyx, as a single record value with no code in it. The
+maintainer chose this over TOML before path dependencies ([#862](https://github.com/nanyx-lang/nanyx/issues/862))
+add `dependencies`. It is part of the [packaging](./packaging) workstream.
 
 # Why not TOML
 
@@ -27,11 +26,7 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
 
 ```nanyx fragment
 (
-  package = (
-    name = "emails"
-    version = "0.1.0"
-    sources = ["src/**/*.nyx"]
-  )
+  package = (name = "emails", version = "0.1.0", sources = ["src/**/*.nyx"])
   dependencies = [
     (package = "acme.util", path = "../util")
   ]
@@ -39,34 +34,46 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
     (
       package = "nanyx.lint"
       version = "0.28.0"
-      settings = (lineWidth = 100, rules = (unusedBindings = #error, nonTailRecursion = #off))
+      settings = (rules = (unusedBindings = #error, nonTailRecursion = #off))
     )
   ]
   host = (package = "nanyx.console", version = "0.28.0")
+  formatter = (lineWidth = 100)
 )
 ```
 
 - **Lists of entries, not maps.** Dependencies and linters are lists of records with a `package` field, so every
   entry has the same shape and no name needs quoting. `host` is one entry.
-- **What it may contain.** Only record, list and tuple literals, strings, numbers, `true` and `false`, and tags
-  (`#error`). Anything else is an error with a span: a name, a call, an operator, a lambda, an interpolation. The
-  manifest can always be read without running or type-checking a program, which `nanyx add` needs in order to edit
-  it.
-- **Its shape is checked.** The fields are the manifest's own: `package`, `dependencies`, `linters` and `host` at the
-  top, and `name`, `version`, `sources` and `public-modules` (as `publicModules`) in `package`. An unknown field, a
-  missing `name` or a string where a list is expected is an error at that field.
+- **What it may contain.** Only record, list and tuple literals, strings, numbers, `true` and `false`, tags
+  (`#error`) and `--` comments. Anything else is an error with a span (`NYX0020`): a name, a call, an operator, a
+  lambda, an interpolated string, a definition, an import, a `::` directive. The manifest can always be read without
+  running or type-checking a program, which `nanyx add` needs in order to edit it.
+- **Its shape is checked** (`Manifest.check`). The fields are the manifest's own: `package`, `dependencies`,
+  `linters`, `host` and `formatter` at the top, and `name`, `version`, `sources` and `publicModules` in `package`. A
+  linter or host entry has `package`, `version` and `settings`. An unknown field (`NYX0021`), a missing `name`
+  (`NYX0022`), a string where a list is expected (`NYX0023`) or a field that isn't supported yet (`NYX0024`) is an
+  error at that field.
+- **What works today.** `dependencies` must be empty until path dependencies. The only linter is `nanyx.lint`, whose
+  `settings` hold `rules`, each set to `#error`, `#warning`, `#info`, `#hint` or `#off`. The only host is
+  `nanyx.console`, which takes no `settings`.
 - **Settings are typed by their package.** A linter or host exports its settings as a record type, and the entry's
   `settings` is checked against it with the ordinary type checker. A misspelt key is an ordinary type error, with a
-  span, naming the package. It needs the package's module compiled first, which happens anyway before it runs.
+  span, naming the package. It needs the package's module compiled first, which happens anyway before it runs. Until
+  then, the compiler checks the settings it knows itself.
+- **The formatter's settings** are the `formatter` field, `(lineWidth = 100, indentSize = 2)`, which the formatter
+  reads itself. It is the simplest place for them; the formatter could become a configured tool like a linter later.
 - **Nothing implicit.** With no `linters`, no linter runs; with no `host`, the package can't be run or built. `nanyx
-  new` writes both, as [Built-ins as packages](./built-ins-as-packages#the-manifest) decided.
+  new` writes both, as [Built-ins as packages](./built-ins-as-packages#the-manifest) decided. Until the console host
+  is a package ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)), a package with no `host` still runs under
+  it.
 - **The file** keeps its name and extension, `<name>.nyxp`, so finding a package is unchanged. A `.nyxp` file is
-  Nanyx source to the parser, the formatter and the editor. Scripts keep their `::` directives.
+  Nanyx source to the parser and the formatter. Scripts keep their `::` directives.
 
 # Tools
 
-- **The editor.** The extension treats `.nyxp` as Nanyx, so highlighting, the formatter, diagnostics, hover and
-  completion work in the manifest. Completion on a `settings` field lists the package's settings.
+- **The editor.** The extension is to treat `.nyxp` as Nanyx, so highlighting, the formatter, diagnostics, hover and
+  completion work in the manifest. Completion on a `settings` field lists the package's settings. It does not do this
+  yet.
 - **Tools outside the compiler.** Scripts and CI that read a manifest, such as the package index's registration
   check in `nanyx-lang/packages`, use `nanyx manifest --json`, which prints the manifest as JSON.
 - **Editing it.** `nanyx add` and `nanyx new` edit the record and reformat it with the formatter, so a manifest the
@@ -74,19 +81,19 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
 
 # Plan
 
-1. **Read the manifest as Nanyx** ([#1404](https://github.com/nanyx-lang/nanyx/issues/1404)): the parser reads a `.nyxp` file as a record value, a manifest checker enforces
-   the data-only rule and the manifest's own shape, and every reader of the TOML form uses it. That means
-   `Package.fs`, the language server, the formatter's settings, `nanyx new` and `examples/greeter/greeter.nyxp`.
-   TOML support is removed, since Nanyx is in closed alpha.
+1. ~~**Read the manifest as Nanyx** ([#1404](https://github.com/nanyx-lang/nanyx/issues/1404)): the parser reads a
+   `.nyxp` file as a record value, a manifest checker enforces the data-only rule and the manifest's own shape, and
+   every reader of the TOML form uses it. That means `Package.fs`, the language server, the formatter's settings,
+   `nanyx new` and `examples/greeter/greeter.nyxp`. TOML support is removed, since Nanyx is in closed alpha.~~ Done.
 2. **`nanyx manifest --json`.**
 3. **Path dependencies** in the new form ([#862](https://github.com/nanyx-lang/nanyx/issues/862)), then the rest of
    [local packages](./packaging#local-packages-first).
 4. **Typed settings**, once linters ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)) and hosts
    ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)) are packages that can declare them.
+5. **The editor** treats `.nyxp` as Nanyx.
 
 # Open questions
 
 - **Version ranges.** A string (`"^2.1"`, `"2.1"` meaning caret, as [Packaging](./packaging#versions-and-resolution)
-  says), or tags (`#caret("2.1")`, `#exact("0.28.0")`)?
-- **The formatter's settings.** They sit in the TOML today as `[formatter]`. They could become a `formatter` field, or
-  the formatter could become a configured tool like a linter.
+  says), or tags (`#caret("2.1")`, `#exact("0.28.0")`)? Versions are strings for now: a linter's or host's `version`
+  is an exact version string, `"0.28.0"`.

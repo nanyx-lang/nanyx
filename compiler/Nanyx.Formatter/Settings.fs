@@ -1,13 +1,12 @@
-/// The formatter's settings for a file: the `[formatter]` table of the package's `.nyxp` manifest, the nearest one
-/// in the file's directory or above it, or for a script its `::formatter` directives. Only that table is read; the
-/// rest of the manifest is the packaging workstream's, whose reader will replace this one.
+/// The formatter's settings for a file: the `formatter` field of the package's `.nyxp` manifest, the nearest one in
+/// the file's directory or above it, or for a script its `::formatter` directives. Only that field is read; the rest of
+/// the manifest is the compiler's.
 module Nanyx.Formatter.Settings
 
 open System
 open System.Collections.Generic
 open System.IO
-open Tomlyn
-open Tomlyn.Model
+open Parser.Program.DataValues
 
 /// The manifest in `directory` or the nearest directory above it that has one, or an error if that directory has more
 /// than one.
@@ -20,42 +19,33 @@ let rec manifestIn (directory: string) : Result<string option, string> =
         | parent -> manifestIn parent
     | several -> Result.Error $"""{directory} has more than one .nyxp manifest: {several |> Array.map Path.GetFileName |> String.concat ", "}"""
 
-/// A TOML value as an error message names it.
-let private describe (value: obj) =
-    match value with
-    | :? int64 as n -> string n
-    | :? string as s -> $"the string \"{s}\""
-    | :? float -> "a float"
-    | :? bool -> "a boolean"
-    | :? TomlTable -> "a table"
-    | :? TomlArray -> "an array"
-    | _ -> "a date or time"
+/// `path:line:column`, from 1, of where `span` starts.
+let private location (span: Parser.Program.SourceSpan) = $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}"
 
-/// The options the `[formatter]` table of the manifest at `manifest` sets, the defaults for those it leaves out, or
-/// an error naming the manifest and what is wrong.
+/// The options the `formatter` field of the manifest at `manifest` sets, `formatter = (lineWidth = 100)`, the defaults
+/// for those it leaves out, or an error naming the manifest and what is wrong. The rest of the manifest is the
+/// compiler's, which reports what is wrong with it; here a manifest that is not data is only an error.
 let read (manifest: string) : Result<Formatter.Options, string> =
-    let positive (key: string) (value: obj) =
-        match value with
-        | :? int64 as n when n > 0L && n <= int64 Int32.MaxValue -> Result.Ok(int n)
-        | _ -> Result.Error $"{manifest}: [formatter] {key} must be a positive integer, not {describe value}"
-    let table =
-        try Result.Ok(TomlSerializer.Deserialize<TomlTable>(File.ReadAllText manifest, TomlSerializerOptions()))
-        with :? TomlException as e -> Result.Error $"{manifest}: not valid TOML: {e.Message}"
-    match table with
-    | Result.Error message -> Result.Error message
-    | Result.Ok table ->
-        match table.TryGetValue "formatter" with
-        | false, _ -> Result.Ok Formatter.Options.defaults
-        | true, (:? TomlTable as settings) ->
+    let positive (field: DataField) =
+        match field.Value.Data with
+        | DataInt n when n > 0I && n <= bigint Int32.MaxValue -> Result.Ok(int n)
+        | _ -> Result.Error $"{location field.Value.Location}: formatter's {field.Name} must be a positive integer, not {DataValue.describe field.Value}"
+    match DataValue.read manifest (File.ReadAllText manifest) with
+    | Result.Error _ -> Result.Error $"{manifest}: not a manifest: it holds code or is not Nanyx; nanyx check says why"
+    | Result.Ok { Data = DataRecord fields } ->
+        match DataValue.field "formatter" fields with
+        | None -> Result.Ok Formatter.Options.defaults
+        | Some { Value = { Data = DataRecord settings } } ->
             (Result.Ok Formatter.Options.defaults, settings)
-            ||> Seq.fold (fun options setting ->
+            ||> List.fold (fun options setting ->
                 options
                 |> Result.bind (fun options ->
-                    match setting.Key with
-                    | "lineWidth" -> positive setting.Key setting.Value |> Result.map (fun n -> { options with LineWidth = n })
-                    | "indentSize" -> positive setting.Key setting.Value |> Result.map (fun n -> { options with IndentSize = n })
-                    | key -> Result.Error $"{manifest}: unknown setting [formatter] {key}; the settings are lineWidth and indentSize"))
-        | true, value -> Result.Error $"{manifest}: formatter must be a table, [formatter], not {describe value}"
+                    match setting.Name with
+                    | "lineWidth" -> positive setting |> Result.map (fun n -> { options with LineWidth = n })
+                    | "indentSize" -> positive setting |> Result.map (fun n -> { options with IndentSize = n })
+                    | name -> Result.Error $"{location setting.NameSpan}: formatter has no setting '{name}'; the settings are lineWidth and indentSize"))
+        | Some field -> Result.Error $"{location field.Value.Location}: formatter must be a record, (lineWidth = 100), not {DataValue.describe field.Value}"
+    | Result.Ok _ -> Result.Ok Formatter.Options.defaults
 
 /// The options for the file at `path`: those of its manifest, or the defaults if it has none.
 let forFile (path: string) : Result<Formatter.Options, string> =
@@ -64,8 +54,19 @@ let forFile (path: string) : Result<Formatter.Options, string> =
         | Some manifest -> read manifest
         | None -> Result.Ok Formatter.Options.defaults)
 
+/// A directive's value, a TOML value, as an error message names it.
+let private describe (value: obj) =
+    match value with
+    | :? int64 as n -> string n
+    | :? string as s -> $"the string \"{s}\""
+    | :? float -> "a float"
+    | :? bool -> "a boolean"
+    | :? Tomlyn.Model.TomlTable -> "a table"
+    | :? Tomlyn.Model.TomlArray -> "an array"
+    | _ -> "a date or time"
+
 /// `options` with the `::formatter` directives at the top of `text`, the source of the file at `path`, applied:
-/// `::formatter.lineWidth = 100`. They are a script's `[formatter]` table, so a file in a package may not have any; the
+/// `::formatter.lineWidth = 100`. They are a script's `formatter` field, so a file in a package may not have any; the
 /// other directives are the compiler's. An error names the file, the line and the directive.
 let withDirectives (path: string) (text: string) (options: Formatter.Options) : Result<Formatter.Options, string> =
     let manifest =
@@ -83,7 +84,7 @@ let withDirectives (path: string) (text: string) (options: Formatter.Options) : 
                 | Result.Ok value -> error $"::formatter.{key} must be a positive integer, not {describe value}"
                 | Result.Error message -> error message
             match manifest, directive.Key, directive.Value with
-            | Result.Ok (Some manifest), _, _ -> error $"::formatter is for a script; in a package, set it in the [formatter] table of {manifest}"
+            | Result.Ok (Some manifest), _, _ -> error $"::formatter is for a script; in a package, set it in the formatter field of {manifest}"
             | _, [ _; "lineWidth" as key ], Some value -> positive key value |> Result.map (fun n -> { options with LineWidth = n })
             | _, [ _; "indentSize" as key ], Some value -> positive key value |> Result.map (fun n -> { options with IndentSize = n })
             | _, [ _; key ], Some _ -> error $"unknown setting ::formatter.{key}; the settings are lineWidth and indentSize"

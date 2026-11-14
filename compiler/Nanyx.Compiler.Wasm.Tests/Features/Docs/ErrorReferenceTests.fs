@@ -70,21 +70,27 @@ let private filesOf (code: string) =
     | first :: _ when isMarker first -> split lines
     | _ -> [ "main.nyx", code ]
 
-/// The codes of the errors compiling `code` reports, with the backend's if the type checker reports none.
+/// The codes of the errors compiling `code` reports, with the backend's if the type checker reports none. An example
+/// whose first file is a manifest, `-- file: demo.nyxp`, reports what reading that manifest finds.
 let private errorsOf (code: string) =
     use directory = new TempDirectory()
     let files = filesOf code
     for name, text in files do
         File.WriteAllText(Path.Combine(directory.Path, name), text)
     let name, text = List.head files
-    let result = Script.compileSource (Path.Combine(directory.Path, name)) text
-    let errors = result.Diagnostics |> List.filter Diagnostics.isError
-    match errors, result.Typed with
-    | [], Some typed ->
-        match CodeGen.tryTranspileTypedModuleToWat typed with
-        | Error diagnostic -> [ diagnostic ]
-        | Ok _ -> []
-    | _ -> errors
+    if name.EndsWith Manifest.extension then
+        match Manifest.check (Path.Combine(directory.Path, name)) text with
+        | Result.Error errors -> errors
+        | Result.Ok _ -> []
+    else
+        let result = Script.compileSource (Path.Combine(directory.Path, name)) text
+        let errors = result.Diagnostics |> List.filter Diagnostics.isError
+        match errors, result.Typed with
+        | [], Some typed ->
+            match CodeGen.tryTranspileTypedModuleToWat typed with
+            | Error diagnostic -> [ diagnostic ]
+            | Ok _ -> []
+        | _ -> errors
 
 [<Theory>]
 [<MemberData(nameof errorExamples)>]

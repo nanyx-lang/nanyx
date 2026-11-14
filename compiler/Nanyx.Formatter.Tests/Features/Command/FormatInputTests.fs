@@ -51,6 +51,6 @@ let ``A byte order mark is kept`` () =
 
 [<Fact>]
 let ``The settings are those of a file in the directory`` () =
-    let directory = directoryWith [ "app.nyxp", "[formatter]\nindentSize = 4\n" ]
+    let directory = directoryWith [ "app.nyxp", "(formatter = (indentSize = 4))" ]
     let _, written = formatInput Write directory (bytes "def x =\n  def a = 1\n  a\n")
     Assert.Equal("def x =\n    def a = 1\n    a\n", Encoding.UTF8.GetString written)

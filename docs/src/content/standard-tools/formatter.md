@@ -131,17 +131,18 @@ def mapSome
 
 # Configuration
 
-The formatter has a small set of configuration options that can be set in a `[formatter]` table of the package's `.nyxp` manifest. These options are intentionally limited to keep style consistent across contributors and projects.
+The formatter has a small set of configuration options that can be set in the `formatter` field of the package's `.nyxp` manifest. These options are intentionally limited to keep style consistent across contributors and projects.
 
-```toml
-[formatter]
-# The maximum line width before wrapping occurs (default: 100)
-lineWidth = 100
-# The number of spaces to use for indentation (default: 2)
-indentSize = 2
+```nanyx fragment
+formatter = (
+  -- The maximum line width before wrapping occurs (default: 100)
+  lineWidth = 100
+  -- The number of spaces to use for indentation (default: 2)
+  indentSize = 2
+)
 ```
 
-Each file is formatted with the settings of the nearest `.nyxp` in its directory or a directory above it, so one run can format several packages, each in its own style. With no manifest, or no `[formatter]` table in it, the defaults apply. The table may hold only these two settings, each a positive integer: anything else is an error naming the manifest and the setting, and no file under that manifest is formatted (`nanyx format` exits with 2). The language server reads the same settings for the document it formats, and leaves the document alone if they are not valid.
+Each file is formatted with the settings of the nearest `.nyxp` in its directory or a directory above it, so one run can format several packages, each in its own style. With no manifest, or no `formatter` field in it, the defaults apply. The field is a record that may hold only these two settings, each a positive integer: anything else, or a manifest that holds code, is an error naming the manifest and the setting, and no file under that manifest is formatted (`nanyx format` exits with 2). The language server reads the same settings for the document it formats, and leaves the document alone if they are not valid.
 
 # Related
 

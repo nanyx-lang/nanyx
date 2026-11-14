@@ -1,15 +1,12 @@
-# A package: `nanyx run` in this directory runs its @entry, and `nanyx build` checks every source file and writes
-# the program to out/greeter.wat.
-
-[package]
-name = "greeter"
-version = "0.1.0"
-sources = ["src/**/*.nyx"]
-
-# The official linter runs only in packages that turn it on. Each rule can be set to error, warning, info, hint
-# or none; leave the table empty to keep every rule at its default.
-[linters.default]
-unusedBindings = "error"
-
-[formatter]
-lineWidth = 100
+-- A package: `nanyx run` in this directory runs its @entry, and `nanyx build` checks every source file and writes
+-- the program to out/greeter.wat.
+(
+  package = (name = "greeter", version = "0.1.0", sources = ["src/**/*.nyx"])
+  -- The official linter runs only in packages that turn it on. Each rule can be set to #error, #warning, #info,
+  -- #hint or #off; leave out its settings to keep every rule at its default.
+  linters = [
+    (package = "nanyx.lint", version = "0.28.0", settings = (rules = (unusedBindings = #error)))
+  ]
+  host = (package = "nanyx.console", version = "0.28.0")
+  formatter = (lineWidth = 100)
+)

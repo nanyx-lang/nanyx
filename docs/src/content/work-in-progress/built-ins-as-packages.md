@@ -38,7 +38,7 @@ host: loading linter packages, severities, configuration and suppression. The ru
 ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343))
 
 **The console host is a package**, for example `nanyx.console`, with `Console` and `Env`. Any module that exports a host
-`run` is a host, from any package. `HostRuntime` goes to the module the manifest's `[host]` (or `--host`) names, rather
+`run` is a host, from any package. `HostRuntime` goes to the module the manifest's `host` (or `--host`) names, rather
 than to a list the compiler keeps. The table of hosts in `Hosts.fs` goes. The standard library keeps only what every
 program needs, whatever its host. ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344))
 
@@ -50,45 +50,40 @@ project is linted and runs from the start. The lockfile records them like any ot
 
 # The manifest
 
-Decided by the maintainer. (The TOML below is moving to a data-only Nanyx record, with the same sections and rules: see [The package manifest](./package-manifest).) The manifest has a small, fixed set of top-level sections, and a package's settings sit
-under its own entry, never at the top level, so a section is never mistaken for a package's configuration:
+Decided by the maintainer. The manifest is one Nanyx record written as data ([The package manifest](./package-manifest)).
+It has a small, fixed set of top-level fields, and a package's settings sit under its own entry, never at the top
+level, so a field is never mistaken for a package's configuration:
 
-```toml
-[package]
-name = "emails"
-version = "0.1.0"
-sources = ["src/**/*.nyx"]
-
-[dependencies]
-"acme.web" = "1.2"
-
-[linters."nanyx.lint"]
-version = "0.27.0"
-lineWidth = 100
-rules.unusedBindings = "error"
-rules.nonTailRecursion = "off"
-
-[host."nanyx.console"]
-version = "0.27.0"
+```nanyx fragment
+(
+  package = (name = "emails", version = "0.1.0", sources = ["src/**/*.nyx"])
+  dependencies = [(package = "acme.web", version = "1.2")]
+  linters = [
+    (
+      package = "nanyx.lint"
+      version = "0.28.0"
+      settings = (rules = (unusedBindings = #error, nonTailRecursion = #off))
+    )
+  ]
+  host = (package = "nanyx.console", version = "0.28.0")
+)
 ```
 
-- **Top-level sections.** `[package]`, `[dependencies]`, `[linters]` and `[host]` are the only ones. Any other is an
-  error.
-- **Linters are not dependencies.** `[dependencies]` are packages the code imports, which end up in the program. A
+- **Top-level fields.** `package`, `dependencies`, `linters`, `host` and `formatter` are the only ones. Any other is
+  an error.
+- **Linters are not dependencies.** `dependencies` are packages the code imports, which end up in the program. A
   linter runs at compile time and is never imported, like Cargo's build dependencies or npm's dev dependencies, so it
-  has a section of its own.
-- **Quote a package's name.** A name with a dot is quoted: in TOML, `[linters.nanyx.lint]` would be a table `lint`
-  inside a table `nanyx`.
-- **A package's settings go under its entry,** with `version`. A linter's rule severities are `rules.<name>`, which
-  replaces today's `[linters.default]`. A linter or host declares the settings it accepts, so a misspelt key is an
-  error naming the package. For linters that's part of their contract
+  has a field of its own.
+- **A package's settings go under its entry,** beside `package` and `version`, in `settings`. A linter's rule
+  severities are `settings = (rules = (...))`. A linter or host declares the settings it accepts, so a misspelt key is
+  an error naming the package. For linters that's part of their contract
   ([#107](https://github.com/nanyx-lang/nanyx/issues/107)); for hosts it settles the Hosts page's question on typed
-  host configuration. `[host."nanyx.http"]` with `version` and `port = 3000` replaces `[host] use = ...`.
-- **The short form** works when there are no settings: `"nanyx.lint" = "0.27.0"` under `[linters]`, as under
-  `[dependencies]`.
+  host configuration. `host = (package = "nanyx.http", version = "...", settings = (port = 3000))` names a host and
+  configures it.
+- **An entry without settings** is just `(package = "nanyx.lint", version = "0.28.0")`.
 - **Nothing implicit.**
-  - With no `[linters]`, no linter runs.
-  - With no `[host]`, a package has no host. `nanyx run` and `nanyx build` refuse it with an error that says to add
+  - With no `linters`, no linter runs.
+  - With no `host`, a package has no host. `nanyx run` and `nanyx build` refuse it with an error that says to add
     one, while `nanyx check` and library packages need none.
   - `nanyx new` writes both entries, at the compiler's version.
 - **Scripts.** A loose script has no manifest. It runs under the console host, and runs the linters its `::linters`

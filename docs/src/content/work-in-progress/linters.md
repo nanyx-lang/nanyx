@@ -138,8 +138,10 @@ The host is `Linters.fs` ([#100](https://github.com/nanyx-lang/nanyx/issues/100)
   not declare, both count as failing, and the linter's other reports for the module are left out.
 - The configuration is `LinterOptions` (the linters to run, and severities by code), passed to
   `Compiler.compileWith` and its file and source variants. A package's `.nyxp` sets it with an
-  `[linters.<name>]` table per linter to run ([#279](https://github.com/nanyx-lang/nanyx/issues/279)), read by
-  `nanyx build`, `nanyx run` and the language server; without the table, the linter does not run. A file
+  entry in `linters` per linter to run, `(package = "nanyx.lint", version = "0.28.0", settings = (rules = (...)))`
+  ([#279](https://github.com/nanyx-lang/nanyx/issues/279)), read by `Manifest.check` for `nanyx build`, `nanyx run`
+  and the language server; without an entry, the linter does not run. A linter's `Package` is the name a manifest
+  gives it, and its `Name` (`default`) is the first part of its rules' codes and its `::linters` directives. A file
   outside any package turns linters on with `::linters` directives in the same way, and without them runs
   none. Linters are opt-in everywhere, including `Compiler.compile` and its variants.
 

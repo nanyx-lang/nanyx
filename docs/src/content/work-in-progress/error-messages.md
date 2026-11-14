@@ -88,7 +88,8 @@ little beyond the title.
 - Every ` ```nanyx ` block is compiled as a script, and must report errors of its section's code and no other. The
   backend compiles it too when the type checker finds nothing, so `NYX03xx` examples work the same way. A block of
   several files starts each with a line `-- file: <name>`, and the first is the one compiled; a file `app.nyxp`
-  among them makes the others a package. The fences `fragment` and `skip=#<issue>` mean what they do in
+  among them makes the others a package. A block whose first line is `-- file: demo.nyxp` is a manifest on its own,
+  read by the manifest checker, as the `NYX0020` to `NYX0024` examples are. The fences `fragment` and `skip=#<issue>` mean what they do in
   [the tour](./compilation#tour-examples).
 - Every section has an example, except those of the codes no program can report: `NYX0002` (the file given to
   `nanyx` is missing), `NYX0006` (a broken standard library module) and `NYX0302` (a bug in the backend).

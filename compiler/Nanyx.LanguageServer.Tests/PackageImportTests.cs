@@ -11,10 +11,7 @@ public sealed class PackageImportTests : LanguageServerTestBase
     public async Task A_package_file_finds_a_module_declared_in_another_file_of_the_package()
     {
         File.WriteAllText(TempPath("acme.web.nyxp"), """
-            [package]
-            name = "acme.web"
-            version = "0.1.0"
-            sources = ["src/**/*.nyx"]
+            (package = (name = "acme.web", version = "0.1.0", sources = ["src/**/*.nyx"]))
             """.ReplaceLineEndings("\n"));
         File.WriteAllText(TempPath("src", "lib", "hello.nyx"), """
             module greetings
@@ -48,9 +45,7 @@ public sealed class PackageImportTests : LanguageServerTestBase
     public async Task Definition_of_a_name_from_another_fragment_of_a_partial_module_is_in_that_file()
     {
         File.WriteAllText(TempPath("demo.nyxp"), """
-            [package]
-            name = "demo"
-            version = "0.1.0"
+            (package = (name = "demo", version = "0.1.0"))
             """.ReplaceLineEndings("\n"));
         var format = TempPath("format.nyx");
         File.WriteAllText(format, """

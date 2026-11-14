@@ -53,7 +53,7 @@ let ``A rule directive sets the rule's severity`` () =
 
 [<Fact>]
 let ``A rule directive can turn the rule off`` () =
-    Assert.Empty((compile ("::linters.default.unusedBindings = \"none\"\n" + unusedBinding)).Diagnostics)
+    Assert.Empty((compile ("::linters.default.unusedBindings = \"off\"\n" + unusedBinding)).Diagnostics)
 
 [<Fact>]
 let ``A #! line, comments and blank lines can come among the directives`` () =
@@ -66,8 +66,8 @@ let ``A #! line, comments and blank lines can come among the directives`` () =
 [<Theory>]
 [<InlineData("::linters.nope", "NYX0009", "unknown linter 'nope'; the linters are 'default'")>]
 [<InlineData("::linters.default.nope = \"error\"", "NYX0009", "unknown rule 'nope' of the linter 'default'; the rules are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'plusBetweenContexts', 'unannotatedExports', 'unusedResults', 'shadowedPreludeNames', 'semicolons', 'linterFailed'")>]
-[<InlineData("::linters.default.unusedBindings = \"loud\"", "NYX0009", "::linters.default.unusedBindings must be 'error', 'warning', 'info', 'hint', 'none', not the string \"loud\"")>]
-[<InlineData("::linters.default.unusedBindings = 3", "NYX0009", "::linters.default.unusedBindings must be 'error', 'warning', 'info', 'hint', 'none', not 3")>]
+[<InlineData("::linters.default.unusedBindings = \"loud\"", "NYX0009", "::linters.default.unusedBindings must be 'error', 'warning', 'info', 'hint', 'off', not the string \"loud\"")>]
+[<InlineData("::linters.default.unusedBindings = 3", "NYX0009", "::linters.default.unusedBindings must be 'error', 'warning', 'info', 'hint', 'off', not 3")>]
 [<InlineData("::linters.default.unusedBindings = error", "NYX0009", "'error' is not a TOML value; a string needs quotes, as in a manifest: \"error\"")>]
 [<InlineData("::linters.default.unusedBindings", "NYX0009", "::linters.default.unusedBindings needs a severity")>]
 [<InlineData("::linters.default = \"error\"", "NYX0009", "::linters.default is a table, so it takes no value")>]
@@ -107,7 +107,7 @@ let ``A directive after the first line of code is a syntax error saying where di
 let ``A directive in a file of a package is an error saying to use the manifest`` () =
     let root = Path.GetDirectoryName(scriptPath ())
     let manifest = Path.Combine(root, "demo.nyxp")
-    File.WriteAllText(manifest, "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n")
+    File.WriteAllText(manifest, """(package = (name = "demo", version = "0.1.0"))""")
     let main = Path.Combine(root, "main.nyx")
     File.WriteAllText(main, "::linters.default.unusedBindings = \"error\"\nmodule main\n\n" + unusedBinding)
     try

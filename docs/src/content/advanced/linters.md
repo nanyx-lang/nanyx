@@ -40,42 +40,47 @@ When you create a new project with `nanyx new`, the default linter is already co
 
 # Configuring linters
 
-Linters are declared in the package manifest (the `.nyxp` file, see [Packages and projects](../tour/packages)). Each linter can be enabled, disabled, or have its individual rules configured:
+Linters are declared in the `linters` list of the package manifest (the `.nyxp` file, see [Packages and projects](../tour/packages)). Each entry names a linter's package and version, and its `settings` can configure its individual rules. The default linter is the package `nanyx.lint`:
 
-```toml
-[linters.default]
-unusedBindings = "warning"
-shadowedPreludeNames = "info"
-unusedResults = "warning"
+```nanyx fragment
+(
+  package = (name = "acme.web", version = "1.2.0")
+  linters = [
+    (
+      package = "nanyx.lint"
+      version = "0.28.0"
+      settings = (rules = (unusedBindings = #warning, shadowedPreludeNames = #info, unusedResults = #warning))
+    )
+  ]
+)
 ```
 
-A linter runs only if the manifest has a table for it, so removing `[linters.default]` uninstalls the default linter. An empty table runs every rule at its default severity:
+A linter runs only if the manifest has an entry for it, so removing the `nanyx.lint` entry uninstalls the default linter. An entry without `settings` runs every rule at its default severity:
 
-```toml
-[linters.default]
+```nanyx fragment
+linters = [(package = "nanyx.lint", version = "0.28.0")]
 ```
 
-A single file run on its own (`nanyx run script.nyx`) has no manifest, so it turns its linters on with `::linters` directives at the top of the file; without any, it runs none. Each directive is written as the manifest's dotted key: `::linters.default` is an empty `[linters.default]` table, and `::linters.default.unusedBindings = "error"` sets one rule's severity. As in a manifest, only the linters the directives name run:
+A single file run on its own (`nanyx run script.nyx`) has no manifest, so it turns its linters on with `::linters` directives at the top of the file; without any, it runs none. `::linters.default` turns the default linter on, as its entry without `settings` would, and `::linters.default.unusedBindings = "error"` sets one rule's severity. As in a manifest, only the linters the directives name run:
 
 ```nanyx
 ::linters.default.unusedBindings = "error"
-::linters.default.nonTailRecursion = "none"
+::linters.default.nonTailRecursion = "off"
 
 import nanyx/console
 
 println("Hello!")
 ```
 
-`nanyx run` shows only errors and warnings before it runs the program. `"info"` and `"hint"` diagnostics are suggestions for code you are working on, so `nanyx check` and the editor show them.
+`nanyx run` shows only errors and warnings before it runs the program. Info and hint diagnostics are suggestions for code you are working on, so `nanyx check` and the editor show them.
 
-The severities are `"error"`, `"warning"`, `"info"` and `"hint"`. A linter or rule the compiler does not know is an error in the manifest, so a misspelt name never silently does nothing. You can suppress a specific rule by setting its severity to `"none"`:
+The severities are `#error`, `#warning`, `#info` and `#hint` in a manifest, and `"error"`, `"warning"`, `"info"` and `"hint"` in a directive. A linter or rule the compiler does not know is an error in the manifest, so a misspelt name never silently does nothing. You can suppress a specific rule by setting its severity to `#off` (`"off"` in a directive):
 
-```toml
-[linters.default]
-shadowedPreludeNames = "none"
+```nanyx fragment
+settings = (rules = (shadowedPreludeNames = #off))
 ```
 
-Because severity is configured per project, a team that wants strictness can promote a linter rule to `"error"`, which then blocks a release build exactly as a compiler error would. This is how "warnings as errors" works in Nanyx: it is a project choice, not a compiler setting.
+Because severity is configured per project, a team that wants strictness can promote a linter rule to `#error`, which then blocks a release build exactly as a compiler error would. This is how "warnings as errors" works in Nanyx: it is a project choice, not a compiler setting.
 
 # Writing custom linters
 

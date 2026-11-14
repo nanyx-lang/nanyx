@@ -8,7 +8,7 @@ Nanyx keeps compiler errors focused on correctness, while style and convention c
 
 The **official Nanyx style linter** enforces recommended coding conventions, including guidance around exported definitions.
 
-Linters are just Nanyx libraries that run during compilation and emit diagnostics. The official Nanyx style linter is installable / uninstallable in any project, and is included in the default project template. It is entirely possible (even encouraged) to write custom linters for your team or project.
+Linters are just Nanyx libraries that run during compilation and emit diagnostics. The official Nanyx style linter is the package `nanyx.lint`, installable / uninstallable in any project with an entry in its manifest's `linters`, and is included in the default project template. It is entirely possible (even encouraged) to write custom linters for your team or project.
 
 # Why it matters
 
@@ -152,9 +152,8 @@ A [tail call](../tour/functions#tail-recursion) uses no stack, but any other cal
 
 It is `info` by default, since recursion that is not in tail position is often fine: a walk over a tree only recurses as deep as the tree. A project that wants every loop to be stack-safe can raise it:
 
-```toml
-[linters.default]
-nonTailRecursion = "warning"
+```nanyx fragment
+linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (nonTailRecursion = #warning)))]
 ```
 
 ## Unused return value
@@ -195,9 +194,8 @@ def total = { n ->
 
 The rule (`semicolons`) reports every `;` that separates two statements on one line (see [Variables](../tour/variables#several-statements-on-one-line)). One statement per line is the house style, so it is a warning by default. Where the statements are lines of a block, as here, its fix puts the statement after the `;` on a line of its own, at the block's indent. A one-line body, such as a match arm's or a lambda's, `{ x -> log(x); x + 1 }`, has no block lines to split it into, so it gets no fix. Turn the rule off to write short sequences on one line:
 
-```toml
-[linters.default]
-semicolons = "none"
+```nanyx fragment
+linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (semicolons = #off)))]
 ```
 
 # Learn more

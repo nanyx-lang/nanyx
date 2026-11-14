@@ -32,7 +32,7 @@ You can run this file with `nanyx run filename.nyx`. The compiler treats the fil
 
 A script has no package manifest, but it can say what a manifest would with _directives_: lines starting `::` at the top of the file, before its first line of code. They may come after a `#!` line and among comments and blank lines.
 
-A directive is written the way the manifest's TOML would write it, as a dotted key after `::`. A key on its own stands for a table. A key followed by `= value` sets that value, which is a TOML value, so strings are quoted:
+A directive is a dotted key after `::`. A key on its own turns something on. A key followed by `= value` sets that value, a string in quotes or a number:
 
 ```nanyx
 #!/usr/bin/env -S nanyx run
@@ -46,10 +46,10 @@ println("Hello!")
 
 | Directive | What it does | In a manifest |
 | --- | --- | --- |
-| `::linters.default` | Turns a linter on, with every rule at its default severity | `[linters.default]` |
-| `::linters.default.unusedBindings = "error"` | Turns the linter on and sets one rule's severity (`"error"`, `"warning"`, `"info"`, `"hint"` or `"none"`) | `unusedBindings = "error"` under `[linters.default]` |
-| `::formatter.lineWidth = 80` | Sets one of the formatter's settings, `lineWidth` or `indentSize` | `lineWidth = 80` under `[formatter]` |
-| `::dependencies.acme.json = "1.2"` | Depends on a package: not supported yet, so it is an error for now | `acme.json = "1.2"` under `[dependencies]` |
+| `::linters.default` | Turns the official linter on, with every rule at its default severity | `linters = [(package = "nanyx.lint", version = "0.28.0")]` |
+| `::linters.default.unusedBindings = "error"` | Turns the linter on and sets one rule's severity (`"error"`, `"warning"`, `"info"`, `"hint"` or `"off"`) | `settings = (rules = (unusedBindings = #error))` in that linter's entry |
+| `::formatter.lineWidth = 80` | Sets one of the formatter's settings, `lineWidth` or `indentSize` | `formatter = (lineWidth = 80)` |
+| `::dependencies.acme.json = "1.2"` | Depends on a package: not supported yet, so it is an error for now | `dependencies = [(package = "acme.json", version = "1.2")]` |
 
 As in a manifest, only the linters a script's `::linters` directives name run, so a script without one runs none. A directive the compiler does not understand, or one after the first line of code, is an error naming its line. A file that belongs to a package cannot have directives: its manifest is the one place a package says these things.
 
@@ -81,18 +81,16 @@ That means shared files should avoid top-level statements and only define values
 
 For larger projects, turn the code into a _package_ by adding a package manifest. In that mode, every source file declares a named module, and modules are imported by their declared names instead of by file paths. This keeps imports stable as the project grows and clarifies ownership of modules.
 
-## Package manifest format (TOML)
+## Package manifest format
 
-A package is described by a `.nyxp` file at the package root, written in TOML. It names the package, selects its source files, and lists its dependencies:
+A package is described by a `.nyxp` file at the package root: one Nanyx record, written as data, with no code in it. It names the package, selects its source files, and says which linters check them and which host runs them:
 
-```toml
-[package]
-name = "word_counter"
-version = "0.1.0"
-sources = ["src/**/*.nyx"]
-
-[dependencies]
-nanyx.web = "1.4"
+```nanyx fragment
+(
+  package = (name = "word_counter", version = "0.1.0", sources = ["src/**/*.nyx"])
+  linters = [(package = "nanyx.lint", version = "0.28.0")]
+  host = (package = "nanyx.console", version = "0.28.0")
+)
 ```
 
 `nanyx new` creates this file for you. The full manifest format, and how packages are grouped into projects, is covered in [Packages and projects](../tour/packages).
