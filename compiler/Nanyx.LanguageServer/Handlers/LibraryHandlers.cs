@@ -105,6 +105,48 @@ public sealed class LibraryModuleHandler : IJsonRpcRequestHandler<LibraryModuleP
         };
 }
 
+/// <summary>The parameters of <c>nanyx/addImport</c>: the document, and the import path of the module to import.</summary>
+[Parallel, Method(AddImportHandler.Method, Direction.ClientToServer)]
+public sealed record AddImportParams : IRequest<IReadOnlyList<TextEdit>?>
+{
+    public required TextDocumentIdentifier TextDocument { get; init; }
+    public required string Module { get; init; }
+}
+
+/// <summary>
+/// <c>nanyx/addImport</c>: the edits that import a standard-library module into an open document, placed as the
+/// missing-import quick fix places them (see <see cref="NyxCompiler.ImportFixes.insertion"/>), for the library browser's
+/// button. None when the document imports it already; <c>null</c> when the document is not open or does not parse.
+/// </summary>
+public sealed class AddImportHandler : IJsonRpcRequestHandler<AddImportParams, IReadOnlyList<TextEdit>?>
+{
+    public const string Method = "nanyx/addImport";
+
+    private readonly DocumentStore _documents;
+
+    public AddImportHandler(DocumentStore documents)
+    {
+        _documents = documents;
+    }
+
+    public Task<IReadOnlyList<TextEdit>?> Handle(AddImportParams request, CancellationToken cancellationToken)
+    {
+        if (_documents.TryGet(request.TextDocument.Uri) is not { } document)
+        {
+            return Task.FromResult<IReadOnlyList<TextEdit>?>(null);
+        }
+
+        IReadOnlyList<TextEdit>? edits = NyxCompiler.ImportFixes.insertion(document.Positions.NormalizedText, request.Module) switch
+        {
+            NyxCompiler.ImportFixes.ImportInsertion.Insert insert =>
+                [new TextEdit { Range = document.Positions.ToRange(insert.offset, insert.offset), NewText = insert.text }],
+            { IsAlreadyImported: true } => [],
+            _ => null
+        };
+        return Task.FromResult(edits);
+    }
+}
+
 internal static class LibraryHandlers
 {
     /// <summary>The target of a link in a doc comment of the library: its place in the copy of the library's source.</summary>

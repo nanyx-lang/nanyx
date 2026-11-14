@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.InfoView = void 0;
+exports.openLocation = openLocation;
 const vscode = __importStar(require("vscode"));
 const contextLines_1 = require("./contextLines");
 /** The language server's request for what the compiler knows at a position (see `InfoViewHandler` in the compiler). */
@@ -145,7 +146,7 @@ class InfoView {
             this.schedule();
         }
         else if (message.type === "open" && message.location) {
-            void open(message.location);
+            void openLocation(message.location);
         }
         else if (message.type === "openLink" && message.href) {
             void openLink(message.href);
@@ -211,7 +212,7 @@ class InfoView {
 exports.InfoView = InfoView;
 InfoView.viewId = "nanyx.infoView";
 /** Opens a location an item links to, in the editor that already shows its document, or else the first one. */
-async function open(location) {
+async function openLocation(location) {
     const { start, end } = location.range;
     const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(location.uri));
     const visible = vscode.window.visibleTextEditors.find((editor) => editor.document === document);
@@ -231,7 +232,7 @@ async function openLink(href) {
         const line = Number(place[1]) - 1;
         const character = Number(place[2]) - 1;
         const range = { start: { line, character }, end: { line, character } };
-        await open({ uri: uri.with({ fragment: "" }).toString(), range });
+        await openLocation({ uri: uri.with({ fragment: "" }).toString(), range });
     }
     else {
         await vscode.commands.executeCommand("vscode.open", uri);

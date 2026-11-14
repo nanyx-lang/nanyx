@@ -281,8 +281,9 @@ In order. Each item is one PR:
 2. **Library requests** ([#712](https://github.com/nanyx-lang/nanyx/issues/712)). Done: `nanyx/libraryModules` and
    `nanyx/libraryModule`, with signatures and docs (see
    [Language server](./language-server#where-it-is-today)).
-3. **Library browser** ([#713](https://github.com/nanyx-lang/nanyx/issues/713)). The tree view in the extension,
-   opening definitions and inserting imports.
+3. **Library browser** ([#713](https://github.com/nanyx-lang/nanyx/issues/713)). Done: the *Library* tree view in
+   the extension (`extension/src/library.ts`), opening definitions and inserting imports through `nanyx/addImport`,
+   which places the import as the quick fix does (`ImportFixes.insertion`).
 4. **Search by type** ([#714](https://github.com/nanyx-lang/nanyx/issues/714)). The matcher and ranking in the
    compiler (as a module beside `Completion`), `nanyx search`, then the search box and the quick pick.
 5. **Info view, first cut** ([#715](https://github.com/nanyx-lang/nanyx/issues/715)). Done: `nanyx/infoView` with

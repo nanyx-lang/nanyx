@@ -40,6 +40,7 @@ const node_1 = require("vscode-languageclient/node");
 const compiler_1 = require("./compiler");
 const developmentMode_1 = require("./developmentMode");
 const infoView_1 = require("./infoView");
+const library_1 = require("./library");
 const run_1 = require("./run");
 const COMMAND_DOWNLOAD = "nanyx.downloadCompiler";
 const COMMAND_RESTART = "nanyx.restartServer";
@@ -55,6 +56,7 @@ let compiler;
 let buildWatcher;
 let outputChannel;
 let infoView;
+let libraryView;
 let declinedDownload = false;
 let declinedUpdate = false;
 async function activate(context) {
@@ -62,7 +64,9 @@ async function activate(context) {
     context.subscriptions.push(outputChannel);
     const view = new infoView_1.InfoView(() => client);
     infoView = view;
-    context.subscriptions.push(view, vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()), vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
+    const library = new library_1.LibraryView(() => client);
+    libraryView = library;
+    context.subscriptions.push(view, library, vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()), vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
         declinedDownload = false;
         const settings = (0, compiler_1.readSettings)();
         const version = await (0, compiler_1.versionToDownload)(context, settings, log);
@@ -285,6 +289,7 @@ async function restartClient(context, executable) {
     try {
         await client.start();
         infoView?.refresh();
+        libraryView?.refresh();
     }
     catch (error) {
         void vscode.window.showErrorMessage(`Nanyx: the language server failed to start (${messageOf(error)}). See the Nanyx output channel.`);
