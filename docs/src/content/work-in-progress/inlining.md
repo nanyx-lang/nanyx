@@ -108,11 +108,22 @@ position after.
 **Traps keep their place.** Inlined code keeps its original source spans, so a trap reports the line it was written
 on, not the caller's.
 
+**Debug and release builds inline alike** (decided). Specialising already runs the same in both, and inlining changes
+no behaviour either:
+
+- **The everyday builds use it.** The tests, `nanyx run`, `--check-memory` and the tour examples all run debug builds,
+  so they exercise the inliner, and a workflow is as cheap in a debug run as in a release one.
+- **Numbers mean the same.** Benchmarks taken from a debug build say what a release build does.
+- **Little is lost.** A trap's backtrace loses the frames of inlined functions, but Nanyx shows no backtraces and has no
+  debugger yet. If backtraces come, the spans can say which function the code was inlined from, to rebuild them.
+- **`--no-inline`** on `nanyx run` and `nanyx build` turns it off, for working on the compiler: it tells at once whether
+  a misbehaving program is the inliner's doing. Some tests run programs both ways and check they print the same.
+
 # Plan
 
 1. **The inliner and its first rules** ([#745](https://github.com/nanyx-lang/nanyx/issues/745)): lambdas called once,
-   small functions, handlers, the recursion check, and keeping tail calls and spans. Tests show a call inlined and
-   one that isn't.
+   small functions, handlers, the recursion check, keeping tail calls and spans, in every build, and `--no-inline`.
+   Tests show a call inlined and one that isn't.
 2. **Simplification after inlining:** known calls, unused closures, known matches.
 3. **Unboxing members at known types,** after #1160.
 4. **The `proc` block above compiles to its nested match,** checked against the WAT of the hand-written match, with
@@ -122,9 +133,6 @@ on, not the caller's.
 
 # Open questions
 
-- **Debug builds.** Inline in every build, or only with `--release`? Keeping source spans means a trap still points at
-  the right line, so this proposes inlining in both. Debug builds then run the same code as release builds, and
-  benchmarks run in debug mean something.
 - **The size limit,** and whether a function can ask to be inlined, or not, with an attribute.
 - **Code size.** Aggressive inlining grows the module. Is there a budget per function, after which it stops?
 - **Across modules.** A function from another module, including the standard library, can only be inlined if its core
