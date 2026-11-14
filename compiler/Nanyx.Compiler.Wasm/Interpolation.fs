@@ -38,7 +38,6 @@ let scratchLocals =
       "__interp_cursor"
       "__interp_ptr"
       "__interp_copy_len"
-      "__interp_src"
       "__interp_start"
       "__interp_lo"
       "__interp_hi"
@@ -76,7 +75,7 @@ let private numberWrite (signed: bool) exprCode =
 let intWrite exprCode = numberWrite true exprCode
 
 let stringCopy exprCode =
-    $"{exprCode}\n    local.set $__interp_ptr\n    local.get $__interp_ptr\n    i32.const {Header.infoBefore}\n    i32.sub\n    i32.load\n    local.set $__interp_copy_len\n    local.get $__interp_ptr\n    local.set $__interp_src\n    block $interp_copy_done\n      loop $interp_copy\n        local.get $__interp_copy_len\n        i32.const 0\n        i32.eq\n        br_if $interp_copy_done\n        local.get $__interp_cursor\n        local.get $__interp_src\n        i32.load8_u\n        i32.store8\n        local.get $__interp_cursor\n        i32.const 1\n        i32.add\n        local.set $__interp_cursor\n        local.get $__interp_src\n        i32.const 1\n        i32.add\n        local.set $__interp_src\n        local.get $__interp_copy_len\n        i32.const 1\n        i32.sub\n        local.set $__interp_copy_len\n        br $interp_copy\n      end\n    end"
+    $"{exprCode}\n    local.set $__interp_ptr\n    local.get $__interp_ptr\n    i32.const {Header.infoBefore}\n    i32.sub\n    i32.load\n    local.set $__interp_copy_len\n    local.get $__interp_cursor\n    local.get $__interp_ptr\n    local.get $__interp_copy_len\n    memory.copy\n    local.get $__interp_cursor\n    local.get $__interp_copy_len\n    i32.add\n    local.set $__interp_cursor"
 
 let boolLength exprCode =
     $"{exprCode}\n    if\n      local.get $__interp_len\n      i32.const 4\n      i32.add\n      local.set $__interp_len\n    else\n      local.get $__interp_len\n      i32.const 5\n      i32.add\n      local.set $__interp_len\n    end"
