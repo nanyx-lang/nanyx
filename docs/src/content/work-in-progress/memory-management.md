@@ -223,7 +223,7 @@ shape. A body is an expression with a type on every node:
 | `makeTag(tag, atom)` | allocates the cell of a tag with a payload |
 | `makeRecord(f1 = atom, ...)` | allocates a record, its fields in the order they are stored |
 | `field(atom, slot)` | reads the field stored in a slot of a record |
-| `updateRecord(atom, slot = atom, ...)` | copies a record with some fields replaced (`record with f = v`) |
+| `updateRecord(atom, slot = atom, ...)` | a record with some fields replaced (`record with f = v`): the same one, updated in place, when it is held once, and a copy otherwise |
 | `x := atom` | gives a local cell a new value, dropping the one it held (see [Memory](../advanced/memory)) |
 | `x[slot] := atom` | writes a field of a box a lambda shares, dropping the value it held: how a captured cell changes |
 | `makeList(atoms)` | builds a list |
@@ -371,12 +371,17 @@ allocation `reusing` a token.
   release keeps the block in a token instead of freeing it, or sets the token to 0 when the object was shared, and
   the allocation writes into the block when the token holds one (`__nanyx_list_cons_at`, `__nanyx_tag_box_at`,
   `__nanyx_reuse_object`). Mapping over a list held once rewrites its cells in place.
+- **`with` updates in place.** `updateRecord` takes its record over, counted after the new values, which may read
+  its fields. Its code computes the new values into locals, then releases the record: when the count was one, it
+  drops the old value of each field on the heap it replaces and stores the new ones into the same block; otherwise
+  the release has taken the count down, and it copies the record, takes a reference to each field on the heap it
+  keeps, and stores the new values into the copy (`UpdateRecord` in `CoreIrEmit.fs`).
 - **`[a, ...rest]`** is `[a] ++ rest` to the parser. It is lowered to a cell for `a` in front of `rest`, rather than
   a one-element list whose cell `++` copies, so that it allocates one cell, and can reuse one.
 
 The tests in `Features/Memory` check that a loop over lists, records, closures and tags runs in constant memory,
 that the examples that compile free every block they allocate, and, counting what the allocator hands out, that
-mapping over a list, a tuple or a tag's cell held once allocates nothing.
+mapping over a list, a tuple or a tag's cell held once allocates nothing, and nor does `with` on a record held once.
 
 **Memory checks.** `nanyx run --check-memory` (`WasmOptions.CheckMemory`) compiles the program with an allocator
 and counts that check themselves (`checkedRuntimeHelpers` and `MemoryChecks` in `WasmRuntime.fs`):

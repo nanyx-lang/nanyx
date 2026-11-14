@@ -32,7 +32,14 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | MakeTag(_, payload) -> [ payload, Owned ]
     | MakeRecord fields -> fields |> List.map snd |> all Owned
     | Field(record, _) -> [ record, Borrowed ]
-    | UpdateRecord(record, updates) -> (record, Borrowed) :: (updates |> List.map snd |> all Owned)
+    // The update takes the record over, to update it in place when it holds the only reference (see `CoreIrEmit`). A
+    // variable is read only when the update runs, after the new values, which may read its fields, so it counts as
+    // used last; a temporary is computed first.
+    | UpdateRecord(record, updates) ->
+        let values = updates |> List.map snd |> all Owned
+        match record with
+        | AVar var when var.Kind <> Temp -> values @ [ record, Owned ]
+        | _ -> (record, Owned) :: values
     // The value is taken over by the cell, which is used after it, to drop what it held.
     | Assign(cell, value) -> [ value, Owned; AVar cell, Borrowed ]
     | SetField(record, _, value) -> [ value, Owned; AVar record, Borrowed ]
