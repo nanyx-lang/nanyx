@@ -241,8 +241,7 @@ def attempt: [Console] () -> #some(int) | #failed = { retrying(3) {
 let ``A proc block is a result of its return value or of the first error`` () =
     // Each `try` instantiates `proc` afresh, so one block can bind payloads of different types.
     let source =
-        normalized """import nanyx/result
-def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }
+        normalized """def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }
 def g: int -> #some(string) | #error(#tooBig) = { n -> #some("{n}") }
 def run = { x -> proc {
   def a = try f(x)
@@ -273,8 +272,7 @@ let ``A proc block that uses no workflow keyword is an ordinary call of proc`` (
 [<Fact>]
 let ``A proc block collects the failures of each try`` () =
     let source =
-        normalized """import nanyx/result
-def name: int -> #some(string) | #nil = { n -> if n > 5 then #nil else #some("n") }
+        normalized """def name: int -> #some(string) | #nil = { n -> if n > 5 then #nil else #some("n") }
 def find: string -> #some(int) | #notFound = { s -> if s == "n" then #some(1) else #notFound }
 def run = { x -> proc {
   def s = try name(x)
@@ -362,8 +360,7 @@ let ``A bare tag given to try in one branch widens the block's failures`` () =
 [<Fact>]
 let ``A try nested in an expression of a proc block is bound before its statement`` () =
     let source =
-        normalized """import nanyx/result
-def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }
+        normalized """def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }
 def run = { x -> proc {
   return (a = try f(x), b = try f(try f(x)))
 } }"""
