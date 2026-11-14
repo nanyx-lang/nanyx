@@ -477,7 +477,7 @@ def passed: [ToString(a)] a -> string = { value -> angled([value]) }
 
 Each part is written with the `ToString` found where the value is written: in generic code, the one the function was given for its type variable, and in a block with a `use`, the one it loads, so in `receipt` above `"{[250]}"` would be `"[£2.50]"`.
 
-A record's fields are written in alphabetical order. A string is written without quotes wherever it is; [`dbg`](../stdlib/io#dbg) prints a value as you would write it in code, and ignores any `ToString`. The compiler does not look inside an alias or a nominal type that is a part: such a part is written with its own `ToString`. An empty list, `"{[]}"`, writes `[]`. A map's entries and a set's elements are written in the order they were first added, and the empty map writes `[=>]`.
+A record's fields are written in alphabetical order. A string is written without quotes wherever it is; [`dbg`](../stdlib/console#dbg) prints a value as you would write it in code, and ignores any `ToString`. The compiler does not look inside an alias or a nominal type that is a part: such a part is written with its own `ToString`. An empty list, `"{[]}"`, writes `[]`. A map's entries and a set's elements are written in the order they were first added, and the empty map writes `[=>]`.
 
 `println` and the other printing functions require `ToString` of what they print, so `println(Point(x = 1, y = 2))` prints `(1, 2)` without a hole.
 
@@ -537,7 +537,7 @@ Context synthesis occurs when:
 
 If any member is missing or has an incompatible type, synthesis fails and the compiler requires you to load the context explicitly. The error names the definition that is missing, such as `Point.+`, or the one whose type does not fit.
 
-A context with more than one parameter is synthesized from the definitions attached to its first parameter's type. Its other parameters need not be known at the call: the definitions' types settle them. The prelude's [`FromString(a, e)`](../stdlib/standard-library#reading-from-text) is built for `int` from `int.fromString`, whose type makes `e` the tag `#invalidInt`.
+A context with more than one parameter is synthesized from the definitions attached to its first parameter's type. Its other parameters need not be known at the call: the definitions' types settle them. The prelude's [`FromString(a, e)`](../stdlib/prelude-contexts#reading-from-text) is built for `int` from `int.fromString`, whose type makes `e` the tag `#invalidInt`.
 
 Each call looks for its instance in this order, and takes the first it finds:
 

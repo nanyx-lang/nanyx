@@ -178,7 +178,8 @@ export def map.update
   }
 
 --| The entries of `m`, then those of `other` whose keys `m` does not have. Where both have a key,
-  the value is `other`'s, as a later entry wins in `map.fromList`.
+  the value is `other`'s, as a later entry wins in `map.fromList`, so `defaults \map.union(overrides)`
+  gives the overrides.
 export def map.union: [Eq(k) & Hash(k)] map(k, v), map(k, v) -> map(k, v) = { m, other ->
   insertAll(m, __nanyx_map_entries(other))
 }

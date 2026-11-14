@@ -4,9 +4,8 @@ description: "One lazy sequence type, how it is represented, and how a function 
 order: 25
 ---
 
-> **Status: design in progress.** Nothing on this page is implemented. It replaces the `seq`/`gen` split that the
-> [sequence](../stdlib/sequence) and [iter](../stdlib/iter) pages, [Sequences and queries](../advanced/sequences-and-queries)
-> and [Ranges](../tour/ranges) still describe. The runtime work is tracked in
+> **Status: design in progress.** Nothing on this page is implemented. It replaces the `seq`/`gen` split that
+> [Sequences and queries](../advanced/sequences-and-queries) and [Ranges](../tour/ranges) still describe. The runtime work is tracked in
 > [#192](https://github.com/nanyx-lang/nanyx/issues/192).
 
 # Summary
@@ -29,11 +28,11 @@ The docs describe several overlapping ideas, and only the type names exist in th
 |------|--------------|-----------------|
 | `seq(a)`, finite and with a pure iterator | [Sequences and queries](../advanced/sequences-and-queries), [Ranges](../tour/ranges) | The type of a bounded range, `1..10`, which only a `for` loop can walk ([Infer.fs:310](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/Infer.fs#L310)) |
 | `gen(a)`, possibly infinite or impure | the same pages | The type of an unbounded range, `0..` |
-| `Sequence.map`, `Gen.take` | [sequence](../stdlib/sequence) | Nothing. Attached definitions on `seq` are looked up as `Seq` ([BuiltinTypeNames.fs:18](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/BuiltinTypeNames.fs#L18)), not `Sequence` |
-| `Iter(a)` with `next` and an associated `elem` type | [iter](../stdlib/iter) | Nothing; it waits on [associated types](./type-members-and-reflection#associated-types) |
+| `Sequence.map`, `Gen.take` | The standard library's `sequence` page, since deleted, as the library has no such module | Nothing. Attached definitions on `seq` are looked up as `Seq` ([BuiltinTypeNames.fs:18](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/BuiltinTypeNames.fs#L18)), not `Sequence` |
+| `Iter(a)` with `next` and an associated `elem` type | The standard library's `iter` page, since deleted | Nothing; it waits on [associated types](./type-members-and-reflection#associated-types) |
 | `getIterator` | [Sequences and queries](../advanced/sequences-and-queries) | Nothing, and nothing defines it |
 | `seq { yield ... }` | [Workflows](../advanced/workflows), [Ranges](../tour/ranges) | No `seq` builder |
-| `Yield(b)` for `list.select` | [collections](../stdlib/collections#select) | Nothing ([#478](https://github.com/nanyx-lang/nanyx/issues/478)) |
+| `Yield(b)` for `list.select` | The standard library's `collections` page, since replaced by [lists](../stdlib/prelude-lists), which has no `select` | Nothing ([#478](https://github.com/nanyx-lang/nanyx/issues/478)) |
 
 A `for` loop accepts a `list`, `seq`, `gen`, `map` or `set` by name
 ([Infer.fs:325](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/Infer.fs#L325)), and rejects a
@@ -206,10 +205,10 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
 
 # Plan
 
-1. Settle the open questions above, and bring the [sequence](../stdlib/sequence), [iter](../stdlib/iter),
+1. Settle the open questions above, and bring the
    [Sequences and queries](../advanced/sequences-and-queries), [Ranges](../tour/ranges) and
-   [Collections](../tour/collections) pages into line: drop `gen`, `Sequence.map` becomes `Seq.map`, and the `iter`
-   page becomes `Iterable`.
+   [Collections](../tour/collections) pages into line: drop `gen`. The standard library's pages follow its modules,
+   so `Seq` and `Iterable` get pages when the library has them.
 2. Type `a..` as a `seq(int)`, and remove `gen` from the type checker.
 3. Give `seq(a)` its runtime representation, with ranges as values and `for` loops over them
    ([#192](https://github.com/nanyx-lang/nanyx/issues/192)).

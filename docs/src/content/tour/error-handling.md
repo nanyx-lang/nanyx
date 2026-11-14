@@ -93,7 +93,7 @@ def main = {
 
 `??` binds tighter than the comparisons and `and`, and looser than arithmetic: `a ?? b == c` is `(a ?? b) == c`, `a ?? 0 < n` is `(a ?? 0) < n`, `x and y ?? z` is `x and (y ?? z)`, and `a ?? b + 1` is `a ?? (b + 1)`. It groups to the right, so `a ?? b ?? c` tries `a`, then `b`, and then settles for `c`. In such a chain every operand but the last is option-like, and the last is a plain value.
 
-`??` only unwraps: its right operand is the value itself, not another option. To fall back to another option, keeping the result option-like, use [`orElseSome`](../stdlib/option#orelsesome):
+`??` only unwraps: its right operand is the value itself, not another option. To fall back to another option, keeping the result option-like, use [`orElseSome`](../stdlib/prelude-results#orelsesome):
 
 ```nanyx fragment
 cached(key) \orElseSome { lookup(key) }
@@ -180,6 +180,6 @@ def doubled: string -> int = { input ->
 }
 ```
 
-`int.fromString` gives `#some(int) | #invalidInt`, so the `Option` helpers apply: they work on any union with a `#some` case. The `Result` helpers are for `#some(a) | #error(e)`. See [option](../stdlib/option) and [result](../stdlib/result).
+`int.fromString` gives `#some(int) | #invalidInt`, so the `Option` helpers apply: they work on any union with a `#some` case. The `Result` helpers are for `#some(a) | #error(e)`. See [results and options](../stdlib/prelude-results).
 
 > **Philosophy:** By making errors explicit in the type system, Nanyx ensures you always handle failure cases. No more unexpected crashes!
