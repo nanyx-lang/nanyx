@@ -1,10 +1,10 @@
 ---
 title: "prelude: numbers"
-description: Arithmetic on int and float, powers, and reading numbers from text
+description: Arithmetic on int and float, powers, bitwise functions on ints, and reading numbers from text
 order: 4
 ---
 
-The number contexts, `Add(a)` and `Num(a)`, the arithmetic attached to `int` and `float` that the operators read through them, powers, and reading numbers from text. They are in the [prelude](prelude), so no import is needed. [`nanyx/math`](math) has more functions on numbers.
+The number contexts, `Add(a)` and `Num(a)`, the arithmetic attached to `int` and `float` that the operators read through them, powers, bitwise functions on ints, and reading numbers from text. They are in the [prelude](prelude), so no import is needed. [`nanyx/math`](math) has more functions on numbers.
 
 # Converting between numbers
 
@@ -17,6 +17,16 @@ def half = (7 \toFloat) / 2.0    -- 3.5
 ```
 
 To turn a `float` back into an `int`, choose how to drop the fraction with `floor`, `ceil`, `round` or `truncate` from [`nanyx/math`](math), or with [`float.toInt`](prelude-conversions#floattoint). Conversions to and from the sized number types are on the [conversions](prelude-conversions) page.
+
+# Bits
+
+Nanyx has no operators for bits, so they are functions attached to `int`: [`int.bitAnd`](#intbitand), [`int.bitOr`](#intbitor), [`int.bitXor`](#intbitxor) and [`int.bitNot`](#intbitnot), and the shifts [`int.shiftLeft`](#intshiftleft), [`int.shiftRight`](#intshiftright), which keeps the sign, and [`int.shiftRightUnsigned`](#intshiftrightunsigned), which fills with zeros:
+
+```nanyx fragment
+def flags = int.bitOr(1, 4)                 -- 5
+def hasFour = int.bitAnd(flags, 4) != 0     -- true
+def kilo = 1 \int.shiftLeft(10)             -- 1024
+```
 
 # Reference
 
@@ -142,6 +152,67 @@ def int.fromInt: int -> int
 ```
 
 `n` itself.
+
+## `int.bitAnd`
+
+```nanyx fragment
+def int.bitAnd: int, int -> int
+```
+
+The bits set in both `x` and `y`: `int.bitAnd(12, 10)` is 8.
+
+## `int.bitOr`
+
+```nanyx fragment
+def int.bitOr: int, int -> int
+```
+
+The bits set in `x`, in `y` or in both: `int.bitOr(12, 10)` is 14.
+
+## `int.bitXor`
+
+```nanyx fragment
+def int.bitXor: int, int -> int
+```
+
+The bits set in one of `x` and `y` but not both: `int.bitXor(12, 10)` is 6.
+
+## `int.bitNot`
+
+```nanyx fragment
+def int.bitNot: int -> int
+```
+
+`n` with each of its bits flipped, which is `-n - 1`: `int.bitNot(0)` is -1.
+
+## `int.shiftLeft`
+
+```nanyx fragment
+def int.shiftLeft: int, int -> int
+```
+
+`x` with its bits moved `count` places towards the high end, zeros coming in at the low end: `1 \int.shiftLeft(4)`
+is 16. Only the low six bits of `count` are read, so a count is taken modulo 64.
+
+## `int.shiftRight`
+
+```nanyx fragment
+def int.shiftRight: int, int -> int
+```
+
+`x` with its bits moved `count` places towards the low end, copies of the sign bit coming in at the high end, so
+that the sign is kept: `int.shiftRight(-8, 1)` is -4. Only the low six bits of `count` are read, so a count is
+taken modulo 64.
+
+## `int.shiftRightUnsigned`
+
+```nanyx fragment
+def int.shiftRightUnsigned: int, int -> int
+```
+
+`x` with its bits moved `count` places towards the low end, zeros coming in at the high end, as if `x` had no
+sign: `int.shiftRightUnsigned(-1, 60)` is 15. Only the low six bits of `count` are read, so a count is taken
+modulo 64.
 
 ## `float.zero`
 

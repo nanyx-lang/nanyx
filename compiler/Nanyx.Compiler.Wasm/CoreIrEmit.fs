@@ -60,6 +60,18 @@ let private takesInts = set [ Helpers.intToFloat; Helpers.floatToInt ]
 let private wrappingOperations =
     Map.ofList [ Intrinsics.wrappingAdd, "add"; Intrinsics.wrappingSub, "sub"; Intrinsics.wrappingMul, "mul" ]
 
+/// The bitwise intrinsics on ints, each with the instructions it is after its arguments. A shift takes its count
+/// modulo 64, as `i64.shl` and the others do.
+let private bitwiseOperations =
+    Map.ofList
+        [ Intrinsics.bitAnd, [ "i64.and" ]
+          Intrinsics.bitOr, [ "i64.or" ]
+          Intrinsics.bitXor, [ "i64.xor" ]
+          Intrinsics.bitNot, [ "i64.const -1"; "i64.xor" ]
+          Intrinsics.shiftLeft, [ "i64.shl" ]
+          Intrinsics.shiftRight, [ "i64.shr_s" ]
+          Intrinsics.shiftRightUnsigned, [ "i64.shr_u" ] ]
+
 /// The integer type of a value of `ty`, as `SizedIntegerCode` takes it: a sized integer, or `None` for an int.
 let private integerType (ty: IrType) =
     match ty with
@@ -488,6 +500,7 @@ type private FunctionEmitter(context: EmitContext) =
                 | IrSized integer -> SizedIntegerCode.wrapping integer operation
                 | other -> internalError $"{name} at {IrType.show other}, which is not an integer"
             join "\n    " [ atoms args; yield! code ]
+        | CallRuntime(name, args, _) when bitwiseOperations.ContainsKey name -> join "\n    " [ atoms args; yield! bitwiseOperations.[name] ]
         | CallRuntime(name, [ arg ], _) when name = Intrinsics.intCast ->
             // An integer as one of another integer type, which the prelude has checked it fits.
             join "\n    " [ atoms [ arg ]; yield! SizedIntegerCode.cast (integerType (atomType arg)) (integerType expr.Type) ]

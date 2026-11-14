@@ -8,7 +8,7 @@ The prelude, `nanyx/prelude`, is imported into every module, so what it defines 
 
 - this page: `panic`, `ignore`, `bool.fromString` and `memory`
 - [contexts](prelude-contexts): equality, ordering, hashing, joining, and converting to and from text
-- [numbers](prelude-numbers): arithmetic on `int` and `float`, powers, and reading floats
+- [numbers](prelude-numbers): arithmetic on `int` and `float`, powers, bitwise functions on ints, and reading floats
 - [sized numbers](prelude-sized-numbers): arithmetic on `I8` to `U64` and `F32`
 - [conversions](prelude-conversions): between `int`, `float` and the sized number types
 - [lists](prelude-lists): functions on `list(a)`

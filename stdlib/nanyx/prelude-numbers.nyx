@@ -119,6 +119,46 @@ export def int.fromInt: int -> int = { n ->
   n
 }
 
+--| The bits set in both `x` and `y`: `int.bitAnd(12, 10)` is 8.
+export def int.bitAnd: int, int -> int = { x, y ->
+  __nanyx_bit_and(x, y)
+}
+
+--| The bits set in `x`, in `y` or in both: `int.bitOr(12, 10)` is 14.
+export def int.bitOr: int, int -> int = { x, y ->
+  __nanyx_bit_or(x, y)
+}
+
+--| The bits set in one of `x` and `y` but not both: `int.bitXor(12, 10)` is 6.
+export def int.bitXor: int, int -> int = { x, y ->
+  __nanyx_bit_xor(x, y)
+}
+
+--| `n` with each of its bits flipped, which is `-n - 1`: `int.bitNot(0)` is -1.
+export def int.bitNot: int -> int = { n ->
+  __nanyx_bit_not(n)
+}
+
+--| `x` with its bits moved `count` places towards the high end, zeros coming in at the low end: `1 \int.shiftLeft(4)`
+  is 16. Only the low six bits of `count` are read, so a count is taken modulo 64.
+export def int.shiftLeft: int, int -> int = { x, count ->
+  __nanyx_shift_left(x, count)
+}
+
+--| `x` with its bits moved `count` places towards the low end, copies of the sign bit coming in at the high end, so
+  that the sign is kept: `int.shiftRight(-8, 1)` is -4. Only the low six bits of `count` are read, so a count is
+  taken modulo 64.
+export def int.shiftRight: int, int -> int = { x, count ->
+  __nanyx_shift_right(x, count)
+}
+
+--| `x` with its bits moved `count` places towards the low end, zeros coming in at the high end, as if `x` had no
+  sign: `int.shiftRightUnsigned(-1, 60)` is 15. Only the low six bits of `count` are read, so a count is taken
+  modulo 64.
+export def int.shiftRightUnsigned: int, int -> int = { x, count ->
+  __nanyx_shift_right_unsigned(x, count)
+}
+
 --| The `float` that adds nothing.
 export def float.zero: float = 0.0
 
