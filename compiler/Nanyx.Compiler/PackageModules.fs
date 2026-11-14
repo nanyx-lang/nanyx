@@ -160,9 +160,13 @@ module PackageModules =
 
     /// The errors in the source file at `filePath` of the package `modules`, whose text is `source`: a package's files
     /// must be named modules, without top-level statements. (That files declaring one module are each marked
-    /// `@partial` is checked as the module is, by `PartialModules.assemble`.)
-    let fileErrors (modules: PackageModules) (filePath: string) (source: string) : Diagnostic list =
-        match parse filePath source with
+    /// `@partial` is checked as the module is, by `PartialModules.assemble`.) `compiled` is the module name the file
+    /// declares and its syntax, from the compile of it, if that got as far as a tree; if not, the file is parsed here.
+    let fileErrors (modules: PackageModules) (filePath: string) (source: string) (compiled: (string option * Module) option) : Diagnostic list =
+        let parsed =
+            compiled
+            |> Option.orElseWith (fun () -> parse filePath source |> Option.map (fun (declaration, syntax) -> Option.map fst declaration, syntax))
+        match parsed with
         | None -> []
         | Some (declaration, syntax) ->
             let shown = display modules filePath
