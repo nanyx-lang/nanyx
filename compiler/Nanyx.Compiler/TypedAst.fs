@@ -100,6 +100,46 @@ type Ty =
     /// closed instead, and is unfolded where it is looked through (see `RecursiveAliases`).
     | TyAlias of string * Ty list * Ty
 
+/// The types a type is made of, one level down, for walks that treat most cases alike: such a walk matches the cases it
+/// treats differently, and hands the others to `Ty.map`, `Ty.fold` or `Ty.exists`.
+module Ty =
+    /// The types `ty` is made of, one level down: a nominal's underlying type, an alias's arguments then what it stands
+    /// for, a function's input, result and contexts, a record's fields in order of their names, an open record's fields
+    /// then its row as a variable, a tag's payload, an applied type's arguments, and a union's members.
+    let children (ty: Ty) : Ty list =
+        match ty with
+        | TyVar _
+        | TyPrimitive _ -> []
+        | TyNominal(_, underlying, _) -> [ underlying ]
+        | TyAlias(_, args, underlying) -> args @ [ underlying ]
+        | TyFunc(input, output, contexts) -> input :: output :: contexts
+        | TyRecord fields -> fields |> Map.toList |> List.map snd
+        | TyOpenRecord(fields, row) -> (fields |> Map.toList |> List.map snd) @ [ TyVar row ]
+        | TyTag(_, payload) -> Option.toList payload
+        | TyApply(_, args)
+        | TyUnion args -> args
+
+    /// `ty` with `f` applied to each of the types it is made of, one level down (see `children`). An open record's row
+    /// is kept as it is.
+    let map (f: Ty -> Ty) (ty: Ty) : Ty =
+        match ty with
+        | TyVar _
+        | TyPrimitive _ -> ty
+        | TyNominal(id, underlying, isPrivate) -> TyNominal(id, f underlying, isPrivate)
+        | TyAlias(name, args, underlying) -> TyAlias(name, List.map f args, f underlying)
+        | TyFunc(input, output, contexts) -> TyFunc(f input, f output, List.map f contexts)
+        | TyRecord fields -> TyRecord(Map.map (fun _ field -> f field) fields)
+        | TyOpenRecord(fields, row) -> TyOpenRecord(Map.map (fun _ field -> f field) fields, row)
+        | TyTag(name, payload) -> TyTag(name, Option.map f payload)
+        | TyApply(name, args) -> TyApply(name, List.map f args)
+        | TyUnion items -> TyUnion(List.map f items)
+
+    /// `f` folded over the types `ty` is made of, one level down, in the order `children` gives them.
+    let fold (f: 'State -> Ty -> 'State) (state: 'State) (ty: Ty) : 'State = children ty |> List.fold f state
+
+    /// Whether `predicate` holds for one of the types `ty` is made of, one level down.
+    let exists (predicate: Ty -> bool) (ty: Ty) : bool = children ty |> List.exists predicate
+
 /// A simple typed expression placeholder for future expansion. `Arguments` are a call's arguments (a pipe's
 /// include the piped value first), so a lambda passed to a call keeps its inferred type.
 type TypedExpr =
