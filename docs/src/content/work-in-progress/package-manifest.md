@@ -71,11 +71,12 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
 
 # Tools
 
-- **The editor.** The extension is to treat `.nyxp` as Nanyx, so highlighting, the formatter, diagnostics, hover and
-  completion work in the manifest. Completion on a `settings` field lists the package's settings. It does not do this
-  yet.
+- **The editor.** The extension treats `.nyxp` as Nanyx: it highlights and formats the manifest, and the language
+  server checks it as you type, showing each problem at its field. Hover and completion in the manifest are still to
+  come; completion on a `settings` field is to list the package's settings.
 - **Tools outside the compiler.** Scripts and CI that read a manifest, such as the package index's registration
-  check in `nanyx-lang/packages`, use `nanyx manifest --json`, which prints the manifest as JSON.
+  check in `nanyx-lang/packages`, use `nanyx manifest --json`, which checks the manifest and prints it as JSON: a record is an object, a list or
+  tuple an array, and a tag a string, `"#error"` (or `{ "#name": payload }` for a tag with a payload).
 - **Editing it.** `nanyx add` and `nanyx new` edit the record and reformat it with the formatter, so a manifest the
   tools touched still looks hand-written.
 
@@ -85,12 +86,12 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
    `.nyxp` file as a record value, a manifest checker enforces the data-only rule and the manifest's own shape, and
    every reader of the TOML form uses it. That means `Package.fs`, the language server, the formatter's settings,
    `nanyx new` and `examples/greeter/greeter.nyxp`. TOML support is removed, since Nanyx is in closed alpha.~~ Done.
-2. **`nanyx manifest --json`.**
+2. ~~**`nanyx manifest --json`.**~~ Done.
 3. **Path dependencies** in the new form ([#862](https://github.com/nanyx-lang/nanyx/issues/862)), then the rest of
    [local packages](./packaging#local-packages-first).
 4. **Typed settings**, once linters ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)) and hosts
    ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)) are packages that can declare them.
-5. **The editor** treats `.nyxp` as Nanyx.
+5. ~~**The editor** treats `.nyxp` as Nanyx.~~ Done, apart from hover and completion in the manifest.
 
 # Open questions
 

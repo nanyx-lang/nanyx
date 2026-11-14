@@ -21,7 +21,9 @@ type Manifest =
       /// The linters the manifest's `linters` turns on, and the severities their `settings` set.
       Linters: LinterOptions
       /// The host `host` names, or the console host when the manifest has no `host`.
-      Host: Host }
+      Host: Host
+      /// The whole manifest as it is written, for tools that read the rest (see `toJson`).
+      Value: DataValue }
 
 /// Reading a manifest: one Nanyx record, written as data (see `DataValue.read`), whose shape is the manifest's own.
 module Manifest =
@@ -242,7 +244,8 @@ module Manifest =
                       Sources = defaultArg sources [ "**/*.nyx" ]
                       // No `linters` means no linters: a package turns on the official one by naming nanyx.lint.
                       Linters = defaultArg linters Linters.none
-                      Host = defaultArg host Hosts.console }
+                      Host = defaultArg host Hosts.console
+                      Value = manifest }
             | problems -> Result.Error problems
 
     /// `diagnostic`, one of a manifest's, as one line: `path:line:column: error NYX0021: message`.
@@ -251,6 +254,52 @@ module Manifest =
         match diagnostic.Span with
         | Some span -> $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: {severity} {diagnostic.Code}: {diagnostic.Message}"
         | None -> $"{severity} {diagnostic.Code}: {diagnostic.Message}"
+
+    /// `value` as JSON, for tools outside the compiler: a record is an object, a list or tuple an array, and a tag a string
+    /// `"#name"`, or an object `{ "#name": payload }` when it has a payload.
+    let toJson (value: DataValue) : string =
+        use stream = new MemoryStream()
+        (
+            use writer = new Text.Json.Utf8JsonWriter(stream, Text.Json.JsonWriterOptions(Indented = true))
+            let rec write (value: DataValue) =
+                match value.Data with
+                | DataRecord fields ->
+                    writer.WriteStartObject()
+                    for field in fields do
+                        writer.WritePropertyName field.Name
+                        write field.Value
+                    writer.WriteEndObject()
+                | DataList items
+                | DataTuple items ->
+                    writer.WriteStartArray()
+                    List.iter write items
+                    writer.WriteEndArray()
+                | DataString text -> writer.WriteStringValue text
+                | DataInt n -> writer.WriteRawValue(string n)
+                | DataFloat n -> writer.WriteNumberValue n
+                | DataBool b -> writer.WriteBooleanValue b
+                | DataTag(name, None) -> writer.WriteStringValue $"#{name}"
+                | DataTag(name, Some payload) ->
+                    writer.WriteStartObject()
+                    writer.WritePropertyName $"#{name}"
+                    write payload
+                    writer.WriteEndObject()
+            write value
+        )
+        Text.Encoding.UTF8.GetString(stream.ToArray()).ReplaceLineEndings "\n"
+
+    /// The manifest at `path`, whose text is `text`, as the editor shows it: a compile whose diagnostics are the problems
+    /// with it (see `check`), with nothing compiled, since a manifest is data.
+    let compile (path: string) (text: string) : CompileResult =
+        { Phase = Parsed
+          Diagnostics = (match check path text with Result.Error problems -> problems | Result.Ok _ -> [])
+          Typed = None
+          TypeChecked = false
+          ErrorsDeferred = false
+          Syntax = None
+          ModuleName = None
+          Lowered = Map.empty
+          DocComments = lazy DocComments.none }
 
     /// The manifest at `path`, or every problem with it (see `check`).
     let read (path: string) : Result<Manifest, Diagnostic list> = check path (File.ReadAllText path)

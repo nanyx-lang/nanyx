@@ -22,6 +22,7 @@ nanyx run [--timings] [--check-memory] [--no-inline] [--host <module>] [<directo
 nanyx check [<directory or .nyxp>] [--timings] [--host <module>]
 nanyx build [<directory or .nyxp>] [--out <path>] [--timings] [--host <module>] [--no-inline]
 nanyx new <name> [<directory>]
+nanyx manifest --json [<directory or .nyxp>]
 nanyx format [--check | --write] <files or directories>
 nanyx format [--check] --stdin
 nanyx stdlib-docs [--check] <directory>
@@ -211,6 +212,10 @@ usage error, since a script always runs under the console host.
 is given: `acme.demo.nyxp`, with the official linter on and the console host, both at the compiler's version, and
 `src/main.nyx`, whose `@entry` prints "Hello, World!". The name must be one the manifest accepts, and the directory
 must be new or empty.
+
+`nanyx manifest --json` checks the manifest of the package a directory is in (the current one by default), or the
+`.nyxp` it is given, and prints it as JSON, for scripts and CI outside the compiler. A manifest with problems prints
+them, as `check` does, and no JSON. `--json` is needed: JSON is the only form so far.
 
 A package runs only the linters its manifest names (an entry with `package = "nanyx.lint"` for the official one), and
 a file run on its own only those its `::linters` directives name (`::linters.default`, or
