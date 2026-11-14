@@ -65,6 +65,7 @@
     <Compile Include="Features\Hosts\ScriptEntryTests.fs" />
     <Compile Include="Features\Imports\ImportTests.fs" />
     <Compile Include="Features\Imports\ImportFixTests.fs" />
+    <Compile Include="Features\Imports\ImportHintTests.fs" />
     <Compile Include="Features\Imports\NameSuggestionTests.fs" />
     <Compile Include="Features\Imports\PackageImportTests.fs" />
     <Compile Include="Features\Imports\PackageBuildTests.fs" />

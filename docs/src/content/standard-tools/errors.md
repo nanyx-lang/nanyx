@@ -290,9 +290,9 @@ module ([Modules](../tour/modules)).
 
 # NYX0101: Unknown identifier
 
-A name is used that nothing in scope defines. When a name in scope is spelled closely enough, the message suggests
-it, and an editor offers to write it. When a standard library module exports the name, an editor offers to import
-it.
+A name is used that nothing in scope defines. When a standard library module exports the name, the message says which
+import brings it in, and an editor offers to add it. Otherwise, when a name in scope is spelled closely enough, the
+message suggests it, and an editor offers to write it.
 
 ```nanyx
 def total = 1
@@ -308,6 +308,16 @@ scope nor attached to the value's type ([Piping](../tour/piping)).
 
 ```nanyx
 def loud = shout("hi")  -- error NYX0102: Unknown function 'shout'
+```
+
+When a standard library module exports the function, the message says which import brings it in, and an editor
+offers to add it. A name qualified by the module's own name is imported under that name; a name more than one module
+exports lists each of them.
+
+```nanyx
+def greet = println("hi")  -- error NYX0102: Unknown function 'println'. 'println' is defined in 'nanyx/console': add `import nanyx/console`
+def found = string.contains("nanyx", "x")  -- error NYX0102: Unknown function 'string.contains'. 'string.contains' is defined in 'nanyx/text': add `import nanyx/text`
+def size = math.abs(-1)  -- error NYX0102: Unknown function 'math.abs'. 'abs' is defined in 'nanyx/math': add `import nanyx/math as math`
 ```
 
 To fix it, correct the name, define the function, or import the module that exports it.
@@ -401,11 +411,15 @@ has.
 def greet: [Telegraph] () -> () = { () }  -- error NYX0108: Unknown context 'Telegraph' in the signature of 'greet'
 ```
 
+When a standard library module exports the context, as `nanyx/console` does `Console`, the message says which import
+brings it in, and an editor offers to add it.
+
 To fix it, correct the context's name, define it, or import the module that exports it.
 
 # NYX0109: Unknown type
 
-A type is named that is not defined.
+A type is named that is not defined. When a standard library module exports the type, the message says which import
+brings it in, and an editor offers to add it.
 
 ```nanyx
 def name: Strng = "Ada"  -- error NYX0109: Unknown type 'Strng'

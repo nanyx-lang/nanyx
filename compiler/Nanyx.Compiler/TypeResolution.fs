@@ -410,7 +410,8 @@ let private unknownTypeErrors (state: InferState) (parameters: Set<Identifier>) 
                 Diagnostics.at DiagnosticCodes.InvalidTypeName span
                     $"'{typeName}' is not a type: a type's name starts with a capital letter, and a lowercase name longer than one letter is reserved for associated types"
             else
-                Diagnostics.at DiagnosticCodes.UnknownType span $"Unknown type '{typeName}'")
+                Diagnostics.at DiagnosticCodes.UnknownType span
+                    ($"Unknown type '{typeName}'" + StandardLibraryImports.hint state.StandardLibraryExports.Value typeName))
     let outside =
         named
         |> List.choose (fun (name, span) -> tryFindTypeDef name state |> Option.map (fun info -> name, info, span))

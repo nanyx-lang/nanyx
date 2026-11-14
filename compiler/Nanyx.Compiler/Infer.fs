@@ -242,7 +242,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 // A function named as a value is checked as a call to it would be, at the type it is passed as.
                 checkComparisonsAt env next expr name expr.Span ty
                 |> Result.map (fun next -> mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name)
-        | None -> Error [ NameSuggestions.unknown DiagnosticCodes.UnknownIdentifier expr.Span $"Unknown identifier '{name}'" env.Keys name ]
+        | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownIdentifier expr.Span $"Unknown identifier '{name}'" env.Keys name ]
     | SpreadSyntax.Call parts -> RecordSpread.infer inferExpr env state expr parts
     | FunctionCall(name, spanOpt, args) -> inferCall env state expr name spanOpt args
     | Lambda(args, body, _) ->
@@ -1118,7 +1118,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                             $"'{receiver}' is a value, so '{name}' is not a function's name. '{attached}' is attached to its type: call it with a pipe, as in `{receiver} \\{memberName}(...)`"
                         | None -> $"'{receiver}' is a value, so '{name}' is not a function's name, and '{Unifier.tyToString receiverTy}' has no '{memberName}' attached"
                     Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message ]
-                | _ -> Error [ NameSuggestions.unknown DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" env.Keys name ]
+                | _ -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" env.Keys name ]
 
 /// `expr`, a call of the map `map` with `args`: a lookup, read as the call `map.get(map, args...)` (see `Maps`) and
 /// recorded in `ReadAs` to be written as it. The call keeps the node of `expr`, which is what its types and the

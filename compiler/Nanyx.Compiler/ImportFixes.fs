@@ -9,8 +9,8 @@ open Parser.Program
 /// qualifier mean that module: `import nanyx/math as math`. The prelude is left out, since its names are always in
 /// scope.
 module ImportFixes =
-    /// The standard-library modules that export each value, in alphabetical order, by the name they export it under.
-    /// Built from the library's sources the first time it is needed.
+    /// The standard-library modules that export each value, type and context, in alphabetical order, by the name they
+    /// export it under. Built from the library's sources the first time it is needed.
     let standardLibraryExports : Lazy<Map<string, string list>> =
         lazy (
             StandardLibrary.moduleNames
@@ -18,7 +18,10 @@ module ImportFixes =
                 StandardLibrary.moduleSources moduleName
                 |> List.collect (fun (_, source) ->
                     match parseModuleFileWithNames "" source with
-                    | Result.Ok (items, _, _) -> SyntaxTree.exportedValueNames items |> Set.toList |> List.map (fun name -> name, moduleName)
+                    | Result.Ok (items, _, _) ->
+                        Set.union (SyntaxTree.exportedValueNames items) (SyntaxTree.exportedTypeNames items)
+                        |> Set.toList
+                        |> List.map (fun name -> name, moduleName)
                     | Result.Error _ -> []))
             |> List.groupBy fst
             |> List.map (fun (name, pairs) -> name, pairs |> List.map snd |> List.distinct)
@@ -30,31 +33,6 @@ module ImportFixes =
 
     /// A name as it is written in source: identifiers joined by dots.
     let private writtenName = Regex(@"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
-
-    /// The imports that would bring `name` into scope, given the modules that export each name (`exports`):
-    /// `nanyx/<module> as <module>` when `name` is qualified by the name of a module that exports the rest of it,
-    /// then `nanyx/<module>` for each module that exports `name` itself.
-    let candidates (exports: Map<string, string list>) (name: string) : ImportItem list =
-        let exportersOf name = exports |> Map.tryFind name |> Option.defaultValue []
-        let import moduleName alias =
-            ImportItem.synthetic (ModuleImport (StandardLibrary.importPrefix + moduleName)) alias
-        let qualified =
-            match name.IndexOf '.' with
-            | dot when dot > 0 ->
-                let qualifier = name.Substring(0, dot)
-                if exportersOf (name.Substring(dot + 1)) |> List.contains qualifier then [ import qualifier (Some qualifier) ]
-                else []
-            | _ -> []
-        qualified @ (exportersOf name |> List.map (fun moduleName -> import moduleName None))
-
-    let private importLine (item: ImportItem) =
-        let source =
-            match item.Source with
-            | ModuleImport name -> name
-            | PathImport path -> $"\"{path}\""
-        match item.Alias with
-        | Some alias -> $"import {source} as {alias}"
-        | None -> $"import {source}"
 
     /// Where a new import goes in `source`, and the text to insert there for the line `line`: on the line after the
     /// module's last top-level import; else after its `module` line, with a blank line between; else after the `#!`
@@ -90,20 +68,22 @@ module ImportFixes =
                 syntax
                 |> List.collect (function Kind (Import items) -> items |> List.map (fun item -> item.Source, item.Alias) | _ -> [])
                 |> Set.ofList
-            candidates exports written
-            |> List.filter (fun item -> not (existing.Contains (item.Source, item.Alias)))
-            |> List.map (fun item ->
-                let line = importLine item
+            StandardLibraryImports.candidates exports written
+            |> List.filter (fun import -> not (existing.Contains (ModuleImport import.Path, import.Alias)))
+            |> List.map (fun import ->
+                let line = StandardLibraryImports.line import
                 let offset, text = insertion source syntax line
                 { Title = $"Add `{line}`"; Edits = [ { Span = TextEdit.spanBetween source span offset offset; NewText = text } ] })
 
     /// `diagnostics` with a fix for each import that would bring an unknown name into scope, given the modules that
-    /// export each name (`exports`). The names are those of the module `syntax`, whose text is `source` (with its line
-    /// endings made `\n`, as for the offsets of spans); a diagnostic about another module gets none.
+    /// export each name, by their import paths (`exports`). The names are those of the module `syntax`, whose text is
+    /// `source` (with its line endings made `\n`, as for the offsets of spans); a diagnostic about another module gets
+    /// none.
     let addWith (exports: Map<string, string list>) (source: string) (syntax: Module) (diagnostics: Diagnostic list) : Diagnostic list =
         let file = syntax |> List.tryPick (fun item -> if SourceSpan.isNone item.Span then None else Some item.Span.File)
         let isUnknownName (diagnostic: Diagnostic) =
-            diagnostic.Code = DiagnosticCodes.UnknownIdentifier.Code || diagnostic.Code = DiagnosticCodes.UnknownFunction.Code
+            [ DiagnosticCodes.UnknownIdentifier; DiagnosticCodes.UnknownFunction; DiagnosticCodes.UnknownType; DiagnosticCodes.UnknownContext ]
+            |> List.exists (fun code -> code.Code = diagnostic.Code)
         diagnostics
         |> List.map (fun diagnostic ->
             match diagnostic.Span with
@@ -113,4 +93,4 @@ module ImportFixes =
 
     /// `addWith` for the standard library's exports.
     let add (source: string) (syntax: Module) (diagnostics: Diagnostic list) : Diagnostic list =
-        addWith standardLibraryExports.Value source syntax diagnostics
+        addWith standardLibraryExportPaths.Value source syntax diagnostics

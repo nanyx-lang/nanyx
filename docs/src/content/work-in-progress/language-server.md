@@ -193,8 +193,10 @@ what the compiler keeps: exact spans, resolved names and types.
   requested range is a `quickfix` code action: its edits applied to the document, carrying the diagnostic as
   published, with a diagnostic's first fix preferred. Linters offer fixes (`default/unusedBindings` removes an
   unused local or renames an unused name to `_`), and so does one compiler error so far
-  ([#497](https://github.com/nanyx-lang/nanyx/issues/497)): an unknown name (`NYX0101`, `NYX0102`) that a
-  standard-library module exports offers the import that brings it in, one fix per module that exports it.
+  ([#497](https://github.com/nanyx-lang/nanyx/issues/497)): an unknown name (`NYX0101`, `NYX0102`, and a type or
+  context, `NYX0109`, `NYX0108`) that a standard-library module exports offers the import that brings it in, one fix
+  per module that exports it. The error's message names the same imports
+  ([#1272](https://github.com/nanyx-lang/nanyx/issues/1272)): both come from `NyxCompiler.StandardLibraryImports`.
   `string.trim(s)` offers `import nanyx/text`; a name qualified by a module's name, as `math.abs(x)`, offers
   `import nanyx/math as math`. The import goes on the line after the file's last import, else after its `module`
   line, else after the `::` directives (which must come before any code), else at the top. `NyxCompiler.ImportFixes` attaches these fixes in the compiler, from an index of the

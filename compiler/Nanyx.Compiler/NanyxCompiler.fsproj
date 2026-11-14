@@ -15,6 +15,7 @@
   <ItemGroup>
     <Compile Include="Diagnostics.fs" />
     <Compile Include="NameSuggestions.fs" />
+    <Compile Include="StandardLibraryImports.fs" />
     <Compile Include="TypedAst.fs" />
     <Compile Include="SizedIntegers.fs" />
     <Compile Include="RecursiveAliases.fs" />
