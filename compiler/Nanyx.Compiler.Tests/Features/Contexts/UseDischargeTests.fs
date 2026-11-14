@@ -90,3 +90,39 @@ def printer: [Console] () -> (string -> ()) = {
     let code, text = singleError (source.ReplaceLineEndings "\n")
     Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)
     Assert.Equal("{ m: string -> println(m) }", text)
+
+
+let private choose = """context Choose = (choose: () -> bool)
+context Move = (move: int -> int)
+
+def chooser: [Choose] int -> int = { n -> if choose() then n else 1 }
+"""
+
+[<Fact>]
+let ``A use may give a member a function by its name when an instance of each context it needs is in scope`` () =
+    compileClean (
+        choose
+        + """
+def moved = {
+  use Choose(choose = { true })
+  use Move(move = chooser)
+  move(5)
+}
+"""
+        |> _.ReplaceLineEndings("\n")
+    )
+    |> ignore
+
+[<Fact>]
+let ``A function named at a use that needs a context not in scope there is not a member's`` () =
+    let source =
+        choose
+        + """
+def moved = {
+  use Move(move = chooser)
+  move(5)
+}
+"""
+    let code, text = singleError (source.ReplaceLineEndings "\n")
+    Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)
+    Assert.Equal("Move(move = chooser)", text)
