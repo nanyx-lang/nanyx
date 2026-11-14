@@ -59,9 +59,12 @@ type WasmOptions =
       /// `CheckedExports.failureExitCode` (see `WasmRuntime.MemoryChecks`). The module exports its start function
       /// rather than running it when instantiated, and exports the counters and `$heap_ptr`, so that a host can see
       /// what was left on the heap once the program has run (see `CheckedExports`).
-      CheckMemory: bool }
+      CheckMemory: bool
+      /// Inline calls in the core IR (see `CoreIrInline`). Off only for working on the compiler (`--no-inline`): it
+      /// tells whether a misbehaving program is the inliner's doing.
+      Inline: bool }
 
-    static member Default = { CheckMemory = false }
+    static member Default = { CheckMemory = false; Inline = true }
 
 /// The names a module compiled with `CheckMemory` exports.
 module CheckedExports =
@@ -715,10 +718,11 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     let startFunction = lowered.Roots |> Map.tryFind CoreIrLowerInput.startFunctionName |> Option.map fst
 
-    // Reference counting, inserted over the whole module at once, since which parameters a function owns depends on
-    // the functions it calls; then drop specialisation and reuse.
+    // Inlining, then reference counting, inserted over the whole module at once, since which parameters a function owns
+    // depends on the functions it calls; then drop specialisation and reuse.
     let definitionFunctions, startFunction =
         let all = definitionFunctions @ Option.toList startFunction
+        let all = if options.Inline then CoreIrInline.inlineCalls (startFunction |> Option.map _.Name) all else all
         let counted = CoreIrCounting.insert (CoreIrCounting.inferOwnership all) all |> CoreIrReuse.insert
         List.take definitionFunctions.Length counted, startFunction |> Option.map (fun _ -> List.last counted)
 

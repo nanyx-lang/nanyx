@@ -26,9 +26,32 @@
   )
   (export "g" (func $g))
 
-  (func $main (result i64)
+  (func $main (result i64) (local $x__in1_i64 i64) (local $__match_tmp_0__in1_i64 i64) (local $__guard__in1_i64 i64)
     i64.const 7
-    return_call $g
+    local.set $x__in1_i64
+    local.get $x__in1_i64
+    local.set $__match_tmp_0__in1_i64
+    local.get $__match_tmp_0__in1_i64
+      local.set $__guard__in1_i64
+      local.get $__guard__in1_i64
+    i64.const 5
+    i64.gt_s
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i32.const 1
+    (if (result i64)
+      (then
+        i64.const 0
+      )
+      (else
+        unreachable
+      )
+    )
+      )
+    )
   )
   (export "main" (func $main))
 )

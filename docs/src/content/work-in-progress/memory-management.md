@@ -326,7 +326,8 @@ On the IR, following the paper:
 4. **Reuse.** When a dropped cell is the same size as one allocated later on the same path, the drop becomes a
    reuse token and the allocation writes into it when the count was one.
 
-Steps 1 and 2 are `CoreIrCounting.fs`, run on every function of the module after it is lowered, which adds three
+Steps 1 and 2 are `CoreIrCounting.fs`, run on every function of the module after it is lowered and calls are inlined
+into it ([Inlining](./inlining)), which adds three
 nodes to the IR: `dup x1, ...; e`, `drop x1, ...; e`, and `e then drop x1, ...` (drop once `e` is done).
 `CoreIrDrop.fs` generates the dup and drop function of each type.
 

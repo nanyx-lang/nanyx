@@ -16,9 +16,20 @@
     )
   )
 
-  (func $main (result i64)
+  (func $main (result i64) (local $value__in1 i32)
     i32.const 3
-    return_call $classify__tags_
+    local.set $value__in1
+    local.get $value__in1
+    i32.const 3
+    call $__nanyx_equals_tags_ok
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
   )
   (export "main" (func $main))
 

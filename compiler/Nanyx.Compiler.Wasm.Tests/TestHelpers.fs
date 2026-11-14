@@ -41,6 +41,15 @@ let transpileWatWith (options: WasmOptions) (source: string) =
 
 let transpileWat (source: string) = transpileWatWith WasmOptions.Default source
 
+/// `source` compiled without inlining, for a test of how a call is lowered: inlined, the call would not be there.
+let transpileWatNotInlined (source: string) = transpileWatWith { WasmOptions.Default with Inline = false } source
+
+/// The text of the function `name` in `wat`, from its `(func` to the line that closes it.
+let functionText (name: string) (wat: string) =
+    let start = wat.IndexOf($"(func ${name} ")
+    Assert.True(start >= 0, $"no function {name}")
+    wat.Substring(start, wat.IndexOf("\n  )", start) - start)
+
 /// How many times `text` occurs in `wat`.
 let countOccurrences (text: string) (wat: string) = Text.RegularExpressions.Regex.Matches(wat, Text.RegularExpressions.Regex.Escape text).Count
 
@@ -104,11 +113,11 @@ let private command (arguments: string list) : Shell -> int =
         let _, _, timings, path = options (null, false, false, []) rest
         fun shell -> CliCommands.CheckIn(shell, path, timings)
     | "run" :: rest ->
-        let _, _, timings, path = options (null, false, false, []) rest
-        fun shell -> CliCommands.RunIn(shell, false, path, timings)
+        let _, _, timings, path = options (null, false, false, []) (List.except [ "--no-inline" ] rest)
+        fun shell -> CliCommands.RunIn(shell, false, path, timings, not (List.contains "--no-inline" rest))
     | "build" :: rest ->
-        let outputPath, release, timings, path = options (null, false, false, []) rest
-        fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings)
+        let outputPath, release, timings, path = options (null, false, false, []) (List.except [ "--no-inline" ] rest)
+        fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings, not (List.contains "--no-inline" rest))
     | "wasm" :: inputFile :: rest ->
         let outputPath, release, _, _ = options (null, false, false, []) rest
         fun shell -> CliCommands.WasmIn(shell, inputFile, outputPath, release)
@@ -126,8 +135,12 @@ let nanyxIn (directory: string) (arguments: string list) : RunOutcome =
 /// Does what `nanyx run <inputPath>` does, with `--check-memory` when `checkMemory` is set (see `nanyxWithInput`).
 /// `standardInput` is the program's stdin. Its stdout is captured, and so is its stderr, with the compiler's diagnostics
 /// and the run's own errors in it as the CLI prints them.
+/// Without `inlineCalls`, as `--no-inline` does, every call is compiled as a call.
+let runScriptWithOptions (checkMemory: bool) (inlineCalls: bool) (standardInput: string) (inputPath: string) : RunOutcome =
+    inProcess (Directory.GetCurrentDirectory()) standardInput (fun shell -> CliCommands.RunScript(shell, inputPath, checkMemory, false, inlineCalls))
+
 let runScriptWith (checkMemory: bool) (standardInput: string) (inputPath: string) : RunOutcome =
-    inProcess (Directory.GetCurrentDirectory()) standardInput (fun shell -> CliCommands.RunScript(shell, inputPath, checkMemory))
+    runScriptWithOptions checkMemory true standardInput inputPath
 /// Runs the program in `inputPath` with its memory checked, so that every program a test runs also fails it when it
 /// frees a block twice, uses an object after freeing it, or leaves anything on the heap.
 let runFileWithInput (standardInput: string) (inputPath: string) : RunOutcome = runScriptWith true standardInput inputPath
@@ -209,12 +222,15 @@ let docExamplesOf (path: string) : Map<int, DocExample> =
 let runE2E testName =
     runFile (Path.Combine(__SOURCE_DIRECTORY__, "E2E", testName, "input.nyx"))
 
-/// `source`, saved as a script and run (see `runScriptWith`).
-let runSourceWith (checkMemory: bool) (standardInput: string) (source: string) : RunOutcome =
+/// `source`, saved as a script and run (see `runScriptWithOptions`).
+let runSourceWithOptions (checkMemory: bool) (inlineCalls: bool) (standardInput: string) (source: string) : RunOutcome =
     let inputPath = Path.Combine(Path.GetTempPath(), $"nanyx-run-{Guid.NewGuid():N}.nyx")
     File.WriteAllText(inputPath, source)
-    try runScriptWith checkMemory standardInput inputPath
+    try runScriptWithOptions checkMemory inlineCalls standardInput inputPath
     finally File.Delete inputPath
+
+let runSourceWith (checkMemory: bool) (standardInput: string) (source: string) : RunOutcome =
+    runSourceWithOptions checkMemory true standardInput source
 
 let runSourceWithInput (standardInput: string) (source: string) : RunOutcome = runSourceWith true standardInput source
 
@@ -240,7 +256,7 @@ let assertRan (expectedOutput: string) (outcome: RunOutcome) =
     Assert.Equal("", outcome.StandardError)
 
 /// The options the in-process tests compile with: memory checks on, so that the counters are there to read.
-let checkedOptions = { CheckMemory = true }
+let checkedOptions = { WasmOptions.Default with CheckMemory = true }
 
 /// A program compiled with memory checks (see `WasmOptions.CheckMemory`), instantiated on Wasmtime with a WASI that
 /// reads nothing and writes nowhere, and its top-level code run. The drop functions of some types are exported as

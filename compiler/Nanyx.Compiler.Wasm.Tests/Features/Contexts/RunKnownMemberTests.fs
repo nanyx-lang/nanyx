@@ -7,12 +7,6 @@ open System
 open Xunit
 open TranspilerWasmTestHelpers
 
-/// The text of the function `name` in `wat`, from its `(func` to the line that closes it.
-let private functionText (name: string) (wat: string) =
-    let start = wat.IndexOf($"(func ${name} ")
-    Assert.True(start >= 0, $"no function {name}")
-    wat.Substring(start, wat.IndexOf("\n  )", start) - start)
-
 [<Fact>]
 let ``A function that passes a known member on passes it as known`` () =
     let source = """import nanyx/console

@@ -374,7 +374,7 @@
   (export "other.message" (func $other_message))
 
   (func $main (result i32) (local $msg i32) (local $__dbg_value i32) (local $__owned_0 i32)
-    call $other_message
+    i32.const 264
     local.set $msg
     local.get $msg
     local.set $__dbg_value

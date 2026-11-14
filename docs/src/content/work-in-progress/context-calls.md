@@ -186,8 +186,9 @@ type class dictionaries.
 
 ## Inlining
 
-The backend has no inliner. After specialising, `println("hi")` is a call to a function that calls
-`string.toString`, which returns its argument, and calls `write` twice. Inlining would fold that into the caller.
+After specialising, `println("hi")` is a call to a function that calls `string.toString`, which returns its
+argument, and calls `write` twice. The inliner folds the small ones into the caller
+([#745](https://github.com/nanyx-lang/nanyx/issues/745)).
 
 The design is on its own page, [Inlining](./inlining): what is inlined, and how a workflow's block compiles down to the
 code you would write by hand.

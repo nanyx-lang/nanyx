@@ -25,7 +25,7 @@ let private instantiate () =
     let engine = new Engine()
     let store = new Store(engine)
     store.SetWasiConfiguration(WasiConfiguration())
-    use module' = Module.FromText(engine, "allocator", allocatorModuleWat { CheckMemory = true })
+    use module' = Module.FromText(engine, "allocator", allocatorModuleWat { WasmOptions.Default with CheckMemory = true })
     use linker = new Linker(engine)
     linker.DefineWasi()
     new CheckedAllocator(engine, store, linker.Instantiate(store, module'))

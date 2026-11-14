@@ -528,8 +528,6 @@
     local.get $text
     call $__nanyx_write_stdout
     i32.const 0
-    local.get $text
-    call $__nanyx_drop_string
   )
   (export "writeStdout" (func $writeStdout))
 
@@ -537,8 +535,6 @@
     local.get $text
     call $__nanyx_write_stderr
     i32.const 0
-    local.get $text
-    call $__nanyx_drop_string
   )
   (export "writeStderr" (func $writeStderr))
 
@@ -707,7 +703,7 @@
   )
   (export "console_host.readToEndAfter" (func $console_host_readToEndAfter))
 
-  (func $__host_run__unit__known (param $entry i32) (result i32) (local $__ctx_writeStdout i32) (local $__ctx_writeStderr i32) (local $__ctx_readStdinByte i32) (local $__use_write_0 i32) (local $__use_writeError_1 i32) (local $__use_readLine_2 i32) (local $__use_readToEnd_4 i32) (local $__use_flush_6 i32)
+  (func $__host_run__unit__known (param $entry i32) (result i32) (local $__ctx_writeStdout i32) (local $__ctx_writeStderr i32) (local $__ctx_readStdinByte i32) (local $__use_write_0 i32) (local $__use_writeError_1 i32) (local $__use_readLine_2 i32) (local $__use_readToEnd_4 i32) (local $__use_flush_6 i32) (local $__arg11 i32)
     i32.const 276
     local.set $__ctx_writeStdout
     i32.const 288
@@ -775,7 +771,8 @@
     local.get $entry
     i32.load
     call_indirect (type $ctx_fn_1)
-    return_call $ignore__unit
+    local.set $__arg11
+    i32.const 0
   )
 
   (func $prelude_reverseOnto__int (param $arg1 i32) (param $arg2 i32) (result i32) (local $__match_tmp_0 i32) (local $__match_tmp_1 i32) (local $__payload_x_i64 i64) (local $__payload_rest i32) (local $__reuse_1 i32)
@@ -1015,8 +1012,51 @@
   )
   (export "main" (func $main))
 
-  (func $__script (result i32)
-    call $main
+  (func $__script (result i32) (local $__dbg_value__in1_i64 i64) (local $__match_tmp_0__in1_i64 i64) (local $__for_cursor_0__in1 i32) (local $__for_end_0__in1_i64 i64) (local $__for___for_element_0__in1_i64 i64) (local $__owned_0 i32) (local $__owned_1 i32)
+    call $items
+    i32.const 324
+    call $list_filter__int
+    local.tee $__owned_0
+    local.set $__for_cursor_0__in1
+    block $__for_done_0
+      loop $__for_next_0
+        local.get $__for_cursor_0__in1
+        i32.eqz
+        br_if $__for_done_0
+        local.get $__for_cursor_0__in1
+        i64.load
+        local.set $__for___for_element_0__in1_i64
+        local.get $__for___for_element_0__in1_i64
+    local.set $__match_tmp_0__in1_i64
+    i32.const 1
+    (if (result i64)
+      (then
+        local.get $__match_tmp_0__in1_i64
+    local.set $__dbg_value__in1_i64
+    local.get $__dbg_value__in1_i64
+    call $__dbg_show_int
+    local.tee $__owned_1
+    call $dbg_str
+    i32.const 0
+    local.get $__owned_1
+    call $__nanyx_drop_string
+    drop
+    local.get $__dbg_value__in1_i64
+      )
+      (else
+        unreachable
+      )
+    )
+        drop
+        local.get $__for_cursor_0__in1
+        i32.load offset=8
+        local.set $__for_cursor_0__in1
+        br $__for_next_0
+      end
+    end
+    i32.const 0
+    local.get $__owned_0
+    call $__nanyx_drop_list_int
     drop
     i32.const 0
   )
@@ -1026,7 +1066,10 @@
     local.get $__env
     call $__nanyx_drop_rec_0_word
     local.get $__arg1
-    return_call $writeStdout
+    call $__nanyx_write_stdout
+    i32.const 0
+    local.get $__arg1
+    call $__nanyx_drop_string
   )
   (export "__fn_writeStdout" (func $__fn_writeStdout))
 
@@ -1034,7 +1077,10 @@
     local.get $__env
     call $__nanyx_drop_rec_0_word
     local.get $__arg1
-    return_call $writeStderr
+    call $__nanyx_write_stderr
+    i32.const 0
+    local.get $__arg1
+    call $__nanyx_drop_string
   )
   (export "__fn_writeStderr" (func $__fn_writeStderr))
 
@@ -1123,10 +1169,55 @@
   )
   (export "__lambda_8" (func $__lambda_8))
 
-  (func $__fn___script (param $__env i32) (result i32)
+  (func $__fn___script (param $__env i32) (result i32) (local $__dbg_value__in1__in1_i64 i64) (local $__match_tmp_0__in1__in1_i64 i64) (local $__for_cursor_0__in1__in1 i32) (local $__for_end_0__in1__in1_i64 i64) (local $__for___for_element_0__in1__in1_i64 i64) (local $__owned_0 i32) (local $__owned_1 i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
-    return_call $__script
+    call $items
+    i32.const 324
+    call $list_filter__int
+    local.tee $__owned_0
+    local.set $__for_cursor_0__in1__in1
+    block $__for_done_0
+      loop $__for_next_0
+        local.get $__for_cursor_0__in1__in1
+        i32.eqz
+        br_if $__for_done_0
+        local.get $__for_cursor_0__in1__in1
+        i64.load
+        local.set $__for___for_element_0__in1__in1_i64
+        local.get $__for___for_element_0__in1__in1_i64
+    local.set $__match_tmp_0__in1__in1_i64
+    i32.const 1
+    (if (result i64)
+      (then
+        local.get $__match_tmp_0__in1__in1_i64
+    local.set $__dbg_value__in1__in1_i64
+    local.get $__dbg_value__in1__in1_i64
+    call $__dbg_show_int
+    local.tee $__owned_1
+    call $dbg_str
+    i32.const 0
+    local.get $__owned_1
+    call $__nanyx_drop_string
+    drop
+    local.get $__dbg_value__in1__in1_i64
+      )
+      (else
+        unreachable
+      )
+    )
+        drop
+        local.get $__for_cursor_0__in1__in1
+        i32.load offset=8
+        local.set $__for_cursor_0__in1__in1
+        br $__for_next_0
+      end
+    end
+    i32.const 0
+    local.get $__owned_0
+    call $__nanyx_drop_list_int
+    drop
+    i32.const 0
   )
   (export "__fn___script" (func $__fn___script))
 
@@ -1135,8 +1226,8 @@
     call $__nanyx_drop_rec_0_word
     i32.const 0
     local.set $__arg1
-    local.get $__arg1
-    return_call $readStdinByte
+    call $__nanyx_read_stdin_byte
+    i64.extend_i32_s
   )
   (export "__fn_readStdinByte" (func $__fn_readStdinByte))
 

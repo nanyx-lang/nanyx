@@ -54,24 +54,66 @@
   )
   (export "check" (func $check))
 
-  (func $main (result i64) (local $r1 i32) (local $r2 i32) (local $c1_i64 i64) (local $c2_i64 i64)
+  (func $main (result i64) (local $x__in1_i64 i64) (local $lo__in1_i64 i64) (local $hi__in1_i64 i64) (local $r1 i32) (local $x__in2_i64 i64) (local $lo__in2_i64 i64) (local $hi__in2_i64 i64) (local $r2 i32) (local $a__in3 i32) (local $b__in3 i32) (local $c1_i64 i64) (local $a__in4 i32) (local $b__in4 i32) (local $c2_i64 i64)
     i64.const 5
+    local.set $x__in1_i64
     i64.const 1
+    local.set $lo__in1_i64
     i64.const 10
-    call $inRange
+    local.set $hi__in1_i64
+    local.get $x__in1_i64
+    local.get $lo__in1_i64
+    i64.ge_s
+    local.get $x__in1_i64
+    local.get $hi__in1_i64
+    i64.le_s
+    i32.and
     local.set $r1
     i64.const 15
+    local.set $x__in2_i64
     i64.const 1
+    local.set $lo__in2_i64
     i64.const 10
-    call $inRange
+    local.set $hi__in2_i64
+    local.get $x__in2_i64
+    local.get $lo__in2_i64
+    i64.ge_s
+    local.get $x__in2_i64
+    local.get $hi__in2_i64
+    i64.le_s
+    i32.and
     local.set $r2
     i32.const 1
+    local.set $a__in3
     i32.const 0
-    call $check
+    local.set $b__in3
+    local.get $a__in3
+    local.get $b__in3
+    i32.or
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
     local.set $c1_i64
     i32.const 0
+    local.set $a__in4
     i32.const 0
-    call $check
+    local.set $b__in4
+    local.get $a__in4
+    local.get $b__in4
+    i32.or
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
     local.set $c2_i64
     local.get $r1
     local.get $c1_i64

@@ -28,7 +28,7 @@ def add = { x, y -> x + y }
 
 def main = add(1, 2)"""
 
-    let wat = transpileWat source
+    let wat = transpileWatNotInlined source
 
     Assert.Contains("(func $main (result i64)", wat)
     Assert.Contains("i64.const 1", wat)
@@ -46,7 +46,7 @@ def main = 3 \ double"""
 
     let result = NyxCompiler.Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    let wat = Transpiler.Wasm.CodeGen.transpileTypedModuleToWat result.Typed.Value
+    let wat = transpileWatNotInlined source
 
     Assert.Contains("i64.const 3", wat)
     Assert.Contains("call $int_double", wat)
@@ -186,7 +186,7 @@ let ``Transpile magic dbg for payload tag literal`` () =
 
 def main = dbg(#some(42))"""
 
-    let wat = transpileWat source
+    let wat = transpileWatNotInlined source
 
     Assert.Contains("call $__dbg_show_tag_some_int", wat)
     Assert.Contains("call $__dbg_show_int", wat)

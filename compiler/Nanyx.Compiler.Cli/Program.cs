@@ -137,17 +137,19 @@ internal static class CliCommands
     /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="checkMemory">Check the program's reference counting as it runs: stop at a block freed twice or an object used after it was freed, and fail if anything is left on the heap at the end.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
+    /// <param name="noInline">Compile every call as a call, without inlining: for working on the compiler, to tell whether a misbehaving program is the inliner's doing.</param>
     [Consolo("run")]
     public static int Run(
         [Consolo("check-memory")] bool checkMemory = false,
         [Consolo("timings")] bool timings = false,
+        [Consolo("no-inline")] bool noInline = false,
         params string[] path)
     {
-        return RunIn(Shell.Process, checkMemory, path, timings);
+        return RunIn(Shell.Process, checkMemory, path, timings, !noInline);
     }
 
     /// <summary>What <c>nanyx run</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int RunIn(Shell shell, bool checkMemory, string[] path, bool timings = false)
+    internal static int RunIn(Shell shell, bool checkMemory, string[] path, bool timings = false, bool inlineCalls = true)
     {
         if (!TrySinglePath(shell, path, out var single))
         {
@@ -156,7 +158,7 @@ internal static class CliCommands
 
         if (single is not null && !IsPackagePath(shell, single))
         {
-            return Execute(shell, single, Target.Run, outputPath: null, checkMemory: checkMemory, timings: timings);
+            return Execute(shell, single, Target.Run, outputPath: null, checkMemory: checkMemory, timings: timings, inlineCalls: inlineCalls);
         }
 
         if (!TryFindPackage(shell, single, out var package, out var failed))
@@ -181,7 +183,7 @@ internal static class CliCommands
         }
 
         ReportDeferredRun(shell, deferred, build.Diagnostics);
-        return RunProgram(shell, entry.Value, deferred, checkMemory, timings);
+        return RunProgram(shell, entry.Value, deferred, checkMemory, timings, inlineCalls);
     }
 
     /// <summary>
@@ -191,18 +193,20 @@ internal static class CliCommands
     /// <param name="outputPath">Where to write the program; the default is out/&lt;package name&gt;.wat beside the manifest.</param>
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
+    /// <param name="noInline">Compile every call as a call, without inlining: for working on the compiler, to tell whether a misbehaving program is the inliner's doing.</param>
     [Consolo("build")]
     public static int Build(
         [Consolo("out", Alias = "o")] string? outputPath = null,
         [Consolo("release")] bool release = false,
         [Consolo("timings")] bool timings = false,
+        [Consolo("no-inline")] bool noInline = false,
         params string[] path)
     {
-        return BuildIn(Shell.Process, outputPath, release, path, timings);
+        return BuildIn(Shell.Process, outputPath, release, path, timings, !noInline);
     }
 
     /// <summary>What <c>nanyx build</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int BuildIn(Shell shell, string? outputPath, bool release, string[] path, bool timings = false)
+    internal static int BuildIn(Shell shell, string? outputPath, bool release, string[] path, bool timings = false, bool inlineCalls = true)
     {
         if (!TrySinglePath(shell, path, out var single))
         {
@@ -230,7 +234,7 @@ internal static class CliCommands
             return deferred ? 1 : 0;
         }
 
-        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, CodeGen.WasmOptions.Default, deferred, timings))
+        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls), deferred, timings))
         {
             return 1;
         }
@@ -534,7 +538,7 @@ internal static class CliCommands
         return $"{count} deferred error{(count == 1 ? "" : "s")}";
     }
 
-    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, bool checkMemory = false, bool timings = false)
+    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, bool checkMemory = false, bool timings = false, bool inlineCalls = true)
     {
         if (string.IsNullOrWhiteSpace(inputFile))
         {
@@ -555,7 +559,7 @@ internal static class CliCommands
 
         if (target == Target.Run)
         {
-            return RunScript(shell, inputFile, checkMemory, timings);
+            return RunScript(shell, inputFile, checkMemory, timings, inlineCalls);
         }
 
         // Script mode: the file's :: directives say what a package's manifest would.
@@ -577,7 +581,7 @@ internal static class CliCommands
     /// <paramref name="shell"/>, and gives the exit code. The compiler's diagnostics and the run's own errors go to the
     /// shell's stderr. The Wasm tests call this to run programs in their own process.
     /// </summary>
-    internal static int RunScript(Shell shell, string inputFile, bool checkMemory, bool timings = false)
+    internal static int RunScript(Shell shell, string inputFile, bool checkMemory, bool timings = false, bool inlineCalls = true)
     {
         // Script mode: the file's :: directives say what a package's manifest would.
         var result = CompileScript(shell, inputFile, timings);
@@ -588,7 +592,7 @@ internal static class CliCommands
         // program reaches it.
         var deferred = ErrorsDeferred(result);
         ReportDeferredRun(shell, deferred, result.Diagnostics);
-        return RunProgram(shell, result, deferred, checkMemory, timings);
+        return RunProgram(shell, result, deferred, checkMemory, timings, inlineCalls);
     }
 
     private static int RunParse(Shell shell, string inputFile)
@@ -729,10 +733,10 @@ internal static class CliCommands
     /// Runs a compiled program with the shell's standard streams, reporting what stops it to the shell's stderr, and
     /// gives the exit code.
     /// </summary>
-    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, bool checkMemory = false, bool timings = false)
+    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, bool checkMemory = false, bool timings = false, bool inlineCalls = true)
     {
         var errors = shell.Error;
-        var options = new CodeGen.WasmOptions(checkMemory);
+        var options = new CodeGen.WasmOptions(checkMemory, inlineCalls);
         if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred, timings))
         {
             return 1;

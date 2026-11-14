@@ -14,7 +14,9 @@ let private typedModule (source: string) =
     Assert.True(errors.IsEmpty, $"Unexpected errors: %A{errors}")
     result.Typed.Value
 
-let private compileWithReport (source: string) = transpileTypedModuleWithReport (typedModule source)
+/// `source` compiled without inlining, since these tests are about how it is lowered.
+let private compileWithReport (source: string) =
+    transpileTypedModuleWithOptions { WasmOptions.Default with Inline = false } (typedModule source)
 
 /// The diagnostic the backend gives `source`, which type-checks but which it cannot compile.
 let private backendError (source: string) =

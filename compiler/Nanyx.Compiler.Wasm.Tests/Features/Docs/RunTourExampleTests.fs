@@ -89,6 +89,10 @@ let private check (section: string) (page: string) (line: int) =
         let expected = expectedOutput example.Code
         if printed <> "" && expected <> "" then
             Assert.Equal(expected, printed)
+        // Inlining changes no behaviour: compiled without it, the example prints the same (see `CoreIrInline`).
+        let notInlined = runSourceWithOptions false false "" (withImports example.Code)
+        Assert.Equal(outcome.ExitCode, notInlined.ExitCode)
+        Assert.Equal(outcome.StandardOutput, notInlined.StandardOutput)
     | Program, expected -> Assert.Equal<string list>(expected, errorCodes example.Code)
 
 [<Theory>]
