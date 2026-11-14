@@ -7,7 +7,11 @@ open TranspilerWasmTestHelpers
 
 [<Fact>]
 let ``A script's statements run through the host's run`` () =
-    let source = "import nanyx/console\n\nprintln(\"hi\")\n"
+    let source =
+        """import nanyx/console
+
+println("hi")
+"""
     let wat = transpileWat source
     Assert.Contains("call $__host_run", wat)
     runSource source |> assertRan "hi\n"
