@@ -33,68 +33,73 @@ def run: int -> int = { n -> go(n, 0) }
 [<Fact>]
 let ``Counting - a loop over lists and records runs in constant memory`` () =
     let source =
-        count +
-        "def step: int -> int = { i ->\n" +
-        "  def words = [\"one {i}\", \"two {i}\"] ++ [\"three\"]\n" +
-        "  def entry = (name = \"entry {i}\", words = words, size = i)\n" +
-        "  def bigger = entry with size = entry.size + 1\n" +
-        "  count(bigger.words) + bigger.size + count([bigger.name, ...words])\n" +
-        "}\n" +
-        loop
+        count
+        + normalized """def step: int -> int = { i ->
+  def words = ["one {i}", "two {i}"] ++ ["three"]
+  def entry = (name = "entry {i}", words = words, size = i)
+  def bigger = entry with size = entry.size + 1
+  count(bigger.words) + bigger.size + count([bigger.name, ...words])
+}
+"""
+        + loop
     assertRunsInConstantMemory source
 
 [<Fact>]
 let ``Counting - a list built by recursion is freed`` () =
     let source =
-        count +
-        "def build: int -> list(string) = { n ->\n" +
-        "  match n\n" +
-        "  | 0 -> []\n" +
-        "  | _ -> [\"item {n}\", ...build(n - 1)]\n" +
-        "}\n" +
-        "def step: int -> int = { i -> count(build(5)) + i }\n" +
-        loop
+        count
+        + normalized """def build: int -> list(string) = { n ->
+  match n
+  | 0 -> []
+  | _ -> ["item {n}", ...build(n - 1)]
+}
+def step: int -> int = { i -> count(build(5)) + i }
+"""
+        + loop
     assertRunsInConstantMemory source
 
 [<Fact>]
 let ``Counting - closures and what they capture are freed`` () =
     let source =
-        count +
-        "def step: int -> int = { i ->\n" +
-        "  def suffix = \"-{i}\"\n" +
-        "  def tagged = list.map([\"a\", \"b {i}\"], { s -> s ++ suffix })\n" +
-        "  count(tagged)\n" +
-        "}\n" +
-        loop
+        count
+        + normalized """def step: int -> int = { i ->
+  def suffix = "-{i}"
+  def tagged = list.map(["a", "b {i}"], { s -> s ++ suffix })
+  count(tagged)
+}
+"""
+        + loop
     assertRunsInConstantMemory source
 
 [<Fact>]
 let ``Counting - tags with payloads are freed on every branch`` () =
     let source =
-        "def find: (list(string), int) -> #found(string) | #missing = { xs, i ->\n" +
-        "  match xs\n" +
-        "  | [] -> #missing\n" +
-        "  | [x, ...rest] -> if i == 0 then #found(x) else find(rest, i - 1)\n" +
-        "}\n" +
-        "def step: int -> int = { i ->\n" +
-        "  match find([\"a {i}\", \"b {i}\", \"c\"], i % 4)\n" +
-        "  | #found(s) -> if s == \"c\" then 2 else 1\n" +
-        "  | #missing -> 0\n" +
-        "}\n" +
-        loop
+        normalized """def find: (list(string), int) -> #found(string) | #missing = { xs, i ->
+  match xs
+  | [] -> #missing
+  | [x, ...rest] -> if i == 0 then #found(x) else find(rest, i - 1)
+}
+def step: int -> int = { i ->
+  match find(["a {i}", "b {i}", "c"], i % 4)
+  | #found(s) -> if s == "c" then 2 else 1
+  | #missing -> 0
+}
+"""
+        + loop
     assertRunsInConstantMemory source
 
 [<Fact>]
 let ``Counting - a loop over lists in step frees them`` () =
     let source =
-        count +
-        "def step: int -> int = { i ->\n" +
-        "  def words = [\"one {i}\", \"two {i}\", \"three\"]\n" +
-        "  def groups = [[\"a {i}\"], [\"b\", \"c {i}\"]]\n" +
-        "  for words, groups, 0.. | word, group, n -> count([word, ...group]) + n\n" +
-        "  count(words)\n" +
-        "}\n" +
-        loop
+        count
+        + normalized """def step: int -> int = { i ->
+  def words = ["one {i}", "two {i}", "three"]
+  def groups = [["a {i}"], ["b", "c {i}"]]
+  for words, groups, 0.. | word, group, n -> count([word, ...group]) + n
+  count(words)
+}
+"""
+        + loop
     assertRunsInConstantMemory source
 // `series` borrows `r`, which its tail call passes on unchanged, and owns `term`, which it gives up. A caller that
 // passes one variable as both, or reads it again in a later argument, keeps it alive until the call is done.
