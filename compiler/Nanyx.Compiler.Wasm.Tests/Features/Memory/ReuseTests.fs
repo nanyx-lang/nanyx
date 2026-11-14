@@ -138,3 +138,13 @@ let ``Reuse - partitioning a list held once reuses a cell in either branch`` () 
     Assert.Equal(101, allocations)
     Assert.Equal(55 * 10000 + (5050 - 55), result)
     Assert.Equal(liveBefore, program.LiveBlocks)
+
+[<Fact>]
+let ``Reuse - reversing a list held once rewrites its cells in place`` () =
+    let source = lists + "def run: int -> int = { n -> list.length(list.reverse(build(n))) }\n"
+    use program = instantiateWasm source []
+    let liveBefore = program.LiveBlocks
+    let allocations, length = allocationsOf program "run" 100
+    Assert.Equal(100, allocations)
+    Assert.Equal(100, length)
+    Assert.Equal(liveBefore, program.LiveBlocks)

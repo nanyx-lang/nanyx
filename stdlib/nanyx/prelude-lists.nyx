@@ -19,7 +19,7 @@ export def list.fold: [c] list(a), b, ([c] b, a -> b) -> b = {
 
 --| The elements in reverse order.
 export def list.reverse: list(a) -> list(a) = { xs ->
-  list.fold(xs, [], { acc, x -> [x, ...acc] })
+  reverseOnto(xs, [])
 }
 
 --| The number of elements.
@@ -280,8 +280,16 @@ export def list.unzip: list((a, b)) -> (list(a), list(b)) = { pairs ->
 --| The elements without repeats, each kept where it first appears. Elements are compared with `==`,
   by their structure, so this works for lists of anything but functions.
 export def list.distinct: [Eq(a)] list(a) -> list(a) = { xs ->
-  list.reverse(
-    list.fold(xs, [], { seen, x -> if list.any(seen, { y -> y == x }) then seen else [x, ...seen] })
+  reverseOnto(distinctOnto(xs, []), [])
+}
+
+--| `seen` with each element of `xs` it doesn't hold yet added at the front, in turn. The cell of an
+  element added is reused, so the cells of a list held only here are not copied.
+def distinctOnto: [Eq(a)] list(a), list(a) -> list(a) = {
+  | [], seen -> seen
+  | [x, ...rest], seen -> distinctOnto(
+    rest
+    if list.any(seen, { y -> y == x }) then seen else [x, ...seen]
   )
 }
 
