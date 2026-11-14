@@ -171,9 +171,11 @@ internal static class CliCommands
             return failed;
         }
 
-        // As for a script, stdout belongs to the program, so the build's diagnostics go to stderr.
-        var build = BuildPackage(shell, package, timings);
-        PrintDiagnostics(shell, WorthStoppingFor(build.Diagnostics), shell.Error);
+        // As for a script, stdout belongs to the program, so the build's diagnostics go to stderr, in the run's box.
+        using var box = RunBox.For(shell, $"run {package.Manifest.Name}");
+        var compiling = box is null ? shell : shell with { Error = box.Lines };
+        var build = BuildPackage(compiling, package, timings);
+        PrintDiagnostics(compiling, WorthStoppingFor(build.Diagnostics), compiling.Error);
         var deferred = ErrorsDeferred(build);
         if (HasErrors(build.Diagnostics) && !deferred)
         {
@@ -183,12 +185,12 @@ internal static class CliCommands
         var entry = PackageModule.entryResult(build);
         if (entry is null)
         {
-            shell.Error.WriteLine($"The package {package.Manifest.Name} has no @entry, so there is nothing to run.");
+            compiling.Error.WriteLine($"The package {package.Manifest.Name} has no @entry, so there is nothing to run.");
             return 1;
         }
 
-        ReportDeferredRun(shell, deferred, build.Diagnostics);
-        return RunProgram(shell, entry.Value, deferred, checkMemory, timings, [package.Manifest.Name, .. programArguments], inlineCalls);
+        ReportDeferredRun(compiling, deferred, build.Diagnostics);
+        return RunProgram(compiling, entry.Value, deferred, checkMemory, timings, [package.Manifest.Name, .. programArguments], inlineCalls);
     }
 
     /// <summary>
@@ -655,16 +657,19 @@ internal static class CliCommands
     /// </summary>
     internal static int RunScript(Shell shell, string inputFile, bool checkMemory, bool timings = false, string[]? programArguments = null, bool inlineCalls = true)
     {
-        // Script mode: the file's :: directives say what a package's manifest would.
-        var result = CompileScript(shell, inputFile, timings);
+        // `run` is the user-facing command: its stdout belongs to the program, so compiler chatter is kept off it, and
+        // on a terminal it goes in the run's box.
+        using var box = RunBox.For(shell, $"run {shell.DisplayPath(shell.FullPath(inputFile))}");
+        var compiling = box is null ? shell : shell with { Error = box.Lines };
 
-        // `run` is the user-facing command: its stdout belongs to the program, so compiler chatter is kept off it.
-        PrintDiagnostics(shell, WorthStoppingFor(result.Diagnostics), shell.Error);
+        // Script mode: the file's :: directives say what a package's manifest would.
+        var result = CompileScript(compiling, inputFile, timings);
+        PrintDiagnostics(compiling, WorthStoppingFor(result.Diagnostics), compiling.Error);
         // A debug run: type and name errors the compiler deferred do not stop it. Each is reported again if the
         // program reaches it.
         var deferred = ErrorsDeferred(result);
-        ReportDeferredRun(shell, deferred, result.Diagnostics);
-        return RunProgram(shell, result, deferred, checkMemory, timings, [inputFile, .. programArguments ?? []], inlineCalls);
+        ReportDeferredRun(compiling, deferred, result.Diagnostics);
+        return RunProgram(compiling, result, deferred, checkMemory, timings, [inputFile, .. programArguments ?? []], inlineCalls);
     }
 
     private static int RunParse(Shell shell, string inputFile)
@@ -711,8 +716,11 @@ internal static class CliCommands
 
         // As compilers usually write them, so editors and terminals can link to the place:
         // `path/to/file.nyx:3:9: error NYX0201: message`, then the line of source with the span underlined (see
-        // `SourceExcerpt`). On a terminal, the severity and the underline are in its colour.
-        var colour = Terminal.InColour(writer);
+        // `SourceExcerpt`). On a terminal, the severity and the underline are in its colour. In the run's box, only the
+        // gutter is dimmed, so diagnostics keep their colours.
+        var box = (writer as RunBox.Writer)?.Box;
+        writer = box?.Diagnostics ?? writer;
+        var colour = box?.InColour ?? Terminal.InColour(writer);
         var sources = new Dictionary<string, string?>();
         foreach (var diagnostic in diagnostics)
         {
@@ -816,6 +824,8 @@ internal static class CliCommands
             return 1;
         }
 
+        // The program's output follows the run's box, unmarked, and so does what the run reports after it.
+        (errors as RunBox.Writer)?.Box.Close("output");
         if (!checkMemory)
         {
             var outcome = WasmRunner.run(shell.Io, programArguments, wat);
