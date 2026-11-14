@@ -74,67 +74,34 @@ let collect (functions: Function list) : Drops =
 
     let variable (v: Var) = add v.Type
 
-    let rec pattern (p: Pattern) =
-        match p with
-        | PBind v -> variable v
-        | PGuard(v, guard) ->
-            variable v
-            expr guard
-        | _ -> Pattern.parts p |> List.iter pattern
-
-    and expr (e: Expr) =
+    // The expression's own type and what it binds, then the expressions inside it (see `Expr.children`), the last in
+    // tail position, so that a chain as long as a function takes no stack to walk.
+    let rec expr (e: Expr) =
         add e.Type
         match e.Kind with
         | MakeClosure(_, _, captured) ->
             let capturedTypes = captured |> List.map atomType
             capturedTypes |> List.iter add
             if not (environments.Contains capturedTypes) then environments.Add capturedTypes
-        | Let(v, value, body) ->
-            variable v
-            expr value
-            expr body
-        | Do(first, rest) ->
-            expr first
-            expr rest
-        | If(_, ifTrue, ifFalse) ->
-            expr ifTrue
-            expr ifFalse
+        | Let(v, _, _) -> variable v
         | Match(scrutinees, arms) ->
             scrutinees |> List.iter variable
             for arm in arms do
-                arm.Patterns |> List.iter pattern
-                expr arm.Body
-        | ForEach loop ->
-            loop.Streams |> List.iter (fun stream -> variable stream.Element)
-            expr loop.Body
-        | While loop ->
-            expr loop.Condition
-            expr loop.Body
+                for p in arm.Patterns do
+                    Pattern.binds p |> List.iter variable
+                    Pattern.guards p |> List.iter (fst >> variable)
+        | ForEach loop -> loop.Streams |> List.iter (fun stream -> variable stream.Element)
         | CallRuntime(name, [ first; _ ], _) when name = Helpers.listConcat ->
             match atomType first with
             | IrList element when isHeapType element && not (listConcats.Contains element) -> listConcats.Add element
             | _ -> ()
-        | Dup(_, body)
-        | Drop(_, body)
-        | DropAfter(body, _)
-        | Release(_, body)
-        | Reuse(_, body) -> expr body
-        | Atom _
-        | Prim _
-        | Call _
-        | MakeTag _
-        | MakeRecord _
-        | Field _
-        | UpdateRecord _
-        | Assign _
-        | SetField _
-        | MakeList _
-        | CallRuntime _
-        | CallClosure _
-        | Interpolate _
-        | Dbg _
-        | BoxFloat _
-        | Panic _ -> ()
+        | _ -> ()
+        match Expr.children e with
+        | [] -> ()
+        | children ->
+            for child in List.take (children.Length - 1) children do
+                expr child
+            expr (List.last children)
 
     for func in functions do
         func.Params |> List.iter variable
