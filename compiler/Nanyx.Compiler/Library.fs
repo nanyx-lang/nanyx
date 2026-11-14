@@ -156,11 +156,27 @@ module Compiler =
 
     /// The standard-library modules this process has checked, by `originKey` and source, each with the modules it
     /// imports, which a compilation that imports it needs too (`compileFrom` resolves inlined definitions' types by
-    /// them). A user's own modules are checked again in each compilation. A checked module is never changed, and
-    /// sharing one is safe: its type variables are numbered by the module itself, as they would be if it were checked
-    /// again, and its syntax nodes and symbols keep ids no other module has.
+    /// them). A checked module is never changed, and sharing one is safe: its type variables are numbered by the module
+    /// itself, as they would be if it were checked again, and its syntax nodes and symbols keep ids no other module has.
     let private checkedStandardLibrary =
         System.Collections.Concurrent.ConcurrentDictionary<string * string, Lazy<Result<CheckedModule, CompilationPhase * Diagnostic list> * (string * Result<CheckedModule, CompilationPhase * Diagnostic list>) list>>()
+
+    /// A source file's module as a compilation that imported it checked it (see `checkedSourceFiles`).
+    type private CheckedSourceFile =
+        { /// The package whose module table its imports were resolved through.
+          Package: PackageModules option
+          /// Every source file its check read, with the text it read: its own, its other fragments', and those of the
+          /// modules it imports, all the way down.
+          Read: (string * string) list
+          Module: CheckedModule
+          /// The modules it imports, all the way down, as `checkedStandardLibrary` keeps them.
+          Imports: (string * Result<CheckedModule, CompilationPhase * Diagnostic list>) list }
+
+    /// The source files' modules this process has checked as imports, by `originKey`, each kept while every file its
+    /// check read still reads the same, so the language server does not check a large module again each time a file
+    /// that imports it changes. Only a module that checked without errors is kept: an error can depend on which file
+    /// the compilation started from (an import cycle is reported where that file enters it).
+    let private checkedSourceFiles = System.Collections.Concurrent.ConcurrentDictionary<string, CheckedSourceFile>()
 
     /// What a module's imports have brought in so far, as `typecheckModule` merges them one by one.
     type private MergedImports =
@@ -765,8 +781,9 @@ module Compiler =
                      ReExports = merged.ReExports }
 
     /// An imported module, checked the first time this compilation imports it; its source is only read then. A
-    /// standard-library module is checked once per process (see `checkedStandardLibrary`), and the modules it imports
-    /// come into this compilation with it. A module already checked is reported to the listener as reused.
+    /// standard-library module is checked once per process (see `checkedStandardLibrary`), and a source file's module
+    /// again only when a file its check read has changed (see `checkedSourceFiles`); the modules either imports come into
+    /// this compilation with it. A module already checked is reported to the listener as reused.
     and private typecheckImport (checkedModules: CheckedModules) (origin: ModuleOrigin) (readSource: unit -> string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
         match checkedModules.TryGetValue key with
@@ -789,9 +806,39 @@ module Compiler =
                     for importKey, imported in imports do
                         checkedModules.TryAdd(importKey, imported) |> ignore
                     checkedModule
+                | SourceFile path when checkedModules.Edited.IsNone -> typecheckSourceFile checkedModules origin path visited
                 | SourceFile _
                 | InMemory -> typecheckModule checkedModules origin (readSource ()) visited
             checkedModules.[key] <- checkedModule
+            checkedModule
+
+    /// The module of the source file at `path`, imported from `origin`: as this process last checked it, if every file
+    /// that check read reads the same now, and else checked again on its own, recording what it reads.
+    and private typecheckSourceFile (checkedModules: CheckedModules) (origin: ModuleOrigin) (path: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
+        let key = originKey origin
+        let readsTheSame (file: string, text: string) =
+            try checkedModules.ReadFile file = text with _ -> false
+        match checkedSourceFiles.TryGetValue key with
+        | true, kept when kept.Package = checkedModules.Package && List.forall readsTheSame kept.Read ->
+            checkedModules.Listener.ModuleReused key
+            for importKey, imported in kept.Imports do
+                checkedModules.TryAdd(importKey, imported) |> ignore
+            Ok kept.Module
+        | _ ->
+            let read = ResizeArray<string * string>()
+            let reading (file: string) =
+                let text = checkedModules.ReadFile file
+                read.Add((file, text))
+                text
+            let own = CheckedModules(checkedModules.Package, None, checkedModules.Listener, reading)
+            let checkedModule = typecheckModule own origin (reading path) visited
+            let imports = [ for KeyValue(importKey, imported) in own -> importKey, imported ]
+            for importKey, imported in imports do
+                checkedModules.TryAdd(importKey, imported) |> ignore
+            match checkedModule with
+            | Ok checked when checked.Errors.IsEmpty ->
+                checkedSourceFiles.[key] <- { Package = checkedModules.Package; Read = List.ofSeq read; Module = checked; Imports = imports }
+            | _ -> checkedSourceFiles.TryRemove key |> ignore
             checkedModule
 
     let parse (source: string) : Result<Module, Diagnostic list> =

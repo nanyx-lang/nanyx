@@ -72,6 +72,16 @@ type TempPackage(files: (string * string) list) =
     interface IDisposable with
         member _.Dispose() = try Directory.Delete(root, true) with _ -> ()
 
+/// A listener that writes down what it is told, as "file <path>", "start <name>", "end <name>" and "reused <name>".
+type Recording() =
+    let events = Collections.Generic.List<string>()
+    member _.Events = List.ofSeq events
+    interface CompileListener with
+        member _.FileStarted file = events.Add $"file {file}"
+        member _.ModuleStarted name = events.Add $"start {name}"
+        member _.ModuleFinished(name, _) = events.Add $"end {name}"
+        member _.ModuleReused name = events.Add $"reused {name}"
+
 let compileImporting (moduleSource: string) (mainSource: string) =
     let mutable result = Unchecked.defaultof<CompileResult>
     withTempDir (fun dir ->

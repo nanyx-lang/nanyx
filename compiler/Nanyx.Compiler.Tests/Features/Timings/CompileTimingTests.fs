@@ -13,16 +13,6 @@ let private okOf result =
     | Result.Ok value -> value
     | Result.Error errors -> failwith (String.concat "\n" errors)
 
-/// A listener that writes down what it is told, as "file <path>", "start <name>", "end <name>" and "reused <name>".
-type private Recording() =
-    let events = Collections.Generic.List<string>()
-    member _.Events = List.ofSeq events
-    interface CompileListener with
-        member _.FileStarted file = events.Add $"file {file}"
-        member _.ModuleStarted name = events.Add $"start {name}"
-        member _.ModuleFinished(name, _) = events.Add $"end {name}"
-        member _.ModuleReused name = events.Add $"reused {name}"
-
 /// The standard library's modules are checked once per process, so which of them a compile reports depends on the
 /// tests that ran before it: only the package's own modules are compared.
 let private ownEvents (root: string) (events: string list) =
