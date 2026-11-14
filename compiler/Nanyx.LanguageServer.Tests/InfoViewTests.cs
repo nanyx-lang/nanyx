@@ -7,7 +7,6 @@ using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary><c>nanyx/infoView</c>, the request behind the extension's info view.</summary>
-[Collection(LanguageServerTestBase.Collection)]
 public sealed class InfoViewTests : LanguageServerTestBase
 {
     [Fact]

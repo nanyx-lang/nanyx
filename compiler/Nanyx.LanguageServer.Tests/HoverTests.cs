@@ -20,7 +20,6 @@ using Severity = NyxCompiler.Severity;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary>Hover: the type, declaration and doc comment of what is under the pointer.</summary>
-[Collection(LanguageServerTestBase.Collection)]
 public sealed class HoverTests : LanguageServerTestBase
 {
     [Fact]

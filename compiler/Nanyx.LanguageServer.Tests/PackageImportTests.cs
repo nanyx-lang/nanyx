@@ -5,7 +5,6 @@ using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary>A source file of a package imports the package's modules by name, from whichever file declares them.</summary>
-[Collection(LanguageServerTestBase.Collection)]
 public sealed class PackageImportTests : LanguageServerTestBase
 {
     [Fact]

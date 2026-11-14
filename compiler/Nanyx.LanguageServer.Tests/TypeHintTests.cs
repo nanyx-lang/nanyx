@@ -20,7 +20,6 @@ using Severity = NyxCompiler.Severity;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary>Type hints: code lenses and inlay hints.</summary>
-[Collection(LanguageServerTestBase.Collection)]
 public sealed class TypeHintTests : LanguageServerTestBase
 {
     [Fact]

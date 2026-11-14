@@ -6,7 +6,6 @@ using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary>A module's doc comment, the <c>--|</c> comment before its <c>module</c> line, wherever the module is named.</summary>
-[Collection(LanguageServerTestBase.Collection)]
 public sealed class ModuleDocTests : LanguageServerTestBase
 {
     [Fact]
