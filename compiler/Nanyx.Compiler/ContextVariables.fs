@@ -42,13 +42,18 @@ let rec private unboundIn (bound: Set<Identifier>) (inFunction: bool) (typeExpr:
     | _ -> []
 
 /// Whether each context variable written on a function type in `typeOpt`, the annotation of the def `name`, is one
-/// something binds: the def's own context list, as `[c]` in `[c] list(a), ([c] a -> b) -> list(b)`, or a function
-/// type of its own (see `unboundIn`).
+/// something binds: the def's own context list, as `[c]` in `[c] list(a), ([c] a -> b) -> list(b)`, the context list
+/// of the function the def returns, as `[c]` in `([c] a -> b), ([c] b -> d) -> [c] a -> d`, which whoever calls that
+/// function binds, or a function type of its own (see `unboundIn`).
 let ensureBound (name: Identifier) (typeOpt: TypeExpr option) : Result<unit, Diagnostic list> =
     let bound, signature =
         match typeOpt with
         | Some (Kind (TypeWithContext(contexts, inner))) -> names contexts, Some inner
         | other -> Set.empty, other
+    let bound =
+        match signature with
+        | Some (Kind (TypeFunc(_, Kind (TypeWithContext(returned, _))))) -> Set.union bound (names returned)
+        | _ -> bound
     match signature |> Option.map (unboundIn bound false) |> Option.defaultValue [] |> List.distinctBy fst with
     | [] -> Ok ()
     | unbound ->
@@ -110,6 +115,17 @@ let ofNamedValue (written: TypeExpr list) (general: Ty) (ty: Ty) (state: InferSt
         | required -> TyFunc(input, output, own @ required |> List.distinct), next
     | _ -> ty, state
 
+/// The context variables the context list of the function the def `defName` returns names, as its written type has it:
+/// `c` in `([c] a -> b), ([c] b -> d) -> [c] a -> d`.
+let private returnedVariables (state: InferState) (defName: Identifier) : Set<Identifier> =
+    let rec signature (typeExpr: TypeExpr) =
+        match typeExpr.Kind with
+        | TypeWithContext(_, inner) -> signature inner
+        | _ -> typeExpr
+    match state.WrittenTypes |> Map.tryFind defName |> Option.map signature with
+    | Some (Kind (TypeFunc(_, Kind (TypeWithContext(returned, _))))) -> names returned
+    | _ -> Set.empty
+
 /// What it takes for a call to `callee` at `span` to require `contexts` (see `boundAt`) where it is, in the def or
 /// at the top level `state.ContextScope` says: `requirePlain` checks a context such as `Console`, as if the callee
 /// declared it; a context variable must be one the def around the call declares, or one an unannotated def infers
@@ -132,6 +148,9 @@ let require
             | TyVar { Name = Some var }, DefScope(defName, false) ->
                 let declared = current.ContextRequirements |> Map.tryFind defName |> Option.map names |> Option.defaultValue Set.empty
                 if declared.Contains var then Ok current
+                // In a lambda, a variable the function the def returns names is that function's: whoever calls it binds
+                // it, as `c` in `__composeForward: ([c] a -> b), ([c] b -> d) -> [c] a -> d`, so the lambda takes it.
+                elif not current.LambdaContexts.IsEmpty && (returnedVariables current defName).Contains var then Ok current
                 else
                     Error [ Diagnostics.at DiagnosticCodes.UndeclaredContext span
                                 $"'{callee}' requires the contexts '{var}', which '{defName}' does not declare: add [{var}] to the type of '{defName}'"

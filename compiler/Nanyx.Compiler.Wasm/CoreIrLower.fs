@@ -117,12 +117,23 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     let contextVariables (name: string) =
         input.DefinitionTypes |> Map.tryFind name |> Option.map (FunctionContexts.variablesIn >> Map.keys >> List.ofSeq) |> Option.defaultValue []
 
+    /// The context variables of the definition `name`'s type that only the function it returns requires (`[c]` in
+    /// `([c] a -> b), ([c] b -> d) -> [c] a -> d`): that function takes their members when it is called, so a call to
+    /// the definition does not pass them, though it is specialised on them.
+    let returnedVariables (name: string) =
+        let ofContexts (contexts: Ty list) = contexts |> List.choose (function TyVar v -> Some v.Id | _ -> None) |> Set.ofList
+        match input.DefinitionTypes |> Map.tryFind name |> Option.map Unifier.unalias with
+        | Some (TyFunc(_, result, own)) -> Set.difference (ofContexts (requiredContexts result)) (ofContexts own)
+        | _ -> Set.empty
+
     /// The members of the contexts the context variables of the definition `name` stand for where `bindings` binds them,
     /// which the definition takes after those of the contexts it declares, as each call passes them.
     let variableMembers (name: string) (bindings: Map<int, Ty>) =
         let declared =
             input.ContextParameters |> Map.tryFind name |> Option.map (fst >> List.map _.Key) |> Option.defaultValue [] |> Set.ofList
+        let returned = returnedVariables name
         contextVariables name
+        |> List.filter (returned.Contains >> not)
         |> List.collect (fun id -> bindings |> Map.tryFind id |> Option.map List.singleton |> Option.defaultValue [])
         |> membersOf
         |> List.filter (fst >> declared.Contains >> not)
