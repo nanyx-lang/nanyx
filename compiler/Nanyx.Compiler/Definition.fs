@@ -66,42 +66,48 @@ let private symbolAndNameAt (file: string) (result: CompileResult) (offset: int)
 let symbolAt (file: string) (result: CompileResult) (offset: int) : Symbol option =
     symbolAndNameAt file result offset |> Option.map fst
 
-/// What hovering a type's name shows: its definition, as `type Name(params) = <the type it stands for>` (or
+/// The type `symbol` names, as `typed` defines it, if it is one.
+let internal typeDefinitionOf (typed: TypedModule) (symbol: Symbol) : TypeDefInfo option =
+    typed.TypeDefs |> Map.tryPick (fun _ info -> if info.Symbol = Some symbol.Id then Some info else None)
+
+/// The definition of the type `symbol` names, `info`, as `type Name(params) = <the type it stands for>` (or
 /// `context Name = ...` or `scoped context Name = ...`), with `protected` or `private` before the type a nominal one
-/// stands for, and made-up type variables named by `names`, over the span of the name. A nominal type's hover has a
-/// note that says its kind and the module that declares it, and a private type's shape is left out outside that
-/// module. The name can be
-/// in an annotation, a type definition (its own or another's) or a signature's contexts, and the type can be the
-/// module's own or an imported one. `None` when no type's name is at `offset`.
+/// stands for, written by `writeShape`, and a note for a nominal type that says its kind and the module that declares
+/// it. `isHome` says whether it is read in that module: a private type's shape is left out anywhere else.
+let internal writtenTypeDefinition (writeShape: Ty -> string) (symbol: Symbol) (info: TypeDefInfo) (isHome: bool) : string * string option =
+    let keyword =
+        if info.IsScoped then "scoped context"
+        elif info.IsContext then "context"
+        else "type"
+    let parameters =
+        match info.Parameters |> List.choose (fun var -> var.Name) with
+        | [] -> ""
+        | parameterNames -> "(" + String.concat ", " parameterNames + ")"
+    let kind =
+        if info.IsPrivate then "private"
+        elif info.IsNominal then "protected"
+        else ""
+    let declared = if isHome then "this module" else Unifier.moduleText info.Home
+    // A private type's shape is its home module's to know.
+    let definition =
+        if info.IsPrivate && not isHome then $"{keyword} {symbol.Name}{parameters}"
+        elif info.IsNominal then $"{keyword} {symbol.Name}{parameters} = {kind} {writeShape info.Underlying}"
+        else $"{keyword} {symbol.Name}{parameters} = {writeShape info.Underlying}"
+    let note =
+        let what = if info.IsContext then keyword else "type"
+        if info.IsNominal then Some $"A {kind} {what}, declared in {declared}." else None
+    definition, note
+
+/// What hovering a type's name shows: its definition, as `writtenTypeDefinition` writes it, with made-up type
+/// variables named by `names`, over the span of the name. The name can be in an annotation, a type definition (its
+/// own or another's) or a signature's contexts, and the type can be the module's own or an imported one. `None` when
+/// no type's name is at `offset`.
 let typeDefinitionAt (names: TypeNotation) (file: string) (result: CompileResult) (offset: int) : Hover.HoverInfo option =
     match result.Typed, symbolAndNameAt file result offset with
     | Some typed, Some (symbol, span) when symbol.Kind = TypeDefinition ->
-        typed.TypeDefs
-        |> Map.tryPick (fun _ info -> if info.Symbol = Some symbol.Id then Some info else None)
+        typeDefinitionOf typed symbol
         |> Option.map (fun info ->
-            let keyword =
-                if info.IsScoped then "scoped context"
-                elif info.IsContext then "context"
-                else "type"
-            let parameters =
-                match info.Parameters |> List.choose (fun var -> var.Name) with
-                | [] -> ""
-                | parameterNames -> "(" + String.concat ", " parameterNames + ")"
-            let kind =
-                if info.IsPrivate then "private"
-                elif info.IsNominal then "protected"
-                else ""
-            let isHome = symbol.Declaration.File = file
-            let declared = if isHome then "this module" else Unifier.moduleText info.Home
-            let shape = Unifier.tyToDisplayString names info.Underlying
-            // A private type's shape is its home module's to know.
-            let definition =
-                if info.IsPrivate && not isHome then $"{keyword} {symbol.Name}{parameters}"
-                elif info.IsNominal then $"{keyword} {symbol.Name}{parameters} = {kind} {shape}"
-                else $"{keyword} {symbol.Name}{parameters} = {shape}"
-            let note =
-                let what = if info.IsContext then keyword else "type"
-                if info.IsNominal then Some $"A {kind} {what}, declared in {declared}." else None
+            let definition, note = writtenTypeDefinition (Unifier.tyToDisplayString names) symbol info (symbol.Declaration.File = file)
             { Type = definition; Span = span; Note = note })
     | _ -> None
 

@@ -5,8 +5,9 @@ order: 26
 ---
 
 > **Status: in progress.** This page describes how the standard library is built today. What it offers is
-> described in the [Standard Library](../stdlib/standard-library) section, most of which is not written yet. It is
-> part of the [compilation](./compilation) workstream.
+> described in the [Standard Library](../stdlib/standard-library) section, whose references are generated from the
+> library (see [its pages on the docs site](#its-pages-on-the-docs-site)). It is part of the
+> [compilation](./compilation) workstream.
 
 # An ordinary package
 
@@ -48,13 +49,13 @@ list every function a module exports.
 
 | Module          | What it holds                                                                                     |
 | --------------- | ------------------------------------------------------------------------------------------------- |
-| `nanyx/prelude` | Imported automatically. `proc`, the result workflow: in `proc { ... }`, `try x` continues with the payload of `#some` or gives back any other tag (the block's type collects them), and `return x` is `#some(x)`. The `Result(a, e)` type and its functions ([result](../stdlib/result)), and the helpers for option-like unions, named for the `#some` tag, among them `someOrElse`, which `a ?? b` calls by its reserved name `__someOrElse` ([option](../stdlib/option)). The contexts for equality, ordering, hashing and joining. `ToString(a)`, which every interpolation hole goes through (`"{x}"` is a call to `__interpolate(x)`, which requires it), and `FromString(a, e)`, with the `toString` and `fromString` attached to the built-in types. `int` and `float`, the number contexts (`Add`, `Num`) and powers, the sized number types, and conversions between them. Lists ([collections](../stdlib/collections)), maps ([map](../stdlib/map)) and sets ([set](../stdlib/set)) |
-| `nanyx/console` | The `Console` context (`write`, `writeError`, `readLine`, `readToEnd`, `flush`), the `IoError` type, and `print`, `println`, `eprint` and `eprintln`, which write any value with a `ToString` through it ([io](../stdlib/io)) |
+| `nanyx/prelude` | Imported automatically. `proc`, the result workflow: in `proc { ... }`, `try x` continues with the payload of `#some` or gives back any other tag (the block's type collects them), and `return x` is `#some(x)`. The `Result(a, e)` type and its functions ([results and options](../stdlib/prelude-results)), and the helpers for option-like unions, named for the `#some` tag, among them `someOrElse`, which `a ?? b` calls by its reserved name `__someOrElse` ([results and options](../stdlib/prelude-results#options)). The contexts for equality, ordering, hashing and joining. `ToString(a)`, which every interpolation hole goes through (`"{x}"` is a call to `__interpolate(x)`, which requires it), and `FromString(a, e)`, with the `toString` and `fromString` attached to the built-in types. `int` and `float`, the number contexts (`Add`, `Num`) and powers, the sized number types, and conversions between them. Lists ([lists](../stdlib/prelude-lists)), maps and sets ([maps and sets](../stdlib/prelude-maps)) |
+| `nanyx/console` | The `Console` context (`write`, `writeError`, `readLine`, `readToEnd`, `flush`), the `IoError` type, and `print`, `println`, `eprint` and `eprintln`, which write any value with a `ToString` through it ([console](../stdlib/console)) |
 | `nanyx/console.host` | The [console host](./hosts): `run`, which takes the program's `@entry` and runs it with a `Console` built on `HostRuntime` |
 | `nanyx/host.runtime` | The `HostRuntime` context (`writeStdout`, `writeStderr`, `readStdinByte`) and the instance the toolchain provides to hosts; anywhere else, requiring it is an error (`NYX0238`) |
 | `nanyx/math`    | Arithmetic over `Num(a)`, so on `int` and `float`; comparisons over `Ord(a)` (`min`, `max`, `clamp` and the like); square roots, exponentials, logarithms and rounding on `float`; the constants `pi` and `e` ([math](../stdlib/math)) |
 | `nanyx/result`  | Nothing: kept so that `import nanyx/result` still compiles now that `proc` is in the prelude      |
-| `nanyx/text`    | Functions attached to `String`: measuring, searching, slicing, case, trimming, padding, splitting and joining, replacing, and characters; called as `string.trim(s)` or `s \trim` ([string](../stdlib/string)) |
+| `nanyx/text`    | Functions attached to `String`: measuring, searching, slicing, case, trimming, padding, splitting and joining, replacing, and characters; called as `string.trim(s)` or `s \trim` ([text](../stdlib/text)) |
 
 `println` comes from `nanyx/console`. A script imports it explicitly; the module that declares `@entry` gets it
 implicitly, because its host, `nanyx/console.host`, provides `Console` to the entry point.
@@ -65,8 +66,41 @@ functions and `words` only treat ASCII whitespace as whitespace. `indexOf` and `
 `#some(index)` or `#notFound`, as the language docs specify. `split`, `substring`, `replace`, `padStart` and
 `padEnd` take their arguments after the string by name, as in `s \split(on = ",")`, and `join` takes its separator by
 position ([Named parameters](../stdlib/standard-library#named-parameters)). `++` (concatenation) and `==`
-on strings are language operators, lowered by the backend. (The language docs call this module
-`string`; it is imported as `nanyx/text`.)
+on strings are language operators, lowered by the backend.
+
+# Its pages on the docs site
+
+The library is the source of truth for its pages in the [Standard Library](../stdlib/standard-library) section: each
+file of the library that exports a name has a page, `docs/src/content/stdlib/<file>.md` with a `-` for each `.` in
+the file's name (`console.host.nyx` is on `console-host.md`), so the prelude has a page for each of its files. A page's
+reference, between the two marker comments on it, is generated; the rest of the page, its introduction and longer
+examples, is written by hand.
+
+The reference lists what the file exports, in the order it declares it: each type, context and def, attached ones
+included, under a heading of its name, with its signature as hover writes it and its doc comment; a context's members
+with theirs; and, on the page of the file named for the module, the module's doc comment first. Names the library
+reserves, those that start with `__`, are left out. It is read from the compile of each module the compiler embeds,
+not from a parse of its own (`StandardLibraryDocs` in `Nanyx.Compiler/StandardLibraryDocs.fs`), and a link in a doc
+comment, `` [`name`] ``, leads to the name's entry, on its page or another.
+
+After changing a doc comment, or what the library exports, write the references again from `compiler/`:
+
+```bash
+dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -- stdlib-docs ../docs/src/content/stdlib
+```
+
+`--check` writes nothing and lists the pages that are out of date. A test in the WebAssembly tests,
+`StandardLibraryReferenceTests.fs`, fails, showing the difference, when a page's reference is not what the library
+gives, when a file that exports names has no page, and when a page with a reference has no file. The `nanyx` blocks
+on these pages outside the reference are compiled and run, as the tour's are
+([Tour examples](./compilation#tour-examples)).
+
+So explain a function in its doc comment, where hover shows it too, and keep a page's prose to what is about the
+module as a whole. Open questions:
+
+- A named parameter is written in a signature in the order of its name, not the order it is declared in, as hover
+  writes it: `string.substring: (string, length: int, start: int)`.
+- `proc`'s signature is a long record of its keyword members, which says little to a reader.
 
 # Intrinsics
 

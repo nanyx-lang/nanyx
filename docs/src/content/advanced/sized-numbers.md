@@ -140,7 +140,7 @@ arithmetic.
 # Reading from text
 
 Each sized type has an attached `fromString`, the mirror of its `toString`, with its own tag for text it cannot read,
-as `int.fromString` has ([Reading from text](../stdlib/standard-library#reading-from-text)):
+as `int.fromString` has ([Reading from text](../stdlib/prelude-contexts#reading-from-text)):
 
 ```nanyx
 I8.fromString: string -> #some(I8) | #invalidI8

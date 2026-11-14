@@ -414,6 +414,46 @@ internal static class CliCommands
         return Nanyx.Formatter.FormatCommand.exitCode(mode, results);
     }
 
+    /// <summary>
+    /// Write the reference of each standard-library page on the docs site from the library's doc comments
+    /// (see docs/src/content/work-in-progress/standard-library-implementation.md).
+    /// </summary>
+    /// <param name="check">Write nothing; list the pages that are out of date, and exit with 1 if there are any.</param>
+    /// <param name="directory">The docs site's standard-library pages: docs/src/content/stdlib.</param>
+    [Consolo("stdlib-docs")]
+    public static int StdlibDocs(string directory, bool check = false)
+    {
+        var shell = Shell.Process;
+        var path = Path.GetFullPath(directory, shell.Directory);
+        if (!Directory.Exists(path))
+        {
+            Console.Error.WriteLine($"{directory} is not a directory.");
+            return UsageError;
+        }
+
+        var failed = false;
+        foreach (var (page, update) in StandardLibraryDocs.update(path))
+        {
+            switch (update)
+            {
+                case StandardLibraryDocs.PageUpdate.OutOfDate outOfDate when check:
+                    Console.WriteLine(shell.DisplayPath(page));
+                    failed = true;
+                    break;
+                case StandardLibraryDocs.PageUpdate.OutOfDate outOfDate:
+                    File.WriteAllText(page, outOfDate.Item);
+                    Console.WriteLine($"Wrote {shell.DisplayPath(page)}");
+                    break;
+                case StandardLibraryDocs.PageUpdate.Unwritable unwritable:
+                    Console.Error.WriteLine($"{shell.DisplayPath(page)} {unwritable.Item}");
+                    failed = true;
+                    break;
+            }
+        }
+
+        return failed ? 1 : 0;
+    }
+
     private const string HelloWorldSource = """
         import nanyx/console
 

@@ -238,7 +238,7 @@ A printing design proposed a `ToString(a)` context behind interpolation holes, s
 | A user type gets an operator by attaching one: ``def Vector.`+` = ...`` (operators.md:47-51, contexts.md:169-173). | A definition named in backticks did not parse, attached or not, and neither did an operator-named context member ([#527](https://github.com/nanyx-lang/nanyx/issues/527)). *Since fixed:* they parse, and `a + b` on a type that attaches `` `+` `` calls it. |
 | `Eq(a)` is a "common context" with a `` `==` `` member, used as `[Eq(a)]` (contexts.md:106-118). | No `Eq` exists, and `==` never requires one. |
 | `sort: [Ord(a)] list(a) -> list(a)` ([memory.md:14](../advanced/memory)). | No `Ord`, no `sort`. *Since fixed:* both exist. |
-| `list.sortBy: (list(a), (a -> b))` ([collections.md:251](../stdlib/collections)). | `(a -> int)` keys only. *Since fixed:* `[Ord(b)]`, keys of any ordered type. |
+| `list.sortBy: (list(a), (a -> b))` (the old collections page; now [lists](../stdlib/prelude-lists#listsortby)). | `(a -> int)` keys only. *Since fixed:* `[Ord(b)]`, keys of any ordered type. |
 | `use` only changes the instance generic code sees, "never what `1 + 2` means" (operators.md:53). | Consistent then, but the printing design had a `ToString(int)` loaded with `use` changing a concrete `"{total}"`. The two designs disagreed. *Since settled:* a `use` changes concrete holes, as [ToString(a)](../advanced/contexts#tostringa) shows. |
 
 Two backend bugs turned up while checking this: [#526](https://github.com/nanyx-lang/nanyx/issues/526) (above) and

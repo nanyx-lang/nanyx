@@ -77,10 +77,10 @@ let ``A doc comment at the end of the file is reported`` () =
 [<Fact>]
 let ``No doc comment in the standard library is stray`` () =
     let stray =
-        StandardLibrary.moduleNames
-        |> List.collect (fun moduleName ->
-            let file = $"{StandardLibrary.importPrefix}{moduleName}.nyx"
-            let docs = Documentation.ofSource file (StandardLibrary.tryLoadSource moduleName).Value
+        StandardLibrary.preludeModuleName :: StandardLibrary.moduleNames
+        |> List.collect StandardLibrary.moduleFiles
+        |> List.collect (fun file ->
+            let docs = Documentation.ofSource file (StandardLibrary.tryLoadFile file).Value
             docs.Comments
             |> List.filter (fun comment -> comment.Target = DocumentsNothing)
             |> List.map (fun comment -> $"{file}:{comment.Span.StartLine + 1}"))

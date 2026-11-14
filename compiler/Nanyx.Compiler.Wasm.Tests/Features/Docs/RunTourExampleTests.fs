@@ -1,6 +1,8 @@
-/// Every ```nanyx block in the language tour (docs/src/content/tour), compiled and run as `nanyx run` runs it, so that
-/// the tour keeps describing what the compiler does. The words after `nanyx` on a block's opening fence say what kind
-/// of example it is; the conventions are in docs/src/content/work-in-progress/compilation.md#tour-examples.
+/// Every ```nanyx block in the language tour (docs/src/content/tour) and the standard library's pages
+/// (docs/src/content/stdlib), compiled and run as `nanyx run` runs it, so that they keep describing what the compiler
+/// does. The words after `nanyx` on a block's opening fence say what kind of example it is; the conventions are in
+/// docs/src/content/work-in-progress/compilation.md#tour-examples. A standard-library page's generated reference is
+/// left out: its blocks are signatures, and its doc comments' examples are checked where they are written.
 module TranspilerWasmTests.Features.Docs.RunTourExamples
 
 open System
@@ -10,17 +12,27 @@ open Xunit
 open NyxCompiler
 open TranspilerWasmTestHelpers
 
-let private tourDirectory = Path.Combine(docsContentDirectory, "tour")
+/// The ```nanyx blocks of `page` in the section `section` (`tour` or `stdlib`), by the line of their opening fence,
+/// but for those in a standard-library page's generated reference.
+let private examplesOf (section: string) (page: string) =
+    let path = Path.Combine(docsContentDirectory, section, page)
+    let lines = File.ReadAllText(path).ReplaceLineEndings("\n").Split('\n')
+    let generated =
+        match Array.IndexOf(lines, StandardLibraryDocs.beginMarker), Array.IndexOf(lines, StandardLibraryDocs.endMarker) with
+        | start, finish when start >= 0 && finish > start -> fun line -> line > start && line <= finish
+        | _ -> fun _ -> false
+    docExamplesOf path |> Map.filter (fun line _ -> not (generated line))
 
-/// The ```nanyx blocks of `page`, by the line of their opening fence.
-let private examplesOf (page: string) = docExamplesOf (Path.Combine(tourDirectory, page))
-
-let tourExamples () : obj array seq =
-    Directory.GetFiles(tourDirectory, "*.md")
+let private examplesIn (section: string) : obj array seq =
+    Directory.GetFiles(Path.Combine(docsContentDirectory, section), "*.md")
     |> Array.sort
     |> Seq.collect (fun path ->
         let page = Path.GetFileName path
-        examplesOf page |> Map.keys |> Seq.map (fun line -> [| box page; box line |]))
+        examplesOf section page |> Map.keys |> Seq.map (fun line -> [| box page; box line |]))
+
+let tourExamples () : obj array seq = examplesIn "tour"
+
+let standardLibraryExamples () : obj array seq = examplesIn "stdlib"
 
 /// The tour's examples print with `nanyx/console` and work on strings with `nanyx/text` without importing them, as
 /// though each imported them as the Hello world page does: after its directives and its module declaration, if it has
@@ -63,10 +75,10 @@ let private errorCodes (code: string) =
     |> List.distinct
     |> List.sort
 
-[<Theory>]
-[<MemberData(nameof tourExamples)>]
-let ``Tour example compiles and runs`` (page: string, line: int) =
-    let example = examplesOf page |> Map.find line
+/// Compiles and runs the example at `line` of `page` in `section`, and checks it prints what it says, or reports the
+/// errors it says.
+let private check (section: string) (page: string) (line: int) =
+    let example = examplesOf section page |> Map.find line
     match example.Kind, expectedErrors example.Code with
     | Fragment, _
     | Skip _, _ -> ()
@@ -78,3 +90,11 @@ let ``Tour example compiles and runs`` (page: string, line: int) =
         if printed <> "" && expected <> "" then
             Assert.Equal(expected, printed)
     | Program, expected -> Assert.Equal<string list>(expected, errorCodes example.Code)
+
+[<Theory>]
+[<MemberData(nameof tourExamples)>]
+let ``Tour example compiles and runs`` (page: string, line: int) = check "tour" page line
+
+[<Theory>]
+[<MemberData(nameof standardLibraryExamples)>]
+let ``Standard library page example compiles and runs`` (page: string, line: int) = check "stdlib" page line

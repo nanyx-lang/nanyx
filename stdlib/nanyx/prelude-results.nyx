@@ -67,7 +67,11 @@ export def Result.mapError: [c] Result(a, e), ([c] e -> f) -> Result(a, f) = {
   | #error(e), f -> #error(f(e))
 }
 
---| Continues with `f` on a success. Both steps have the same error type.
+--| Continues with `f` on a success. Both steps have the same error type: to chain a step whose
+  errors differ, bring them to one type with [`Result.mapError`] first. That holds for errors that
+  are tags too: the error is one type, so `#error(#notFound)` and `#error(#invalidInt)` do not
+  chain, as the other tags of [`bindSome`] do
+  ([#679](https://github.com/nanyx-lang/nanyx/issues/679)).
 export def Result.bind: [c] Result(a, e), ([c] a -> Result(b, e)) -> Result(b, e) = {
   | #some(value), f -> f(value)
   | #error(e), _ -> #error(e)
@@ -91,11 +95,13 @@ export def Result.orElse: [c] Result(a, e), ([c] e -> Result(a, f)) -> Result(a,
   | #error(e), f -> f(e)
 }
 
+--| Whether the result is a success.
 export def Result.isOk: Result(a, e) -> bool = {
   | #some(_) -> true
   | #error(_) -> false
 }
 
+--| Whether the result is an error.
 export def Result.isError: Result(a, e) -> bool = {
   | #some(_) -> false
   | #error(_) -> true
@@ -114,7 +120,10 @@ export def mapSome: [c] (#some(a) | r), ([c] a -> b) -> #some(b) | r = {
 }
 
 --| Continues with `f` on the value of `#some`. The other tags of both steps are kept: `r` stands for all of them,
-  and a step given with other tags adds them to it.
+  and a step given with other tags adds them to it, so `#some("42") \bindSome(int.fromString)` on a
+  `#some(string) | #notFound` is a `#some(int) | #notFound | #invalidInt`. A function that is itself
+  generic in both steps cannot say so yet: a union has one rest, so `#some(b) | r | s` is not a type
+  ([#680](https://github.com/nanyx-lang/nanyx/issues/680)).
 export def bindSome: [c] (#some(a) | r), ([c] a -> #some(b) | r) -> #some(b) | r = {
   | #some(value), f -> f(value)
   | other, _ -> other
@@ -139,11 +148,13 @@ export def someOrElse: [c] (#some(a) | r), ([c] () -> a) -> a = { option, fallba
   option ?? fallback()
 }
 
+--| Whether the option is `#some`.
 export def isSome: (#some(a) | r) -> bool = {
   | #some(_) -> true
   | _ -> false
 }
 
+--| Whether the option is any tag but `#some`.
 export def isNone: (#some(a) | r) -> bool = {
   | #some(_) -> false
   | _ -> true
@@ -175,7 +186,8 @@ export def orElseSome: [c] (#some(a) | r), ([c] () -> #some(a) | s) -> #some(a) 
   | _, fallback -> fallback()
 }
 
---| The value of `#some` as a one-element list, or the empty list for any other tag.
+--| The value of `#some` as a one-element list, or the empty list for any other tag. Spread into a
+  list literal, it adds an element only when there is one: `["device", ...(identity \someToList)]`.
 export def someToList: (#some(a) | r) -> list(a) = {
   | #some(value) -> [value]
   | _ -> []

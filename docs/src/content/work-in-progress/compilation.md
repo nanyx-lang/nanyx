@@ -81,10 +81,12 @@ as a `BackendInternalError` (`NYX0302`) that asks for a bug report. The backend 
 
 ## Tour examples
 
-Every ` ```nanyx ` block in the [language tour](../tour/variables) is a test case: `RunTourExampleTests.fs` in
-`Nanyx.Compiler.Wasm.Tests` reads the tour's pages, and compiles and runs each block in the test process, as
-`nanyx run` would run it as a script. The words after `nanyx` on a block's opening fence say what kind of example it
-is:
+Every ` ```nanyx ` block in the [language tour](../tour/variables) and the
+[Standard Library](../stdlib/standard-library) pages is a test case: `RunTourExampleTests.fs` in
+`Nanyx.Compiler.Wasm.Tests` reads their pages, and compiles and runs each block in the test process, as `nanyx run`
+would run it as a script. A standard-library page's generated reference is left out (see
+[Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)). The words after
+`nanyx` on a block's opening fence say what kind of example it is:
 
 | Fence | What the test does |
 |-------|--------------------|

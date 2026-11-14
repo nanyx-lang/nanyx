@@ -74,7 +74,8 @@ export def exp: float -> float = { x ->
 }
 
 --| The natural logarithm of `x`, the power `e` is raised to to give `x`: `ln(e)` is `1.0` and `ln(1.0)` is
-  `0.0`. It is minus infinity at zero, and NaN below it.
+  `0.0`. It is minus infinity at zero, and NaN below it. `exp` and `ln` are computed from their series,
+  as WebAssembly has neither, so a result can be one unit in the last place from the nearest `float`.
 export def ln: float -> float = { x ->
   __floatLn(x)
 }
