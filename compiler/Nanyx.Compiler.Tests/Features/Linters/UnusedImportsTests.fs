@@ -62,13 +62,19 @@ let ``An import used only in a type is not reported`` () =
 
 [<Fact>]
 let ``A module imported by the file and by a module block is used by each where it is used`` () =
-    let block = "module inner =\n  import nanyx/text\n  export def a = string.trim(\" x \")\n"
-    Assert.Empty(reported ("import nanyx/text\n" + block + "def b = string.trim(\" y \")\n"))
+    let block = withFinalNewline """module inner =
+  import nanyx/text
+  export def a = string.trim(" x ")"""
+    Assert.Empty(reported ("import nanyx/text\n" + block + (withFinalNewline """def b = string.trim(" y ")""")))
     // The block's import is its own: a use in the block does not use the file's, nor one outside it the block's.
     Assert.Equal<(string * string) list>(
         [ "`nanyx/text` is imported but never used", "nanyx/text" ],
         reported ("import nanyx/text\n" + block + "def b = 1\n"))
-    let source = "import nanyx/text\nmodule inner =\n  import nanyx/text\n  export def a = 1\ndef b = string.trim(\" y \")\n"
+    let source = withFinalNewline """import nanyx/text
+module inner =
+  import nanyx/text
+  export def a = 1
+def b = string.trim(" y ")"""
     let reportedAt =
         (Compiler.compileWith Linters.everyLinter source).Diagnostics
         |> List.filter (fun diagnostic -> diagnostic.Code = "default/unusedImports")
@@ -93,7 +99,8 @@ let ``An unused import in a file that imports it by path is reported`` () =
     withTempDir (fun dir ->
         File.WriteAllText(Path.Combine(dir, "lib.nyx"), "export def helper = 1\n")
         let mainPath = Path.Combine(dir, "main.nyx")
-        let source = "import \"./lib.nyx\" as lib\ndef answer = 2\n"
+        let source = withFinalNewline """import "./lib.nyx" as lib
+def answer = 2"""
         File.WriteAllText(mainPath, source)
         let result = Compiler.compileFileWith Linters.everyLinter mainPath
         Assert.Equal<(string * string) list>([ "`lib` is imported but never used", "\"./lib.nyx\" as lib" ], unusedImportsIn result source))

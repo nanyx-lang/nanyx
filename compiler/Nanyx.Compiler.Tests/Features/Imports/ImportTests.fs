@@ -49,7 +49,10 @@ let private csvAndJson =
 
 [<Fact>]
 let ``A name two imports export is ambiguous where it is used`` () =
-    let result = compileImportingAll csvAndJson "module main\nimport csvParser\nimport jsonParser\ndef data = parse(\"x\")"
+    let result = compileImportingAll csvAndJson (normalized """module main
+import csvParser
+import jsonParser
+def data = parse("x")""")
     assertReports DiagnosticCodes.AmbiguousName result
     Assert.Contains("'parse' is ambiguous between 'csvParser.parse' and 'jsonParser.parse'", (result.Diagnostics |> List.head).Message)
 
@@ -66,12 +69,20 @@ let ``A name two imports export is not an error when unused`` () =
 
 [<Fact>]
 let ``Aliasing one import resolves an ambiguous name`` () =
-    let result = compileImportingAll csvAndJson "module main\nimport csvParser as csv\nimport jsonParser\ndef a = parse(\"x\")\ndef b = csv.parse(\"x\")"
+    let result = compileImportingAll csvAndJson (normalized """module main
+import csvParser as csv
+import jsonParser
+def a = parse("x")
+def b = csv.parse("x")""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
 [<Fact>]
 let ``The module's own definition wins over a name two imports export`` () =
-    let result = compileImportingAll csvAndJson "module main\nimport csvParser\nimport jsonParser\ndef parse = { s -> 3 }\ndef data = parse(\"x\")"
+    let result = compileImportingAll csvAndJson (normalized """module main
+import csvParser
+import jsonParser
+def parse = { s -> 3 }
+def data = parse("x")""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
 [<Fact>]
@@ -81,7 +92,10 @@ let ``A local shadows a name two imports export`` () =
 
 [<Fact>]
 let ``Importing the same module twice is not ambiguous`` () =
-    let result = compileImportingAll csvAndJson "module main\nimport csvParser\nimport csvParser\ndef data = parse(\"x\")"
+    let result = compileImportingAll csvAndJson (normalized """module main
+import csvParser
+import csvParser
+def data = parse("x")""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
 [<Fact>]
@@ -122,11 +136,11 @@ let private valueDefinitionNames (result: CompileResult) =
 let ``Only the imported definitions a module reaches are inlined`` () =
     let modules =
         [ "mod.nyx",
-          "module mod\n" +
-          "def c = { 1 }\n" +
-          "def b = { c() + 1 }\n" +
-          "export def a = { b() + 1 }\n" +
-          "export def unused = { 5 }" ]
+          normalized """module mod
+def c = { 1 }
+def b = { c() + 1 }
+export def a = { b() + 1 }
+export def unused = { 5 }""" ]
     let result = compileImportingAll modules "module main\nimport mod\ndef x = a()"
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let names = valueDefinitionNames result
@@ -137,7 +151,8 @@ let ``Only the imported definitions a module reaches are inlined`` () =
 
 [<Fact>]
 let ``Only the standard-library definitions a program reaches are inlined`` () =
-    let result = Compiler.compile "import nanyx/text\ndef x = string.contains(\"abc\", \"b\")"
+    let result = Compiler.compile (normalized """import nanyx/text
+def x = string.contains("abc", "b")""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let names = valueDefinitionNames result
     Assert.Contains("string.contains", names)
@@ -157,8 +172,12 @@ let ``Definitions reached through an aliased import are inlined`` () =
 let ``An attached name two imports define is ambiguous where it is used`` () =
     let modules =
         [ "one.nyx", "module one\nexport def string.shout: string -> string = { s -> s }"
-          "two.nyx", "module two\nexport def string.shout: string -> string = { s -> s ++ \"!\" }" ]
-    let result = compileImportingAll modules "module main\nimport one\nimport two\ndef a = \"x\" \\ shout"
+          "two.nyx", (normalized """module two
+export def string.shout: string -> string = { s -> s ++ "!" }""") ]
+    let result = compileImportingAll modules (normalized """module main
+import one
+import two
+def a = "x" \ shout""")
     assertReports DiagnosticCodes.AmbiguousAttachedFunction result
     Assert.Contains("'string.shout' is defined in 'one' and 'two'", (result.Diagnostics |> List.head).Message)
 
@@ -266,7 +285,8 @@ import "./mod" as h
 
 def value = 1
 """
-    let modSource = "import nanyx/console\nprintln(\"side effect\")\n"
+    let modSource = withFinalNewline """import nanyx/console
+println("side effect")"""
     Assert.Equal<(string * string) list>([ DiagnosticCodes.EntrypointImported.Code, "\"./mod\" as h" ], importErrors modSource main)
 
 [<Fact>]
@@ -276,7 +296,10 @@ import mod
 
 def value = 1
 """
-    let modSource = "module mod\nimport nanyx/console\nexport def helper = 1\nprintln(\"side effect\")\n"
+    let modSource = withFinalNewline """module mod
+import nanyx/console
+export def helper = 1
+println("side effect")"""
     Assert.Equal<(string * string) list>([ DiagnosticCodes.EntrypointImported.Code, "mod" ], importErrors modSource main)
 
 [<Fact>]

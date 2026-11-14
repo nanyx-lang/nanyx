@@ -2,6 +2,7 @@ module Nanyx.Compiler.Tests.Features.Loops.ForLoops
 
 open Xunit
 open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
 
 // `for xs, ys | x, y -> ...` walks several iterables in step, and `a..` is a range without an end (a `gen`).
 
@@ -25,14 +26,14 @@ let ``a range without an end is a gen of ints`` () =
 [<Fact>]
 let ``each arm of a zipped loop matches one element of each iterable`` () =
     typesOf (
-        "def label: list(string) -> () = { names -> for names, 0.. | name, i -> name ++ \"{i}\" }\n" +
-        "def pairs = for [true], 1..3, [\"a\"] | flag, n, s -> if flag then n + 1 else 0\n" +
-        "def both = { xs, ys -> for xs, ys | x, y -> x + y }\n")
+        withFinalNewline """def label: list(string) -> () = { names -> for names, 0.. | name, i -> name ++ "{i}" }
+def pairs = for [true], 1..3, ["a"] | flag, n, s -> if flag then n + 1 else 0
+def both = { xs, ys -> for xs, ys | x, y -> x + y }""")
     |> ignore
 
 [<Fact>]
 let ``an element of a zipped loop has its own iterable's type`` () =
-    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, singleCode "def f = for [\"a\"], 0.. | s, i -> i ++ s")
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, singleCode """def f = for ["a"], 0.. | s, i -> i ++ s""")
 
 [<Fact>]
 let ``a loop over a gen alone is an error`` () =

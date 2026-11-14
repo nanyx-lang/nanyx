@@ -2,6 +2,7 @@ module Nanyx.Compiler.Tests.Features.AndPatterns
 
 open Xunit
 open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
 
 let private assertCompiles (source: string) =
     let result = Compiler.compile source
@@ -11,57 +12,57 @@ let private assertCompiles (source: string) =
 let ``Every part of an and-pattern matches the value, and binds its names for the arm`` () =
     // The pattern-matching page's examples (#427).
     assertCompiles (
-        "def describeNumber: int -> string = { n ->\n" +
-        "  match n\n" +
-        "    | { < 0 } -> \"negative\"\n" +
-        "    | 0 -> \"zero\"\n" +
-        "    | n & { > 100 } -> \"{n}, which is large!\"\n" +
-        "    | _ -> \"positive\"\n" +
-        "}\n")
+        withFinalNewline """def describeNumber: int -> string = { n ->
+  match n
+    | { < 0 } -> "negative"
+    | 0 -> "zero"
+    | n & { > 100 } -> "{n}, which is large!"
+    | _ -> "positive"
+}""")
     assertCompiles (
-        "def show: int -> string = { value ->\n" +
-        "  match value\n" +
-        "    | { < 0 } & n -> \"Negative: {n}\"\n" +
-        "    | { > 100 } & n -> \"Large: {n}\"\n" +
-        "    | n -> \"Something else: {n}\"\n" +
-        "}\n")
+        withFinalNewline """def show: int -> string = { value ->
+  match value
+    | { < 0 } & n -> "Negative: {n}"
+    | { > 100 } & n -> "Large: {n}"
+    | n -> "Something else: {n}"
+}""")
     // Names from several parts, nested, in a lambda's parameter and in an if-is.
     assertCompiles (
-        "def f: #some((int, string)) | #none -> int = { o ->\n" +
-        "  match o\n" +
-        "    | #some((a, b) & pair) -> a + b.length + pair.0\n" +
-        "    | #none -> 0\n" +
-        "}\n" +
-        "def g = { (a, b) & p -> a + b + p.1 }\n" +
-        "def h: int -> int = { n -> if n is m & { > 0 } then m else 0 }\n")
+        withFinalNewline """def f: #some((int, string)) | #none -> int = { o ->
+  match o
+    | #some((a, b) & pair) -> a + b.length + pair.0
+    | #none -> 0
+}
+def g = { (a, b) & p -> a + b + p.1 }
+def h: int -> int = { n -> if n is m & { > 0 } then m else 0 }""")
 
 [<Fact>]
 let ``The nested patterns example checks, with an and-pattern on the whole list`` () =
     // The pattern-matching page's "Nesting patterns" example.
     assertCompiles (
-        "type Result =\n" +
-        "  | #some(int)\n" +
-        "  | #error(string)\n" +
-        "\n" +
-        "type Request = (\n" +
-        "  id: int\n" +
-        "  status: Result\n" +
-        "  tags: list(string)\n" +
-        ")\n" +
-        "\n" +
-        "def processRequests: list(Request) -> string = { requests ->\n" +
-        "  match requests\n" +
-        "    | [] ->\n" +
-        "      \"No requests\"\n" +
-        "    | [(id = 1, status = #some(value), tags = [\"urgent\", ...rest]), ...more] ->\n" +
-        "      \"Urgent request 1 with value {value}\"\n" +
-        "    | [(id = id, status = #error(msg), tags = []), (status = #some(val), ...), ...tail] ->\n" +
-        "      \"Error in request {id}: {msg}, followed by success\"\n" +
-        "    | [(status = #some(n), ...), ...rest] & requests & { .length > 5 } ->\n" +
-        "      \"Multiple requests with first one ok, total: {requests.length}\"\n" +
-        "    | _ ->\n" +
-        "      \"Other pattern\"\n" +
-        "}\n")
+        withFinalNewline """type Result =
+  | #some(int)
+  | #error(string)
+
+type Request = (
+  id: int
+  status: Result
+  tags: list(string)
+)
+
+def processRequests: list(Request) -> string = { requests ->
+  match requests
+    | [] ->
+      "No requests"
+    | [(id = 1, status = #some(value), tags = ["urgent", ...rest]), ...more] ->
+      "Urgent request 1 with value {value}"
+    | [(id = id, status = #error(msg), tags = []), (status = #some(val), ...), ...tail] ->
+      "Error in request {id}: {msg}, followed by success"
+    | [(status = #some(n), ...), ...rest] & requests & { .length > 5 } ->
+      "Multiple requests with first one ok, total: {requests.length}"
+    | _ ->
+      "Other pattern"
+}""")
 
 [<Fact>]
 let ``Every part of an and-pattern is checked against the value's type`` () =
@@ -86,16 +87,16 @@ let ``An and-pattern covers what all its parts cover`` () =
     Assert.Contains("Non-exhaustive match", (Assert.Single guarded.Diagnostics).Message)
     assertCompiles "def f: int -> int = { n ->\n  match n\n    | m & _ -> m\n}\n"
     assertCompiles (
-        "def f: #some(int) | #none -> int = { o ->\n" +
-        "  match o\n" +
-        "    | #some(n) & whole -> n\n" +
-        "    | #none & _ -> 0\n" +
-        "}\n")
+        withFinalNewline """def f: #some(int) | #none -> int = { o ->
+  match o
+    | #some(n) & whole -> n
+    | #none & _ -> 0
+}""")
     let partialTag =
         Compiler.compile (
-            "def f: #some(int) | #none -> int = { o ->\n" +
-            "  match o\n" +
-            "    | #some(n) & #some(1) -> n\n" +
-            "    | #none -> 0\n" +
-            "}\n")
+            withFinalNewline """def f: #some(int) | #none -> int = { o ->
+  match o
+    | #some(n) & #some(1) -> n
+    | #none -> 0
+}""")
     Assert.Contains("Non-exhaustive match", (Assert.Single partialTag.Diagnostics).Message)

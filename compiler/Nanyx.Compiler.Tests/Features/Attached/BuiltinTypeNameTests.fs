@@ -16,7 +16,9 @@ let private notTypes (source: string) =
 
 [<Fact>]
 let ``A definition attached to a built-in type is called by the type's alias`` () =
-    let typed = compileClean "def n = int.fromString(\"42\")\ndef s = string.toString(\"ab\")\ndef xs = list.map([1], { x -> x + 1 })"
+    let typed = compileClean (normalized """def n = int.fromString("42")
+def s = string.toString("ab")
+def xs = list.map([1], { x -> x + 1 })""")
     Assert.Equal(TyApply("list", [ TyPrimitive "int" ]), typed.Types.["xs"])
 
 [<Fact>]

@@ -21,10 +21,18 @@ let private unusedIn (source: string) =
 let ``An unused local def, argument or pattern variable is reported once, at its name`` () =
     // The examples from the official linter's page in the docs.
     let source =
-        "def total =\n  def taxRate = 0.2\n  100\n" +
-        "def greet: (string, string) -> string = { name, title ->\n  \"Hello, {name}!\"\n}\n" +
-        "def describe: #some(int) | #error(string) -> string = { response ->\n" +
-        "  match response\n    | #some(value) -> \"Success\"\n    | #error(msg) -> \"Error\"\n}\n"
+        normalized """def total =
+  def taxRate = 0.2
+  100
+def greet: (string, string) -> string = { name, title ->
+  "Hello, {name}!"
+}
+def describe: #some(int) | #error(string) -> string = { response ->
+  match response
+    | #some(value) -> "Success"
+    | #error(msg) -> "Error"
+}
+"""
     Assert.Equal<(string * string) list>(
         [ "`taxRate` is never used", "taxRate"
           "Argument `title` is never used", "title"
@@ -35,15 +43,16 @@ let ``An unused local def, argument or pattern variable is reported once, at its
 [<Fact>]
 let ``Used names, top-level defs and names starting with an underscore are not reported`` () =
     let source =
-        "def unusedTopLevel = 1\n" +
-        "def f = { x, _ignored ->\n" +
-        "  def doubled = x * 2\n" +
-        "  def _spare = 3\n" +
-        "  def g = { y -> \"{y} {doubled}\" }\n" +
-        "  match [doubled]\n" +
-        "    | [_first, ..._rest] -> g(1)\n" +
-        "    | _ -> g(2)\n" +
-        "}\n"
+        normalized """def unusedTopLevel = 1
+def f = { x, _ignored ->
+  def doubled = x * 2
+  def _spare = 3
+  def g = { y -> "{y} {doubled}" }
+  match [doubled]
+    | [_first, ..._rest] -> g(1)
+    | _ -> g(2)
+}
+"""
     Assert.Empty(unusedIn source)
 
 [<Fact>]
@@ -51,23 +60,29 @@ let ``Names the compiler makes up are not reported`` () =
     // A destructuring def binds the whole value under a made-up name, `for` its element, a shorthand lambda its
     // argument, and a workflow bind a lambda's.
     let source =
-        "def half: int -> Result(int, string) = { n -> #some(n / 2) }\n" +
-        "def f = { pair ->\n" +
-        "  def (a, b) = pair\n" +
-        "  def doubled = [a, b] \\ list.map({ * 2 })\n" +
-        "  for doubled\n    | n -> n\n" +
-        "}\n" +
-        "def quarter = { n -> proc {\n  def h = try half(n)\n  return try half(h)\n} }\n"
+        normalized """def half: int -> Result(int, string) = { n -> #some(n / 2) }
+def f = { pair ->
+  def (a, b) = pair
+  def doubled = [a, b] \ list.map({ * 2 })
+  for doubled
+    | n -> n
+}
+def quarter = { n -> proc {
+  def h = try half(n)
+  return try half(h)
+} }
+"""
     Assert.Empty(unusedIn source)
 
 [<Fact>]
 let ``A name used only in a guard pattern's predicate is used`` () =
     let source =
-        "def size: int, int -> string = { n, limit ->\n" +
-        "  match n\n" +
-        "    | { x -> x > limit } -> \"big\"\n" +
-        "    | _ -> \"small\"\n" +
-        "}\n"
+        normalized """def size: int, int -> string = { n, limit ->
+  match n
+    | { x -> x > limit } -> "big"
+    | _ -> "small"
+}
+"""
     Assert.Empty(unusedIn source)
 
 [<Fact>]

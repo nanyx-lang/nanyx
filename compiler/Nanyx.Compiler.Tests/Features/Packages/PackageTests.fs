@@ -10,7 +10,13 @@ let private repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__,
 
 let private manifest extra = $"[package]\nname = \"demo\"\nversion = \"0.1.0\"\n{extra}"
 
-let private entrySource = "module main\n\n@entry\ndef main = {\n  def unused = 1\n  println(\"hi\")\n}\n"
+let private entrySource = withFinalNewline """module main
+
+@entry
+def main = {
+  def unused = 1
+  println("hi")
+}"""
 
 let private errorsOf result =
     match result with
@@ -48,7 +54,7 @@ let ``Every problem with a manifest is reported, naming the key`` () =
         + "[linters.other]\n[dependencies]\nacme.json = \"1.0\"\n[extras]\n"
     use package = new TempPackage([ "demo.nyxp", text ])
     let errors = errorsOf (Manifest.read (package.Path "demo.nyxp")) |> List.map (fun e -> e.Substring(e.IndexOf(": ") + 2))
-    Assert.Contains("[package] name \"Demo\" must be lower case, with words separated by dots: acme.web", errors)
+    Assert.Contains("""[package] name "Demo" must be lower case, with words separated by dots: acme.web""", errors)
     Assert.Contains("[package] version must be a string, not 1", errors)
     Assert.Contains("unknown key [package] colour; the keys are 'name', 'version', 'sources', 'public-modules'", errors)
     Assert.Contains("[linters.default] unusedBindings must be 'error', 'warning', 'info', 'hint', 'none', not the string \"loud\"", errors)
@@ -67,10 +73,10 @@ let ``A manifest that is not TOML says so`` () =
 let ``A package is found from a directory under it, with its sources and entry`` () =
     use package =
         new TempPackage(
-            [ "demo.nyxp", manifest "sources = [\"src/**/*.nyx\"]"
+            [ "demo.nyxp", manifest """sources = ["src/**/*.nyx"]"""
               "src/main.nyx", entrySource
               "src/lib/util.nyx", "module util\n\nexport def one = 1\n"
-              "scripts/other.nyx", "println(\"not a source\")\n" ])
+              "scripts/other.nyx", (withFinalNewline """println("not a source")""") ])
     let found = okOf (Package.find (package.Path "src/lib"))
     Assert.Equal<string list>([ package.Path "src/lib/util.nyx"; package.Path "src/main.nyx" ] |> List.map Path.GetFullPath |> List.sort, found.Sources)
     Assert.Equal(Some(Path.GetFullPath(package.Path "src/main.nyx")), found.Entry)

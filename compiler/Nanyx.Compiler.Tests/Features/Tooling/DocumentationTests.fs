@@ -44,7 +44,8 @@ let ``The doc comment of a def in an imported file is read from that file, with 
     withTempDir (fun dir ->
         File.WriteAllText(Path.Combine(dir, "mod.nyx"), doubling)
         let mainPath = Path.Combine(dir, "main.nyx")
-        let source = "import \"./mod.nyx\" as m\ndef four = m.double(2)\n"
+        let source = withFinalNewline """import "./mod.nyx" as m
+def four = m.double(2)"""
         File.WriteAllText(mainPath, source)
         let result = Compiler.compileFile mainPath
         Assert.Equal(Some "Doubles `n`. See [`half`](mod.nyx:4).", docsOf mainPath source result "double"))

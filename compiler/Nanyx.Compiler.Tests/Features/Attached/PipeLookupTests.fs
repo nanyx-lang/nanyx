@@ -93,14 +93,15 @@ def a = "x" \shout"""
 
 [<Fact>]
 let ``A pipe to a definition a standard-library module attaches says which module to import`` () =
-    let source = "def a = \" x \" \\trim"
+    let source = """def a = " x " \trim"""
     let code, message, _ = onlyDiagnosticIn source (Compiler.compile source)
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
     Assert.Equal("'string' has no attached 'trim', and there is no function 'trim' in scope. 'string.trim' is defined in 'nanyx/text': add `import nanyx/text`", message)
 
 [<Fact>]
 let ``A pipe to a standard-library definition imported with as says how to reach it`` () =
-    let source = "import nanyx/text as t\ndef a = \" x \" \\trim"
+    let source = normalized """import nanyx/text as t
+def a = " x " \trim"""
     let _, message, _ = onlyDiagnosticIn source (Compiler.compile source)
     Assert.Equal("'string' has no attached 'trim', and there is no function 'trim' in scope. 'string.trim' is available as 't.string.trim'", message)
 

@@ -10,9 +10,10 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``Match rejects non-exhaustive tag unions`` () =
     let source =
-        "def value: #some(int) | #none = #none\n" +
-        "def result = match value\n" +
-        "| #some(v) -> v\n"
+        normalized """def value: #some(int) | #none = #none
+def result = match value
+| #some(v) -> v
+"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.NonExhaustiveMatch result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
@@ -23,30 +24,30 @@ let ``Match checks exhaustiveness when the scrutinee is a call result or a local
     // #61: the scrutinee's type was still an unsolved variable when the check ran, so it passed silently.
     let direct =
         Compiler.compile (
-            "def getMessage: () -> #some(string) | #noMessage = { #some(\"hi\") }\n" +
-            "def partial = {\n" +
-            "  match getMessage()\n" +
-            "    | #some(_) -> \"message\"\n" +
-            "}\n")
+            withFinalNewline """def getMessage: () -> #some(string) | #noMessage = { #some("hi") }
+def partial = {
+  match getMessage()
+    | #some(_) -> "message"
+}""")
     Assert.False(direct.Diagnostics.IsEmpty, "a match on an annotated call result must be checked")
     Assert.Contains("missing tags: noMessage", (direct.Diagnostics |> List.head).Message)
     let viaLocal =
         Compiler.compile (
-            "def getMessage: () -> #some(string) | #noMessage = { #some(\"hi\") }\n" +
-            "def partial = {\n" +
-            "  def m = getMessage()\n" +
-            "  match m\n" +
-            "    | #some(_) -> \"message\"\n" +
-            "}\n")
+            withFinalNewline """def getMessage: () -> #some(string) | #noMessage = { #some("hi") }
+def partial = {
+  def m = getMessage()
+  match m
+    | #some(_) -> "message"
+}""")
     Assert.False(viaLocal.Diagnostics.IsEmpty, "a match on a local bound to a call result must be checked")
     let complete =
         Compiler.compile (
-            "def getMessage: () -> #some(string) | #noMessage = { #some(\"hi\") }\n" +
-            "def total = {\n" +
-            "  match getMessage()\n" +
-            "    | #some(_) -> \"message\"\n" +
-            "    | #noMessage -> \"none\"\n" +
-            "}\n")
+            withFinalNewline """def getMessage: () -> #some(string) | #noMessage = { #some("hi") }
+def total = {
+  match getMessage()
+    | #some(_) -> "message"
+    | #noMessage -> "none"
+}""")
     Assert.True(complete.Diagnostics.IsEmpty, sprintf "%A" complete.Diagnostics)
 
 [<Fact>]
@@ -54,28 +55,28 @@ let ``A guard pattern covers nothing for certain, whatever its predicate`` () =
     // #428: the check cannot tell that `{ % 2 == 0 }` and `{ % 2 != 0 }` between them cover every int.
     let guardsOnly =
         Compiler.compile (
-            "def parity: int -> string = { n ->\n" +
-            "  match n\n" +
-            "    | { % 2 == 0 } -> \"even\"\n" +
-            "    | { x -> x % 2 != 0 } -> \"odd\"\n" +
-            "}\n")
+            withFinalNewline """def parity: int -> string = { n ->
+  match n
+    | { % 2 == 0 } -> "even"
+    | { x -> x % 2 != 0 } -> "odd"
+}""")
     Assert.Contains("Non-exhaustive match", (Assert.Single guardsOnly.Diagnostics).Message)
     let nested =
         Compiler.compile (
-            "def f: #some(string) | #none -> int = { o ->\n" +
-            "  match o\n" +
-            "    | #some({ .length > 5 }) -> 1\n" +
-            "    | #none -> 0\n" +
-            "}\n")
+            withFinalNewline """def f: #some(string) | #none -> int = { o ->
+  match o
+    | #some({ .length > 5 }) -> 1
+    | #none -> 0
+}""")
     Assert.Contains("Non-exhaustive match", (Assert.Single nested.Diagnostics).Message)
     let withCatchAll =
         Compiler.compile (
-            "def f: #some(string) | #none -> int = { o ->\n" +
-            "  match o\n" +
-            "    | #some({ .length > 5 }) -> 2\n" +
-            "    | #some(_) -> 1\n" +
-            "    | #none -> 0\n" +
-            "}\n")
+            withFinalNewline """def f: #some(string) | #none -> int = { o ->
+  match o
+    | #some({ .length > 5 }) -> 2
+    | #some(_) -> 1
+    | #none -> 0
+}""")
     Assert.True(withCatchAll.Diagnostics.IsEmpty, sprintf "%A" withCatchAll.Diagnostics)
 
 [<Fact>]
@@ -98,19 +99,21 @@ let ``A guard pattern's predicate is checked as a function from the value matche
 [<Fact>]
 let ``Match accepts exhaustive tag unions`` () =
     let source =
-        "def value: #some(int) | #none = #none\n" +
-        "def result = match value\n" +
-        "| #some(v) -> v\n" +
-        "| #none -> 0\n"
+        normalized """def value: #some(int) | #none = #none
+def result = match value
+| #some(v) -> v
+| #none -> 0
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
 
 [<Fact>]
 let ``Match rejects non-exhaustive list patterns`` () =
     let source =
-        "def values = [1, 2]\n" +
-        "def result = match values\n" +
-        "| [x, y] -> x\n"
+        normalized """def values = [1, 2]
+def result = match values
+| [x, y] -> x
+"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.NonExhaustiveMatch result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
@@ -119,20 +122,22 @@ let ``Match rejects non-exhaustive list patterns`` () =
 [<Fact>]
 let ``Match accepts list catch-all`` () =
     let source =
-        "def values = [1, 2]\n" +
-        "def result = match values\n" +
-        "| [x, y] -> x\n" +
-        "| _ -> 0\n"
+        normalized """def values = [1, 2]
+def result = match values
+| [x, y] -> x
+| _ -> 0
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
 
 [<Fact>]
 let ``Match accepts exhaustive list patterns`` () =
     let source =
-        "def values = [1, 2]\n" +
-        "def result = match values\n" +
-        "| [] -> 0\n" +
-        "| [head, ...tail] -> head\n"
+        normalized """def values = [1, 2]
+def result = match values
+| [] -> 0
+| [head, ...tail] -> head
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
 
@@ -140,19 +145,21 @@ let ``Match accepts exhaustive list patterns`` () =
 let ``Match accepts an unnamed rest as covering every longer list`` () =
     // `[x, ...]` matches any list of one or more, like `[x, ...rest]`; it is not `[x]`.
     let source =
-        "def values = [1, 2]\n" +
-        "def result = match values\n" +
-        "| [x, ...] -> x\n" +
-        "| [] -> 0\n"
+        normalized """def values = [1, 2]
+def result = match values
+| [x, ...] -> x
+| [] -> 0
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
 [<Fact>]
 let ``Match rejects non-exhaustive record patterns`` () =
     let source =
-        "def point = (x = 1, y = 2)\n" +
-        "def result = match point\n" +
-        "| (x = 1) -> 1\n"
+        normalized """def point = (x = 1, y = 2)
+def result = match point
+| (x = 1) -> 1
+"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.NonExhaustiveMatch result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
@@ -161,21 +168,23 @@ let ``Match rejects non-exhaustive record patterns`` () =
 [<Fact>]
 let ``Match accepts record catch-all`` () =
     let source =
-        "def point = (x = 1, y = 2)\n" +
-        "def result = match point\n" +
-        "| (x = 1, ...) -> 1\n" +
-        "| _ -> 0\n"
+        normalized """def point = (x = 1, y = 2)
+def result = match point
+| (x = 1, ...) -> 1
+| _ -> 0
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
 
 [<Fact>]
 let ``Match rejects incompatible record patterns`` () =
     let source =
-        "def point = (x = 1)\n" +
-        "def result = match point\n" +
-        "| (x = 1) -> 1\n" +
-        "| \"oops\" -> 0\n" +
-        "| _ -> 0\n"
+        normalized """def point = (x = 1)
+def result = match point
+| (x = 1) -> 1
+| "oops" -> 0
+| _ -> 0
+"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.TypeMismatch result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
@@ -184,11 +193,12 @@ let ``Match rejects incompatible record patterns`` () =
 [<Fact>]
 let ``Match rejects non-exhaustive tag unions with multiple scrutinees`` () =
     let source =
-        "def a: #left | #right = #left\n" +
-        "def b: #up | #down = #up\n" +
-        "def result = match a, b\n" +
-        "| #left, #up -> 1\n" +
-        "| #right, #up -> 2\n"
+        normalized """def a: #left | #right = #left
+def b: #up | #down = #up
+def result = match a, b
+| #left, #up -> 1
+| #right, #up -> 2
+"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.NonExhaustiveMatch result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
@@ -198,16 +208,16 @@ let ``Match rejects non-exhaustive tag unions with multiple scrutinees`` () =
 let ``Typecheck matches on an inferred tag union exhaustively`` () =
     // Exhaustiveness is checked against the scrutinee's known type; an inferred union counts as known.
     let source =
-        "def message = if false then #some(\"hi\") else #noMessage\n" +
-        "def describe = {\n" +
-        "  match message\n" +
-        "    | #some(_) -> \"message\"\n" +
-        "    | #noMessage -> \"nothing\"\n" +
-        "}\n" +
-        "def partial = {\n" +
-        "  match message\n" +
-        "    | #some(_) -> \"message\"\n" +
-        "}"
+        normalized """def message = if false then #some("hi") else #noMessage
+def describe = {
+  match message
+    | #some(_) -> "message"
+    | #noMessage -> "nothing"
+}
+def partial = {
+  match message
+    | #some(_) -> "message"
+}"""
     let result = Compiler.compile source
     Assert.Equal(1, result.Diagnostics.Length)
     Assert.Contains("Non-exhaustive match", (List.head result.Diagnostics).Message)
@@ -216,16 +226,17 @@ let ``Typecheck matches on an inferred tag union exhaustively`` () =
 [<Fact>]
 let ``A def takes a nominal value apart with its type's pattern`` () =
     let source =
-        "type Money = private int\n" +
-        "def toPence: Money -> int = { m ->\n" +
-        "  def Money(pence) = m\n" +
-        "  pence\n" +
-        "}\n" +
-        "def price = Money(250)\n" +
-        "def Money(top) = price\n" +
-        "def shown = match price\n" +
-        "  | Money(0) -> \"free\"\n" +
-        "  | Money(p) -> \"{p}\"\n"
+        normalized """type Money = private int
+def toPence: Money -> int = { m ->
+  def Money(pence) = m
+  pence
+}
+def price = Money(250)
+def Money(top) = price
+def shown = match price
+  | Money(0) -> "free"
+  | Money(p) -> "{p}"
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -246,10 +257,10 @@ let ``A def with a pattern that is not total is a non-exhaustive match`` () =
 let ``A lambda's pattern parameter must be total, as a destructuring def's pattern must`` () =
     let total =
         Compiler.compile (
-            "type Email = protected string\n" +
-            "def value: Email -> string = { Email(s) -> s }\n" +
-            "def add = { (a, b), c -> a + b + c + 1 }\n" +
-            "def ignore = { (), n -> n }\n")
+            withFinalNewline """type Email = protected string
+def value: Email -> string = { Email(s) -> s }
+def add = { (a, b), c -> a + b + c + 1 }
+def ignore = { (), n -> n }""")
     Assert.True(total.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{total.Diagnostics}")
     Assert.Equal("(int, int), int -> int", Unifier.tyToString total.Typed.Value.Types.["add"])
     // One that is not is reported where the pattern is written; `{ | ... }` is the lambda for several cases.
@@ -264,21 +275,23 @@ let ``A lambda's pattern parameter must be total, as a destructuring def's patte
 [<Fact>]
 let ``A match on an alias of a tag union is checked for exhaustiveness`` () =
     let source =
-        "type Lookup = #found(int) | #missing\n" +
-        "def describe: Lookup -> int = { l -> match l\n" +
-        "  | #found(n) -> n }\n"
+        normalized """type Lookup = #found(int) | #missing
+def describe: Lookup -> int = { l -> match l
+  | #found(n) -> n }
+"""
     let result = Compiler.compile source
     Assert.Contains(result.Diagnostics, fun diag -> diag.Message.Contains "missing tags: missing")
 
 [<Fact>]
 let ``A lone else in a match on several values matches whatever they all are`` () =
     let source =
-        "def describe: int, int -> string = { x, y ->\n" +
-        "  match x, y\n" +
-        "    | 0, 0 -> \"origin\"\n" +
-        "    | 0, _ -> \"on the y axis\"\n" +
-        "    | else -> \"elsewhere\"\n" +
-        "}\n"
+        normalized """def describe: int, int -> string = { x, y ->
+  match x, y
+    | 0, 0 -> "origin"
+    | 0, _ -> "on the y axis"
+    | else -> "elsewhere"
+}
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
@@ -330,18 +343,33 @@ let ``The parser's multi-value match examples compile without throwing`` () =
 
 [<Fact>]
 let ``A match on ints without a catch-all is non-exhaustive, and says which int is missing`` () =
-    let single = diagnosticOf "def f: int -> string = { n ->\n  match n\n    | 0 -> \"zero\"\n    | 1 -> \"one\"\n}\n"
+    let single = diagnosticOf (withFinalNewline """def f: int -> string = { n ->
+  match n
+    | 0 -> "zero"
+    | 1 -> "one"
+}""")
     Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, single.Code)
     Assert.Equal("Non-exhaustive match, missing int values, such as 2", single.Message)
     // Ranges count for the ints they hold.
-    let ranges = diagnosticOf "def f: int -> string = { n ->\n  match n\n    | 0..9 -> \"digit\"\n    | 10..99 -> \"two digits\"\n}\n"
+    let ranges = diagnosticOf (withFinalNewline """def f: int -> string = { n ->
+  match n
+    | 0..9 -> "digit"
+    | 10..99 -> "two digits"
+}""")
     Assert.Equal("Non-exhaustive match, missing int values, such as 100", ranges.Message)
     // `(1, 1)` reaches no arm, though each value on its own has a catch-all somewhere.
-    let source = "def f: int, int -> string = { x, y ->\n  match x, y\n    | 0, 0 -> \"origin\"\n    | 0, _ -> \"on the y axis\"\n}\n"
+    let source = withFinalNewline """def f: int, int -> string = { x, y ->
+  match x, y
+    | 0, 0 -> "origin"
+    | 0, _ -> "on the y axis"
+}"""
     let pair = diagnosticOf source
     Assert.Equal("Non-exhaustive match (scrutinee 1), missing int values, such as 1", pair.Message)
     Assert.Equal("match x, y", textAt source pair.Span.Value)
-    let strings = diagnosticOf "def f: string -> int = { s ->\n  match s\n    | \"a\" -> 1\n}\n"
+    let strings = diagnosticOf (withFinalNewline """def f: string -> int = { s ->
+  match s
+    | "a" -> 1
+}""")
     Assert.Equal("Non-exhaustive match, missing string values, such as \"\"", strings.Message)
     let booleans = diagnosticOf "def f: bool -> int = { b ->\n  match b\n    | true -> 1\n}\n"
     Assert.Equal("Non-exhaustive match, missing value: false", booleans.Message)
@@ -352,11 +380,12 @@ let ``A match on ints without a catch-all is non-exhaustive, and says which int 
 [<Fact>]
 let ``A match on several values must cover every combination of them, not each value on its own`` () =
     let source =
-        "def f: (#some(int) | #none), bool -> int = { o, b ->\n" +
-        "  match o, b\n" +
-        "    | #some(_), true -> 1\n" +
-        "    | #none, false -> 2\n" +
-        "}\n"
+        normalized """def f: (#some(int) | #none), bool -> int = { o, b ->
+  match o, b
+    | #some(_), true -> 1
+    | #none, false -> 2
+}
+"""
     let diagnostic = diagnosticOf source
     Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, diagnostic.Code)
     // `(#none, true)` is missing too; the check names one case.
@@ -364,11 +393,11 @@ let ``A match on several values must cover every combination of them, not each v
     Assert.Equal("match o, b", textAt source diagnostic.Span.Value)
     let tags =
         diagnosticOf (
-            "def f: (#left | #right), (#up | #down) -> int = { a, b ->\n" +
-            "  match a, b\n" +
-            "    | #left, #up -> 1\n" +
-            "    | #right, _ -> 2\n" +
-            "}\n")
+            withFinalNewline """def f: (#left | #right), (#up | #down) -> int = { a, b ->
+  match a, b
+    | #left, #up -> 1
+    | #right, _ -> 2
+}""")
     Assert.Equal("Non-exhaustive match, missing case: #left, #down", tags.Message)
     // Inside a tag's payload too.
     let nested = diagnosticOf "def f: #some(bool) | #none -> int = { o ->\n  match o\n    | #some(true) -> 1\n    | #none -> 0\n}\n"
@@ -393,13 +422,13 @@ let ``A non-exhaustive match is reported from the match keyword to the end of it
 [<Fact>]
 let ``A non-exhaustive match on a pipeline is reported over the whole pipeline`` () =
     let prefix =
-        "def mapSome\n" +
-        "  : (#some(int) | #notFound), (int -> string) -> (#some(string) | #notFound)\n" +
-        "  = { | #some(a), f -> #some(f(a))\n" +
-        "      | #notFound, _ -> #notFound }\n" +
-        "def getData: () -> #some(int) | #notFound = { #notFound }\n" +
-        "def b = "
-    let head = "match getData() \\mapSome { n: int -> \"{n}\" }"
+        normalized """def mapSome
+  : (#some(int) | #notFound), (int -> string) -> (#some(string) | #notFound)
+  = { | #some(a), f -> #some(f(a))
+      | #notFound, _ -> #notFound }
+def getData: () -> #some(int) | #notFound = { #notFound }
+def b = """
+    let head = """match getData() \mapSome { n: int -> "{n}" }"""
     let source = prefix + head + "\n  | #some(s) -> s\n"
     Assert.Equal((prefix.Length, prefix.Length + head.Length, head), onlySpan source)
 

@@ -15,25 +15,27 @@ let private email (withHash: bool) =
 
 [<Fact>]
 let ``A call that requires Hash of a type with no hash of its own is passed the compiler's own`` () =
-    let typed = compileClean (hashing + "def a = h(1)\ndef b = h((name = \"x\", tags = [#red]))\n")
+    let typed = compileClean (hashing + (withFinalNewline """def a = h(1)
+def b = h((name = "x", tags = [#red]))"""))
     Assert.Equal<ContextInstance list>([ InstanceSynthesized [ "hash", "__hash" ]; InstanceSynthesized [ "hash", "__hash" ] ], instancesOf typed)
 
 [<Fact>]
 let ``A call that requires Hash of a nominal type that attaches hash is passed it`` () =
-    let typed = compileClean (hashing + email true + "def a = h(Email(\"x\"))\n")
+    let typed = compileClean (hashing + email true + (withFinalNewline """def a = h(Email("x"))"""))
     Assert.Equal<ContextInstance list>([ InstanceSynthesized [ "hash", "Email.hash" ] ], instancesOf typed)
 
 [<Fact>]
 let ``A type that attaches == and no hash has no Hash, and nor has anything that holds it`` () =
-    let message, at = missingContext (hashing + email false + "def a = h(Email(\"x\"))\n")
+    let message, at = missingContext (hashing + email false + (withFinalNewline """def a = h(Email("x"))"""))
     Assert.Equal("'h' hashes values of type 'Email', which cannot be hashed: 'Email' defines its own ==, so its hash must agree with it: attach 'Email.hash'", message)
     Assert.Equal("h", at)
-    let message, _ = missingContext (hashing + email false + "def a = h([Email(\"x\")])\n")
+    let message, _ = missingContext (hashing + email false + (withFinalNewline """def a = h([Email("x")])"""))
     Assert.Equal("'h' hashes values of type 'list(Email)', which cannot be hashed: 'Email' defines its own ==, so its hash must agree with it: attach 'Email.hash'", message)
 
 [<Fact>]
 let ``A structure that holds a part with its own hash is passed a hash derived from its parts`` () =
-    let typed = compileClean (hashing + email true + "def a = h([Email(\"x\")])\ndef b = h((who = Email(\"x\"), n = 1))\n")
+    let typed = compileClean (hashing + email true + (withFinalNewline """def a = h([Email("x")])
+def b = h((who = Email("x"), n = 1))"""))
     // The derived definitions' own calls, which hash each part, come after the module's.
     match instancesOf typed |> List.truncate 2 with
     | [ InstanceSynthesized [ "hash", list ]; InstanceSynthesized [ "hash", record ] ] ->
@@ -45,7 +47,7 @@ let ``A structure that holds a part with its own hash is passed a hash derived f
 let ``Functions have no hash`` () =
     let message, _ = missingContext (hashing + "def a = h({ (x: int) -> x })\n")
     Assert.Equal("'h' hashes values of type 'int -> int', which cannot be hashed: functions have no hash", message)
-    let message, _ = missingContext (hashing + "def a = h((name = \"x\", onClick = { (x: int) -> x }))\n")
+    let message, _ = missingContext (hashing + (withFinalNewline """def a = h((name = "x", onClick = { (x: int) -> x }))"""))
     Assert.Equal("'h' hashes values of type '(name: string, onClick: (int -> int))', which cannot be hashed: its field 'onClick' is a function, and functions have no hash", message)
 
 [<Fact>]

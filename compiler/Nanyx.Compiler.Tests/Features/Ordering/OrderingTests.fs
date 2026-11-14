@@ -48,7 +48,8 @@ let ``A def that writes its type must require Ord of a type variable it orders``
 
 [<Fact>]
 let ``A def that requires Ord of a type variable orders through the instance it is passed`` () =
-    let typed = compileClean "def less: [Ord(a)] a, a -> bool = { x, y -> x < y }\ndef b = less(\"a\", \"b\")\n"
+    let typed = compileClean (withFinalNewline """def less: [Ord(a)] a, a -> bool = { x, y -> x < y }
+def b = less("a", "b")""")
     match instancesOf typed with
     | [ InstanceInScope({ Kind = TypeApply("Ord", _) }, _); _ ] -> ()
     | other -> failwith $"Unexpected instances: %A{other}"
@@ -57,8 +58,8 @@ let ``A def that requires Ord of a type variable orders through the instance it 
 let ``Numbers, bools, strings, tuples and lists of them are ordered by the compiler's own Ord`` () =
     let typed =
         compileClean (
-            "def a = 1 < 2 and 1.5 >= 2.5 and false < true and \"a\" <= \"b\"\n" +
-            "def b = (1, \"a\") < (1, \"b\") and [1, 2] > [1] and [(1, [\"x\"])] < [(2, [])]\n")
+            withFinalNewline """def a = 1 < 2 and 1.5 >= 2.5 and false < true and "a" <= "b"
+def b = (1, "a") < (1, "b") and [1, 2] > [1] and [(1, ["x"])] < [(2, [])]""")
     Assert.Empty(instancesOf typed)
 
 [<Fact>]
@@ -91,11 +92,11 @@ let ``A call that requires Ord of a type with no order is an error at the call``
 let ``A nominal type orders with the compare attached to it`` () =
     let typed =
         compileClean (
-            "type Version = protected (major: int, minor: int)\n" +
-            "def Version.compare: Version, Version -> #less | #equal | #greater = { a, b -> int.compare(a.major, b.major) }\n" +
-            "def v = { major -> Version(major = major, minor = 0) }\n" +
-            "def a = v(1) < v(2)\n" +
-            "def b = list.sort([v(2), v(1)])\n")
+            withFinalNewline """type Version = protected (major: int, minor: int)
+def Version.compare: Version, Version -> #less | #equal | #greater = { a, b -> int.compare(a.major, b.major) }
+def v = { major -> Version(major = major, minor = 0) }
+def a = v(1) < v(2)
+def b = list.sort([v(2), v(1)])""")
     Assert.Contains(InstanceSynthesized [ "compare", "Version.compare" ], instancesOf typed)
 
 [<Fact>]
@@ -111,7 +112,8 @@ let ``An Ord loaded with use orders a built-in type in its block`` () =
 
 [<Fact>]
 let ``List.sortBy takes a key of any type with an order`` () =
-    let typed = compileClean "def sorted = list.sortBy([\"bb\", \"a\"], { s -> s })\ndef byPair = list.sortBy([1, 2], { n -> (n, \"x\") })\n"
+    let typed = compileClean (withFinalNewline """def sorted = list.sortBy(["bb", "a"], { s -> s })
+def byPair = list.sortBy([1, 2], { n -> (n, "x") })""")
     Assert.Equal("list(string)", Unifier.tyToString typed.Types.["sorted"])
     Assert.Equal("list(int)", Unifier.tyToString typed.Types.["byPair"])
 
@@ -152,11 +154,11 @@ let ``A def that calls a local function ordering its own type variable requires 
 let ``A list of a type with its own compare is ordered through it, element by element`` () =
     let typed =
         compileClean (
-            "type Version = protected (major: int, minor: int)\n" +
-            "def Version.compare: Version, Version -> #less | #equal | #greater = { a, b -> int.compare(a.major, b.major) }\n" +
-            "def v = { major -> Version(major = major, minor = 0) }\n" +
-            "def a = [v(1), v(2)] < [v(3)]\n" +
-            "def before: [Ord(a)] list(a), list(a) -> bool = { xs, ys -> xs >= ys }\n")
+            withFinalNewline """type Version = protected (major: int, minor: int)
+def Version.compare: Version, Version -> #less | #equal | #greater = { a, b -> int.compare(a.major, b.major) }
+def v = { major -> Version(major = major, minor = 0) }
+def a = [v(1), v(2)] < [v(3)]
+def before: [Ord(a)] list(a), list(a) -> bool = { xs, ys -> xs >= ys }""")
     Assert.Contains(InstanceSynthesized [ "compare", "Version.compare" ], instancesOf typed)
     let instances = typed.ContextInstances |> Map.values |> Seq.concat |> Seq.choose id |> List.ofSeq
     Assert.Contains(instances, function InstanceInScope(Kind (TypeApply("Ord", [ Kind (TypeVar "a") ])), _) -> true | _ -> false)

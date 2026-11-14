@@ -40,7 +40,10 @@ def main = {
 
 /// The diagnostics of the package of `files` (paths under `src`, with their text), each with the file it is in.
 let private buildOf (files: (string * string) list) =
-    let manifest = "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nsources = [\"src/**/*.nyx\"]\n"
+    let manifest = withFinalNewline """[package]
+name = "demo"
+version = "0.1.0"
+sources = ["src/**/*.nyx"]"""
     use package = new TempPackage(("demo.nyxp", manifest) :: (files |> List.map (fun (path, text) -> "src/" + path, text.ReplaceLineEndings "\n")))
     let shown (span: Parser.Program.SourceSpan) = Path.GetRelativePath(package.Root, span.File).Replace('\\', '/')
     match Package.find package.Root with

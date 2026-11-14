@@ -69,7 +69,7 @@ let ``A value that does not fit a recursive alias is a mismatch`` () =
 
 [<Fact>]
 let ``A recursive alias is the same type at the same arguments only`` () =
-    let code, _ = error (tree + "def wrong: Tree(int) = mapTree(insert(#leaf, 1), { n -> \"{n}\" })\n")
+    let code, _ = error (tree + (withFinalNewline """def wrong: Tree(int) = mapTree(insert(#leaf, 1), { n -> "{n}" })"""))
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
 
 [<Fact>]

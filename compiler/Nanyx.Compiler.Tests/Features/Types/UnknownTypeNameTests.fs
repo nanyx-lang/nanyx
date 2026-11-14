@@ -30,13 +30,14 @@ let ``A type name in a type definition that names no type is reported`` () =
 [<Fact>]
 let ``Built-in types, type variables, type parameters and types defined anywhere in the module are known`` () =
     let source =
-        "def n: int = 1\n" +
-        "def xs: list(string) = [ \"a\" ]\n" +
-        "def ys: seq(bool) -> seq(bool) = { s -> s }\n" +
-        "def id: a -> a = { x -> x }\n" +
-        "def t: Tree = #leaf\n" +
-        "type Tree = #leaf | #node(Tree, Tree)\n" +
-        "type Box(t) = (value: t)\n" +
-        "type Pair(a, b) = (first: a, second: b)\n" +
-        "def g = { (p: Pair(int, Tree)), (b: Box(string)) -> (p.first, b.value) }\n"
+        normalized """def n: int = 1
+def xs: list(string) = [ "a" ]
+def ys: seq(bool) -> seq(bool) = { s -> s }
+def id: a -> a = { x -> x }
+def t: Tree = #leaf
+type Tree = #leaf | #node(Tree, Tree)
+type Box(t) = (value: t)
+type Pair(a, b) = (first: a, second: b)
+def g = { (p: Pair(int, Tree)), (b: Box(string)) -> (p.first, b.value) }
+"""
     Assert.Empty(compiled source)

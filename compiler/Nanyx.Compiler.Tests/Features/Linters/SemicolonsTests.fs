@@ -4,8 +4,6 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-let private normalized (source: string) = source.ReplaceLineEndings "\n"
-
 /// What `default/semicolons` reports for `source`, compiled with every linter on: each diagnostic with the text it is
 /// reported at. The module must type-check, or no linter would run. Its line endings are made `\n`, as for spans.
 let private reported (source: string) =

@@ -20,17 +20,18 @@ let rec private shapes (source: string) (items: Outline.OutlineItem list) : Shap
 [<Fact>]
 let ``The outline lists top-level declarations with what is declared inside them`` () =
     let source =
-        "type Point = (x: int, y: int)\n" +
-        "type Shape = #circle(int) | #square(int)\n" +
-        "type Count = int\n" +
-        "context Logger = (log: string -> (), level: int)\n" +
-        "def origin: Point = (x = 0, y = 0)\n" +
-        "def area = { s ->\n" +
-        "  def side = 2\n" +
-        "  side * side\n" +
-        "}\n" +
-        "module geometry =\n" +
-        "  def unit = 1\n"
+        normalized """type Point = (x: int, y: int)
+type Shape = #circle(int) | #square(int)
+type Count = int
+context Logger = (log: string -> (), level: int)
+def origin: Point = (x = 0, y = 0)
+def area = { s ->
+  def side = 2
+  side * side
+}
+module geometry =
+  def unit = 1
+"""
     let outline = (Outline.ofSource "" source).Value
     Assert.Equal<Shape list>(
         [ Shape("Point", Outline.OutlineKind.RecordType, "Point",

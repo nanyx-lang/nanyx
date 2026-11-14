@@ -43,7 +43,7 @@ def x = lookup("a") ?? lookup("b")
         Assert.Equal(DiagnosticCodes.OptionLikeFallback.Code, diagnostic.Code)
         Assert.Contains("`??` only unwraps", diagnostic.Message)
         Assert.Contains("orElseSome", diagnostic.Message)
-        Assert.Equal("lookup(\"b\")", source.Substring(diagnostic.Span.Value.Start, diagnostic.Span.Value.End - diagnostic.Span.Value.Start))
+        Assert.Equal("""lookup("b")""", source.Substring(diagnostic.Span.Value.Start, diagnostic.Span.Value.End - diagnostic.Span.Value.Start))
     | other -> failwith $"Expected one diagnostic, got %A{other}"
 
 [<Fact>]

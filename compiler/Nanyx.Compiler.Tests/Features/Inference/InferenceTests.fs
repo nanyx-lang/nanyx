@@ -35,16 +35,16 @@ let ``Typecheck interpolated string`` () =
 [<Fact>]
 let ``Typecheck list type application`` () =
     let source =
-        "def sum: list(int) -> int = { xs -> 0 }\n" +
-        "def values: list(string, int) = []"
+        normalized """def sum: list(int) -> int = { xs -> 0 }
+def values: list(string, int) = []"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
 [<Fact>]
 let ``Typecheck dbg returns its argument`` () =
     let source =
-        "def value = dbg(1)\n" +
-        "def text = dbg(\"hi\")"
+        normalized """def value = dbg(1)
+def text = dbg("hi")"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
@@ -54,8 +54,8 @@ let ``Typecheck dbg returns its argument`` () =
 [<Fact>]
 let ``Typecheck self recursive function`` () =
     let source =
-        "def fact = { n -> if n == 0 then 1 else n * fact(n - 1) }\n" +
-        "def result = fact(3)"
+        normalized """def fact = { n -> if n == 0 then 1 else n * fact(n - 1) }
+def result = fact(3)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
@@ -64,9 +64,9 @@ let ``Typecheck self recursive function`` () =
 [<Fact>]
 let ``Typecheck supports polymorphic let`` () =
     let source =
-        "def id = { x -> x }\n" +
-        "def a = id(1)\n" +
-        "def b = id(\"hi\")"
+        normalized """def id = { x -> x }
+def a = id(1)
+def b = id("hi")"""
     let result = Compiler.compile source
     let typed = result.Typed.Value
     Assert.Equal(TyPrimitive "int", typed.Types.["a"])
@@ -75,17 +75,17 @@ let ``Typecheck supports polymorphic let`` () =
 [<Fact>]
 let ``Typecheck expands generic type aliases in annotations`` () =
     let source =
-        "type Async(a) = #done(a) | #pending(a)\n" +
-        "def fromResult: a -> Async(a) = { r -> #done(r) }\n" +
-        "def value = fromResult(5)"
+        normalized """type Async(a) = #done(a) | #pending(a)
+def fromResult: a -> Async(a) = { r -> #done(r) }
+def value = fromResult(5)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
 [<Fact>]
 let ``Typecheck uses tuple input for multi-arg functions`` () =
     let source =
-        "def f = { x, y -> x }\n" +
-        "def result = f(1, 2)"
+        normalized """def f = { x, y -> x }
+def result = f(1, 2)"""
     let result = Compiler.compile source
     let typed = result.Typed.Value
     match typed.Types.["f"] with
@@ -97,8 +97,8 @@ let ``Typecheck uses tuple input for multi-arg functions`` () =
 [<Fact>]
 let ``Typecheck uses unit input for zero-arg functions`` () =
     let source =
-        "def f = { 1 }\n" +
-        "def result = f()"
+        normalized """def f = { 1 }
+def result = f()"""
     let result = Compiler.compile source
     let typed = result.Typed.Value
     Assert.Equal(TyFunc(TyPrimitive "unit", TyPrimitive "int", []), typed.Types.["f"])
@@ -108,9 +108,9 @@ let ``Typecheck uses unit input for zero-arg functions`` () =
 let ``Typecheck gives a lambda argument's parameter its type from the callee`` () =
     // `p.x` is checked inside the lambda, before the call is solved: `p` is a `P` from `apply`'s signature.
     let source =
-        "type P = (x: int)\n" +
-        "def apply: P, (P -> int) -> int = { p, f -> f(p) }\n" +
-        "def n = P(x = 3) \\apply { p -> p.x }"
+        normalized """type P = (x: int)
+def apply: P, (P -> int) -> int = { p, f -> f(p) }
+def n = P(x = 3) \apply { p -> p.x }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"%A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.["n"])
@@ -120,12 +120,12 @@ let ``Typecheck rejects a lambda of several parameters whose signature's input i
     let messages source = (Compiler.compile source).Diagnostics |> List.map (fun diagnostic -> diagnostic.Message)
     Assert.Equal<string list>(
         [ "Type mismatch: #some(x: string, y: string) vs (t0, t1)." ],
-        messages "def g: #some(x: string, y: string) -> string = { x, y -> \"{x}{y}\" }\n")
+        messages (withFinalNewline """def g: #some(x: string, y: string) -> string = { x, y -> "{x}{y}" }"""))
     Assert.Equal<string list>(
         [ "Type mismatch: #some(x: string, y: string) vs (t1, t2)." ],
         messages (
-            "def a: #some(x: string, y: string) = #some(x = \"\", y = \"\")\n" +
-            "def g: typeof a -> string = { x, y -> \"{x}{y}\" }\n"))
+            withFinalNewline """def a: #some(x: string, y: string) = #some(x = "", y = "")
+def g: typeof a -> string = { x, y -> "{x}{y}" }"""))
     Assert.Equal<string list>(
         [ "Type mismatch: string vs (string, t1)." ], messages "def g: string -> string = { x, y -> x }\n")
 
@@ -133,13 +133,13 @@ let ``Typecheck rejects a lambda of several parameters whose signature's input i
 let ``Typecheck gives a lambda argument's parameter a type solved from the arguments before it`` () =
     // `a` in `mapSome`'s signature is only known from the first argument, a `#some(Customer)`.
     let source =
-        "type Customer = (name: string)\n" +
-        "def mapSome\n" +
-        "  : (#some(a) | r), (a -> b) -> (#some(b) | r)\n" +
-        "  = { | #some(a), f -> #some(f(a))\n" +
-        "      | other, _ -> other }\n" +
-        "def c: #some(Customer) | #notFound = #notFound\n" +
-        "def name = c \\mapSome { c -> c.name }"
+        normalized """type Customer = (name: string)
+def mapSome
+  : (#some(a) | r), (a -> b) -> (#some(b) | r)
+  = { | #some(a), f -> #some(f(a))
+      | other, _ -> other }
+def c: #some(Customer) | #notFound = #notFound
+def name = c \mapSome { c -> c.name }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"%A{result.Diagnostics}")
     match result.Typed.Value.Types.["name"] with
@@ -178,10 +178,10 @@ let ``Typecheck infers operator results`` () =
 [<Fact>]
 let ``Typecheck ++ concatenates strings and lists`` () =
     let source =
-        "def greeting = \"Hello, \" ++ \"World\"\n" +
-        "def numbers = [1, 2] ++ [3]\n" +
-        "def shout: string -> string = { s -> s ++ \"!\" }\n" +
-        "def twice: list(int) -> list(int) = { xs -> xs ++ xs }"
+        normalized """def greeting = "Hello, " ++ "World"
+def numbers = [1, 2] ++ [3]
+def shout: string -> string = { s -> s ++ "!" }
+def twice: list(int) -> list(int) = { xs -> xs ++ xs }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -190,7 +190,7 @@ let ``Typecheck ++ concatenates strings and lists`` () =
 
 [<Fact>]
 let ``Typecheck rejects ++ between a string and an int`` () =
-    let result = Compiler.compile "def bad = \"a\" ++ 1"
+    let result = Compiler.compile """def bad = "a" ++ 1"""
     assertReports DiagnosticCodes.TypeMismatch result
 
 [<Fact>]
@@ -201,9 +201,9 @@ let ``Typecheck rejects + on strings`` () =
 [<Fact>]
 let ``Typecheck allows mutual recursion between annotated top-level defs`` () =
     let source =
-        "def isEven: int -> bool = { n -> if n == 0 then true else isOdd(n - 1) }\n" +
-        "def isOdd: int -> bool = { n -> if n == 0 then false else isEven(n - 1) }\n" +
-        "def result = isEven(10)"
+        normalized """def isEven: int -> bool = { n -> if n == 0 then true else isOdd(n - 1) }
+def isOdd: int -> bool = { n -> if n == 0 then false else isEven(n - 1) }
+def result = isEven(10)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "bool", result.Typed.Value.Types.["result"])
@@ -211,8 +211,8 @@ let ``Typecheck allows mutual recursion between annotated top-level defs`` () =
 [<Fact>]
 let ``Typecheck allows a forward reference to an unannotated def`` () =
     let source =
-        "def result = addOne(41)\n" +
-        "def addOne = { x -> x + 1 }"
+        normalized """def result = addOne(41)
+def addOne = { x -> x + 1 }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.["result"])
@@ -221,9 +221,9 @@ let ``Typecheck allows a forward reference to an unannotated def`` () =
 [<Fact>]
 let ``Typecheck still generalizes a def used after its definition`` () =
     let source =
-        "def id = { x -> x }\n" +
-        "def a = id(1)\n" +
-        "def b = id(\"s\")"
+        normalized """def id = { x -> x }
+def a = id(1)
+def b = id("s")"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.["a"])
@@ -232,9 +232,9 @@ let ``Typecheck still generalizes a def used after its definition`` () =
 [<Fact>]
 let ``Typecheck types the boolean keywords as bool`` () =
     let source =
-        "def a = true and false\n" +
-        "def b = a or not a\n" +
-        "def c = not (1 < 2)"
+        normalized """def a = true and false
+def b = a or not a
+def c = not (1 < 2)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let types = result.Typed.Value.Types
@@ -247,12 +247,12 @@ let ``Typecheck accepts arithmetic and comparison on floats`` () =
     // #36: `+ - * /` and `< > <= >=` used to pin their operands to int.
     let ok =
         Compiler.compile (
-            "def pi = 3.14\n" +
-            "def d = pi * 2.0\n" +
-            "def e: float = 1.5 + 2.5\n" +
-            "def half = { x -> x / 2.0 }\n" +
-            "def big = 2.5 > 1.0\n" +
-            "def sum: (float, float) -> float = { a, b -> a + b }\n")
+            withFinalNewline """def pi = 3.14
+def d = pi * 2.0
+def e: float = 1.5 + 2.5
+def half = { x -> x / 2.0 }
+def big = 2.5 > 1.0
+def sum: (float, float) -> float = { a, b -> a + b }""")
     Assert.True(ok.Diagnostics.IsEmpty, sprintf "%A" ok.Diagnostics)
     let mixed = Compiler.compile "def m = 1 + 2.0"
     Assert.False(mixed.Diagnostics.IsEmpty, "int + float should not type-check")
@@ -278,4 +278,4 @@ let ``Typecheck rejects boolean keywords on non-booleans`` () =
     let andResult = Compiler.compile "def a = 1 and 2"
     Assert.False(andResult.Diagnostics.IsEmpty, "`1 and 2` should not type-check")
     let notResult = Compiler.compile "def b = not \"text\""
-    Assert.False(notResult.Diagnostics.IsEmpty, "`not \"text\"` should not type-check")
+    Assert.False(notResult.Diagnostics.IsEmpty, """`not "text"` should not type-check""")

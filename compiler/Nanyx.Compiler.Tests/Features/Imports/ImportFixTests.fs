@@ -16,7 +16,7 @@ let private fixesFor (source: string) =
 
 [<Fact>]
 let ``A function a standard-library module exports offers its import at the top`` () =
-    let source = "def s = string.trim(\" a \")\n"
+    let source = withFinalNewline """def s = string.trim(" a ")"""
     Assert.Equal<(string * string) list>(
         [ "Add `import nanyx/text`", "import nanyx/text\n\ndef s = string.trim(\" a \")\n" ],
         fixesFor source)

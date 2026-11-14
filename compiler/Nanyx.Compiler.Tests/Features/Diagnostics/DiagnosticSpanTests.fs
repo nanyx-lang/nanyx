@@ -10,7 +10,8 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``An unknown identifier is reported at the reference, not an earlier mention of the name`` () =
     // The old positioning searched the source for the first quoted name, which is in the string.
-    let source = "def note = \"missing\"\ndef value = missing"
+    let source = normalized """def note = "missing"
+def value = missing"""
     let diagnostic = single (Compiler.compile source)
     Assert.Equal(DiagnosticCodes.UnknownIdentifier.Code, diagnostic.Code)
     Assert.Equal(DiagnosticCodes.UnknownIdentifier.Title, diagnostic.Title)
@@ -43,9 +44,10 @@ let ``An unknown member is reported at the member name`` () =
 [<Fact>]
 let ``A non-exhaustive match is reported at its head`` () =
     let source =
-        "def value: #some(int) | #none = #none\n" +
-        "def result = match value\n" +
-        "| #some(v) -> v\n"
+        normalized """def value: #some(int) | #none = #none
+def result = match value
+| #some(v) -> v
+"""
     let diagnostic = single (Compiler.compile source)
     Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, diagnostic.Code)
     let span = spanOf diagnostic
@@ -55,11 +57,12 @@ let ``A non-exhaustive match is reported at its head`` () =
 [<Fact>]
 let ``A pattern of the wrong type is reported at the pattern`` () =
     let source =
-        "def value = 1\n" +
-        "def result = match value\n" +
-        "| 0 -> 0\n" +
-        "| \"one\" -> 1\n" +
-        "| _ -> 2\n"
+        normalized """def value = 1
+def result = match value
+| 0 -> 0
+| "one" -> 1
+| _ -> 2
+"""
     let diagnostic = single (Compiler.compile source)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     Assert.Equal("\"one\"", textAt source (spanOf diagnostic))
@@ -67,14 +70,15 @@ let ``A pattern of the wrong type is reported at the pattern`` () =
 [<Fact>]
 let ``A mismatch inside a tuple pattern is reported within the pattern, not at the whole match`` () =
     let source =
-        "def value = (1, 2)\n" +
-        "def result = match value\n" +
-        "| (a, \"two\") -> a\n" +
-        "| _ -> 0\n"
+        normalized """def value = (1, 2)
+def result = match value
+| (a, "two") -> a
+| _ -> 0
+"""
     let diagnostic = single (Compiler.compile source)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     // The element's constraint is solved first, so the tuple's own constraint is the one that fails.
-    Assert.Equal("(a, \"two\")", textAt source (spanOf diagnostic))
+    Assert.Equal("""(a, "two")""", textAt source (spanOf diagnostic))
 
 [<Fact>]
 let ``A reference to a private definition links to where it is declared`` () =

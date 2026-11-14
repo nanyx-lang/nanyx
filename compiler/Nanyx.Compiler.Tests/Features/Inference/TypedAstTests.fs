@@ -23,10 +23,10 @@ let ``Typecheck populates typed AST items`` () =
 [<Fact>]
 let ``Typecheck captures typed block statements in lambda`` () =
     let source =
-        "def f = { x ->\n" +
-        "  def y = x\n" +
-        "  y\n" +
-        "}"
+        normalized """def f = { x ->
+  def y = x
+  y
+}"""
     let result = Compiler.compile source
     let typed = result.Typed.Value
     let hasBlockStatements =
@@ -49,12 +49,12 @@ let ``Typecheck captures typed block statements in lambda`` () =
 [<Fact>]
 let ``Typecheck supports match shorthand lambda`` () =
     let source =
-        "def f: string -> int = {\n" +
-        "  | \"one\" -> 1\n" +
-        "  | \"two\" -> 2\n" +
-        "  | _ -> 0\n" +
-        "}\n" +
-        "def result = f(\"one\")"
+        normalized """def f: string -> int = {
+  | "one" -> 1
+  | "two" -> 2
+  | _ -> 0
+}
+def result = f("one")"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
@@ -63,13 +63,14 @@ let ``Typecheck supports match shorthand lambda`` () =
 [<Fact>]
 let ``Typecheck infers a shorthand lambda's argument from the operators applied to it`` () =
     let source =
-        "def suffix = \"!\"\n" +
-        "def isEven = { % 2 == 0 }\n" +
-        "def shout = { ++ suffix }\n" +
-        "def add = { + }\n" +
-        "def even = isEven(4)\n" +
-        "def loud = shout(\"hi\")\n" +
-        "def sum = add(1, 2)\n"
+        normalized """def suffix = "!"
+def isEven = { % 2 == 0 }
+def shout = { ++ suffix }
+def add = { + }
+def even = isEven(4)
+def loud = shout("hi")
+def sum = add(1, 2)
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typed = result.Typed.Value
@@ -106,9 +107,9 @@ let ``Typecheck records typed match patterns`` () =
 [<Fact>]
 let ``Typecheck types list and guard patterns`` () =
     let source =
-        "def result = match [1, 2]\n" +
-        "  | [x, y] -> x\n" +
-        "  | _ -> 0"
+        normalized """def result = match [1, 2]
+  | [x, y] -> x
+  | _ -> 0"""
     let result = Compiler.compile source
     let typed = result.Typed.Value
     let hasListPattern =

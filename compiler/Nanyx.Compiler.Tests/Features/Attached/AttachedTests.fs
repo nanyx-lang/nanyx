@@ -10,8 +10,8 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``Typecheck dotted def name`` () =
     let source =
-        "type Person = (firstName: string)\n" +
-        "def Person.fullName: Person -> string = { p -> p.firstName }"
+        normalized """type Person = (firstName: string)
+def Person.fullName: Person -> string = { p -> p.firstName }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
@@ -23,10 +23,10 @@ let ``Typecheck dotted def name`` () =
 [<Fact>]
 let ``Typecheck ws-sensitive module block`` () =
     let source =
-        "module Root\n" +
-        "module Inner =\n" +
-        "  def x = 1\n" +
-        "  def y = x"
+        normalized """module Root
+module Inner =
+  def x = 1
+  def y = x"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -36,8 +36,8 @@ let ``Typecheck ws-sensitive module block`` () =
 [<Fact>]
 let ``Typecheck infers attached receiver type for unannotated lambda`` () =
     let source =
-        "type Person = (firstName: string)\n" +
-        "def Person.toString = { p -> \"person\" }"
+        normalized """type Person = (firstName: string)
+def Person.toString = { p -> "person" }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -49,8 +49,8 @@ let ``Typecheck infers attached receiver type for unannotated lambda`` () =
 [<Fact>]
 let ``Typecheck infers nominal attached receiver type for unannotated lambda`` () =
     let source =
-        "type Email = protected string\n" +
-        "def Email.toString = { e -> \"ok\" }"
+        normalized """type Email = protected string
+def Email.toString = { e -> "ok" }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -62,8 +62,8 @@ let ``Typecheck infers nominal attached receiver type for unannotated lambda`` (
 [<Fact>]
 let ``Typecheck infers nominal attached receiver as argument in body`` () =
     let source =
-        "type Email = protected string\n" +
-        "def Email.toDisplay = { e -> e }"
+        normalized """type Email = protected string
+def Email.toDisplay = { e -> e }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -83,9 +83,9 @@ let ``Typecheck rejects attached def with missing type`` () =
 [<Fact>]
 let ``Typecheck allows attached defs on built-in types`` () =
     let source =
-        "def int.parse: string -> int = { s -> 0 }\n" +
-        "def string.shout: string -> string = { s -> s }\n" +
-        "def list.isBlank: list(int) -> bool = { xs -> true }"
+        normalized """def int.parse: string -> int = { s -> 0 }
+def string.shout: string -> string = { s -> s }
+def list.isBlank: list(int) -> bool = { xs -> true }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -102,8 +102,8 @@ let ``Typecheck infers primitive attached receiver type for unannotated lambda``
 [<Fact>]
 let ``Typecheck pipe resolves attached functions on built-in types`` () =
     let source =
-        "def int.double: int -> int = { n -> n * 2 }\n" +
-        "def n = 3 \\ double"
+        normalized """def int.double: int -> int = { n -> n * 2 }
+def n = 3 \ double"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -112,11 +112,11 @@ let ``Typecheck pipe resolves attached functions on built-in types`` () =
 [<Fact>]
 let ``Typecheck pipe resolves attached functions on a type known only from earlier constraints`` () =
     let source =
-        "def int.double: int -> int = { n -> n * 2 }\n" +
-        "def string.double: string -> string = { s -> s ++ s }\n" +
-        "def id = { x -> x }\n" +
-        "def n = id(3) \\ double\n" +
-        "def s = id(\"a\") \\ double"
+        normalized """def int.double: int -> int = { n -> n * 2 }
+def string.double: string -> string = { s -> s ++ s }
+def id = { x -> x }
+def n = id(3) \ double
+def s = id("a") \ double"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -126,12 +126,12 @@ let ``Typecheck pipe resolves attached functions on a type known only from earli
 [<Fact>]
 let ``Typecheck pipe resolves attached functions on a lambda parameter pinned earlier in the body`` () =
     let source =
-        "def int.double: int -> int = { n -> n * 2 }\n" +
-        "def string.double: string -> string = { s -> s ++ s }\n" +
-        "def f = { x ->\n" +
-        "  def y: int = x\n" +
-        "  x \\ double\n" +
-        "}"
+        normalized """def int.double: int -> int = { n -> n * 2 }
+def string.double: string -> string = { s -> s ++ s }
+def f = { x ->
+  def y: int = x
+  x \ double
+}"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -140,11 +140,11 @@ let ``Typecheck pipe resolves attached functions on a lambda parameter pinned ea
 [<Fact>]
 let ``Typecheck pipe resolves attached functions`` () =
     let source =
-        "type Person = (firstName: string surname: string)\n" +
-        "def Person.fullName: Person -> string = { p -> p.firstName }\n" +
-        "def p: Person = (firstName = \"\", surname = \"\")\n" +
-        "def n = p \\ Person.fullName\n" +
-        "def n2 = p \\ fullName"
+        normalized """type Person = (firstName: string surname: string)
+def Person.fullName: Person -> string = { p -> p.firstName }
+def p: Person = (firstName = "", surname = "")
+def n = p \ Person.fullName
+def n2 = p \ fullName"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
@@ -154,12 +154,12 @@ let ``Typecheck pipe resolves attached functions`` () =
 [<Fact>]
 let ``Typecheck pipe resolves attached functions on nominals`` () =
     let source =
-        "type Email = protected string\n" +
-        "def Email.toString: Email -> string = { e -> \"\" }\n" +
-        "def Email.format: Email -> string = { e -> \"\" }\n" +
-        "def email: Email = \"a@b.com\"\n" +
-        "def s = email \\ toString\n" +
-        "def s2 = email \\ format"
+        normalized """type Email = protected string
+def Email.toString: Email -> string = { e -> "" }
+def Email.format: Email -> string = { e -> "" }
+def email: Email = "a@b.com"
+def s = email \ toString
+def s2 = email \ format"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -169,13 +169,13 @@ let ``Typecheck pipe resolves attached functions on nominals`` () =
 [<Fact>]
 let ``Typecheck pipe picks the attached function by the name of the value's type`` () =
     let source =
-        "type Option(a) = #some(a) | #none\n" +
-        "def list.map: (list(a), (a -> b)) -> list(b) = { xs, f -> [] }\n" +
-        "def Option.map: (Option(a), (a -> b)) -> Option(b) = { o, f -> #none }\n" +
-        "def xs: list(int) = [1, 2]\n" +
-        "def o: Option(int) = #some(1)\n" +
-        "def ys = xs \\ map({ x -> x > 1 })\n" +
-        "def p = o \\ map({ x -> \"a\" })"
+        normalized """type Option(a) = #some(a) | #none
+def list.map: (list(a), (a -> b)) -> list(b) = { xs, f -> [] }
+def Option.map: (Option(a), (a -> b)) -> Option(b) = { o, f -> #none }
+def xs: list(int) = [1, 2]
+def o: Option(int) = #some(1)
+def ys = xs \ map({ x -> x > 1 })
+def p = o \ map({ x -> "a" })"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -187,10 +187,10 @@ let ``Typecheck pipe picks the attached function by the name of the value's type
 [<Fact>]
 let ``Typecheck pipe calls a plain function when the value's type attaches none`` () =
     let source =
-        "def int.describe: int -> string = { n -> \"int\" }\n" +
-        "def describe: string -> string = { s -> s }\n" +
-        "def a = \"x\" \\ describe\n" +
-        "def b = 1 \\ describe"
+        normalized """def int.describe: int -> string = { n -> "int" }
+def describe: string -> string = { s -> s }
+def a = "x" \ describe
+def b = 1 \ describe"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -199,10 +199,15 @@ let ``Typecheck pipe calls a plain function when the value's type attaches none`
 
 [<Fact>]
 let ``Typecheck pipe does not find attached functions of a module imported with as`` () =
-    let modules = [ "one.nyx", "module one\nexport def string.shout: string -> string = { s -> s ++ \"!\" }" ]
-    let unqualified = compileImportingAll modules "module main\nimport one as t\ndef a = \"x\" \\ shout"
+    let modules = [ "one.nyx", (normalized """module one
+export def string.shout: string -> string = { s -> s ++ "!" }""") ]
+    let unqualified = compileImportingAll modules (normalized """module main
+import one as t
+def a = "x" \ shout""")
     assertReports DiagnosticCodes.UnknownFunction unqualified
-    let qualified = compileImportingAll modules "module main\nimport one as t\ndef a = \"x\" \\ t.string.shout"
+    let qualified = compileImportingAll modules (normalized """module main
+import one as t
+def a = "x" \ t.string.shout""")
     Assert.True(qualified.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{qualified.Diagnostics}")
     Assert.Equal(TyPrimitive "string", qualified.Typed.Value.Types.["a"])
 
@@ -211,13 +216,13 @@ let ``A string's and a list's length are built-in properties, read with a dot`` 
     // No import: the property is the string's own, not `nanyx/text`'s `String.length`.
     let result =
         Compiler.compile (
-            "def s = \"hello\"\n" +
-            "def n = s.length\n" +
-            "def xs = [1, 2, 3]\n" +
-            "def m = xs.length\n" +
-            "def size: string -> int = { text -> text.length }\n" +
-            "def r = (length = \"field\")\n" +
-            "def f = r.length\n")
+            withFinalNewline """def s = "hello"
+def n = s.length
+def xs = [1, 2, 3]
+def m = xs.length
+def size: string -> int = { text -> text.length }
+def r = (length = "field")
+def f = r.length""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let types = result.Typed.Value.Types
     Assert.Equal(TyPrimitive "int", types.["n"])
@@ -231,11 +236,11 @@ let ``A lambda argument's parameter typed by the call reads a string's length`` 
     // the arguments before it, not from an annotation of its own (#479).
     let result =
         Compiler.compile (
-            "def ap: string, (string -> int) -> int = { x, f -> f(x) }\n" +
-            "def a = ap(\"bbb\", { s -> s.length })\n" +
-            "def lengths = list.map([\"bbb\"], { s -> s.length })\n" +
-            "def sorted = list.sortBy([\"bbb\", \"a\", \"cc\"], { .length })\n" +
-            "def counts = list.map([[1], [2, 3]], { xs -> xs.length })\n")
+            withFinalNewline """def ap: string, (string -> int) -> int = { x, f -> f(x) }
+def a = ap("bbb", { s -> s.length })
+def lengths = list.map(["bbb"], { s -> s.length })
+def sorted = list.sortBy(["bbb", "a", "cc"], { .length })
+def counts = list.map([[1], [2, 3]], { xs -> xs.length })""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let types = result.Typed.Value.Types
     Assert.Equal(TyPrimitive "int", types.["a"])
@@ -245,17 +250,21 @@ let ``A lambda argument's parameter typed by the call reads a string's length`` 
 
 [<Fact>]
 let ``A lambda argument still reads a record's field when the arguments before it make it a record`` () =
-    let result = Compiler.compile "def names = list.map([(length = \"x\")], { r -> r.length })\n"
+    let result = Compiler.compile (withFinalNewline """def names = list.map([(length = "x")], { r -> r.length })""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyApply("list", [ TyPrimitive "string" ]), result.Typed.Value.Types.["names"])
 
 [<Fact>]
 let ``A dot on a value does not reach a definition attached to its type, and the error says to pipe`` () =
-    let code, message, _ = onlyDiagnostic "import nanyx/text\ndef s = \"nanyx\"\ndef b = s.isEmpty\n"
+    let code, message, _ = onlyDiagnostic (withFinalNewline """import nanyx/text
+def s = "nanyx"
+def b = s.isEmpty""")
     Assert.Equal(DiagnosticCodes.UnknownMember.Code, code)
     Assert.Equal("'string' has no property 'isEmpty'. 'string.isEmpty' is attached to its type: call it with a pipe, as in `s \\isEmpty`", message)
     // Called, it reads as a function named `s.startsWith`.
-    let code, message, _ = onlyDiagnostic "import nanyx/text\ndef s = \"nanyx\"\ndef b = s.startsWith(\"nan\")\n"
+    let code, message, _ = onlyDiagnostic (withFinalNewline """import nanyx/text
+def s = "nanyx"
+def b = s.startsWith("nan")""")
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
     Assert.Equal("'s' is a value, so 's.startsWith' is not a function's name. 'string.startsWith' is attached to its type: call it with a pipe, as in `s \\startsWith(...)`", message)
     // A record type with an attached definition and no field of that name.
@@ -263,26 +272,30 @@ let ``A dot on a value does not reach a definition attached to its type, and the
         onlyDiagnostic "type Point = (x: int, y: int)\ndef Point.length = { p -> p.x + p.y }\ndef p = Point(x = 3, y = 4)\ndef n = p.length\n"
     Assert.Equal("Record 'p' has no member 'length'. 'Point.length' is attached to its type: call it with a pipe, as in `p \\length`", message)
     // Nothing attached: the property is just missing.
-    Assert.Equal((DiagnosticCodes.UnknownMember.Code, "'string' has no property 'size'", "size"), onlyDiagnostic "def s = \"x\"\ndef n = s.size\n")
+    Assert.Equal((DiagnosticCodes.UnknownMember.Code, "'string' has no property 'size'", "size"), onlyDiagnostic (withFinalNewline """def s = "x"
+def n = s.size"""))
 
 [<Fact>]
 let ``nanyx/text imported with as is only reached qualified from a pipe`` () =
-    let qualified = Compiler.compile "import nanyx/text as t\ndef x = \" a \" \\ t.string.trim"
+    let qualified = Compiler.compile (normalized """import nanyx/text as t
+def x = " a " \ t.string.trim""")
     Assert.True(qualified.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{qualified.Diagnostics}")
-    let short = Compiler.compile "import nanyx/text as t\ndef x = \" a \" \\ trim"
+    let short = Compiler.compile (normalized """import nanyx/text as t
+def x = " a " \ trim""")
     assertReports DiagnosticCodes.UnknownFunction short
 
 [<Fact>]
 let ``An operator on a type that attaches it calls the attached definition`` () =
     let source =
-        "type V = protected (x: int, y: int)\n" +
-        "def V.`+`: V, V -> V = { p, q -> V(x = p.x + q.x, y = p.y + q.y) }\n" +
-        "def V.`*`: V, int -> V = { p, k -> V(x = p.x * k, y = p.y * k) }\n" +
-        "def V.`==`: V, V -> bool = { p, q -> p.x == q.x }\n" +
-        "def a = V(x = 1, y = 2)\n" +
-        "def sum = a + a\n" +
-        "def scaled = a * 3\n" +
-        "def same = a != a\n"
+        normalized """type V = protected (x: int, y: int)
+def V.`+`: V, V -> V = { p, q -> V(x = p.x + q.x, y = p.y + q.y) }
+def V.`*`: V, int -> V = { p, k -> V(x = p.x * k, y = p.y * k) }
+def V.`==`: V, V -> bool = { p, q -> p.x == q.x }
+def a = V(x = 1, y = 2)
+def sum = a + a
+def scaled = a * 3
+def same = a != a
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let types = result.Typed.Value.Types
