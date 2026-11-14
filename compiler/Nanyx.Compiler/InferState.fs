@@ -119,6 +119,9 @@ type InferState =
             /// `nanyx/console`, in a module that does not. Like any ambient context they are the top level's, and a
             /// def has them only if it declares them or infers them.
             CarriedAmbientContexts: Set<Identifier>;
+            /// The contexts a host provides, by the names the module knows them by (`Console`, `c.Console`): a function
+            /// named as a value carries those of them it was inferred to require in its type (see `Contexts.inferredAmbientContexts`).
+            HostContexts: Set<Identifier>;
             ContextScope: ContextScope;
             /// The ambient contexts each unannotated top-level def uses itself, by the def's name.
             InferredContexts: Map<Identifier, Set<Identifier>>;
@@ -333,6 +336,7 @@ let emptyState =
             WrittenTypes = Map.empty;
             AmbientMembers = Map.empty;
             CarriedAmbientContexts = Set.empty;
+            HostContexts = Set.empty;
             ContextScope = AmbientScope;
             InferredContexts = Map.empty;
             UnannotatedDefs = Map.empty;

@@ -222,15 +222,23 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
         | Some scheme ->
             // A function named as a value requires its contexts where it is called, which its type says (see
-            // `ContextVariables.ofNamedValue`), so they need not be available where it is named. A parameterised context
-            // is found where it is named, but by type, once a call settles it (see `resolveCallInstances`).
+            // `ContextVariables.ofNamedValue`), so they need not be available where it is named. So do the contexts a
+            // host provides that an unannotated function was inferred to require, once it is inferred (`f >> shout` is
+            // a `[Console]` function); any other ambient context it requires, a module's own instance or `Memory`'s
+            // scope, is found where it is named. A parameterised context is found where it is named, but by type, once
+            // a call settles it (see `resolveCallInstances`).
+            let inferredAmbient =
+                inferredAmbientContexts env state (canonicalName env state name)
+                |> Option.filter (fun contexts -> Set.isSubset contexts state.HostContexts)
             let contextCheck =
                 match contextRequirementsOf env state name with
                 | Some contexts ->
                     let parameterized = contexts |> List.filter (isParameterizedContext state)
                     ensureContextAvailable None false env state name parameterized expr.Span
                 | None -> Ok state
-                |> Result.bind (fun current -> checkContextUse None env current (canonicalName env state name) expr.Span)
+                |> Result.bind (fun current ->
+                    if inferredAmbient.IsSome then Ok current
+                    else checkContextUse None env current (canonicalName env state name) expr.Span)
             match contextCheck with
             | Error err -> Error err
             | Ok state ->
@@ -239,6 +247,19 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     match contextRequirementsOf env state name with
                     | Some written -> ContextVariables.ofNamedValue written scheme.Type ty next
                     | None -> ty, next
+                // Each by the name its module declares it under, as the signatures of the functions it is passed to
+                // write it (`Console` for `c.Console`), and a scoped one of a scope of its own.
+                let ty, next =
+                    match inferredAmbient |> Option.map Set.toList, Unifier.unalias ty with
+                    | Some (_ :: _ as contexts), TyFunc(input, output, own) ->
+                        let declared =
+                            contexts
+                            |> List.map (fun ctxName ->
+                                let name = next.TypeDefs |> Map.tryFind ctxName |> Option.map _.Name |> Option.defaultValue ctxName
+                                TypeExpr.synthetic (TypeName name))
+                        let carried, next = WrittenContexts.plain next ty declared
+                        TyFunc(input, output, own @ carried |> List.distinct), next
+                    | _ -> ty, next
                 // A function named as a value is checked as a call to it would be, at the type it is passed as.
                 checkComparisonsAt env next expr name expr.Span ty
                 |> Result.map (fun next -> mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name)
