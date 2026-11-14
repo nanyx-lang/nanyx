@@ -14,7 +14,9 @@ let private typedModule (source: string) =
     Assert.True(errors.IsEmpty, $"Unexpected errors: %A{errors}")
     result.Typed.Value
 
-let private compileWithReport (source: string) = transpileTypedModuleWithReport (typedModule source)
+/// `source` compiled without inlining, since these tests are about how it is lowered.
+let private compileWithReport (source: string) =
+    transpileTypedModuleWithOptions { WasmOptions.Default with Inline = false } (typedModule source)
 
 /// The diagnostic the backend gives `source`, which type-checks but which it cannot compile.
 let private backendError (source: string) =
@@ -299,7 +301,7 @@ dbg(fine(1))
 dbg(broken(2))
 """
     let result = Compiler.compile source
-    let wat, report = transpileTypedModuleWithReport result.Typed.Value
+    let wat, report = transpileTypedModuleWithOptions { WasmOptions.Default with Inline = false } result.Typed.Value
     // The script's statements are its entry point, run by the console host's `run`, which the module has too.
     let functions = withoutPrinters report.Functions
     Assert.Equal<string list>([ "broken"; "fine" ], functions |> List.filter (fun name -> name = "broken" || name = "fine"))

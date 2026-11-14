@@ -18,6 +18,7 @@
     <Compile Include="Features\Core\FunctionAndLocalsTests.fs" />
     <Compile Include="Features\Core\AllocatorTests.fs" />
     <Compile Include="Features\Core\CoreIrTests.fs" />
+    <Compile Include="Features\Core\InliningTests.fs" />
     <Compile Include="Features\Core\RunLexicalTests.fs" />
     <Compile Include="Features\Core\ReachTests.fs" />
     <Compile Include="Features\ControlFlow\BoolMatchTests.fs" />

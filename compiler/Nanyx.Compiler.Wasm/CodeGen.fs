@@ -59,9 +59,12 @@ type WasmOptions =
       /// `CheckedExports.failureExitCode` (see `WasmRuntime.MemoryChecks`). The module exports its start function
       /// rather than running it when instantiated, and exports the counters and `$heap_ptr`, so that a host can see
       /// what was left on the heap once the program has run (see `CheckedExports`).
-      CheckMemory: bool }
+      CheckMemory: bool
+      /// Inline calls in the core IR (see `CoreIrInline`). Off only for working on the compiler (`--no-inline`): it
+      /// tells whether a misbehaving program is the inliner's doing.
+      Inline: bool }
 
-    static member Default = { CheckMemory = false }
+    static member Default = { CheckMemory = false; Inline = true }
 
 /// The names a module compiled with `CheckMemory` exports.
 module CheckedExports =
@@ -725,7 +728,14 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     let startFunction = lowered.Roots |> Map.tryFind CoreIrLowerInput.startFunctionName |> Option.map fst
 
-    // Only what the program can run (see `CoreIrReach`).
+    // Inlining, over the whole module at once, since a function is inlined as it is once calls are inlined into it.
+    let definitionFunctions, startFunction =
+        if options.Inline then
+            let inlined = CoreIrInline.inlineCalls (startFunction |> Option.map _.Name) (definitionFunctions @ Option.toList startFunction)
+            List.take definitionFunctions.Length inlined, startFunction |> Option.map (fun _ -> List.last inlined)
+        else definitionFunctions, startFunction
+
+    // Only what the program can run (see `CoreIrReach`): a function inlined wherever it is called is not reached.
     let startFunction = startFunction |> Option.map CoreIrReach.withoutUnreadClosures
     let definitionFunctions =
         definitionFunctions |> List.map CoreIrReach.withoutUnreadClosures |> CoreIrReach.reachedFrom startFunction

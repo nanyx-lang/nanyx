@@ -61,66 +61,174 @@
   )
   (export "boolToInt" (func $boolToInt))
 
-  (func $main (result i64) (local $b0_i64 i64) (local $b1_i64 i64) (local $b2_i64 i64) (local $b3_i64 i64) (local $b4_i64 i64) (local $b5_i64 i64) (local $b6_i64 i64) (local $b7_i64 i64) (local $b8_i64 i64) (local $b9_i64 i64) (local $b10_i64 i64) (local $b11_i64 i64)
+  (func $main (result i64) (local $__inlined46 i32) (local $b0_i64 i64) (local $__inlined47 i32) (local $b1_i64 i64) (local $__inlined48 i32) (local $b2_i64 i64) (local $__inlined49 i32) (local $b3_i64 i64) (local $__inlined50 i32) (local $b4_i64 i64) (local $__inlined51 i32) (local $b5_i64 i64) (local $__inlined52 i32) (local $b6_i64 i64) (local $__inlined53 i32) (local $b7_i64 i64) (local $__inlined54 i32) (local $b8_i64 i64) (local $__inlined55 i32) (local $b9_i64 i64) (local $__inlined56 i32) (local $b10_i64 i64) (local $__inlined57 i32) (local $b11_i64 i64)
     i64.const 5
     i64.const 10
     i64.lt_s
-    call $boolToInt
+    local.set $__inlined46
+    local.get $__inlined46
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
     local.set $b0_i64
     i64.const 10
     i64.const 5
     i64.lt_s
-    call $boolToInt
+    local.set $__inlined47
+    local.get $__inlined47
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
     local.set $b1_i64
     i64.const 5
     i64.const 10
     i64.gt_s
-    call $boolToInt
+    local.set $__inlined48
+    local.get $__inlined48
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
     local.set $b2_i64
     i64.const 10
     i64.const 5
     i64.gt_s
-    call $boolToInt
+    local.set $__inlined49
+    local.get $__inlined49
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
     local.set $b3_i64
     i64.const 5
     i64.const 5
     i64.le_s
-    call $boolToInt
+    local.set $__inlined50
+    local.get $__inlined50
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
     local.set $b4_i64
     i64.const 5
     i64.const 4
     i64.le_s
-    call $boolToInt
+    local.set $__inlined51
+    local.get $__inlined51
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
     local.set $b5_i64
     i64.const 5
     i64.const 5
     i64.ge_s
-    call $boolToInt
+    local.set $__inlined52
+    local.get $__inlined52
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
     local.set $b6_i64
     i64.const 4
     i64.const 5
     i64.ge_s
-    call $boolToInt
+    local.set $__inlined53
+    local.get $__inlined53
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
     local.set $b7_i64
     i64.const 5
     i64.const 5
     i64.eq
-    call $boolToInt
+    local.set $__inlined54
+    local.get $__inlined54
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
     local.set $b8_i64
     i64.const 5
     i64.const 6
     i64.eq
-    call $boolToInt
+    local.set $__inlined55
+    local.get $__inlined55
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
     local.set $b9_i64
     i64.const 5
     i64.const 6
     i64.ne
-    call $boolToInt
+    local.set $__inlined56
+    local.get $__inlined56
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
     local.set $b10_i64
     i64.const 5
     i64.const 5
     i64.ne
-    call $boolToInt
+    local.set $__inlined57
+    local.get $__inlined57
+    (if (result i64)
+      (then
+        i64.const 1
+      )
+      (else
+        i64.const 0
+      )
+    )
     local.set $b11_i64
     local.get $b0_i64
     local.get $b1_i64

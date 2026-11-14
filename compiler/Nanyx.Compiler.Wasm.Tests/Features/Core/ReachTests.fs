@@ -8,7 +8,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``A function the start never reaches is not emitted`` () =
     let wat =
-        transpileWat (
+        transpileWatNotInlined (
             withFinalNewline
                 """def used: int -> int = { x -> x + 1 }
 def unused: int -> int = { x -> x * 2 }
@@ -28,7 +28,7 @@ let ``A function reached only through a closure is emitted`` () =
 def apply: (int -> int), int -> int = { f, x -> f(x) }
 
 dbg(apply(double, 4))"""
-    let wat = transpileWat source
+    let wat = transpileWatNotInlined source
     Assert.Contains("(func $double", wat)
     runSource source |> assertRan "dbg: 8\n"
 

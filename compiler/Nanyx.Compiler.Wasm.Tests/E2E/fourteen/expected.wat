@@ -117,28 +117,39 @@
 
   (type $ctx_fn_1 (func (param i32) (result i32)))
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
-  (type $ctx_fn_2_i32_i64_to_i64 (func (param i32 i64) (result i64)))
   (table $ctx_table 2 funcref)
   (elem (i32.const 0) $__lambda_1 $__lambda_3)
 
   (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
   (data (i32.const 268) "\00\00\00\00\00\00\00\00\01\00\00\00")
 
-  (func $main (result i64) (local $__use_double_0 i32) (local $__use_triple_2 i32)
+  (func $main (result i64) (local $__use_double_0 i32) (local $__use_triple_2 i32) (local $__env__in1 i32) (local $x__in1_i64 i64) (local $__inlined7_i64 i64) (local $__env__in2 i32) (local $x__in2_i64 i64) (local $__inlined10_i64 i64)
     i32.const 264
     local.set $__use_double_0
     i32.const 276
     local.set $__use_triple_2
     local.get $__use_double_0
+    local.set $__env__in1
+    local.get $__env__in1
+    call $__nanyx_drop_rec_0_word
     i64.const 5
-    local.get $__use_double_0
-    i32.load
-    call_indirect (type $ctx_fn_2_i32_i64_to_i64)
+    local.set $x__in1_i64
+    local.get $x__in1_i64
+    i64.const 2
+    call $__nanyx_int_mul
+    local.set $__inlined7_i64
     local.get $__use_triple_2
+    local.set $__env__in2
+    local.get $__env__in2
+    call $__nanyx_drop_rec_0_word
     i64.const 10
-    local.get $__use_triple_2
-    i32.load
-    call_indirect (type $ctx_fn_2_i32_i64_to_i64)
+    local.set $x__in2_i64
+    local.get $x__in2_i64
+    i64.const 3
+    call $__nanyx_int_mul
+    local.set $__inlined10_i64
+    local.get $__inlined7_i64
+    local.get $__inlined10_i64
     call $__nanyx_int_add
   )
   (export "main" (func $main))

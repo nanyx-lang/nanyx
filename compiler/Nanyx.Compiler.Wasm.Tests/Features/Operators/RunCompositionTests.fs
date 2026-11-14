@@ -110,7 +110,7 @@ def main = {
   greet("bob")
 }
 """
-    let wat = transpileWat source
+    let wat = transpileWatNotInlined source
     // Building `greet` passes `__composeForward` the two functions, and none of `Console`'s members.
     Assert.Contains("(func $greet (result i32)", wat)
     runSource source |> assertRan "hello ada!\n[hello bob!][\n]"

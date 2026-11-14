@@ -415,8 +415,6 @@
     drop
     local.get $p
     i64.load offset=12
-    local.get $p
-    call $__nanyx_drop_rec_age_int_name_string_score_int
     local.set $__dbg_value_2_i64
     local.get $__dbg_value_2_i64
     call $__dbg_show_int
@@ -432,7 +430,7 @@
   )
   (export "printPerson" (func $printPerson))
 
-  (func $main (result i32) (local $p i32) (local $p2 i32)
+  (func $main (result i32) (local $p i32) (local $__dbg_value__in1 i32) (local $__dbg_value_1__in1_i64 i64) (local $__dbg_value_2__in1_i64 i64) (local $p2 i32) (local $__dbg_value__in2 i32) (local $__dbg_value_1__in2_i64 i64) (local $__dbg_value_2__in2_i64 i64) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32) (local $__owned_4 i32) (local $__owned_5 i32)
     i32.const 20
     i32.const 1
     call $__nanyx_new_object
@@ -447,7 +445,48 @@
     call $__nanyx_record_set_i64
     local.set $p
     local.get $p
-    call $printPerson
+    i32.load offset=8
+    call $__nanyx_dup_string
+    local.set $__dbg_value__in1
+    local.get $__dbg_value__in1
+    call $__dbg_show_string
+    local.tee $__owned_0
+    call $dbg_str
+    i32.const 0
+    local.get $__owned_0
+    call $__nanyx_drop_string
+    drop
+    local.get $__dbg_value__in1
+    call $__nanyx_drop_string
+    local.get $p
+    i64.load
+    local.set $__dbg_value_1__in1_i64
+    local.get $__dbg_value_1__in1_i64
+    call $__dbg_show_int
+    local.tee $__owned_1
+    call $dbg_str
+    i32.const 0
+    local.get $__owned_1
+    call $__nanyx_drop_string
+    drop
+    local.get $__dbg_value_1__in1_i64
+    drop
+    local.get $p
+    i64.load offset=12
+    local.get $p
+    call $__nanyx_drop_rec_age_int_name_string_score_int
+    local.set $__dbg_value_2__in1_i64
+    local.get $__dbg_value_2__in1_i64
+    call $__dbg_show_int
+    local.tee $__owned_2
+    call $dbg_str
+    i32.const 0
+    local.get $__owned_2
+    call $__nanyx_drop_string
+    drop
+    local.get $__dbg_value_2__in1_i64
+    drop
+    i32.const 0
     drop
     i32.const 20
     i32.const 1
@@ -463,7 +502,48 @@
     call $__nanyx_record_set_i64
     local.set $p2
     local.get $p2
-    return_call $printPerson
+    i32.load offset=8
+    call $__nanyx_dup_string
+    local.set $__dbg_value__in2
+    local.get $__dbg_value__in2
+    call $__dbg_show_string
+    local.tee $__owned_3
+    call $dbg_str
+    i32.const 0
+    local.get $__owned_3
+    call $__nanyx_drop_string
+    drop
+    local.get $__dbg_value__in2
+    call $__nanyx_drop_string
+    local.get $p2
+    i64.load
+    local.set $__dbg_value_1__in2_i64
+    local.get $__dbg_value_1__in2_i64
+    call $__dbg_show_int
+    local.tee $__owned_4
+    call $dbg_str
+    i32.const 0
+    local.get $__owned_4
+    call $__nanyx_drop_string
+    drop
+    local.get $__dbg_value_1__in2_i64
+    drop
+    local.get $p2
+    i64.load offset=12
+    local.get $p2
+    call $__nanyx_drop_rec_age_int_name_string_score_int
+    local.set $__dbg_value_2__in2_i64
+    local.get $__dbg_value_2__in2_i64
+    call $__dbg_show_int
+    local.tee $__owned_5
+    call $dbg_str
+    i32.const 0
+    local.get $__owned_5
+    call $__nanyx_drop_string
+    drop
+    local.get $__dbg_value_2__in2_i64
+    drop
+    i32.const 0
   )
   (export "main" (func $main))
 

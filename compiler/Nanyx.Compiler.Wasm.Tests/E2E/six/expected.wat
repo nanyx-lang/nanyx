@@ -97,18 +97,262 @@
   )
   (export "fizzbuzz" (func $fizzbuzz))
 
-  (func $main (result i64) (local $a_i64 i64) (local $b_i64 i64) (local $c_i64 i64) (local $d_i64 i64)
+  (func $main (result i64) (local $n__in1_i64 i64) (local $mod3__in1_i64 i64) (local $mod5__in1_i64 i64) (local $a_i64 i64) (local $n__in2_i64 i64) (local $mod3__in2_i64 i64) (local $mod5__in2_i64 i64) (local $b_i64 i64) (local $n__in3_i64 i64) (local $mod3__in3_i64 i64) (local $mod5__in3_i64 i64) (local $c_i64 i64) (local $n__in4_i64 i64) (local $mod3__in4_i64 i64) (local $mod5__in4_i64 i64) (local $d_i64 i64) (local $__match_tmp_0__in1_i64 i64) (local $__match_tmp_1__in1_i64 i64) (local $__match_tmp_0__in2_i64 i64) (local $__match_tmp_1__in2_i64 i64) (local $__match_tmp_0__in3_i64 i64) (local $__match_tmp_1__in3_i64 i64) (local $__match_tmp_0__in4_i64 i64) (local $__match_tmp_1__in4_i64 i64)
     i64.const 15
-    call $fizzbuzz
+    local.set $n__in1_i64
+    local.get $n__in1_i64
+    i64.const 3
+    i64.rem_s
+    local.set $mod3__in1_i64
+    local.get $n__in1_i64
+    i64.const 5
+    i64.rem_s
+    local.set $mod5__in1_i64
+    local.get $mod3__in1_i64
+    local.set $__match_tmp_0__in1_i64
+    local.get $mod5__in1_i64
+    local.set $__match_tmp_1__in1_i64
+    local.get $__match_tmp_0__in1_i64
+      i64.const 0
+      i64.eq
+      local.get $__match_tmp_1__in1_i64
+      i64.const 0
+      i64.eq
+      i32.and
+    (if (result i64)
+      (then
+        i64.const 15
+      )
+      (else
+        local.get $__match_tmp_0__in1_i64
+      i64.const 0
+      i64.eq
+      i32.const 1
+      i32.and
+    (if (result i64)
+      (then
+        i64.const 3
+      )
+      (else
+        i32.const 1
+      local.get $__match_tmp_1__in1_i64
+      i64.const 0
+      i64.eq
+      i32.and
+    (if (result i64)
+      (then
+        i64.const 5
+      )
+      (else
+        i32.const 1
+      i32.const 1
+      i32.and
+    (if (result i64)
+      (then
+        local.get $n__in1_i64
+      )
+      (else
+        unreachable
+      )
+    )
+      )
+    )
+      )
+    )
+      )
+    )
     local.set $a_i64
     i64.const 9
-    call $fizzbuzz
+    local.set $n__in2_i64
+    local.get $n__in2_i64
+    i64.const 3
+    i64.rem_s
+    local.set $mod3__in2_i64
+    local.get $n__in2_i64
+    i64.const 5
+    i64.rem_s
+    local.set $mod5__in2_i64
+    local.get $mod3__in2_i64
+    local.set $__match_tmp_0__in2_i64
+    local.get $mod5__in2_i64
+    local.set $__match_tmp_1__in2_i64
+    local.get $__match_tmp_0__in2_i64
+      i64.const 0
+      i64.eq
+      local.get $__match_tmp_1__in2_i64
+      i64.const 0
+      i64.eq
+      i32.and
+    (if (result i64)
+      (then
+        i64.const 15
+      )
+      (else
+        local.get $__match_tmp_0__in2_i64
+      i64.const 0
+      i64.eq
+      i32.const 1
+      i32.and
+    (if (result i64)
+      (then
+        i64.const 3
+      )
+      (else
+        i32.const 1
+      local.get $__match_tmp_1__in2_i64
+      i64.const 0
+      i64.eq
+      i32.and
+    (if (result i64)
+      (then
+        i64.const 5
+      )
+      (else
+        i32.const 1
+      i32.const 1
+      i32.and
+    (if (result i64)
+      (then
+        local.get $n__in2_i64
+      )
+      (else
+        unreachable
+      )
+    )
+      )
+    )
+      )
+    )
+      )
+    )
     local.set $b_i64
     i64.const 10
-    call $fizzbuzz
+    local.set $n__in3_i64
+    local.get $n__in3_i64
+    i64.const 3
+    i64.rem_s
+    local.set $mod3__in3_i64
+    local.get $n__in3_i64
+    i64.const 5
+    i64.rem_s
+    local.set $mod5__in3_i64
+    local.get $mod3__in3_i64
+    local.set $__match_tmp_0__in3_i64
+    local.get $mod5__in3_i64
+    local.set $__match_tmp_1__in3_i64
+    local.get $__match_tmp_0__in3_i64
+      i64.const 0
+      i64.eq
+      local.get $__match_tmp_1__in3_i64
+      i64.const 0
+      i64.eq
+      i32.and
+    (if (result i64)
+      (then
+        i64.const 15
+      )
+      (else
+        local.get $__match_tmp_0__in3_i64
+      i64.const 0
+      i64.eq
+      i32.const 1
+      i32.and
+    (if (result i64)
+      (then
+        i64.const 3
+      )
+      (else
+        i32.const 1
+      local.get $__match_tmp_1__in3_i64
+      i64.const 0
+      i64.eq
+      i32.and
+    (if (result i64)
+      (then
+        i64.const 5
+      )
+      (else
+        i32.const 1
+      i32.const 1
+      i32.and
+    (if (result i64)
+      (then
+        local.get $n__in3_i64
+      )
+      (else
+        unreachable
+      )
+    )
+      )
+    )
+      )
+    )
+      )
+    )
     local.set $c_i64
     i64.const 7
-    call $fizzbuzz
+    local.set $n__in4_i64
+    local.get $n__in4_i64
+    i64.const 3
+    i64.rem_s
+    local.set $mod3__in4_i64
+    local.get $n__in4_i64
+    i64.const 5
+    i64.rem_s
+    local.set $mod5__in4_i64
+    local.get $mod3__in4_i64
+    local.set $__match_tmp_0__in4_i64
+    local.get $mod5__in4_i64
+    local.set $__match_tmp_1__in4_i64
+    local.get $__match_tmp_0__in4_i64
+      i64.const 0
+      i64.eq
+      local.get $__match_tmp_1__in4_i64
+      i64.const 0
+      i64.eq
+      i32.and
+    (if (result i64)
+      (then
+        i64.const 15
+      )
+      (else
+        local.get $__match_tmp_0__in4_i64
+      i64.const 0
+      i64.eq
+      i32.const 1
+      i32.and
+    (if (result i64)
+      (then
+        i64.const 3
+      )
+      (else
+        i32.const 1
+      local.get $__match_tmp_1__in4_i64
+      i64.const 0
+      i64.eq
+      i32.and
+    (if (result i64)
+      (then
+        i64.const 5
+      )
+      (else
+        i32.const 1
+      i32.const 1
+      i32.and
+    (if (result i64)
+      (then
+        local.get $n__in4_i64
+      )
+      (else
+        unreachable
+      )
+    )
+      )
+    )
+      )
+    )
+      )
+    )
     local.set $d_i64
     local.get $a_i64
     local.get $b_i64

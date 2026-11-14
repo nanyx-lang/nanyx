@@ -159,13 +159,39 @@
   )
   (export "f" (func $f))
 
-  (func $main (result i64) (local $__use_println_0 i32)
+  (func $main (result i64) (local $__use_println_0 i32) (local $x__in1_i64 i64) (local $y__in1_i64 i64) (local $__env__in2 i32) (local $s__in2 i32) (local $__dbg_value__in2 i32) (local $__owned_0 i32)
     i32.const 292
     local.set $__use_println_0
     i64.const 3
+    local.set $x__in1_i64
     i64.const 4
+    local.set $y__in1_i64
     local.get $__use_println_0
-    return_call $f
+    local.set $__env__in2
+    local.get $__env__in2
+    call $__nanyx_drop_rec_0_word
+    i32.const 264
+    local.set $s__in2
+    local.get $s__in2
+    local.set $__dbg_value__in2
+    local.get $__dbg_value__in2
+    call $__nanyx_dup_string
+    drop
+    local.get $__dbg_value__in2
+    call $__dbg_show_unit
+    local.tee $__owned_0
+    call $dbg_str
+    i32.const 0
+    local.get $__owned_0
+    call $__nanyx_drop_string
+    drop
+    local.get $__dbg_value__in2
+    call $__nanyx_drop_string
+    i32.const 0
+    drop
+    local.get $x__in1_i64
+    local.get $y__in1_i64
+    call $__nanyx_int_add
   )
   (export "main" (func $main))
 

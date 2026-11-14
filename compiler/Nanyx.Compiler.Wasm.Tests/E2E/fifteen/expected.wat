@@ -91,29 +91,33 @@
   )
 
   (type $ctx_fn_1 (func (param i32) (result i32)))
-  (type $ctx_fn_1_i32_to_i64 (func (param i32) (result i64)))
   (type $ctx_fn_3 (func (param i32 i32 i32) (result i32)))
-  (type $ctx_fn_3_i32_i64_i64_to_i64 (func (param i32 i64 i64) (result i64)))
   (table $ctx_table 2 funcref)
   (elem (i32.const 0) $__lambda_1 $__lambda_3)
 
   (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
   (data (i32.const 268) "\00\00\00\00\00\00\00\00\01\00\00\00")
 
-  (func $main (result i64) (local $__use_add_0 i32) (local $__use_getVal_2 i32)
+  (func $main (result i64) (local $__use_add_0 i32) (local $__use_getVal_2 i32) (local $__env__in1 i32) (local $__inlined5_i64 i64) (local $__env__in2 i32) (local $b__in2_i64 i64)
     i32.const 264
     local.set $__use_add_0
     i32.const 276
     local.set $__use_getVal_2
+    local.get $__use_getVal_2
+    local.set $__env__in1
+    local.get $__env__in1
+    call $__nanyx_drop_rec_0_word
+    i64.const 42
+    local.set $__inlined5_i64
     local.get $__use_add_0
-    local.get $__use_getVal_2
-    local.get $__use_getVal_2
-    i32.load
-    call_indirect (type $ctx_fn_1_i32_to_i64)
+    local.set $__env__in2
+    local.get $__env__in2
+    call $__nanyx_drop_rec_0_word
     i64.const 8
-    local.get $__use_add_0
-    i32.load
-    return_call_indirect (type $ctx_fn_3_i32_i64_i64_to_i64)
+    local.set $b__in2_i64
+    local.get $__inlined5_i64
+    local.get $b__in2_i64
+    call $__nanyx_int_add
   )
   (export "main" (func $main))
 

@@ -507,7 +507,7 @@
     call $__nanyx_drop_string
   )
 
-  (func $main (result i32) (local $fakeInt i32) (local $__use_ToString_int_toString_1 i32) (local $plainString i32) (local $__use_ToString_string_toString_3 i32)
+  (func $main (result i32) (local $fakeInt i32) (local $__use_ToString_int_toString_1 i32) (local $plainString i32) (local $__use_ToString_string_toString_3 i32) (local $x__in1_i64 i64) (local $y__in1 i32) (local $xString__in1 i32) (local $yString__in1 i32) (local $__dbg_value__in1 i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32)
     i32.const 4
     i32.const 1
     call $__nanyx_new_object
@@ -535,10 +535,52 @@
     call $__nanyx_drop_rec_toString_fn_string_to_string
     local.set $__use_ToString_string_toString_3
     i64.const 42
+    local.set $x__in1_i64
     i32.const 304
+    local.set $y__in1
     local.get $__use_ToString_int_toString_1
+    local.get $x__in1_i64
+    local.get $__use_ToString_int_toString_1
+    i32.load
+    call_indirect (type $ctx_fn_2_i32_i64_to_i32)
+    local.set $xString__in1
     local.get $__use_ToString_string_toString_3
-    return_call $compareStrings__int__string
+    local.get $y__in1
+    local.get $__use_ToString_string_toString_3
+    i32.load
+    call_indirect (type $ctx_fn_2)
+    local.set $yString__in1
+    i32.const 264
+    local.get $xString__in1
+    i32.const 284
+    local.get $yString__in1
+    call $__nanyx_string_concat
+    local.tee $__owned_1
+    call $__nanyx_string_concat
+    local.get $__owned_1
+    call $__nanyx_drop_string
+    local.tee $__owned_0
+    call $__nanyx_string_concat
+    local.get $__owned_0
+    call $__nanyx_drop_string
+    local.set $__dbg_value__in1
+    local.get $__dbg_value__in1
+    call $__dbg_show_string
+    local.tee $__owned_2
+    call $dbg_str
+    i32.const 0
+    local.get $__owned_2
+    call $__nanyx_drop_string
+    drop
+    local.get $__dbg_value__in1
+    call $__nanyx_drop_string
+    local.get $xString__in1
+    local.get $yString__in1
+    call $__nanyx_string_equals
+    local.get $xString__in1
+    call $__nanyx_drop_string
+    local.get $yString__in1
+    call $__nanyx_drop_string
   )
   (export "main" (func $main))
 

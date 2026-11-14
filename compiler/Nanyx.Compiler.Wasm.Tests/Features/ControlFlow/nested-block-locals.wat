@@ -38,9 +38,20 @@
   )
   (export "nested" (func $nested))
 
-  (func $main (result i64)
+  (func $main (result i64) (local $x__in1_i64 i64) (local $y__in1_i64 i64) (local $z__in1_i64 i64)
     i64.const 5
-    return_call $nested
+    local.set $x__in1_i64
+    local.get $x__in1_i64
+    i64.const 1
+    call $__nanyx_int_add
+    local.set $y__in1_i64
+    local.get $y__in1_i64
+    i64.const 2
+    call $__nanyx_int_add
+    local.set $z__in1_i64
+    local.get $z__in1_i64
+    i64.const 3
+    call $__nanyx_int_add
   )
   (export "main" (func $main))
 )
