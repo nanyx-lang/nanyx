@@ -229,28 +229,10 @@
     end
   )
   (func $__nanyx_copy_bytes (param $dst i32) (param $src i32) (param $len i32)
-    (local $i i32)
-    block $done
-      loop $copy
-        local.get $i
-        local.get $len
-        i32.ge_s
-        br_if $done
-        local.get $dst
-        local.get $i
-        i32.add
-        local.get $src
-        local.get $i
-        i32.add
-        i32.load8_u
-        i32.store8
-        local.get $i
-        i32.const 1
-        i32.add
-        local.set $i
-        br $copy
-      end
-    end
+    local.get $dst
+    local.get $src
+    local.get $len
+    memory.copy
   )
   (func $__nanyx_string_length (param $s i32) (result i32)
     local.get $s
@@ -508,15 +490,14 @@
   (type $ctx_fn_1_i32_to_i64 (func (param i32) (result i64)))
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
   (type $ctx_fn_4 (func (param i32 i32 i32 i32) (result i32)))
-  (table $ctx_table 8 funcref)
-  (elem (i32.const 0) $__fn_writeStdout $__fn_writeStderr $__fn_readStdinByte $__lambda_3__unit $__nanyx_drop_env__fn_unit_to_int__fn_string_to_unit__fn_string_to_unit $__lambda_5__unit $__lambda_7__unit $__fn___script)
+  (table $ctx_table 7 funcref)
+  (elem (i32.const 0) $__fn_writeStdout $__fn_writeStderr $__fn_readStdinByte $__lambda_3__unit $__nanyx_drop_env__fn_unit_to_int__fn_string_to_unit__fn_string_to_unit $__lambda_5__unit $__fn___script)
 
   (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
   (data (i32.const 268) "\00\00\00\00\00\00\00\00\00\00\00\00")
   (data (i32.const 280) "\00\00\00\00\00\00\00\00\01\00\00\00")
   (data (i32.const 292) "\00\00\00\00\00\00\00\00\02\00\00\00")
   (data (i32.const 304) "\00\00\00\00\00\00\00\00\06\00\00\00")
-  (data (i32.const 316) "\00\00\00\00\00\00\00\00\07\00\00\00")
 
   (func $writeStdout (param $text i32) (result i32)
     local.get $text
@@ -701,21 +682,13 @@
   )
   (export "console_host.readToEndAfter" (func $console_host_readToEndAfter))
 
-  (func $__host_run__unit__known (param $entry i32) (result i32) (local $__ctx_writeStdout i32) (local $__ctx_writeStderr i32) (local $__ctx_readStdinByte i32) (local $__use_write_0 i32) (local $__use_writeError_1 i32) (local $__use_readLine_2 i32) (local $__use_readToEnd_4 i32) (local $__use_flush_6 i32)
+  (func $__host_run__unit__known (param $entry i32) (result i32) (local $__ctx_writeStdout i32) (local $__ctx_writeStderr i32) (local $__ctx_readStdinByte i32) (local $__use_readLine_2 i32) (local $__use_readToEnd_4 i32)
     i32.const 276
     local.set $__ctx_writeStdout
     i32.const 288
     local.set $__ctx_writeStderr
     i32.const 300
     local.set $__ctx_readStdinByte
-    i32.const 276
-    local.set $__use_write_0
-    local.get $__use_write_0
-    call $__nanyx_drop_fn_string_to_unit
-    i32.const 288
-    local.set $__use_writeError_1
-    local.get $__use_writeError_1
-    call $__nanyx_drop_fn_string_to_unit
     local.get $__ctx_readStdinByte
     call $__nanyx_dup_fn_unit_to_int
     drop
@@ -761,10 +734,6 @@
     local.set $__use_readToEnd_4
     local.get $__use_readToEnd_4
     call $__nanyx_drop_fn_unit_to_tags_some_string_ctx_readStdinByte_writeStderr_writeStdout
-    i32.const 312
-    local.set $__use_flush_6
-    local.get $__use_flush_6
-    call $__nanyx_drop_fn_unit_to_unit
     local.get $entry
     local.get $entry
     i32.load
@@ -928,14 +897,6 @@
     call $__nanyx_tag_box
   )
 
-  (func $__lambda_7__unit (param $__env i32) (result i32) (local $_ i32)
-    local.get $__env
-    call $__nanyx_drop_rec_0_word
-    i32.const 0
-    local.set $_
-    i32.const 0
-  )
-
   (func $__fn___script (param $__env i32) (result i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
@@ -953,7 +914,7 @@
   )
   (export "__fn_readStdinByte" (func $__fn_readStdinByte))
 
-  (func $__dbg_show_int (param $__dbg_value_i64 i64) (result i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_src i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64)
+  (func $__dbg_show_int (param $__dbg_value_i64 i64) (result i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64)
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_i64
@@ -1452,7 +1413,7 @@
   )
 
   (func $__nanyx_start
-    i32.const 324
+    i32.const 312
     call $__host_run__unit__known
     drop
   )

@@ -20,7 +20,6 @@ using Severity = NyxCompiler.Severity;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary>Formatting a document.</summary>
-[Collection(LanguageServerTestBase.Collection)]
 public sealed class FormattingTests : LanguageServerTestBase
 {
     [Fact]

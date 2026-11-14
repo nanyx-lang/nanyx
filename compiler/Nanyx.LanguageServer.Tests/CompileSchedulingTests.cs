@@ -4,7 +4,7 @@ using Xunit;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary>When a document is compiled: at once when it is opened, and after a change once the user pauses.</summary>
-[Collection(LanguageServerTestBase.Collection)]
+[Collection(LanguageServerTestBase.SerialCollection)]
 public sealed class CompileSchedulingTests : LanguageServerTestBase
 {
     [Fact]

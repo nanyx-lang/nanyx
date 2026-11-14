@@ -20,7 +20,6 @@ using Severity = NyxCompiler.Severity;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary>Find references.</summary>
-[Collection(LanguageServerTestBase.Collection)]
 public sealed class ReferencesTests : LanguageServerTestBase
 {
     [Fact]

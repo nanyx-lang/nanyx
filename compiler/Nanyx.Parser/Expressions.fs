@@ -325,7 +325,6 @@ do
                 >>. (attempt (indentedBlock matchIndent) <|> sameLine)
                 >>= fun (scrutinees, blockColumn) ->
                     armsAfter blockColumn |>> fun arms -> Match(scrutinees, arms))
-            .>> skipMany (skipAnyOf " \t\r\n")
         <?> "match expression"
 
 /// An operand of an operator, with the span of all the text it was written as. That is wider than the expression's

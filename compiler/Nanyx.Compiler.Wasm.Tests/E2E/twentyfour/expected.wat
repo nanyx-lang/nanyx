@@ -183,28 +183,10 @@
     end
   )
   (func $__nanyx_copy_bytes (param $dst i32) (param $src i32) (param $len i32)
-    (local $i i32)
-    block $done
-      loop $copy
-        local.get $i
-        local.get $len
-        i32.ge_s
-        br_if $done
-        local.get $dst
-        local.get $i
-        i32.add
-        local.get $src
-        local.get $i
-        i32.add
-        i32.load8_u
-        i32.store8
-        local.get $i
-        i32.const 1
-        i32.add
-        local.set $i
-        br $copy
-      end
-    end
+    local.get $dst
+    local.get $src
+    local.get $len
+    memory.copy
   )
   (func $__nanyx_string_length (param $s i32) (result i32)
     local.get $s

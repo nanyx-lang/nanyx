@@ -6,7 +6,6 @@ using Xunit;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary>Semantic tokens: the names of nominal types, marked so that the editor shows them apart.</summary>
-[Collection(LanguageServerTestBase.Collection)]
 public sealed class SemanticTokensTests : LanguageServerTestBase
 {
     [Fact]

@@ -22,13 +22,17 @@ namespace Nanyx.LanguageServer.Tests;
 
 /// <summary>
 /// Drives the server in-process through a real LSP client over a pair of pipes, so what is tested is the
-/// same wire protocol an editor speaks. Each test class derives from it, and all of them are in one collection,
-/// so their tests run one at a time, as they did when they were one class.
+/// same wire protocol an editor speaks. Each test class derives from it. Every test starts a server of its own with
+/// its own folder, so test classes run in parallel; only the ones that time the server are kept apart (see
+/// <see cref="SerialCollection"/>).
 /// </summary>
 public abstract class LanguageServerTestBase : IAsyncLifetime
 {
-    /// <summary>The collection every language server test class is in.</summary>
-    public const string Collection = "Language server";
+    /// <summary>
+    /// The collection of the test classes that time the server, such as a compile's debounce. It runs on its own after
+    /// the others, so the load of tests running in parallel can't stretch the pauses it measures.
+    /// </summary>
+    public const string SerialCollection = "Language server timing";
 
     protected static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 
@@ -243,3 +247,7 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
     protected static IReadOnlyList<InfoViewItem> Section(InfoViewResult view, string kind, string id) =>
         view.Scopes.First(scope => scope.Kind == kind).Sections.SingleOrDefault(section => section.Id == id)?.Items ?? [];
 }
+
+/// <summary>Runs the classes in <see cref="LanguageServerTestBase.SerialCollection"/> on their own, after the others.</summary>
+[CollectionDefinition(LanguageServerTestBase.SerialCollection, DisableParallelization = true)]
+public sealed class SerialCollectionDefinition;

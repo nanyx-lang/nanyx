@@ -20,7 +20,6 @@ using Severity = NyxCompiler.Severity;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary>Publishing diagnostics: when, where and which.</summary>
-[Collection(LanguageServerTestBase.Collection)]
 public sealed class DiagnosticsTests : LanguageServerTestBase
 {
     [Fact]
