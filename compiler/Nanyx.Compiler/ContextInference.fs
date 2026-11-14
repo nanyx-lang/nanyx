@@ -311,3 +311,50 @@ module internal ContextInference =
                 | Some symbol -> { registered with InferredContextTypes = registered.InferredContextTypes |> Map.add symbol contextTys }
                 | None -> registered
             | None -> None, current)
+
+    /// `state` with the local def `name`, declared as `symbol`, which writes no type and was just generalised as
+    /// `scheme`, requiring the parameterised contexts the calls in its value need of its own type variables, as if its
+    /// type were written: `def f = { x -> describe(x) }` requires `Show` of its parameter's type, and a call to it finds
+    /// an instance for the type it is called with. `before` are the calls that were waiting for an instance before the
+    /// def's value was inferred; the rest are its value's. A call of the value's whose arguments are not all variables
+    /// of the def's own type is left to the def around it, and so are a well-known context's (see
+    /// `InferState.LocalComparisons`) and an interpolation hole's.
+    let resolveLocal (name: Identifier) (symbol: SymbolId option) (scheme: TypeScheme) (before: PendingContextInstance list) (state: InferState) : InferState =
+        let earlier = before |> List.map (fun p -> p.Call, p.Index) |> Set.ofList
+        let candidates =
+            state.PendingContextInstances
+            |> List.filter (fun p ->
+                not (earlier.Contains (p.Call, p.Index))
+                && not p.ChecksOnly
+                && (WellKnownContexts.tryFind p.Context).IsNone
+                && not (WellKnownContexts.isOperatorPending p)
+                && not (state.HoleScopes.ContainsKey p.Call))
+        if candidates.IsEmpty || scheme.Quantified.IsEmpty then state
+        else
+            let subst = fst (Unifier.solve state.Constraints)
+            let ownVars (p: PendingContextInstance) =
+                let vars = p.ArgTys |> List.map (Unifier.applySolved subst >> function TyVar v when scheme.Quantified.Contains v.Id -> Some v | _ -> None)
+                if vars |> List.forall Option.isSome then Some (p, vars |> List.map Option.get) else None
+            let taken = candidates |> List.rev |> List.choose ownVars
+            let key (ctxName: Identifier, vars: TyVar list) = ctxName, vars |> List.map _.Id
+            let required = taken |> List.map (fun (p, vars) -> p.Context, vars) |> List.distinctBy key
+            match annotation scheme.Type required with
+            | Some (contexts, signature) when not taken.IsEmpty ->
+                let instances =
+                    taken
+                    |> List.fold (fun instances (p, vars) ->
+                        let context = contexts.[required |> List.findIndex (fun required -> key required = key (p.Context, vars))]
+                        withInstance p (InstanceInScope(context, FromInference)) instances) state.ContextInstances
+                let takenCalls = taken |> List.map (fun (p, _) -> p.Call, p.Index) |> Set.ofList
+                let registered =
+                    registerLocalContextRequirement
+                        { state with
+                            ContextInstances = instances
+                            PendingContextInstances = state.PendingContextInstances |> List.filter (fun p -> not (takenCalls.Contains (p.Call, p.Index))) }
+                        symbol name contexts (Some signature)
+                match symbol with
+                | Some symbol ->
+                    let contextTys = required |> List.map (fun (ctxName, vars) -> TyApply(ctxName, vars |> List.map TyVar))
+                    { registered with InferredContextTypes = registered.InferredContextTypes |> Map.add symbol contextTys }
+                | None -> registered
+            | _ -> state
