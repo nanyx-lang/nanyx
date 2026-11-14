@@ -227,6 +227,14 @@ what the compiler keeps: exact spans, resolved names and types.
   recorded for it (`TypedModule.ContextInstances` and `ContextProviders`,
   [#989](https://github.com/nanyx-lang/nanyx/issues/989)). The extension shows it in a webview view in the secondary side bar (see
   [Info view and library browser](./info-view-and-library-browser)).
+- **The standard library's modules and exports** ([#712](https://github.com/nanyx-lang/nanyx/issues/712)), two
+  requests of the server's own, for the library browser. `nanyx/libraryModules` returns each module's import path
+  (`nanyx/text`) and doc comment, the prelude first. `nanyx/libraryModule`, given a module's import path, returns
+  what it exports in the order its files declare them, less the reserved `__` names, or `null` for no module: each
+  export's name, its kind (`function`, `value`, `type`, `context`, or `attached` with the type it attaches to), its
+  declaration as hover writes it, its doc comment, the import it needs (none for the prelude's), and its location in
+  the copy of the library's source `StandardLibrarySource` writes. `NyxCompiler.LibraryCatalog` reads them from the
+  same compile of each module as the generated reference (`StandardLibraryDocs`), made once per process.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
 - **The extension** highlights syntax, finds `nanyx` (setting, `PATH`, or a downloaded release) and offers
   *Download the compiler* and *Restart the language server*, and shows the info view. Its settings are described for users on the

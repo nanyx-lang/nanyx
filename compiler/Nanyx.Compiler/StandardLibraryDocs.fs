@@ -20,7 +20,7 @@ let pageOf (file: string) =
 
 /// What a page's reference lists: an exported def, type or context, its doc comment, and, for a context, its
 /// members, each with its doc comment.
-type private Export =
+type internal Export =
     { Symbol: Symbol
       Written: string
       Doc: string option
@@ -74,12 +74,12 @@ let private typeSignature (typed: TypedModule) (symbol: Symbol) (info: TypeDefIn
     fst (Definition.writtenTypeDefinition writeShape symbol info true)
 
 /// The compile of the standard-library module `moduleName`, as an import of it checks it.
-let private compile (moduleName: string) : CompileResult =
+let internal compile (moduleName: string) : CompileResult =
     Compiler.compileFrom Linters.none (StandardLibraryModule moduleName) (StandardLibrary.tryLoadSource moduleName).Value
 
 /// The names the module `moduleName`, compiled as `typed`, exports, by the file of it that declares each, in the order
 /// the file declares them, with their doc comments as `docOf` writes them. The names it reserves are left out.
-let private exportsOf (moduleName: string) (typed: TypedModule) (docOf: Symbol -> string option) : Map<string, Export list> =
+let internal exportsOf (moduleName: string) (typed: TypedModule) (docOf: Symbol -> string option) : Map<string, Export list> =
     let files = StandardLibrary.moduleFiles moduleName |> Set.ofList
     typed.Symbols
     |> Map.values
