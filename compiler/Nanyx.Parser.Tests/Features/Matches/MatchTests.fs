@@ -190,6 +190,19 @@ let ``() matches the unit value, and #tag() a tag carrying it`` () =
         | other -> failwith $"Unexpected arms: %A{other}"
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
+let ``#tag with named fields in its brackets matches a record payload, as #tag((...)) does`` () =
+    match parseModule "def f = { | #some(count = 0, ...) -> 0 | #some((count = 0, ...)) -> 1 | #some(item) -> 2 }" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Match (_, arms)), _))))) ] ->
+        match arms |> List.map fst with
+        | [ [ Kind (TagPattern ("some", Some (Kind (RecordMemberPattern ([ "count", Kind (LiteralPattern (IntLit zero)) ], true))))) ]
+            [ Kind (TagPattern ("some", Some (Kind (RecordMemberPattern ([ "count", Kind (LiteralPattern (IntLit zeroAgain)) ], true))))) ]
+            [ Kind (TagPattern ("some", Some (Kind (IdentifierPattern "item")))) ] ] when zero = 0I && zeroAgain = 0I -> ()
+        | other -> failwith $"Unexpected arms: %A{other}"
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
 /// How many arms the match in `def f = { xs -> <match> }` has, and how many the match in its first arm's body has.
 let private nestedArmCounts (source: string) =
     match parseModule source with
