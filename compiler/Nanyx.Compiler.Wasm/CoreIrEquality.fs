@@ -46,63 +46,18 @@ let collectFor (helper: string) (needsFunction: IrType -> bool) (parts: IrType -
             types.Add ty
             parts ty |> List.iter add
 
+    // The expression's own call, then the expressions inside it (see `Expr.children`), the last in tail position, so
+    // that a chain as long as a function takes no stack to walk.
     let rec expr (e: Expr) =
         match e.Kind with
         | CallRuntime(name, first :: _, _) when name = helper -> add (atomType first)
-        | Let(_, value, body) ->
-            expr value
-            expr body
-        | Do(first, rest) ->
-            expr first
-            expr rest
-        | If(_, ifTrue, ifFalse) ->
-            expr ifTrue
-            expr ifFalse
-        | Match(_, arms) ->
-            for arm in arms do
-                arm.Patterns |> List.iter pattern
-                expr arm.Body
-        | ForEach loop -> expr loop.Body
-        | While loop ->
-            expr loop.Condition
-            expr loop.Body
-        | Dup(_, body)
-        | Drop(_, body)
-        | DropAfter(body, _)
-        | Release(_, body)
-        | Reuse(_, body) -> expr body
-        | Atom _
-        | Prim _
-        | Call _
-        | MakeTag _
-        | MakeRecord _
-        | Field _
-        | UpdateRecord _
-        | Assign _
-        | SetField _
-        | MakeList _
-        | CallRuntime _
-        | MakeClosure _
-        | CallClosure _
-        | Interpolate _
-        | Dbg _
-        | BoxFloat _
-        | Panic _ -> ()
-
-    and pattern (p: Pattern) =
-        match p with
-        | PGuard(_, guard) -> expr guard
-        | PTag(_, payload) -> payload |> Option.iter pattern
-        | PFields fields -> fields |> List.iter (snd >> pattern)
-        | PAll parts -> parts |> List.iter pattern
-        | PList(elements, rest) ->
-            elements |> List.iter pattern
-            rest |> Option.iter pattern
-        | PBind _
-        | PWildcard
-        | PInt _
-        | PBool _
-        | PString _ -> ()
+        | _ -> ()
+        match Expr.children e with
+        | [] -> ()
+        | children ->
+            for child in List.take (children.Length - 1) children do
+                expr child
+            expr (List.last children)
 
     for func in functions do
         expr func.Body
