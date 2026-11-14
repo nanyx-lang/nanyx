@@ -86,7 +86,7 @@ def main = {
   parameter's type requires, at a call whose callee's type is known
   ([#1218](https://github.com/nanyx-lang/nanyx/issues/1218)). `RunLambdaSuppliedContextTests.fs` runs this example.
 
-- **The backend needs nothing new.** `FunctionLowering.Coerce` already adapts a function value given where one that
+- **The backend needs nothing new.** `CoreIrLowerMembers.coerce` already adapts a function value given where one that
   passes fewer members is expected, capturing the members it needs where it is given. A `use` binding goes through it.
 
 `UseDischarge.fs` does this in the type checker ([#1054](https://github.com/nanyx-lang/nanyx/issues/1054)). A `use`
@@ -243,7 +243,7 @@ export def proc: [c] ([Proc & c] () -> #some(b) | r) -> #some(b) | r = { block -
   its context's layout and in the lambda a `use` binds to it, which is found by the context the `use` names
   (`LowerInput.UseBindingContexts`), since two contexts may have members of the same name. A call converts what it
   passes and is given back, rebuilding a tag's cell, a record or a list around the parts it converts, and adapts a
-  continuation to do the same (`CoreIrLowerBoxes`, `FunctionLowering.Coerce`). A member of a parameterised context
+  continuation to do the same (`CoreIrLowerBoxes`, `CoreIrLowerMembers.coerce`). A member of a parameterised context
   generic in variables of its own is not boxed yet, and neither is a `use` of an instance built as a value rather than
   written at the `use`.
 - **An imported context keeps its own variables.** A module's substitution leaves alone every type variable of a type

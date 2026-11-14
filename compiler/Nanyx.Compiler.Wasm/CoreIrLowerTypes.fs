@@ -292,7 +292,7 @@ let contextMembersOf (layouts: ContextLayouts) (contexts: Ty list) : (ContextMem
     | _ -> []
 
 /// The arguments an adapter from a function value of type `givenTy` to one of `expectedTy` takes and passes on (see
-/// `FunctionLowering.Coerce`): the elements of a tuple, none for unit, or else the one value. An expected input of unit
+/// `CoreIrLowerMembers.coerce`): the elements of a tuple, none for unit, or else the one value. An expected input of unit
 /// may be a type variable nothing constrained where the type was found (see `toIrType`), so the given input decides then,
 /// unless it is a box, which the adapter makes of unit itself.
 let valuesOf (input: IrType) =

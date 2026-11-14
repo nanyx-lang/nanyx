@@ -17,7 +17,7 @@ type internal Lowering =
     /// each call passes.
     | WrapperCalling of string * Ty * (ContextMemberKey * IrType) list
     /// As a function value of the second type that calls one of the first, which its closure holds, with the members
-    /// the first requires: each passed to it, or captured after the value where it was made (see `Coerce`).
+    /// the first requires: each passed to it, or captured after the value where it was made (see `CoreIrLowerMembers.coerce`).
     | Adapting of IrType * IrType
     /// As the function a box of a value of this type is a closure over (see `CoreIrLowerBoxes`).
     | BoxReading of IrType

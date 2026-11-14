@@ -32,9 +32,9 @@ type LiftedTools =
       BindLocal: string -> Expr -> (Atom -> Expr) -> Expr
       /// A value as an atom that can wait while code that stores runs before it is used.
       Settle: Expr -> (Atom -> Expr) -> Expr
-      /// An atom adapted to a type (see `FunctionLowering.Coerce`).
+      /// An atom adapted to a type (see `CoreIrLowerMembers.coerce`).
       Coerce: Scope -> Atom -> IrType -> (Atom -> Expr) -> Expr
-      /// Atoms each adapted to its type (see `FunctionLowering.CoerceAll`).
+      /// Atoms each adapted to its type (see `CoreIrLowerMembers.coerceAll`).
       CoerceAll: Scope -> Atom list -> IrType list -> (Atom list -> Expr) -> Expr
       /// The parameters a lifted function takes for its parameters (see `FunctionLowering.ValueParameters`).
       ValueParameters: string list -> IrType list -> Var list * (Expr -> Expr) * Var list

@@ -127,7 +127,7 @@ passes the instance the type checker found for it there, as a call to a top-leve
   members of the contexts they stand for at each call (`CoreIrLower.callee`), and takes those members after the ones
   it declares.
 - A function value given where one requiring other contexts is expected, as an argument, a context member, a `use`
-  binding, a list element or a def's result, is adapted (`FunctionLowering.Coerce`): a closure over an adapter that
+  binding, a list element or a def's result, is adapted (`CoreIrLowerMembers.coerce`): a closure over an adapter that
   holds it, drops the members it doesn't take and captures the ones it needs that the expected type doesn't pass, as
   they are where it is given. That is how `use (write = { s -> write(...) })` calls the outer `write`, and how a
   builder's `try`, whose context variable no call binds, takes a continuation that prints.
@@ -198,7 +198,7 @@ host's `write` through the table.
 
 How it is built:
 
-- A call works out which of the members it finds are known (`FunctionLowering.KnownMembers`, from what
+- A call works out which of the members it finds are known (`CoreIrLowerMembers.knownMembers`, from what
   `LowerInput.ContextArguments` finds) before it lowers its arguments, and asks for the callee by a key that names them
   (`SpecKey.Known`). It passes the others as before.
 - The specialisation binds each known member to a local, not a parameter. A call through that local is a direct call to
