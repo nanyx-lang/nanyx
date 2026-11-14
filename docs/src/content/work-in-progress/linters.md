@@ -183,7 +183,7 @@ Once the internal linters have shaken out the semantic model, the public contrac
 evidence rather than guesses. The direction so far:
 
 - Linters are Nanyx packages, compiled to WebAssembly and run at compile time on the embedded Wasmtime engine
-  the compiler already ships.
+  the compiler already ships. The official linter becomes one too ([Built-ins as packages](./built-ins-as-packages)).
 - They see the semantic model through query functions (type of a node, symbol of a reference, references to a
   symbol, children of a node) rather than a serialized copy of the whole tree. Queries keep the compiler's internal
   representation free to change, and avoid copying large trees across the WASM boundary.
