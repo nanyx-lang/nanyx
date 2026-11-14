@@ -20,7 +20,6 @@ using Severity = NyxCompiler.Severity;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary>Document symbols: the outline of a document.</summary>
-[Collection(LanguageServerTestBase.Collection)]
 public sealed class DocumentSymbolTests : LanguageServerTestBase
 {
     [Fact]

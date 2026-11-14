@@ -20,7 +20,6 @@ using Severity = NyxCompiler.Severity;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary>Go to definition.</summary>
-[Collection(LanguageServerTestBase.Collection)]
 public sealed class DefinitionTests : LanguageServerTestBase
 {
     [Fact]

@@ -20,7 +20,6 @@ using Severity = NyxCompiler.Severity;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary>Completion.</summary>
-[Collection(LanguageServerTestBase.Collection)]
 public sealed class CompletionTests : LanguageServerTestBase
 {
     [Fact]
