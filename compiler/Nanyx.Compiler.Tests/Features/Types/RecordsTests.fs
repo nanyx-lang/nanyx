@@ -101,11 +101,14 @@ def result = area((width = 2, height = 3, colour = "red"))"""
 
 [<Fact>]
 let ``Typecheck gives a record update the record's type and checks the updated fields`` () =
-    let ok = Compiler.compile "def alice = (name = \"Alice\", age = 30)\ndef older = alice with age = 31\ndef n: int = older.age"
+    let ok = Compiler.compile (normalized """def alice = (name = "Alice", age = 30)
+def older = alice with age = 31
+def n: int = older.age""")
     Assert.True(ok.Diagnostics.IsEmpty, sprintf "%A" ok.Diagnostics)
     let wrongType = Compiler.compile "def alice = (name = \"Alice\", age = 30)\ndef older = alice with age = \"old\""
     Assert.False(wrongType.Diagnostics.IsEmpty, "updating age with a string should not type-check")
-    let unknownField = Compiler.compile "def alice = (name = \"Alice\", age = 30)\ndef older = alice with height = 1"
+    let unknownField = Compiler.compile (normalized """def alice = (name = "Alice", age = 30)
+def older = alice with height = 1""")
     Assert.False(unknownField.Diagnostics.IsEmpty, "updating a field the record lacks should not type-check")
 
 [<Fact>]

@@ -80,7 +80,8 @@ let ``Typecheck rejects a lambda annotated with a type variable alone`` () =
 
 [<Fact>]
 let ``Typecheck checks a lambda against the function a nominal type wraps`` () =
-    let source = "type Handler = protected int -> int\ndef h: Handler = { x -> x ++ \"a\" }"
+    let source = normalized """type Handler = protected int -> int
+def h: Handler = { x -> x ++ "a" }"""
     match (Compiler.compile source).Diagnostics with
     | [ diagnostic ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     | other -> failwith $"Expected one diagnostic, got %A{other}"

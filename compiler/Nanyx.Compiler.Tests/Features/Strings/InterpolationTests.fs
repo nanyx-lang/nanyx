@@ -44,14 +44,15 @@ let ``A hole uses an instance loaded with use ahead of the compiler's own`` () =
 
 [<Fact>]
 let ``A def that does not write its type requires ToString of a type variable it interpolates`` () =
-    let typed = compileClean "def show = { value -> \"<{value}>\" }\ndef s = show(3) ++ show(\"x\")\n"
+    let typed = compileClean (withFinalNewline """def show = { value -> "<{value}>" }
+def s = show(3) ++ show("x")""")
     match typed.InferredContextTypes |> Map.values |> List.ofSeq with
     | [ [ TyApply("ToString", [ TyVar _ ]) ] ] -> ()
     | other -> failwith $"Unexpected inferred contexts: %A{other}"
 
 [<Fact>]
 let ``A def that writes its type must require ToString of a type variable it interpolates`` () =
-    let message, at = missingContext "def show: a -> string = { value -> \"<{value}>\" }\n"
+    let message, at = missingContext (withFinalNewline """def show: a -> string = { value -> "<{value}>" }""")
     Assert.Equal(
         "Interpolating a value of type 'a' requires the context 'ToString(a)', which is not available here: add [ToString(a)] to the type of 'show'",
         message)
@@ -63,7 +64,7 @@ let ``A def that requires ToString of a type variable can interpolate it`` () =
 
 [<Fact>]
 let ``A hole of a parameter typed by the call it is passed to finds its ToString once the module is inferred`` () =
-    compileClean "def labels: list(int) -> list(string) = { xs -> xs \\list.map({ x -> \"#{x}\" }) }\n" |> ignore
+    compileClean (withFinalNewline """def labels: list(int) -> list(string) = { xs -> xs \list.map({ x -> "#{x}" }) }""") |> ignore
 
 [<Fact>]
 let ``A local function generic in the type it interpolates is not an error`` () =
@@ -85,7 +86,9 @@ let ``A hole of a type with no ToString is an error at the hole`` () =
 
 [<Fact>]
 let ``A function that requires ToString is passed the compiler's own for a tag`` () =
-    let typed = compileClean "def angled = { v -> \"<{v}>\" }\ndef color: #red | #green = #green\ndef s = angled(#red) ++ angled(color)\n"
+    let typed = compileClean (withFinalNewline """def angled = { v -> "<{v}>" }
+def color: #red | #green = #green
+def s = angled(#red) ++ angled(color)""")
     Assert.Equal<ContextInstance list>(
         [ InstanceSynthesized [ "toString", "__toString" ]; InstanceSynthesized [ "toString", "__toString" ] ],
         instancesOf typed |> List.filter (function InstanceSynthesized _ -> true | _ -> false))

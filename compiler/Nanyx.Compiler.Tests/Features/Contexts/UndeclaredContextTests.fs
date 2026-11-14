@@ -41,14 +41,19 @@ let ``A def whose type declares no context cannot call a function that requires 
 let ``A lambda runs in the contexts of the def it is written in`` () =
     let source =
         "def twice: (() -> ()) -> () = { k ->\n  k()\n  k()\n}\n" +
-        "def run: () -> () = { twice({ println(\"x\") }) }\n" + entryCalling "run()"
+        (withFinalNewline """def run: () -> () = { twice({ println("x") }) }""") + entryCalling "run()"
     match undeclaredContexts source with
     | [ text, _ ] -> Assert.Equal("println", text)
     | other -> failwith $"Expected one diagnostic, got %A{other}"
 
 [<Fact>]
 let ``A local function whose type declares no context cannot call a member of the runtime's Console`` () =
-    let source = "\n@entry\ndef main = {\n  def shout: string -> () = { s -> println(s) }\n  shout(\"x\")\n}\n"
+    let source = withFinalNewline """
+@entry
+def main = {
+  def shout: string -> () = { s -> println(s) }
+  shout("x")
+}"""
     match undeclaredContexts source with
     | [ text, message ] ->
         Assert.Equal("println", text)
@@ -102,7 +107,10 @@ def main = {
 
 [<Fact>]
 let ``The top level of a module runs in the runtime's Console`` () =
-    Assert.Empty(undeclaredContexts "import nanyx/console\n\nprintln(\"hi\")\ndef x = println(\"value\")\n")
+    Assert.Empty(undeclaredContexts (withFinalNewline """import nanyx/console
+
+println("hi")
+def x = println("value")"""))
 
 [<Fact>]
 let ``A function imported from another module requires its contexts where it is called`` () =
@@ -110,7 +118,10 @@ let ``A function imported from another module requires its contexts where it is 
         let mainPath = Path.Combine(dir, "main.nyx")
         File.WriteAllText(
             Path.Combine(dir, "mod.nyx"),
-            "module mod\nimport nanyx/console\nexport def greet: [Console] () -> () = { println(\"hi\") }\nexport def loud = { println(\"LOUD\") }")
+            (normalized """module mod
+import nanyx/console
+export def greet: [Console] () -> () = { println("hi") }
+export def loud = { println("LOUD") }"""))
         File.WriteAllText(mainPath, "module main\nimport mod\ndef g: () -> () = { loud() }\n@entry\ndef main = {\n  greet()\n  g()\n}")
         let diagnostic = single (Compiler.compileFile mainPath)
         Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, diagnostic.Code)
@@ -123,7 +134,9 @@ let private undeclaredContextsWithMod (main: string) =
         let mainPath = Path.Combine(dir, "main.nyx")
         File.WriteAllText(
             Path.Combine(dir, "mod.nyx"),
-            "module mod\nimport nanyx/console\nexport def greet: [Console] () -> () = { println(\"hi\") }\n")
+            (withFinalNewline """module mod
+import nanyx/console
+export def greet: [Console] () -> () = { println("hi") }"""))
         File.WriteAllText(mainPath, main)
         result <-
             (Compiler.compileFile mainPath).Diagnostics
@@ -143,7 +156,11 @@ let ``An imported function requires its contexts in a module that does not have 
 
 [<Fact>]
 let ``A standard-library function imported under an alias still requires its context`` () =
-    let main = "module main\nimport nanyx/console as c\ndef g: () -> () = { c.write(\"hi\") }\n@entry\ndef main = { g() }\n"
+    let main = withFinalNewline """module main
+import nanyx/console as c
+def g: () -> () = { c.write("hi") }
+@entry
+def main = { g() }"""
     Assert.Equal<string list>([ "c.write" ], undeclaredContextsWithMod main)
 [<Fact>]
 let ``An imported function's context needs nothing more where the module cannot name it, at the top level or in a def that infers it`` () =
@@ -152,7 +169,11 @@ let ``An imported function's context needs nothing more where the module cannot 
 
 [<Fact>]
 let ``A def that declares an aliased context can use its members under the alias`` () =
-    let main = "module main\nimport nanyx/console as c\ndef g: [c.Console] () -> () = { c.println(\"hi\") }\n@entry\ndef main = { g() }\n"
+    let main = withFinalNewline """module main
+import nanyx/console as c
+def g: [c.Console] () -> () = { c.println("hi") }
+@entry
+def main = { g() }"""
     Assert.Equal<string list>([], undeclaredContextsWithMod main)
 
 [<Fact>]

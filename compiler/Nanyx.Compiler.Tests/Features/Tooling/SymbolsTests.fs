@@ -157,7 +157,8 @@ let ``Imported names refer to the imported definition and the import`` () =
         check "module main\nimport mod as m1\ndef value = m1.foo" "m1.foo" "m1"
         check "module main\nimport mod\ndef value = foo" "foo" "mod"
         // A standard-library definition is declared in the library's own module.
-        let source = "import nanyx/text as t\ndef shout = t.string.uppercase(\"hi\")"
+        let source = normalized """import nanyx/text as t
+def shout = t.string.uppercase("hi")"""
         let toUpper = (symbolAt (fun typed -> typed.References) (Compiler.compile source) (offsetOf source "t.string.uppercase" 0 2)).Value
         Assert.Equal("nanyx/text.nyx", toUpper.Declaration.File))
 
@@ -253,7 +254,8 @@ def peek = Store(int).get
 
 [<Fact>]
 let ``Context members of an imported context are declared in its module`` () =
-    let source = "import nanyx/console\ndef hello: [Console] () -> () = { write(\"hi\") }\n"
+    let source = withFinalNewline """import nanyx/console
+def hello: [Console] () -> () = { write("hi") }"""
     let consoleSource = (StandardLibrary.tryLoadSource "console").Value.Replace("\r\n", "\n")
     Assert.Equal(
         Some (ContextMember, "nanyx/console.nyx", offsetOf consoleSource "write:" 0 0),
@@ -297,7 +299,9 @@ let ``References to a recursive type include its names in its own definition`` (
 
 [<Fact>]
 let ``References to an import are the alias its names are written with`` () =
-    let source = "import nanyx/text as t\ndef a = t.string.uppercase(\"x\")\ndef b = t.string.uppercase(\"y\")\n"
+    let source = withFinalNewline """import nanyx/text as t
+def a = t.string.uppercase("x")
+def b = t.string.uppercase("y")"""
     Assert.Equal<(string * int) list>(
         [ "t", offsetOf source "t.string" 0 0; "t", offsetOf source "t.string" 1 0 ],
         referencesAt source (offsetOf source "as t" 0 3))

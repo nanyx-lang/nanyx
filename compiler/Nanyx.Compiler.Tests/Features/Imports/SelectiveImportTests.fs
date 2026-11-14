@@ -57,5 +57,8 @@ let ``Selecting a name resolves a name two imports export`` () =
     let modules =
         [ "csvParser.nyx", "module csvParser\nexport def parse = { s -> 1 }\nexport def csvOnly = 1"
           "jsonParser.nyx", "module jsonParser\nexport def parse = { s -> 2 }" ]
-    let result = compileImportingAll modules "module main\nimport csvParser as (csvOnly)\nimport jsonParser\ndef data = parse(\"x\") + csvOnly"
+    let result = compileImportingAll modules (normalized """module main
+import csvParser as (csvOnly)
+import jsonParser
+def data = parse("x") + csvOnly""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")

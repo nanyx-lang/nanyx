@@ -140,7 +140,7 @@ let ``An operator required by its member is the prelude's context that has it`` 
 let ``Only an operator of a prelude context, at its member's type, can be required by its member`` () =
     Assert.Equal(
         (DiagnosticCodes.UnknownContext.Code, "Only an operator can be required by its member, and 'toString' is not one: it is a member of ToString, so require [ToString(a)]", "toString: a -> string"),
-        onlyDiagnostic "def write: [toString: a -> string] a -> string = { x -> \"Wrote: {x}\" }\n")
+        onlyDiagnostic (withFinalNewline """def write: [toString: a -> string] a -> string = { x -> "Wrote: {x}" }"""))
     Assert.Equal(
         (DiagnosticCodes.UnknownContext.Code, "No context in the prelude has a member '`<`': it is read through Ord's 'compare', so require [Ord(a)]", "`<`: a, a -> bool"),
         onlyDiagnostic "def less: [`<`: a, a -> bool] a, a -> bool = { x, y -> x < y }\n")

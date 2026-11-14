@@ -48,7 +48,7 @@ let ``The diverging statement is related, and the fix removes what follows it`` 
 [<Fact>]
 let ``A call to any function whose result is undefined counts, as does a def bound to one`` () =
     let source =
-        "def fail: string -> undefined = { message -> panic(\"failed: {message}\") }\n"
+        (withFinalNewline """def fail: string -> undefined = { message -> panic("failed: {message}") }""")
         + "def f: int -> int = { x ->\n"
         + "  def v = fail(\"x\")\n"
         + "  x\n"
@@ -72,5 +72,11 @@ let ``An if whose every branch never returns is a statement that never returns``
 
 [<Fact>]
 let ``A panic as a block's last statement, or in only one branch, is not reported`` () =
-    Assert.Empty(reported "def f: int -> int = { x ->\n  def y = x + 1\n  panic(\"no {y}\")\n}\n")
-    Assert.Empty(reported "def f: int -> int = { x ->\n  def y = if x > 0 then x else panic(\"no\")\n  y + 1\n}\n")
+    Assert.Empty(reported (withFinalNewline """def f: int -> int = { x ->
+  def y = x + 1
+  panic("no {y}")
+}"""))
+    Assert.Empty(reported (withFinalNewline """def f: int -> int = { x ->
+  def y = if x > 0 then x else panic("no")
+  y + 1
+}"""))

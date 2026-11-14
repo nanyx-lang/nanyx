@@ -15,8 +15,8 @@ let (|IntLit64|_|) (literal: Literal) =
 /// `source` with `\n` line breaks, whatever the line endings of the test file's checkout.
 let normalized (source: string) = source.ReplaceLineEndings "\n"
 
-/// `normalized source` with a line break after it: for a multi-line source whose closing quotes, with code after them,
-/// end its last line.
+/// `normalized source` with a line break after it: for a source that ends in a line break, written with its closing
+/// quotes, and the code after them, on its last line.
 let withFinalNewline (source: string) = normalized source + "\n"
 
 let withTempDir (action: string -> unit) =

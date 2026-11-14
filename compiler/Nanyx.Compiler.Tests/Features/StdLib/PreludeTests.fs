@@ -56,7 +56,8 @@ def recovered = Result.orElse(r, { e -> #error(1.5) })"""
 
 [<Fact>]
 let ``Int.fromString is in the prelude`` () =
-    let result = Compiler.compile "def n = int.fromString(\"42\")\ndef piped = \"7\" \\ int.fromString"
+    let result = Compiler.compile (normalized """def n = int.fromString("42")
+def piped = "7" \ int.fromString""")
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("#some(int) | #invalidInt", Unifier.tyToString result.Typed.Value.Types.["n"])
     Assert.Equal("#some(int) | #invalidInt", Unifier.tyToString result.Typed.Value.Types.["piped"])
@@ -70,14 +71,16 @@ let ``Int.toFloat is in the prelude`` () =
 
 [<Fact>]
 let ``Float.fromString is in the prelude`` () =
-    let result = Compiler.compile "def x = float.fromString(\"1.5\")\ndef piped = \"7\" \\ float.fromString"
+    let result = Compiler.compile (normalized """def x = float.fromString("1.5")
+def piped = "7" \ float.fromString""")
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("#some(float) | #invalidFloat", Unifier.tyToString result.Typed.Value.Types.["x"])
     Assert.Equal("#some(float) | #invalidFloat", Unifier.tyToString result.Typed.Value.Types.["piped"])
 
 [<Fact>]
 let ``Bool.fromString is in the prelude`` () =
-    let result = Compiler.compile "def b = bool.fromString(\"true\")\ndef piped = \"false\" \\ bool.fromString"
+    let result = Compiler.compile (normalized """def b = bool.fromString("true")
+def piped = "false" \ bool.fromString""")
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("#some(bool) | #invalidBool", Unifier.tyToString result.Typed.Value.Types.["b"])
     Assert.Equal("#some(bool) | #invalidBool", Unifier.tyToString result.Typed.Value.Types.["piped"])

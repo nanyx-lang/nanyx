@@ -16,7 +16,8 @@ let ``Compile reports diagnostics on parse error`` () =
 
 [<Fact>]
 let ``Every type mismatch in a module is reported`` () =
-    let result = Compiler.compile "def a: int = \"x\"\ndef b: string = 1"
+    let result = Compiler.compile (normalized """def a: int = "x"
+def b: string = 1""")
     let mismatches = result.Diagnostics |> List.filter (fun diag -> diag.Code = DiagnosticCodes.TypeMismatch.Code)
     Assert.Equal(2, mismatches.Length)
     Assert.Equal<int list>([ 0; 1 ], mismatches |> List.map (fun diag -> diag.Span.Value.StartLine))
@@ -124,7 +125,14 @@ let ``Every error inside a def is reported`` () =
 
 [<Fact>]
 let ``The uses of an expression that fails to check are not errors too`` () =
-    let result = Compiler.compile "def f = { x ->\n  def y = nope\n  def a = y + 1\n  def b: string = y\n  def c = y \\contains(\"s\")\n  def d = y.length\n  a\n}"
+    let result = Compiler.compile (normalized """def f = { x ->
+  def y = nope
+  def a = y + 1
+  def b: string = y
+  def c = y \contains("s")
+  def d = y.length
+  a
+}""")
     let diag = Assert.Single(result.Diagnostics)
     Assert.Equal("Unknown identifier 'nope'", diag.Message)
 
@@ -137,7 +145,9 @@ let ``The arguments of a pipe from an expression that fails to check are still c
 
 [<Fact>]
 let ``The uses of a def that fails to check are not errors too`` () =
-    let result = Compiler.compile "def broken = { x -> missing(x) }\ndef a = broken(1)\ndef b = broken(\"s\")"
+    let result = Compiler.compile (normalized """def broken = { x -> missing(x) }
+def a = broken(1)
+def b = broken("s")""")
     let diag = Assert.Single(result.Diagnostics)
     Assert.Contains("Unknown function 'missing'", diag.Message)
 

@@ -163,7 +163,8 @@ let ``Passing functions to a def that requires Eq is an error at the call`` () =
 
 [<Fact>]
 let ``A call that requires Eq of a type with no == attached passes the compiler's own`` () =
-    let typed = compileClean "def same = { x, y -> x == y }\ndef b = same(1, 2) or same([\"a\"], [\"b\"])\n"
+    let typed = compileClean (withFinalNewline """def same = { x, y -> x == y }
+def b = same(1, 2) or same(["a"], ["b"])""")
     Assert.Equal<ContextInstance list>(
         [ InstanceSynthesized [ "==", "__equals" ]; InstanceSynthesized [ "==", "__equals" ] ],
         instancesOf typed |> List.filter (function InstanceSynthesized _ -> true | _ -> false))
@@ -196,7 +197,7 @@ let ``Comparing with a tag joins the operands, leaving the other open to more ta
 
 [<Fact>]
 let ``Comparing tags with payloads of different types is still an error`` () =
-    let diagnostic = Assert.Single((Compiler.compile "def b = #some(1) == #some(\"a\")\n").Diagnostics)
+    let diagnostic = Assert.Single((Compiler.compile (withFinalNewline """def b = #some(1) == #some("a")""")).Diagnostics)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
 
 [<Fact>]

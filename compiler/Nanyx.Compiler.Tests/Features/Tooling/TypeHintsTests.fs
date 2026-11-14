@@ -112,7 +112,8 @@ def describe: [Show(a)] a -> string = { value -> Show(a).show(value) }
 
 [<Fact>]
 let ``A def's lens shows a plain context it was inferred to require`` () =
-    let source = "import nanyx/console\ndef greet = { println(\"hi\") }\n"
+    let source = withFinalNewline """import nanyx/console
+def greet = { println("hi") }"""
     let expected = [ "greet", "[Console] () -> ()", offsetOf source "greet" 0 0 ]
     Assert.Equal<(string * string * int) list>(expected, typeHints TypeHints.typeLenses source)
     Assert.Equal<(string * string * int) list>(expected, typeHints TypeHints.inlayHintsWithTopLevel source)

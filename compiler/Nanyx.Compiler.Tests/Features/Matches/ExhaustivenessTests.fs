@@ -343,18 +343,33 @@ let ``The parser's multi-value match examples compile without throwing`` () =
 
 [<Fact>]
 let ``A match on ints without a catch-all is non-exhaustive, and says which int is missing`` () =
-    let single = diagnosticOf "def f: int -> string = { n ->\n  match n\n    | 0 -> \"zero\"\n    | 1 -> \"one\"\n}\n"
+    let single = diagnosticOf (withFinalNewline """def f: int -> string = { n ->
+  match n
+    | 0 -> "zero"
+    | 1 -> "one"
+}""")
     Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, single.Code)
     Assert.Equal("Non-exhaustive match, missing int values, such as 2", single.Message)
     // Ranges count for the ints they hold.
-    let ranges = diagnosticOf "def f: int -> string = { n ->\n  match n\n    | 0..9 -> \"digit\"\n    | 10..99 -> \"two digits\"\n}\n"
+    let ranges = diagnosticOf (withFinalNewline """def f: int -> string = { n ->
+  match n
+    | 0..9 -> "digit"
+    | 10..99 -> "two digits"
+}""")
     Assert.Equal("Non-exhaustive match, missing int values, such as 100", ranges.Message)
     // `(1, 1)` reaches no arm, though each value on its own has a catch-all somewhere.
-    let source = "def f: int, int -> string = { x, y ->\n  match x, y\n    | 0, 0 -> \"origin\"\n    | 0, _ -> \"on the y axis\"\n}\n"
+    let source = withFinalNewline """def f: int, int -> string = { x, y ->
+  match x, y
+    | 0, 0 -> "origin"
+    | 0, _ -> "on the y axis"
+}"""
     let pair = diagnosticOf source
     Assert.Equal("Non-exhaustive match (scrutinee 1), missing int values, such as 1", pair.Message)
     Assert.Equal("match x, y", textAt source pair.Span.Value)
-    let strings = diagnosticOf "def f: string -> int = { s ->\n  match s\n    | \"a\" -> 1\n}\n"
+    let strings = diagnosticOf (withFinalNewline """def f: string -> int = { s ->
+  match s
+    | "a" -> 1
+}""")
     Assert.Equal("Non-exhaustive match, missing string values, such as \"\"", strings.Message)
     let booleans = diagnosticOf "def f: bool -> int = { b ->\n  match b\n    | true -> 1\n}\n"
     Assert.Equal("Non-exhaustive match, missing value: false", booleans.Message)
@@ -413,7 +428,7 @@ let ``A non-exhaustive match on a pipeline is reported over the whole pipeline``
       | #notFound, _ -> #notFound }
 def getData: () -> #some(int) | #notFound = { #notFound }
 def b = """
-    let head = "match getData() \\mapSome { n: int -> \"{n}\" }"
+    let head = """match getData() \mapSome { n: int -> "{n}" }"""
     let source = prefix + head + "\n  | #some(s) -> s\n"
     Assert.Equal((prefix.Length, prefix.Length + head.Length, head), onlySpan source)
 

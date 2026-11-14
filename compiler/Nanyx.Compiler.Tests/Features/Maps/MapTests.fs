@@ -12,7 +12,8 @@ let private typesOf (source: string) (names: string list) =
 
 [<Fact>]
 let ``A map literal is a map from its keys' type to its values' type`` () =
-    let source = "def m = [\"a\" => 1, \"b\" => 2]\ndef byPoint = [(x = 1, y = 2) => [1], (x = 3, y = 4) => []]\n"
+    let source = withFinalNewline """def m = ["a" => 1, "b" => 2]
+def byPoint = [(x = 1, y = 2) => [1], (x = 3, y = 4) => []]"""
     Assert.Equal<string list>([ "map(string, int)"; "map((x: int, y: int), list(int))" ], typesOf source [ "m"; "byPoint" ])
 
 [<Fact>]
@@ -37,17 +38,19 @@ def price = { (shop: Shop) -> shop.prices("tea") }
 
 [<Fact>]
 let ``A map's functions are attached to Map, so a pipe finds them`` () =
-    let source = "def m = [\"a\" => 1] \\insert(\"b\", 2) \\remove(\"a\")\ndef n = m \\count\n"
+    let source = withFinalNewline """def m = ["a" => 1] \insert("b", 2) \remove("a")
+def n = m \count"""
     Assert.Equal<string list>([ "map(string, int)"; "int" ], typesOf source [ "m"; "n" ])
 
 [<Fact>]
 let ``List.groupBy gives a map from each key to its elements`` () =
-    let source = "def groups = [\"a\", \"bb\", \"cc\"] \\list.groupBy { s -> s.length }\n"
+    let source = withFinalNewline """def groups = ["a", "bb", "cc"] \list.groupBy { s -> s.length }"""
     Assert.Equal<string list>([ "map(int, list(string))" ], typesOf source [ "groups" ])
 
 [<Fact>]
 let ``A lookup with a key of another type is a mismatch`` () =
-    let code, message, _ = onlyDiagnostic "def m = [\"a\" => 1]\ndef found = m(2)\n"
+    let code, message, _ = onlyDiagnostic (withFinalNewline """def m = ["a" => 1]
+def found = m(2)""")
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     Assert.Contains("string", message)
 
@@ -94,7 +97,7 @@ let ``A call generic in the types of the sets it compares is passed the == deriv
 
 [<Fact>]
 let ``Maps and sets cannot be ordered or hashed`` () =
-    let code, message, _ = onlyDiagnostic "def less = [\"a\" => 1] < [\"a\" => 1]\n"
+    let code, message, _ = onlyDiagnostic (withFinalNewline """def less = ["a" => 1] < ["a" => 1]""")
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'map(string, int)' cannot be ordered with <: maps have no order", message)
     let code, message, _ = onlyDiagnostic "def keyed = [set.fromList([1]) => 1]\n"

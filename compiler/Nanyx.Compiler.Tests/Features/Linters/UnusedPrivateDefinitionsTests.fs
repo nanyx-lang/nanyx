@@ -85,7 +85,10 @@ export def x = 1
 
 [<Fact>]
 let ``The entry point, defs an instance picks up and names starting with an underscore are not reported`` () =
-    Assert.Empty(reported "@entry\ndef main = {\n  println(\"hi\")\n}\n")
+    Assert.Empty(reported (withFinalNewline """@entry
+def main = {
+  println("hi")
+}"""))
     let attached =
         normalized """module points
 type Point = (x: int, y: int)

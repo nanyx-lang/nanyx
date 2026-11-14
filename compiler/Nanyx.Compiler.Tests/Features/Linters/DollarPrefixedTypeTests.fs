@@ -33,7 +33,8 @@ def e = "a" \$Email.parse
 
 [<Fact>]
 let ``The declaration's fix writes protected after the =`` () =
-    let source = "type $Email = string\ndef e: Email = Email(\"a\")\n"
+    let source = withFinalNewline """type $Email = string
+def e: Email = Email("a")"""
     match reported source with
     | [ diagnostic, "$" ] ->
         Assert.Equal(
@@ -57,7 +58,8 @@ let ``A private type's fix only removes the $`` () =
 
 [<Fact>]
 let ``A use's fix removes the $`` () =
-    let source = "type Email = protected string\ndef e: $Email = Email(\"a\")\n"
+    let source = withFinalNewline """type Email = protected string
+def e: $Email = Email("a")"""
     match reported source with
     | [ diagnostic, "$" ] ->
         Assert.Equal("A type's name is written without a `$`", diagnostic.Message)

@@ -8,7 +8,7 @@ open Nanyx.Compiler.Tests.TestSupport
 let ``Arithmetic on a type that is not a number is an error naming the operator`` () =
     let cases =
         [ "def s = \"a\" % \"b\"\n", "'string' cannot be used with %: it is not a number", "\"a\" % \"b\""
-          "def s = \"a\" * 2\n", "'string' cannot be used with *: it is not a number", "\"a\" * 2"
+          (withFinalNewline """def s = "a" * 2"""), "'string' cannot be used with *: it is not a number", "\"a\" * 2"
           "def b = 1 - true\n", "'bool' cannot be used with -: it is not a number", "1 - true"
           "def s = \"a\" + \"b\"\n", "'string' cannot be used with +: it is not a number. Use ++ to join them", "\"a\" + \"b\"" ]
     for source, message, text in cases do

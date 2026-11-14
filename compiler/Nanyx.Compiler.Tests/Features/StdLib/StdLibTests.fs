@@ -18,7 +18,9 @@ def greet: [Console] string -> () = { name -> println(name) }"""
 
 [<Fact>]
 let ``println comes from nanyx/console and gives unit`` () =
-    let result = Compiler.compile "import nanyx/console\n\ndef result = println(\"hi\")"
+    let result = Compiler.compile (normalized """import nanyx/console
+
+def result = println("hi")""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "unit", result.Typed.Value.Types.["result"])
 
@@ -73,7 +75,9 @@ let ``println is not in scope without importing nanyx/console`` () =
 let ``Standard library import is resolved without a file`` () =
     withTempDir (fun dir ->
         let mainPath = Path.Combine(dir, "main.nyx")
-        File.WriteAllText(mainPath, "import nanyx/console\n\nprintln(\"Hello, Nanyx!\")\n")
+        File.WriteAllText(mainPath, (withFinalNewline """import nanyx/console
+
+println("Hello, Nanyx!")"""))
         let result = Compiler.compileFile mainPath
         Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
         // The module is compiled together with the program: the backend sees its definitions, not the import.
@@ -129,18 +133,24 @@ def allWords = string.words("a b")"""
 
 [<Fact>]
 let ``nanyx/text rejects a wrongly typed argument`` () =
-    let result = Compiler.compile "import nanyx/text\n\ndef bad = string.repeat(\"ab\", \"twice\")"
+    let result = Compiler.compile (normalized """import nanyx/text
+
+def bad = string.repeat("ab", "twice")""")
     assertReports DiagnosticCodes.TypeMismatch result
 
 [<Fact>]
 let ``Standard library private helpers are not imported`` () =
-    let result = Compiler.compile "import nanyx/text\n\ndef bad = indexFrom(\"abc\", \"b\", 0)"
+    let result = Compiler.compile (normalized """import nanyx/text
+
+def bad = indexFrom("abc", "b", 0)""")
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("Unknown function 'indexFrom'", message)
 
 [<Fact>]
 let ``Compiler intrinsics are not in scope in user code`` () =
-    let result = Compiler.compile "import nanyx/text\n\ndef bad = __nanyx_string_length(\"abc\")"
+    let result = Compiler.compile (normalized """import nanyx/text
+
+def bad = __nanyx_string_length("abc")""")
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("Unknown function '__nanyx_string_length'", message)
 
@@ -171,16 +181,22 @@ def shout = t.string.uppercase("hi")"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["shout"])
-    let unqualified = Compiler.compile "import nanyx/text as t\n\ndef shout = string.uppercase(\"hi\")"
+    let unqualified = Compiler.compile (normalized """import nanyx/text as t
+
+def shout = string.uppercase("hi")""")
     assertReports DiagnosticCodes.UnknownFunction unqualified
 
 [<Fact>]
 let ``nanyx/text functions are attached to String`` () =
-    let result = Compiler.compile "import nanyx/text\ndef s = \" a \"\ndef piped = s \\ trim\ndef called = string.trim(s)"
+    let result = Compiler.compile (normalized """import nanyx/text
+def s = " a "
+def piped = s \ trim
+def called = string.trim(s)""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["piped"])
     Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["called"])
-    let bare = Compiler.compile "import nanyx/text\ndef x = trim(\" a \")"
+    let bare = Compiler.compile (normalized """import nanyx/text
+def x = trim(" a ")""")
     Assert.Contains("Unknown function 'trim'", (List.head bare.Diagnostics).Message)
 
 [<Fact>]
@@ -204,7 +220,11 @@ def main = {
 """
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    let withoutEntry = Compiler.compile "module main\n\ndef main = {\n  println(\"Hello, World!\")\n}\n"
+    let withoutEntry = Compiler.compile (withFinalNewline """module main
+
+def main = {
+  println("Hello, World!")
+}""")
     assertReports DiagnosticCodes.UnknownFunction withoutEntry
 
 [<Fact>]
@@ -262,7 +282,9 @@ let ``nanyx/math minMax of an int and a float is an error`` () =
 
 [<Fact>]
 let ``nanyx/math abs of a string is an error, and so is min of an int and a float`` () =
-    let notANumber = Compiler.compile "import nanyx/math as math\n\ndef a = math.abs(\"x\")"
+    let notANumber = Compiler.compile (normalized """import nanyx/math as math
+
+def a = math.abs("x")""")
     Assert.Equal<string list>([ DiagnosticCodes.MissingContextMembers.Code ], notANumber.Diagnostics |> List.map (fun d -> d.Code))
     let mixed = Compiler.compile "import nanyx/math as math\n\ndef a = math.min(1, 2.5)"
     Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], mixed.Diagnostics |> List.map (fun d -> d.Code))
@@ -284,13 +306,17 @@ def t = math.truncate(-3.9)""")
 
 [<Fact>]
 let ``nanyx/text rejects a labelled argument passed by position`` () =
-    let result = Compiler.compile "import nanyx/text\n\ndef parts = string.split(\"a,b\", \",\")"
+    let result = Compiler.compile (normalized """import nanyx/text
+
+def parts = string.split("a,b", ",")""")
     let diagnostic = List.exactlyOne result.Diagnostics
     Assert.Equal(DiagnosticCodes.PositionalForNamedArgument.Code, diagnostic.Code)
     Assert.Equal("'string.split' takes 'on' by name, not by position: write 'on = ...'", diagnostic.Message)
     let piped = List.exactlyOne (Compiler.compile "import nanyx/text\n\ndef parts = \"a,b\" \\split(\",\")").Diagnostics
     Assert.Equal(diagnostic.Message, piped.Message)
-    let named = Compiler.compile "import nanyx/text\n\ndef parts = string.split(\"a,b\", on = \",\")"
+    let named = Compiler.compile (normalized """import nanyx/text
+
+def parts = string.split("a,b", on = ",")""")
     Assert.True(named.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{named.Diagnostics}")
 
 [<Fact>]

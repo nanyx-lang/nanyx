@@ -199,10 +199,15 @@ def b = 1 \ describe"""
 
 [<Fact>]
 let ``Typecheck pipe does not find attached functions of a module imported with as`` () =
-    let modules = [ "one.nyx", "module one\nexport def string.shout: string -> string = { s -> s ++ \"!\" }" ]
-    let unqualified = compileImportingAll modules "module main\nimport one as t\ndef a = \"x\" \\ shout"
+    let modules = [ "one.nyx", (normalized """module one
+export def string.shout: string -> string = { s -> s ++ "!" }""") ]
+    let unqualified = compileImportingAll modules (normalized """module main
+import one as t
+def a = "x" \ shout""")
     assertReports DiagnosticCodes.UnknownFunction unqualified
-    let qualified = compileImportingAll modules "module main\nimport one as t\ndef a = \"x\" \\ t.string.shout"
+    let qualified = compileImportingAll modules (normalized """module main
+import one as t
+def a = "x" \ t.string.shout""")
     Assert.True(qualified.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{qualified.Diagnostics}")
     Assert.Equal(TyPrimitive "string", qualified.Typed.Value.Types.["a"])
 
@@ -245,17 +250,21 @@ def counts = list.map([[1], [2, 3]], { xs -> xs.length })""")
 
 [<Fact>]
 let ``A lambda argument still reads a record's field when the arguments before it make it a record`` () =
-    let result = Compiler.compile "def names = list.map([(length = \"x\")], { r -> r.length })\n"
+    let result = Compiler.compile (withFinalNewline """def names = list.map([(length = "x")], { r -> r.length })""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyApply("list", [ TyPrimitive "string" ]), result.Typed.Value.Types.["names"])
 
 [<Fact>]
 let ``A dot on a value does not reach a definition attached to its type, and the error says to pipe`` () =
-    let code, message, _ = onlyDiagnostic "import nanyx/text\ndef s = \"nanyx\"\ndef b = s.isEmpty\n"
+    let code, message, _ = onlyDiagnostic (withFinalNewline """import nanyx/text
+def s = "nanyx"
+def b = s.isEmpty""")
     Assert.Equal(DiagnosticCodes.UnknownMember.Code, code)
     Assert.Equal("'string' has no property 'isEmpty'. 'string.isEmpty' is attached to its type: call it with a pipe, as in `s \\isEmpty`", message)
     // Called, it reads as a function named `s.startsWith`.
-    let code, message, _ = onlyDiagnostic "import nanyx/text\ndef s = \"nanyx\"\ndef b = s.startsWith(\"nan\")\n"
+    let code, message, _ = onlyDiagnostic (withFinalNewline """import nanyx/text
+def s = "nanyx"
+def b = s.startsWith("nan")""")
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
     Assert.Equal("'s' is a value, so 's.startsWith' is not a function's name. 'string.startsWith' is attached to its type: call it with a pipe, as in `s \\startsWith(...)`", message)
     // A record type with an attached definition and no field of that name.
@@ -263,13 +272,16 @@ let ``A dot on a value does not reach a definition attached to its type, and the
         onlyDiagnostic "type Point = (x: int, y: int)\ndef Point.length = { p -> p.x + p.y }\ndef p = Point(x = 3, y = 4)\ndef n = p.length\n"
     Assert.Equal("Record 'p' has no member 'length'. 'Point.length' is attached to its type: call it with a pipe, as in `p \\length`", message)
     // Nothing attached: the property is just missing.
-    Assert.Equal((DiagnosticCodes.UnknownMember.Code, "'string' has no property 'size'", "size"), onlyDiagnostic "def s = \"x\"\ndef n = s.size\n")
+    Assert.Equal((DiagnosticCodes.UnknownMember.Code, "'string' has no property 'size'", "size"), onlyDiagnostic (withFinalNewline """def s = "x"
+def n = s.size"""))
 
 [<Fact>]
 let ``nanyx/text imported with as is only reached qualified from a pipe`` () =
-    let qualified = Compiler.compile "import nanyx/text as t\ndef x = \" a \" \\ t.string.trim"
+    let qualified = Compiler.compile (normalized """import nanyx/text as t
+def x = " a " \ t.string.trim""")
     Assert.True(qualified.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{qualified.Diagnostics}")
-    let short = Compiler.compile "import nanyx/text as t\ndef x = \" a \" \\ trim"
+    let short = Compiler.compile (normalized """import nanyx/text as t
+def x = " a " \ trim""")
     assertReports DiagnosticCodes.UnknownFunction short
 
 [<Fact>]

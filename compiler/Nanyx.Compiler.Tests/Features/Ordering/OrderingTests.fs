@@ -48,7 +48,8 @@ let ``A def that writes its type must require Ord of a type variable it orders``
 
 [<Fact>]
 let ``A def that requires Ord of a type variable orders through the instance it is passed`` () =
-    let typed = compileClean "def less: [Ord(a)] a, a -> bool = { x, y -> x < y }\ndef b = less(\"a\", \"b\")\n"
+    let typed = compileClean (withFinalNewline """def less: [Ord(a)] a, a -> bool = { x, y -> x < y }
+def b = less("a", "b")""")
     match instancesOf typed with
     | [ InstanceInScope({ Kind = TypeApply("Ord", _) }, _); _ ] -> ()
     | other -> failwith $"Unexpected instances: %A{other}"
@@ -111,7 +112,8 @@ let ``An Ord loaded with use orders a built-in type in its block`` () =
 
 [<Fact>]
 let ``List.sortBy takes a key of any type with an order`` () =
-    let typed = compileClean "def sorted = list.sortBy([\"bb\", \"a\"], { s -> s })\ndef byPair = list.sortBy([1, 2], { n -> (n, \"x\") })\n"
+    let typed = compileClean (withFinalNewline """def sorted = list.sortBy(["bb", "a"], { s -> s })
+def byPair = list.sortBy([1, 2], { n -> (n, "x") })""")
     Assert.Equal("list(string)", Unifier.tyToString typed.Types.["sorted"])
     Assert.Equal("list(int)", Unifier.tyToString typed.Types.["byPair"])
 

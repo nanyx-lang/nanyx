@@ -69,7 +69,12 @@ let ``The flow view lists the signature's contexts and each use, with the calls 
 
 [<Fact>]
 let ``The flow view shows what an unannotated def was inferred to require`` () =
-    let source = "import nanyx/console\n\ndef greet = {\n  println(\"a\")\n  println(\"b\")\n}\n"
+    let source = withFinalNewline """import nanyx/console
+
+def greet = {
+  println("a")
+  println("b")
+}"""
     Assert.Equal(Some ("greet", [ "Console", "inferred", "greet", [ "println"; "println" ] ]), flowAt source "println" 0)
 
 [<Fact>]

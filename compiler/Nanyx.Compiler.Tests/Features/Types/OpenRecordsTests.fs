@@ -43,6 +43,6 @@ let ``Hover shows an open record annotation with its row`` () =
 
 [<Fact>]
 let ``A with on an open record updates only the fields it lists`` () =
-    let source = "def setLabel: (x: int, ...r) -> (x: int, ...r) = { p -> p with label = \"b\" }\n"
+    let source = withFinalNewline """def setLabel: (x: int, ...r) -> (x: int, ...r) = { p -> p with label = "b" }"""
     let diagnostic = diagnosticOf source
     Assert.Equal(DiagnosticCodes.UnknownMember.Code, diagnostic.Code)

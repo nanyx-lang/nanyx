@@ -120,7 +120,7 @@ let ``Typecheck rejects a lambda of several parameters whose signature's input i
     let messages source = (Compiler.compile source).Diagnostics |> List.map (fun diagnostic -> diagnostic.Message)
     Assert.Equal<string list>(
         [ "Type mismatch: #some(x: string, y: string) vs (t0, t1)." ],
-        messages "def g: #some(x: string, y: string) -> string = { x, y -> \"{x}{y}\" }\n")
+        messages (withFinalNewline """def g: #some(x: string, y: string) -> string = { x, y -> "{x}{y}" }"""))
     Assert.Equal<string list>(
         [ "Type mismatch: #some(x: string, y: string) vs (t1, t2)." ],
         messages (

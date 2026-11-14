@@ -123,7 +123,9 @@ def q = p
     // A tuple's numbered items are not names, and a value not yet known to be a record has no fields.
     Assert.Empty(members "def q" [ "t" ])
     // A string's built-in property, but never what is attached to `String`: that follows a pipe.
-    let withText = "import nanyx/text\ndef s = \"abc\"\ndef q = s\n"
+    let withText = withFinalNewline """import nanyx/text
+def s = "abc"
+def q = s"""
     Assert.Equal<(string * Completion.MemberKind * string option) list>(
         [ "length", Completion.Property, Some "int" ], membersIn (Compiler.compile withText) withText "def q" [ "s" ])
     Assert.Empty(members "v }" [ "v" ])
@@ -174,7 +176,8 @@ let ``After an import's alias come its exports, and after a prefix the names und
         Assert.Equal<(string * Completion.MemberKind * string option) list>(
             [ "foo", Completion.Definition, Some "int"; "twice", Completion.Definition, Some "int -> int" ],
             membersIn (Compiler.compileFile mainPath) mainSource "def value" [ "m" ]))
-    let source = "import nanyx/text as t\ndef shout = t.string.uppercase(\"hi\")\n"
+    let source = withFinalNewline """import nanyx/text as t
+def shout = t.string.uppercase("hi")"""
     let members = membersIn (Compiler.compile source) source "def shout"
     // A dotted export is offered a segment at a time.
     Assert.Contains(("string", Completion.Prefix, None), members [ "t" ])

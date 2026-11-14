@@ -10,7 +10,8 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``An unknown identifier is reported at the reference, not an earlier mention of the name`` () =
     // The old positioning searched the source for the first quoted name, which is in the string.
-    let source = "def note = \"missing\"\ndef value = missing"
+    let source = normalized """def note = "missing"
+def value = missing"""
     let diagnostic = single (Compiler.compile source)
     Assert.Equal(DiagnosticCodes.UnknownIdentifier.Code, diagnostic.Code)
     Assert.Equal(DiagnosticCodes.UnknownIdentifier.Title, diagnostic.Title)
