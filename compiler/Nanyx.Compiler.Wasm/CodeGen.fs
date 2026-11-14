@@ -5,6 +5,7 @@ open System.Text
 open NyxCompiler
 open Parser.Program
 open Transpiler.Wasm.Identifiers
+open Transpiler.Wasm.WasmAllocator
 open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
 

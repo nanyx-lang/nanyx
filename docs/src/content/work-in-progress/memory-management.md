@@ -22,7 +22,7 @@ place. Generic code is monomorphised, so every object's layout is known when it 
 # Where we are today
 
 The WebAssembly backend's allocator can free (`__nanyx_alloc` and `__nanyx_free` in
-`compiler/Nanyx.Compiler.Wasm/WasmRuntime.fs`; see Allocator below), every object on the heap has a reference count
+`compiler/Nanyx.Compiler.Wasm/WasmAllocator.fs`; see Allocator below), every object on the heap has a reference count
 and a drop function for its type (see Object header below), and the compiler inserts `dup` and `drop` (see
 Inserting counts below), so a program frees each object once nothing refers to it, and reuses an object it takes
 apart and holds the only reference to for a new one of the same size.
@@ -398,7 +398,7 @@ that the examples that compile free every block they allocate, and, counting wha
 mapping over a list, a tuple or a tag's cell held once allocates nothing, and nor does `with` on a record held once.
 
 **Memory checks.** `nanyx run --check-memory` (`WasmOptions.CheckMemory`) compiles the program with an allocator
-and counts that check themselves (`checkedRuntimeHelpers` and `MemoryChecks` in `WasmRuntime.fs`):
+and counts that check themselves (`checkedRuntimeHelpers` in `WasmRuntime.fs` and `MemoryChecks` in `WasmAllocator.fs`):
 
 - `alloc` and `free` count the blocks still in use. The program's start function is exported rather than run on
   instantiation, so the CLI can read the count once the program has finished. A count above 0 fails the run.
