@@ -55,7 +55,8 @@ let ``Every section has an example, unless no program reports its code`` () =
 let errorExamples () : obj array seq =
     docExamplesOf pagePath |> Map.keys |> Seq.map (fun line -> [| box line |])
 
-/// The files of an example: each starts with a line `-- file: <name>`, and the first is the one compiled. An example
+/// The files of an example: each starts with a line `-- file: <name>`, which may be in a directory (`util/util.nyxp`),
+/// and the first is the one compiled. An example
 /// with no such line is one file, `main.nyx`.
 let private filesOf (code: string) =
     let lines = code.TrimEnd().Split('\n') |> List.ofArray
@@ -71,17 +72,17 @@ let private filesOf (code: string) =
     | _ -> [ "main.nyx", code ]
 
 /// The codes of the errors compiling `code` reports, with the backend's if the type checker reports none. An example
-/// whose first file is a manifest, `-- file: demo.nyxp`, reports what reading that manifest finds.
+/// whose first file is a manifest, `-- file: demo.nyxp`, reports what reading that manifest and its dependencies finds.
 let private errorsOf (code: string) =
     use directory = new TempDirectory()
     let files = filesOf code
     for name, text in files do
-        File.WriteAllText(Path.Combine(directory.Path, name), text)
+        let path = Path.Combine(directory.Path, name)
+        Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
+        File.WriteAllText(path, text)
     let name, text = List.head files
     if name.EndsWith Manifest.extension then
-        match Manifest.check (Path.Combine(directory.Path, name)) text with
-        | Result.Error errors -> errors
-        | Result.Ok _ -> []
+        (Package.compileManifest (Path.Combine(directory.Path, name)) text).Diagnostics
     else
         let result = Script.compileSource (Path.Combine(directory.Path, name)) text
         let errors = result.Diagnostics |> List.filter Diagnostics.isError

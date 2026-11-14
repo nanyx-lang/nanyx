@@ -87,8 +87,8 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
    every reader of the TOML form uses it. That means `Package.fs`, the language server, the formatter's settings,
    `nanyx new` and `examples/greeter/greeter.nyxp`. TOML support is removed, since Nanyx is in closed alpha.~~ Done.
 2. ~~**`nanyx manifest --json`.**~~ Done.
-3. **Path dependencies** in the new form ([#862](https://github.com/nanyx-lang/nanyx/issues/862)), then the rest of
-   [local packages](./packaging#local-packages-first).
+3. ~~**Path dependencies** in the new form ([#862](https://github.com/nanyx-lang/nanyx/issues/862))~~ Done; then the
+   rest of [local packages](./packaging#local-packages-first).
 4. **Typed settings**, once linters ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)) and hosts
    ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)) are packages that can declare them.
 5. ~~**The editor** treats `.nyxp` as Nanyx.~~ Done, apart from hover and completion in the manifest.

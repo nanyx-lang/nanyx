@@ -91,33 +91,37 @@ An anonymous module is therefore a compilation error when encountered during a p
 
 # Package dependencies
 
-Dependencies on other packages are declared in the package manifest's `dependencies` list:
+Dependencies on other packages are declared in the package manifest's `dependencies` list. Each entry names a package and the directory it is in, relative to the manifest:
 
 ```nanyx fragment
 (
   package = (name = "acme.app", version = "0.1.0")
-  dependencies = [(package = "acme.core", version = "2.1"), (package = "nanyx.web", version = "1.4")]
+  dependencies = [(package = "acme.core", path = "../core"), (package = "acme.web", path = "../web")]
 )
 ```
 
-Dependencies are not supported yet, so for now a `dependencies` list that isn't empty is an error.
+The directory holds the package's own `.nyxp`, whose `name` must be the one the entry gives. Packages can't be downloaded yet, so an entry with a `version` instead of a `path` is an error (`NYX0024`).
 
 Source code imports modules using the dependency's package name:
 
 ```nanyx fragment
 import (
   acme.core/collections
-  nanyx.web/http
+  acme.web/http
 )
 ```
 
-Versions are resolved by the package tooling and do not appear in Nanyx import expressions.
+Only the modules a package lists in its `publicModules` can be imported from another package (`NYX0025`):
 
-A package can only import modules from packages that it directly depends on. Dependencies of dependencies are not implicitly available to source code.
+```nanyx fragment
+(package = (name = "acme.core", version = "2.1.0", publicModules = ["collections"]))
+```
+
+A package can only import modules from packages that it directly depends on (`NYX0026`). Dependencies of dependencies are not implicitly available to source code. A build has one copy of each package: two dependencies that reach the same package in different directories are an error (`NYX0028`), and so is a cycle of packages that depend on each other (`NYX0027`). The dependencies' modules are checked once each and compiled into the same program as the package's own.
 
 # Project references
 
-Packages being developed together can reference each other using project references: a dependency that names the directory the other package is in, instead of a version.
+Packages being developed together can reference each other with path dependencies, as above: a dependency that names the directory the other package is in, instead of a version.
 
 ```nanyx fragment
 (

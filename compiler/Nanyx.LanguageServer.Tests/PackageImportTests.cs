@@ -66,4 +66,38 @@ public sealed class PackageImportTests : LanguageServerTestBase
         Assert.Equal(DocumentUri.FromFileSystemPath(format), definition.Location!.Uri);
         Assert.Equal(new Range(2, 4, 2, 14), definition.Location.Range);
     }
+
+    [Fact]
+    public async Task A_package_file_imports_a_public_module_of_a_path_dependency_and_finds_its_definitions()
+    {
+        File.WriteAllText(TempPath("util", "util.nyxp"), """
+            (package = (name = "acme.util", version = "0.1.0", publicModules = ["strings"]))
+            """.ReplaceLineEndings("\n"));
+        var strings = TempPath("util", "strings.nyx");
+        File.WriteAllText(strings, """
+            module strings
+
+            export def shout: string -> string = { s -> s ++ "!" }
+            """.ReplaceLineEndings("\n"));
+        File.WriteAllText(TempPath("app", "app.nyxp"), """
+            (
+              package = (name = "app", version = "0.1.0")
+              dependencies = [(package = "acme.util", path = "../util")]
+            )
+            """.ReplaceLineEndings("\n"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("app", "main.nyx"));
+
+        Open(uri, """
+            module main
+
+            import acme.util/strings
+
+            def loud = shout("hi")
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var definition = Assert.Single(await DefinitionsAt(uri, 4, 12));
+        Assert.Equal(DocumentUri.FromFileSystemPath(strings), definition.Location!.Uri);
+        Assert.Equal(new Range(2, 11, 2, 16), definition.Location.Range);
+    }
 }

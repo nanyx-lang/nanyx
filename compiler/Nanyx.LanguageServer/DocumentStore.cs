@@ -245,7 +245,7 @@ public sealed class DocumentStore
         if (path is not null && path.EndsWith(ManifestModule.extension, StringComparison.OrdinalIgnoreCase))
         {
             // A package's manifest is data, not a module: it is checked, not compiled.
-            return new OpenDocument(text, path, ManifestModule.compile(path, text), null) { Sources = read };
+            return new OpenDocument(text, path, PackageModule.compileManifest(path, text), null) { Sources = read };
         }
 
         try

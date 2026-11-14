@@ -6,9 +6,20 @@ open System.Text.RegularExpressions
 open Parser.Program
 open Parser.Program.DataValues
 
+/// A package another depends on, in a directory on disk: `(package = "acme.util", path = "../util")` in `dependencies`.
+type Dependency =
+    { /// The package's name, which its own manifest must give it too.
+      Name: string
+      /// The full path of the directory its manifest is in.
+      Directory: string
+      /// Where its `package` is written.
+      NameSpan: SourceSpan
+      /// Where its `path` is written.
+      PathSpan: SourceSpan }
+
 /// A package's `.nyxp` manifest, as far as it is read so far: what the package is called, which files are its
-/// sources, which linters check them, and which host runs its `@entry`. Its `formatter` field is the formatter's,
-/// which reads it itself.
+/// sources, which of its modules other packages may import, what it depends on, which linters check it, and which host
+/// runs its `@entry`. Its `formatter` field is the formatter's, which reads it itself.
 type Manifest =
     { /// The manifest's full path.
       Path: string
@@ -18,6 +29,10 @@ type Manifest =
       Version: string
       /// Globs relative to `Root`: `**/*.nyx` unless the manifest says otherwise.
       Sources: string list
+      /// The names of the modules a package that depends on this one may import: `package`'s `publicModules`.
+      PublicModules: string list
+      /// The packages it depends on, in the order `dependencies` lists them.
+      Dependencies: Dependency list
       /// The linters the manifest's `linters` turns on, and the severities their `settings` set.
       Linters: LinterOptions
       /// The host `host` names, or the console host when the manifest has no `host`.
@@ -187,6 +202,48 @@ module Manifest =
             host
         | None -> Hosts.console
 
+    /// The fields of an entry of `dependencies`.
+    let private dependencyFields = [ "package"; "path"; "version" ]
+
+    /// The packages the manifest's `dependencies` lists, each in a directory relative to `root`. A version names a
+    /// package to download, which isn't supported yet.
+    let private readDependencies (problems: Problems) (root: string) (value: DataValue) : Dependency list =
+        let read (value: DataValue) =
+            problems.Record "a dependency" dependencyFields value
+            |> Option.bind (fun fields ->
+                let name = problems.RequiredText "a dependency" value.Location fields "package" namePattern nameRule
+                let example = $"""path = "../{name |> Option.map (fun name -> name.Substring(name.LastIndexOf '.' + 1)) |> Option.defaultValue "util"}" """.TrimEnd()
+                match DataValue.field "path" fields, DataValue.field "version" fields with
+                | _, Some version ->
+                    problems.Add
+                        DiagnosticCodes.UnsupportedManifestField
+                        version.NameSpan
+                        $"a dependency's version names a package to download, but packages can't be downloaded yet: give the directory the package is in, {example}"
+                    None
+                | None, None ->
+                    problems.Add DiagnosticCodes.MissingManifestField value.Location $"a dependency has no path, the directory the package is in: {example}"
+                    None
+                | Some path, None ->
+                    match name, path.Value.Data with
+                    | Some name, DataString directory ->
+                        Some
+                            { Name = name
+                              Directory = Path.GetFullPath(Path.Combine(root, directory))
+                              NameSpan = (DataValue.field "package" fields).Value.Value.Location
+                              PathSpan = path.Value.Location }
+                    | _, DataString _ -> None
+                    | _ ->
+                        problems.Add
+                            DiagnosticCodes.InvalidManifestValue
+                            path.Value.Location
+                            $"a dependency's path must be a string, the directory the package is in, not {DataValue.describe path.Value}"
+                        None)
+        match value.Data with
+        | DataList entries -> entries |> List.choose read
+        | _ ->
+            problems.Add DiagnosticCodes.InvalidManifestValue value.Location $"dependencies must be a list, [(package = ..., path = ...)], not {DataValue.describe value}"
+            []
+
     /// What is wrong with a file that is not one data value, as diagnostics.
     let private dataErrors (errors: DataError list) =
         errors
@@ -203,16 +260,7 @@ module Manifest =
             let problems = Problems()
             let top = problems.Record "the manifest" fields manifest |> Option.defaultValue []
             let field name = DataValue.field name top
-            match field "dependencies" with
-            | Some { DataField.Value = { DataValue.Data = DataList [] } } -> ()
-            | Some { DataField.Value = { DataValue.Data = DataList _ } as value } ->
-                problems.Add
-                    DiagnosticCodes.UnsupportedManifestField
-                    value.Location
-                    "dependencies are not supported yet: a package can only use the standard library and its own files"
-            | Some { DataField.Value = value } ->
-                problems.Add DiagnosticCodes.InvalidManifestValue value.Location $"dependencies must be a list, not {DataValue.describe value}"
-            | None -> ()
+            let dependencies = field "dependencies" |> Option.map (fun field -> readDependencies problems (Path.GetDirectoryName path) field.Value)
             match field "formatter" with
             | Some { DataField.Value = { DataValue.Data = DataRecord _ } }
             | None -> ()
@@ -224,14 +272,13 @@ module Manifest =
                     if manifest.Data.IsDataRecord then
                         problems.Add DiagnosticCodes.MissingManifestField manifest.Location "the manifest has no package, which needs at least a name and a version"
                     None
-            let name, version, sources =
+            let name, version, sources, publicModules =
                 match package with
                 | Some (fields, span) ->
                     let name = problems.RequiredText "package" span fields "name" namePattern nameRule
                     let version = problems.RequiredText "package" span fields "version" versionPattern "a semantic version: 1.2.0"
-                    problems.Strings "package" fields "publicModules" |> ignore
-                    name, version, problems.Strings "package" fields "sources"
-                | None -> None, None, None
+                    name, version, problems.Strings "package" fields "sources", problems.Strings "package" fields "publicModules"
+                | None -> None, None, None, None
             let linters = field "linters" |> Option.map (fun field -> readLinters problems field.Value)
             let host = field "host" |> Option.map (fun field -> readHost problems field.Value)
             match problems.All with
@@ -242,6 +289,8 @@ module Manifest =
                       Name = defaultArg name ""
                       Version = defaultArg version ""
                       Sources = defaultArg sources [ "**/*.nyx" ]
+                      PublicModules = defaultArg publicModules []
+                      Dependencies = defaultArg dependencies []
                       // No `linters` means no linters: a package turns on the official one by naming nanyx.lint.
                       Linters = defaultArg linters Linters.none
                       Host = defaultArg host Hosts.console
@@ -287,19 +336,6 @@ module Manifest =
             write value
         )
         Text.Encoding.UTF8.GetString(stream.ToArray()).ReplaceLineEndings "\n"
-
-    /// The manifest at `path`, whose text is `text`, as the editor shows it: a compile whose diagnostics are the problems
-    /// with it (see `check`), with nothing compiled, since a manifest is data.
-    let compile (path: string) (text: string) : CompileResult =
-        { Phase = Parsed
-          Diagnostics = (match check path text with Result.Error problems -> problems | Result.Ok _ -> [])
-          Typed = None
-          TypeChecked = false
-          ErrorsDeferred = false
-          Syntax = None
-          ModuleName = None
-          Lowered = Map.empty
-          DocComments = lazy DocComments.none }
 
     /// The manifest at `path`, or every problem with it (see `check`).
     let read (path: string) : Result<Manifest, Diagnostic list> = check path (File.ReadAllText path)
