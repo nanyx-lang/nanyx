@@ -89,11 +89,13 @@ def main = {
   println("{loop(1000000, 0)}")
 }
 """
-    // `apply` is inlined into `loop`, and its call of the lambda, which calls `loop`, is still the last thing `loop`
-    // does: a million of them would overflow the stack if each were an ordinary call.
+    // `apply` is inlined into `loop`, and its call of the lambda, which calls `loop`, is a direct call and still the last
+    // thing `loop` does: a million of them would overflow the stack if each were an ordinary call. The lambda calls
+    // `loop`, so it is not inlined.
     let loop = functionText "loop" (transpileWat source)
     Assert.DoesNotContain("call $apply", loop)
-    Assert.Contains("return_call_indirect", loop)
+    Assert.DoesNotContain("call_indirect", loop)
+    Assert.Contains("return_call $__lambda", loop)
     runSource source |> assertRan "1000000\n"
 
 [<Fact>]
@@ -135,7 +137,44 @@ let private allocationsOfRun (program: WasmProgram) =
     program.Allocations - before, result
 
 [<Fact>]
-let ``A proc block allocates no more inlined`` () =
+let ``A closure inlining leaves unread is not made`` () =
+    let source =
+        normalized """def apply: (int -> int), int -> int = { f, x -> f(x) }
+
+def run: int -> int = { n -> apply({ m -> m + n }, 1) }
+"""
+    use inlined = instantiateWasm source []
+    use notInlined = instantiateWat (transpileWatWith { checkedOptions with Inline = false } source) []
+    let inlinedAllocations, inlinedResult = allocationsOfRun inlined
+    let notInlinedAllocations, _ = allocationsOfRun notInlined
+    Assert.Equal(101, inlinedResult)
+    // The lambda captures `n`, so it is a closure block. Inlined, its body reads `n` from the closure it is called
+    // through, which is known, and then nothing reads the closure.
+    Assert.Equal(1, notInlinedAllocations)
+    Assert.Equal(0, inlinedAllocations)
+
+[<Fact>]
+let ``A match on a tag made where it is known takes its arm`` () =
+    let source =
+        normalized """def orZero: (#some(int) | #none) -> int = { option ->
+  match option
+    | #some(value) -> value
+    | #none -> 0
+}
+
+def run: int -> int = { n -> orZero(#some(n + 1)) }
+"""
+    use inlined = instantiateWasm source []
+    use notInlined = instantiateWat (transpileWatWith { checkedOptions with Inline = false } source) []
+    let inlinedAllocations, inlinedResult = allocationsOfRun inlined
+    let notInlinedAllocations, _ = allocationsOfRun notInlined
+    Assert.Equal(101, inlinedResult)
+    // Inlined, `orZero`'s match is on the `#some` made just before it, so it takes that arm, and nothing reads the tag.
+    Assert.Equal(1, notInlinedAllocations)
+    Assert.Equal(0, inlinedAllocations)
+
+[<Fact>]
+let ``A proc block allocates fewer inlined`` () =
     let source =
         normalized """def getA: int -> #some(int) | #none = { n -> if n > 0 then #some(n) else #none }
 
@@ -164,6 +203,7 @@ def run: int -> int = { n -> go(n, 0) }
     let notInlinedAllocations, notInlinedResult = allocationsOfRun notInlined
     Assert.Equal(15450, inlinedResult)
     Assert.Equal(notInlinedResult, inlinedResult)
-    // `proc` and the block are inlined, but the members still reach the block through adapters and boxes, so both make
-    // 29 allocations a block: removing those is the next steps on the Inlining page.
-    Assert.True(inlinedAllocations <= notInlinedAllocations, $"{inlinedAllocations} allocations inlined, {notInlinedAllocations} not")
+    // Not inlined, the block makes 29 allocations. Inlined, `proc`, the block, the members and the continuations are
+    // inlined, and no closure is made for any of them, but the members' generic values are still boxed: 17.
+    Assert.Equal(2900, notInlinedAllocations)
+    Assert.Equal(1700, inlinedAllocations)

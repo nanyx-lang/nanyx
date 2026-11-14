@@ -245,15 +245,11 @@
 
   (type $ctx_fn_1 (func (param i32) (result i32)))
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
-  (type $ctx_fn_3 (func (param i32 i32 i32) (result i32)))
   (type $ctx_fn_3_i32_i64_i64_to_i64 (func (param i32 i64 i64) (result i64)))
-  (table $ctx_table 2 funcref)
-  (elem (i32.const 0) $__lambda_1 $__lambda_3)
+  (table $ctx_table 0 funcref)
 
   (data (i32.const 256) "\00\00\00\00\05\00\00\00Hello\00\00\00")
   (data (i32.const 272) "\00\00\00\00\02\00\00\00()\00\00")
-  (data (i32.const 284) "\00\00\00\00\00\00\00\00\00\00\00\00")
-  (data (i32.const 296) "\00\00\00\00\00\00\00\00\01\00\00\00")
 
   (func $f (param $__ctx_println i32) (param $__ctx_add i32) (result i64)
     local.get $__ctx_println
@@ -271,22 +267,11 @@
   )
   (export "f" (func $f))
 
-  (func $main (result i64) (local $__use_println_0 i32) (local $__use_add_2 i32) (local $__env__in2 i32) (local $s__in2 i32) (local $__dbg_value__in2 i32) (local $__env__in3 i32) (local $x__in3_i64 i64) (local $y__in3_i64 i64) (local $__owned_0 i32)
-    i32.const 292
-    local.set $__use_println_0
-    i32.const 304
-    local.set $__use_add_2
-    local.get $__use_println_0
-    local.set $__env__in2
-    local.get $__env__in2
-    call $__nanyx_drop_rec_0_word
+  (func $main (result i64) (local $s__in2 i32) (local $__dbg_value__in2 i32) (local $x__in3_i64 i64) (local $y__in3_i64 i64) (local $__owned_0 i32)
     i32.const 264
     local.set $s__in2
     local.get $s__in2
     local.set $__dbg_value__in2
-    local.get $__dbg_value__in2
-    call $__nanyx_dup_string
-    drop
     local.get $__dbg_value__in2
     call $__dbg_show_unit
     local.tee $__owned_0
@@ -295,14 +280,6 @@
     local.get $__owned_0
     call $__nanyx_drop_string
     drop
-    local.get $__dbg_value__in2
-    call $__nanyx_drop_string
-    i32.const 0
-    drop
-    local.get $__use_add_2
-    local.set $__env__in3
-    local.get $__env__in3
-    call $__nanyx_drop_rec_0_word
     i64.const 3
     local.set $x__in3_i64
     i64.const 4
@@ -314,13 +291,8 @@
   (export "main" (func $main))
 
   (func $__lambda_1 (param $__env i32) (param $s i32) (result i32) (local $__dbg_value i32) (local $__owned_0 i32)
-    local.get $__env
-    call $__nanyx_drop_rec_0_word
     local.get $s
     local.set $__dbg_value
-    local.get $__dbg_value
-    call $__nanyx_dup_string
-    drop
     local.get $__dbg_value
     call $__dbg_show_unit
     local.tee $__owned_0
@@ -329,15 +301,11 @@
     local.get $__owned_0
     call $__nanyx_drop_string
     drop
-    local.get $__dbg_value
-    call $__nanyx_drop_string
     i32.const 0
   )
   (export "__lambda_1" (func $__lambda_1))
 
   (func $__lambda_3 (param $__env i32) (param $x_i64 i64) (param $y_i64 i64) (result i64)
-    local.get $__env
-    call $__nanyx_drop_rec_0_word
     local.get $x_i64
     local.get $y_i64
     call $__nanyx_int_add
@@ -410,30 +378,6 @@
     local.get $p
   )
 
-  (func $__nanyx_drop_rec_0_word (param $p i32)
-    ;; (0: word)
-    local.get $p
-    i32.const 8
-    i32.sub
-    call $__nanyx_release
-    if
-      local.get $p
-      i32.const 8
-      i32.sub
-      call $__nanyx_free
-    end
-  )
-
-  (func $__nanyx_dup_rec_0_word (param $p i32) (result i32)
-    block $shared
-      local.get $p
-      i32.const 8
-      i32.sub
-      call $__nanyx_retain
-    end
-    local.get $p
-  )
-
   (func $__nanyx_drop_string (param $p i32)
     ;; string
     local.get $p
@@ -449,6 +393,30 @@
   )
 
   (func $__nanyx_dup_string (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
+  )
+
+  (func $__nanyx_drop_rec_0_word (param $p i32)
+    ;; (0: word)
+    local.get $p
+    i32.const 8
+    i32.sub
+    call $__nanyx_release
+    if
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_free
+    end
+  )
+
+  (func $__nanyx_dup_rec_0_word (param $p i32) (result i32)
     block $shared
       local.get $p
       i32.const 8

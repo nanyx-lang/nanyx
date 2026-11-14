@@ -4,162 +4,6 @@
 
   (global $heap_ptr (mut i32) (i32.const 4132))
 
-  (func $__nanyx_alloc (param $size i32) (result i32)
-    (local $link i32)
-    (local $ptr i32)
-    (local $found i32)
-    (local $rest i32)
-    local.get $size
-    i32.const 3
-    i32.add
-    i32.const -4
-    i32.and
-    local.tee $size
-    i32.eqz
-    if
-      i32.const 4
-      local.set $size
-    end
-    local.get $size
-    i32.const 32
-    i32.le_u
-    if (result i32)
-      i32.const 4092
-      local.get $size
-      i32.add
-    else
-      i32.const 4128
-    end
-    local.set $link
-    local.get $size
-    i32.const 32
-    i32.le_u
-    if
-      local.get $link
-      i32.load
-      local.tee $ptr
-      if
-        local.get $link
-        local.get $ptr
-        i32.load
-        i32.store
-        local.get $ptr
-        i32.const 4
-        i32.sub
-        local.get $size
-        i32.store
-        local.get $ptr
-        return
-      end
-    else
-      block $empty
-        loop $search
-          local.get $link
-          i32.load
-          local.tee $ptr
-          i32.eqz
-          br_if $empty
-          local.get $ptr
-          i32.const 4
-          i32.sub
-          i32.load
-          i32.const -4
-          i32.and
-          local.tee $found
-          local.get $size
-          i32.ge_u
-          if
-            local.get $found
-            local.get $size
-            i32.sub
-            i32.const 40
-            i32.ge_u
-            if
-              local.get $ptr
-              local.get $size
-              i32.add
-              i32.const 4
-              i32.add
-              local.tee $rest
-              i32.const 4
-              i32.sub
-              local.get $found
-              local.get $size
-              i32.sub
-              i32.const 4
-              i32.sub
-              i32.store
-              local.get $rest
-              local.get $ptr
-              i32.load
-              i32.store
-              local.get $link
-              local.get $rest
-              i32.store
-              local.get $size
-              local.set $found
-            else
-              local.get $link
-              local.get $ptr
-              i32.load
-              i32.store
-            end
-            local.get $ptr
-            i32.const 4
-            i32.sub
-            local.get $found
-            i32.store
-            local.get $ptr
-            return
-          end
-          local.get $ptr
-          local.set $link
-          br $search
-        end
-      end
-    end
-    global.get $heap_ptr
-    i32.const 4
-    i32.add
-    local.tee $ptr
-    local.get $size
-    i32.add
-    local.tee $rest
-    local.get $ptr
-    i32.lt_u
-    if
-      unreachable
-    end
-    local.get $rest
-    global.set $heap_ptr
-    global.get $heap_ptr
-    i64.extend_i32_u
-    i64.const 65535
-    i64.add
-    i64.const 16
-    i64.shr_u
-    i32.wrap_i64
-    memory.size
-    i32.sub
-    local.tee $rest
-    i32.const 0
-    i32.gt_s
-    if
-      local.get $rest
-      memory.grow
-      i32.const -1
-      i32.eq
-      if
-        unreachable
-      end
-    end
-    local.get $ptr
-    i32.const 4
-    i32.sub
-    local.get $size
-    i32.store
-    local.get $ptr
-  )
   (func $__nanyx_free (param $ptr i32)
     (local $size i32)
     (local $head i32)
@@ -291,19 +135,6 @@
     local.get $ptr
     i32.store
   )
-  (func $__nanyx_new_cell (param $size i32) (result i32)
-    (local $block i32)
-    local.get $size
-    i32.const 4
-    i32.add
-    call $__nanyx_alloc
-    local.tee $block
-    i32.const 1
-    i32.store
-    local.get $block
-    i32.const 4
-    i32.add
-  )
   (func $__nanyx_release (param $count i32) (result i32)
     (local $n i32)
     local.get $count
@@ -340,18 +171,6 @@
       i32.add
       i32.store
     end
-  )
-  (func $__nanyx_tag_box_i64 (param $code i32) (param $payload i64) (result i32)
-    (local $cell i32)
-    i32.const 12
-    call $__nanyx_new_cell
-    local.tee $cell
-    local.get $code
-    i32.store
-    local.get $cell
-    local.get $payload
-    i64.store offset=4
-    local.get $cell
   )
   (func $__nanyx_tag_code (param $tag i32) (result i32)
     local.get $tag
@@ -439,20 +258,14 @@
     )
   )
 
-  (func $main (result i64) (local $x i32) (local $y i32) (local $a_i64 i64) (local $b_i64 i64)
-    i32.const 5
+  (func $main (result i64) (local $a_i64 i64) (local $default__in2_i64 i64) (local $b_i64 i64) (local $__payload_value__in1_i64 i64)
     i64.const 42
-    call $__nanyx_tag_box_i64
-    local.set $x
-    i32.const 3
-    local.set $y
-    local.get $x
-    i64.const 0
-    call $getOrDefault__int
+    local.set $__payload_value__in1_i64
+    local.get $__payload_value__in1_i64
     local.set $a_i64
-    local.get $y
     i64.const 99
-    call $getOrDefault__int
+    local.set $default__in2_i64
+    local.get $default__in2_i64
     local.set $b_i64
     local.get $a_i64
     local.get $b_i64
@@ -481,40 +294,6 @@
   )
 
   (func $__nanyx_dup_tags_None_Some_int (param $p i32) (result i32)
-    block $shared
-      local.get $p
-      i32.const 1
-      i32.and
-      br_if $shared
-      local.get $p
-      i32.const 4
-      i32.sub
-      call $__nanyx_retain
-    end
-    local.get $p
-  )
-
-  (func $__nanyx_drop_tags_Some_int (param $p i32)
-    ;; #Some(int)
-    local.get $p
-    i32.const 1
-    i32.and
-    if
-      return
-    end
-    local.get $p
-    i32.const 4
-    i32.sub
-    call $__nanyx_release
-    if
-      local.get $p
-      i32.const 4
-      i32.sub
-      call $__nanyx_free
-    end
-  )
-
-  (func $__nanyx_dup_tags_Some_int (param $p i32) (result i32)
     block $shared
       local.get $p
       i32.const 1

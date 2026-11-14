@@ -550,17 +550,18 @@
   )
   (export "other.message" (func $other_message))
 
-  (func $main (result i32) (local $msg i32) (local $__dbg_value i32) (local $__owned_0 i32)
+  (func $main (result i32) (local $msg i32) (local $__dbg_value i32) (local $__inlined4 i32)
     i32.const 264
     local.set $msg
     local.get $msg
     local.set $__dbg_value
     local.get $__dbg_value
-    call $__dbg_show_string
-    local.tee $__owned_0
+    call $__nanyx_string_quote
+    local.set $__inlined4
+    local.get $__inlined4
     call $dbg_str
     i32.const 0
-    local.get $__owned_0
+    local.get $__inlined4
     call $__nanyx_drop_string
     drop
     local.get $__dbg_value

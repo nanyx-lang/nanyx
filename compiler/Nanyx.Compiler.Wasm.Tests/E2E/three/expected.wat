@@ -6,11 +6,7 @@
   )
   (export "isPositive" (func $isPositive))
 
-  (func $main (result i64) (local $a i32) (local $b i32) (local $x__in1_i64 i64) (local $positive i32)
-    i32.const 1
-    local.set $a
-    i32.const 0
-    local.set $b
+  (func $main (result i64) (local $x__in1_i64 i64) (local $positive i32)
     i64.const 5
     local.set $x__in1_i64
     local.get $x__in1_i64
