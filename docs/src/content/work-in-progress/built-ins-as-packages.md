@@ -50,7 +50,7 @@ project is linted and runs from the start. The lockfile records them like any ot
 
 # The manifest
 
-Decided by the maintainer. The manifest has a small, fixed set of top-level sections, and a package's settings sit
+Decided by the maintainer. (The TOML below is moving to a data-only Nanyx record, with the same sections and rules: see [The package manifest](./package-manifest).) The manifest has a small, fixed set of top-level sections, and a package's settings sit
 under its own entry, never at the top level, so a section is never mistaken for a package's configuration:
 
 ```toml
