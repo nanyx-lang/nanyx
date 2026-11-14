@@ -64,12 +64,12 @@ part of its type, as they are of `def k = say` (`Contexts.extractDefContexts`, w
 it requires at a type nothing constrains, as `dbg(twice)` names `twice: [Show(a)] a -> string`, needs no instance:
 when a parameter of the value is of such a type, the value is never called, since no value of that type is ever made,
 so the closure captures a stand-in for each such member, which panics (`CoreIrLowerInstances.neverCalled`,
-[#599](https://github.com/nanyx-lang/nanyx/issues/599)). A local def that doesn't write its type and names such a
-function point-free, as `def f = println` does, is read as the lambda that calls it, `{ __p0 -> println(__p0) }`
-(`ContextInstances.pointFreeAsLambda`, recorded in `ReadAs`), so it requires the context at its own type as any local
+[#599](https://github.com/nanyx-lang/nanyx/issues/599)). A def that doesn't write its type and names such a function
+point-free, as `def f = println` does, is read as the lambda that calls it, `{ __p0 -> println(__p0) }`
+(`ContextInstances.pointFreeAsLambda`, recorded in `ReadAs`), so it requires the context at its own type as any
 function that calls one does ([below](#function-values-that-require-contexts),
-[#807](https://github.com/nanyx-lang/nanyx/issues/807)). A top-level def written that way finds no instance yet
-([#1389](https://github.com/nanyx-lang/nanyx/issues/1389)).
+[#807](https://github.com/nanyx-lang/nanyx/issues/807)). At the top level it is then an unannotated function, which
+infers the ambient contexts it uses, not a script's value ([#1389](https://github.com/nanyx-lang/nanyx/issues/1389)).
 
 A function with a context variable, such as `apply: [c] ([c] a -> b), a -> b`, is specialised on the members of the
 contexts the variable stands for at each call, which it takes after its other parameters and passes to the function

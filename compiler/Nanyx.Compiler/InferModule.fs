@@ -222,8 +222,25 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
 
     let check (item: TopLevelItem) =
         match item.Kind with
-        | Def (ValueDef(isExport, name, typeOpt, expr)) ->
+        | Def (ValueDef(isExport, name, typeOpt, written)) ->
             beginDef ()
+            // `def p = println` is read as the lambda that calls `println`, so that it requires `ToString` at its own
+            // type (see `pointFreeAsLambda`). It is an unannotated function, then, not a script's value, as the
+            // pre-binding pass took it to be from its syntax: what it is matters only where it is used, which is
+            // checked after it (see `DefinitionOrder`).
+            let expr =
+                match (if typeOpt.IsNone then pointFreeAsLambda env state written else None) with
+                | Some lambda ->
+                    let unannotated =
+                        match TypeEnv.tryFind name env |> Option.bind _.Symbol with
+                        | Some symbol ->
+                            { state with
+                                ScriptValues = state.ScriptValues |> Map.remove name
+                                UnannotatedDefs = state.UnannotatedDefs |> Map.add name symbol }
+                        | None -> state
+                    state <- { unannotated with ReadAs = unannotated.ReadAs |> Map.add written.Id lambda }
+                    lambda
+                | None -> written
             // A def's own name is not in scope in its annotation: `def x: typeof x` says nothing.
             match DefAnnotations.read inferTypeOfValues currentModule (Ok ()) (withoutTopLevel name env) env state name typeOpt expr with
             | Error err -> abandon isExport name expr err
