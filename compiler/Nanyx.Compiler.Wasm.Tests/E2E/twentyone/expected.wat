@@ -557,6 +557,8 @@
     local.set $__dbg_value
     local.get $__dbg_value
     call $__nanyx_string_quote
+    local.get $__dbg_value
+    call $__nanyx_drop_string
     local.set $__inlined4
     local.get $__inlined4
     call $dbg_str
@@ -564,7 +566,7 @@
     local.get $__inlined4
     call $__nanyx_drop_string
     drop
-    local.get $__dbg_value
+    i32.const 264
   )
   (export "main" (func $main))
 

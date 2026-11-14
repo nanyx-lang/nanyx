@@ -265,8 +265,10 @@ Each `try` boxes its payload into a new `#some` cell, adapts its continuation (w
 and boxes the result it returns into a new cell), and unboxes its result into a new cell again; `return` boxes its
 value. A block of three `bind`s and a `ret` written by hand on a `Proc` context makes 28 with the members generic,
 against 11 with the same members written on `int`. Inlining and simplifying after it
-([#1339](https://github.com/nanyx-lang/nanyx/issues/1339)) remove the closures and adapters, and leave the boxes: 17
-allocations a block (see [Inlining](./inlining#what-it-costs)).
+([#1339](https://github.com/nanyx-lang/nanyx/issues/1339)) remove the closures and adapters, which leaves the boxes: 17
+allocations a block. Copying a match into the branches whose tag it tests
+([#1340](https://github.com/nanyx-lang/nanyx/issues/1340)) removes the boxes too: 1 allocation, the `#some` the block
+returns, and about 9 ns a block against 240 ns without inlining (see [Inlining](./inlining#what-it-costs)).
 
 ### Measured before the change
 

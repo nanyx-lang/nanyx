@@ -143,6 +143,8 @@ type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string
 
     /// One time over `body`: each call that is to be inlined is.
     member this.Round (body: Expr) : Expr * bool =
+        // Simplifying makes variables of its own, which new ones must not share an id with.
+        mapVars (fun v -> nextId <- max nextId v.Id; v) id body |> ignore
         // How often each function is called here, and the functions this body makes a closure over.
         let calls = Dictionary<string, int>()
         let closures = HashSet<string>()

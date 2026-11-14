@@ -258,10 +258,8 @@
     )
   )
 
-  (func $main (result i64) (local $a_i64 i64) (local $default__in2_i64 i64) (local $b_i64 i64) (local $__payload_value__in1_i64 i64)
+  (func $main (result i64) (local $a_i64 i64) (local $default__in2_i64 i64) (local $b_i64 i64)
     i64.const 42
-    local.set $__payload_value__in1_i64
-    local.get $__payload_value__in1_i64
     local.set $a_i64
     i64.const 99
     local.set $default__in2_i64

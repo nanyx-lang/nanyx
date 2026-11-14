@@ -6,6 +6,9 @@
 /// - a field read from a known closure's environment is the value the closure captured there;
 /// - a `match` takes the one arm its known scrutinees match, leaves out the arms they cannot, and no longer tests a
 ///   scrutinee that every arm matches whatever it is;
+/// - the code after an `if` or a `match` that gives a tag is copied into each branch when it matches on that tag, where
+///   the tag is known, if the copies come to little (case-of-case): how a box made in a branch meets its reading;
+/// - a chain that ends in a variable given another's value ends in that value;
 /// - a binding that nothing reads, of a value that has no effect, is not made.
 ///
 /// What is known about a variable comes from its binding (a closure, a tag, another variable) and from the arm it is
@@ -64,6 +67,79 @@ let private bindAll (bindings: (Var * Atom) list) (body: Expr) : Expr =
 /// Whether a value of `taken` can stand where one of `ty` was: they are held alike.
 let private heldAlike (taken: IrType) (ty: IrType) = CoreIrLayout.valueType taken = CoreIrLayout.valueType ty
 
+/// How often each variable is read in `e`.
+let private reads (e: Expr) : Dictionary<int, int> =
+    let counts = Dictionary<int, int>()
+    let read (v: Var) = counts.[v.Id] <- (match counts.TryGetValue v.Id with | true, n -> n + 1 | _ -> 1)
+    for e in allExprs e do
+        for atom in directAtoms e do
+            match atom with
+            | AVar v -> read v
+            | _ -> ()
+        directVars e |> List.iter read
+    counts
+
+/// `e` without the bindings that nothing reads of values that have no effect, and without the `do`s of such values. A
+/// temporary that nothing reads is evaluated for its effects with a `do`, since every temporary must be used.
+let private withoutUnread (e: Expr) : Expr * bool =
+    let counts = reads e
+    let mutable changed = false
+    let rec strip (e: Expr) : Expr =
+        let links, last = Chain.split e
+        links
+        |> Chain.rebuild
+            (fun link following ->
+                match link.Kind with
+                | Let(var, value, _) when not (counts.ContainsKey var.Id) ->
+                    if isPure value then
+                        changed <- true
+                        following
+                    elif var.Kind = Temp then
+                        changed <- true
+                        doValue (strip value) following
+                    else { link with Kind = Let(var, strip value, following) }
+                | Let(var, value, _) -> { link with Kind = Let(var, strip value, following) }
+                | Do(value, _) when isPure value ->
+                    changed <- true
+                    following
+                | Do(value, _) -> { link with Kind = Do(strip value, following) }
+                | _ -> Chain.relink link following)
+        <| mapNested strip last
+    let stripped = strip e
+    stripped, changed
+
+/// How many core IR nodes the code after a branch may grow by when it is copied into each branch (see `Simplifier.Sequence`).
+let private copyLimit = 40
+
+/// The variables bound in `e`: by a `let`, a pattern, a guard or a loop.
+let private boundIn (e: Expr) : Var list =
+    allExprs e
+    |> Seq.collect (fun e ->
+        match e.Kind with
+        | Let(v, _, _) -> [ v ]
+        | Match(_, arms) ->
+            arms |> List.collect (fun arm -> arm.Patterns |> List.collect (fun p -> Pattern.binds p @ List.map fst (Pattern.guards p)))
+        | ForEach loop -> ForLoop.locals loop
+        | _ -> [])
+    |> List.ofSeq
+
+/// Whether `rest` matches on the value of `var`, or of a variable the chain gives that value to.
+let private matchesOn (var: Var) (rest: Expr) =
+    let links, _ = Chain.split rest
+    let names =
+        links
+        |> List.fold
+            (fun (names: Set<int>) link ->
+                match link.Kind with
+                | Let(alias, { Kind = Atom(AVar v) }, _) when names.Contains v.Id -> names.Add alias.Id
+                | _ -> names)
+            (Set.singleton var.Id)
+    allExprs rest
+    |> Seq.exists (fun e ->
+        match e.Kind with
+        | Match(scrutinees, _) -> scrutinees |> List.exists (fun s -> names.Contains s.Id)
+        | _ -> false)
+
 /// One pass of the simplifier over the body of `f`, given the functions it may call.
 type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
     // How often each kind and name of variable is bound in the function: those of a variable that is the only one with
@@ -72,6 +148,12 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
     // The variables something assigns or writes into, whose value is not known from their binding.
     let assigned = HashSet<int>()
     let mutable changed = false
+    // Whether the code after a branch is being tried in each branch, inside which it is not tried again.
+    let mutable trying = false
+    let mutable nextId =
+        let mutable highest = f.Params |> List.fold (fun acc p -> max acc p.Id) 0
+        mapVars (fun v -> highest <- max highest v.Id; v) id f.Body |> ignore
+        highest
     do
         let bind (v: Var) =
             bound.[(v.Kind, v.Name)] <- (match bound.TryGetValue((v.Kind, v.Name)) with | true, n -> n + 1 | _ -> 1)
@@ -187,6 +269,9 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
         let rebuilt = ResizeArray<Expr -> Expr>()
         let mutable facts = facts
         let mutable remaining = links
+        let mutable branchedLast = None
+        // The atom each variable bound in this chain to one is given.
+        let aliases = Dictionary<int, Atom>()
         while not remaining.IsEmpty do
             let link = remaining.Head
             remaining <- remaining.Tail
@@ -205,15 +290,87 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
                 remaining <- { link with Kind = Let(local, value, link) } :: { next with Kind = Let(var, { tag with Kind = MakeTag(name, AVar local) }, next) } :: rest
             | Let(var, value, _), _ ->
                 let value = this.Value facts value
-                facts <- learn var (factOfValue facts value) facts
-                // A temporary's value is evaluated where it is used, so a chain that is its value stays whole there.
-                if var.Kind = Temp then rebuilt.Add(fun next -> Expr.make (Let(var, value, next)) next.Type)
-                else rebuilt.Add(fun next -> bindValue var value next)
+                match this.Branched facts var value remaining last with
+                | Some branched ->
+                    remaining <- []
+                    branchedLast <- Some branched
+                | None ->
+                    facts <- learn var (factOfValue facts value) facts
+                    match value.Kind with
+                    | Atom atom when not (assigned.Contains var.Id) -> aliases.[var.Id] <- atom
+                    | _ -> ()
+                    // A temporary's value is evaluated where it is used, so a chain that is its value stays whole there.
+                    if var.Kind = Temp then rebuilt.Add(fun next -> Expr.make (Let(var, value, next)) next.Type)
+                    else rebuilt.Add(fun next -> bindValue var value next)
             | Do(value, _), _ ->
                 let value = this.Value facts value
                 rebuilt.Add(fun next -> doValue value next)
             | _ -> rebuilt.Add(fun next -> Chain.relink link next)
-        Chain.rebuild (fun rebuild next -> rebuild next) (List.ofSeq rebuilt) (this.Value facts last)
+        let last =
+            match branchedLast, last.Kind with
+            | Some branched, _ -> branched
+            // A chain that ends in a variable it gives another's value to ends in that value.
+            | None, Atom(AVar result) ->
+                match aliases.TryGetValue result.Id with
+                | true, value when readable value && heldAlike (atomType value) last.Type ->
+                    changed <- true
+                    { last with Kind = Atom value; Type = atomType value }
+                | _ -> last
+            | None, _ -> this.Value facts last
+        Chain.rebuild (fun rebuild next -> rebuild next) (List.ofSeq rebuilt) last
+
+    /// `let var = value in rest`, with `rest` copied into each branch of `value`, when `value` is a `match` or an `if`
+    /// that gives a tag in some branch and `rest` matches on `var`: in each copy, which tag `var` is is known. It is
+    /// done only when the copies, simplified, grow the code by no more than `copyLimit` nodes, as when all but one of
+    /// them come to little.
+    member this.Branched (facts: Map<int, Fact>) (var: Var) (value: Expr) (links: Expr list) (last: Expr) : Expr option =
+        let rec givesTag (branch: Expr) =
+            match (snd (Chain.split branch)).Kind with
+            | MakeTag _
+            | Atom(ATag _) -> true
+            | Match(_, arms) -> arms |> List.exists (fun arm -> givesTag arm.Body)
+            | If(_, ifTrue, ifFalse) -> givesTag ifTrue || givesTag ifFalse
+            | _ -> false
+        let branches =
+            match value.Kind with
+            | Match(_, arms) -> arms |> List.map _.Body
+            | If(_, ifTrue, ifFalse) -> [ ifTrue; ifFalse ]
+            | _ -> []
+        if trying || var.Kind = Temp || assigned.Contains var.Id || not (List.exists givesTag branches) then None
+        else
+            let rest = Chain.rebuild Chain.relink links last
+            if not (matchesOn var rest) then None
+            else
+                let wasChanged = changed
+                trying <- true
+                let into index (branch: Expr) =
+                    let copy = bindValue var branch rest
+                    if index = 0 then copy else this.Fresh copy
+                let branched =
+                    match value.Kind with
+                    | Match(scrutinees, arms) -> Match(scrutinees, arms |> List.mapi (fun index arm -> { arm with Body = into index arm.Body }))
+                    | If(condition, ifTrue, ifFalse) -> If(condition, into 0 ifTrue, into 1 ifFalse)
+                    | kind -> kind
+                let simplified = this.Value facts (Expr.make branched rest.Type) |> withoutUnread |> fst
+                trying <- false
+                if size simplified <= size value + size rest + copyLimit then
+                    changed <- true
+                    Some simplified
+                else
+                    changed <- wasChanged
+                    None
+
+    /// `e` with every variable it binds made new, under a name of its own, as a copy of `e` beside it needs.
+    member _.Fresh (e: Expr) : Expr =
+        let renamed = Dictionary<int, Var>()
+        for v in boundIn e do
+            if not (renamed.ContainsKey v.Id) then
+                nextId <- nextId + 1
+                let fresh = { v with Id = nextId; Name = $"{v.Name}__c{nextId}" }
+                bound.[(fresh.Kind, fresh.Name)] <- 1
+                if assigned.Contains v.Id then assigned.Add fresh.Id |> ignore
+                renamed.[v.Id] <- fresh
+        mapVars (fun v -> match renamed.TryGetValue v.Id with | true, fresh -> fresh | _ -> v) id e
 
     /// An expression, with what `facts` tell put to use in it.
     member this.Value (facts: Map<int, Fact>) (e: Expr) : Expr =
@@ -288,47 +445,6 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
                     if not hasGuard then failed <- failedArmFacts failed scrutinees arm.Patterns
                     { arm with Body = body })
             { e with Kind = Match(scrutinees, arms) }
-
-/// How often each variable is read in `e`.
-let private reads (e: Expr) : Dictionary<int, int> =
-    let counts = Dictionary<int, int>()
-    let read (v: Var) = counts.[v.Id] <- (match counts.TryGetValue v.Id with | true, n -> n + 1 | _ -> 1)
-    for e in allExprs e do
-        for atom in directAtoms e do
-            match atom with
-            | AVar v -> read v
-            | _ -> ()
-        directVars e |> List.iter read
-    counts
-
-/// `e` without the bindings that nothing reads of values that have no effect, and without the `do`s of such values. A
-/// temporary that nothing reads is evaluated for its effects with a `do`, since every temporary must be used.
-let private withoutUnread (e: Expr) : Expr * bool =
-    let counts = reads e
-    let mutable changed = false
-    let rec strip (e: Expr) : Expr =
-        let links, last = Chain.split e
-        links
-        |> Chain.rebuild
-            (fun link following ->
-                match link.Kind with
-                | Let(var, value, _) when not (counts.ContainsKey var.Id) ->
-                    if isPure value then
-                        changed <- true
-                        following
-                    elif var.Kind = Temp then
-                        changed <- true
-                        doValue (strip value) following
-                    else { link with Kind = Let(var, strip value, following) }
-                | Let(var, value, _) -> { link with Kind = Let(var, strip value, following) }
-                | Do(value, _) when isPure value ->
-                    changed <- true
-                    following
-                | Do(value, _) -> { link with Kind = Do(strip value, following) }
-                | _ -> Chain.relink link following)
-        <| mapNested strip last
-    let stripped = strip e
-    stripped, changed
 
 /// The most passes the simplifier makes over a body before it is given back as it is by then.
 let private passes = 8
