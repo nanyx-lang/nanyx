@@ -5,8 +5,9 @@ open System
 open Parser.Program
 
 /// Prints types. The expressions in them (a refinement's predicate, a `typeof`, a field's default) are printed by
-/// `expression`, or by `expressionFollowed` where something follows on the line.
-type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -> Doc) =
+/// `expression`, or by `expressionFollowed` where something follows on the line. A field's attribute is printed by
+/// `attribute`, as a top-level one is.
+type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -> Doc, attribute: Identifier -> Expression option -> SourceSpan -> Doc) =
     let text = Doc.text
     let cat = Doc.concat
     let commaJoin docs = Doc.join (text ", ") docs
@@ -92,10 +93,10 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
         | TypeHole -> text "_"
         | TypeUnit -> text "()"
         | TypeTuple _ -> parenType t
-        | TypeRecord fields -> cat [ text "("; commaJoin (List.map recordTypeField fields); text ")" ]
+        | TypeRecord fields -> cat [ text "("; commaJoin (recordTypeFields fields); text ")" ]
         | TypeOpenRecord(fields, row) ->
             let others = text ("..." + Option.defaultValue "" row)
-            cat [ text "("; commaJoin (List.map recordTypeField fields @ [ others ]); text ")" ]
+            cat [ text "("; commaJoin (recordTypeFields fields @ [ others ]); text ")" ]
         // `mut int`, the type of a cell (see `CellPassingSyntax`): what it holds is an atom, so a bigger type is bracketed.
         | TypeApply(n, [ held ]) when n = CellPassingSyntax.typeName ->
             match held.Kind with
@@ -153,6 +154,18 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
             ]
         | TypeMember(n, Some t) -> cat [ text $"type {n} = "; typeExpr t ]
         | TypeMember(n, None) -> text $"type {n}"
+        | TypeFieldAttribute(n, argument, span) -> attribute n argument span
+
+    /// The fields of a record type on one line, each after its attributes: `(@customKeywordType(#bind) await: ...)`.
+    and recordTypeFields (fields: TypeRecordField list) : Doc list =
+        TypeRecordField.withAttributes fields
+        |> List.map (fun (attributes, field) ->
+            cat [
+                for name, argument, span in attributes do
+                    attribute name argument span
+                    text " "
+                recordTypeField field
+            ])
 
     and contextSet (items: TypeExpr list) : Doc =
         let item (t: TypeExpr) =

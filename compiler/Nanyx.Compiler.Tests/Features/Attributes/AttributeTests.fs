@@ -49,3 +49,50 @@ let ``Entry attribute with an argument is an error, reported at the argument`` (
     Assert.Contains("Attribute '@entry' takes no argument", diagnostic.Message)
     let span = diagnostic.Span.Value
     Assert.Equal((7, 11), (span.Start, span.End))
+
+[<Fact>]
+let ``A context member's keyword kind is accepted, and the builder's block compiles`` () =
+    let source =
+        """context Logged = (
+  @customKeywordType(#bind)
+  step: [c] (int, ([c] int -> int)) -> int
+  return: int -> int
+)
+
+def logged: [c] ([Logged & c] () -> int) -> int = { block ->
+  use Logged(step = { value, continue -> continue(value + 1) }, return = { value -> value }) in block()
+}
+
+def result = logged {
+  def x = step! 1
+  return x * 10
+}
+"""
+    let result = Compiler.compile (source.ReplaceLineEndings "\n")
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+
+[<Fact>]
+let ``An unknown keyword kind is an error, reported at the attribute`` () =
+    let source = "context C = (\n  @customKeywordType(#bindF)\n  step: int\n)"
+    let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
+    Assert.Equal(DiagnosticCodes.UnknownKeywordKind.Code, diagnostic.Code)
+    Assert.Equal("Unknown keyword kind '#bindF': the kinds are `#bind`", diagnostic.Message)
+    Assert.Equal((16, 42), (diagnostic.Span.Value.Start, diagnostic.Span.Value.End))
+
+[<Fact>]
+let ``A keyword type without a kind is an error`` () =
+    let diagnostic = (Compiler.compile "context C = (\n  @customKeywordType\n  step: int\n)").Diagnostics |> List.exactlyOne
+    Assert.Equal(DiagnosticCodes.UnknownKeywordKind.Code, diagnostic.Code)
+    Assert.Contains("takes the keyword's kind", diagnostic.Message)
+
+[<Fact>]
+let ``An unknown attribute on a context's member is an error`` () =
+    let diagnostic = (Compiler.compile "context C = (\n  @inline\n  step: int\n)").Diagnostics |> List.exactlyOne
+    Assert.Equal(DiagnosticCodes.UnknownAttribute.Code, diagnostic.Code)
+    Assert.Equal((16, 23), (diagnostic.Span.Value.Start, diagnostic.Span.Value.End))
+
+[<Fact>]
+let ``An attribute on a field of a type that is not a context is misplaced`` () =
+    let diagnostic = (Compiler.compile "type T = (\n  @customKeywordType(#bind)\n  x: int\n)").Diagnostics |> List.exactlyOne
+    Assert.Equal(DiagnosticCodes.MisplacedAttribute.Code, diagnostic.Code)
+    Assert.Equal("Attribute '@customKeywordType' can only come before a member of a context declaration", diagnostic.Message)

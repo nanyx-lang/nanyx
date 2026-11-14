@@ -167,7 +167,8 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
                     fields
                     |> List.choose (function
                         | TypeField(fieldName, _, typeOpt, _)
-                        | TypeMember(fieldName, typeOpt) -> typeOpt |> Option.map (fun ty -> fieldName, ty))
+                        | TypeMember(fieldName, typeOpt) -> typeOpt |> Option.map (fun ty -> fieldName, ty)
+                        | TypeFieldAttribute _ -> None)
                     |> Map.ofList
                 Some (name, (parameters |> List.map fst, members))
             | _ -> None)

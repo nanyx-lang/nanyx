@@ -21,6 +21,18 @@ let ``@partial stays on the line of the module declaration it marks`` () =
     Assert.Equal(source, format (lines [ "@partial"; "module utils"; ""; "export def one = 1" ]))
 
 [<Fact>]
+let ``A context member's attribute is printed on the line above the member`` () =
+    let expected =
+        """context Async = (
+  @customKeywordType(#bind)
+  await: [c] (int, ([c] int -> int)) -> int
+  zero: int
+)
+"""
+    Assert.Equal(expected.ReplaceLineEndings "\n", format "context Async = (@customKeywordType( #bind ) await: [c] (int, ([c] int -> int)) -> int, zero: int)\n")
+    unchanged (expected.ReplaceLineEndings "\n")
+
+[<Fact>]
 let ``An attribute's argument is printed as a tag's payload is`` () =
     unchanged (lines [ "@test(#io)"; "def readsConfig = 1" ])
     unchanged (lines [ "@test()"; "def x = 1" ])

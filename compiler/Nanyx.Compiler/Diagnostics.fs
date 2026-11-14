@@ -74,6 +74,7 @@ module DiagnosticCodes =
     let EntrypointImported = code 16 "Entrypoint imported" Severity.Error
     let ScriptInPackage = code 17 "Script in a package" Severity.Error
     let DuplicateModule = code 18 "Module declared by more than one file" Severity.Error
+    let UnknownKeywordKind = code 19 "Unknown keyword kind" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -143,7 +144,7 @@ module DiagnosticCodes =
         [ SyntaxError; FileNotFound; ImportNotFound; ImportCycle; UnknownStandardLibraryModule
           InvalidStandardLibraryModule; UnknownAttribute; MisplacedAttribute; InvalidDirective; DirectiveInPackage
           UnsupportedDirective; CodeInModuleBlock; UnexpectedAttributeArgument; PathImportWithoutAlias
-          NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule
+          NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField

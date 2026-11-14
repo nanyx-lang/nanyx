@@ -349,7 +349,8 @@ and private recordFieldTypes (state: InferState) (fields: TypeRecordField list) 
         fields
         |> List.choose (function
             | TypeField(name, _, typeOpt, _) -> Some (name, typeOpt)
-            | TypeMember(name, typeOpt) -> Some (name, typeOpt))
+            | TypeMember(name, typeOpt) -> Some (name, typeOpt)
+            | TypeFieldAttribute _ -> None)
         |> List.map (fun (name, typeOpt) ->
             let ty, next =
                 match typeOpt with
@@ -520,7 +521,8 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
                     let memberSymbol, declared = declareUnscoped RecordTypeFields body.Id memberName ContextMember next
                     next <- declared
                     memberSymbol |> Option.map (fun id -> memberName, id)
-                | TypeMember _ -> None)
+                | TypeMember _
+                | TypeFieldAttribute _ -> None)
             |> Map.ofList
         | _ -> Map.empty
     let info =

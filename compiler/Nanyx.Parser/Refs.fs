@@ -24,6 +24,9 @@ let lambda, lambdaRef = createParserForwardedToRef<Expression, ParseState>()
 let functionCall, functionCallRef = createParserForwardedToRef<Expression, ParseState>()
 let matchExpr, matchExprRef = createParserForwardedToRef<Expression, ParseState>()
 let statement, statementRef = createParserForwardedToRef<Statement, ParseState>()
+/// An attribute's argument, written straight after its name as a tag's payload is: the `(#bind)` of
+/// `@customKeywordType(#bind)`.
+let attributeArgument, attributeArgumentRef = createParserForwardedToRef<Expression, ParseState>()
 /// One line of a block as the statements it stands for: a single statement, or the several a
 /// destructuring `def (x, y) = ...` desugars into.
 let statementItems, statementItemsRef = createParserForwardedToRef<Statement list, ParseState>()
