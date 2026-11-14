@@ -54,7 +54,6 @@ list every function a module exports.
 | `nanyx/console.host` | The [console host](./hosts): `run`, which takes the program's `@entry` and runs it with a `Console` built on `HostRuntime` |
 | `nanyx/host.runtime` | The `HostRuntime` context (`writeStdout`, `writeStderr`, `readStdinByte`) and the instance the toolchain provides to hosts; anywhere else, requiring it is an error (`NYX0238`) |
 | `nanyx/math`    | Arithmetic over `Num(a)`, so on `int` and `float`; comparisons over `Ord(a)` (`min`, `max`, `clamp` and the like); square roots, exponentials, logarithms and rounding on `float`; the constants `pi` and `e` ([math](../stdlib/math)) |
-| `nanyx/result`  | Nothing: kept so that `import nanyx/result` still compiles now that `proc` is in the prelude      |
 | `nanyx/text`    | Functions attached to `String`: measuring, searching, slicing, case, trimming, padding, splitting and joining, replacing, and characters; called as `string.trim(s)` or `s \trim` ([text](../stdlib/text)) |
 
 `println` comes from `nanyx/console`. A script imports it explicitly; the module that declares `@entry` gets it

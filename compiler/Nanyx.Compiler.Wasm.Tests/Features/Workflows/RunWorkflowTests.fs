@@ -245,7 +245,6 @@ let ``Run - a proc block continues past each #some and stops at the first #error
     // `try`s nested in its `return`.
     let source =
         normalized """import nanyx/console
-import nanyx/result
 
 def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }
 def g: int -> #some(string) | #error(#tooBig) = { n -> if n == 3 then #error(#tooBig) else #some("n = {n}") }
@@ -284,7 +283,6 @@ showInt(sum(5))
 let ``Run - a proc block gives back whichever failure stopped it`` () =
     let source =
         normalized """import nanyx/console
-import nanyx/result
 
 def name: int -> #some(string) | #nil = { n -> if n > 5 then #nil else #some("n{n}") }
 def find: string -> #some(int) | #notFound = { s -> if s == "n3" then #notFound else #some(7) }
