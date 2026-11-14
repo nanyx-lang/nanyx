@@ -284,7 +284,8 @@ The composite host runs each part under the right sub-host and coordinates start
 - **Hosts whose platform can't block are Elm-style for now.** The browser host's entry is `init`, `update` and `view`,
   and effects such as fetching and timers come back to `update` as messages. Nothing in the language suspends, so this
   can be built without async. Async is a separate design, for later.
-- **Hosts live in the standard library until packages resolve**: `nanyx/console.host` first, then
+- **Hosts live in the standard library until packages resolve**, and then become ordinary packages that the compiler
+  ships but doesn't treat specially ([Built-ins as packages](./built-ins-as-packages)): `nanyx/console.host` first, then
   `nanyx/browser.host`. They are chosen with a `[host]` table in the manifest or `--host` on the CLI. (The issues
   wrote `nanyx/console/host`; a module path has one `/`, between the package and the module, so the module is
   `console.host`.)
