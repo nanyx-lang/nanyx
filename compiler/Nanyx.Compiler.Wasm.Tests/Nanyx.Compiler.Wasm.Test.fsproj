@@ -102,6 +102,7 @@
     <Compile Include="Features\Ordering\RunOrderingTests.fs" />
     <Compile Include="Features\Packages\ManifestCommandTests.fs" />
     <Compile Include="Features\Packages\PackageCommandTests.fs" />
+    <Compile Include="Features\Packages\PathDependencyRunTests.fs" />
     <Compile Include="Features\Packages\PartialModuleTests.fs" />
     <Compile Include="Features\Packages\SelectiveImportTests.fs" />
     <Compile Include="Features\Packages\ReExportTests.fs" />

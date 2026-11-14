@@ -80,6 +80,10 @@ module DiagnosticCodes =
     let MissingManifestField = code 22 "Missing manifest field" Severity.Error
     let InvalidManifestValue = code 23 "Invalid manifest value" Severity.Error
     let UnsupportedManifestField = code 24 "Manifest field not supported yet" Severity.Error
+    let ModuleNotPublic = code 25 "Module not public" Severity.Error
+    let IndirectDependency = code 26 "Package is not a direct dependency" Severity.Error
+    let PackageCycle = code 27 "Packages depend on each other in a cycle" Severity.Error
+    let PackageReachedTwice = code 28 "Package reached by two paths" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -151,6 +155,7 @@ module DiagnosticCodes =
           UnsupportedDirective; CodeInModuleBlock; UnexpectedAttributeArgument; PathImportWithoutAlias
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
+          ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField

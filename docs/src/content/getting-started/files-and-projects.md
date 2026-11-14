@@ -49,7 +49,7 @@ println("Hello!")
 | `::linters.default` | Turns the official linter on, with every rule at its default severity | `linters = [(package = "nanyx.lint", version = "0.28.0")]` |
 | `::linters.default.unusedBindings = "error"` | Turns the linter on and sets one rule's severity (`"error"`, `"warning"`, `"info"`, `"hint"` or `"off"`) | `settings = (rules = (unusedBindings = #error))` in that linter's entry |
 | `::formatter.lineWidth = 80` | Sets one of the formatter's settings, `lineWidth` or `indentSize` | `formatter = (lineWidth = 80)` |
-| `::dependencies.acme.json = "1.2"` | Depends on a package: not supported yet, so it is an error for now | `dependencies = [(package = "acme.json", version = "1.2")]` |
+| `::dependencies.acme.json = "1.2"` | Depends on a package: not supported yet, so it is an error for now | `dependencies = [(package = "acme.json", path = "../json")]`, a package in a directory |
 
 As in a manifest, only the linters a script's `::linters` directives name run, so a script without one runs none. A directive the compiler does not understand, or one after the first line of code, is an error naming its line. A file that belongs to a package cannot have directives: its manifest is the one place a package says these things.
 

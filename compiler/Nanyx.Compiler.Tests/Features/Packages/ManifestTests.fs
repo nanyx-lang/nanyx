@@ -192,11 +192,9 @@ let ``An unknown linter, rule, severity or host is an error`` () =
     )
 
 [<Fact>]
-let ``Dependencies and a host's settings are not supported yet`` () =
+let ``A host's settings are not supported yet`` () =
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.UnsupportedManifestField.Code,
-          "dependencies are not supported yet: a package can only use the standard library and its own files"
-          DiagnosticCodes.UnsupportedManifestField.Code, "nanyx.console takes no settings" ],
+        [ DiagnosticCodes.UnsupportedManifestField.Code, "nanyx.console takes no settings" ],
         errorsOf
             """
 (

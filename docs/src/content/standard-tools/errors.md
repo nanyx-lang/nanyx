@@ -357,18 +357,149 @@ To fix it, write the value the message asks for: `sources = ["*.nyx"]`.
 
 # NYX0024: Manifest field not supported yet
 
-The manifest uses a field the compiler knows, but does not support yet: a `dependencies` list that isn't empty, or
-`settings` for a host.
+The manifest uses a field the compiler knows, but does not support yet: a dependency's `version`, which names a
+package to download, or `settings` for a host.
 
 ```nanyx
 -- file: demo.nyxp
 (
   package = (name = "demo", version = "0.1.0")
-  dependencies = [(package = "acme.util", path = "../util")]  -- error NYX0024: dependencies are not supported yet: ...
+  dependencies = [(package = "acme.util", version = "1.2")]  -- error NYX0024: a dependency's version names a package to download, ...
 )
 ```
 
-To fix it, remove the field. A package can use only the standard library and its own files for now.
+To fix it, give the directory the package is in instead, `path = "../util"`. Packages can't be downloaded yet.
+
+# NYX0025: Module not public
+
+A module imports a module of a package it depends on that the package does not make public. Another package can import
+only the modules a package lists in its manifest's `publicModules`.
+
+```nanyx
+-- file: main.nyx
+module main
+
+import acme.util/secrets  -- error NYX0025: The module 'secrets' of the package 'acme.util' is not public, ...
+
+@entry
+def run = { () -> ignore(mark) }
+-- file: app.nyxp
+(
+  package = (name = "app", version = "0.1.0", sources = ["*.nyx"])
+  dependencies = [(package = "acme.util", path = "util")]
+)
+-- file: util/util.nyxp
+(package = (name = "acme.util", version = "0.1.0", publicModules = ["strings"]))
+-- file: util/strings.nyx
+module strings
+
+export def shout = { s: string -> s ++ "!" }
+-- file: util/secrets.nyx
+module secrets
+
+export def mark = "!"
+```
+
+To fix it, import one of the package's public modules, or, if you maintain the package, add the module to its
+`publicModules`.
+
+# NYX0026: Package is not a direct dependency
+
+A module imports a package that only one of its package's dependencies depends on. A package can import only the
+packages its own manifest lists in `dependencies`.
+
+```nanyx
+-- file: main.nyx
+module main
+
+import acme.util/strings  -- error NYX0026: The package 'acme.util' is not a dependency of 'app', only of a package it depends on: ...
+
+@entry
+def run = { () -> ignore(shout("hi")) }
+-- file: app.nyxp
+(
+  package = (name = "app", version = "0.1.0", sources = ["*.nyx"])
+  dependencies = [(package = "acme.loud", path = "loud")]
+)
+-- file: loud/loud.nyxp
+(
+  package = (name = "acme.loud", version = "0.1.0", publicModules = ["louder"])
+  dependencies = [(package = "acme.util", path = "../util")]
+)
+-- file: loud/louder.nyx
+module louder
+
+import acme.util/strings
+
+export def louder = { s: string -> shout(shout(s)) }
+-- file: util/util.nyxp
+(package = (name = "acme.util", version = "0.1.0", publicModules = ["strings"]))
+-- file: util/strings.nyx
+module strings
+
+export def shout = { s: string -> s ++ "!" }
+```
+
+To fix it, add the package to `dependencies` in your own manifest, with the same path as the dependency that uses it.
+
+# NYX0027: Packages depend on each other in a cycle
+
+A package depends on itself through the packages it depends on. Packages are built in order of their dependencies,
+so there can't be a cycle.
+
+```nanyx
+-- file: a/a.nyxp
+(
+  package = (name = "acme.a", version = "0.1.0")
+  dependencies = [(package = "acme.b", path = "../b")]  -- error NYX0027: packages can't depend on each other in a cycle: acme.a -> acme.b -> acme.a
+)
+-- file: a/main.nyx
+module main
+-- file: b/b.nyxp
+(
+  package = (name = "acme.b", version = "0.1.0")
+  dependencies = [(package = "acme.a", path = "../a")]
+)
+-- file: b/other.nyx
+module other
+```
+
+To fix it, move what both packages need into a third package that both depend on.
+
+# NYX0028: Package reached by two paths
+
+A build reaches the same package, by its name, in two different directories: one package depends on it in one place,
+and another in another. A build has one version of each package.
+
+```nanyx
+-- file: app/app.nyxp
+(
+  package = (name = "app", version = "0.1.0")
+  dependencies = [
+    (package = "acme.util", path = "../util")
+    (package = "acme.loud", path = "../loud")
+  ]
+)
+-- file: app/main.nyx
+module main
+-- file: loud/loud.nyxp
+(
+  package = (name = "acme.loud", version = "0.1.0")
+  dependencies = [(package = "acme.util", path = "../copy")]  -- error NYX0028: the build reaches the package acme.util by two paths, ...
+)
+-- file: loud/louder.nyx
+module louder
+-- file: util/util.nyxp
+(package = (name = "acme.util", version = "0.1.0"))
+-- file: util/strings.nyx
+module strings
+-- file: copy/util.nyxp
+(package = (name = "acme.util", version = "0.1.0"))
+-- file: copy/strings.nyx
+module strings
+```
+
+To fix it, make every package that depends on it give the same directory.
 
 # NYX0101: Unknown identifier
 
