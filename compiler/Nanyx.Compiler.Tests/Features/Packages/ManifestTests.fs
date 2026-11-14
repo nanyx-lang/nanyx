@@ -37,7 +37,7 @@ let ``A manifest's package is read, with the default sources, no linters and the
 let ``A manifest is read with comments, its sources, public modules, formatter, empty dependencies and host`` () =
     let manifest =
         okOf
-            """
+            $"""
 -- The demo package.
 (
   package = (
@@ -48,7 +48,7 @@ let ``A manifest is read with comments, its sources, public modules, formatter, 
   )
   dependencies = []
   formatter = (lineWidth = 100)
-  host = (package = "nanyx.console", version = "0.28.0")
+  host = (package = "nanyx.console", version = "{Toolchain.version}")
 )
 """
     Assert.Equal("acme.demo", manifest.Name)
@@ -59,11 +59,11 @@ let ``A manifest is read with comments, its sources, public modules, formatter, 
 let ``Linters turn on the linters they name, with the severities their settings set`` () =
     let manifest =
         okOf
-            """
+            $"""
 (
   package = (name = "demo", version = "0.1.0")
   linters = [
-    (package = "nanyx.lint", version = "0.28.0", settings = (rules = (unusedBindings = #error, linterFailed = #off)))
+    (package = "nanyx.lint", version = "{Toolchain.version}", settings = (rules = (unusedBindings = #error, linterFailed = #off)))
   ]
 )
 """
@@ -150,7 +150,7 @@ let ``A linter or host without a package or version is an error`` () =
         [ DiagnosticCodes.MissingManifestField.Code, "a linter has no version, which it needs"
           DiagnosticCodes.MissingManifestField.Code, "the host has no package, which it needs" ],
         errorsOf
-            """(package = (name = "demo", version = "0.1.0"), linters = [(package = "nanyx.lint")], host = (version = "0.28.0"))"""
+            $"""(package = (name = "demo", version = "0.1.0"), linters = [(package = "nanyx.lint")], host = (version = "{Toolchain.version}"))"""
     )
 
 [<Fact>]
@@ -179,12 +179,12 @@ let ``An unknown linter, rule, severity or host is an error`` () =
           DiagnosticCodes.InvalidManifestValue.Code, "the rule unusedBindings must be #error, #warning, #info, #hint, #off, not the string \"error\""
           DiagnosticCodes.InvalidManifestValue.Code, "there is no host 'acme.host'; the hosts are 'nanyx.console'" ],
         errorsOf
-            """
+            $"""
 (
   package = (name = "demo", version = "0.1.0")
   linters = [
     (package = "acme.lint", version = "1.0.0")
-    (package = "nanyx.lint", version = "0.28.0", settings = (rules = (noSuchRule = #error, unusedBindings = "error")))
+    (package = "nanyx.lint", version = "{Toolchain.version}", settings = (rules = (noSuchRule = #error, unusedBindings = "error")))
   ]
   host = (package = "acme.host", version = "1.0.0")
 )
@@ -196,11 +196,32 @@ let ``A host's settings are not supported yet`` () =
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.UnsupportedManifestField.Code, "nanyx.console takes no settings" ],
         errorsOf
-            """
+            $"""
 (
   package = (name = "demo", version = "0.1.0")
   dependencies = [(package = "acme.util", path = "../util")]
-  host = (package = "nanyx.console", version = "0.28.0", settings = (colour = true))
+  host = (package = "nanyx.console", version = "{Toolchain.version}", settings = (colour = true))
 )
 """
     )
+
+[<Fact>]
+let ``A linter or host must be named at the version the compiler ships, exactly`` () =
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.VersionNotShipped.Code,
+          $"the compiler ships nanyx.lint {Toolchain.version}, not 0.1.0: a package the compiler ships is named at its version exactly"
+          DiagnosticCodes.VersionNotShipped.Code,
+          $"the compiler ships nanyx.console {Toolchain.version}, not 99.0.0: a package the compiler ships is named at its version exactly" ],
+        errorsOf
+            """
+(
+  package = (name = "demo", version = "0.1.0")
+  linters = [(package = "nanyx.lint", version = "0.1.0")]
+  host = (package = "nanyx.console", version = "99.0.0")
+)
+"""
+    )
+
+[<Fact>]
+let ``The compiler's version is its release, with no commit`` () =
+    Assert.Matches(@"^\d+\.\d+\.\d+$", Toolchain.version)

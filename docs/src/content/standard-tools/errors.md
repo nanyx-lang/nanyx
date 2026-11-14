@@ -501,6 +501,21 @@ module strings
 
 To fix it, make every package that depends on it give the same directory.
 
+# NYX0029: Version not shipped
+
+A manifest names a linter or host the compiler ships, such as `nanyx.lint` or `nanyx.console`, at a version other than
+the one it ships. The compiler ships each of them at its own version, and a manifest names them at it exactly.
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "demo", version = "0.1.0")
+  linters = [(package = "nanyx.lint", version = "0.1.0")]  -- error NYX0029: the compiler ships nanyx.lint ..., not 0.1.0: ...
+)
+```
+
+To fix it, write the version the message names, which `nanyx --version` prints too. `nanyx new` writes it for you.
+
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which

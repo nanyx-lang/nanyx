@@ -32,26 +32,26 @@ let private onPackage (host: string) (source: string) (arguments: string list) =
 
 [<Fact>]
 let ``A package whose host is the console host runs under it`` () =
-    let outcome = onPackage """host = (package = "nanyx.console", version = "0.28.0")""" main [ "run" ]
+    let outcome = onPackage $"""host = (package = "nanyx.console", version = "{Toolchain.version}")""" main [ "run" ]
     Assert.Equal("", outcome.StandardError)
     Assert.Equal("hello\n", outcome.StandardOutput)
     Assert.Equal(0, outcome.ExitCode)
 
 [<Fact>]
 let ``A host that isn't one is an error naming it`` () =
-    let outcome = onPackage """host = (package = "nanyx.nope", version = "0.28.0")""" main [ "check" ]
+    let outcome = onPackage $"""host = (package = "nanyx.nope", version = "{Toolchain.version}")""" main [ "check" ]
     Assert.Equal(1, outcome.ExitCode)
     Assert.Contains("app.nyxp:3:21: error NYX0023: there is no host 'nanyx.nope'; the hosts are 'nanyx.console'", outcome.StandardError)
 
 [<Fact>]
 let ``A host's settings are an error at the field, until hosts take settings`` () =
-    let outcome = onPackage """host = (package = "nanyx.console", version = "0.28.0", settings = (port = 3000))""" main [ "build" ]
+    let outcome = onPackage $"""host = (package = "nanyx.console", version = "{Toolchain.version}", settings = (port = 3000))""" main [ "build" ]
     Assert.Equal(1, outcome.ExitCode)
     Assert.Contains("app.nyxp:3:58: error NYX0024: nanyx.console takes no settings", outcome.StandardError)
 
 [<Fact>]
 let ``A host without a package is an error`` () =
-    let outcome = onPackage """host = (version = "0.28.0")""" main [ "run" ]
+    let outcome = onPackage $"""host = (version = "{Toolchain.version}")""" main [ "run" ]
     Assert.Equal(1, outcome.ExitCode)
     Assert.Contains("error NYX0022: the host has no package, which it needs", outcome.StandardError)
 [<Theory>]
@@ -86,9 +86,9 @@ let ``An entry that doesn't fit the package's host names the host, in the editor
     let root = directory.Path
     Directory.CreateDirectory(Path.Combine(root, "src")) |> ignore
     let manifest =
-        """(
+        $"""(
   package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"])
-  host = (package = "nanyx.console", version = "0.28.0")
+  host = (package = "nanyx.console", version = "{Toolchain.version}")
 )
 """
     File.WriteAllText(Path.Combine(root, "app.nyxp"), manifest)
