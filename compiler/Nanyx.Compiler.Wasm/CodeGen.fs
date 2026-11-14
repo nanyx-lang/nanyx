@@ -958,9 +958,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let usedHelperSet = closeHelpers Set.empty (usedHelpers |> Seq.toList)
     // Exiting, the arguments and the environment are not streams, but their WASI imports are declared with theirs.
     let moduleUsesStandardStreams =
-        [ Helpers.writeStdout; Helpers.writeStderr; Helpers.readStdinByte; Helpers.procExit; Helpers.arguments; Helpers.environment ]
+        [ Helpers.writeStdout; Helpers.writeStderr; Helpers.readStdin; Helpers.procExit; Helpers.arguments; Helpers.environment ]
         |> List.exists usedHelperSet.Contains
-    let moduleReadsStdin = usedHelperSet.Contains Helpers.readStdinByte
+    let moduleReadsStdin = usedHelperSet.Contains Helpers.readStdin
     let wasiPair (helperName: string) (wasi: string) =
         if usedHelperSet.Contains helperName then
             [ $"""  (import "wasi_snapshot_preview1" "{wasi}_sizes_get" (func ${wasi}_sizes_get (param i32 i32) (result i32)))"""
