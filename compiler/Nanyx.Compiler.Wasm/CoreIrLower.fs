@@ -34,6 +34,16 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     let usedNames = System.Collections.Generic.HashSet<string>()
     // The locals that stand for the members the function is specialised on, by id (see `CoreIrLowerKnown`).
     let known = System.Collections.Generic.Dictionary<int, Var * KnownMember>()
+    // The locals a `def` gives the value of a top-level function, by id: a `use` that binds one to a context member
+    // makes the member known where it is in scope, and a call through one calls the function directly.
+    let definedKnown = System.Collections.Generic.Dictionary<int, KnownMember>()
+
+    /// The member the local `var` is known to be, if it is.
+    let knownOf (var: Var) =
+        match known.TryGetValue var.Id, definedKnown.TryGetValue var.Id with
+        | (true, (_, knownMember)), _
+        | _, (true, knownMember) -> Some knownMember
+        | _ -> None
 
     let newVar (name: string) (kind: VarKind) (ty: IrType) =
         nextId <- nextId + 1
@@ -674,7 +684,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let contextParameters, memberTys = this.MemberTypes name instanceTy
         match input.ContextArguments name node (scope.Members |> Map.keys |> Set.ofSeq) Set.empty with
         | Ok arguments when arguments.Length = contextParameters.Length ->
-            let inScope key = scope.Members |> Map.tryFind key |> Option.bind (fun var -> match known.TryGetValue var.Id with | true, (_, knownMember) -> Some knownMember | _ -> None)
+            let inScope key = scope.Members |> Map.tryFind key |> Option.bind knownOf
             knownAmong input contextParameters arguments memberTys inScope
         | _ -> []
 
@@ -744,6 +754,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         match knownMember with
         | KnownFunction(wrapper, _, at) -> k (this.WrapperClosure wrapper (Some at))
         | KnownValue(definition, ty) -> bindTemp (Expr.make (Call(callee definition ty, [])) (toIrType ty)) k
+        | KnownConstant(constant, _) -> k constant
 
     /// `body` with each local that stands for a known member and that it uses given the member's value first.
     member private this.WithKnownValues (body: Expr) : Expr =
@@ -980,8 +991,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | _ -> [], []
         let call atoms =
             this.CoerceAll scope atoms (if parameterTys.Length = atoms.Length then parameterTys else []) (fun atoms ->
-                match known.TryGetValue closure.Id, closure.Type with
-                | (true, (_, KnownFunction(wrapper, wrapped, at))), IrFunction(input, _, _) ->
+                match knownOf closure, closure.Type with
+                | Some (KnownFunction(wrapper, wrapped, at)), IrFunction(input, _, _) ->
                     directArguments bindTemp (parameterNames wrapper).Tail.Length input atoms (fun atoms -> k (Expr.make (Call(callee wrapped at, atoms)) ty))
                 | _ ->
                     this.MemberAtoms scope members (fun memberAtoms ->
@@ -1125,6 +1136,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let statement =
                 this.Complex scope rhs (fun value ->
                     let local = newVar localName Local value.Type
+                    this.NoteDefinedKnown local rhs value
                     let members =
                         match scope.CapturedMembers |> Map.tryFind name with
                         | Some keys -> keys |> List.fold (fun acc key -> acc |> Map.add key local) scope.Members
@@ -1172,6 +1184,28 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             hole, Some (hole, scope, rest)
         | UseStatement _ :: _ -> cannot "this kind of `use`"
         | _ -> cannot "this kind of statement"
+
+    /// Records the local `local`, which a `def` gives the value `rhs`, lowered to `value`, as known when `rhs` is a
+    /// top-level function that is not generic and requires no contexts, named as a value (`def bump = addThree`, or what
+    /// lambda lifting makes of `use Counter(bump = addThree)`), an int or bool literal, or a local known already. Such a
+    /// local holds that value for as long as it is in scope (a cell's `def` is `mut(...)`, which is none of these), so a
+    /// call through it is a call to the function, and a `use` that binds it to a context member makes the member known.
+    member private this.NoteDefinedKnown (local: Var) (rhs: Expression) (value: Expr) =
+        match rhs.Kind, value.Kind with
+        | LiteralExpr(IntLit _ | BoolLit _), Atom(AInt _ | ASized _ | ABool _ as constant) ->
+            definedKnown.[local.Id] <- KnownConstant(constant, value.Type)
+        | IdentifierExpr _, Atom(AVar var) -> knownOf var |> Option.iter (fun knownMember -> definedKnown.[local.Id] <- knownMember)
+        | ClosureSyntax.Closure(target, []), _ ->
+            match input.Lifted |> Map.tryFind target with
+            | Some (FunctionWrapper wrapped) when
+                not (input.ContextParameters.ContainsKey wrapped)
+                && (contextVariables wrapped).IsEmpty
+                && input.DefinitionTypes |> Map.tryFind wrapped |> Option.exists (freeVars >> List.isEmpty)
+                ->
+                let _, at = wrappedAt input target None
+                definedKnown.[local.Id] <- KnownFunction(target, wrapped, at)
+            | _ -> ()
+        | _ -> ()
 
     /// Whether a `use` among `statements` binds the local `name` to a context member whose type has values boxed.
     member private this.BindsBoxingMember (name: string) (statements: StatementKind list) =
