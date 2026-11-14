@@ -157,3 +157,28 @@ def main = {
 }
 """
     runSource source |> assertRan "cc!\n"
+
+[<Fact>]
+let ``Run - a composition that does not write its type requires Console, which reaches it from where it is called`` () =
+    // `greet` is inferred as `[Console] string -> ()` (#1288), so each call passes it the `Console` in scope there.
+    let source =
+        """
+import nanyx/console
+
+def shout = { s -> println(s ++ "!") }
+def greet = { name -> "hello " ++ name } >> shout
+
+@entry
+def main = {
+  greet("ada")
+  use Console(
+    write = { text -> write("[" ++ text ++ "]") }
+    writeError = writeError
+    readLine = readLine
+    readToEnd = readToEnd
+    flush = flush
+  )
+  greet("bob")
+}
+"""
+    runSource source |> assertRan "hello ada!\n[hello bob!][\n]"

@@ -448,6 +448,22 @@ let internal contextSignatureOf (env: TypeEnv) (state: InferState) (name: Identi
     | Some symbol when symbol.Kind = Parameter || symbol.Kind = PatternVariable -> None
     | _ -> state.ContextSignatures |> Map.tryFind (canonicalName env state name)
 
+/// The ambient contexts the unannotated top-level function `name`, as `env` binds it, was inferred to require, once its
+/// body has been inferred: those it uses itself, and those of the unannotated functions it calls, as far as they have
+/// been inferred too. Defs are inferred in the order they use each other (see `DefinitionOrder`), so only a function
+/// in a cycle with the one naming it is not yet. `None` where `name` is not such a function, or is not inferred yet.
+let internal inferredAmbientContexts (env: TypeEnv) (state: InferState) (name: Identifier) : Set<Identifier> option =
+    let rec contextsOf (visited: Set<Identifier>) (defName: Identifier) =
+        state.DeferredContextUses
+        |> List.filter (fun used -> used.Caller = DefScope(defName, true) && not (visited.Contains used.Callee))
+        |> List.fold
+            (fun acc used -> Set.union acc (Set.difference (contextsOf (visited.Add used.Callee) used.Callee) used.Available))
+            (state.InferredContexts |> Map.tryFind defName |> Option.defaultValue Set.empty)
+    match state.UnannotatedDefs |> Map.tryFind name, TypeEnv.tryFind name env with
+    | Some symbol, Some scheme when scheme.Symbol = Some symbol && (match scheme.Type with TyVar _ -> false | _ -> true) ->
+        Some (contextsOf (Set.singleton name) name)
+    | _ -> None
+
 /// Checks the context use of naming `name` at `span`: a member of the ambient instance needs its context, and a use
 /// of an unannotated top-level def, or of a script's value, is kept to check once its contexts are known. Where the use
 /// is the call `call`, what provides the context of a member it calls is recorded, as is, once known, what provides

@@ -333,6 +333,13 @@ module Compiler =
                 TypeDefs = carried @ carriedParameterised |> List.fold (fun acc (name, info) -> acc |> Map.add name info) typeDefs
                 HiddenTypeNames = carried @ carriedParameterised |> List.fold (fun acc (name, _) -> acc |> Set.add name) hiddenTypeNames
                 CarriedAmbientContexts = carried |> List.fold (fun acc (name, _) -> acc |> Set.add name) state.CarriedAmbientContexts
+                HostContexts =
+                    if Hosts.providesContexts importedOrigin then
+                        exportedTypeDefs
+                        |> Map.filter (fun name info -> info.IsContext && info.Parameters.IsEmpty && isSelected name)
+                        |> Map.keys
+                        |> Seq.fold (fun acc name -> acc |> Set.add (ModuleLinking.importedName qualifier name)) state.HostContexts
+                    else state.HostContexts
                 Symbols = Seq.fold (fun acc (KeyValue(id, symbol)) -> acc |> Map.add id symbol) state.Symbols (Seq.concat [ exportedSymbols; exportedTypeSymbols; importSymbols ])
                 ImportedThrough = importedThrough
                 // The prelude's contexts are the ones operators are read through (see `OperatorContexts`),
