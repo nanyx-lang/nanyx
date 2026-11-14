@@ -68,7 +68,7 @@ A type of your own gets one by attaching a `fromString`, with a tag of its own f
 def Point.fromString: string -> #some(Point) | #invalidPoint = { s -> ... }
 ```
 
-The call has to settle `a` from what it is given or what its result is passed to. A result whose type is written only in an annotation, `def ints: list(#some(int) | #invalidInt) = readAll(texts)`, does not settle it yet ([#621](https://github.com/nanyx-lang/nanyx/issues/621)). The `e` parameter is expected to become an [associated type](../work-in-progress/type-members-and-reflection#associated-types) once those exist, as `e` is always determined by `a`.
+Something has to settle `a`: what the call is given, what its result is passed to, or the type the result is expected to have, as in `def ints: list(#some(int) | #invalidInt) = readAll(texts)`. The `e` parameter is expected to become an [associated type](../work-in-progress/type-members-and-reflection#associated-types) once those exist, as `e` is always determined by `a`.
 
 # Reference
 
