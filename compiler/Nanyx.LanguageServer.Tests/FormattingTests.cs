@@ -83,6 +83,43 @@ public sealed class FormattingTests : LanguageServerTestBase
         Assert.Equal("::formatter.indentSize = 4\ndef x =\n    def a = 1\n    a\n", edit.NewText);
     }
 
+    [Fact]
+    public void Server_advertises_range_formatting()
+    {
+        Assert.NotNull(_client.ServerSettings.Capabilities.DocumentRangeFormattingProvider);
+    }
+
+    [Fact]
+    public async Task Formatting_a_range_formats_only_the_top_level_items_it_touches()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-format-range");
+        Open(uri, "def a={1}\r\ndef b={2}\r\ndef c={3}\r\n");
+        await NextPublished(uri);
+
+        var edit = Assert.Single(await RangeFormattingEdits(uri, new Range(1, 2, 1, 3)));
+        Assert.Equal(new Range(1, 0, 1, 9), edit.Range);
+        Assert.Equal("def b = { 2 }", edit.NewText);
+    }
+
+    [Fact]
+    public async Task Formatting_a_range_of_formatted_items_changes_nothing()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-format-range-formatted");
+        Open(uri, "def a = 1\ndef b={2}\n");
+        await NextPublished(uri);
+
+        Assert.Empty(await RangeFormattingEdits(uri, new Range(0, 0, 0, 3)));
+    }
+
+    private async Task<List<TextEdit>> RangeFormattingEdits(DocumentUri uri, Range range) =>
+        (await _client.TextDocument.RequestDocumentRangeFormatting(
+            new DocumentRangeFormattingParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Range = range,
+                Options = new FormattingOptions { TabSize = 4, InsertSpaces = false }
+            },
+            _cancellation.Token))?.ToList() ?? [];
     private async Task<List<TextEdit>> FormattingEdits(DocumentUri uri) =>
         (await _client.TextDocument.RequestDocumentFormatting(
             new DocumentFormattingParams

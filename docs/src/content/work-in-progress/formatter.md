@@ -313,7 +313,12 @@ an option.
 
 The language server answers `textDocument/formatting` with one edit replacing the document, or no edits if it does
 not parse. The VS Code extension registers Nanyx as formattable, so "Format Document" and `editor.formatOnSave` work.
-Range formatting comes later: formatting the smallest enclosing top-level items is enough.
+
+It answers `textDocument/rangeFormatting` ("Format Selection") by formatting the top-level items the range touches
+([#857](https://github.com/nanyx-lang/nanyx/issues/857)): the whole document is formatted, with the same check, and
+the lines from the first such item's to the last's are replaced with the same items' lines in the formatted text
+(`RangeFormatting.formatRange`). The comments and blank lines around them are left as they are. When formatting
+changes how many top-level items there are, as joining imports does, the whole document is replaced.
 
 # Plan
 
@@ -341,7 +346,6 @@ its own:
 10. **The repository** ([#223](https://github.com/nanyx-lang/nanyx/issues/223)). Format `examples/`, `stdlib/` and
     the docs' code blocks, and run `nanyx format --check` in CI.
 
-Later: range formatting.
 
 # Decided
 

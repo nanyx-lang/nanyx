@@ -14,7 +14,7 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in 
 - go to definition (from a name, or from a `` [`name`] `` link in a doc comment), find references and the outline view
 - completion of names, record fields, module members and import paths, each name with its doc comment and each module with the module's. The names the standard library keeps for itself, those that start with `__`, are never offered outside it. VS Code's own suggestions of words already in a file come only from the file being edited (`editor.wordBasedSuggestions` is `currentDocument` for Nanyx), so a standard-library file you opened from go to definition does not fill completion with its words. A word, for those suggestions and for double-clicking, is a name, a number, or a name with a `#` (a tag) or `@` before it
 - quick fixes, such as adding the import for a standard-library name, or writing `int.fromString` for the deprecated `Int.fromString`
-- **Format Document**, which formats the file as `nanyx format` does
+- **Format Document**, which formats the file as `nanyx format` does, and **Format Selection**, which formats the definitions the selection touches
 - an [info view](#info-view), a view in the secondary side bar that shows what the compiler knows at the cursor
 - a [library browser](#library), which lists what the standard library exports, and a [search](#searching-the-library) of it by name and by type
 - a run button, which runs the file as `nanyx run` does
@@ -100,7 +100,7 @@ VS Code's own `editor.codeLens` and `editor.inlayHints.enabled` settings turn al
 
 # Formatting
 
-**Format Document** formats a `.nyx` file with the [standard formatter](./formatter). A file that does not parse is left as it is. To format every time you save, set `editor.formatOnSave` to `true`, as in the example above.
+**Format Document** formats a `.nyx` file with the [standard formatter](./formatter). **Format Selection** formats only the top-level definitions the selection touches, and leaves the rest of the file as it is. A file that does not parse is left as it is. To format every time you save, set `editor.formatOnSave` to `true`, as in the example above.
 
 # Info view
 

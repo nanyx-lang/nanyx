@@ -12,7 +12,7 @@ namespace Nanyx.LanguageServer;
 /// <remarks>
 /// The server publishes diagnostics, shows inferred types on hover, in lenses above unannotated top-level defs and
 /// in inlay hints after other unannotated names, goes to definitions, finds references, outlines documents,
-/// completes the names in scope, offers diagnostics' fixes as quick fixes, formats documents, and marks the names of
+/// completes the names in scope, offers diagnostics' fixes as quick fixes, formats documents and selections, and marks the names of
 /// nominal types as semantic tokens. It also answers
 /// <c>nanyx/infoView</c>, a request of its own for the extension's info view (see <see cref="InfoViewHandler"/>), and
 /// <c>nanyx/libraryModules</c> and <c>nanyx/libraryModule</c>, which list the standard library's modules and what each
@@ -77,6 +77,7 @@ public static class NanyxLanguageServer
             .WithHandler<InlayHintHandler>()
             .WithHandler<CompletionHandler>()
             .WithHandler<FormattingHandler>()
+            .WithHandler<RangeFormattingHandler>()
             .WithHandler<SemanticTokensHandler>()
             .WithHandler<InfoViewHandler>()
             .WithHandler<LibraryModulesHandler>()
