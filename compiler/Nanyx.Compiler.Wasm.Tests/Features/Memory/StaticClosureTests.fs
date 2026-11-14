@@ -14,12 +14,6 @@ def double: int -> int = { x -> x * 2 }
 def apply: (int -> int), int -> int = { f, x -> f(x) }
 """
 
-/// How many blocks `name(argument)` allocates, and what it returns.
-let private allocationsOf (program: WasmProgram) (name: string) (argument: int) =
-    let before = program.Allocations
-    let result = program.Call(name, argument)
-    program.Allocations - before, result
-
 [<Fact>]
 let ``Static closure - passing a top-level function as a value in a loop allocates nothing`` () =
     let source =

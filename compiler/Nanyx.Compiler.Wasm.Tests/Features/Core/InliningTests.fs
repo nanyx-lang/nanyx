@@ -130,12 +130,6 @@ println("{double(21)}")
     finally
         File.Delete path
 
-/// How many blocks `run(100)` allocates in `program`, and what it returns.
-let private allocationsOfRun (program: WasmProgram) =
-    let before = program.Allocations
-    let result = program.Call("run", 100)
-    program.Allocations - before, result
-
 [<Fact>]
 let ``A closure inlining leaves unread is not made`` () =
     let source =
@@ -145,8 +139,8 @@ def run: int -> int = { n -> apply({ m -> m + n }, 1) }
 """
     use inlined = instantiateWasm source []
     use notInlined = instantiateWat (transpileWatWith { checkedOptions with Inline = false } source) []
-    let inlinedAllocations, inlinedResult = allocationsOfRun inlined
-    let notInlinedAllocations, _ = allocationsOfRun notInlined
+    let inlinedAllocations, inlinedResult = allocationsOf inlined "run" 100
+    let notInlinedAllocations, _ = allocationsOf notInlined "run" 100
     Assert.Equal(101, inlinedResult)
     // The lambda captures `n`, so it is a closure block. Inlined, its body reads `n` from the closure it is called
     // through, which is known, and then nothing reads the closure.
@@ -166,8 +160,8 @@ def run: int -> int = { n -> orZero(#some(n + 1)) }
 """
     use inlined = instantiateWasm source []
     use notInlined = instantiateWat (transpileWatWith { checkedOptions with Inline = false } source) []
-    let inlinedAllocations, inlinedResult = allocationsOfRun inlined
-    let notInlinedAllocations, _ = allocationsOfRun notInlined
+    let inlinedAllocations, inlinedResult = allocationsOf inlined "run" 100
+    let notInlinedAllocations, _ = allocationsOf notInlined "run" 100
     Assert.Equal(101, inlinedResult)
     // Inlined, `orZero`'s match is on the `#some` made just before it, so it takes that arm, and nothing reads the tag.
     Assert.Equal(1, notInlinedAllocations)
@@ -186,8 +180,8 @@ def run: int -> int = { n ->
 """
     use inlined = instantiateWasm source []
     use notInlined = instantiateWat (transpileWatWith { checkedOptions with Inline = false } source) []
-    let inlinedAllocations, inlinedResult = allocationsOfRun inlined
-    let notInlinedAllocations, _ = allocationsOfRun notInlined
+    let inlinedAllocations, inlinedResult = allocationsOf inlined "run" 100
+    let notInlinedAllocations, _ = allocationsOf notInlined "run" 100
     Assert.Equal(100, inlinedResult)
     // Inlined, the match is on the tag `classify`'s `if` gives. Copied into each branch, it is on a known tag there, so
     // it takes its arm, and no tag is made.
@@ -253,8 +247,8 @@ def run: int -> int = { n -> go(n, 0) }
 """
     use inlined = instantiateWasm source []
     use notInlined = instantiateWat (transpileWatWith { checkedOptions with Inline = false } source) []
-    let inlinedAllocations, inlinedResult = allocationsOfRun inlined
-    let notInlinedAllocations, notInlinedResult = allocationsOfRun notInlined
+    let inlinedAllocations, inlinedResult = allocationsOf inlined "run" 100
+    let notInlinedAllocations, notInlinedResult = allocationsOf notInlined "run" 100
     Assert.Equal(15450, inlinedResult)
     Assert.Equal(notInlinedResult, inlinedResult)
     // Not inlined, the block makes 29 allocations. Inlined, `proc`, the block, the members and the continuations are

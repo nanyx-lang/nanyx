@@ -19,12 +19,6 @@ def double: list(int) -> list(int) = {
 def built: int -> int = { n -> sum(build(n)) }
 """
 
-/// How many blocks `name(argument)` allocates, and what it returns.
-let private allocationsOf (program: WasmProgram) (name: string) (argument: int) =
-    let before = program.Allocations
-    let result = program.Call(name, argument)
-    program.Allocations - before, result
-
 [<Fact>]
 let ``Reuse - mapping over a list held once rewrites its cells in place`` () =
     use program = instantiateWasm (lists + "def run: int -> int = { n -> sum(double(build(n))) }\n") []
