@@ -149,3 +149,6 @@ It looks for the problems the rules in AGENTS.md are meant to prevent:
 - new string matches on desugared names
 - new `failwith` calls in the backend
 - tests added outside the `Features/` layout
+
+The `Compiler` workflow also lists the compiler's F# and C# files over 1,500 lines on every run: each is a warning on
+the run, and in a table in the run's summary. They don't fail the run.
