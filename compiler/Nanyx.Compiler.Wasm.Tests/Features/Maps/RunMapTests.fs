@@ -9,8 +9,8 @@ let private program (definitions: string list) (lines: string list) =
     [ "import nanyx/console"
       ""
       "def found = {"
-      "  | #some(n) -> println(\"{n}\")"
-      "  | #notFound -> println(\"not found\")"
+      """  | #some(n) -> println("{n}")"""
+      """  | #notFound -> println("not found")"""
       "}"
       yield! definitions
       ""
@@ -24,12 +24,12 @@ let private program (definitions: string list) (lines: string list) =
 let ``Run - calling a map looks a key up`` () =
     program
         []
-        [ "def m = [\"a\" => 1, \"b\" => 2]"
-          "found(m(\"a\"))"
-          "found(m(\"b\"))"
-          "found(m(\"c\"))"
+        [ """def m = ["a" => 1, "b" => 2]"""
+          """found(m("a"))"""
+          """found(m("b"))"""
+          """found(m("c"))"""
           "def counts = [1 => 10, 2 => 20]"
-          "found(counts([\"x\", \"y\"] \\list.length))" ]
+          """found(counts(["x", "y"] \list.length))""" ]
     |> runSource
     |> assertRan "1\n2\nnot found\n20\n"
 
@@ -41,7 +41,7 @@ let ``Run - a map literal can be written one entry per line`` () =
           "  1 => \"one\""
           "  2 => \"two\""
           "]"
-          "println(map.get(m, 2) \\someOr(\"none\"))" ]
+          """println(map.get(m, 2) \someOr("none"))""" ]
     |> runSource
     |> assertRan "two\n"
 
@@ -49,37 +49,37 @@ let ``Run - a map literal can be written one entry per line`` () =
 let ``Run - a key written twice in a literal holds the value written last`` () =
     program
         []
-        [ "def m = [\"a\" => 1, \"b\" => 2, \"a\" => 3]"
-          "found(m(\"a\"))"
-          "println(\"{map.count(m)}\")" ]
+        [ """def m = ["a" => 1, "b" => 2, "a" => 3]"""
+          """found(m("a"))"""
+          """println("{map.count(m)}")""" ]
     |> runSource
     |> assertRan "3\n2\n"
 
 [<Fact>]
 let ``Run - insert adds a key, or replaces its value, and leaves the map it was given as it was`` () =
     program
-        [ "def keys = { m -> map.toList(m) \\list.map({ entry -> entry.0 }) \\list.fold(\"\", { acc, k -> acc ++ k }) }" ]
-        [ "def m = [\"a\" => 1, \"b\" => 2]"
-          "def added = m \\insert(\"c\", 3)"
-          "def replaced = added \\map.insert(\"a\", 10)"
-          "found(added(\"c\"))"
-          "found(replaced(\"a\"))"
-          "found(m(\"c\"))"
+        [ """def keys = { m -> map.toList(m) \list.map({ entry -> entry.0 }) \list.fold("", { acc, k -> acc ++ k }) }""" ]
+        [ """def m = ["a" => 1, "b" => 2]"""
+          """def added = m \insert("c", 3)"""
+          """def replaced = added \map.insert("a", 10)"""
+          """found(added("c"))"""
+          """found(replaced("a"))"""
+          """found(m("c"))"""
           "println(keys(replaced))"
-          "println(\"{map.count(replaced)}\")" ]
+          """println("{map.count(replaced)}")""" ]
     |> runSource
     |> assertRan "3\n10\nnot found\nabc\n3\n"
 
 [<Fact>]
 let ``Run - remove takes a key out, and containsKey says whether a map has one`` () =
     program
-        [ "def show = { b -> if b then \"T\" else \"F\" }" ]
+        [ """def show = { b -> if b then "T" else "F" }""" ]
         [ "def m = map.fromList([(1, 10), (2, 20), (3, 30)])"
           "def removed = map.remove(m, 2)"
           "println(show(map.containsKey(m, 2)))"
           "println(show(map.containsKey(removed, 2)))"
           "found(removed(3))"
-          "println(\"{map.count(map.remove(removed, 7))}\")" ]
+          """println("{map.count(map.remove(removed, 7))}")""" ]
     |> runSource
     |> assertRan "T\nF\n30\n2\n"
 
@@ -100,8 +100,8 @@ let ``Run - records and tags can be keys, compared by their structure`` () =
 let ``Run - a map in a record's field is looked up by calling the field`` () =
     program
         [ "type Shop = (prices: map(string, int))" ]
-        [ "def shop = Shop(prices = [\"tea\" => 3, \"cake\" => 4])"
-          "found(shop.prices(\"cake\"))" ]
+        [ """def shop = Shop(prices = ["tea" => 3, "cake" => 4])"""
+          """found(shop.prices("cake"))""" ]
     |> runSource
     |> assertRan "4\n"
 
@@ -114,8 +114,8 @@ let ``Run - a map is passed to and given back from functions`` () =
           "    | #notFound -> 0"
           "}"
           "def restock: map(string, int), string -> map(string, int) = { m, name -> m \\insert(name, stock(m, name) + 1) }" ]
-        [ "def m = restock(restock([\"tea\" => 1], \"tea\"), \"cake\")"
-          "println(\"{stock(m, \"tea\")} {stock(m, \"cake\")} {stock(m, \"pie\")}\")" ]
+        [ """def m = restock(restock(["tea" => 1], "tea"), "cake")"""
+          """println("{stock(m, "tea")} {stock(m, "cake")} {stock(m, "pie")}")""" ]
     |> runSource
     |> assertRan "2 1 0\n"
 
@@ -137,12 +137,12 @@ let ``Run - list.groupBy takes a key of any type with an Eq and a Hash`` () =
 [<Fact>]
 let ``Run - List.groupBy groups elements by a key, in order`` () =
     program
-        [ "def show = { xs -> xs \\list.map(int.toString) \\list.fold(\"\", { acc, s -> acc ++ s }) }" ]
+        [ """def show = { xs -> xs \list.map(int.toString) \list.fold("", { acc, s -> acc ++ s }) }""" ]
         [ "def groups = [1, 2, 3, 4, 5] \\list.groupBy { x -> x % 2 }"
           "println(show(groups(1) \\someOr([])))"
           "println(show(groups(0) \\someOr([])))"
           "println(show(map.toList(groups) \\list.map({ group -> group.0 })))"
-          "println(\"{map.count(list.groupBy([], { (x: int) -> x }))}\")" ]
+          """println("{map.count(list.groupBy([], { (x: int) -> x }))}")""" ]
     |> runSource
     |> assertRan "135\n24\n10\n0\n"
 
@@ -150,9 +150,9 @@ let ``Run - List.groupBy groups elements by a key, in order`` () =
 let ``Run - a for loop walks a map's entries, in the order their keys were added`` () =
     program
         []
-        [ "def dict = [\"one\" => \"uno\", \"two\" => \"dos\"] \\insert(\"one\", \"un\")"
-          "for dict | key, value -> println(\"{key} => {value}\")"
-          "for dict, 1.. | entry, i -> println(\"{i}: {entry.1}\")" ]
+        [ """def dict = ["one" => "uno", "two" => "dos"] \insert("one", "un")"""
+          """for dict | key, value -> println("{key} => {value}")"""
+          """for dict, 1.. | entry, i -> println("{i}: {entry.1}")""" ]
     |> runSource
     |> assertRan "one => un\ntwo => dos\n1: un\n2: dos\n"
 
@@ -162,9 +162,9 @@ let ``Run - a nominal type with its own == and hash can be a key, compared by it
         [ "type $Code = string"
           "def $Code.`==`: $Code, $Code -> bool = { a, b -> true }"
           "def $Code.hash: $Code -> int = { c -> 0 }" ]
-        [ "def m = [$Code(\"ab\") => 1] \\insert($Code(\"xy\"), 2)"
-          "println(\"{map.count(m)}\")"
-          "found(m($Code(\"zz\")))" ]
+        [ """def m = [$Code("ab") => 1] \insert($Code("xy"), 2)"""
+          """println("{map.count(m)}")"""
+          """found(m($Code("zz")))""" ]
     |> runSource
     |> assertRan "1\n2\n"
 
@@ -181,8 +181,8 @@ let ``Run - tags of different names can be keys of a map whose key type is writt
 [<Fact>]
 let ``Run - keys and values give a map's keys and values in order`` () =
     program
-        [ "def joined = { xs -> xs \\list.fold(\"\", { acc, x -> acc ++ x }) }" ]
-        [ "def m = [\"b\" => \"2\", \"a\" => \"1\"] \\insert(\"c\", \"3\")"
+        [ """def joined = { xs -> xs \list.fold("", { acc, x -> acc ++ x }) }""" ]
+        [ """def m = ["b" => "2", "a" => "1"] \insert("c", "3")"""
           "println(joined(map.keys(m)))"
           "println(joined(map.values(m)))" ]
     |> runSource

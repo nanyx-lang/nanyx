@@ -29,7 +29,8 @@ def main: [Console] () -> () = {
 
 [<Fact>]
 let ``The start calls the host's run with the entry point`` () =
-    let wat = transpileWat "@entry\ndef main = { println(\"hi\") }\n"
+    let wat = transpileWat (withFinalNewline """@entry
+def main = { println("hi") }""")
     Assert.Contains("(func $__host_run", wat)
     Assert.Contains("call $__host_run", wat)
 

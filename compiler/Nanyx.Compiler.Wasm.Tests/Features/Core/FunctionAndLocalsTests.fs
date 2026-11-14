@@ -8,8 +8,9 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Transpile function with parameters`` () =
     let source =
-        "module M\n\n" +
-        "def add: int, int -> int = { x, y -> x + y }"
+        normalized """module M
+
+def add: int, int -> int = { x, y -> x + y }"""
 
     let wat = transpileWat source
 
@@ -21,9 +22,11 @@ let ``Transpile function with parameters`` () =
 [<Fact>]
 let ``Transpile function call with arguments`` () =
     let source =
-        "module M\n\n" +
-        "def add = { x, y -> x + y }\n\n" +
-        "def main = add(1, 2)"
+        normalized """module M
+
+def add = { x, y -> x + y }
+
+def main = add(1, 2)"""
 
     let wat = transpileWat source
 
@@ -35,9 +38,11 @@ let ``Transpile function call with arguments`` () =
 [<Fact>]
 let ``Transpile attached function on a built-in type`` () =
     let source =
-        "module M\n\n" +
-        "def int.double: int -> int = { n -> n * 2 }\n\n" +
-        "def main = 3 \\ double"
+        normalized """module M
+
+def int.double: int -> int = { n -> n * 2 }
+
+def main = 3 \ double"""
 
     let result = NyxCompiler.Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
@@ -84,11 +89,12 @@ def depth: Nest(int) -> int = { t ->
 [<Fact>]
 let ``Transpile block local variable`` () =
     let source =
-        "module M\n\n" +
-        "def incTwice = { x ->\n" +
-        "  def y = x + 1\n" +
-        "  y + 1\n" +
-        "}"
+        normalized """module M
+
+def incTwice = { x ->
+  def y = x + 1
+  y + 1
+}"""
 
     let wat = transpileWat source
 
@@ -99,24 +105,26 @@ let ``Transpile block local variable`` () =
 [<Fact>]
 let ``Transpile top-level constant def`` () =
     let source =
-        "module M\n\n" +
-        "def one = 1"
+        normalized """module M
+
+def one = 1"""
 
     let wat = transpileWat source
 
     Assert.Contains("(func $one (result i64)", wat)
     Assert.Contains("i64.const 1", wat)
-    Assert.Contains("(export \"one\" (func $one))", wat)
+    Assert.Contains("""(export "one" (func $one))""", wat)
 
 [<Fact>]
 let ``Transpile magic dbg for int`` () =
     let source =
-        "module M\n\n" +
-        "def main = dbg(42)"
+        normalized """module M
+
+def main = dbg(42)"""
 
     let wat = transpileWat source
 
-    Assert.Contains("(import \"wasi_snapshot_preview1\" \"fd_write\" (func $fd_write", wat)
+    Assert.Contains("""(import "wasi_snapshot_preview1" "fd_write" (func $fd_write""", wat)
     Assert.Contains("(func $__dbg_show_int (param $__dbg_value_i64 i64)", wat)
     Assert.Contains("i64.const 42", wat)
     Assert.Contains("call $dbg_str", wat)
@@ -124,8 +132,9 @@ let ``Transpile magic dbg for int`` () =
 [<Fact>]
 let ``Transpile magic dbg for string literal`` () =
     let source =
-        "module M\n\n" +
-        "def main = dbg(\"hello\")"
+        normalized """module M
+
+def main = dbg("hello")"""
 
     let wat = transpileWat source
 
@@ -136,8 +145,9 @@ let ``Transpile magic dbg for string literal`` () =
 [<Fact>]
 let ``Transpile bare tag literal`` () =
     let source =
-        "module M\n\n" +
-        "def main = #ok"
+        normalized """module M
+
+def main = #ok"""
 
     let wat = transpileWat source
 
@@ -147,8 +157,9 @@ let ``Transpile bare tag literal`` () =
 [<Fact>]
 let ``Transpile magic dbg for bare tag literal`` () =
     let source =
-        "module M\n\n" +
-        "def main = dbg(#test)"
+        normalized """module M
+
+def main = dbg(#test)"""
 
     let wat = transpileWat source
 
@@ -159,8 +170,9 @@ let ``Transpile magic dbg for bare tag literal`` () =
 [<Fact>]
 let ``Transpile payload tag literal`` () =
     let source =
-        "module M\n\n" +
-        "def main = #some(42)"
+        normalized """module M
+
+def main = #some(42)"""
 
     let wat = transpileWat source
 
@@ -170,8 +182,9 @@ let ``Transpile payload tag literal`` () =
 [<Fact>]
 let ``Transpile magic dbg for payload tag literal`` () =
     let source =
-        "module M\n\n" +
-        "def main = dbg(#some(42))"
+        normalized """module M
+
+def main = dbg(#some(42))"""
 
     let wat = transpileWat source
 
@@ -185,7 +198,12 @@ let ``Transpile interpolated dbg string from file`` () =
     let childPath = Path.Combine(dir.Path, "child.nyx")
     let mainPath = Path.Combine(dir.Path, "main.nyx")
     File.WriteAllText(childPath, "export def double = { x -> x * 2 }")
-    File.WriteAllText(mainPath, "import \"child.nyx\" as child\n\ndef main = {\n  def result = child.double(21)\n  dbg(\"Result: {result}\")\n}")
+    File.WriteAllText(mainPath, (normalized """import "child.nyx" as child
+
+def main = {
+  def result = child.double(21)
+  dbg("Result: {result}")
+}"""))
 
     let wat = transpileWatFile mainPath
 

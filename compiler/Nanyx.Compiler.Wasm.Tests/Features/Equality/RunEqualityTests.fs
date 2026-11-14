@@ -11,8 +11,8 @@ let ``Run - records and tuples compare field by field`` () =
         [ "(x = 1, y = 2) == (x = 1, y = 2)"
           "(x = 1, y = 2) == (x = 1, y = 3)"
           "Point(x = 1, y = 2) != Point(x = 1, y = 3)"
-          "(1, s) == (1, \"aa\")"
-          "(1, s) == (1, \"ab\")"
+          """(1, s) == (1, "aa")"""
+          """(1, s) == (1, "ab")"""
           "(f = 1.5, g = [2.0]) == (f = 1.5, g = [2.0])"
           "(f = 1.5, g = [2.0]) == (f = 1.5, g = [2.5])" ]
     |> runSource
@@ -25,7 +25,7 @@ let ``Run - lists compare element by element`` () =
         [ "[1, 2, 3] == [1, 2, 3]"
           "[1, 2] == [1, 2, 3]"
           "[1, 2, 3] == [1, 2]"
-          "[[s], [\"b\"]] == [[\"aa\"], [\"b\"]]"
+          """[[s], ["b"]] == [["aa"], ["b"]]"""
           "empty == [1]"
           "empty == []" ]
     |> runSource
@@ -39,16 +39,16 @@ let ``Run - tags compare by name, then payload by its type`` () =
           "type Mixed = #i(int) | #s(string) | #p(Point) | #nothing"
           "def eqMixed: Mixed, Mixed -> bool = { a, b -> a == b }"
           "def eqResult: #ok(list(string)) | #error(string), #ok(list(string)) | #error(string) -> bool = { a, b -> a == b }" ]
-        [ "#some(s) == #some(\"aa\")"
-          "#some(s) == #some(\"ab\")"
-          "eqMixed(#s(s), #s(\"aa\"))"
+        [ """#some(s) == #some("aa")"""
+          """#some(s) == #some("ab")"""
+          """eqMixed(#s(s), #s("aa"))"""
           "eqMixed(#p(Point(x = 1, y = 2)), #p(Point(x = 1, y = 2)))"
           "eqMixed(#s(s), #p(Point(x = 1, y = 2)))"
           "eqMixed(#nothing, #nothing)"
           "eqMixed(#nothing, #i(1))"
           "eqMixed(#i(2), #i(2))"
-          "eqResult(#ok([s]), #ok([\"aa\"]))"
-          "eqResult(#ok([s]), #error(\"aa\"))" ]
+          """eqResult(#ok([s]), #ok(["aa"]))"""
+          """eqResult(#ok([s]), #error("aa"))""" ]
     |> runSource
     |> assertRan "T\nF\nT\nT\nF\nT\nF\nT\nT\nF\n"
 
@@ -56,8 +56,8 @@ let ``Run - tags compare by name, then payload by its type`` () =
 let ``Each type compared gets one equality function, and its parts their own`` () =
     let wat =
         transpileWat (
-            "def a: list((x: int, y: string)), list((x: int, y: string)) -> bool = { p, q -> p == q }\n" +
-            "def b: list((x: int, y: string)), list((x: int, y: string)) -> bool = { p, q -> p != q }\n")
+            withFinalNewline """def a: list((x: int, y: string)), list((x: int, y: string)) -> bool = { p, q -> p == q }
+def b: list((x: int, y: string)), list((x: int, y: string)) -> bool = { p, q -> p != q }""")
     Assert.Equal(1, countOccurrences "(func $__nanyx_equals_list_" wat)
     Assert.Equal(1, countOccurrences "(func $__nanyx_equals_rec_" wat)
 
@@ -70,15 +70,15 @@ let ``Run - a function that compares its type variable compares each type it is 
           "def holds = { xs, x -> xs \\list.any({ y -> y == x }) }"
           "def written: [Eq(a)] a, list(a) -> bool = { x, xs -> x != x or xs == [x] }" ]
         [ "same(1, 1)"
-          "same(s, \"ab\")"
+          """same(s, "ab")"""
           "same(Point(x = 1, y = 2), Point(x = 1, y = 2))"
           "same([1.5], [1.5])"
-          "same(#some(s), #some(\"aa\"))"
+          """same(#some(s), #some("aa"))"""
           "differ(1, 1)"
-          "differ([s], [\"b\"])"
+          """differ([s], ["b"])"""
           "holds([1, 2, 3], 3)"
           "written(1, [1])"
-          "list.distinct([s, \"aa\", \"b\"]) == [\"aa\", \"b\"]" ]
+          """list.distinct([s, "aa", "b"]) == ["aa", "b"]""" ]
     |> runSource
     |> assertRan "T\nF\nT\nT\nT\nF\nT\nT\nT\nT\n"
 
@@ -182,8 +182,8 @@ let ``Run - a function that compares its type variable uses the == attached to a
           "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }"
           "def same = { x, y -> x == y }"
           "def differ = { x, y -> x != y }" ]
-        [ "same($Email(\"a\"), $Email(\"b\"))"
-          "differ($Email(\"a\"), $Email(\"b\"))" ]
+        [ """same($Email("a"), $Email("b"))"""
+          """differ($Email("a"), $Email("b"))""" ]
     |> runSource
     |> assertRan "T\nF\n"
 
@@ -203,19 +203,19 @@ let ``Run - comparing an open union with a tag compares its payload with the == 
     comparing
         [ "type $Email = string"
           "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }"
-          "def same = { o -> o == #some($Email(\"a\")) }"
-          "def differ = { o -> o != #some($Email(\"a\")) }"
-          "def either = { o -> o == #some($Email(\"a\")) or o == #other(2) }"
-          "def sameClosed: #some($Email) -> bool = { o -> o == #some($Email(\"a\")) }"
+          """def same = { o -> o == #some($Email("a")) }"""
+          """def differ = { o -> o != #some($Email("a")) }"""
+          """def either = { o -> o == #some($Email("a")) or o == #other(2) }"""
+          """def sameClosed: #some($Email) -> bool = { o -> o == #some($Email("a")) }"""
           "def opened: [Eq(a)] (#x(a) | r), (#x(a) | r) -> bool = { v, w -> v == w }" ]
-        [ "same(#some($Email(\"b\")))"
+        [ """same(#some($Email("b")))"""
           "same(#none)"
-          "differ(#some($Email(\"b\")))"
+          """differ(#some($Email("b")))"""
           "differ(#other(1))"
           "either(#other(2))"
           "either(#other(3))"
-          "sameClosed(#some($Email(\"b\")))"
-          "opened(#x($Email(\"a\")), #x($Email(\"b\")))"
+          """sameClosed(#some($Email("b")))"""
+          """opened(#x($Email("a")), #x($Email("b")))"""
           "opened(#x(1), #y)" ]
     |> runSource
     |> assertRan "T\nF\nF\nT\nT\nF\nT\nT\nF\n"
@@ -256,9 +256,9 @@ let ``Run - an Eq loaded with use changes a concrete comparison in its block`` (
           "  use (`==` = { x, y -> false })"
           "  a == b"
           "}" ]
-        [ "loose(\"ab\", \"cd\")"
-          "loose(\"ab\", \"ab\")"
-          "literal(\"ab\", \"ab\")"
+        [ """loose("ab", "cd")"""
+          """loose("ab", "ab")"""
+          """literal("ab", "ab")"""
           "\"ab\" == \"cd\"" ]
     |> runSource
     |> assertRan "T\nT\nF\nF\n"
@@ -274,11 +274,11 @@ let ``Run - a list of a type with its own == is compared through it, element by 
           "  xs == ys"
           "}"
           "def same: [Eq(a)] list(a), list(a) -> bool = { xs, ys -> xs == ys }" ]
-        [ "[$Email(\"a\")] == [$Email(\"b\")]"
-          "[$Email(\"a\")] != [$Email(\"b\")]"
-          "[$Email(\"a\")] == [$Email(\"a\"), $Email(\"b\")]"
-          "same([$Email(\"a\")], [$Email(\"b\")])"
-          "loose([\"a\"], [\"b\"])"
-          "[\"a\"] == [\"b\"]" ]
+        [ """[$Email("a")] == [$Email("b")]"""
+          """[$Email("a")] != [$Email("b")]"""
+          """[$Email("a")] == [$Email("a"), $Email("b")]"""
+          """same([$Email("a")], [$Email("b")])"""
+          """loose(["a"], ["b"])"""
+          """["a"] == ["b"]""" ]
     |> runSource
     |> assertRan "T\nF\nF\nT\nT\nF\n"
