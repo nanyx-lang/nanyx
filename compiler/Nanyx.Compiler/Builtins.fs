@@ -32,8 +32,11 @@ module Intrinsics =
     let writeStdout = prefix + "write_stdout"
     /// Writes a string to standard error, with nothing added.
     let writeStderr = prefix + "write_stderr"
-    /// The next byte of standard input, or -1 at its end (or when it cannot be read).
-    let readStdinByte = prefix + "read_stdin_byte"
+    /// The standard input the runtime has read and not yet given out, reading the next block (up to 64 KB) when it has
+    /// none; the empty string at the end of the input (or when it cannot be read).
+    let readStdinBlock = prefix + "read_stdin_block"
+    /// What `readStdinBlock` gives, but only up to and including its first line break when it has one.
+    let readStdinLine = prefix + "read_stdin_line"
     /// The program's command-line arguments, its own name first, as one string: each argument followed by a zero byte.
     let arguments = prefix + "arguments"
     /// The program's environment variables as one string: each `NAME=value` followed by a zero byte.
@@ -109,7 +112,8 @@ module Intrinsics =
     let all : (string * TypeScheme) list =
         [ writeStdout, TypeEnv.mono (TyFunc(stringTy, unitTy, []))
           writeStderr, TypeEnv.mono (TyFunc(stringTy, unitTy, []))
-          readStdinByte, TypeEnv.mono (TyFunc(unitTy, intTy, []))
+          readStdinBlock, TypeEnv.mono (TyFunc(unitTy, stringTy, []))
+          readStdinLine, TypeEnv.mono (TyFunc(unitTy, stringTy, []))
           arguments, TypeEnv.mono (TyFunc(unitTy, stringTy, []))
           environment, TypeEnv.mono (TyFunc(unitTy, stringTy, []))
           exit, TypeEnv.mono (TyFunc(intTy, Unifier.bottomType, []))
