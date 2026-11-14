@@ -579,25 +579,32 @@ the context to the definition's type, as the message says ([Contexts](../advance
 
 # NYX0206: Invalid workflow
 
-A builder block, such as `opt { ... }`, is not one its builder can run: the builder lacks a member the block needs,
-or a workflow is called without the trailing lambda that is its block ([Workflows](../advanced/workflows)).
+A builder block, such as `opt { ... }`, is not one its builder can run: the context the builder runs it under lacks a
+member the block needs (a keyword it uses, `zero` for a block that can end without `return`, or `for` for a loop whose
+body uses a keyword), or a keyword is somewhere the rest of the block cannot follow it ([Workflows](../advanced/workflows)).
 
 ```nanyx
-def opt = (
-  try = {
-    | #some(value), continue -> continue(value)
-    | failure, _ -> failure
-  }
-  return = { value -> #some(value) }
+context Opt = (
+  try: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r
+  return: a -> #some(a) | r
 )
+def opt: [c] ([Opt & c] () -> t) -> t = { block ->
+  use Opt(
+    try = {
+      | #some(value), continue -> continue(value)
+      | failure, _ -> failure
+    }
+    return = { value -> #some(value) }
+  ) in block()
+}
 def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
 def show = { n -> opt {
   def h = try half(n)
-  h + 1  -- error NYX0206: This `opt` block can end here without `return`, and `opt` has no `zero` to be its value then: ...
+  h + 1  -- error NYX0206: This `opt` block can end here without `return`, and the context `opt` runs it under has no `zero` to be its value then: ...
 } }
 ```
 
-To fix it, do what the message says: here, end the block with `return`, or give the builder a `zero`.
+To fix it, do what the message says: here, end the block with `return`, or give the context a `zero`.
 
 # NYX0207: Workflow keyword outside a workflow
 

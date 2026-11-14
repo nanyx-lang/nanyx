@@ -59,9 +59,9 @@ Nothing else is in tail position. In particular:
 - list, tuple and record construction (`[x, ...f(xs)]`, `(a = f(n))`),
 - the body of a `for` or `while`.
 
-A workflow block becomes `builder.apply({ ... })`, with each keyword's continuation a closure holding the rest of
-the block, so the rules above apply to the desugared code. A loop written inside a workflow is stack-safe when the
-builder's keyword methods call their continuation in tail position, which is the builder author's choice. A
+A workflow block becomes `builder({ ... })`, with each keyword's continuation a closure holding the rest of the
+block, so the rules above apply to the desugared code. A loop written inside a workflow is stack-safe when the
+members of the builder's context call their continuation in tail position, which is the builder author's choice. A
 keyword that runs code after its continuation returns (`defer`) is not.
 
 # Design

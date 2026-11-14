@@ -1,6 +1,6 @@
 ---
 title: "Attributes"
-description: "Metadata annotations such as @entry and @workflow"
+description: "Metadata annotations such as @entry and @partial"
 order: 13
 ---
 
@@ -16,11 +16,10 @@ def main = { ... }
 ```
 
 ```nanyx fragment
-@workflow
-def optionChain = (...)
+@partial module utils
 ```
 
-A declaration can have one or more attributes, each on its own line. An attribute may also precede a field inside a record literal.
+A declaration can have one or more attributes, each on its own line. An attribute may also precede a member in a `context` declaration.
 
 An attribute that takes an argument has it in parentheses straight after its name, written as a tag's payload is: `@customKeywordType(#bind)`. Several values make a tuple and named ones a record. `@entry` takes no argument.
 
@@ -51,29 +50,14 @@ Marks a file's module declaration as one fragment of a module split across files
 
 See [Partial modules](./modules#partial-modules).
 
-## `@workflow`
-
-Marks a workflow builder definition and enables workflow helper generation.
-
-```nanyx fragment
-@workflow
-def optionChain = (
-  try = { ... }
-  return = { value -> #some(value) }
-  zero = #none
-)
-```
-
-See [Option chaining](../cookbook/option-chaining) and [Workflows](../advanced/workflows).
-
 ## `@customKeywordType(...)`
 
-Used in workflow builders to specify how a custom keyword behaves. It is placed before the field of the builder record that implements the keyword.
+Says how a custom keyword of a workflow behaves. A workflow builder runs its block under a context whose members are its keywords, and the attribute is placed before the member's declaration in that `context`.
 
 ```nanyx fragment
-def async = (
+context Async = (
   @customKeywordType(#bind)
-  await = { m, continuation -> ... }
+  await: [c] (Task(a), ([c] a -> Task(b))) -> Task(b)
 )
 ```
 

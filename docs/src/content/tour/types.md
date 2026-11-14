@@ -271,6 +271,6 @@ def defaults = (host = "localhost", port = 8080)
 def override: typeof defaults = (host = "example.com", port = 443)
 ```
 
-This is useful for referring to the type of a value whose type was inferred rather than declared, such as a builder record passed to `use`.
+This is useful for referring to the type of a value whose type was inferred rather than declared, such as a record of settings passed around a module.
 
 What follows `typeof` is a value's name or a path of fields, such as `typeof config.server.port`, never an arbitrary expression. Brackets only group it, so `typeof(defaults)` is the same type. The value can be declared later in the module, and a generic value gives a fresh copy of its type each time, as using it would. A type definition is not in the scope of any value, so `typeof` can only be written in the type of a value: a def's annotation or a lambda parameter's.

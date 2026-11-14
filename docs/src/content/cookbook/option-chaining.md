@@ -15,49 +15,44 @@ cd option_chaining
 
 # The code
 
-A workflow is a record of keyword methods. We start by declaring the shape of that record as a context, so that functions can require it:
+A workflow builder is a function that runs its block under a context, whose members are the workflow's keywords. We start by declaring that context:
 
-```nanyx
+```nanyx fragment
 context OptionChain = (
-  try: (#some(a) | #none, a -> #some(b) | #none) -> #some(b) | #none
+  try: [c] ((#some(a) | #none), ([c] a -> #some(b) | #none)) -> #some(b) | #none
   return: a -> #some(a) | #none
-  zero: #some(a) | #none
+  zero: #some(()) | #none
 )
 ```
 
-Then we provide the implementation:
+`try`'s continuation is the rest of the block, which calls the context's members too, so its type takes a context variable, `[c]`, that stands for whatever the block requires.
 
-```nanyx
-@workflow -- This attribute will give you a helper function for free
-def optionChain: OptionChain = (
-  -- This is how we get the short-circuiting behavior for options.
-  -- Notice how we don't use the continuation for the `#none` case, so
-  -- the workflow ignores the rest of the block
-  try = {
-    | #some(value), cont -> cont(value)
-    | #none, _ -> #none
-  }
+Then we write the builder: a function that loads an instance of the context with `use` and runs the block under it. The block's type, `[OptionChain & c] () -> ...`, is what gives the block the keywords:
 
-  -- `return` wraps the block's final value
-  return = { value -> #some(value) }
+```nanyx fragment
+def maybe: [c] ([OptionChain & c] () -> #some(a) | #none) -> #some(a) | #none = { block ->
+  use OptionChain(
+    -- This is how we get the short-circuiting behavior for options.
+    -- Notice how we don't use the continuation for the `#none` case, so
+    -- the workflow ignores the rest of the block
+    try = {
+      | #some(value), continue -> continue(value)
+      | #none, _ -> #none
+    }
 
-  -- `zero` is the value of a block that produces nothing: an `if` with no
-  -- `else`, or a block that falls off the end without a `return`
-  zero = #none
-)
-```
+    -- `return` wraps the block's final value
+    return = { value -> #some(value) }
 
-The `@workflow` attribute generates a helper function named after the builder. If we didn't want to use the attribute, we could implement the helper ourselves. Here `typeof optionChain` is the type of the value `optionChain` (see [typeof](../tour/types#typeof)), so the lambda is required to run with `optionChain` loaded as a context:
-
-```nanyx
-def maybe: ([typeof optionChain] () -> #some(a) | #none) -> #some(a) | #none = { f ->
-  use optionChain in f()
+    -- `zero` is the value of a block that produces nothing: an `if` with no
+    -- `else`, or a block that falls off the end without a `return`
+    zero = #none
+  ) in block()
 }
 ```
 
-Either way, the workflow is used like this:
+The workflow is used like this:
 
-```nanyx
+```nanyx fragment
 maybe {
   def a = try someComputation1()
   def b = try someComputation2()
@@ -66,6 +61,6 @@ maybe {
 }
 ```
 
-If `someComputation1()` returns `#none`, the `try` keyword never calls its continuation, so `someComputation2()` is never run and the whole block evaluates to `#none`. Otherwise both values are bound and `return` produces `#some(a + b)`.
+`maybe { ... }` is the call `maybe({ ... })`. If `someComputation1()` returns `#none`, the `try` keyword never calls its continuation, so `someComputation2()` is never run and the whole block evaluates to `#none`. Otherwise both values are bound and `return` produces `#some(a + b)`.
 
 For the general model behind this, see [Workflows](../advanced/workflows).
