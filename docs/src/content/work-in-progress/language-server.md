@@ -237,7 +237,11 @@ what the compiler keeps: exact spans, resolved names and types.
   same compile of each module as the generated reference (`StandardLibraryDocs`), made once per process. A third,
   `nanyx/addImport` ([#713](https://github.com/nanyx-lang/nanyx/issues/713)), gives the edit that imports a module into
   an open document, placed as the missing-import quick fix places it: none if the document imports it already, `null`
-  if it does not parse. The extension's *Library* view lists them and uses it.
+  if it does not parse. The extension's *Library* view lists them and uses it. A fourth, `nanyx/librarySearch`
+  ([#714](https://github.com/nanyx-lang/nanyx/issues/714)), given a query, returns what matches it by name, by type or
+  both, best first, with each match's signature, doc comment, import, location and the contexts it still needs, or the
+  reason the query is not a type (`NyxCompiler.LibrarySearch`; see
+  [Search by type](./info-view-and-library-browser#search-by-type)).
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
 - **The extension** highlights syntax, finds `nanyx` (setting, `PATH`, or a downloaded release) and offers
   *Download the compiler* and *Restart the language server*, and shows the info view. Its settings are described for users on the

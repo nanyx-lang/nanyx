@@ -16,7 +16,7 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in 
 - quick fixes, such as adding the import for a standard-library name, or writing `int.fromString` for the deprecated `Int.fromString`
 - **Format Document**, which formats the file as `nanyx format` does
 - an [info view](#info-view), a view in the secondary side bar that shows what the compiler knows at the cursor
-- a [library browser](#library), which lists what the standard library exports
+- a [library browser](#library), which lists what the standard library exports, and a [search](#searching-the-library) of it by name and by type
 - a run button, which runs the file as `nanyx run` does
 
 All of the settings below are under **Nanyx** in VS Code's settings, or can be written in `settings.json`. Changing any of them restarts the language server.
@@ -181,6 +181,18 @@ export of any module but the prelude, whose names need no import, adds that modu
 file, where the quick fix for a missing import would put it. It adds nothing if the file imports the module already,
 and nothing while the file does not parse. It needs a compiler newer than 0.28.0.
 
+## Searching the library
+
+**Nanyx: Search library by type**, or the search button at the top of the **Library** view, searches the standard
+library as you type. Type a name (`trim`), a type written as a def's annotation is (`bool -> string`), or both, with
+a colon between them (`trim: string -> string`). A type finds the functions whose types can be made equal to it: its
+variables stand for any type, a function's inputs may come in any order, and a definition attached to a type takes
+that type as its first input. `bool -> string` finds `bool.toString` first, then `ToString(a).toString`. Each match
+shows its signature, the import it needs and the contexts it still needs at the types it matched, such as
+`needs ToString(a)`; the best matches come first. Choose one to insert its name at the cursor and add its import to
+the file. With no `.nyx` file open, it opens the match's declaration instead. `nanyx search` gives the same results
+on the command line. It needs a compiler newer than 0.28.0.
+
 # Running a file
 
 The run button at the top right of a `.nyx` editor, or **Nanyx: Run the current file** from the command palette, saves the file and runs it with `nanyx run`. The program runs in a terminal of its own in the panel, so it can read what you type, and Ctrl+C stops it. Running the file again uses the same terminal.
@@ -195,6 +207,7 @@ The command has no keyboard shortcut. To give it one, look for it in **Keyboard 
 |---------|--------------|
 | **Nanyx: Run the current file** | Saves the file and runs it in a terminal. See [Running a file](#running-a-file). |
 | **Nanyx: Show info view** | Shows and focuses the view that shows what the compiler knows at the cursor. See [Info view](#info-view). |
+| **Nanyx: Search library by type** | Searches the standard library by name or type, and inserts the match you choose with its import. See [Searching the library](#searching-the-library). |
 | **Nanyx: Download the compiler** | Looks for the newest compiler release straight away and downloads it. |
 | **Nanyx: Restart the language server** | Stops the server and starts it again. |
 

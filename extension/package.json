@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.9.16",
+  "version": "0.9.17",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -118,6 +118,11 @@
         "command": "nanyx.library.addImport",
         "title": "Add import to the active file",
         "icon": "$(add)"
+      },
+      {
+        "command": "nanyx.library.search",
+        "title": "Nanyx: Search library by type",
+        "icon": "$(search)"
       }
     ],
     "keybindings": [
@@ -137,6 +142,13 @@
         {
           "command": "nanyx.library.addImport",
           "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "nanyx.library.search",
+          "when": "view == nanyx.library",
+          "group": "navigation"
         }
       ],
       "view/item/context": [

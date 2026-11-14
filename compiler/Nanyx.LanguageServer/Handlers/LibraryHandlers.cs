@@ -105,6 +105,76 @@ public sealed class LibraryModuleHandler : IJsonRpcRequestHandler<LibraryModuleP
         };
 }
 
+/// <summary>
+/// The parameters of <c>nanyx/librarySearch</c>: a name, a type written as a def's annotation is, or a name and a type
+/// with a colon between them (see <see cref="NyxCompiler.LibrarySearch.parse"/>).
+/// </summary>
+[Parallel, Method(LibrarySearchHandler.Method, Direction.ClientToServer)]
+public sealed record LibrarySearchParams : IRequest<LibrarySearchResult>
+{
+    public required string Query { get; init; }
+}
+
+/// <summary>What matches a search, best first, or why the query could not be read.</summary>
+public sealed record LibrarySearchResult
+{
+    public required IReadOnlyList<LibrarySearchItem> Matches { get; init; }
+    public string? Error { get; init; }
+}
+
+/// <summary>
+/// A match: an export as <see cref="LibraryExportItem"/> has it, or a member of a context it exports
+/// (<c>ToString(a).toString</c>). <see cref="Needs"/> are the contexts it requires at the types of the match that no
+/// instance satisfies there.
+/// </summary>
+public sealed record LibrarySearchItem
+{
+    public required string Name { get; init; }
+    public required string Signature { get; init; }
+    public string? Documentation { get; init; }
+    public string? Import { get; init; }
+    public Location? Location { get; init; }
+    public required IReadOnlyList<string> Needs { get; init; }
+}
+
+/// <summary>
+/// <c>nanyx/librarySearch</c>: the standard library's exports that match a query by name, by type or both, for the
+/// extension's <em>Search library by type</em> (see <see cref="NyxCompiler.LibrarySearch"/>).
+/// </summary>
+public sealed class LibrarySearchHandler : IJsonRpcRequestHandler<LibrarySearchParams, LibrarySearchResult>
+{
+    public const string Method = "nanyx/librarySearch";
+
+    private readonly StandardLibrarySource _standardLibrary;
+
+    public LibrarySearchHandler(StandardLibrarySource standardLibrary)
+    {
+        _standardLibrary = standardLibrary;
+    }
+
+    public Task<LibrarySearchResult> Handle(LibrarySearchParams request, CancellationToken cancellationToken)
+    {
+        var query = NyxCompiler.LibrarySearch.parse(request.Query);
+        if (query.IsError)
+        {
+            return Task.FromResult(new LibrarySearchResult { Matches = [], Error = query.ErrorValue });
+        }
+
+        var matches = NyxCompiler.LibrarySearch.search(LibraryHandlers.LinkTo(_standardLibrary), query.ResultValue)
+            .Select(found => new LibrarySearchItem
+            {
+                Name = found.Name,
+                Signature = found.Signature,
+                Documentation = found.Doc?.Value,
+                Import = found.Import?.Value,
+                Location = SourceLocations.InFile(found.Declaration, _standardLibrary),
+                Needs = found.Needs.ToList()
+            })
+            .ToList();
+        return Task.FromResult(new LibrarySearchResult { Matches = matches });
+    }
+}
+
 /// <summary>The parameters of <c>nanyx/addImport</c>: the document, and the import path of the module to import.</summary>
 [Parallel, Method(AddImportHandler.Method, Direction.ClientToServer)]
 public sealed record AddImportParams : IRequest<IReadOnlyList<TextEdit>?>

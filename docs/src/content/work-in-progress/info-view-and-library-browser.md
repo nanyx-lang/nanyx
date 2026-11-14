@@ -4,7 +4,7 @@ description: "A panel that shows what the compiler knows at the cursor, and a br
 order: 30
 ---
 
-> **Status: proposal.** Doc comments and a first cut of the info view are done; nothing else here is built yet. This page sets out what the features are, what the compiler
+> **Status: in progress.** Doc comments, the info view, the library browser and search by type are done. This page sets out what the features are, what the compiler
 > already records that they can use, what it would have to start recording, and an order to build them in. Each
 > plan item has an issue under the `lsp` label. See [Language server and editor](./language-server) for what the server does
 > today.
@@ -41,8 +41,8 @@ These features mostly read tables the server already has in `TypedModule` (see `
 | Every export in the library | the export index `ImportFixes` builds once, to offer missing imports |
 | Doc comments | attached by `DocComments.attach`, read for a symbol by `Documentation.Reader` |
 
-Not recorded yet: **types of exports by symbol, for search.** These are in `ImportedTypes` only for what a module
-imports, not for the whole library.
+The library's exports and their types are read from each module's own compile, made once per process
+(`LibraryCatalog.compiledExports`), as the browser and search by type need them.
 
 # 1. Info view
 
@@ -231,8 +231,15 @@ server process, so these are cheap. The packages a workspace depends on could be
 
 ## Search by type
 
-The search box takes a name, a type, or both. A type is parsed with the parser's own type grammar, so the query
-is written as a signature is: `bool -> string`, `list(a), (a -> bool) -> list(a)`, `string -> list(string)`.
+Done ([#714](https://github.com/nanyx-lang/nanyx/issues/714)): `NyxCompiler.LibrarySearch`, beside
+`LibraryCatalog`, reads a query and matches it against the library.
+
+A query is a name, a type, or both, with a colon between them: `trim`, `bool -> string`, `trim: string -> string`.
+Text that is not a name is a type. A type is parsed with the parser's own type grammar (`Api.parseTypeSignature`), so
+the query is written as a signature is: `bool -> string`, `list(a), (a -> bool) -> list(a)`, `string -> list(string)`.
+It is read as an annotation is (`TypeResolution.typeExprToTy`), with no type definitions in scope, so a named type is
+matched by its name. A name finds the names that contain it, ignoring case: the one it names, or whose last part it
+is, first, then those that start with it.
 
 **What matches.** An export matches if its type can be made equal to the query's:
 
@@ -243,9 +250,16 @@ is written as a signature is: `bool -> string`, `list(a), (a -> bool) -> list(a)
 - **Order of inputs.** The inputs of a function that takes several can come in any order, since the query writer
   rarely knows which comes first. `(a -> bool), list(a) -> list(a)` finds `list.filter`.
 - **Contexts.** An export's contexts must have an instance at the types it is instantiated at, or the match is
-  shown with the contexts it still needs. `bool -> string` should find `ToString(a).toString`, which
-  `ToString(bool)`, the compiler's own instance, satisfies.
-- **Attached definitions.** These are found by the type they attach to, as the first input.
+  shown with the contexts it still needs. `bool -> string` finds `ToString(a).toString`, which
+  `ToString(bool)`, the compiler's own instance, satisfies. An instance is the compiler's own `ToString`, or one built
+  from a definition attached to the type for each of the context's members (`int.compare`); one derived from a type's
+  parts (a list's `ToString`) is not looked for yet, so such a match is shown as still needing it. A context of no
+  parameters, such as `Console`, is supplied where the function is called, and is not matched. Each member of a
+  context the library exports is searched as `Context(a).member`.
+- **Attached definitions.** These are found by the type they attach to, as the first input, which is how their
+  types have it.
+- **Values of any type**, such as `Num`'s `zero`, whose type is a variable alone, would match every query, and are
+  left out of a search by type.
 
 **Ranking.** Best first:
 
@@ -254,8 +268,9 @@ is written as a signature is: `bool -> string`, `list(a), (a -> bool) -> list(a)
 3. inputs reordered
 4. contexts needed
 
-Within each rank, shorter names first. Names that start with `__` (intrinsics and desugaring targets) are never
-shown.
+Within each rank, a match that makes fewer of the query's variables a type comes first (`abs: a -> a` before
+`ln: float -> float` for `a -> a`), then the better match of the name, then shorter names. Names that start with
+`__` (intrinsics and desugaring targets) are never shown.
 
 **Where it runs.** The index is built once, from the same export list as the browser. Each query is a unification
 against every export, which is fast for a library this size. The query's variables are treated as fresh variables,
@@ -264,8 +279,9 @@ by the type's shape (its result's head, its number of inputs) first.
 
 **Where to find it.**
 
-- the browser's search box
-- a quick-pick command, *Nanyx: Search library by type*, which inserts the chosen function and its import
+- the browser's search button, which opens the quick pick below: a tree view has no search box of its own
+- a quick-pick command, *Nanyx: Search library by type*, which searches as you type, through the server's
+  `nanyx/librarySearch` request, and inserts the chosen name and its import (`nanyx/addImport`)
 - `nanyx search "bool -> string"` on the command line, for the terminal and for agents, with the same results as
   text
 
@@ -284,8 +300,8 @@ In order. Each item is one PR:
 3. **Library browser** ([#713](https://github.com/nanyx-lang/nanyx/issues/713)). Done: the *Library* tree view in
    the extension (`extension/src/library.ts`), opening definitions and inserting imports through `nanyx/addImport`,
    which places the import as the quick fix does (`ImportFixes.insertion`).
-4. **Search by type** ([#714](https://github.com/nanyx-lang/nanyx/issues/714)). The matcher and ranking in the
-   compiler (as a module beside `Completion`), `nanyx search`, then the search box and the quick pick.
+4. **Search by type** ([#714](https://github.com/nanyx-lang/nanyx/issues/714)). Done: `LibrarySearch`,
+   `nanyx search`, `nanyx/librarySearch`, and *Search library by type*, also the Library view's search button.
 5. **Info view, first cut** ([#715](https://github.com/nanyx-lang/nanyx/issues/715)). Done: `nanyx/infoView` with
    the expression, names in scope, contexts from the signature, a `use`, inference and the runtime, and messages; the
    webview panel with pinning.

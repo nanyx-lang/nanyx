@@ -95,4 +95,40 @@ public sealed class LibraryRequestTests : LanguageServerTestBase
         Assert.Null(await Exports("nanyx/missing"));
         Assert.Null(await Exports("text"));
     }
+
+    private async Task<LibrarySearchResult> Search(string query) =>
+        await _client
+            .SendRequest(LibrarySearchHandler.Method, new LibrarySearchParams { Query = query })
+            .Returning<LibrarySearchResult>(_cancellation.Token);
+
+    [Fact]
+    public async Task A_search_by_type_finds_the_export_with_its_import_and_its_place()
+    {
+        var result = await Search("string -> list(string)");
+
+        Assert.Null(result.Error);
+        var lines = Assert.Single(result.Matches, found => found.Name == "string.lines");
+        Assert.Equal("import nanyx/text", lines.Import);
+        Assert.Empty(lines.Needs);
+        Assert.NotNull(lines.Location);
+        Assert.EndsWith("text.nyx", lines.Location.Uri.Path);
+    }
+
+    [Fact]
+    public async Task A_search_lists_the_contexts_a_match_still_needs()
+    {
+        var result = await Search("a -> string");
+
+        var toString = Assert.Single(result.Matches, found => found.Name == "ToString(a).toString");
+        Assert.Equal(["ToString(a)"], toString.Needs);
+    }
+
+    [Fact]
+    public async Task A_query_that_is_not_a_type_gives_its_error_and_no_matches()
+    {
+        var result = await Search("bool ->");
+
+        Assert.Empty(result.Matches);
+        Assert.StartsWith("`bool ->` is not a type", result.Error);
+    }
 }
