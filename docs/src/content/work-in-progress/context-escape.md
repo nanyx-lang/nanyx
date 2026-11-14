@@ -237,6 +237,12 @@ The proposal draws the line there, and makes every helper a function that takes 
 
 ## Workflows
 
+_Decided on its own, apart from the rest of the proposal:_ builders become a declared context and a function
+([#1305](https://github.com/nanyx-lang/nanyx/issues/1305)). That needs a member instantiated afresh at each call
+([#1304](https://github.com/nanyx-lang/nanyx/issues/1304)) and compiled with a uniform representation for its own type
+variables ([#1160](https://github.com/nanyx-lang/nanyx/issues/1160)). It doesn't need the rest of this proposal: a
+builder's `use` is of a constructor written in place, as now.
+
 A workflow builder is a record value today: `proc` in `prelude-results.nyx` is a `def` of a structural record type.
 The workflows page documents `proc { ... }` as `proc.apply({ use proc in ... })`, but `WorkflowDesugaring.fs` makes
 neither the `apply` nor the `use` yet: the block runs where it is written, and each keyword reads its member into a
@@ -362,8 +368,10 @@ member's own type variables unit, so it reports a call that has one of them at a
 - **Generic members.** Each `try` in a block has its own `a` and `b`, so `Proc`'s `try` must be polymorphic per call.
   It isn't today: a context member's type variables are fixed once in a function that requires the context, so
   `bind(name(i), { s -> bind(size(s), ...) })`, on a `string` payload and then an `int` one, is NYX0201 (`int vs
-  string`). Today's `proc` takes the same block, because each keyword reads `proc.try` into a local of its own. The
-  proposal needs a member instantiated afresh at each call.
+  string`). Today's `proc` takes the same block, because each keyword reads `proc.try` into a local of its own. Settled:
+  a member is instantiated afresh at each call ([#1304](https://github.com/nanyx-lang/nanyx/issues/1304)), and the
+  backend gives the values of its own type variables a uniform, boxed representation
+  ([#1160](https://github.com/nanyx-lang/nanyx/issues/1160)).
 
 # Open questions
 
