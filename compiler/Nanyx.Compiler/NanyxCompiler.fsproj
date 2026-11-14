@@ -81,6 +81,7 @@
     <Compile Include="Builtins.fs" />
     <Compile Include="Hosts.fs" />
     <Compile Include="Attributes.fs" />
+    <Compile Include="Scripts.fs" />
     <Compile Include="TailPosition.fs" />
     <Compile Include="Signatures.fs" />
     <Compile Include="Linters.fs" />

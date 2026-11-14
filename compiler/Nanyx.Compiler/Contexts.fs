@@ -174,7 +174,9 @@ let internal extendEnvWithContexts (env: TypeEnv) (state: InferState) (contexts:
 /// that type requires, as far as `state` says, so the body can call them and what requires them. The function the
 /// lambda is passed to supplies them, as `withLog: [Console & c] ([Log & c] () -> ()) -> ()` supplies `Log` to its
 /// block, so the lambda's type requires them and the code around it does not (see `LambdaContexts`). Each is provided
-/// by the type the lambda is checked against, at the lambda. A context variable, a parameterised context and a scoped
+/// by the type the lambda is checked against, at the lambda. A script's statements (`InferState.ScriptEntry`) are not
+/// given them: they are the top level, whose names they see, as the module's own defs, and whose ambient contexts they
+/// run in. A context variable, a parameterised context and a scoped
 /// one are not bound: a scoped context is the call's (see `ScopedCalls`). The contexts are not written in the source,
 /// so nothing refers to them: `state` keeps only the variables reading their members made.
 let internal extendEnvForLambdaArgument (env: TypeEnv) (state: InferState) (lambda: Expression) (paramTy: Ty option) : TypeEnv * InferState =
@@ -192,6 +194,7 @@ let internal extendEnvForLambdaArgument (env: TypeEnv) (state: InferState) (lamb
         | _ -> []
     match required with
     | [] -> env, state
+    | _ when state.ScriptEntry = Some lambda.Id -> env, state
     | _ ->
         let env, next = extendEnvWithContextsFrom (fun _ -> FromSignature lambda.Span) env state required
         env, { state with NextId = next.NextId }
@@ -267,20 +270,23 @@ let private availableAmbientContexts (env: TypeEnv) (state: InferState) : Set<Id
             match state.ContextScope with
             | AmbientScope -> true
             | DefScope _
-            | ValueScope _ -> suppliedNearer env state members)
+            | ValueScope _
+            | ScriptValueScope _ -> suppliedNearer env state members)
         |> List.map fst
         |> Set.ofList
     match state.ContextScope with
     | AmbientScope -> Set.union fromMembers state.CarriedAmbientContexts
     | DefScope _
-    | ValueScope _ -> fromMembers
+    | ValueScope _
+    | ScriptValueScope _ -> fromMembers
 
 /// What provides an ambient context to code in `scope` where the ambient instance supplies it: the runtime at the top
 /// level, and inference in a def that does not write its type. None in a def that writes its type, or in a named
 /// module's value, where that is an error.
 let internal ambientProvider (scope: ContextScope) : ContextProvider option =
     match scope with
-    | AmbientScope -> Some FromRuntime
+    | AmbientScope
+    | ScriptValueScope _ -> Some FromRuntime
     | DefScope(_, true) -> Some FromInference
     | DefScope(_, false)
     | ValueScope _ -> None
@@ -355,6 +361,14 @@ let internal undeclaredContext (state: InferState) (defName: Identifier) (ctxNam
 let internal contextInValue (valueName: Identifier) (ctxName: Identifier) (what: string) (span: SourceSpan) =
     Diagnostics.at DiagnosticCodes.UndeclaredContext span $"{what} the context '{ctxName}', which '{valueName}' cannot have: a named module's top-level values are built without contexts, so make '{valueName}' a function"
 
+/// The error for naming `valueName` at `span`, a value the script computes as it runs (see
+/// `InferState.ScriptEntryValues`), where it is not computed yet: in a function (`inFunction`), or before its def.
+let internal scriptRunValue (valueName: Identifier) (inFunction: bool) (span: SourceSpan) =
+    let message =
+        if inFunction then $"'{valueName}' is computed when the script runs, so a function can't name it: pass it as an argument"
+        else $"'{valueName}' is computed when the script runs, so it can't be read before its def: move the def up"
+    Diagnostics.at DiagnosticCodes.ScriptRunValue span message
+
 /// `infer` run on `state`, but at the top level's ambient contexts where `state` is in a named module's value: for a
 /// lambda written in the value, which building the value does not run. One passed to a call is not inferred this
 /// way, since the call may run it.
@@ -365,11 +379,13 @@ let internal outsideValue (infer: InferState -> Result<'T * InferState, Diagnost
     | _ -> infer state
 
 /// `what` needs the ambient context `ctxName` where nothing nearer supplies it: fine at the top level, inferred for
-/// an unannotated def, and an error in a def whose type does not declare it or in a named module's value.
+/// an unannotated def or a script's value, and an error in a def whose type does not declare it or in a named module's
+/// value.
 let private needAmbientContext (state: InferState) (ctxName: Identifier) (what: string) (span: SourceSpan) : Result<InferState, Diagnostic list> =
     match state.ContextScope with
     | AmbientScope -> Ok state
-    | DefScope(defName, true) ->
+    | DefScope(defName, true)
+    | ScriptValueScope defName ->
         let contexts = state.InferredContexts |> Map.tryFind defName |> Option.defaultValue Set.empty
         Ok { state with InferredContexts = state.InferredContexts |> Map.add defName (contexts.Add ctxName) }
     | DefScope(defName, false) -> Error [ undeclaredContext state defName ctxName what span |> ContextFixes.withAddToType state defName ctxName ]
@@ -404,16 +420,21 @@ let internal contextSignatureOf (env: TypeEnv) (state: InferState) (name: Identi
     | _ -> state.ContextSignatures |> Map.tryFind (canonicalName env state name)
 
 /// Checks the context use of naming `name` at `span`: a member of the ambient instance needs its context, and a use
-/// of an unannotated top-level def is kept to check once its contexts are known. Where the use is the call `call`, what
-/// provides the context of a member it calls is recorded, as is, once known, what provides each context of the def.
+/// of an unannotated top-level def, or of a script's value, is kept to check once its contexts are known. Where the use
+/// is the call `call`, what provides the context of a member it calls is recorded, as is, once known, what provides
+/// each context of the def.
 let internal checkContextUse (call: NodeId option) (env: TypeEnv) (state: InferState) (name: Identifier) (span: SourceSpan) : Result<InferState, Diagnostic list> =
     if isAmbientMember env state name then
         let _, ctxName = state.AmbientMembers.[name]
         needAmbientContext state ctxName $"'{name}' is a member of" span
         |> Result.map (recordMemberCall call env name)
     else
-        match state.UnannotatedDefs |> Map.tryFind name, TypeEnv.tryFind name env with
-        | Some symbol, Some scheme when scheme.Symbol = Some symbol && not (state.AmbientMembers.IsEmpty && state.CarriedAmbientContexts.IsEmpty) ->
+        let deferredSymbol =
+            match state.UnannotatedDefs |> Map.tryFind name with
+            | Some symbol when not (state.AmbientMembers.IsEmpty && state.CarriedAmbientContexts.IsEmpty) -> Some symbol
+            | _ -> state.ScriptValues |> Map.tryFind name
+        match deferredSymbol, TypeEnv.tryFind name env with
+        | Some symbol, Some scheme when scheme.Symbol = Some symbol ->
             let deferred =
                 { Caller = state.ContextScope; Callee = name; Span = span; Available = availableAmbientContexts env state
                   Call = call; Providers = if call.IsSome then ambientProviders env state else Map.empty }

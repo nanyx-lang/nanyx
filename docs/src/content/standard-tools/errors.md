@@ -951,6 +951,25 @@ def shout = { text -> writeStdout(text ++ "!") }  -- error NYX0238: 'shout' requ
 
 To fix it, require the context the host provides instead, such as `Console`, and call its members.
 
+# NYX0239: Value the script computes as it runs, named outside it
+
+A script's value that needs a context, such as `def line = readLine()`, is computed when the script runs, in the order
+its statements are written, so that it reads its line once. A function can't name it, because the function may be
+called where the value doesn't exist, and a statement can't read it before its def.
+
+```nanyx
+import nanyx/console
+
+def line = readLine()
+
+def greet = { name -> println("{name} said {line}") }  -- error NYX0239: 'line' is computed when the script runs, so a function can't name it: pass it as an argument
+
+greet("Ada")
+```
+
+To fix it, pass the value to the function as an argument, `greet("Ada", line)`, or move the def above the statements
+that read it.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

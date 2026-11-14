@@ -13,8 +13,11 @@ type ContextScope =
     | DefScope of name: Identifier * inferring: bool
     /// The value of the top-level def `name` of a named module, which is built where there are no contexts (#956).
     | ValueScope of name: Identifier
+    /// The value of the top-level def `name` of a script, which is built in the ambient instances as the top level is.
+    /// One that needs any runs in the script's entry point (see `Scripts`).
+    | ScriptValueScope of name: Identifier
 
-/// A use of the unannotated top-level def `Callee`, whose contexts are only known once every def has been inferred:
+/// A use of the unannotated top-level def `Callee`, or of a script's value (see `InferState.ScriptValues`), whose contexts are only known once every def has been inferred:
 /// `Available` are the ambient contexts something nearer than the ambient instance supplies at `Span`. A call records,
 /// by its node `Call`, what provides each ambient context there (see `TypedModule.ContextProviders`).
 type DeferredContextUse =
@@ -121,6 +124,14 @@ type InferState =
             InferredContexts: Map<Identifier, Set<Identifier>>;
             /// The module's unannotated top-level functions, by name, with their symbols.
             UnannotatedDefs: Map<Identifier, SymbolId>;
+            /// The lambda a script's statements are, its entry point, if the module is a script (see `Scripts`).
+            ScriptEntry: NodeId option;
+            /// The top-level defs of a script whose values are not functions, by name, with their symbols: those that
+            /// turn out to need an ambient context run in the entry point (`ScriptEntryValues`).
+            ScriptValues: Map<Identifier, SymbolId>;
+            /// The script's values that need an ambient context, worked out once the module is inferred: they run in the
+            /// entry point, in the order written, rather than at the top level.
+            ScriptEntryValues: Set<Identifier>;
             DeferredContextUses: DeferredContextUse list;
             /// The calls whose instances are found once the def around them is inferred (see `PendingContextInstance`).
             PendingContextInstances: PendingContextInstance list;
@@ -324,6 +335,9 @@ let emptyState =
             ContextScope = AmbientScope;
             InferredContexts = Map.empty;
             UnannotatedDefs = Map.empty;
+            ScriptEntry = None;
+            ScriptValues = Map.empty;
+            ScriptEntryValues = Set.empty;
             DeferredContextUses = [];
             PendingContextInstances = [];
             PendingArithmetic = [];

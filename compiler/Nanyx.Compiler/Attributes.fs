@@ -14,15 +14,18 @@ module Attributes =
             | ModuleImport name -> name = moduleName
             | PathImport _ -> false)
 
+    /// The import of `host` itself, under an alias of its own, which a module that runs under it gets.
+    let internal hostImport (host: Host) =
+        TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport host.Module) (Some Hosts.importAlias) ])
+
     /// The imports the module that declares the entry point gets from `host`: the modules of the contexts it provides,
-    /// which the module sees without importing them, and the host itself, under an alias of its own.
+    /// which the module sees without importing them, and the host itself (see `hostImport`).
     let private hostImports (host: Host) (module': Module) =
-        let hostImport = ImportItem.synthetic (ModuleImport host.Module) (Some Hosts.importAlias)
         let provided =
             host.ProvidedModules
             |> List.filter (fun moduleName -> not (importsModule moduleName module'))
-            |> List.map (fun moduleName -> ImportItem.synthetic (ModuleImport moduleName) None)
-        provided @ [ hostImport ] |> List.map (fun item -> TopLevelItem.synthetic (Import [ item ]))
+            |> List.map (fun moduleName -> TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport moduleName) None ]))
+        provided @ [ hostImport host ]
 
     /// Resolves `@attribute` lines. `@entry` on a definition appends a call of the host's `run` with that definition
     /// at the end of the module, so it runs as the program's start function, and imports the host and the modules of

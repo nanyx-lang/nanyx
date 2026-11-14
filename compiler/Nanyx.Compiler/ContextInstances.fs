@@ -496,6 +496,7 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                                 | DefScope(defName, true) -> defName, None
                                 | DefScope(defName, false) -> InterpolationHoles.moduleEnd, Some defName
                                 | AmbientScope
+                                | ScriptValueScope _
                                 | ValueScope _ -> InterpolationHoles.moduleEnd, None
                             let errors =
                                 ContextInference.varsInOrder argTys.Head

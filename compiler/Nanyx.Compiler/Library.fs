@@ -438,14 +438,19 @@ module Compiler =
                 | desugaredAst, [], memberPlaces, lowered ->
                     Attributes.applyAttributes desugaredAst
                     |> Result.map (fun (desugared, entries) ->
+                        // A module without an `@entry` runs its statements as its entry point (see `Scripts`).
+                        let desugared, script =
+                            match origin, entries with
+                            | (SourceFile _ | InMemory), [] -> Scripts.asEntry (fun span -> (NyxCompiler.InferState.blockAround moduleBlocks span).IsSome) desugared
+                            | _ -> desugared, None
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
                         let nameErrors = TypeNames.definitionErrors declared @ nameErrors
                         let lowered = entries |> List.fold (fun acc entry -> Map.add entry.Attribute entry.Call acc) lowered
-                        (ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, nameErrors)
+                        (ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, script, nameErrors)
                     |> Result.mapError (fun diagnostics -> Desugared, diagnostics))
         match resolved with
         | Result.Error failure -> Error failure
-        | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, nameErrors) ->
+        | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, script, nameErrors) ->
             let preludeKey = originKey (StandardLibraryModule StandardLibrary.preludeModuleName)
             // Every module but the prelude imports it first, so that anything it imports or defines itself wins.
             // An import of a `module name =` block of this file is not of another file: inference resolves it.
@@ -469,6 +474,7 @@ module Compiler =
                         ModuleBlocks = moduleBlocks
                         WorkflowMemberPlaces = memberPlaces
                         Home = origin
+                        ScriptEntry = script |> Option.map snd
                         StandardLibraryExports = ImportFixes.standardLibraryExportPaths }
                   Errors = []
                   Inlined = []
@@ -587,7 +593,13 @@ module Compiler =
                     |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue)
                     |> List.ofSeq
                 let contextTypes = RequiredContexts.ofDefs state subst ownTopLevel
-                let runtimeErrors = Hosts.runtimeErrors origin entries state.Symbols contextTypes state.ContextProviders desugared
+                let runtimeErrors = Hosts.runtimeErrors origin (entries @ (script |> Option.map fst |> Option.toList)) state.Symbols contextTypes state.ContextProviders desugared
+                // A script whose statements need `HostRuntime` is told so where they need it: that its entry point, which
+                // has no span, then doesn't fit the host's `run` says nothing more.
+                let mismatchErrors =
+                    match script, runtimeErrors with
+                    | Some _, _ :: _ -> mismatchErrors |> List.filter (fun diagnostic -> not (diagnostic.Code = DiagnosticCodes.ContextsNotAllowed.Code && diagnostic.Span.IsNone))
+                    | _ -> mismatchErrors
                 let moduleErrors = nameErrors @ inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let defer =
@@ -596,6 +608,8 @@ module Compiler =
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
                 let own, placed = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.OperatorInstances state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems
                 let own = own |> ModuleLinking.writeBlockAliases state |> writeCells state |> nameIgnoredParameters state.ExprTypes subst
+                // The script's values that need a context run in its entry point.
+                let own = match script with Some (entry, _) -> Scripts.withEntryValues entry state.ScriptEntryValues own | None -> own
                 // An error is deferred when the diagnostic itself was placed, its place included.
                 let placed = Set.ofList placed
                 let undeferred = moduleErrors |> List.filter (placed.Contains >> not)
