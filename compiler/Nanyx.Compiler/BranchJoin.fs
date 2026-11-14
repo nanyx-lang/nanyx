@@ -10,7 +10,8 @@ open NyxCompiler.InferState
 /// being forced to agree, so `if c then #some(x) else #none` is `#some(a) | #none` without an
 /// annotation. Same-named tags unify their payloads, so `#some(1)` against `#some("a")` is still an
 /// error, unless both payloads are tags, which are joined: `#error(#notFound)` against `#error(#denied)` is
-/// `#error(#notFound | #denied)`. When every branch is a record (or tuple) with the same fields, the fields are joined one by
+/// `#error(#notFound | #denied)`, or both are tuples or records, which are joined field by field: `#a(#x, 1)` against
+/// `#a(#y, 2)` is `#a(#x | #y, int)`. When every branch is a record (or tuple) with the same fields, the fields are joined one by
 /// one, so `if c then (s, #some(x)) else (s, #none)` is `(string, #some(a) | #none)`. Otherwise the
 /// branches have to agree as before: every later branch is constrained equal to the first.
 ///
@@ -71,7 +72,7 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
             if untagged.Length < branchTypes.Length && untagged |> List.forall isUnknown then untagged else []
         if untagged.IsEmpty || not unknownBranches.IsEmpty then
             // Merge in order of first appearance; an existing tag of the same name unifies with the new one, unless
-            // both payloads are tags, which are joined in turn. A union has one rest, so a second rest variable is
+            // both payloads are tags, tuples or records, which are joined in turn. A union has one rest, so a second rest variable is
             // unified with the first.
             let taggedBranches = branchTags |> List.choose id
             let items = List.concat taggedBranches
@@ -79,9 +80,14 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
             let isJoinRest = function TyVar v -> state.JoinRests.Contains v.Id | _ -> false
             let rests = items |> List.filter (function TyVar _ -> true | _ -> false) |> List.distinct
             let joinRests, ownRests = rests |> List.partition isJoinRest
-            let isTagPayload st payload =
-                match Unifier.unalias (resolveSoFar st payload) with
+            // A payload that is a tag is joined, and so is a tuple or record one, field by field, so the tags in its
+            // fields are joined too: `#a(#x, 1)` against `#a(#y, 2)` is `#a(#x | #y, int)`. A named record's fields
+            // have the types its declaration gives them, so it is not joined.
+            let isJoinablePayload st payload =
+                let resolved = resolveSoFar st payload
+                match Unifier.unalias resolved with
                 | TyTag _ -> true
+                | TyRecord _ -> (match resolved with TyAlias _ -> false | _ -> true)
                 | TyUnion members -> members |> List.forall isUnionMember
                 | _ -> false
             let merged, nextState =
@@ -96,7 +102,7 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
                         resolveSoFar st existingPayload = resolveSoFar st payload ->
                         acc, st
                     | Some (TyTag(_, Some existingPayload)), TyTag(_, Some payload) when
-                        isTagPayload st existingPayload && isTagPayload st payload ->
+                        isJoinablePayload st existingPayload && isJoinablePayload st payload ->
                         let joinedPayload, next =
                             joinBranchTypes rowVars st [ resolveSoFar st existingPayload; resolveSoFar st payload ]
                         acc |> List.updateAt index.Value (TyTag(name, Some joinedPayload)), next
