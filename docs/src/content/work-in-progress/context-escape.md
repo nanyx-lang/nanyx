@@ -93,6 +93,9 @@ def main = {
 marks the instance it loads; the constructor call checks each lambda it is given against its member's type without
 the contexts the lambda needs besides, and records those as used where the `use` is written, so a lambda around the
 `use` requires them too. The lambda's parameters take their types from the member wherever the constructor is called.
+A function given by its name, `use Move(move = bobChooses)`, is taken the same way when an instance of each context it
+needs besides is in scope at the `use`; otherwise it keeps its type, and is `NYX0227` as before
+([#1265](https://github.com/nanyx-lang/nanyx/issues/1265)).
 
 A `use` of a record written out, `use (log = { m: string -> println(m) })`, already checks and runs, because its
 members have no declared types to fit: `log` is `[Console] string -> ()`, and a lambda that calls it requires

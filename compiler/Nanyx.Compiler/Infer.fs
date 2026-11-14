@@ -1092,7 +1092,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     | Some diagnostic -> Error [ diagnostic ]
                     | None ->
                     let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
-                    let inputTy, fitted = UseDischarge.fit current expr info.Underlying args (inputTypeFromArgs argTys)
+                    let inputTy, fitted = UseDischarge.fit env current expr info.Underlying args (inputTypeFromArgs argTys)
                     let made, constrained = constructedType (addAssignableConstraint inputTy info.Underlying fitted) name info
                     Ok (mkTypedExpr expr made None None None, constrained)
                 else
