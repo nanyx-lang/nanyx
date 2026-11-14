@@ -25,6 +25,8 @@ type CompileResult =
       /// The root module as parsed, before desugaring: the syntax the user wrote, whose nodes the typed module's
       /// `ExprTypes` and `CalleeTypes` are keyed by. Present when `Typed` is.
       Syntax: Module option
+      /// The name the root module's file declares with `module name`, if it does. None when `Syntax` is absent.
+      ModuleName: string option
       /// The expressions desugaring and `@entry` made up for each node of `Syntax`, by its node, in the order they were
       /// made: how the type of a workflow bind is found, through `ExprTypes`. Empty when `Syntax` is absent.
       Lowered: Map<NodeId, NodeId list>
