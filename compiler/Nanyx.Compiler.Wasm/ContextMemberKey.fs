@@ -14,6 +14,14 @@ type ContextMemberKey =
     /// The member of an instance of a parameterised context (`toString` of `ToString(int)`).
     | InstanceMember of instance: TypeKey * memberName: string
 
+/// The members of each context, by the context's name, in the order the context's layout stores them: what a function
+/// value that requires the context takes (see `CoreIrLowerTypes.toIrTypeIn`).
+type ContextLayouts =
+    { /// Of each context without parameters: each member's key and declared type.
+      Plain: Map<string, (ContextMemberKey * NyxCompiler.Ty) list>
+      /// Of each parameterised context: its parameters, and each member's name and declared type in them.
+      Parameterised: Map<string, NyxCompiler.TyVar list * (string * NyxCompiler.Ty) list> }
+
 module ContextMemberKey =
     /// A name in a key's text, with each `_` written `-5F-`, so that `_` only ever separates the parts.
     let private part (name: string) = name.Replace("_", "-5F-")

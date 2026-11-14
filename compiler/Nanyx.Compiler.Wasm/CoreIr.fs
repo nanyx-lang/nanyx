@@ -31,8 +31,9 @@ type IrType =
     | IrList of IrType
     /// A function value: a closure block holding the function's table slot and what it captures. The input is a
     /// record of the parameters when there are several, as a function's type has it. The members are those of the
-    /// contexts the function requires where it is called, by key, each with its type: a call passes the ones in scope
-    /// there after its arguments, in this order (contexts by name, and each context's members in its layout's order).
+    /// contexts the function requires where it is called, by key, each with its type: a call passes them after its
+    /// arguments, in this order (contexts without parameters by name, then instances of parameterised ones by key, and
+    /// each context's members in its layout's order).
     | IrFunction of IrType * IrType * members: (ContextMemberKey * IrType) list
     /// A value of one of a context member's own type variables, which the member's value is made once for, whatever type
     /// each call has it at: held in a box, a closure block whose function returns the value, so it is passed, kept and
