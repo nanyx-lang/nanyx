@@ -298,7 +298,10 @@ dbg(broken(2))
 """
     let result = Compiler.compile source
     let wat, report = transpileTypedModuleWithReport result.Typed.Value
-    Assert.Equal<string list>([ "broken"; "fine"; "__nanyx_start" ], withoutPrinters report.Functions)
+    // The script's statements are its entry point, run by the console host's `run`, which the module has too.
+    let functions = withoutPrinters report.Functions
+    Assert.Equal<string list>([ "broken"; "fine" ], functions |> List.filter (fun name -> name = "broken" || name = "fine"))
+    Assert.Equal("__nanyx_start", List.last functions)
     Assert.Contains("call $proc_exit\n    unreachable", wat)
     Assert.Contains("(start $__nanyx_start)", wat)
 

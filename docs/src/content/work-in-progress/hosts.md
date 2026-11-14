@@ -295,8 +295,8 @@ The composite host runs each part under the right sub-host and coordinates start
 
 1. **ConsoleHost in Nanyx** ([#1245](https://github.com/nanyx-lang/nanyx/issues/1245)): `nanyx/console.host`'s `run`
    takes the entry, the compiler checks `@entry` against it and starts the program with `run(entry)`, and
-   `HostRuntime` is provided only to the host. Built, and the host's `Console` reaches every entry. Left: running
-   scripts under the host too, then removing `nanyx/console`'s ambient instance (see [What's built](#whats-built)).
+   `HostRuntime` is provided only to the host. Built: the host's `Console` reaches every entry, and scripts run under
+   the host too. Left: removing `nanyx/console`'s ambient instance (see [What's built](#whats-built)).
 2. **`Env`** ([#1246](https://github.com/nanyx-lang/nanyx/issues/1246)): arguments, environment variables and the
    exit code, provided by ConsoleHost.
 3. **Choosing a host** ([#1247](https://github.com/nanyx-lang/nanyx/issues/1247)): `[host]` in the manifest and
@@ -334,11 +334,26 @@ The composite host runs each part under the right sub-host and coordinates start
   members as a def that writes it does: `InferModule` adds the contexts it inferred to the def's annotation for the
   backend (`[Console]` on its own, or after the parameterised contexts it was given), and the backend gives a function
   named as a value the contexts without parameters it requires (`CodeGen.carryPlainContexts`), so `run(main)` passes
-  `main` its members rather than closing it over `nanyx/console`'s. Where the ambient instance is known, at a script's
-  top level, a call is specialised on its members (see [Context calls](./context-calls)) and calls them directly.
-  Nothing wires `Console` to the entry by name.
-- **Scripts** (files without `@entry`) still run their top level in `nanyx/console`'s ambient instance. Until they
-  run under the host, `nanyx/console.host` repeats `nanyx/console`'s line reading over `HostRuntime.readStdinByte`.
+  `main` its members rather than closing it over `nanyx/console`'s. Nothing wires `Console` to the entry by name.
+- **Scripts run under the host.** A module without an `@entry` whose top level has statements is a script, and its
+  statements are its entry point: `Scripts.asEntry` makes them the body of a lambda, followed by `()`, and appends
+  `__host.run({ ... })` to the module, importing only the host (a script imports `nanyx/console` itself if it prints).
+  The lambda is not given `Console`'s members as a lambda passed to `run` would be
+  (`Contexts.extendEnvForLambdaArgument`): its statements are the top level, and see the script's own names and
+  ambient contexts as before. A script's value that needs a context, directly or through the functions and values it
+  names (`def line = readLine()`), is inferred in a scope of its own (`ScriptValueScope`) that records what it
+  needs; once the module is inferred, those values (`InferState.ScriptEntryValues`) move into the entry point as local
+  defs, in the order written (`Scripts.withEntryValues`), so each is computed once
+  ([#1257](https://github.com/nanyx-lang/nanyx/issues/1257)). A value that needs no context stays at the top level,
+  where a function can name it. A function that names a value that moved, or a statement that reads one before its def,
+  is `NYX0239`. The ambient contexts the statements and the moved values need through unannotated functions are
+  only known once the module is inferred, so the lambda's type is given them then (`InferModule.withEntryContexts`),
+  and the host passes their members. A lambda inside a statement does not take them from the entry point yet: it still
+  finds `nanyx/console`'s ambient instance. Every script now carries the host's `Console`, about 20 KB of WebAssembly text for hello world, as an
+  entry program already did.
+- **`nanyx/console`'s ambient instance** is still there, and `nanyx/console.host` repeats its line reading over
+  `HostRuntime.readStdinByte`. Removing both is what is left of
+  [#1245](https://github.com/nanyx-lang/nanyx/issues/1245).
 
 # Open questions
 

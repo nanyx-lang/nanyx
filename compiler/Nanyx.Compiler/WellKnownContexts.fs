@@ -292,6 +292,7 @@ module internal WellKnownContexts =
             | DefScope(name, true) -> name, None
             | DefScope(name, false) -> InterpolationHoles.moduleEnd, Some name
             | AmbientScope
+            | ScriptValueScope _
             | ValueScope _ -> InterpolationHoles.moduleEnd, None
         let pending =
             { Def = def; Call = expr.Id; Callee = op; Index = 0; Count = 1
@@ -448,7 +449,7 @@ module internal WellKnownContexts =
         | Open _, TyVar _, DefScope(_, true) -> None
         | Open v, _, DefScope(defName, true) -> later (pendingIn defName v None) state
         | Open v, _, scope ->
-            let annotatedDef = match scope with DefScope(defName, _) -> Some defName | AmbientScope | ValueScope _ -> None
+            let annotatedDef = match scope with DefScope(defName, _) -> Some defName | AmbientScope | ScriptValueScope _ | ValueScope _ -> None
             later (pendingIn InterpolationHoles.moduleEnd v annotatedDef) { state with HoleScopes = state.HoleScopes |> Map.add call.Id (env, annotatedDef) }
 
     // Contexts checked at calls.
@@ -498,5 +499,5 @@ module internal WellKnownContexts =
         | Attached, _ -> Ok state
         | Open v, DefScope(defName, true) -> pendingIn defName v None state
         | Open v, scope ->
-            let annotatedDef = match scope with DefScope(defName, _) -> Some defName | AmbientScope | ValueScope _ -> None
+            let annotatedDef = match scope with DefScope(defName, _) -> Some defName | AmbientScope | ScriptValueScope _ | ValueScope _ -> None
             pendingIn InterpolationHoles.moduleEnd v annotatedDef { state with HoleScopes = state.HoleScopes |> Map.add call.Id (env, annotatedDef) }

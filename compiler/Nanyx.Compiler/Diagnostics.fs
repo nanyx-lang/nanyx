@@ -129,6 +129,7 @@ module DiagnosticCodes =
     let UndeterminedContextType = code 236 "Context on a type no parameter or result has" Severity.Error
     let EntryDoesNotFitHost = code 237 "Entry point does not fit the host" Severity.Error
     let HostRuntimeOutsideHost = code 238 "HostRuntime required outside a host" Severity.Error
+    let ScriptRunValue = code 239 "Value the script computes as it runs, named outside it" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -151,7 +152,7 @@ module DiagnosticCodes =
           UnattachableDefinition; BlockWithoutResult; MutOutsideMemory; NotACell; CellAssignmentMismatch
           UnboundContextVariable; ContextsNotAllowed; UnguardedRecursiveAlias
           LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotNominal; ScopedContextEscapes
-          NotACellArgument; MisplacedCellType; UndeterminedContextType; EntryDoesNotFitHost; HostRuntimeOutsideHost
+          NotACellArgument; MisplacedCellType; UndeterminedContextType; EntryDoesNotFitHost; HostRuntimeOutsideHost; ScriptRunValue
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

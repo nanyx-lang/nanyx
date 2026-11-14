@@ -73,6 +73,24 @@ let private withInferredAmbientContexts (required: Map<Identifier, Set<Identifie
         | _ -> item
     | _ -> item
 
+/// `state` with the type of a script's entry point (`InferState.ScriptEntry`) requiring the ambient contexts that the
+/// unannotated functions and values its statements use need (`uses`, `required`, by name), and those that the values
+/// that run in it (`ScriptEntryValues`) need: known only once the module is inferred, so not yet in the type the lambda
+/// was given. The host then passes their members to the entry point, which passes them on.
+let private withEntryContexts (required: Map<Identifier, Set<Identifier>>) (uses: DeferredContextUse list) (state: InferState) =
+    match state.ScriptEntry |> Option.bind (fun lambda -> state.ExprTypes |> Map.tryFind lambda |> Option.map (fun ty -> lambda, ty)) with
+    | Some (lambda, TyFunc(input, output, own)) ->
+        let needed =
+            (uses |> List.filter (fun used -> used.Caller = AmbientScope) |> List.map (fun used -> required.[used.Callee]))
+            @ (state.ScriptEntryValues |> Seq.map (fun name -> required.[name]) |> List.ofSeq)
+            |> Set.unionMany
+            |> Set.toList
+            |> List.map (fun ctxName -> TyApply(ctxName, []))
+            |> List.filter (fun context -> not (List.contains context own))
+        if needed.IsEmpty then state
+        else { state with ExprTypes = state.ExprTypes |> Map.add lambda (TyFunc(input, output, own @ needed)) }
+    | _ -> state
+
 /// Infers a module in `initialEnv`, carrying on past an item that fails to check: the types and items of those
 /// that do, and the diagnostics of those that do not. The constraints are not solved here, so a type mismatch is
 /// not among them.
@@ -134,6 +152,12 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     let withoutTopLevel (name: string) (env: TypeEnv) =
         aliasesOf |> Map.tryFind name |> Option.defaultValue [] |> List.fold (fun acc alias -> acc |> Map.remove alias) (env |> Map.remove name)
 
+    // A value of a script is computed at the top level, unless it is in a module block, which is a named module.
+    let isScriptValue (value: Expression) =
+        state.ScriptEntry.IsSome
+        && not (module' |> List.exists (function Kind (ModuleDecl _) -> true | _ -> false))
+        && (blockAround state.ModuleBlocks value.Span).IsNone
+
     let mutable preboundFreshVars: Map<string, Ty> = Map.empty
     let prebind (item: TopLevelItem) =
         match item with
@@ -146,6 +170,9 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             state <- { declared with ContextRequirements = declared.ContextRequirements |> Map.remove name }
             match typeOpt, value.Kind, symbol with
             | None, Lambda _, Some symbol -> state <- { state with UnannotatedDefs = state.UnannotatedDefs |> Map.add name symbol }
+            | _, Lambda _, _ -> ()
+            | _, _, Some symbol when isScriptValue value ->
+                state <- { state with ScriptValues = state.ScriptValues |> Map.add name symbol }
             | _ -> ()
             let _, declaredTypeExprOpt = extractDefContexts typeOpt value
             match declaredTypeExprOpt with
@@ -224,6 +251,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     | Lambda _ -> { nextStateWithReq with ContextScope = DefScope(name, typeOpt.IsNone) } |> LambdaContexts.markBody expr
                     | _ when currentModule.IsSome || (blockAround state.ModuleBlocks expr.Span).IsSome ->
                         { nextStateWithReq with ContextScope = ValueScope name }
+                    | _ when state.ScriptValues.ContainsKey name -> { nextStateWithReq with ContextScope = ScriptValueScope name }
                     | _ -> nextStateWithReq
                 let inferResult =
                     inferDefValue envWithRec bodyState expr annotation
@@ -366,21 +394,38 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
 
     do
         // The ambient contexts each unannotated function needs: those its body uses, and those the unannotated
-        // functions it uses need that nothing nearer supplies, until no more are found.
+        // functions it uses need that nothing nearer supplies, until no more are found. So for a script's values, which
+        // need the contexts of the functions and values they use too; a function that names such a value is an error.
         let uses = List.rev state.DeferredContextUses
+        let isScriptValue name = state.ScriptValues.ContainsKey name
         let mutable required =
-            state.UnannotatedDefs |> Map.map (fun name _ -> state.InferredContexts |> Map.tryFind name |> Option.defaultValue Set.empty)
+            Seq.append state.UnannotatedDefs.Keys state.ScriptValues.Keys
+            |> Seq.map (fun name -> name, state.InferredContexts |> Map.tryFind name |> Option.defaultValue Set.empty)
+            |> Map.ofSeq
         let mutable changed = true
         while changed do
             changed <- false
             for used in uses do
                 match used.Caller with
-                | DefScope(caller, true) when required.ContainsKey caller ->
+                | DefScope(caller, true)
+                | ScriptValueScope caller when required.ContainsKey caller && (isScriptValue caller || not (isScriptValue used.Callee)) ->
                     let needed = Set.difference required.[used.Callee] used.Available
                     if not (Set.isSubset needed required.[caller]) then
                         required <- required |> Map.add caller (Set.union required.[caller] needed)
                         changed <- true
                 | _ -> ()
+        // The script's values that need a context run in its entry point, in the order written: one is not computed in
+        // a function, or before its def.
+        let entryValues = state.ScriptValues |> Map.filter (fun name _ -> not required.[name].IsEmpty)
+        for used in uses do
+            match entryValues |> Map.tryFind used.Callee, used.Caller with
+            | Some _, (DefScope _ | ValueScope _) -> errors <- errors @ [ scriptRunValue used.Callee true used.Span ]
+            | Some symbol, _ when used.Span.Start < state.Symbols.[symbol].Declaration.Start ->
+                errors <- errors @ [ scriptRunValue used.Callee false used.Span ]
+            | _ -> ()
+        state <- { state with ScriptEntryValues = entryValues.Keys |> Set.ofSeq } |> withEntryContexts required uses
+        let required = required |> Map.filter (fun name _ -> not (isScriptValue name))
+        let uses = uses |> List.filter (fun used -> not (isScriptValue used.Callee))
         for used in uses do
             match used.Caller with
             | DefScope(caller, false) ->

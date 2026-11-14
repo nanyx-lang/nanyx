@@ -176,6 +176,7 @@ module InterpolationHoles =
                 | DefScope(name, true) -> name, None
                 | DefScope(name, false) -> moduleEnd, Some name
                 | AmbientScope
+                | ScriptValueScope _
                 | ValueScope _ -> moduleEnd, None
             let pending =
                 { Def = def; Call = call.Id; Callee = holeFunction; Index = found.Length; Count = count

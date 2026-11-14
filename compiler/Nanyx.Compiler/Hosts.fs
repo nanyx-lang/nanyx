@@ -108,6 +108,7 @@ module Hosts =
                     | Kind (Expr _) as item -> Some item
                     | _ -> None)
                 |> List.collect SyntaxTree.ofItem
+                |> List.collect SyntaxTree.expressionsWithin
                 |> List.filter (fun expr ->
                     not (startCalls.Contains expr.Id)
                     && providers

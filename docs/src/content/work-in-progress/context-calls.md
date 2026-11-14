@@ -147,11 +147,9 @@ all its members, and exported; a specialisation of it on known members is named 
 
 A def that doesn't write its type and infers an ambient context, such as `def greet = { name -> println(name) }`,
 takes the context's members as one that writes `[Console]` does
-([#1245](https://github.com/nanyx-lang/nanyx/issues/1245)). At a script's top level the members are the ambient
-instance's, so the call is to `greet__known`, which calls them directly; the unspecialised `greet` is lowered and
-exported too, with the drop and dup functions of its members' types. An `@entry` is called by its host's `run`, with the
-members of the `Console` the host `use`s, which are not known there: so `println` in an entry calls the host's `write`
-through the table.
+([#1245](https://github.com/nanyx-lang/nanyx/issues/1245)). An `@entry`, and a script's statements, are called by the
+host's `run` with the members of the `Console` the host `use`s, which are not known there: so `println` calls the
+host's `write` through the table.
 
 How it is built:
 

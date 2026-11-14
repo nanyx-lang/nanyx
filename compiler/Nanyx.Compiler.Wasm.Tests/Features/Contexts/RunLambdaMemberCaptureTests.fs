@@ -25,12 +25,11 @@ def shout: [Greet] list(string) -> list(string) = { names ->
 
 def hello = { s -> "hi " ++ s }
 
+@entry
 def main = {
   use (greet = hello)
   for shout(["a", "b"]) | s -> println(s)
 }
-
-main()
 """
     Assert.DoesNotContain("__ctx", lambdaText (transpileWat source))
     runSource source |> assertRan "hi a!\nhi b!\n"
@@ -47,12 +46,11 @@ def shout: [Greet] list(string) -> list(string) = { names ->
 
 def hello = { s -> "hi " ++ s }
 
+@entry
 def main = {
   use (greet = hello)
   for shout(["a", "b"]) | s -> println(s)
 }
-
-main()
 """
     Assert.Contains("__ctx_greet", lambdaText (transpileWat source))
     runSource source |> assertRan "hi a!\nhi b!\n"
@@ -65,13 +63,12 @@ context Greet = (greet: string -> string)
 
 def hello = { s -> "hi " ++ s }
 
+@entry
 def main = {
   use (greet = hello)
   def marked = ["a", "b"] \list.map({ s -> s ++ "?" })
   for marked | s -> println(greet(s))
 }
-
-main()
 """
     Assert.DoesNotContain("__use_", lambdaText (transpileWat source))
     runSource source |> assertRan "hi a?\nhi b?\n"
