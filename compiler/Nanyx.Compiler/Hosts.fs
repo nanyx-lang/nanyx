@@ -49,6 +49,21 @@ module Hosts =
     /// The hosts the standard library ships.
     let all = [ console ]
 
+    /// The hosts that can be chosen, as a message lists them.
+    let private choices () = all |> List.map (fun host -> $"'{host.Module}'") |> String.concat ", "
+
+    /// The host that is the module `name`, as a manifest's `[host] use` and `--host` write it (`nanyx/console.host`), or
+    /// why there is none: no such module, or a module that isn't a host. Until packages resolve, only the standard
+    /// library's hosts can be chosen.
+    let tryFind (name: string) : Result<Host, string> =
+        match all |> List.tryFind (fun host -> host.Module = name) with
+        | Some host -> Ok host
+        | None when not (name.StartsWith StandardLibrary.importPrefix) ->
+            Error $"'{name}' is not a host: until packages resolve, a host is one of the standard library's, {choices ()}"
+        | None when StandardLibrary.moduleNames |> List.contains (name.Substring StandardLibrary.importPrefix.Length) ->
+            Error $"'{name}' is not a host: it has no '{runFunction}' that runs an entry point. The hosts are {choices ()}"
+        | None -> Error $"There is no host '{name}': the standard library has no such module. The hosts are {choices ()}"
+
     /// Whether the module `origin` declares contexts a host provides, as `nanyx/console` declares `Console`.
     let providesContexts (origin: ModuleOrigin) =
         match origin with

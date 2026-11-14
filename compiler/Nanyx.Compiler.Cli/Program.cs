@@ -53,16 +53,18 @@ internal static class CliCommands
     /// </summary>
     /// <param name="path">A .nyx file, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported. On a terminal, the tree is shown live while the compile runs.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's [host]: a module such as nanyx/console.host. A script always runs under nanyx/console.host.</param>
     [Consolo("check")]
     public static int Check(
         [Consolo("timings")] bool timings = false,
+        [Consolo("host")] string? host = null,
         params string[] path)
     {
-        return CheckIn(Shell.Process, path, timings);
+        return CheckIn(Shell.Process, path, timings, host);
     }
 
     /// <summary>What <c>nanyx check</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int CheckIn(Shell shell, string[] path, bool timings = false)
+    internal static int CheckIn(Shell shell, string[] path, bool timings = false, string? host = null)
     {
         if (!TrySinglePath(shell, path, out var single))
         {
@@ -71,10 +73,10 @@ internal static class CliCommands
 
         if (single is not null && !IsPackagePath(shell, single))
         {
-            return Execute(shell, single, Target.Check, outputPath: null, timings: timings);
+            return NoHostForScript(shell, host) ?? Execute(shell, single, Target.Check, outputPath: null, timings: timings);
         }
 
-        if (!TryFindPackage(shell, single, out var package, out var failed))
+        if (!TryFindPackage(shell, single, host, out var package, out var failed))
         {
             return failed;
         }
@@ -137,17 +139,19 @@ internal static class CliCommands
     /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest, followed by the program's arguments; none means the package the current directory is in.</param>
     /// <param name="checkMemory">Check the program's reference counting as it runs: stop at a block freed twice or an object used after it was freed, and fail if anything is left on the heap at the end.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's [host]: a module such as nanyx/console.host. A script always runs under nanyx/console.host.</param>
     [Consolo("run")]
     public static int Run(
         [Consolo("check-memory")] bool checkMemory = false,
         [Consolo("timings")] bool timings = false,
+        [Consolo("host")] string? host = null,
         params string[] path)
     {
-        return RunIn(Shell.Process, checkMemory, path, timings);
+        return RunIn(Shell.Process, checkMemory, path, timings, host);
     }
 
     /// <summary>What <c>nanyx run</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int RunIn(Shell shell, bool checkMemory, string[] path, bool timings = false)
+    internal static int RunIn(Shell shell, bool checkMemory, string[] path, bool timings = false, string? host = null)
     {
         // What follows the program is its own: its arguments, which it reads through `Env`.
         var single = path.FirstOrDefault();
@@ -155,10 +159,11 @@ internal static class CliCommands
 
         if (single is not null && !IsPackagePath(shell, single))
         {
-            return Execute(shell, single, Target.Run, outputPath: null, checkMemory: checkMemory, timings: timings, programArguments: programArguments);
+            return NoHostForScript(shell, host)
+                ?? Execute(shell, single, Target.Run, outputPath: null, checkMemory: checkMemory, timings: timings, programArguments: programArguments);
         }
 
-        if (!TryFindPackage(shell, single, out var package, out var failed))
+        if (!TryFindPackage(shell, single, host, out var package, out var failed))
         {
             return failed;
         }
@@ -190,25 +195,27 @@ internal static class CliCommands
     /// <param name="outputPath">Where to write the program; the default is out/&lt;package name&gt;.wat beside the manifest.</param>
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's [host]: a module such as nanyx/console.host. A script always runs under nanyx/console.host.</param>
     [Consolo("build")]
     public static int Build(
         [Consolo("out", Alias = "o")] string? outputPath = null,
         [Consolo("release")] bool release = false,
         [Consolo("timings")] bool timings = false,
+        [Consolo("host")] string? host = null,
         params string[] path)
     {
-        return BuildIn(Shell.Process, outputPath, release, path, timings);
+        return BuildIn(Shell.Process, outputPath, release, path, timings, host);
     }
 
     /// <summary>What <c>nanyx build</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int BuildIn(Shell shell, string? outputPath, bool release, string[] path, bool timings = false)
+    internal static int BuildIn(Shell shell, string? outputPath, bool release, string[] path, bool timings = false, string? host = null)
     {
         if (!TrySinglePath(shell, path, out var single))
         {
             return UsageError;
         }
 
-        if (!TryFindPackage(shell, single, out var package, out var failed))
+        if (!TryFindPackage(shell, single, host, out var package, out var failed))
         {
             return failed;
         }
@@ -309,6 +316,50 @@ internal static class CliCommands
     /// <summary>Whether a path names a package (its directory or manifest) rather than a file to run as a script.</summary>
     private static bool IsPackagePath(Shell shell, string path) =>
         Directory.Exists(shell.FullPath(path)) || path.EndsWith(ManifestModule.extension, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// A usage error, reported, when <c>--host</c> is given for a script, which always runs under the console host; null
+    /// when it is not given.
+    /// </summary>
+    private static int? NoHostForScript(Shell shell, string? host)
+    {
+        if (host is null)
+        {
+            return null;
+        }
+
+        shell.Error.WriteLine($"--host chooses a package's host: a script always runs under {Hosts.console.Module}.");
+        return UsageError;
+    }
+
+    /// <summary>
+    /// The package a path names, or the one the shell's directory is in, under the host <paramref name="host"/> names if
+    /// it names one (<c>--host</c>), in place of its manifest's; otherwise reports why there is none, or why the host
+    /// can't be chosen, and gives the exit code in <paramref name="failed"/>.
+    /// </summary>
+    private static bool TryFindPackage(Shell shell, string? path, string? host, out Package package, out int failed)
+    {
+        if (!TryFindPackage(shell, path, out package, out failed))
+        {
+            return false;
+        }
+
+        if (host is null)
+        {
+            return true;
+        }
+
+        var chosen = Hosts.tryFind(host);
+        if (chosen.IsError)
+        {
+            shell.Error.WriteLine($"--host: {chosen.ErrorValue}");
+            failed = UsageError;
+            return false;
+        }
+
+        package = PackageModule.withHost(chosen.ResultValue, package);
+        return true;
+    }
 
     /// <summary>
     /// The package a path names, or the one the shell's directory is in; otherwise reports why there is none, and gives

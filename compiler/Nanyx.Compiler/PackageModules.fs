@@ -17,7 +17,9 @@ type PackageModules =
       Files: string list
       /// Each module name the package's files declare, with the files that declare it, in order: several for a module
       /// split across files, each marked `@partial` (see `PartialModules`).
-      Modules: Map<string, string list> }
+      Modules: Map<string, string list>
+      /// The host the package's `@entry` runs under: its manifest's `[host]`, or `--host`.
+      Host: Host }
 
 module PackageModules =
     /// Whether two full paths name the same file: file names differ only in case on Windows and macOS, and an editor
@@ -46,9 +48,11 @@ module PackageModules =
             declaredNames.[filePath] <- (info.LastWriteTimeUtc, info.Length, name)
             name
 
-    /// The modules of the package called `name`, whose manifest is in `root` and whose source files are `files`.
-    let ofFiles (name: string) (root: string) (files: string list) : PackageModules =
+    /// The modules of the package called `name`, whose manifest is in `root`, whose source files are `files` and whose
+    /// `@entry` runs under `host`.
+    let ofFiles (name: string) (root: string) (host: Host) (files: string list) : PackageModules =
         { Package = name
+          Host = host
           Root = root
           Files = files
           Modules =

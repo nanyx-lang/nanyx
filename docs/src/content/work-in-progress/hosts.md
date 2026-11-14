@@ -300,7 +300,7 @@ The composite host runs each part under the right sub-host and coordinates start
 2. **`Env`** ([#1246](https://github.com/nanyx-lang/nanyx/issues/1246)): arguments, environment variables and the
    exit code, provided by ConsoleHost. Done (see [What's built](#whats-built)).
 3. **Choosing a host** ([#1247](https://github.com/nanyx-lang/nanyx/issues/1247)): `[host]` in the manifest and
-   `--host` on the CLI, with errors that name the host.
+   `--host` on the CLI, with errors that name the host. Done (see [What's built](#whats-built)).
 4. **More contexts for ConsoleHost**, as they are added: [`Random`](https://github.com/nanyx-lang/nanyx/issues/1237),
    then `Clock` and `FileSystem`.
 5. **Console in a page**, for the [playground](./playground): the embedder changes in "`ConsoleHost` in a page"
@@ -315,7 +315,13 @@ The composite host runs each part under the right sub-host and coordinates start
 
 - **The host is a module the compiler resolves.** `Hosts.fs` describes each host the standard library ships (`Host`:
   the module, and the modules of the contexts it provides) and names the default, `Hosts.console`. Choosing another
-  host ([#1247](https://github.com/nanyx-lang/nanyx/issues/1247)) is choosing another `Host` there.
+  host is choosing another `Host` there: `Hosts.tryFind` gives the one a module name (`nanyx/console.host`) is, or an
+  error that names it, for a module that doesn't exist or isn't a host.
+- **A package chooses its host.** `Manifest.read` reads `[host] use` into `Manifest.Host` (the console host without a
+  `[host]` table), and any other key of the table is an error at its line, since no host takes configuration yet.
+  `--host` on `run`, `build` and `check` replaces it (`Package.withHost`); on a script it is a usage error. The host
+  travels with the package's module table (`PackageModules.Host`), so every compile of a package's file, the language
+  server's included, passes `@entry` to that host's `run`; a file in no package runs under the console host.
 - **`@entry` calls the host's `run`.** `Attributes.applyAttributes` imports the host under an alias of its own
   (`__host`), so that it can't clash with the program's names, imports the modules of the contexts the host provides
   (`nanyx/console`, so that `println` is in scope), and appends `__host.run(main)` to the module as its start. The

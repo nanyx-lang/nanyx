@@ -18,9 +18,9 @@ nanyx run [--timings] <file.nyx> [<arguments>]
 nanyx check <file.nyx> [--timings]
 nanyx parse <file.nyx>
 nanyx wasm <file.nyx> [--out <path>]
-nanyx run [--timings] [<directory or .nyxp> [<arguments>]]
-nanyx check [<directory or .nyxp>] [--timings]
-nanyx build [<directory or .nyxp>] [--out <path>] [--timings]
+nanyx run [--timings] [--host <module>] [<directory or .nyxp> [<arguments>]]
+nanyx check [<directory or .nyxp>] [--timings] [--host <module>]
+nanyx build [<directory or .nyxp>] [--out <path>] [--timings] [--host <module>]
 nanyx new <name> [<directory>]
 nanyx format [--check | --write] <files or directories>
 nanyx stdlib-docs [--check] <directory>
@@ -148,6 +148,12 @@ above it.
   manifest (or to `--out`). A package without an `@entry` is only checked.
 - `run` does the same checks, then runs the `@entry`.
 - `check` does the same checks and writes nothing. Any error fails it, including one a debug build would defer.
+
+The package's `@entry` runs under the host its manifest's `[host]` table names with `use`, or `nanyx/console.host`
+without one (see [Hosts](./hosts#choosing-a-host)). `--host <module>` chooses another for one command, in place of the
+manifest's. A host that isn't one of the standard library's, a module that isn't a host, and a key of `[host]` other than
+`use` are errors that name it; `--host` on a single `.nyx` file is a usage error, since a script always runs under
+the console host.
 
 `nanyx new acme.demo` makes a package in a new directory, `demo` (the name's last segment) unless another
 is given: `acme.demo.nyxp`, with the official linter on, and `src/main.nyx`, whose `@entry` prints

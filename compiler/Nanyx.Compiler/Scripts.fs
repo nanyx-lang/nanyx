@@ -12,8 +12,9 @@ module Scripts =
     /// lambda's type stays as it is when a value is moved in after the last statement (see `asDefinition`). A statement
     /// in a module block (`inBlock`) is left where it is, to be reported. In a module with `@entry`s (`entries`), whose
     /// calls of their host's `run` are not statements, the statements run before them, as they would at the top level,
-    /// and the host is imported once. With the entry point and the lambda's node, if there are any statements.
-    let asEntry (inBlock: SourceSpan -> bool) (entries: EntryPoint list) (module': Module) : Module * (EntryPoint * NodeId) option =
+    /// and the host is imported once. The host is `host`: a package's, or the console host for a loose script. With the
+    /// entry point and the lambda's node, if there are any statements.
+    let asEntry (host: Host) (inBlock: SourceSpan -> bool) (entries: EntryPoint list) (module': Module) : Module * (EntryPoint * NodeId) option =
         let entryCalls = entries |> List.collect _.Call |> Set.ofList
         let isEntryCall (item: TopLevelItem) =
             match item.Kind with
@@ -26,7 +27,6 @@ module Scripts =
         match module' |> List.filter isStatement with
         | [] -> module', None
         | statements ->
-            let host = Hosts.console
             let body =
                 (statements |> List.choose (function Kind (Expr expr) -> Some (Statement.from expr (ExprStatement expr)) | _ -> None))
                 @ [ Statement.synthetic (ExprStatement (Expression.synthetic UnitExpr)) ]
