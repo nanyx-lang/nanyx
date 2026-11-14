@@ -322,6 +322,21 @@ Returns the position of the first element equal to the value, counting from 0, o
 
 ---
 
+## init
+
+```nanyx
+list.init: [c] (int, ([c] int -> a)) -> list(a)
+```
+
+Returns a list of the given length, whose element at each position is the function applied to that position. The function is called on the positions in order, from 0. A length of zero or less gives `[]`.
+
+```nanyx
+list.init(3, { i -> i * 2 })
+-- [0, 2, 4]
+```
+
+---
+
 ## isEmpty
 
 ```nanyx
@@ -471,6 +486,22 @@ Returns the elements that pass the predicate and the elements that fail it, each
 ```
 
 ---
+
+## replicate
+
+```nanyx
+list.replicate: (a, count: int) -> list(a)
+```
+
+Returns `count` copies of the value. A `count` of zero or less gives `[]`. The count is passed by name, so a call doesn't leave you guessing which literal it is.
+
+```nanyx
+list.replicate(0, count = 3)
+-- [0, 0, 0]
+```
+
+---
+
 ## reverse
 
 ```nanyx
