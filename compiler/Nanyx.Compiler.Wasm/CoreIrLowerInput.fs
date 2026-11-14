@@ -73,6 +73,10 @@ type LowerInput =
       /// The calls of interpolation holes that use the compiler's own `ToString` (see `InterpolationHoles`), by node: the
       /// value is written into the string as it is.
       BuiltInHoles: Set<NodeId>
+      /// The names written in the module that refer to a top-level def other than through an import, by node, with where
+      /// the def is declared. One declared in the file the name is written in is the module's own, which wins over a
+      /// context member of the same name in scope, as `def write = ...` in a script that runs in `Console` does.
+      TopLevelReferences: Map<NodeId, SourceSpan>
       /// The record types the module defines, whose names construct a record: `Person(name = "Ada", age = 36)`.
       RecordConstructors: Set<string>
       /// The nominal types whose shape is not a record (`type Money = private int`). A value of one is its shape's
@@ -94,6 +98,11 @@ let wrappedOf (input: LowerInput) (wrapper: string) =
     match input.Lifted |> Map.tryFind wrapper with
     | Some (FunctionWrapper wrapped) -> wrapped
     | _ -> internalError $"'{wrapper}' is not a function's wrapper"
+
+/// Whether `expr`, a name, refers to a top-level def of the module it is written in, which wins over a context member of
+/// that name in scope (see `LowerInput.TopLevelReferences`).
+let namesOwnDefinition (input: LowerInput) (expr: Expression) =
+    input.TopLevelReferences |> Map.tryFind expr.Id |> Option.exists (fun declared -> declared.File = expr.Span.File)
 
 /// The name of the start function, which evaluates the module's top-level expressions.
 let startFunctionName = "__nanyx_start"
