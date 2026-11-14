@@ -432,6 +432,11 @@ module Compiler =
                 PartialModules.assemble parseWithDiagnostics (PartialModules.otherFragments checkedModules.Package checkedModules.Edited origin) parsed
                 |> Result.map (fun assembled -> (let ast, _, _ = parsed in ast), docComments, assembled))
             |> Result.mapError (fun diagnostics -> Parsed, diagnostics)
+            // A record that names a field twice is reported before anything is inferred from it (see `DuplicateFields`).
+            |> Result.bind (fun ((_, _, (items, declared, _)) as parsed) ->
+                match DuplicateFields.check declared items with
+                | [] -> Ok parsed
+                | errors -> Error (Parsed, errors))
             |> Result.bind (fun (ast, docComments, (items, declared, moduleBlocks)) ->
                 match WorkflowDesugaring.desugarWithDiagnostics items with
                 | _, (_ :: _ as errors), _, _ -> Error (Desugared, errors)

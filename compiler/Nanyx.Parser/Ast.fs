@@ -895,6 +895,11 @@ type Declarer =
     | TypeDefBody
     /// A record type declares its named fields: a context's are its members.
     | RecordTypeFields
+    /// What a named field is written with declares the field's name: its value in a record or a call's named
+    /// arguments, or among a `with`'s updates; its type in a record type; its pattern in a record pattern by member.
+    /// The record's own list of names keeps one of each, so this is how a name written twice is found (see
+    /// `NyxCompiler.DuplicateFields`).
+    | NamedFieldValue
 
 /// The names nodes declare, each with the span it is written at. Declarations have no nodes of their own yet
 /// (#96), so their spans are kept here, keyed by the node they belong to.

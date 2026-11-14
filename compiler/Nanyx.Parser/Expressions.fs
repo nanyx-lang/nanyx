@@ -350,10 +350,8 @@ let private binary op (opSpan: SourceSpan) ((left, leftText): Operand) ((right, 
 // Record field parser: either "name = expr" or just "expr"
 let recordField =
     (attempt (
-        pipe2
-            (nameNoWs .>> ws .>> pstring "=" .>> ws)
-            expression
-            (fun name expr -> NamedField(name, expr))
+        (getPosition .>>. nameNoWs .>> ws .>> pstring "=" .>> ws) .>>. expression
+        >>= fun ((start, name), expr) -> declareField start name expr.Id >>% NamedField(name, expr)
     ) <|> (expression |>> PositionalField))
     <?> "record field"
 
@@ -736,8 +734,8 @@ let memberAccessChain =
     // one per line: `record with (x = 1, y = 2)`. Then the record of updates spans from `(` to `)`.
     let withClause =
         let update =
-            (nameNoWs .>> wsInline .>> pstring "=" .>> ws) .>>. expression
-            |>> fun (field, value) -> NamedField(field, value)
+            (getPosition .>>. nameNoWs .>> wsInline .>> pstring "=" .>> ws) .>>. expression
+            >>= fun ((start, field), value) -> declareField start field value.Id >>% NamedField(field, value)
         let updateBlock = withSpan (noteFailureInside (between (pstring "(") (ws >>. pstring ")") recordFields))
         let updates = updateBlock <|> withSpan (sepBy1 update (pstring "," .>> ws))
         attempt (wsInline >>. pstring "with" >>. keywordEnd >>. ws >>. updates)

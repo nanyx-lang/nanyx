@@ -89,7 +89,8 @@ module DocComments =
                 | TypeDefBody -> names |> List.truncate 1
                 | RecordTypeFields -> names
                 | LambdaParameters
-                | ArmBody -> [])
+                | ArmBody
+                | NamedFieldValue -> [])
             |> List.map (fun (_, span) -> DocumentsDeclaration span, span.Start)
         let rec typeDefBodies (item: TopLevelItem) =
             match item.Kind with

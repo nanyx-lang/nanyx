@@ -499,6 +499,19 @@ type point = (x: int, y: int)  -- error NYX0116: 'point' cannot be a type's name
 
 To fix it, start the type's name with a capital letter: `Point`, `Money`.
 
+# NYX0117: Duplicate field
+
+A record names the same field twice: a record type, a record value, a call's named arguments, the updates of a
+`with`, or a record pattern. The error is at the second, and the module is checked no further until it is fixed.
+Fields after a spread may replace the spread record's own, as in `(...defaults, port = 80)`, but not one written
+before them.
+
+```nanyx
+def user = (name = "Ada", name = "Grace")  -- error NYX0117: 'name' is named twice in this record
+```
+
+To fix it, rename or remove one of the two.
+
 # NYX0201: Type mismatch
 
 A value's type is not the type its place needs: an argument is not what the function takes, a definition's value is
