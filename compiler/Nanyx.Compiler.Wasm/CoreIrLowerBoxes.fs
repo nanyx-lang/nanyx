@@ -7,7 +7,7 @@
 /// `CoreIrLowerTypes.boxOwnVariables`), and the value of the instance is lowered with them boxed too. A box is a
 /// closure block over a function that returns the value, so it is passed, kept and dropped the same way whatever the
 /// value is. A call boxes what it passes and unboxes what it is given back, and a function it passes or is given is
-/// adapted to do the same (see `FunctionLowering.Coerce`).
+/// adapted to do the same (see `CoreIrLowerMembers.coerce`).
 module internal Transpiler.Wasm.CoreIrLowerBoxes
 
 open Transpiler.Wasm.WasmRuntime
@@ -16,7 +16,7 @@ open Transpiler.Wasm.CoreIrLowerTypes
 
 /// Whether a value of `given` must be converted to be a value of `expected`: somewhere in it, one of them has a value
 /// boxed where the other does not. Types that differ only in the tags of their unions, or in a function's context
-/// members, hold their values alike: a function's members are `Coerce`'s to adapt.
+/// members, hold their values alike: a function's members are `CoreIrLowerMembers.coerce`'s to adapt.
 let rec needsConversion (given: IrType) (expected: IrType) : bool =
     match given, expected with
     | _ when given = expected -> false

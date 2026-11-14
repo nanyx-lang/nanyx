@@ -792,7 +792,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     | [] -> ()
 
     // Each definition that is not generic, followed by the specialisations of it: a generic definition has only those.
-    // Then the adapters between function types that require different contexts (see `FunctionLowering.Coerce` in `CoreIrLower.fs`).
+    // Then the adapters between function types that require different contexts (see `coerce` in `CoreIrLowerMembers.fs`).
     let definitionFunctions =
         let definitionNames = defs |> List.map (fun (name, _, _) -> name) |> Set.ofList
         [ yield!

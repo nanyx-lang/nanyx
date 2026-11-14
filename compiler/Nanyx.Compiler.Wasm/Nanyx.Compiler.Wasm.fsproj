@@ -33,6 +33,7 @@
     <Compile Include="CoreIrLowerScope.fs" />
     <Compile Include="CoreIrLowerInstances.fs" />
     <Compile Include="CoreIrLowerBoxes.fs" />
+    <Compile Include="CoreIrLowerMembers.fs" />
     <Compile Include="CoreIrLowerMatch.fs" />
     <Compile Include="CoreIrLowerLocals.fs" />
     <Compile Include="CoreIrLowerLifted.fs" />

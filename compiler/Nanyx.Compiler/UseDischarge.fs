@@ -8,7 +8,7 @@ open NyxCompiler.InferState
 /// `string` from it, and the contexts the lambda needs besides are required where the `use` is written, as a Koka or
 /// Flix handler's clauses add their effects to the place where the handler is installed. Like any lambda, it is checked
 /// where it is made against the contexts there (see `LambdaContexts`), so it runs with the instances in scope at the
-/// `use`, and the backend's `FunctionLowering.Coerce` captures them where it is given. A function given by its name,
+/// `use`, and the backend's `CoreIrLowerMembers.coerce` captures them where it is given. A function given by its name,
 /// `use Log(log = shout)`, is taken in the same way when an instance of each context it needs besides is in scope
 /// there (#1265).
 ///
