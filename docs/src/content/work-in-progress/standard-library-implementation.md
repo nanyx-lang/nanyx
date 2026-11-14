@@ -43,7 +43,7 @@ and its explicit imports take precedence over the prelude's, so a module can def
 
 The prelude is split by topic across `prelude.nyx` and the files beside it that start `@partial module prelude`:
 `prelude-contexts.nyx` (equality, ordering, hashing, joining and text), `prelude-numbers.nyx` (`int` and `float`,
-`Add`, `Num` and powers), `prelude-sized-numbers.nyx`, `prelude-conversions.nyx`, `prelude-results.nyx` (results,
+`Add`, `Num`, powers and bitwise functions on ints), `prelude-sized-numbers.nyx`, `prelude-conversions.nyx`, `prelude-results.nyx` (results,
 options and `proc`), `prelude-lists.nyx` and `prelude-maps.nyx` (maps and sets). `prelude.nyx` keeps the module's doc
 comment and what fits no topic: `panic`, `ignore`, booleans and memory blocks.
 
@@ -112,7 +112,7 @@ The library is written over a handful of **compiler intrinsics**: operations tha
 Nanyx itself, such as writing to standard output or reading a byte of a string. They are listed with
 their types in one place, `Intrinsics` in `Nanyx.Compiler/Builtins.fs`, are only in scope while a
 standard-library module is being checked (user code cannot call them), and are lowered by the backend
-onto helper functions it emits with the module (`runtimeHelpers` in `Nanyx.Compiler.Wasm/WasmRuntime.fs`).
+onto helper functions it emits with the module (`runtimeHelpers` in `Nanyx.Compiler.Wasm/WasmRuntime.fs`). The few that are one\nor two instructions, the wrapping arithmetic and the bitwise operations on ints, are emitted inline instead\n(`wrappingOperations` and `bitwiseOperations` in `Nanyx.Compiler.Wasm/CoreIrEmit.fs`).
 Their names all start with `__nanyx_`.
 
 # Adding to it

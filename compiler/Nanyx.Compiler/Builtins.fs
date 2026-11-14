@@ -73,6 +73,15 @@ module Intrinsics =
     let wrappingAdd = prefix + "wrapping_add"
     let wrappingSub = prefix + "wrapping_sub"
     let wrappingMul = prefix + "wrapping_mul"
+    /// The bitwise operations on ints: and, or, exclusive or and not.
+    let bitAnd = prefix + "bit_and"
+    let bitOr = prefix + "bit_or"
+    let bitXor = prefix + "bit_xor"
+    let bitNot = prefix + "bit_not"
+    /// An int's bits moved by a count, taken modulo 64: left, right keeping the sign, and right filling with zeros.
+    let shiftLeft = prefix + "shift_left"
+    let shiftRight = prefix + "shift_right"
+    let shiftRightUnsigned = prefix + "shift_right_unsigned"
     /// An integer as one of the integer type it is taken as: its bits, sign- or zero-extended or cut to the target's.
     /// The prelude's conversions check first that the value fits.
     let intCast = prefix + "int_cast"
@@ -132,6 +141,13 @@ module Intrinsics =
           wrappingAdd, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None; ProvidedBy = None }
           wrappingSub, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None; ProvidedBy = None }
           wrappingMul, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None; ProvidedBy = None }
+          bitAnd, TypeEnv.mono (TyFunc(tuple [ intTy; intTy ], intTy, []))
+          bitOr, TypeEnv.mono (TyFunc(tuple [ intTy; intTy ], intTy, []))
+          bitXor, TypeEnv.mono (TyFunc(tuple [ intTy; intTy ], intTy, []))
+          bitNot, TypeEnv.mono (TyFunc(intTy, intTy, []))
+          shiftLeft, TypeEnv.mono (TyFunc(tuple [ intTy; intTy ], intTy, []))
+          shiftRight, TypeEnv.mono (TyFunc(tuple [ intTy; intTy ], intTy, []))
+          shiftRightUnsigned, TypeEnv.mono (TyFunc(tuple [ intTy; intTy ], intTy, []))
           intCast, { Quantified = set [ elementVar.Id; valueVar.Id ]; Type = TyFunc(element, TyVar valueVar, []); Symbol = None; ProvidedBy = None }
           toFloat, { Quantified = set [ elementVar.Id; valueVar.Id ]; Type = TyFunc(element, TyVar valueVar, []); Symbol = None; ProvidedBy = None }
           mapOfEntries, overEntries (TyFunc(entries, map, []))
