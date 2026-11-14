@@ -405,6 +405,93 @@
     i32.store8
     local.get $s
   )
+  (func $__nanyx_int_text_length (param $n i64) (param $signed i32) (result i32)
+    (local $len i32)
+    i32.const 1
+    local.set $len
+    local.get $signed
+    if
+      local.get $n
+      i64.const 0
+      i64.lt_s
+      if
+        i32.const 2
+        local.set $len
+        i64.const 0
+        local.get $n
+        i64.sub
+        local.set $n
+      end
+    end
+    block $counted
+      loop $count
+        local.get $n
+        i64.const 10
+        i64.lt_u
+        br_if $counted
+        local.get $len
+        i32.const 1
+        i32.add
+        local.set $len
+        local.get $n
+        i64.const 10
+        i64.div_u
+        local.set $n
+        br $count
+      end
+    end
+    local.get $len
+  )
+  (func $__nanyx_int_text_write (param $at i32) (param $n i64) (param $signed i32) (result i32)
+    (local $end i32)
+    local.get $signed
+    if
+      local.get $n
+      i64.const 0
+      i64.lt_s
+      if
+        local.get $at
+        i32.const 45
+        i32.store8
+        local.get $at
+        i32.const 1
+        i32.add
+        local.set $at
+        i64.const 0
+        local.get $n
+        i64.sub
+        local.set $n
+      end
+    end
+    local.get $at
+    local.get $n
+    i32.const 0
+    call $__nanyx_int_text_length
+    i32.add
+    local.tee $end
+    local.set $at
+    loop $digit
+      local.get $at
+      i32.const 1
+      i32.sub
+      local.tee $at
+      local.get $n
+      i64.const 10
+      i64.rem_u
+      i32.wrap_i64
+      i32.const 48
+      i32.add
+      i32.store8
+      local.get $n
+      i64.const 10
+      i64.div_u
+      local.tee $n
+      i64.const 0
+      i64.ne
+      br_if $digit
+    end
+    local.get $end
+  )
 
   (type $ctx_fn_1 (func (param i32) (result i32)))
   (table $ctx_table 1 funcref)
@@ -441,7 +528,7 @@
   )
   (export "r" (func $r))
 
-  (func $__fn___script (param $__env i32) (result i32) (local $__dbg_value__in1_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64) (local $__owned_0 i32)
+  (func $__fn___script (param $__env i32) (result i32) (local $__dbg_value__in1_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__owned_0 i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
     call $r
@@ -449,134 +536,20 @@
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value__in1_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-    else
-      loop $interp_int_len
-        local.get $__interp_len
-        i32.const 1
-        i32.add
-        local.set $__interp_len
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_int_len
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_length
+    local.get $__interp_len
+    i32.add
+    local.set $__interp_len
     local.get $__interp_len
     call $__nanyx_string_alloc
     local.tee $__interp_base
     local.set $__interp_cursor
+    local.get $__interp_cursor
     local.get $__dbg_value__in1_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_cursor
-      i32.const 45
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_cursor
-      i32.const 48
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-    else
-      local.get $__interp_cursor
-      local.set $__interp_start
-      loop $interp_digits
-        local.get $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.rem_u
-        i32.wrap_i64
-        i32.const 48
-        i32.add
-        i32.store8
-        local.get $__interp_cursor
-        i32.const 1
-        i32.add
-        local.set $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_digits
-      end
-      local.get $__interp_start
-      local.set $__interp_lo
-      local.get $__interp_cursor
-      i32.const 1
-      i32.sub
-      local.set $__interp_hi
-      block $interp_rev_done
-        loop $interp_rev
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.ge_u
-          br_if $interp_rev_done
-          local.get $__interp_lo
-          i32.load8_u
-          local.set $__interp_swap
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.load8_u
-          i32.store8
-          local.get $__interp_hi
-          local.get $__interp_swap
-          i32.store8
-          local.get $__interp_lo
-          i32.const 1
-          i32.add
-          local.set $__interp_lo
-          local.get $__interp_hi
-          i32.const 1
-          i32.sub
-          local.set $__interp_hi
-          br $interp_rev
-        end
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_write
+    local.set $__interp_cursor
     local.get $__interp_base
     local.tee $__owned_0
     call $dbg_str

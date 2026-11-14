@@ -83,7 +83,12 @@ let collect (functions: Function list) : ModuleFacts =
             atom record
             updates |> List.iter (snd >> atom)
         | Interpolate parts ->
-            parts |> List.iter (function Hole(_, ty) -> holeType ty | Text _ -> ())
+            // A literal part the string copies is a string literal (see `Interpolation.textWrite`).
+            parts
+            |> List.iter (function
+                | Hole(_, ty) -> holeType ty
+                | Text text when Interpolation.copiesText text -> strings.Add text
+                | Text _ -> ())
         | Dbg text ->
             atom text
             usesDbgHelpers.Value <- true

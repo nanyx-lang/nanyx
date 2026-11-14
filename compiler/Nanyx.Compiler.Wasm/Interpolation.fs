@@ -37,40 +37,30 @@ let scratchLocals =
       "__interp_base"
       "__interp_cursor"
       "__interp_ptr"
-      "__interp_copy_len"
-      "__interp_start"
-      "__interp_lo"
-      "__interp_hi"
-      "__interp_swap" ]
+      "__interp_copy_len" ]
 
 /// The local the hole `index` of an interpolated string at nesting depth `depth` is evaluated into. A string inside a
 /// hole of another is one deeper: its holes are evaluated while the outer string's earlier holes are already held,
 /// so they must not share locals (#326). Sibling strings at one depth share them, as they are evaluated in turn.
 let holeLocalName (depth: int) (index: int) = $"__interp_hole_{depth}_{index}"
 
-let staticBytes (bytes: byte array) =
+/// The code that writes `bytes` at `$__interp_cursor`, a byte at a time.
+let private staticBytes (bytes: byte array) =
     bytes
-    |> Array.toList
-    |> List.map (fun b ->
+    |> Array.map (fun b ->
         $"local.get $__interp_cursor\n    i32.const {int b}\n    i32.store8\n    local.get $__interp_cursor\n    i32.const 1\n    i32.add\n    local.set $__interp_cursor")
     |> String.concat "\n    "
 
-/// The `i64` local an int hole is measured and written from, which a function that builds interpolated strings
-/// declares besides `scratchLocals`. The smallest int is its own negation: read unsigned, its magnitude is right.
-let intLocal = "__interp_int"
-
 /// The code that adds the length of the int `exprCode` leaves to `$__interp_len`: read signed, with a `-` before a
-/// negative one, or unsigned (a `U64`).
+/// negative one, or unsigned (a `U64`). The smallest int is its own negation: read unsigned, its magnitude is right.
 let private numberLength (signed: bool) exprCode =
-    let sign = if signed then $"local.get ${intLocal}\n    i64.const 0\n    i64.lt_s\n    if\n      local.get $__interp_len\n      i32.const 1\n      i32.add\n      local.set $__interp_len\n      i64.const 0\n      local.get ${intLocal}\n      i64.sub\n      local.set ${intLocal}\n    end\n    " else ""
-    $"{exprCode}\n    local.set ${intLocal}\n    {sign}local.get ${intLocal}\n    i64.eqz\n    if\n      local.get $__interp_len\n      i32.const 1\n      i32.add\n      local.set $__interp_len\n    else\n      loop $interp_int_len\n        local.get $__interp_len\n        i32.const 1\n        i32.add\n        local.set $__interp_len\n        local.get ${intLocal}\n        i64.const 10\n        i64.div_u\n        local.set ${intLocal}\n        local.get ${intLocal}\n        i64.const 0\n        i64.ne\n        br_if $interp_int_len\n      end\n    end"
+    $"{exprCode}\n    i32.const {(if signed then 1 else 0)}\n    call ${Helpers.intTextLength}\n    local.get $__interp_len\n    i32.add\n    local.set $__interp_len"
 
 let intLength exprCode = numberLength true exprCode
 
 /// The code that writes the int `exprCode` leaves at `$__interp_cursor`, read as `numberLength` reads it.
 let private numberWrite (signed: bool) exprCode =
-    let sign = if signed then $"local.get ${intLocal}\n    i64.const 0\n    i64.lt_s\n    if\n      local.get $__interp_cursor\n      i32.const 45\n      i32.store8\n      local.get $__interp_cursor\n      i32.const 1\n      i32.add\n      local.set $__interp_cursor\n      i64.const 0\n      local.get ${intLocal}\n      i64.sub\n      local.set ${intLocal}\n    end\n    " else ""
-    $"{exprCode}\n    local.set ${intLocal}\n    {sign}local.get ${intLocal}\n    i64.eqz\n    if\n      local.get $__interp_cursor\n      i32.const 48\n      i32.store8\n      local.get $__interp_cursor\n      i32.const 1\n      i32.add\n      local.set $__interp_cursor\n    else\n      local.get $__interp_cursor\n      local.set $__interp_start\n      loop $interp_digits\n        local.get $__interp_cursor\n        local.get ${intLocal}\n        i64.const 10\n        i64.rem_u\n        i32.wrap_i64\n        i32.const 48\n        i32.add\n        i32.store8\n        local.get $__interp_cursor\n        i32.const 1\n        i32.add\n        local.set $__interp_cursor\n        local.get ${intLocal}\n        i64.const 10\n        i64.div_u\n        local.set ${intLocal}\n        local.get ${intLocal}\n        i64.const 0\n        i64.ne\n        br_if $interp_digits\n      end\n      local.get $__interp_start\n      local.set $__interp_lo\n      local.get $__interp_cursor\n      i32.const 1\n      i32.sub\n      local.set $__interp_hi\n      block $interp_rev_done\n        loop $interp_rev\n          local.get $__interp_lo\n          local.get $__interp_hi\n          i32.ge_u\n          br_if $interp_rev_done\n          local.get $__interp_lo\n          i32.load8_u\n          local.set $__interp_swap\n          local.get $__interp_lo\n          local.get $__interp_hi\n          i32.load8_u\n          i32.store8\n          local.get $__interp_hi\n          local.get $__interp_swap\n          i32.store8\n          local.get $__interp_lo\n          i32.const 1\n          i32.add\n          local.set $__interp_lo\n          local.get $__interp_hi\n          i32.const 1\n          i32.sub\n          local.set $__interp_hi\n          br $interp_rev\n        end\n      end\n    end"
+    $"local.get $__interp_cursor\n    {exprCode}\n    i32.const {(if signed then 1 else 0)}\n    call ${Helpers.intTextWrite}\n    local.set $__interp_cursor"
 
 let intWrite exprCode = numberWrite true exprCode
 
@@ -88,7 +78,20 @@ let boolWrite exprCode =
 let textLength (text: string) =
     $"local.get $__interp_len\n    i32.const {Encoding.UTF8.GetByteCount text}\n    i32.add\n    local.set $__interp_len"
 
-let textWrite (text: string) = staticBytes (Encoding.UTF8.GetBytes text)
+/// The code that writes `text` at `$__interp_cursor` a byte at a time.
+let private bytesWrite (text: string) = staticBytes (Encoding.UTF8.GetBytes text)
+
+/// Whether `textWrite` copies `text` from its string literal, which the module then holds: it does where that takes
+/// fewer instructions than writing it a byte at a time.
+let copiesText (text: string) = Encoding.UTF8.GetByteCount text > 1
+
+/// The code that writes `text`, a literal part of an interpolated string, at `$__interp_cursor`: copied from its
+/// string literal, at `offsetOf text`, where `copiesText` says so.
+let textWrite (offsetOf: string -> int) (text: string) =
+    if copiesText text then
+        let length = Encoding.UTF8.GetByteCount text
+        $"local.get $__interp_cursor\n    i32.const {offsetOf text}\n    i32.const {length}\n    memory.copy\n    local.get $__interp_cursor\n    i32.const {length}\n    i32.add\n    local.set $__interp_cursor"
+    else bytesWrite text
 
 let private stringLength exprCode =
     $"{exprCode}\n    i32.const {Header.infoBefore}\n    i32.sub\n    i32.load\n    local.get $__interp_len\n    i32.add\n    local.set $__interp_len"
@@ -104,7 +107,7 @@ let private tagPayloadLength (kind: PayloadKind) payloadCode =
 let private tagPayloadWrite (kind: PayloadKind) payloadCode =
     match kind with
     | StringPayload ->
-        let quote = textWrite "\""
+        let quote = bytesWrite "\""
         $"{quote}\n    {stringCopy payloadCode}\n    {quote}"
     | IntPayload -> intWrite payloadCode
     | BoolPayload -> boolWrite payloadCode
@@ -142,7 +145,7 @@ let holeWrite (kind: HoleKind) (valueCode: string) =
     | FloatHole -> stringCopy valueCode
     | IntHole -> intWrite valueCode
     | UnsignedHole -> numberWrite false valueCode
-    | TagHole cases -> tagHole valueCode cases textWrite tagPayloadWrite
+    | TagHole cases -> tagHole valueCode cases bytesWrite tagPayloadWrite
     | BoolHole -> boolWrite valueCode
 
 /// The string, once its holes are in their locals: the length pass, the allocation (by `Helpers.stringAlloc`) and the

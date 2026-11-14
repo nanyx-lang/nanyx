@@ -135,6 +135,10 @@ module Helpers =
     let stringQuote = "__nanyx_string_quote"
     /// The letter after the `\` that escapes a byte in a string literal, or 0 for a byte written as it is.
     let escapeByte = "__nanyx_escape_byte"
+    /// How many bytes an int takes written in decimal, read signed or not (see `Interpolation`).
+    let intTextLength = "__nanyx_int_text_length"
+    /// Writes an int in decimal at an address, read signed or not, and gives the address after it.
+    let intTextWrite = "__nanyx_int_text_write"
     /// WASI's `proc_exit`, imported rather than a helper of its own: asking for it declares the import.
     let procExit = Names.procExit
     /// `+`, `-` and `*` on ints, which stop the program when the result does not fit (see `checkedIntHelper`).
@@ -1083,6 +1087,100 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  i32.const 34"
             "  i32.store8"
             "  local.get $out"
+            ")" ]
+      // A digit, and one more for each ten times over; and one for the `-` of a negative int read signed. The smallest
+      // int is its own negation: read unsigned, its magnitude is right.
+      Helpers.intTextLength,
+      lines
+          [ $"(func ${Helpers.intTextLength} (param $n i64) (param $signed i32) (result i32)"
+            "  (local $len i32)"
+            "  i32.const 1"
+            "  local.set $len"
+            "  local.get $signed"
+            "  if"
+            "    local.get $n"
+            "    i64.const 0"
+            "    i64.lt_s"
+            "    if"
+            "      i32.const 2"
+            "      local.set $len"
+            "      i64.const 0"
+            "      local.get $n"
+            "      i64.sub"
+            "      local.set $n"
+            "    end"
+            "  end"
+            "  block $counted"
+            "    loop $count"
+            "      local.get $n"
+            "      i64.const 10"
+            "      i64.lt_u"
+            "      br_if $counted"
+            "      local.get $len"
+            "      i32.const 1"
+            "      i32.add"
+            "      local.set $len"
+            "      local.get $n"
+            "      i64.const 10"
+            "      i64.div_u"
+            "      local.set $n"
+            "      br $count"
+            "    end"
+            "  end"
+            "  local.get $len"
+            ")" ]
+      // The `-` first, then the digits from the last back, from the end its length gives.
+      Helpers.intTextWrite,
+      lines
+          [ $"(func ${Helpers.intTextWrite} (param $at i32) (param $n i64) (param $signed i32) (result i32)"
+            "  (local $end i32)"
+            "  local.get $signed"
+            "  if"
+            "    local.get $n"
+            "    i64.const 0"
+            "    i64.lt_s"
+            "    if"
+            "      local.get $at"
+            "      i32.const 45"
+            "      i32.store8"
+            "      local.get $at"
+            "      i32.const 1"
+            "      i32.add"
+            "      local.set $at"
+            "      i64.const 0"
+            "      local.get $n"
+            "      i64.sub"
+            "      local.set $n"
+            "    end"
+            "  end"
+            "  local.get $at"
+            "  local.get $n"
+            "  i32.const 0"
+            $"  call ${Helpers.intTextLength}"
+            "  i32.add"
+            "  local.tee $end"
+            "  local.set $at"
+            "  loop $digit"
+            "    local.get $at"
+            "    i32.const 1"
+            "    i32.sub"
+            "    local.tee $at"
+            "    local.get $n"
+            "    i64.const 10"
+            "    i64.rem_u"
+            "    i32.wrap_i64"
+            "    i32.const 48"
+            "    i32.add"
+            "    i32.store8"
+            "    local.get $n"
+            "    i64.const 10"
+            "    i64.div_u"
+            "    local.tee $n"
+            "    i64.const 0"
+            "    i64.ne"
+            "    br_if $digit"
+            "  end"
+            "  local.get $end"
             ")" ] ]
     |> Map.ofList
 
@@ -1173,7 +1271,9 @@ let helperDependencies =
       Helpers.intSub, []
       Helpers.intMul, []
       Helpers.intToIndex, []
-      Helpers.stringJoin, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.copyBytes ] ]
+      Helpers.stringJoin, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.copyBytes ]
+      Helpers.intTextLength, []
+      Helpers.intTextWrite, [ Helpers.intTextLength ] ]
     @ (SizedIntegerCode.helpers |> List.map (fun (name, _) -> name, []))
 
 /// The helpers that read and write no linear memory themselves: they compute on their operands, or leave that to the
@@ -1191,6 +1291,7 @@ let private helpersWithoutMemory =
           yield Helpers.intSub
           yield Helpers.intMul
           yield Helpers.intToIndex
+          yield Helpers.intTextLength
           yield! SizedIntegerCode.helpers |> List.map fst ]
 
 /// Whether the helper `name` reads or writes linear memory itself.
