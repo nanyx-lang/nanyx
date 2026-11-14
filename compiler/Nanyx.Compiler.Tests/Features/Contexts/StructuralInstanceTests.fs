@@ -3,6 +3,7 @@ module Nanyx.Compiler.Tests.Features.StructuralInstances
 open Xunit
 open NyxCompiler
 open Parser.Program
+open Nanyx.Compiler.Tests.TestSupport
 
 /// `source` compiled, with no diagnostics, whatever line endings it was checked out with.
 let private compileClean (source: string) =
@@ -39,7 +40,7 @@ let private derivedDefs (prefix: string) (typed: TypedModule) =
 
 [<Fact>]
 let ``A hole of a structure with nothing left open uses a toString derived from its parts`` () =
-    for value, structures in [ "#some(1)", 1; "(1, \"a\")", 1; "(a = 1)", 1; "[1, 2]", 1; "[#pair(1, (x = [2.5]))]", 4 ] do
+    for value, structures in [ "#some(1)", 1; """(1, "a")""", 1; "(a = 1)", 1; "[1, 2]", 1; "[#pair(1, (x = [2.5]))]", 4 ] do
         let typed = compileClean $"def s = \"{{{value}}}\"\n"
         let derived = derivedDefs "__toString_" typed
         Assert.Equal(structures, derived.Length)
@@ -218,30 +219,30 @@ let ``A structure with no part that has an == of its own is compared by the comp
 let ``A structure with a part that has an == attached is compared by a derived ==`` () =
     let typed =
         compileClean (
-            "type Email = protected string\n" +
-            "def Email.`==`: Email, Email -> bool = { a, b -> true }\n" +
-            "def b = #some(Email(\"a\")) == #some(Email(\"b\"))\n" +
-            "def c = #some(Email(\"a\")) != #some(Email(\"c\"))\n")
+            withFinalNewline """type Email = protected string
+def Email.`==`: Email, Email -> bool = { a, b -> true }
+def b = #some(Email("a")) == #some(Email("b"))
+def c = #some(Email("a")) != #some(Email("c"))""")
     Assert.Equal(1, (derivedDefs "__equals_" typed).Length)
 
 [<Fact>]
 let ``A list whose elements have an == attached is compared through it without a derived ==`` () =
     let typed =
         compileClean (
-            "type Email = protected string\n" +
-            "def Email.`==`: Email, Email -> bool = { a, b -> true }\n" +
-            "def b = [Email(\"a\")] == [Email(\"b\")]\n")
+            withFinalNewline """type Email = protected string
+def Email.`==`: Email, Email -> bool = { a, b -> true }
+def b = [Email("a")] == [Email("b")]""")
     Assert.Empty(derivedDefs "__equals_" typed)
 
 [<Fact>]
 let ``A function that requires Eq is passed the one derived for a structure whose part has an == attached`` () =
     let typed =
         compileClean (
-            "type Email = protected string\n" +
-            "def Email.`==`: Email, Email -> bool = { a, b -> true }\n" +
-            "def same: [Eq(a)] a, a -> bool = { x, y -> x == y }\n" +
-            "def b = same(#some(Email(\"a\")), #some(Email(\"b\")))\n" +
-            "def c = same(#some(1), #some(2))\n")
+            withFinalNewline """type Email = protected string
+def Email.`==`: Email, Email -> bool = { a, b -> true }
+def same: [Eq(a)] a, a -> bool = { x, y -> x == y }
+def b = same(#some(Email("a")), #some(Email("b")))
+def c = same(#some(1), #some(2))""")
     match membersNamed "==" typed with
     | [ derived; builtIn ] ->
         Assert.StartsWith("__equals_", derived)

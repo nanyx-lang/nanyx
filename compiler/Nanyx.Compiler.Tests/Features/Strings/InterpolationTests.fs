@@ -32,11 +32,11 @@ let ``A hole uses the ToString synthesized from a type's attached toString`` () 
 let ``A hole uses an instance loaded with use ahead of the compiler's own`` () =
     let typed =
         compileClean (
-            "def s = {\n" +
-            "  def hashInt: ToString(int) = ( toString = { n -> \"#{n}\" } )\n" +
-            "  use hashInt\n" +
-            "  \"{1}\"\n" +
-            "}\n")
+            withFinalNewline """def s = {
+  def hashInt: ToString(int) = ( toString = { n -> "#{n}" } )
+  use hashInt
+  "{1}"
+}""")
     let loaded =
         instancesOf typed
         |> List.choose (function InstanceInScope(Kind (TypeApply("ToString", [ Kind (TypeName "int") ])), _) -> Some () | _ -> None)

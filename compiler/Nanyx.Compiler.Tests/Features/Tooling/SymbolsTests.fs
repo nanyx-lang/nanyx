@@ -25,10 +25,11 @@ let private resolvesTo (source: string) (offset: int) =
 [<Fact>]
 let ``Names refer to parameters and locals`` () =
     let source =
-        "def scale = { factor ->\n" +
-        "  def offset = 1\n" +
-        "  factor * 2 + offset\n" +
-        "}\n"
+        normalized """def scale = { factor ->
+  def offset = 1
+  factor * 2 + offset
+}
+"""
     Assert.Equal(Some (Parameter, offsetOf source "factor" 0 0), resolvesTo source (offsetOf source "factor *" 0 0))
     Assert.Equal(Some (LocalValue, offsetOf source "offset" 0 0), resolvesTo source (offsetOf source "offset" 1 0))
     // A declaration spans its name.
@@ -38,13 +39,14 @@ let ``Names refer to parameters and locals`` () =
 [<Fact>]
 let ``Names refer to the variables patterns bind`` () =
     let source =
-        "def rest = { items -> match items\n" +
-        "  | [_, ...tail] -> tail\n" +
-        "  | _ -> items }\n" +
-        "def either = { pair -> match pair\n" +
-        "  | (a, 0) | (0, a) -> a\n" +
-        "  | _ -> 0 }\n" +
-        "def unwrap = if #some(1) is #some(v) then v else 0\n"
+        normalized """def rest = { items -> match items
+  | [_, ...tail] -> tail
+  | _ -> items }
+def either = { pair -> match pair
+  | (a, 0) | (0, a) -> a
+  | _ -> 0 }
+def unwrap = if #some(1) is #some(v) then v else 0
+"""
     Assert.Equal(Some (PatternVariable, offsetOf source "tail" 0 0), resolvesTo source (offsetOf source "tail" 1 0))
     // Each alternative of an or-pattern binds the same variable, declared where it is first written.
     Assert.Equal(Some (PatternVariable, offsetOf source "a, 0" 0 0), resolvesTo source (offsetOf source "-> a" 0 3))
@@ -53,18 +55,20 @@ let ``Names refer to the variables patterns bind`` () =
 [<Fact>]
 let ``Names in a guard pattern's predicate refer to its parameter and to what is in scope at the match`` () =
     let source =
-        "def size = { n, limit -> match n\n" +
-        "  | { x -> x > limit * 2 } -> 2\n" +
-        "  | _ -> 0 }\n"
+        normalized """def size = { n, limit -> match n
+  | { x -> x > limit * 2 } -> 2
+  | _ -> 0 }
+"""
     Assert.Equal(Some (Parameter, offsetOf source "{ x" 0 2), resolvesTo source (offsetOf source "x >" 0 0))
     Assert.Equal(Some (Parameter, offsetOf source "limit" 0 0), resolvesTo source (offsetOf source "limit *" 0 0))
 
 [<Fact>]
 let ``Names refer to the variables a pattern parameter binds`` () =
     let source =
-        "type Email = protected string\n" +
-        "def value = { Email(s) -> s }\n" +
-        "def add = { (a, b), c -> a + b + c }\n"
+        normalized """type Email = protected string
+def value = { Email(s) -> s }
+def add = { (a, b), c -> a + b + c }
+"""
     Assert.Equal(Some (PatternVariable, offsetOf source "s)" 0 0), resolvesTo source (offsetOf source "-> s" 0 3))
     Assert.Equal(Some (PatternVariable, offsetOf source "b)" 0 0), resolvesTo source (offsetOf source "b +" 0 0))
     Assert.Equal(Some (Parameter, offsetOf source "c ->" 0 0), resolvesTo source (offsetOf source "+ c" 0 2))
@@ -82,13 +86,14 @@ let ``Names refer to the variables a pattern parameter binds`` () =
 [<Fact>]
 let ``The nearest declaration of a name wins`` () =
     let source =
-        "def x = 1\n" +
-        "def f = { x -> x }\n" +
-        "def g = {\n" +
-        "  def x = 2\n" +
-        "  x\n" +
-        "}\n" +
-        "def h = x\n"
+        normalized """def x = 1
+def f = { x -> x }
+def g = {
+  def x = 2
+  x
+}
+def h = x
+"""
     Assert.Equal(Some (Parameter, offsetOf source "{ x" 0 2), resolvesTo source (offsetOf source "-> x" 0 3))
     Assert.Equal(Some (LocalValue, offsetOf source "def x = 2" 0 4), resolvesTo source (offsetOf source "  x\n" 0 2))
     Assert.Equal(Some (TopLevelValue, offsetOf source "def x = 1" 0 4), resolvesTo source (offsetOf source "def h = x" 0 8))
@@ -96,13 +101,14 @@ let ``The nearest declaration of a name wins`` () =
 [<Fact>]
 let ``Names refer to top-level definitions declared later`` () =
     let source =
-        "def a = b + 1\n" +
-        "def c = twice(b)\n" +
-        "def d = b \\twice\n" +
-        "def b = 2\n" +
-        "def twice = { n -> n * 2 }\n" +
-        "def (p, q) = (1, 2)\n" +
-        "def r = q\n"
+        normalized """def a = b + 1
+def c = twice(b)
+def d = b \twice
+def b = 2
+def twice = { n -> n * 2 }
+def (p, q) = (1, 2)
+def r = q
+"""
     let b = offsetOf source "def b" 0 4
     let twice = offsetOf source "def twice" 0 4
     Assert.Equal(Some (TopLevelValue, b), resolvesTo source (offsetOf source "b + 1" 0 0))
@@ -180,16 +186,17 @@ let ``An operator never goes to the standard library's reserved name it is desug
 [<Fact>]
 let ``Type names refer to the type definition`` () =
     let source =
-        "def id: Point -> Point = { p -> p }\n" +
-        "type Point = (x: int, y: int)\n" +
-        "type Line = (start: Point, finish: Point)\n" +
-        "type Box(a) = (item: a)\n" +
-        "def boxed: Box(Point) -> Point = { b -> b.item }\n" +
-        "def g = {\n" +
-        "  def q: Point = (x = 1, y = 2)\n" +
-        "  def r: Line = (start = q, finish = q)\n" +
-        "  r.start\n" +
-        "}\n"
+        normalized """def id: Point -> Point = { p -> p }
+type Point = (x: int, y: int)
+type Line = (start: Point, finish: Point)
+type Box(a) = (item: a)
+def boxed: Box(Point) -> Point = { b -> b.item }
+def g = {
+  def q: Point = (x = 1, y = 2)
+  def r: Line = (start = q, finish = q)
+  r.start
+}
+"""
     let result = Compiler.compile source
     let point = Some (TypeDefinition, "", offsetOf source "type Point" 0 5)
     // In an annotation, before the type is declared and after.
@@ -227,9 +234,10 @@ let ``Type names refer to imported types in their own file`` () =
 [<Fact>]
 let ``Context members are declared in the context and referred to where it is required`` () =
     let source =
-        "context Store(a) = (get: () -> a, put: a -> ())\n" +
-        "def save: [Store(int)] int -> () = { n -> put(n) }\n" +
-        "def peek = Store(int).get\n"
+        normalized """context Store(a) = (get: () -> a, put: a -> ())
+def save: [Store(int)] int -> () = { n -> put(n) }
+def peek = Store(int).get
+"""
     let result = Compiler.compile source
     let put = Some (ContextMember, "", offsetOf source "put:" 0 0)
     // A member called in a def that requires the context.
@@ -265,11 +273,12 @@ let private referencesAt (source: string) (offset: int) =
 [<Fact>]
 let ``References are every name that refers to a declaration, in order`` () =
     let source =
-        "type Point = (x: int, y: int)\n" +
-        "def origin: Point = (x = 0, y = 0)\n" +
-        "def shift = { p, d -> (x = p.x + d, y = p.y + d) }\n" +
-        "def twice = shift(shift(origin, 1), 1)\n" +
-        "def piped = origin \\shift(2)\n"
+        normalized """type Point = (x: int, y: int)
+def origin: Point = (x = 0, y = 0)
+def shift = { p, d -> (x = p.x + d, y = p.y + d) }
+def twice = shift(shift(origin, 1), 1)
+def piped = origin \shift(2)
+"""
     let at text occurrence = text, offsetOf source text occurrence 0
     // A top-level def, from its declaration or from a use: its calls by name, and a pipe's target.
     let shift = [ at "shift" 1; at "shift" 2; at "shift" 3 ]
@@ -302,17 +311,18 @@ let private typeDefinitionHover (file: string) (result: CompileResult) (source: 
 [<Fact>]
 let ``Hovering a type's name shows its definition`` () =
     let source =
-        "type Point = (x: int, y: int)\n" +
-        "type Box(a) = (item: a)\n" +
-        "type Shape = #circle(int) | #square(int)\n" +
-        "context Logger = (log: string -> ())\n" +
-        "def origin: Point = (x = 0, y = 0)\n" +
-        "def boxed: Box(Point) = (item = origin)\n" +
-        "def greet: [Logger] string -> () = { s -> log(s) }\n" +
-        "def local = {\n" +
-        "  def p: Point = (x = 1, y = 2)\n" +
-        "  p.x\n" +
-        "}\n"
+        normalized """type Point = (x: int, y: int)
+type Box(a) = (item: a)
+type Shape = #circle(int) | #square(int)
+context Logger = (log: string -> ())
+def origin: Point = (x = 0, y = 0)
+def boxed: Box(Point) = (item = origin)
+def greet: [Logger] string -> () = { s -> log(s) }
+def local = {
+  def p: Point = (x = 1, y = 2)
+  p.x
+}
+"""
     let result = Compiler.compile source
     let hover text within = typeDefinitionHover "" result source (offsetOf source text 0 within)
     let point = Some ("type Point = (x: int, y: int)", "Point")

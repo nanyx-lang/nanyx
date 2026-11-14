@@ -48,7 +48,7 @@ let ``Every problem with a manifest is reported, naming the key`` () =
         + "[linters.other]\n[dependencies]\nacme.json = \"1.0\"\n[extras]\n"
     use package = new TempPackage([ "demo.nyxp", text ])
     let errors = errorsOf (Manifest.read (package.Path "demo.nyxp")) |> List.map (fun e -> e.Substring(e.IndexOf(": ") + 2))
-    Assert.Contains("[package] name \"Demo\" must be lower case, with words separated by dots: acme.web", errors)
+    Assert.Contains("""[package] name "Demo" must be lower case, with words separated by dots: acme.web""", errors)
     Assert.Contains("[package] version must be a string, not 1", errors)
     Assert.Contains("unknown key [package] colour; the keys are 'name', 'version', 'sources', 'public-modules'", errors)
     Assert.Contains("[linters.default] unusedBindings must be 'error', 'warning', 'info', 'hint', 'none', not the string \"loud\"", errors)
@@ -67,7 +67,7 @@ let ``A manifest that is not TOML says so`` () =
 let ``A package is found from a directory under it, with its sources and entry`` () =
     use package =
         new TempPackage(
-            [ "demo.nyxp", manifest "sources = [\"src/**/*.nyx\"]"
+            [ "demo.nyxp", manifest """sources = ["src/**/*.nyx"]"""
               "src/main.nyx", entrySource
               "src/lib/util.nyx", "module util\n\nexport def one = 1\n"
               "scripts/other.nyx", "println(\"not a source\")\n" ])

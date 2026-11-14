@@ -10,16 +10,16 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``Typecheck allows context members with annotation`` () =
     let source =
-        "context Console = (println: string -> ())\n" +
-        "def sayHello: [Console] () -> () = { println(\"hi\") }"
+        normalized """context Console = (println: string -> ())
+def sayHello: [Console] () -> () = { println("hi") }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
 
 [<Fact>]
 let ``Typecheck rejects an unknown context in a signature`` () =
     let source =
-        "context MyConsole = (p: string -> ())\n" +
-        "def greet: [Bogus] string -> () = { name -> p(name) }"
+        normalized """context MyConsole = (p: string -> ())
+def greet: [Bogus] string -> () = { name -> p(name) }"""
     let result = Compiler.compile source
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("Unknown context 'Bogus' in the signature of 'greet'", message)
@@ -27,10 +27,10 @@ let ``Typecheck rejects an unknown context in a signature`` () =
 [<Fact>]
 let ``Typecheck rejects an unknown context in a local signature`` () =
     let source =
-        "def main = {\n" +
-        "  def greet: [Bogus] string -> () = { name -> () }\n" +
-        "  greet(\"hi\")\n" +
-        "}"
+        normalized """def main = {
+  def greet: [Bogus] string -> () = { name -> () }
+  greet("hi")
+}"""
     let result = Compiler.compile source
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("Unknown context 'Bogus' in the signature of 'greet'", message)
@@ -38,8 +38,8 @@ let ``Typecheck rejects an unknown context in a local signature`` () =
 [<Fact>]
 let ``Typecheck rejects missing context members`` () =
     let source =
-        "context Console = (println: string -> ())\n" +
-        "def sayHello = { println(\"hi\") }"
+        normalized """context Console = (println: string -> ())
+def sayHello = { println("hi") }"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.UnknownFunction result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
@@ -48,19 +48,19 @@ let ``Typecheck rejects missing context members`` () =
 [<Fact>]
 let ``Typecheck allows use statement to bring members into scope`` () =
     let source =
-        "context Console = (println: string -> string)\n" +
-        "def main = {\n" +
-        "  use Console(println = { msg -> msg })\n" +
-        "  println(\"hi\")\n" +
-        "}"
+        normalized """context Console = (println: string -> string)
+def main = {
+  use Console(println = { msg -> msg })
+  println("hi")
+}"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
 
 [<Fact>]
 let ``Typecheck allows use-in expression`` () =
     let source =
-        "type Ctx = (value: int)\n" +
-        "def result = use Ctx(value = 1) in value"
+        normalized """type Ctx = (value: int)
+def result = use Ctx(value = 1) in value"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
@@ -77,9 +77,9 @@ let ``Typecheck supports unit literal`` () =
 [<Fact>]
 let ``Typecheck rejects missing context on call`` () =
     let source =
-        "context Console = (println: string -> ())\n" +
-        "def g: [Console] () -> () = { println(\"hi\") }\n" +
-        "def h = { g() }"
+        normalized """context Console = (println: string -> ())
+def g: [Console] () -> () = { println("hi") }
+def h = { g() }"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.MissingContextMembers result
     let diagnostic = result.Diagnostics |> List.head
@@ -94,8 +94,9 @@ let ``Missing contexts are named, not listed by their members`` () =
         Assert.True(diagnostic.Code = DiagnosticCodes.MissingContextMembers.Code, diagnostic.Message)
         diagnostic.Message
     let contexts =
-        "context Log = (log: string -> ())\n" +
-        "context Clock = (now: () -> int)\n"
+        normalized """context Log = (log: string -> ())
+context Clock = (now: () -> int)
+"""
     Assert.Equal(
         "'g' requires the contexts 'Log' and 'Clock', which are not available here",
         message (contexts + "def g: [Log & Clock] () -> () = { log(\"hi\") }\ndef h = { g() }"))
@@ -133,9 +134,10 @@ def main = {
 /// A parameterised context, a type, and a function that requires the context, for the tests of where a call finds an
 /// instance of it (#328).
 let private showContext =
-    "context Show(a) = (show: a -> string)\n" +
-    "type Point = (x: int, y: int)\n" +
-    "def describe: [Show(a)] a -> string = { value -> Show(a).show(value) }\n"
+    normalized """context Show(a) = (show: a -> string)
+type Point = (x: int, y: int)
+def describe: [Show(a)] a -> string = { value -> Show(a).show(value) }
+"""
 
 /// Where each call in `source` that requires a parameterised context finds its instances, in the order written. The
 /// calls of the prelude, and the interpolation holes of built-in types, are left out.
@@ -152,9 +154,10 @@ let private instancesIn (source: string) =
 let ``A call synthesizes a context's instance from the type's attached definitions`` () =
     let source =
         showContext +
-        "def Point.show: Point -> string = { p -> \"{p.x}\" }\n" +
-        "def s = describe(Point(x = 1, y = 2))\n" +
-        "def t = Point(x = 3, y = 4) \\describe\n"
+        normalized """def Point.show: Point -> string = { p -> "{p.x}" }
+def s = describe(Point(x = 1, y = 2))
+def t = Point(x = 3, y = 4) \describe
+"""
     let synthesized = [ Some (InstanceSynthesized [ "show", "Point.show" ]) ]
     Assert.Equal<ContextInstance option list list>([ synthesized; synthesized ], instancesIn source)
 
@@ -162,13 +165,14 @@ let ``A call synthesizes a context's instance from the type's attached definitio
 let ``A loaded instance wins over synthesis, and a generic function passes its own on`` () =
     let source =
         showContext +
-        "def Point.show: Point -> string = { p -> \"{p.x}\" }\n" +
-        "def twice: [Show(a)] a -> string = { v -> describe(v) ++ describe(v) }\n" +
-        "def main = {\n" +
-        "  def showPoint: Show(Point) = ( show = { p -> \"p\" } )\n" +
-        "  use showPoint\n" +
-        "  describe(Point(x = 1, y = 2))\n" +
-        "}\n"
+        normalized """def Point.show: Point -> string = { p -> "{p.x}" }
+def twice: [Show(a)] a -> string = { v -> describe(v) ++ describe(v) }
+def main = {
+  def showPoint: Show(Point) = ( show = { p -> "p" } )
+  use showPoint
+  describe(Point(x = 1, y = 2))
+}
+"""
     match instancesIn source with
     | [ [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])), _)) ]
         [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])), _)) ]
@@ -179,15 +183,16 @@ let ``A loaded instance wins over synthesis, and a generic function passes its o
 let ``A call finds an instance loaded with use by name, from a def or a parameter (#581)`` () =
     let source =
         showContext +
-        "def showPoint: Show(Point) = ( show = { p -> \"p\" } )\n" +
-        "def viaParameter: (Show(Point), Point) -> string = { instance, p ->\n" +
-        "  use instance\n" +
-        "  describe(p)\n" +
-        "}\n" +
-        "def main = {\n" +
-        "  use showPoint\n" +
-        "  describe(Point(x = 1, y = 2))\n" +
-        "}\n"
+        normalized """def showPoint: Show(Point) = ( show = { p -> "p" } )
+def viaParameter: (Show(Point), Point) -> string = { instance, p ->
+  use instance
+  describe(p)
+}
+def main = {
+  use showPoint
+  describe(Point(x = 1, y = 2))
+}
+"""
     match instancesIn source with
     | [ [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])), _)) ]
         [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])), _)) ] ] -> ()
@@ -198,13 +203,14 @@ let ``A loaded instance is only used for the type it is for`` () =
     // A `Show(Point)` loaded with `use` does not make a `Show(Money)`: that one is still synthesized.
     let source =
         showContext +
-        "type Money = private int\n" +
-        "def Money.show: Money -> string = { m -> \"money\" }\n" +
-        "def main = {\n" +
-        "  def showPoint: Show(Point) = ( show = { p -> \"p\" } )\n" +
-        "  use showPoint\n" +
-        "  describe(Money(5))\n" +
-        "}\n"
+        normalized """type Money = private int
+def Money.show: Money -> string = { m -> "money" }
+def main = {
+  def showPoint: Show(Point) = ( show = { p -> "p" } )
+  use showPoint
+  describe(Money(5))
+}
+"""
     Assert.Equal<ContextInstance option list list>([ [ Some (InstanceSynthesized [ "show", "Money.show" ]) ] ], instancesIn source)
 
 [<Fact>]
@@ -219,8 +225,9 @@ let ``An instance is checked against the context's members at the type it is for
 /// `showContext` with a named instance of `Show(Point)`, and `Point.show` for synthesis to find if the instance is not.
 let private namedShowInstance =
     showContext +
-    "def Point.show: Point -> string = { p -> \"{p.x}\" }\n" +
-    "def showPoint: Show(Point) = ( show = { p -> \"p\" } )\n"
+    normalized """def Point.show: Point -> string = { p -> "{p.x}" }
+def showPoint: Show(Point) = ( show = { p -> "p" } )
+"""
 
 [<Fact>]
 let ``A use of a named value loads it as the instance of the context it has the shape of`` () =
@@ -266,17 +273,17 @@ let ``A context and the function that requires it can come from an import`` () =
     withTempDir (fun dir ->
         File.WriteAllText(
             Path.Combine(dir, "shows.nyx"),
-            "module shows\n" +
-            "export context Show(a) = (show: a -> string)\n" +
-            "export def describe: [Show(a)] a -> string = { value -> Show(a).show(value) }\n")
+            withFinalNewline """module shows
+export context Show(a) = (show: a -> string)
+export def describe: [Show(a)] a -> string = { value -> Show(a).show(value) }""")
         let mainPath = Path.Combine(dir, "main.nyx")
         File.WriteAllText(
             mainPath,
-            "module main\n" +
-            "import shows\n" +
-            "type Point = (x: int, y: int)\n" +
-            "def Point.show: Point -> string = { p -> \"{p.x}\" }\n" +
-            "def s = describe(Point(x = 1, y = 2))\n")
+            withFinalNewline """module main
+import shows
+type Point = (x: int, y: int)
+def Point.show: Point -> string = { p -> "{p.x}" }
+def s = describe(Point(x = 1, y = 2))""")
         let result = Compiler.compileFile mainPath
         Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
         Assert.Contains(Some (InstanceSynthesized [ "show", "Point.show" ]), result.Typed.Value.ContextInstances |> Map.values |> Seq.concat))
@@ -284,8 +291,9 @@ let ``A context and the function that requires it can come from an import`` () =
 /// `showContext` with a `Point.show` and a function that calls `describe` without writing its type (#544).
 let private inferredShow =
     showContext +
-    "def Point.show: Point -> string = { p -> \"({p.x}, {p.y})\" }\n" +
-    "def twice = { v -> describe(v) ++ describe(v) }\n"
+    normalized """def Point.show: Point -> string = { p -> "({p.x}, {p.y})" }
+def twice = { v -> describe(v) ++ describe(v) }
+"""
 
 [<Fact>]
 let ``A def that does not write its type requires the parameterised context it calls a function with at its own type`` () =
@@ -301,8 +309,9 @@ let ``A def that does not write its type requires the parameterised context it c
 let ``An inferred parameterised context passes through another def that does not write its type`` () =
     let source =
         inferredShow +
-        "def thrice = { v -> twice(v) ++ describe(v) }\n" +
-        "def s = thrice(Point(x = 1, y = 2))\n"
+        normalized """def thrice = { v -> twice(v) ++ describe(v) }
+def s = thrice(Point(x = 1, y = 2))
+"""
     match instancesIn source with
     | [ _; _; [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])), _)) ]
         [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])), _)) ]
@@ -313,9 +322,10 @@ let ``An inferred parameterised context passes through another def that does not
 let ``A def with an inferred parameterised context can be used at two types`` () =
     let source =
         inferredShow +
-        "type Size = (w: int)\n" +
-        "def Size.show: Size -> string = { s -> \"{s.w}px\" }\n" +
-        "def s = twice(Point(x = 1, y = 2)) ++ twice(Size(w = 3))\n"
+        normalized """type Size = (w: int)
+def Size.show: Size -> string = { s -> "{s.w}px" }
+def s = twice(Point(x = 1, y = 2)) ++ twice(Size(w = 3))
+"""
     match instancesIn source with
     | [ _; _; [ Some (InstanceSynthesized [ "show", "Point.show" ]) ]; [ Some (InstanceSynthesized [ "show", "Size.show" ]) ] ] -> ()
     | other -> failwith $"Unexpected instances: %A{other}"
@@ -324,11 +334,12 @@ let ``A def with an inferred parameterised context can be used at two types`` ()
 let ``A context needed at a type the call leaves open is found once the rest of the def settles it`` () =
     let source =
         inferredShow +
-        "def onlyPoint: Point -> int = { p -> p.x }\n" +
-        "def settled = { v ->\n" +
-        "  def s = describe(v)\n" +
-        "  s ++ int.toString(onlyPoint(v))\n" +
-        "}\n"
+        normalized """def onlyPoint: Point -> int = { p -> p.x }
+def settled = { v ->
+  def s = describe(v)
+  s ++ int.toString(onlyPoint(v))
+}
+"""
     match instancesIn source with
     | [ _; _; [ Some (InstanceSynthesized [ "show", "Point.show" ]) ] ] -> ()
     | other -> failwith $"Unexpected instances: %A{other}"
@@ -359,9 +370,10 @@ let private addContext =
 let ``An operator in a generic function calls the member of that name of the context the function requires`` () =
     let source =
         addContext +
-        "context Sum(a) = (zero: () -> a, `+`: (a, a) -> a)\n" +
-        "def add: [Add(a)] a, a -> a = { x, y -> x + y }\n" +
-        "def sum: [Sum(a)] list(a) -> a = { items -> items \\fold(zero()) { + } }\n"
+        normalized """context Sum(a) = (zero: () -> a, `+`: (a, a) -> a)
+def add: [Add(a)] a, a -> a = { x, y -> x + y }
+def sum: [Sum(a)] list(a) -> a = { items -> items \fold(zero()) { + } }
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 

@@ -61,7 +61,7 @@ let ``A call at the top level that needs HostRuntime outside a host is an error,
 
 writeStdout("hi")
 """
-    Assert.Equal((DiagnosticCodes.HostRuntimeOutsideHost.Code, "writeStdout(\"hi\")"), singleError source)
+    Assert.Equal((DiagnosticCodes.HostRuntimeOutsideHost.Code, """writeStdout("hi")"""), singleError source)
 
 [<Fact>]
 let ``Calling a host's run outside a host is an error, as it requires HostRuntime`` () =

@@ -15,18 +15,20 @@ let private typesOf (source: string) =
 [<Fact>]
 let ``A name alone in a pattern binds the field of that name`` () =
     let source =
-        "def describe: (name: string, age: int) -> string = { r -> match r\n" +
-        "  | (age, name) -> \"{name} is {age}\" }\n"
+        normalized """def describe: (name: string, age: int) -> string = { r -> match r
+  | (age, name) -> "{name} is {age}" }
+"""
     Assert.Equal<(string * string) list>(
         [ "r", "(age: int, name: string)"; "age", "int"; "name", "string" ], typesOf source)
 
 [<Fact>]
 let ``A tag's named payload is taken apart by name, in a match and in a lambda's parameter`` () =
     let source =
-        "def a: #some(x: string, y: int) = #some(x = \"\", y = 1)\n" +
-        "def f: typeof a -> string = { #some(x, y) -> \"{x}{y}\" }\n" +
-        "def g: typeof a -> string = { t -> match t\n" +
-        "  | #some(y, x) -> \"{x}{y}\" }\n"
+        normalized """def a: #some(x: string, y: int) = #some(x = "", y = 1)
+def f: typeof a -> string = { #some(x, y) -> "{x}{y}" }
+def g: typeof a -> string = { t -> match t
+  | #some(y, x) -> "{x}{y}" }
+"""
     Assert.Equal<(string * string) list>(
         [ "x", "string"; "y", "int"; "t", "#some(x: string, y: int)"; "y", "int"; "x", "string" ], typesOf source)
 
@@ -45,9 +47,10 @@ let ``A record pattern that leaves a field out without ... is an error that name
 [<Fact>]
 let ``A record pattern that ends in ... leaves the other fields out`` () =
     let source =
-        "def f: (name: string, age: int) -> string = { r -> match r\n" +
-        "  | (name = \"Alice\", ...) -> \"A\"\n" +
-        "  | (name = n, age = _) -> n }\n"
+        normalized """def f: (name: string, age: int) -> string = { r -> match r
+  | (name = "Alice", ...) -> "A"
+  | (name = n, age = _) -> n }
+"""
     Assert.Equal<(string * string) list>([ "r", "(age: int, name: string)"; "n", "string" ], typesOf source)
 
 [<Fact>]

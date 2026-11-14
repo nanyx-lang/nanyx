@@ -146,12 +146,13 @@ let ``A type error in one def does not make a later match on tags an error too``
     // Each union a later def gives a tag to tried its members against the rest of the module's constraints, and so
     // blamed itself for the earlier def's error.
     let source =
-        "def f = { s -> s + \"x\" }\n" +
-        "def g = { t -> match t\n" +
-        "  | #some(x) -> x\n" +
-        "  | #none -> 0\n" +
-        "}\n" +
-        "def h: int -> #some(int) | #none = { n -> if n > 0 then #some(n) else #none }\n"
+        normalized """def f = { s -> s + "x" }
+def g = { t -> match t
+  | #some(x) -> x
+  | #none -> 0
+}
+def h: int -> #some(int) | #none = { n -> if n > 0 then #some(n) else #none }
+"""
     match (Compiler.compile source).Diagnostics with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)

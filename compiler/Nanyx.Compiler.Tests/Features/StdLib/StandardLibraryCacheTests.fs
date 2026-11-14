@@ -2,28 +2,29 @@ module Nanyx.Compiler.Tests.Features.StdLib.StandardLibraryCache
 
 open Xunit
 open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
 
 // The standard library is checked once per process and shared by every compilation after (#694). These programs use
 // the same generic prelude functions at different types, so a type variable of the shared prelude that leaked into a
 // later compilation, or a change one compilation made to it, would show in the next one's types or diagnostics.
 
 let private withInts =
-    "def name: #some(int) | #empty = #some(1)\n" +
-    "def called = mapSome(name, { n -> n + 1 })\n" +
-    "def r: Result(int, string) = #error(\"x\")\n" +
-    "def mapped = r \\ Result.map({ n -> 1.5 })\n" +
-    "def listed = name \\ someToList"
+    normalized """def name: #some(int) | #empty = #some(1)
+def called = mapSome(name, { n -> n + 1 })
+def r: Result(int, string) = #error("x")
+def mapped = r \ Result.map({ n -> 1.5 })
+def listed = name \ someToList"""
 
 let private withStrings =
-    "def name: #some(string) | #empty = #some(\"a\")\n" +
-    "def called = mapSome(name, { s -> true })\n" +
-    "def r: Result(string, int) = #error(1)\n" +
-    "def mapped = r \\ Result.map({ s -> [s] })\n" +
-    "def listed = name \\ someToList"
+    normalized """def name: #some(string) | #empty = #some("a")
+def called = mapSome(name, { s -> true })
+def r: Result(string, int) = #error(1)
+def mapped = r \ Result.map({ s -> [s] })
+def listed = name \ someToList"""
 
 let private withAnError =
-    "def name: #some(int) | #empty = #some(1)\n" +
-    "def called: #some(string) | #empty = mapSome(name, { n -> n + 1 })"
+    normalized """def name: #some(int) | #empty = #some(1)
+def called: #some(string) | #empty = mapSome(name, { n -> n + 1 })"""
 
 /// What a compilation found: its diagnostics, the type of each definition, and the type of each node of the
 /// program in the order they are written (node ids differ between compilations; their order does not).

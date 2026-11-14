@@ -18,10 +18,11 @@ let private typeHints (hintsOf: TypeNotation -> string -> CompileResult -> TypeH
 [<Fact>]
 let ``Lenses show the types of top-level defs that do not write theirs`` () =
     let source =
-        "def id = { x -> x }\n" +
-        "def answer: int = 42\n" +
-        "def pair = { a, b -> (a, b) }\n" +
-        "def (p, q) = (1, \"s\")\n"
+        normalized """def id = { x -> x }
+def answer: int = 42
+def pair = { a, b -> (a, b) }
+def (p, q) = (1, "s")
+"""
     Assert.Equal<(string * string * int) list>(
         [ "id", "α -> α", offsetOf source "id" 0 0
           "pair", "α, β -> (α, β)", offsetOf source "pair" 0 0
@@ -32,14 +33,15 @@ let ``Lenses show the types of top-level defs that do not write theirs`` () =
 [<Fact>]
 let ``Inlay hints show the types of locals, parameters and pattern variables`` () =
     let source =
-        "def scale = { factor ->\n" +
-        "  def offset = 1\n" +
-        "  def written: int = 2\n" +
-        "  factor * written + offset\n" +
-        "}\n" +
-        "def rest = { items -> match items\n" +
-        "  | [_, ...tail] -> tail\n" +
-        "  | _ -> items }\n"
+        normalized """def scale = { factor ->
+  def offset = 1
+  def written: int = 2
+  factor * written + offset
+}
+def rest = { items -> match items
+  | [_, ...tail] -> tail
+  | _ -> items }
+"""
     Assert.Equal<(string * string * int) list>(
         [ "factor", "int", offsetOf source "factor" 0 0
           "offset", "int", offsetOf source "offset" 0 0
@@ -56,13 +58,14 @@ let ``A shorthand lambda's argument is not written, so it has no inlay hint`` ()
 [<Fact>]
 let ``Each hint says what kind of declaration it is for`` () =
     let source =
-        "def scale = { factor ->\n" +
-        "  def offset = 1\n" +
-        "  factor * offset\n" +
-        "}\n" +
-        "def rest = { items -> match items\n" +
-        "  | [_, ...tail] -> tail\n" +
-        "  | _ -> items }\n"
+        normalized """def scale = { factor ->
+  def offset = 1
+  factor * offset
+}
+def rest = { items -> match items
+  | [_, ...tail] -> tail
+  | _ -> items }
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal<(string * SymbolKind) list>(
@@ -77,13 +80,14 @@ let ``Each hint says what kind of declaration it is for`` () =
 [<Fact>]
 let ``A def that writes only its contexts has its type shown after them`` () =
     let source =
-        "context Log = (log: string -> ())\n" +
-        "def greet: [Log] = { name -> log(name) }\n" +
-        "def twice: [Log] = { s ->\n" +
-        "  def say: [Log] = { line -> log(line) }\n" +
-        "  say(s)\n" +
-        "  say(s)\n" +
-        "}\n"
+        normalized """context Log = (log: string -> ())
+def greet: [Log] = { name -> log(name) }
+def twice: [Log] = { s ->
+  def say: [Log] = { line -> log(line) }
+  say(s)
+  say(s)
+}
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let hints =
@@ -141,8 +145,9 @@ let ``A def's lens shows both kinds of context it was inferred to require, as ho
 [<Fact>]
 let ``Hints name type variables as their top-level def's type does`` () =
     let source =
-        "def pair = { a, b -> (a, b) }\n" +
-        "def second = { a, b -> b }\n"
+        normalized """def pair = { a, b -> (a, b) }
+def second = { a, b -> b }
+"""
     Assert.Equal<(string * string * int) list>(
         [ "a", "α", offsetOf source "{ a" 0 2
           "b", "β", offsetOf source "b ->" 0 0
@@ -156,9 +161,10 @@ let ``Hints name type variables as their top-level def's type does`` () =
 [<Fact>]
 let ``Inlay hints with top-level defs have the lenses' types too, in source order`` () =
     let source =
-        "def pair = { a, b -> (a, b) }\n" +
-        "def answer: int = 42\n" +
-        "def second = { a, b -> b }\n"
+        normalized """def pair = { a, b -> (a, b) }
+def answer: int = 42
+def second = { a, b -> b }
+"""
     Assert.Equal<(string * string * int) list>(
         [ "pair", "α, β -> (α, β)", 4
           "a", "α", offsetOf source "{ a" 0 2
@@ -171,9 +177,10 @@ let ``Inlay hints with top-level defs have the lenses' types too, in source orde
 [<Fact>]
 let ``A record's rest is left unnamed in every hint of a def when it is named nowhere else`` () =
     let source =
-        "def names = { people -> match people\n" +
-        "  | [] -> []\n" +
-        "  | [p, ...rest] -> [p.name, ...names(rest)] }\n"
+        normalized """def names = { people -> match people
+  | [] -> []
+  | [p, ...rest] -> [p.name, ...names(rest)] }
+"""
     Assert.Equal<(string * string) list>(
         [ "names", "list(name: α, …) -> list(α)"
           "people", "list(name: α, …)"
@@ -184,9 +191,10 @@ let ``A record's rest is left unnamed in every hint of a def when it is named no
 [<Fact>]
 let ``A lambda's parameters take their types from the def's signature`` () =
     let source =
-        "def a: (x: string, y: int) = (x = \"\", y = 1)\n" +
-        "def g: typeof a -> string = { x, y -> \"x = {x}, y = {y}\" }\n" +
-        "def h: string, int -> string = { s, n -> s }\n"
+        normalized """def a: (x: string, y: int) = (x = "", y = 1)
+def g: typeof a -> string = { x, y -> "x = {x}, y = {y}" }
+def h: string, int -> string = { s, n -> s }
+"""
     Assert.Equal<(string * string * int) list>(
         [ "x", "string", offsetOf source "x, y ->" 0 0
           "y", "int", offsetOf source "y ->" 0 0
@@ -197,8 +205,9 @@ let ``A lambda's parameters take their types from the def's signature`` () =
 [<Fact>]
 let ``A lambda's tag pattern parameter takes its names' types from the def's signature`` () =
     let source =
-        "def a: #some(x: string, y: string) = #some(x = \"\", y = \"\")\n" +
-        "def g: typeof a -> string = { #some(x, y) -> \"x = {x}, y = {y}\" }\n"
+        normalized """def a: #some(x: string, y: string) = #some(x = "", y = "")
+def g: typeof a -> string = { #some(x, y) -> "x = {x}, y = {y}" }
+"""
     Assert.Equal<(string * string * int) list>(
         [ "x", "string", offsetOf source "x, y)" 0 0
           "y", "string", offsetOf source "y) ->" 0 0 ],
@@ -207,14 +216,15 @@ let ``A lambda's tag pattern parameter takes its names' types from the def's sig
 [<Fact>]
 let ``Hints keep the names of type aliases`` () =
     let source =
-        "type Customer = (name: string)\n" +
-        "def getCustomer = { name -> match name\n" +
-        "  | \"\" -> #customerNotFound\n" +
-        "  | _ -> #some(Customer(name = name)) }\n" +
-        "type Box(a) = (value: a)\n" +
-        "def unbox: Box(int) -> int = { b -> b.value }\n" +
-        "def rename: Customer -> Customer = { c -> c with name = \"x\" }\n" +
-        "def firstName = { c -> rename(c).name }\n"
+        normalized """type Customer = (name: string)
+def getCustomer = { name -> match name
+  | "" -> #customerNotFound
+  | _ -> #some(Customer(name = name)) }
+type Box(a) = (value: a)
+def unbox: Box(int) -> int = { b -> b.value }
+def rename: Customer -> Customer = { c -> c with name = "x" }
+def firstName = { c -> rename(c).name }
+"""
     Assert.Equal<(string * string * int) list>(
         [ "getCustomer", "string -> #customerNotFound | #some(Customer)", offsetOf source "getCustomer" 0 0
           "firstName", "Customer -> string", offsetOf source "firstName" 0 0 ],

@@ -41,7 +41,7 @@ let ``The diverging statement is related, and the fix removes what follows it`` 
     match diagnostics source with
     | [ diagnostic, _ ] ->
         let related = diagnostic.Related |> List.map (fun (span, message) -> source.Substring(span.Start, span.End - span.Start), message)
-        Assert.Equal<(string * string) list>([ "panic(\"bad input\")", "never gives a value" ], related)
+        Assert.Equal<(string * string) list>([ """panic("bad input")""", "never gives a value" ], related)
         Assert.Equal("def f: int -> int = { x ->\n  panic(\"bad input\")\n}\n", applyFix source (List.exactlyOne diagnostic.Fixes))
     | other -> Assert.Fail($"Expected one report, got %A{other}")
 

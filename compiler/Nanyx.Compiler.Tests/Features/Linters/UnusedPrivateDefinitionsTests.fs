@@ -30,11 +30,12 @@ let private fixed' (source: string) =
 let ``An unused private def, type and context are reported at their names`` () =
     // The example from the official linter's page in the docs.
     let source =
-        "module shapes\n" +
-        "def scale = 2\n" +
-        "type Corner = (x: int)\n" +
-        "context Logger = (log: string -> ())\n" +
-        "export def area = { w, h -> w * h }\n"
+        normalized """module shapes
+def scale = 2
+type Corner = (x: int)
+context Logger = (log: string -> ())
+export def area = { w, h -> w * h }
+"""
     Assert.Equal<(string * string) list>(
         [ "`scale` is never used", "scale"
           "Type `Corner` is never used", "Corner"
@@ -49,13 +50,14 @@ let ``Exported definitions are not reported, used or not`` () =
 [<Fact>]
 let ``A private def, type or context member that the module uses is not reported`` () =
     let source =
-        "module shapes\n" +
-        "type Corner = (x: int)\n" +
-        "context Scale = (factor: () -> int)\n" +
-        "def scale = 2\n" +
-        "def corner: Corner = (x = scale)\n" +
-        "def scaled: [Scale] int -> int = { n -> n * factor() }\n" +
-        "export def area: [Scale] int -> int = { w -> scaled(w) + corner.x }\n"
+        normalized """module shapes
+type Corner = (x: int)
+context Scale = (factor: () -> int)
+def scale = 2
+def corner: Corner = (x = scale)
+def scaled: [Scale] int -> int = { n -> n * factor() }
+export def area: [Scale] int -> int = { w -> scaled(w) + corner.x }
+"""
     Assert.Empty(reported source)
     // A type that only a call makes a value of is used.
     Assert.Empty(reported "module m\ntype Corner = (x: int)\nexport def origin = Corner(x = 0)\n")
@@ -63,18 +65,20 @@ let ``A private def, type or context member that the module uses is not reported
 [<Fact>]
 let ``A member of a used context that nothing calls is reported`` () =
     let source =
-        "module shapes\n" +
-        "context Scale = (factor: () -> int, offset: () -> int)\n" +
-        "export def scaled: [Scale] int -> int = { n -> n * factor() }\n"
+        normalized """module shapes
+context Scale = (factor: () -> int, offset: () -> int)
+export def scaled: [Scale] int -> int = { n -> n * factor() }
+"""
     Assert.Equal<(string * string) list>([ "Context member `offset` is never used", "offset" ], reported source)
 
 [<Fact>]
 let ``A def that only calls itself, or a type that only names itself, is unused`` () =
     let source =
-        "module m\n" +
-        "def countdown: int -> int = { n -> if n == 0 then 0 else countdown(n - 1) }\n" +
-        "type Tree = #leaf | #node(Tree, Tree)\n" +
-        "export def x = 1\n"
+        normalized """module m
+def countdown: int -> int = { n -> if n == 0 then 0 else countdown(n - 1) }
+type Tree = #leaf | #node(Tree, Tree)
+export def x = 1
+"""
     Assert.Equal<(string * string) list>(
         [ "`countdown` is never used", "countdown"; "Type `Tree` is never used", "Tree" ],
         reported source)
@@ -83,22 +87,24 @@ let ``A def that only calls itself, or a type that only names itself, is unused`
 let ``The entry point, defs an instance picks up and names starting with an underscore are not reported`` () =
     Assert.Empty(reported "@entry\ndef main = {\n  println(\"hi\")\n}\n")
     let attached =
-        "module points\n" +
-        "type Point = (x: int, y: int)\n" +
-        "def Point.toString = { p -> \"({p.x}, {p.y})\" }\n" +
-        "export def s = \"at {Point(x = 1, y = 2)}\"\n"
+        normalized """module points
+type Point = (x: int, y: int)
+def Point.toString = { p -> "({p.x}, {p.y})" }
+export def s = "at {Point(x = 1, y = 2)}"
+"""
     Assert.Empty(reported attached)
     Assert.Empty(reported "module m\ndef _spare = 1\ntype _Later = (x: int)\n")
 
 [<Fact>]
 let ``A module block's private def that the block does not use is reported`` () =
     let source =
-        "module outer =\n" +
-        "  def helper = 1\n" +
-        "  def unused = 2\n" +
-        "  export def value = helper + 1\n" +
-        "def total = outer.value\n" +
-        "export def answer = total\n"
+        normalized """module outer =
+  def helper = 1
+  def unused = 2
+  export def value = helper + 1
+def total = outer.value
+export def answer = total
+"""
     Assert.Equal<string list>([ "unused" ], reported source |> List.map snd)
 
 [<Fact>]

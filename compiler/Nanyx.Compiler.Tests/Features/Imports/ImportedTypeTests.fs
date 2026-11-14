@@ -9,10 +9,11 @@ open Nanyx.Compiler.Tests.TestSupport
 
 /// A module `people` that exports the nominal `Person`, with a function that makes one and one that takes one.
 let private peopleModule =
-    "module people\n" +
-    "export type Person = protected (name: string)\n" +
-    "export def Person.new: string -> Person = { name -> Person(name = name) }\n" +
-    "export def greet: Person -> string = { p -> \"Hello, \" ++ p.name }\n"
+    normalized """module people
+export type Person = protected (name: string)
+export def Person.new: string -> Person = { name -> Person(name = name) }
+export def greet: Person -> string = { p -> "Hello, " ++ p.name }
+"""
 
 /// The diagnostics compiling `main`, beside the `people` module, gives: each one's code and the text it is reported at.
 let private compiledWithPeople (main: string) =
@@ -39,10 +40,12 @@ let ``An aliased import's constructor cannot be called without the alias`` () =
 [<Fact>]
 let ``An aliased import's types and their attached definitions are named with the alias`` () =
     let main =
-        "module main\nimport people as people\n" +
-        "def p: people.Person = people.Person.new(\"Ada\")\n" +
-        "def greeting: string = people.greet(p)\n" +
-        "def all: list(people.Person) = [ p ]\n"
+        normalized """module main
+import people as people
+def p: people.Person = people.Person.new("Ada")
+def greeting: string = people.greet(p)
+def all: list(people.Person) = [ p ]
+"""
     Assert.Empty(compiledWithPeople main)
 
 [<Fact>]
@@ -117,10 +120,12 @@ let ``A list of a nominal type cannot hold its shape`` () =
 [<Fact>]
 let ``A list of a nominal type is assignable to a list of its shape`` () =
     let main =
-        "module main\nimport people\n" +
-        "def namesOf: list((name: string)) -> int = { xs -> list.length(xs) }\n" +
-        "def people: list(Person) = [ Person.new(\"Ada\") ]\n" +
-        "def n: int = namesOf(people)\n"
+        normalized """module main
+import people
+def namesOf: list((name: string)) -> int = { xs -> list.length(xs) }
+def people: list(Person) = [ Person.new("Ada") ]
+def n: int = namesOf(people)
+"""
     Assert.Empty(compiledWithPeople main)
 
 [<Fact>]

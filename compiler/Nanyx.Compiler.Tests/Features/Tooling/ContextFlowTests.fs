@@ -83,5 +83,5 @@ let ``On a use, the calls it serves are highlighted`` () =
 
 [<Fact>]
 let ``On a call, what provides its contexts is highlighted`` () =
-    Assert.Equal<string list * string list>(([ "Log" ], [ "note" ]), highlightsAt logAndClock "note(\"a\")" 0)
-    Assert.Equal<string list * string list>(([ "quiet" ], [ "note" ]), highlightsAt logAndClock "note(\"b\")" 0)
+    Assert.Equal<string list * string list>(([ "Log" ], [ "note" ]), highlightsAt logAndClock """note("a")""" 0)
+    Assert.Equal<string list * string list>(([ "quiet" ], [ "note" ]), highlightsAt logAndClock """note("b")""" 0)

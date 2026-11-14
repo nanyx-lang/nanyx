@@ -16,13 +16,13 @@ let private typeOf (source: string) (name: string) = Unifier.tyToString (typesOf
 [<Fact>]
 let ``A hole in a type argument is inferred from the value`` () =
     Assert.Equal("list(int)", typeOf "def xs: list(_) = [1, 2]" "xs")
-    Assert.Equal("(string, int)", typeOf "def pair: (string, _) = (\"a\", 1)" "pair")
+    Assert.Equal("(string, int)", typeOf """def pair: (string, _) = ("a", 1)""" "pair")
 
 [<Fact>]
 let ``A hole in a function type is inferred from the lambda`` () =
     let source =
-        "def add: (int, _) -> _ = { a, b -> a + b }\n" +
-        "def greet: _ -> string = { name -> \"hi \" ++ name }"
+        normalized """def add: (int, _) -> _ = { a, b -> a + b }
+def greet: _ -> string = { name -> "hi " ++ name }"""
     let types = typesOf source
     Assert.Equal("int, int -> int", Unifier.tyToString types.["add"])
     Assert.Equal("string -> string", Unifier.tyToString types.["greet"])
@@ -34,8 +34,8 @@ let ``A hole for a whole input takes all of a lambda's parameters`` () =
 [<Fact>]
 let ``A hole for a whole type is the same as no annotation`` () =
     let source =
-        "def f: _ = { x -> x + 1 }\n" +
-        "def n: _ = f(2)"
+        normalized """def f: _ = { x -> x + 1 }
+def n: _ = f(2)"""
     let types = typesOf source
     Assert.Equal("int -> int", Unifier.tyToString types.["f"])
     Assert.Equal("int", Unifier.tyToString types.["n"])
@@ -55,7 +55,7 @@ let ``Holes are generalised as an unannotated def is, not as named variables`` (
 
 [<Fact>]
 let ``Each hole is a type of its own`` () =
-    Assert.Equal("(int, string)", typeOf "def pair: (_, _) = (1, \"a\")" "pair")
+    Assert.Equal("(int, string)", typeOf """def pair: (_, _) = (1, "a")""" "pair")
 
 [<Fact>]
 let ``A hole can be used before its def`` () =
@@ -65,13 +65,13 @@ let ``A hole can be used before its def`` () =
 [<Fact>]
 let ``Holes work in local defs and lambda parameters`` () =
     let source =
-        "def total = {\n" +
-        "  def xs: list(_) = [1, 2, 3]\n" +
-        "  def add = { a: _, b -> a + b }\n" +
-        "  match xs\n" +
-        "    | [x, ...] -> add(x, 1)\n" +
-        "    | [] -> 0\n" +
-        "}"
+        normalized """def total = {
+  def xs: list(_) = [1, 2, 3]
+  def add = { a: _, b -> a + b }
+  match xs
+    | [x, ...] -> add(x, 1)
+    | [] -> 0
+}"""
     Assert.Equal("() -> int", typeOf source "total")
 
 [<Fact>]

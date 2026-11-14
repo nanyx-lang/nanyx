@@ -30,7 +30,7 @@ let ``A def whose type declares no context cannot call a member of the runtime's
 let ``A def whose type declares no context cannot call a function that requires one`` () =
     let source =
         "def sayHello: [Console] () -> () = { println(\"hello\") }\n" +
-        "def g: int -> int = { n ->\n  sayHello()\n  n\n}\n" + entryCalling "println(\"{g(1)}\")"
+        "def g: int -> int = { n ->\n  sayHello()\n  n\n}\n" + entryCalling """println("{g(1)}")"""
     match undeclaredContexts source with
     | [ text, message ] ->
         Assert.Equal("sayHello", text)
@@ -61,7 +61,7 @@ let ``An unannotated def infers the contexts it uses, so a def that declares non
     let source =
         "def g: int -> int = { n -> f(n) }\n" +
         "def f = { n ->\n  h()\n  n + 1\n}\n" +
-        "def h = { println(\"x\") }\n" + entryCalling "println(\"{g(1)}\")"
+        "def h = { println(\"x\") }\n" + entryCalling """println("{g(1)}")"""
     match undeclaredContexts source with
     | [ text, message ] ->
         Assert.Equal("f", text)
@@ -71,17 +71,33 @@ let ``An unannotated def infers the contexts it uses, so a def that declares non
 [<Fact>]
 let ``Code that declares or is given the Console context can use it`` () =
     let source =
-        "def sayHello: [Console] () -> () = { println(\"hello\") }\n" +
-        "def greet: [Console] string -> () = { name ->\n  sayHello()\n  println(name)\n}\n" +
-        "def helper = { n ->\n  greet(\"x\")\n  n\n}\n" +
-        "def g: [Console] int -> int = { n -> helper(n) }\n" +
-        "def quiet: () -> () = {\n" +
-        "  use Console(\n" +
-        "    write = { _ -> () }\n    writeError = { _ -> () }\n" +
-        "    readLine = { #error(#endOfInput) }\n    readToEnd = { #error(#endOfInput) }\n    flush = { () }\n" +
-        "  ) in sayHello()\n" +
-        "}\n" +
-        "\n@entry\ndef main = {\n  quiet()\n  println(\"{g(1)}\")\n  println(\"{helper(2)}\")\n}\n"
+        normalized """def sayHello: [Console] () -> () = { println("hello") }
+def greet: [Console] string -> () = { name ->
+  sayHello()
+  println(name)
+}
+def helper = { n ->
+  greet("x")
+  n
+}
+def g: [Console] int -> int = { n -> helper(n) }
+def quiet: () -> () = {
+  use Console(
+    write = { _ -> () }
+    writeError = { _ -> () }
+    readLine = { #error(#endOfInput) }
+    readToEnd = { #error(#endOfInput) }
+    flush = { () }
+  ) in sayHello()
+}
+
+@entry
+def main = {
+  quiet()
+  println("{g(1)}")
+  println("{helper(2)}")
+}
+"""
     Assert.Empty(undeclaredContexts source)
 
 [<Fact>]

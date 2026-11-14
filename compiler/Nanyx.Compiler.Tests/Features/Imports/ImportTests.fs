@@ -122,11 +122,11 @@ let private valueDefinitionNames (result: CompileResult) =
 let ``Only the imported definitions a module reaches are inlined`` () =
     let modules =
         [ "mod.nyx",
-          "module mod\n" +
-          "def c = { 1 }\n" +
-          "def b = { c() + 1 }\n" +
-          "export def a = { b() + 1 }\n" +
-          "export def unused = { 5 }" ]
+          normalized """module mod
+def c = { 1 }
+def b = { c() + 1 }
+export def a = { b() + 1 }
+export def unused = { 5 }""" ]
     let result = compileImportingAll modules "module main\nimport mod\ndef x = a()"
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let names = valueDefinitionNames result

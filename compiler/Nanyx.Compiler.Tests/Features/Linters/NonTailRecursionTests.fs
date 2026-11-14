@@ -23,11 +23,21 @@ let private nonTailMessage name why =
 [<Fact>]
 let ``A function that calls itself other than in tail position is reported at the call, saying why`` () =
     let source =
-        "def factorial: int -> int = { n -> if n <= 1 then 1 else n * factorial(n - 1) }\n" +
-        "def length: list(int) -> int = {\n  | [] -> 0\n  | [_, ...tail] -> 1 + length(tail)\n}\n" +
-        "def copy: list(int) -> list(int) = {\n  | [] -> []\n  | [x, ...rest] -> [x, ...copy(rest)]\n}\n" +
-        "def show: int -> string = { n -> if n == 0 then \"\" else \"{show(n - 1)}.\" }\n" +
-        "def steps: int -> int = { n ->\n  def before = if n == 0 then 0 else steps(n - 1)\n  before + 1\n}\n"
+        normalized """def factorial: int -> int = { n -> if n <= 1 then 1 else n * factorial(n - 1) }
+def length: list(int) -> int = {
+  | [] -> 0
+  | [_, ...tail] -> 1 + length(tail)
+}
+def copy: list(int) -> list(int) = {
+  | [] -> []
+  | [x, ...rest] -> [x, ...copy(rest)]
+}
+def show: int -> string = { n -> if n == 0 then "" else "{show(n - 1)}." }
+def steps: int -> int = { n ->
+  def before = if n == 0 then 0 else steps(n - 1)
+  before + 1
+}
+"""
     Assert.Equal<(string * string) list>(
         [ nonTailMessage "factorial" "its result is an operand of `*`", "factorial(n - 1)"
           nonTailMessage "length" "its result is an operand of `+`", "length(tail)"
@@ -39,27 +49,41 @@ let ``A function that calls itself other than in tail position is reported at th
 [<Fact>]
 let ``A local rec function that calls itself other than in tail position is reported`` () =
     let source =
-        "def f: int -> int = { n ->\n" +
-        "  rec down = { i -> if i == 0 then 0 else 1 + down(i - 1) }\n" +
-        "  down(n)\n" +
-        "}\n"
+        normalized """def f: int -> int = { n ->
+  rec down = { i -> if i == 0 then 0 else 1 + down(i - 1) }
+  down(n)
+}
+"""
     Assert.Equal<(string * string) list>([ nonTailMessage "down" "its result is an operand of `+`", "down(i - 1)" ], nonTailIn source)
 
 [<Fact>]
 let ``Recursion in tail position is not reported`` () =
     // In the branches of an `if`, the arms of a `match`, the end of a block, and as a pipe.
     let source =
-        "def countdown: (int, int) -> int = { n, acc -> if n == 0 then acc else countdown(n - 1, acc + 1) }\n" +
-        "def sum: (list(int), int) -> int = {\n  | [], acc -> acc\n  | [x, ...rest], acc -> sum(rest, acc + x)\n}\n" +
-        "def steps: (int, int) -> int = { n, acc ->\n  def next = n - 1\n  match n\n    | 0 -> acc\n    | _ -> next \\steps(acc + 1)\n}\n" +
-        "def count: int -> int = { n ->\n  rec loop = { i, acc -> if i == 0 then acc else loop(i - 1, acc + 1) }\n  loop(n, 0)\n}\n"
+        normalized """def countdown: (int, int) -> int = { n, acc -> if n == 0 then acc else countdown(n - 1, acc + 1) }
+def sum: (list(int), int) -> int = {
+  | [], acc -> acc
+  | [x, ...rest], acc -> sum(rest, acc + x)
+}
+def steps: (int, int) -> int = { n, acc ->
+  def next = n - 1
+  match n
+    | 0 -> acc
+    | _ -> next \steps(acc + 1)
+}
+def count: int -> int = { n ->
+  rec loop = { i, acc -> if i == 0 then acc else loop(i - 1, acc + 1) }
+  loop(n, 0)
+}
+"""
     Assert.Empty(nonTailIn source)
 
 [<Fact>]
 let ``Calls to other functions, and calls from a lambda within the function, are not reported`` () =
     // `twice` calls `inc` other than in tail position, and `again` is called from a lambda it builds, not by itself.
     let source =
-        "def inc: int -> int = { n -> n + 1 }\n" +
-        "def twice: int -> int = { n -> inc(inc(n)) }\n" +
-        "def again: list(int) -> list(int) = { xs -> xs \\ list.map({ x -> list.length(again([x])) }) }\n"
+        normalized """def inc: int -> int = { n -> n + 1 }
+def twice: int -> int = { n -> inc(inc(n)) }
+def again: list(int) -> list(int) = { xs -> xs \ list.map({ x -> list.length(again([x])) }) }
+"""
     Assert.Empty(nonTailIn source)

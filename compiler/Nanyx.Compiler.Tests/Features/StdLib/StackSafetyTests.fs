@@ -2,6 +2,7 @@ module Nanyx.Compiler.Tests.Features.StdLib.StackSafety
 
 open Xunit
 open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
 
 // Each standard-library function that walks a collection is stack-safe (docs/src/content/work-in-progress/tail-calls.md): it calls
 // itself only in tail position. The runs that show it working on long input are in the Wasm tests
@@ -26,8 +27,12 @@ let ``The linter finds no recursion outside tail position in the standard librar
 [<Fact>]
 let ``The check above finds recursion outside tail position in a library module, intrinsics and all`` () =
     let source =
-        "module text\n" +
-        "def copy: list(int) -> list(int) = {\n  | [] -> []\n  | [x, ...rest] -> __nanyx_list_cons(x, copy(rest))\n}\n"
+        normalized """module text
+def copy: list(int) -> list(int) = {
+  | [] -> []
+  | [x, ...rest] -> __nanyx_list_cons(x, copy(rest))
+}
+"""
     let message, line = Assert.Single(nonTailRecursionIn "text" source)
     Assert.Equal(4, line)
     Assert.StartsWith("`copy` calls itself here, but not in tail position: its result is passed to `__nanyx_list_cons`", message)

@@ -20,14 +20,14 @@ let ``A workflow keyword in a branch of an if or match statement has the rest of
         "  return half\n" +
         "} }\n" +
         // A failure only one branch adds is in an annotation too.
-        "def label: int -> #some(string) | #odd = { n -> proc {\n" +
-        "  def text = match n\n" +
-        "    | 0 -> \"zero\"\n" +
-        "    | _ ->\n" +
-        "      def h = try halve(n)\n" +
-        "      \"half is {h}\"\n" +
-        "  return text\n" +
-        "} }"
+        normalized """def label: int -> #some(string) | #odd = { n -> proc {
+  def text = match n
+    | 0 -> "zero"
+    | _ ->
+      def h = try halve(n)
+      "half is {h}"
+  return text
+} }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("int -> #some(int) | #negative | #odd", Unifier.tyToString result.Typed.Value.Types.["check"])
@@ -76,14 +76,14 @@ let ``A workflow keyword the rest of its block cannot follow is reported where i
         reported "  def m = false or (if true then try halve(2) == 1 else false)")
     // A builder block of its own inside a lambda has its own continuation.
     let nested =
-        "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n" +
-        "def f = { xs -> proc {\n" +
-        "  def results = list.map(xs, { x -> proc {\n" +
-        "    def h = try halve(x)\n" +
-        "    return h\n" +
-        "  } })\n" +
-        "  return results\n" +
-        "} }"
+        normalized """def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+def f = { xs -> proc {
+  def results = list.map(xs, { x -> proc {
+    def h = try halve(x)
+    return h
+  } })
+  return results
+} }"""
     Assert.Empty((Compiler.compile nested).Diagnostics)
 
 [<Fact>]
@@ -122,10 +122,10 @@ let ``try and return outside a builder block are reported as workflow keywords``
 [<Fact>]
 let ``Desugar workflow bind and return`` () =
     let source =
-        "def result = async {\n" +
-        "  def x = await! foo()\n" +
-        "  return! x.y\n" +
-        "}"
+        normalized """def result = async {
+  def x = await! foo()
+  return! x.y
+}"""
     match parseModule source with
     | Result.Error err -> Assert.True(false, $"Parse error: {err}")
     | Result.Ok ast ->
@@ -150,9 +150,9 @@ let ``Desugar workflow bind and return`` () =
 [<Fact>]
 let ``Desugar workflow implicit return`` () =
     let source =
-        "def result = async {\n" +
-        "  1\n" +
-        "}"
+        normalized """def result = async {
+  1
+}"""
     match parseModule source with
     | Result.Error err -> Assert.True(false, $"Parse error: {err}")
     | Result.Ok ast ->
@@ -165,23 +165,23 @@ let ``Desugar workflow implicit return`` () =
 [<Fact>]
 let ``Typecheck workflow context members`` () =
     let source =
-        "context AsyncWorkflow = (await: (int, (int -> int)) -> int return: int -> int)\n" +
-        "def async: AsyncWorkflow = (await = { x, f -> f(x) }, return = { x -> x })\n" +
-        "def result = async {\n" +
-        "  def x = await! 1\n" +
-        "  return! x\n" +
-        "}"
+        normalized """context AsyncWorkflow = (await: (int, (int -> int)) -> int return: int -> int)
+def async: AsyncWorkflow = (await = { x, f -> f(x) }, return = { x -> x })
+def result = async {
+  def x = await! 1
+  return! x
+}"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
 
 [<Fact>]
 let ``Typecheck workflow requires return`` () =
     let source =
-        "context AsyncWorkflow = (await: (int, (int -> int)) -> int)\n" +
-        "def async: AsyncWorkflow = (await = { x, f -> f(x) })\n" +
-        "def result = async {\n" +
-        "  return! 1\n" +
-        "}"
+        normalized """context AsyncWorkflow = (await: (int, (int -> int)) -> int)
+def async: AsyncWorkflow = (await = { x, f -> f(x) })
+def result = async {
+  return! 1
+}"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.UnknownMember result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
@@ -191,15 +191,15 @@ let ``Typecheck workflow requires return`` () =
 let ``A proc block is a result of its return value or of the first error`` () =
     // Each `try` instantiates `proc` afresh, so one block can bind payloads of different types.
     let source =
-        "import nanyx/result\n" +
-        "def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }\n" +
-        "def g: int -> #some(string) | #error(#tooBig) = { n -> #some(\"{n}\") }\n" +
-        "def run = { x -> proc {\n" +
-        "  def a = try f(x)\n" +
-        "  try f(a)\n" +
-        "  def s = try g(a)\n" +
-        "  return s\n" +
-        "} }"
+        normalized """import nanyx/result
+def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }
+def g: int -> #some(string) | #error(#tooBig) = { n -> #some("{n}") }
+def run = { x -> proc {
+  def a = try f(x)
+  try f(a)
+  def s = try g(a)
+  return s
+} }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("int -> #some(string) | #error(#tooBig)", Unifier.tyToString result.Typed.Value.Types.["run"])
@@ -208,11 +208,11 @@ let ``A proc block is a result of its return value or of the first error`` () =
 let ``A proc block that uses no workflow keyword is its block`` () =
     // It used to be checked for the members `await` and `pure`, which no builder has (#346).
     let source =
-        "def total = proc {\n" +
-        "  def a = 20\n" +
-        "  a + 22\n" +
-        "}\n" +
-        "def nothing = { proc { () } }"
+        normalized """def total = proc {
+  def a = 20
+  a + 22
+}
+def nothing = { proc { () } }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("int", Unifier.tyToString result.Typed.Value.Types.["total"])
@@ -220,14 +220,14 @@ let ``A proc block that uses no workflow keyword is its block`` () =
 [<Fact>]
 let ``A proc block collects the failures of each try`` () =
     let source =
-        "import nanyx/result\n" +
-        "def name: int -> #some(string) | #nil = { n -> if n > 5 then #nil else #some(\"n\") }\n" +
-        "def find: string -> #some(int) | #notFound = { s -> if s == \"n\" then #some(1) else #notFound }\n" +
-        "def run = { x -> proc {\n" +
-        "  def s = try name(x)\n" +
-        "  def i = try find(s)\n" +
-        "  return i\n" +
-        "} }"
+        normalized """import nanyx/result
+def name: int -> #some(string) | #nil = { n -> if n > 5 then #nil else #some("n") }
+def find: string -> #some(int) | #notFound = { s -> if s == "n" then #some(1) else #notFound }
+def run = { x -> proc {
+  def s = try name(x)
+  def i = try find(s)
+  return i
+} }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("int -> #some(int) | #notFound | #nil", Unifier.tyToString result.Typed.Value.Types.["run"])
@@ -312,11 +312,11 @@ let ``A bare tag given to try in one branch widens the block's failures`` () =
 [<Fact>]
 let ``A try nested in an expression of a proc block is bound before its statement`` () =
     let source =
-        "import nanyx/result\n" +
-        "def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }\n" +
-        "def run = { x -> proc {\n" +
-        "  return (a = try f(x), b = try f(try f(x)))\n" +
-        "} }"
+        normalized """import nanyx/result
+def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }
+def run = { x -> proc {
+  return (a = try f(x), b = try f(try f(x)))
+} }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("int -> #some(a: int, b: int) | #error(#tooBig)", Unifier.tyToString result.Typed.Value.Types.["run"])
@@ -347,14 +347,14 @@ let ``A try nested in an expression of a proc block is bound before its statemen
 [<Fact>]
 let ``A proc block that ends without return is #some()`` () =
     let source =
-        "def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }\n" +
-        "def run = { x -> proc {\n" +
-        "  def a = try f(x)\n" +
-        "  a + 1\n" +
-        "} }\n" +
-        "def check = { x -> proc {\n" +
-        "  if x < 0 then try #error(#tooBig)\n" +
-        "} }"
+        normalized """def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }
+def run = { x -> proc {
+  def a = try f(x)
+  a + 1
+} }
+def check = { x -> proc {
+  if x < 0 then try #error(#tooBig)
+} }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("int -> #some() | #error(#tooBig)", Unifier.tyToString result.Typed.Value.Types.["run"])
@@ -363,14 +363,15 @@ let ``A proc block that ends without return is #some()`` () =
 [<Fact>]
 let ``A builder block that can end without return needs the builder's zero`` () =
     let builder =
-        "def opt = (\n" +
-        "  try = {\n" +
-        "    | #some(value), continue -> continue(value)\n" +
-        "    | failure, _ -> failure\n" +
-        "  }\n" +
-        "  return = { value -> #some(value) }\n" +
-        ")\n" +
-        "def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n"
+        normalized """def opt = (
+  try = {
+    | #some(value), continue -> continue(value)
+    | failure, _ -> failure
+  }
+  return = { value -> #some(value) }
+)
+def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+"""
     let fallsOff = builder + "def show = { n -> opt {\n  def h = try half(n)\n  h + 1\n} }\n"
     let result = Compiler.compile fallsOff
     let diagnostic = Assert.Single(result.Diagnostics)
@@ -383,22 +384,26 @@ let ``A builder block that can end without return needs the builder's zero`` () 
 [<Fact>]
 let ``A builder's zero is the value of a block that ends without return`` () =
     let source =
-        "def opt\n" +
-        "  : (\n" +
-        "    try: ((#some(a) | r), (a -> #some(b) | r)) -> #some(b) | r\n" +
-        "    return: a -> #some(a) | r\n" +
-        "    zero: #nothing | r\n" +
-        "  )\n" +
-        "  = (\n" +
-        "  try = {\n" +
-        "    | #some(value), continue -> continue(value)\n" +
-        "    | failure, _ -> failure\n" +
-        "  }\n" +
-        "  return = { value -> #some(value) }\n" +
-        "  zero = #nothing\n" +
-        ")\n" +
-        "def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n" +
-        "def show = { n -> opt {\n  def h = try half(n)\n  h + 1\n} }\n"
+        normalized """def opt
+  : (
+    try: ((#some(a) | r), (a -> #some(b) | r)) -> #some(b) | r
+    return: a -> #some(a) | r
+    zero: #nothing | r
+  )
+  = (
+  try = {
+    | #some(value), continue -> continue(value)
+    | failure, _ -> failure
+  }
+  return = { value -> #some(value) }
+  zero = #nothing
+)
+def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+def show = { n -> opt {
+  def h = try half(n)
+  h + 1
+} }
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let shown = Unifier.tyToString result.Typed.Value.Types.["show"]
@@ -415,10 +420,16 @@ let ``A proc block that returns a value on one path and ends without return on a
 let ``An if or match keeps every tag of a branch whose type is an open union`` () =
     // A branch that is `#nothing | r` used to be made equal to a `#some(...)` one, which dropped `#nothing` (#433).
     let source =
-        "def nothing: () -> #nothing | r = { #nothing }\n" +
-        "def h = { c -> if c then #some(1) else nothing() }\n" +
-        "def m = { n -> match n\n  | 0 -> #some(\"zero\")\n  | _ -> nothing()\n}\n" +
-        "def k = { c ->\n  def __rest_1 = { _ -> nothing() }\n  if c then #some(1) else __rest_1(())\n}"
+        normalized """def nothing: () -> #nothing | r = { #nothing }
+def h = { c -> if c then #some(1) else nothing() }
+def m = { n -> match n
+  | 0 -> #some("zero")
+  | _ -> nothing()
+}
+def k = { c ->
+  def __rest_1 = { _ -> nothing() }
+  if c then #some(1) else __rest_1(())
+}"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("bool -> #some(int) | #nothing", Unifier.tyToString result.Typed.Value.Types.["h"])
@@ -428,22 +439,26 @@ let ``An if or match keeps every tag of a branch whose type is an open union`` (
 [<Fact>]
 let ``A builder's zero is part of the block's type when a branch returns a value`` () =
     let source =
-        "def opt\n" +
-        "  : (\n" +
-        "    try: ((#some(a) | r), (a -> #some(b) | r)) -> #some(b) | r\n" +
-        "    return: a -> #some(a) | r\n" +
-        "    zero: #nothing | r\n" +
-        "  )\n" +
-        "  = (\n" +
-        "  try = {\n" +
-        "    | #some(value), continue -> continue(value)\n" +
-        "    | failure, _ -> failure\n" +
-        "  }\n" +
-        "  return = { value -> #some(value) }\n" +
-        "  zero = #nothing\n" +
-        ")\n" +
-        "def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n" +
-        "def show = { n -> opt {\n  def h = try half(n)\n  if h > 2 then return h\n} }\n"
+        normalized """def opt
+  : (
+    try: ((#some(a) | r), (a -> #some(b) | r)) -> #some(b) | r
+    return: a -> #some(a) | r
+    zero: #nothing | r
+  )
+  = (
+  try = {
+    | #some(value), continue -> continue(value)
+    | failure, _ -> failure
+  }
+  return = { value -> #some(value) }
+  zero = #nothing
+)
+def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+def show = { n -> opt {
+  def h = try half(n)
+  if h > 2 then return h
+} }
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let shown = Unifier.tyToString result.Typed.Value.Types.["show"]

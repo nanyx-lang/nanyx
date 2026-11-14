@@ -23,12 +23,13 @@ let private ownNamesAt (source: string) (offset: int) =
 [<Fact>]
 let ``Locals are in scope from their def, parameters in their lambda and top-level defs everywhere`` () =
     let source =
-        "def scale = { factor ->\n" +
-        "  def before = 1\n" +
-        "  def offset = before\n" +
-        "  factor * 2 + offset\n" +
-        "}\n" +
-        "def later = 3\n"
+        normalized """def scale = { factor ->
+  def before = 1
+  def offset = before
+  factor * 2 + offset
+}
+def later = 3
+"""
     // A top-level def written later is in scope; a local written later is not.
     Assert.Equal<(string * SymbolKind) list>(
         [ "before", LocalValue; "factor", Parameter; "later", TopLevelValue; "scale", TopLevelValue ],
@@ -44,9 +45,10 @@ let ``Locals are in scope from their def, parameters in their lambda and top-lev
 [<Fact>]
 let ``A pattern variable is in scope in its own arm only`` () =
     let source =
-        "def rest = { items -> match items\n" +
-        "  | [_, ...tail] -> tail\n" +
-        "  | _ -> items }\n"
+        normalized """def rest = { items -> match items
+  | [_, ...tail] -> tail
+  | _ -> items }
+"""
     let inArm = ownNamesAt source (offsetOf source "-> tail" 0 3)
     Assert.Contains(("tail", PatternVariable), inArm)
     let inNextArm = ownNamesAt source (offsetOf source "-> items" 0 3)
@@ -56,13 +58,14 @@ let ``A pattern variable is in scope in its own arm only`` () =
 [<Fact>]
 let ``The nearest declaration of a name is the one in scope`` () =
     let source =
-        "def x = 1\n" +
-        "def f = { x -> x }\n" +
-        "def g = {\n" +
-        "  def x = 2\n" +
-        "  x\n" +
-        "}\n" +
-        "def h = x\n"
+        normalized """def x = 1
+def f = { x -> x }
+def g = {
+  def x = 2
+  x
+}
+def h = x
+"""
     let x offset = ownNamesAt source offset |> List.filter (fun (name, _) -> name = "x")
     Assert.Equal<(string * SymbolKind) list>([ "x", Parameter ], x (offsetOf source "-> x" 0 3))
     Assert.Equal<(string * SymbolKind) list>([ "x", LocalValue ], x (offsetOf source "  x\n" 0 2))
@@ -106,10 +109,11 @@ let private membersIn (result: CompileResult) (source: string) (at: string) (pat
 [<Fact>]
 let ``After a value's name come the fields of its record, followed through the path`` () =
     let source =
-        "def p = (x = 1, name = \"a\", inner = (y = true))\n" +
-        "def t = (1, 2)\n" +
-        "def f = { v -> v }\n" +
-        "def q = p\n"
+        normalized """def p = (x = 1, name = "a", inner = (y = true))
+def t = (1, 2)
+def f = { v -> v }
+def q = p
+"""
     let members = membersIn (Compiler.compile source) source
     Assert.Equal<(string * Completion.MemberKind * string option) list>(
         [ "inner", Completion.Field, Some "(y: bool)"; "name", Completion.Field, Some "string"; "x", Completion.Field, Some "int" ],
@@ -127,9 +131,10 @@ let ``After a value's name come the fields of its record, followed through the p
 [<Fact>]
 let ``After the dot that starts a shorthand lambda come the members of its argument`` () =
     let source =
-        "def name: (name: string, age: int) -> string = { .name }\n" +
-        "def size: string -> int = { .length }\n" +
-        "def person = (name = \"a\", age = 3)\n"
+        normalized """def name: (name: string, age: int) -> string = { .name }
+def size: string -> int = { .length }
+def person = (name = "a", age = 3)
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let members at =
@@ -145,11 +150,12 @@ let ``After the dot that starts a shorthand lambda come the members of its argum
 [<Fact>]
 let ``After the dot that starts a guard pattern come the members of the value matched`` () =
     let source =
-        "def size: (name: string, age: int) -> string = { p ->\n" +
-        "  match p\n" +
-        "    | { .age > 17 } -> \"adult\"\n" +
-        "    | _ -> \"minor\"\n" +
-        "}\n"
+        normalized """def size: (name: string, age: int) -> string = { p ->
+  match p
+    | { .age > 17 } -> "adult"
+    | _ -> "minor"
+}
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal<(string * Completion.MemberKind * string option) list>(
@@ -194,10 +200,11 @@ let private pipeTargetsIn (source: string) (at: string) (path: string list) =
 [<Fact>]
 let ``After a pipe come the definitions attached to the piped value's type, then the functions in scope`` () =
     let source =
-        "import nanyx/text\n" +
-        "def s = \"abc\"\n" +
-        "def double = { n -> n * 2 }\n" +
-        "def r = s\n"
+        normalized """import nanyx/text
+def s = "abc"
+def double = { n -> n * 2 }
+def r = s
+"""
     let targets = pipeTargetsIn source "def r" [ "s" ]
     let attached = targets |> List.takeWhile (fun target -> target.IsAttached)
     Assert.Contains("startsWith", attached |> List.map (fun target -> target.Name))
@@ -215,10 +222,11 @@ let ``After a pipe come the definitions attached to the piped value's type, then
 [<Fact>]
 let ``After a pipe come the module's own definitions attached to a type`` () =
     let source =
-        "type Point = (x: int, y: int)\n" +
-        "def Point.norm = { p -> p.x + p.y }\n" +
-        "def p = Point(x = 1, y = 2)\n" +
-        "def q = p\n"
+        normalized """type Point = (x: int, y: int)
+def Point.norm = { p -> p.x + p.y }
+def p = Point(x = 1, y = 2)
+def q = p
+"""
     let attached = pipeTargetsIn source "def q" [ "p" ] |> List.filter (fun target -> target.IsAttached)
     Assert.Equal<string list>([ "norm" ], attached |> List.map (fun target -> target.Name))
 

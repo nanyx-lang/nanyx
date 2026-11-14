@@ -34,10 +34,11 @@ let ``A function that writes its type must require Add of a type variable it add
 [<Fact>]
 let ``Adding and negating values of a type variable calls the members of the Add the function requires`` () =
     let source =
-        "def double: [Add(a)] a -> a = { x -> x + x }\n" +
-        "def orZero: [Add(a)] a -> a = { x -> x + 0 }\n" +
-        "def flip: [Add(a)] a -> a = { x -> 0 - x + -x }\n" +
-        "def total = [1.5, 2.5] \\list.sum\n"
+        normalized """def double: [Add(a)] a -> a = { x -> x + x }
+def orZero: [Add(a)] a -> a = { x -> x + 0 }
+def flip: [Add(a)] a -> a = { x -> 0 - x + -x }
+def total = [1.5, 2.5] \list.sum
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal("float", Unifier.tyToString result.Typed.Value.Types.["total"])
@@ -71,10 +72,11 @@ let ``A literal beside a value of a type variable is fromInt of it, which needs 
 [<Fact>]
 let ``A function that requires Num multiplies, takes literals and calls one that requires Add`` () =
     let source =
-        "def square: [Num(a)] a -> a = { x -> x * x }\n" +
-        "def twice: [Num(a)] a -> a = { x -> 2 * x + 0 }\n" +
-        "def mean: [Num(a)] list(a) -> a = { xs -> list.sum(xs) / fromInt(list.length(xs)) }\n" +
-        "def total = mean([1.5, 2.5]) + square(2.0) + twice(1.5)\n"
+        normalized """def square: [Num(a)] a -> a = { x -> x * x }
+def twice: [Num(a)] a -> a = { x -> 2 * x + 0 }
+def mean: [Num(a)] list(a) -> a = { xs -> list.sum(xs) / fromInt(list.length(xs)) }
+def total = mean([1.5, 2.5]) + square(2.0) + twice(1.5)
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal("float", Unifier.tyToString result.Typed.Value.Types.["total"])
@@ -82,10 +84,11 @@ let ``A function that requires Num multiplies, takes literals and calls one that
 [<Fact>]
 let ``A power is a call to the prelude's __pow, of the base's type`` () =
     let source =
-        "def i = 2 ** 10\n" +
-        "def f = 1.5 ** 2\n" +
-        "def cube: [Num(a)] a -> a = { x -> x ** 3 }\n" +
-        "def g = float.pow(2.0, 0.5)\n"
+        normalized """def i = 2 ** 10
+def f = 1.5 ** 2
+def cube: [Num(a)] a -> a = { x -> x ** 3 }
+def g = float.pow(2.0, 0.5)
+"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let types = result.Typed.Value.Types

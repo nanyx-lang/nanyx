@@ -10,10 +10,10 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``Typecheck supports nominal types`` () =
     let source =
-        "type Email = protected string\n" +
-        "def email: Email = \"a@b.com\"\n" +
-        "def addr: string = email\n" +
-        "def email2: Email = addr"
+        normalized """type Email = protected string
+def email: Email = "a@b.com"
+def addr: string = email
+def email2: Email = addr"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
@@ -30,10 +30,10 @@ let ``Typecheck supports nominal types`` () =
 [<Fact>]
 let ``Typecheck rejects distinct nominal types`` () =
     let source =
-        "type Email = protected string\n" +
-        "type UserId = protected string\n" +
-        "def email: Email = \"a@b.com\"\n" +
-        "def user: UserId = email"
+        normalized """type Email = protected string
+type UserId = protected string
+def email: Email = "a@b.com"
+def user: UserId = email"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.TypeMismatch result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message

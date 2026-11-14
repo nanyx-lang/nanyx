@@ -57,8 +57,8 @@ let ``A def that requires Ord of a type variable orders through the instance it 
 let ``Numbers, bools, strings, tuples and lists of them are ordered by the compiler's own Ord`` () =
     let typed =
         compileClean (
-            "def a = 1 < 2 and 1.5 >= 2.5 and false < true and \"a\" <= \"b\"\n" +
-            "def b = (1, \"a\") < (1, \"b\") and [1, 2] > [1] and [(1, [\"x\"])] < [(2, [])]\n")
+            withFinalNewline """def a = 1 < 2 and 1.5 >= 2.5 and false < true and "a" <= "b"
+def b = (1, "a") < (1, "b") and [1, 2] > [1] and [(1, ["x"])] < [(2, [])]""")
     Assert.Empty(instancesOf typed)
 
 [<Fact>]
@@ -91,11 +91,11 @@ let ``A call that requires Ord of a type with no order is an error at the call``
 let ``A nominal type orders with the compare attached to it`` () =
     let typed =
         compileClean (
-            "type Version = protected (major: int, minor: int)\n" +
-            "def Version.compare: Version, Version -> #less | #equal | #greater = { a, b -> int.compare(a.major, b.major) }\n" +
-            "def v = { major -> Version(major = major, minor = 0) }\n" +
-            "def a = v(1) < v(2)\n" +
-            "def b = list.sort([v(2), v(1)])\n")
+            withFinalNewline """type Version = protected (major: int, minor: int)
+def Version.compare: Version, Version -> #less | #equal | #greater = { a, b -> int.compare(a.major, b.major) }
+def v = { major -> Version(major = major, minor = 0) }
+def a = v(1) < v(2)
+def b = list.sort([v(2), v(1)])""")
     Assert.Contains(InstanceSynthesized [ "compare", "Version.compare" ], instancesOf typed)
 
 [<Fact>]
@@ -152,11 +152,11 @@ let ``A def that calls a local function ordering its own type variable requires 
 let ``A list of a type with its own compare is ordered through it, element by element`` () =
     let typed =
         compileClean (
-            "type Version = protected (major: int, minor: int)\n" +
-            "def Version.compare: Version, Version -> #less | #equal | #greater = { a, b -> int.compare(a.major, b.major) }\n" +
-            "def v = { major -> Version(major = major, minor = 0) }\n" +
-            "def a = [v(1), v(2)] < [v(3)]\n" +
-            "def before: [Ord(a)] list(a), list(a) -> bool = { xs, ys -> xs >= ys }\n")
+            withFinalNewline """type Version = protected (major: int, minor: int)
+def Version.compare: Version, Version -> #less | #equal | #greater = { a, b -> int.compare(a.major, b.major) }
+def v = { major -> Version(major = major, minor = 0) }
+def a = [v(1), v(2)] < [v(3)]
+def before: [Ord(a)] list(a), list(a) -> bool = { xs, ys -> xs >= ys }""")
     Assert.Contains(InstanceSynthesized [ "compare", "Version.compare" ], instancesOf typed)
     let instances = typed.ContextInstances |> Map.values |> Seq.concat |> Seq.choose id |> List.ofSeq
     Assert.Contains(instances, function InstanceInScope(Kind (TypeApply("Ord", [ Kind (TypeVar "a") ])), _) -> true | _ -> false)

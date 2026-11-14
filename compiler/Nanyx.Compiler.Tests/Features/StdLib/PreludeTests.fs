@@ -10,15 +10,15 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``The prelude is in scope with no imports`` () =
     let source =
-        "def f: int -> Result(int, string) = { n -> if n > 5 then #error(\"big\") else #some(n) }\n" +
-        "def run = { x -> proc {\n" +
-        "  def a = try f(x)\n" +
-        "  return a + 1\n" +
-        "} }\n" +
-        "def name: #some(string) | #empty = #some(\"abc\")\n" +
-        "def called = mapSome(name, { s -> 1 })\n" +
-        "def piped = name \\ mapSome({ s -> 1 })\n" +
-        "def mapped = f(1) \\ Result.mapError({ e -> 0 })"
+        normalized """def f: int -> Result(int, string) = { n -> if n > 5 then #error("big") else #some(n) }
+def run = { x -> proc {
+  def a = try f(x)
+  return a + 1
+} }
+def name: #some(string) | #empty = #some("abc")
+def called = mapSome(name, { s -> 1 })
+def piped = name \ mapSome({ s -> 1 })
+def mapped = f(1) \ Result.mapError({ e -> 0 })"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
@@ -29,9 +29,9 @@ let ``The prelude is in scope with no imports`` () =
 [<Fact>]
 let ``A pipe finds the prelude's Result helpers by the Result alias`` () =
     let source =
-        "def r: Result(int, string) = #error(\"x\")\n" +
-        "def mapped = r \\ mapError({ e -> 0 })\n" +
-        "def fallback = r \\ defaultValue(3)"
+        normalized """def r: Result(int, string) = #error("x")
+def mapped = r \ mapError({ e -> 0 })
+def fallback = r \ defaultValue(3)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("Result(int, int)", Unifier.tyToString result.Typed.Value.Types.["mapped"])
@@ -40,12 +40,12 @@ let ``A pipe finds the prelude's Result helpers by the Result alias`` () =
 [<Fact>]
 let ``The prelude's toList, values, mapOr and orElse keep the option's and result's types`` () =
     let source =
-        "def name: #some(string) | #notFound = #some(\"abc\")\n" +
-        "def r: Result(int, string) = #error(\"x\")\n" +
-        "def listed = name \\ someToList\n" +
-        "def present = somes([name, name])\n" +
-        "def described = Result.mapOr(r, \"none\", { n -> \"n\" })\n" +
-        "def recovered = Result.orElse(r, { e -> #error(1.5) })"
+        normalized """def name: #some(string) | #notFound = #some("abc")
+def r: Result(int, string) = #error("x")
+def listed = name \ someToList
+def present = somes([name, name])
+def described = Result.mapOr(r, "none", { n -> "n" })
+def recovered = Result.orElse(r, { e -> #error(1.5) })"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
@@ -85,11 +85,11 @@ let ``Bool.fromString is in the prelude`` () =
 [<Fact>]
 let ``Each built-in type has an attached toString in the prelude`` () =
     let source =
-        "def i = int.toString(1)\n" +
-        "def f = 1.5 \\ toString\n" +
-        "def b = true \\ toString\n" +
-        "def s = string.toString(\"a\")\n" +
-        "def texts = [1, 2] \\ map(int.toString)"
+        normalized """def i = int.toString(1)
+def f = 1.5 \ toString
+def b = true \ toString
+def s = string.toString("a")
+def texts = [1, 2] \ map(int.toString)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
@@ -100,9 +100,9 @@ let ``Each built-in type has an attached toString in the prelude`` () =
 [<Fact>]
 let ``A context of toString is synthesized for a built-in type from its attached toString`` () =
     let source =
-        "context ToString(a) = (toString: a -> string)\n" +
-        "def label: [ToString(a)] a -> string = { x -> \"<\" ++ toString(x) ++ \">\" }\n" +
-        "def text = label(42)"
+        normalized """context ToString(a) = (toString: a -> string)
+def label: [ToString(a)] a -> string = { x -> "<" ++ toString(x) ++ ">" }
+def text = label(42)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["text"])
@@ -118,15 +118,15 @@ let ``FromString is in the prelude, and a function that requires it keeps its fa
 let ``A FromString is synthesized from an attached fromString, and settles the failure type`` () =
     // Each def gives back the failure as it is, so its type shows the tag the instance settled `e` to.
     let source =
-        "def readOne: [FromString(a, e)] string -> #some(a) | e = { s -> fromString(s) }\n" +
-        "def number = { s -> match readOne(s)\n" +
-        "  | #some(n) -> #some(n + 1)\n" +
-        "  | failure -> failure\n" +
-        "}\n" +
-        "def flag = { s -> match readOne(s)\n" +
-        "  | #some(b) -> #some(if b then 1 else 2)\n" +
-        "  | failure -> failure\n" +
-        "}"
+        normalized """def readOne: [FromString(a, e)] string -> #some(a) | e = { s -> fromString(s) }
+def number = { s -> match readOne(s)
+  | #some(n) -> #some(n + 1)
+  | failure -> failure
+}
+def flag = { s -> match readOne(s)
+  | #some(b) -> #some(if b then 1 else 2)
+  | failure -> failure
+}"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
@@ -136,13 +136,13 @@ let ``A FromString is synthesized from an attached fromString, and settles the f
 [<Fact>]
 let ``The prelude's List functions are found by a pipe on a list`` () =
     let source =
-        "def xs = [3, 1, 2]\n" +
-        "def doubled = xs \\ map({ x -> x * 2 })\n" +
-        "def names = xs \\ map({ x -> \"n\" })\n" +
-        "def big = xs \\ filter({ x -> x > 1 })\n" +
-        "def first = xs \\ head\n" +
-        "def total = list.fold(xs, 0, { acc, x -> acc + x })\n" +
-        "def pairs = list.zip(xs, names)"
+        normalized """def xs = [3, 1, 2]
+def doubled = xs \ map({ x -> x * 2 })
+def names = xs \ map({ x -> "n" })
+def big = xs \ filter({ x -> x > 1 })
+def first = xs \ head
+def total = list.fold(xs, 0, { acc, x -> acc + x })
+def pairs = list.zip(xs, names)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
@@ -156,10 +156,10 @@ let ``The prelude's List functions are found by a pipe on a list`` () =
 [<Fact>]
 let ``The prelude's distinct, sortBy and unfold have the docs' types`` () =
     let source =
-        "def xs = [3, 1, 2]\n" +
-        "def unique = xs \\ distinct\n" +
-        "def sorted = xs \\ sortBy({ x -> 0 - x })\n" +
-        "def counted = list.unfold(3, { n -> if n == 0 then #done else #some(\"x\", n - 1) })"
+        normalized """def xs = [3, 1, 2]
+def unique = xs \ distinct
+def sorted = xs \ sortBy({ x -> 0 - x })
+def counted = list.unfold(3, { n -> if n == 0 then #done else #some("x", n - 1) })"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
@@ -170,11 +170,11 @@ let ``The prelude's distinct, sortBy and unfold have the docs' types`` () =
 [<Fact>]
 let ``The prelude's skipWhile, partition, unzip and get have the docs' types`` () =
     let source =
-        "def xs = [3, 1, 2]\n" +
-        "def rest = xs \\ skipWhile({ x -> x > 2 })\n" +
-        "def halves = xs \\ partition({ x -> x > 1 })\n" +
-        "def columns = list.unzip([(1, \"a\"), (2, \"b\")])\n" +
-        "def second = xs \\ list.get(1)"
+        normalized """def xs = [3, 1, 2]
+def rest = xs \ skipWhile({ x -> x > 2 })
+def halves = xs \ partition({ x -> x > 1 })
+def columns = list.unzip([(1, "a"), (2, "b")])
+def second = xs \ list.get(1)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]

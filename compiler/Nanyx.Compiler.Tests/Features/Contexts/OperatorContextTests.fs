@@ -111,15 +111,16 @@ let ``A def the module names as a value requires nothing, as a function that req
 [<Fact>]
 let ``A def inferred to require Add is called with ints, floats and a type that attaches the members`` () =
     let source =
-        "type Money = protected (pence: int)\n" +
-        "def Money.zero: Money = Money(pence = 0)\n" +
-        "def Money.`+`: Money, Money -> Money = { p, q -> Money(pence = p.pence + q.pence) }\n" +
-        "def Money.`-`: Money, Money -> Money = { p, q -> Money(pence = p.pence - q.pence) }\n" +
-        "def Money.negate: Money -> Money = { p -> Money(pence = 0 - p.pence) }\n" +
-        "def add = { x, y -> x + y }\n" +
-        "def i = add(1, 2)\n" +
-        "def f = add(1.5, 2.5)\n" +
-        "def m = add(Money(pence = 1), Money(pence = 2))\n"
+        normalized """type Money = protected (pence: int)
+def Money.zero: Money = Money(pence = 0)
+def Money.`+`: Money, Money -> Money = { p, q -> Money(pence = p.pence + q.pence) }
+def Money.`-`: Money, Money -> Money = { p, q -> Money(pence = p.pence - q.pence) }
+def Money.negate: Money -> Money = { p -> Money(pence = 0 - p.pence) }
+def add = { x, y -> x + y }
+def i = add(1, 2)
+def f = add(1.5, 2.5)
+def m = add(Money(pence = 1), Money(pence = 2))
+"""
     let typed = compileClean source
     Assert.Equal<string list>([ "int"; "float"; "Money" ], [ "i"; "f"; "m" ] |> List.map (fun name -> Unifier.tyToString typed.Types.[name]))
 
