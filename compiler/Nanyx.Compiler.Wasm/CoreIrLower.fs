@@ -383,8 +383,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         // The hole function called outside a string, at a built-in type: the value as a hole would write it.
         | FunctionCall(_, _, [ value ]) when input.BuiltInHoles.Contains expr.Id ->
             this.Complex scope { expr with Kind = InterpolatedString [ StringExpr value ] } k
-        | FunctionCall(name, _, args) when input.NominalWrappers.Contains name && not (scope.Vars.ContainsKey name) ->
-            // `Money(pence)`: a nominal value is its shape's value.
+        | FunctionCall(name, _, args) when input.ShapeWrappers.Contains name && not (scope.Vars.ContainsKey name) ->
+            // `Money(pence)`, `Pair(1, 2)`: a value of a type whose shape is not a record is its shape's value.
             match SyntaxTree.flattenCallArgs args with
             | [ single ] -> this.Complex scope single k
             | several -> this.Record scope (several |> List.mapi (fun index value -> string index, value)) (tyOf expr) k
