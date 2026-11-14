@@ -35,6 +35,14 @@ public sealed record OpenDocument(
     public SourcePositions Positions { get; } = new(Text);
 
     /// <summary>
+    /// The text the compile read of each other source file it needed, by full path: the files the document imports,
+    /// directly or through other modules, and the other files of a module split across files. An open file's is its
+    /// editor's text. A change to one of them compiles this document again (see <see cref="CompileScheduler"/>). A text
+    /// not compiled yet keeps those of the compile before it.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Sources { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>
     /// What <see cref="Text"/> declares, as a tree (see <c>NyxCompiler.Outline</c>), or <c>null</c> if it does not
     /// parse. It needs only a parse, so a text that does not type-check has one. Parsed once, when first asked for.
     /// </summary>
@@ -160,6 +168,9 @@ public sealed record OpenDocument(
 /// </summary>
 public sealed class DocumentStore
 {
+    /// <summary>Compares the paths of files as the file system does: ignoring case on Windows.</summary>
+    internal static readonly StringComparer FilePaths = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
     private readonly ConcurrentDictionary<DocumentUri, OpenDocument> _documents = new();
     private readonly ILogger<DocumentStore> _logger;
     private readonly ServerSettings _settings;
@@ -174,7 +185,8 @@ public sealed class DocumentStore
     /// Records a document's new text before it is compiled, so that requests about it read positions in this text,
     /// and what they need from a compile from the last text that was typed (see <see cref="OpenDocument.LastGood"/>).
     /// </summary>
-    public void Edit(DocumentUri uri, string text) => Record(uri, new OpenDocument(text, FileNameOf(uri), null, null));
+    public void Edit(DocumentUri uri, string text) =>
+        Record(uri, new OpenDocument(text, FileNameOf(uri), null, null) { Sources = TryGet(uri)?.Sources ?? new Dictionary<string, string>() });
 
     /// <summary>Records a compiled text of a document, as its latest.</summary>
     public OpenDocument Record(DocumentUri uri, OpenDocument document)
@@ -194,9 +206,28 @@ public sealed class DocumentStore
     /// <summary>An open document, or <c>null</c> if the client has not opened it.</summary>
     public OpenDocument? TryGet(DocumentUri uri) => _documents.TryGetValue(uri, out var document) ? document : null;
 
+    /// <summary>
+    /// The open documents whose last compile read the file at the full path <paramref name="file"/> (see
+    /// <see cref="OpenDocument.Sources"/>): those that import it, directly or through other modules.
+    /// </summary>
+    public IReadOnlyList<DocumentUri> Importers(string file) =>
+        _documents.Where(entry => entry.Value.Sources.Keys.Contains(file, FilePaths)).Select(entry => entry.Key).ToList();
+
     /// <summary>The file the compiler's spans name for a document: its full path, or empty if it is not on disk.</summary>
-    private static string FileNameOf(DocumentUri uri) =>
+    internal static string FileNameOf(DocumentUri uri) =>
         uri.Scheme == "file" ? Path.GetFullPath(uri.GetFileSystemPath()) : string.Empty;
+
+    /// <summary>
+    /// The text of another source file a compile needs, by its full path: the editor's, if the file is open, so that
+    /// diagnostics follow what is on screen, or else the file's on disk. It is recorded in <paramref name="read"/>.
+    /// </summary>
+    private string ReadFile(string file, Dictionary<string, string> read)
+    {
+        var text = _documents.Values.FirstOrDefault(document => FilePaths.Equals(document.FileName, file))?.Text
+            ?? File.ReadAllText(file);
+        read[file] = text;
+        return text;
+    }
 
     /// <summary>
     /// Compiles a text of a document, without recording it, and logs how long it took, with each module's time when
@@ -210,6 +241,7 @@ public sealed class DocumentStore
         // file of the standard library is checked as the library module it is, as a build of the library checks it.
         // The compiler names a file by its full path.
         var path = uri.Scheme == "file" ? FileNameOf(uri) : null;
+        var read = new Dictionary<string, string>(FilePaths);
         try
         {
             var directives = Script.read(path ?? string.Empty, text);
@@ -219,15 +251,15 @@ public sealed class DocumentStore
             var result = path is null
                 ? Compiler.compileReporting(timings, linters, text)
                 : Compiler.compileStandardLibraryFileReporting(timings, linters, path, text)?.Value
-                    ?? PackageModule.compileSourceReporting(timings, linters, path, text);
+                    ?? PackageModule.compileSourceReading(timings, Microsoft.FSharp.Core.FuncConvert.FromFunc((string file) => ReadFile(file, read)), linters, path, text);
             LogCompiled(uri, stopwatch.Elapsed, timings);
-            return new OpenDocument(text, path ?? string.Empty, Script.withDirectives(directives, result), null);
+            return new OpenDocument(text, path ?? string.Empty, Script.withDirectives(directives, result), null) { Sources = read };
         }
         catch (Exception ex)
         {
             // A compiler bug must not take the server down with it: it is reported as a diagnostic instead.
             _logger.LogError(ex, "The compiler failed on {Uri}", uri);
-            return new OpenDocument(text, path ?? string.Empty, null, ex);
+            return new OpenDocument(text, path ?? string.Empty, null, ex) { Sources = read };
         }
     }
 
