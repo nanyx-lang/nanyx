@@ -29,7 +29,7 @@ Two things are wrong with the brackets.
   and the `plusBetweenContexts` linter rule reports.
 
 Attributes already exist in the language and already mean "annotate the thing that follows": `@entry` before a
-definition, `@partial` before a module declaration, `@customKeywordType(#bind)` before a record field. Writing a
+definition, `@partial` before a module declaration, `@customKeywordType(#bind)` before a context's member. Writing a
 context as an attribute on a type uses the same idea in one more position.
 
 # Syntax

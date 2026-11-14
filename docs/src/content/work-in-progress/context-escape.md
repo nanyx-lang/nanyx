@@ -195,6 +195,111 @@ checks, since a lambda with no parameters ignores one.
 - **`use` loads a `Memory`; it can't make one.** `use` loads any context instance you have. `Memory` is nominal, so
   only the standard library can construct one, and `memory` is the only way to get one.
 
+# Workflows: a context and a function
+
+Done ([#1305](https://github.com/nanyx-lang/nanyx/issues/1305)), decided apart from the proposal below, which it doesn't
+need: a builder's `use` is of a constructor written in place. A workflow builder is a function that runs its block
+under a declared context, whose members are the builder's keywords. `proc` in `prelude-results.nyx` is the context
+`Proc` and the function `proc`:
+
+```nanyx fragment
+export context Proc = (try: ..., return: ..., zero: ..., for: ...)
+
+export def proc: [c] ([Proc & c] () -> #some(b) | r) -> #some(b) | r = { block ->
+  use Proc(
+    try = {
+      | #some(value), continue -> continue(value)
+      | failure, _ -> failure
+    }
+    return = { value -> #some(value) }
+    zero = #some()
+    for = { items, body, rest -> procFor(items, body, rest) }
+  ) in block()
+}
+```
+
+- **The desugaring is a call.** `proc { ... }` is `proc({ ... })`, and `retrying(3) { ... }` is `retrying(3, { ... })`:
+  a call whose last argument is a lambda without parameters is a builder's block (`WorkflowDesugaring.BuilderBlock`).
+  Inside the block, `try x`, `return x`, `zero`, `for` and custom keywords (`await! x`) are calls of the members of
+  those names, with continuations, as before. The block's lambda requires the context, so the members are in scope
+  in it by name (`Contexts.extendEnvForLambdaArgument`), and the builder's `use` supplies it. A keyword the context
+  in scope has no member for is reported at the keyword (`WorkflowMembers`), as a missing `zero` or `for` was.
+- **The builder writes its type.** The block's type in it, `[Proc & c] () -> ...`, is what gives the block the
+  members: the checker can't infer that `f` in `{ f -> use Proc(...) in f() }` requires `Proc`. A member that takes a
+  continuation takes one with a context variable (`[c] a -> ...`), since the continuation calls members too.
+- **`apply` and `@workflow` are gone.** The builder function is what `apply` did, and what `@workflow` would have
+  generated. `@customKeywordType` goes on the member in the `context` declaration; the parser doesn't read it there
+  yet ([#1317](https://github.com/nanyx-lang/nanyx/issues/1317)), as it didn't on a record field.
+- **A block without a keyword is an ordinary call.** `proc { 1 + 2 }` used to be its block, `3`. Now it is
+  `proc({ 1 + 2 })`, a type error, and `proc { #some(3) }` is `#some(3)`.
+- **Members are generic at each call** ([#1304](https://github.com/nanyx-lang/nanyx/issues/1304)): a member's own type
+  variables, those the context's parameters don't give it, are instantiated afresh at each call, in a function that
+  requires the context, in a block given it, and after a `use` of a plain one (`Contexts.extendEnvWithContextsFrom`,
+  `extendEnvWithRecordFields`). The context's own parameters (`a` in `Eq(a)`) stay fixed by the instance. Reading a
+  member as a value, as a block reads `zero`, requires its context of the lambda around it, as a call of it does.
+- **The backend boxes them** ([#1160](https://github.com/nanyx-lang/nanyx/issues/1160)): a member of a context without
+  parameters has the values of its own type variables boxed (`IrBox`, a closure whose function returns the value), in
+  its context's layout and in the lambda a `use` binds to it, which is found by the context the `use` names
+  (`LowerInput.UseBindingContexts`), since two contexts may have members of the same name. A call converts what it
+  passes and is given back, rebuilding a tag's cell, a record or a list around the parts it converts, and adapts a
+  continuation to do the same (`CoreIrLowerBoxes`, `FunctionLowering.Coerce`). A member of a parameterised context
+  generic in variables of its own is not boxed yet, and neither is a `use` of an instance built as a value rather than
+  written at the `use`.
+- **An imported context keeps its own variables.** A module's substitution leaves alone every type variable of a type
+  definition, not only its parameters (`Library.resolveTypes`): an imported definition's variables are numbered by its
+  own module, and the importer's constraints bound `Proc`'s `b`, `c` and `y` once they were shared ids.
+
+## What it costs
+
+There is no instance at run time. The backend passes a context's members one by one, as closures, to each function
+that requires it ([Context calls](./context-calls)), and a `use` binds each member's lambda to a local. `proc` no
+longer rebuilds a record at each keyword, so [#1151](https://github.com/nanyx-lang/nanyx/issues/1151) no longer applies
+to it, though it still does to other generic top-level values. But each keyword's call now boxes what it passes and
+unboxes what it is given back, until inlining ([#745](https://github.com/nanyx-lang/nanyx/issues/745)) removes the boxes
+where every call is known.
+
+Measured by the allocation counter of a `--check-memory` build over 100 blocks, and the time of 100,000 calls from the
+host (the call from .NET included), for a `proc` block of three `try`s and a `return` on `int` payloads: 15
+allocations and about 544 ns per block with `main` before the change, and 29 allocations and about 724 ns after it.
+Each `try` boxes its payload into a new `#some` cell, adapts its continuation (which unboxes the payload it is given
+and boxes the result it returns into a new cell), and unboxes its result into a new cell again; `return` boxes its
+value. A block of three `bind`s and a `ret` written by hand on a `Proc` context makes 28 with the members generic,
+against 11 with the same members written on `int`.
+
+### Measured before the change
+
+A `proc` block with three `try`s and a `return`, on `int` payloads, was compiled with `main` at dcda5b3b and run 20
+million times in a loop. There are four variants: (A) `proc { ... }`; (B) what A desugars to, written out (`def t =
+proc.try` then `t(x, { v -> ... })`); (B2) the documented `use proc in` form, with the members renamed `bind` and
+`ret`, since `try` and `return` can't be called by name; (C) the proposal: `context Proc`, a `procH` that runs `f`
+under `use Proc(...) in f()`, and the members called by hand. Debug and `--release` emit the same WAT. Allocations
+and `call_indirect`s are counted from the WAT, along the path where every `try` succeeds. The time is the median of
+five runs, minus a one-iteration run for compiling and start-up, and runs differed by up to 30%.
+
+|                              |      A |      B |     B2 |      C |
+| ---------------------------- | -----: | -----: | -----: | -----: |
+| WAT of the block's functions | 6.2 KB | 6.0 KB | 6.0 KB | 6.5 KB |
+| Allocations per block        |     19 |     19 |      9 |      9 |
+| `call_indirect` per `try`    |      2 |      2 |      2 |      3 |
+| `call_indirect` per block    |      7 |      7 |      7 |     11 |
+| Time per block               | 192 ns | 204 ns | 141 ns | 132 ns |
+
+- **The old `proc` rebuilt its record at every keyword.** `proc` was generic, so a read of it is a call that makes
+  the whole record: three closures and the record, four allocations, for each of the four keywords. That is 16 of A's
+  19 allocations, and why C, which makes its two member closures once per block, is faster than A today
+  ([#1151](https://github.com/nanyx-lang/nanyx/issues/1151)).
+- **C makes two closures per `try`.** The continuation requires `Proc`, and `bind`'s parameter is `[c] a -> ...`, so
+  the backend wraps it in an adapter closure (`__adapt_...`), and calling it makes a third `call_indirect`. C's other
+  allocations are the block lambda and the two member closures at `procH`'s `use`.
+- **With [#743](https://github.com/nanyx-lang/nanyx/issues/743)**, `bind` and `ret` at `procH`'s `use` capture nothing and become static: C drops to 7 allocations per
+  block (the block lambda, three continuations and three adapters) and keeps 11 `call_indirect`s. Measured once #743
+  was done, by the allocation counter of a `--check-memory` build over 100 blocks: C's blocks allocate 2 fewer each
+  (13 to 11, counting the `#some` cells the table leaves out), so 9 to 7, as predicted. [#744](https://github.com/nanyx-lang/nanyx/issues/744) doesn't help
+  C: the members reach the block as closure parameters through `f`.
+- **With [#745](https://github.com/nanyx-lang/nanyx/issues/745) as well**, inlining `procH` into its caller exposes `f` as the block lambda and the members as top-level
+  functions. The block lambda isn't made, `f()`, `bind` and `ret` become direct calls, and a continuation no longer
+  needs an adapter, since the members it reads are known. That leaves three continuations and the three calls of them
+  in `bind`: 3 allocations and 3 `call_indirect`s per block, fewer than A makes today.
 # Proposal: contexts are not types
 
 _Proposed in [#1141](https://github.com/nanyx-lang/nanyx/issues/1141), not yet decided._
@@ -262,115 +367,11 @@ The proposal draws the line there, and makes every helper a function that takes 
     context l -> ... use l in other() }`, which loads the same `Log` again, for instance after an inner `use`
     shadowed it.
 
-## Workflows
-
-_Decided on its own, apart from the rest of the proposal:_ builders become a declared context and a function
-([#1305](https://github.com/nanyx-lang/nanyx/issues/1305)). That needs a member instantiated afresh at each call
-([#1304](https://github.com/nanyx-lang/nanyx/issues/1304), done) and compiled with a uniform representation for its own
-type variables ([#1160](https://github.com/nanyx-lang/nanyx/issues/1160), done). It doesn't need the rest of this proposal: a
-builder's `use` is of a constructor written in place, as now.
-
-A workflow builder is a record value today: `proc` in `prelude-results.nyx` is a `def` of a structural record type.
-The workflows page documents `proc { ... }` as `proc.apply({ use proc in ... })`, but `WorkflowDesugaring.fs` makes
-neither the `apply` nor the `use` yet: the block runs where it is written, and each keyword reads its member into a
-local and calls it (`def t = proc.try` then `t(x, { v -> ... })`). Under the proposal a builder is a declared context
-and a function that runs the block under it:
-
-```nanyx fragment
-context Proc = (try: ..., return: ..., zero: ..., for: ...)
-
-def proc = { f ->
-  use Proc(
-    try = {
-      | #some(value), continue -> continue(value)
-      | failure, _ -> failure
-    }
-    return = { value -> #some(value) }
-    zero = #some()
-    for = { items, body, rest -> procFor(items, body, rest) }
-  ) in f()
-}
-```
-
-- **The desugaring is a call.** `proc { ... }` is `proc({ ... })`. Inside the block, `try x`, `return x`, `zero` and
-  `for` are rewritten into calls of the members with continuations, as now. The block lambda then requires `[Proc]`,
-  which `proc`'s `use` discharges.
-- **`apply` and `@workflow` go.** The function's body is what `apply` did, and the helper `@workflow` generates is the
-  function itself.
-- **Builders take parameters for free.** `retrying(3) { ... }` is `retrying(3, { ... })`, a trailing lambda.
-- **A builder may need contexts.** An `async` that needs a scheduler is `def async: [Scheduler] ...`, discharged at its
-  `use` as above.
-- **`@customKeywordType` moves to the member's declaration** in the `context`, since there is no builder record left
-  to put it on.
-
-## What it costs
-
-There is no instance at run time. The backend passes a context's members one by one, as closures, to each function
-that requires it ([Context calls](./context-calls)), and a `use` binds each member's lambda to a local. So a `use`
-makes one closure per member: four for `Proc`.
-
-- **Allocation.** Members that capture nothing, as `Proc`'s do, are lifted to top-level functions, so each is a
-  closure over a top-level function. Today that is a small heap allocation per member, per block. With
-  [#743](https://github.com/nanyx-lang/nanyx/issues/743) they become static data and cost nothing.
-- **Calls.** Today a block's keywords read `proc`, a top-level definition, so with
-  [#744](https://github.com/nanyx-lang/nanyx/issues/744) the block could call `try` directly. Under the proposal the
-  members come from `proc`'s `use`, outside the block, so they stay closure parameters of the block and its calls stay
-  indirect, unless `proc` is inlined where it is called. A function of the form `use ... in f()` is the smallest case
-  for an inliner ([#745](https://github.com/nanyx-lang/nanyx/issues/745)); inlined, the block compiles as it does
-  today.
-- **The real cost of a workflow is unchanged.** Each `try` makes a continuation closure over the block's live locals
-  and calls a member indirectly, in both forms.
-
-### Measured
-
-A `proc` block with three `try`s and a `return`, on `int` payloads, was compiled with `main` at dcda5b3b and run 20
-million times in a loop. There are four variants: (A) `proc { ... }`; (B) what A desugars to, written out (`def t =
-proc.try` then `t(x, { v -> ... })`); (B2) the documented `use proc in` form, with the members renamed `bind` and
-`ret`, since `try` and `return` can't be called by name; (C) the proposal: `context Proc`, a `procH` that runs `f`
-under `use Proc(...) in f()`, and the members called by hand. Debug and `--release` emit the same WAT. Allocations
-and `call_indirect`s are counted from the WAT, along the path where every `try` succeeds. The time is the median of
-five runs, minus a one-iteration run for compiling and start-up, and runs differed by up to 30%.
-
-|                              |      A |      B |     B2 |      C |
-| ---------------------------- | -----: | -----: | -----: | -----: |
-| WAT of the block's functions | 6.2 KB | 6.0 KB | 6.0 KB | 6.5 KB |
-| Allocations per block        |     19 |     19 |      9 |      9 |
-| `call_indirect` per `try`    |      2 |      2 |      2 |      3 |
-| `call_indirect` per block    |      7 |      7 |      7 |     11 |
-| Time per block               | 192 ns | 204 ns | 141 ns | 132 ns |
-
-- **Today's `proc` rebuilds its record at every keyword.** `proc` is generic, so a read of it is a call that makes
-  the whole record: three closures and the record, four allocations, for each of the four keywords. That is 16 of A's
-  19 allocations, and why C, which makes its two member closures once per block, is faster than A today
-  ([#1151](https://github.com/nanyx-lang/nanyx/issues/1151)).
-- **C makes two closures per `try`.** The continuation requires `Proc`, and `bind`'s parameter is `[c] a -> ...`, so
-  the backend wraps it in an adapter closure (`__adapt_...`), and calling it makes a third `call_indirect`. C's other
-  allocations are the block lambda and the two member closures at `procH`'s `use`.
-- **With [#743](https://github.com/nanyx-lang/nanyx/issues/743)**, `bind` and `ret` at `procH`'s `use` capture nothing and become static: C drops to 7 allocations per
-  block (the block lambda, three continuations and three adapters) and keeps 11 `call_indirect`s. Measured once #743
-  was done, by the allocation counter of a `--check-memory` build over 100 blocks: C's blocks allocate 2 fewer each
-  (13 to 11, counting the `#some` cells the table leaves out), so 9 to 7, as predicted. [#744](https://github.com/nanyx-lang/nanyx/issues/744) doesn't help
-  C: the members reach the block as closure parameters through `f`.
-- **With [#745](https://github.com/nanyx-lang/nanyx/issues/745) as well**, inlining `procH` into its caller exposes `f` as the block lambda and the members as top-level
-  functions. The block lambda isn't made, `f()`, `bind` and `ret` become direct calls, and a continuation no longer
-  needs an adapter, since the members it reads are known. That leaves three continuations and the three calls of them
-  in `bind`: 3 allocations and 3 `call_indirect`s per block, fewer than A makes today.
-
-C's `Proc` is on `int`. A generic `Proc`, with `bind` over `a` and `b` as `proc`'s `try` is, compiles since
-[#1160](https://github.com/nanyx-lang/nanyx/issues/1160) with the values of the members' own type variables boxed
-(see `CoreIrLowerBoxes`): the members' values are made once, at `procH`'s `use`, and each call boxes what it passes
-and unboxes what it is given back. Measured by the allocation counter of a `--check-memory` build, with `procH`
-taking `[Proc & c] () -> ...` and a `step` that runs a block of three `bind`s and a `ret` on `int` payloads: 28
-allocations per block with the generic `Proc`, against 11 with the same `Proc` written on `int`, and about 664 ns
-against 533 ns per call from the host. Each `bind` boxes its payload into a new `#some` cell, adapts its continuation
-(which unboxes the payload it is given and boxes the one it returns), and unboxes the result into a new cell again;
-`ret` boxes its value. Inlining ([#745](https://github.com/nanyx-lang/nanyx/issues/745)) would remove the boxes where
-every call is known.
-
 ## What changes
 
-- The prelude's builders (`proc` and any others) become a `context` and a function. The cookbook's `OptionChain` and
-  the `@workflow` and `@customKeywordType` docs change with them, and `[typeof optionChain]` goes.
+- ~~The prelude's builders (`proc` and any others) become a `context` and a function. The cookbook's `OptionChain` and
+  the `@workflow` and `@customKeywordType` docs change with them, and `[typeof optionChain]` goes.~~ Done, see
+  [Workflows](#workflows-a-context-and-a-function).
 - Named instances become handlers: `def perfect = Move(...)` and `def cheating = Move(...)` in `examples/Nim.nyx`,
   `bobChooses` there, the monoid instances in `examples/traitsAndTypeclasses.nyx`, and `connection` in
   `examples/sql-utils.nyx`.
@@ -396,17 +397,6 @@ every call is known.
 - **What `protected` means on a context.** On a type, `protected` makes it nominal: only its home module can construct one. On a
   context it would mean only its home module can write its constructor in a `use`, which is what `Memory` and a
   `scoped context` need.
-- **Generic members.** Each `try` in a block has its own `a` and `b`, so `Proc`'s `try` must be polymorphic per call.
-  Done in the checker ([#1304](https://github.com/nanyx-lang/nanyx/issues/1304)): a member's own type variables, those
-  the context's parameters don't give it, are instantiated afresh at each call, in a function that requires the
-  context and after a `use` of a plain one (`Contexts.extendEnvWithContextsFrom`, `extendEnvWithRecordFields`), so
-  `bind(name(i), { s -> bind(size(s), ...) })`, on a `string` payload and then an `int` one, type-checks. The
-  context's own parameters (`a` in `Eq(a)`) stay fixed by the instance. Done in the backend too
-  ([#1160](https://github.com/nanyx-lang/nanyx/issues/1160)): a member of a context without parameters has the values
-  of its own type variables boxed (`IrBox`, a closure whose function returns the value), in its context's layout and
-  in the lambda a `use` binds to it, and a call converts what it passes and is given back (`CoreIrLowerBoxes`,
-  `FunctionLowering.Coerce`). A member of a parameterised context generic in variables of its own is not boxed yet,
-  and neither is a `use` of an instance built as a value rather than written at the `use`.
 
 # Open questions
 

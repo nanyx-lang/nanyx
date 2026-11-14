@@ -7,26 +7,109 @@ open Xunit
 open TranspilerWasmTestHelpers
 
 [<Fact>]
-let ``Run - a builder block that uses no workflow keyword runs as its block`` () =
+let ``Run - a builder block that uses no workflow keyword is an ordinary call of the builder`` () =
     let source =
         normalized """import nanyx/console
 
 def total = proc {
   def a = 20
-  a + 22
+  #some(a + 22)
 }
 
 @entry
 def main = {
-  proc {
+  def greeted = proc {
     def names = ["Ada", "Grace"]
     for names | name -> println("Hello, " ++ name)
+    #some(list.length(names))
   }
-  def three = proc { 1 + 2 }
-  println("{total} {three}")
+  println("{total} {greeted}")
 }
 """
-    runSource source |> assertRan "Hello, Ada\nHello, Grace\n42 3\n"
+    runSource source |> assertRan "Hello, Ada\nHello, Grace\n#some(42) #some(2)\n"
+
+[<Fact>]
+let ``Run - a builder takes parameters before its block`` () =
+    // `retrying(3) { ... }` is `retrying(3, { ... })`: the builder runs the block up to three times, under its context.
+    let source =
+        normalized """import nanyx/console
+
+context Retry = (
+  try: [c] ((#some(a) | #failed), ([c] a -> #some(b) | #failed)) -> #some(b) | #failed
+  return: a -> #some(a) | #failed
+)
+
+def retrying: [c] int, ([Retry & c] () -> #some(b) | #failed) -> #some(b) | #failed = { times, block ->
+  use Retry(
+    try = {
+      | #some(value), continue -> continue(value)
+      | #failed, _ -> #failed
+    }
+    return = { value -> #some(value) }
+  ) in (
+    match block()
+      | #some(value) -> #some(value)
+      | #failed -> (if times > 1 then retrying(times - 1, block) else #failed)
+  )
+}
+
+def flaky: [Console] int -> #some(int) | #failed = { n ->
+  println("trying {n}")
+  if n > 0 then #failed else #some(n)
+}
+
+@entry
+def main = {
+  def result = retrying(2) {
+    def x = try flaky(1)
+    return x
+  }
+  def other = retrying(3) {
+    def x = try flaky(0)
+    return x + 5
+  }
+  println("{result} {other}")
+}
+"""
+    runSource source |> assertRan "trying 1\ntrying 1\ntrying 0\n#failed #some(5)\n"
+
+[<Fact>]
+let ``Run - a builder may require contexts of its own`` () =
+    // `logged` requires `Log`, which its caller supplies, and the block's keywords call `Steps`'s members.
+    let source =
+        normalized """import nanyx/console
+import nanyx/text
+
+context Log = (log: [Console] string -> ())
+
+context Steps = (
+  step: [c] (string, ([c] string -> int)) -> int
+  return: int -> int
+)
+
+def logged: [c & Log & Console] ([Steps & c] () -> int) -> int = { block ->
+  log("start")
+  use Steps(
+    step = { name, continue ->
+      log("step " ++ name)
+      continue(name)
+    }
+    return = { value -> value }
+  ) in block()
+}
+
+@entry
+def main = {
+  use Log(log = { message -> println(message) })
+  def total = logged {
+    def a = step! "one"
+    def b = step! "three"
+    return string.length(a) + string.length(b)
+  }
+  println("{total}")
+}
+"""
+    runSource source |> assertRan "start\nstep one\nstep three\n8\n"
 
 [<Fact>]
 let ``Run - workflow keywords in the branches of an if or match end or continue the whole block`` () =

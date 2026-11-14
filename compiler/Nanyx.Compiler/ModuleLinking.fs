@@ -118,6 +118,11 @@ module internal ModuleLinking =
         let contextMembers = membersOfContexts (fun _ -> true)
         // The members of the contexts without parameters, which an import under an alias defines under it (`c.write`).
         let plainContextMembers = membersOfContexts List.isEmpty
+        // A definition attached to a type (`int.zero`) is not one an import's alias qualifies, whatever its name.
+        let typeNames = inlined @ own |> List.choose (function Kind (Def (TypeDef(name, _, _, _))) -> Some name | _ -> None) |> Set.ofList
+        let isAttached (name: string) =
+            let qualifier = name.Substring(0, name.LastIndexOf '.')
+            TypeResolution.isBuiltInTypeName qualifier || typeNames.Contains qualifier
         let rootNames =
             own
             |> List.collect (function
@@ -127,7 +132,7 @@ module internal ModuleLinking =
             referenced.Contains name
             || contextMembers.Contains name
             || (name.Contains "." && referenced.Contains (name.Substring(name.LastIndexOf '.')))
-            || (name.Contains "." && plainContextMembers.Contains (name.Substring(name.LastIndexOf '.' + 1)))
+            || (name.Contains "." && not (isAttached name) && plainContextMembers.Contains (name.Substring(name.LastIndexOf '.' + 1)))
         let rec reach (referenced: Set<string>) (reached: Set<string>) =
             let newlyReached =
                 bodies |> List.filter (fun (name, _) -> not (reached.Contains name) && isReferenced referenced name)

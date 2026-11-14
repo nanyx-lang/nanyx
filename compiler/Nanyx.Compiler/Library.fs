@@ -47,9 +47,10 @@ module Compiler =
         let resolvedTypeDefs =
             typeDefs
             |> Map.map (fun _ info ->
-                // A definition's parameters stand for the types it is applied to, whatever the module found for a
-                // variable of the same id: an imported definition's are numbered by the module it came from.
-                let ownSubst = info.Parameters |> List.fold (fun acc parameter -> acc |> Map.remove parameter.Id) subst
+                // A definition's type variables are its own: its parameters stand for the types it is applied to, and a
+                // context's member's own variables are instantiated at each call. They mean nothing the module found
+                // for a variable of the same id: an imported definition's are numbered by the module it came from.
+                let ownSubst = TypeEnv.freeTyVars info.Underlying |> Set.fold (fun acc id -> acc |> Map.remove id) subst
                 { info with Underlying = Unifier.apply ownSubst info.Underlying })
         let rec applyTypedExpr (typedExpr: TypedExpr) =
             { typedExpr with

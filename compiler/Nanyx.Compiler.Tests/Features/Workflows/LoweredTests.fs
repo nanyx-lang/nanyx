@@ -30,8 +30,9 @@ def quarter = {{ n -> proc {{
     Assert.True(result.Diagnostics.IsEmpty, $"%A{result.Diagnostics}")
     let bind = writtenAt source result "try" (fun expr -> match expr.Kind with WorkflowBindExpr _ -> true | _ -> false)
     let types = loweredTypes result bind.Id
-    // The continuation takes what the bind gives the name `h`, and the call is the rest of the workflow.
-    Assert.Equal("int -> #some(int)", types.Head)
+    // The continuation takes what the bind gives the name `h`, and requires `Proc`, whose `return` it calls. The call
+    // is the rest of the workflow.
+    Assert.Equal("[Proc] int -> #some(int) | #odd", types.Head)
     Assert.Contains("#some(int) | #odd", types)
     // Every made-up expression is in the desugared module, so each has a type.
     Assert.Equal(result.Lowered.[bind.Id].Length, types.Length)
@@ -47,7 +48,7 @@ def quarter = {{ n -> proc {{
     let result = Compiler.compile source
     let returned = writtenAt source result "return" (fun expr -> match expr.Kind with WorkflowReturnExpr _ -> true | _ -> false)
     Assert.True(result.Diagnostics.IsEmpty, $"%A{result.Diagnostics}")
-    Assert.Contains("#some(int)", loweredTypes result returned.Id)
+    Assert.Contains("#some(int) | #odd", loweredTypes result returned.Id)
 
 [<Fact>]
 let ``The call @entry makes up is found from the attribute`` () =
