@@ -95,7 +95,10 @@ what the compiler keeps: exact spans, resolved names and types.
   name resolution records ([#98](https://github.com/nanyx-lang/nanyx/issues/98)). A declaration's own name goes
   to itself. A definition in an imported source file opens that file. The standard library is embedded in the
   compiler, so a definition in it opens a read-only copy of its module's source, which the server writes under the
-  user's local application data by compiler version (`StandardLibrarySource`). A standard-library file open in the
+  user's local application data by compiler version (`StandardLibrarySource`), and compares with the embedded source
+  only the first time it is asked for each file. The embedded source itself is read once per process
+  (`StandardLibrary.tryLoadFile`), though completion asks for it for each doc comment it shows
+  ([#838](https://github.com/nanyx-lang/nanyx/issues/838)). A standard-library file open in the
   editor, that copy or `stdlib/nanyx/<module>.nyx` in a checkout, is checked as the library module it is a file of,
   as a build of the library checks it (`Compiler.compileStandardLibraryFile`,
   [#922](https://github.com/nanyx-lang/nanyx/issues/922)): with the intrinsics in scope, without importing the prelude

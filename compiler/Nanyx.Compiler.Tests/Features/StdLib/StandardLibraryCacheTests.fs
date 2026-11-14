@@ -56,3 +56,10 @@ let ``Compilations in a row that use the same generic prelude functions each get
     Assert.Equal(ints, outcome withInts)
     Assert.Equal(error, outcome withAnError)
     Assert.Equal(strings, outcome withStrings)
+
+[<Fact>]
+let ``A standard-library file's source is read once per process`` () =
+    let first = StandardLibrary.tryLoadFile "nanyx/prelude.nyx"
+    let second = StandardLibrary.tryLoadFile "nanyx/prelude.nyx"
+    Assert.True(obj.ReferenceEquals(first.Value, second.Value))
+    Assert.Equal(None, StandardLibrary.tryLoadFile "nanyx/missing.nyx")
