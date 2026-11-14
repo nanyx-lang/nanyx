@@ -27,6 +27,14 @@ ignore(readLine())
 
 <!-- The reference below is generated from the doc comments in stdlib/ by `nanyx stdlib-docs`: edit those, not this. -->
 
+What every module sees without importing anything.
+
+The compiler imports this module, unqualified, into every other module, the rest of the standard
+library included. A module's own definitions and its explicit imports take precedence over the
+names here, so a module can define its own `proc`. It is written across this file and the files
+beside it that start `@partial module prelude`, one for each topic: lists, maps and sets, numbers
+and so on.
+
 ## `panic`
 
 ```nanyx fragment

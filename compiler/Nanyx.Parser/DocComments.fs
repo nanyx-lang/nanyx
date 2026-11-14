@@ -129,10 +129,15 @@ module DocComments =
                 | lineEnd -> codeAfter lineEnd
             else Some i
 
+        // A comment before the first item documents the module if that is `module` or an import: the code after it is
+        // that item, or what follows the line `@partial module name`, which `codeAfter` skips as an attribute's.
         let targetAfter (commentEnd: int) =
             match codeAfter commentEnd, firstItem with
             | None, _ -> DocumentsNothing
-            | Some code, Some first when code = first.Span.Start && (match first.Kind with ModuleDecl _ | Import _ -> true | _ -> false) ->
+            | Some code, Some first when
+                commentEnd <= first.Span.Start
+                && code >= first.Span.Start
+                && (match first.Kind with ModuleDecl _ | Import _ -> true | _ -> false) ->
                 DocumentsModule
             | Some code, _ ->
                 let declaredAt = documentableStarts |> Map.tryFind code |> Option.defaultValue code
