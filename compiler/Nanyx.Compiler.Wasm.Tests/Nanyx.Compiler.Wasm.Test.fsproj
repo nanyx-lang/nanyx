@@ -29,6 +29,7 @@
     <Compile Include="Features\Commands\CheckCommandTests.fs" />
     <Compile Include="Features\Commands\DiagnosticExcerptTests.fs" />
     <Compile Include="Features\Commands\ExitCodeTests.fs" />
+    <Compile Include="Features\Commands\RunBoxTests.fs" />
     <Compile Include="Features\Commands\VersionCommandTests.fs" />
     <Compile Include="Features\Console\RunConsoleTests.fs" />
     <Compile Include="Features\Contexts\RunContextTests.fs" />
