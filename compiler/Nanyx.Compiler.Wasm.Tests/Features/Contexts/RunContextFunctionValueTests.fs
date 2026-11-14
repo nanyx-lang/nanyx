@@ -278,3 +278,19 @@ def main = {
 }
 """
     runSource (normalized source) |> assertRan "3\nhi\n(1, 2)&(3, 4)\n"
+
+[<Fact>]
+let ``Run - a top-level def whose value names such a function point-free (#1389)`` () =
+    let source = "import nanyx/console\n" + twice + """type Point = (x: int, y: int)
+def Point.show: Point -> string = { p -> "({p.x}, {p.y})" }
+def q = println
+def d = describe
+def t = twice
+def viaAnnotated: [Console] () -> () = { q(t(Point(x = 1, y = 2))) }
+def viaInferred = { q(7) }
+q(1.5)
+q(d(Point(x = 3, y = 4)))
+viaAnnotated()
+viaInferred()
+"""
+    runSource (normalized source) |> assertRan "1.5\n(3, 4)\n(1, 2)(1, 2)\n7\n"
