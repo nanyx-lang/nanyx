@@ -268,7 +268,10 @@ against 11 with the same members written on `int`. Inlining and simplifying afte
 ([#1339](https://github.com/nanyx-lang/nanyx/issues/1339)) remove the closures and adapters, which leaves the boxes: 17
 allocations a block. Copying a match into the branches whose tag it tests
 ([#1340](https://github.com/nanyx-lang/nanyx/issues/1340)) removes the boxes too: 1 allocation, the `#some` the block
-returns, and about 9 ns a block against 240 ns without inlining (see [Inlining](./inlining#what-it-costs)).
+returns, and about 9 ns a block against 240 ns without inlining. With aliases copied away and locals read at once kept
+on the stack ([#1341](https://github.com/nanyx-lang/nanyx/issues/1341)), the block compiles to the same WebAssembly as
+the nested match written by hand, and in the benchmark's loop it allocates nothing: about 3 ns a block (see
+[Inlining](./inlining#what-it-costs)).
 
 ### Measured before the change
 

@@ -114,15 +114,13 @@
   )
   (export "fib" (func $fib))
 
-  (func $main (result i64) (local $f5_i64 i64) (local $fib10_i64 i64)
+  (func $main (result i64) (local $f5_i64 i64)
     i64.const 5
     call $factorial
     local.set $f5_i64
+    local.get $f5_i64
     i64.const 10
     call $fib
-    local.set $fib10_i64
-    local.get $f5_i64
-    local.get $fib10_i64
     call $__nanyx_int_add
   )
   (export "main" (func $main))

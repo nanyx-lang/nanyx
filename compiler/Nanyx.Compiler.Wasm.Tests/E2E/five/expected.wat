@@ -258,15 +258,11 @@
     )
   )
 
-  (func $main (result i64) (local $a_i64 i64) (local $default__in2_i64 i64) (local $b_i64 i64)
+  (func $main (result i64) (local $a_i64 i64)
     i64.const 42
     local.set $a_i64
-    i64.const 99
-    local.set $default__in2_i64
-    local.get $default__in2_i64
-    local.set $b_i64
     local.get $a_i64
-    local.get $b_i64
+    i64.const 99
     call $__nanyx_int_add
   )
   (export "main" (func $main))

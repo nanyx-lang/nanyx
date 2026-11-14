@@ -35,10 +35,8 @@
   )
   (export "double" (func $double))
 
-  (func $main__build (result i64) (local $x__in1_i64 i64)
+  (func $main__build (result i64)
     i64.const 5
-    local.set $x__in1_i64
-    local.get $x__in1_i64
     i64.const 2
     call $__nanyx_int_mul
   )

@@ -196,13 +196,11 @@
     local.get $r
   )
 
-  (func $main (result i64) (local $__inlined5_i64 i64) (local $b__in2_i64 i64)
+  (func $main (result i64) (local $__inlined5_i64 i64)
     i64.const 42
     local.set $__inlined5_i64
-    i64.const 8
-    local.set $b__in2_i64
     local.get $__inlined5_i64
-    local.get $b__in2_i64
+    i64.const 8
     call $__nanyx_int_add
   )
   (export "main" (func $main))

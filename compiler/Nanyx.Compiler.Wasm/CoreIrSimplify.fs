@@ -8,8 +8,9 @@
 ///   scrutinee that every arm matches whatever it is;
 /// - the code after an `if` or a `match` that gives a tag is copied into each branch when it matches on that tag, where
 ///   the tag is known, if the copies come to little (case-of-case): how a box made in a branch meets its reading;
-/// - a chain that ends in a variable given another's value ends in that value;
-/// - a binding that nothing reads, of a value that has no effect, is not made.
+/// - a variable given another's value is that other, and a chain that ends in a variable given a value ends in it;
+/// - a binding that nothing reads, of a value that has no effect, is not made;
+/// - once nothing more is inlined, a local read once and at once is a temporary (`withTemporaries`).
 ///
 /// What is known about a variable comes from its binding (a closure, a tag, another variable) and from the arm it is
 /// in (the tag its pattern tests, and those the arms before it tested and failed). A value is read again somewhere else
@@ -108,6 +109,61 @@ let private withoutUnread (e: Expr) : Expr * bool =
     let stripped = strip e
     stripped, changed
 
+/// `e` with each local that is read once, by what the next link stores or does or by what the chain ends in, made a
+/// temporary, which is computed where it is read and needs no local. Nothing happens between the two, so nothing moves
+/// past it; the reader must not be a temporary, whose value is computed later still, where it is read, unless it is one
+/// made here, which is read at once too.
+let withTemporaries (e: Expr) : Expr =
+    let counts = reads e
+    let readOnce (var: Var) =
+        match counts.TryGetValue var.Id with
+        | true, 1 -> true
+        | _ -> false
+    let isSimple (value: Expr) =
+        match value.Kind with
+        | Let _
+        | Do _
+        | If _
+        | Match _
+        | ForEach _
+        | While _
+        | Panic _ -> false
+        | _ -> true
+    // The locals made temporaries: one is read at once, so a local it reads can be one too.
+    let made = HashSet<int>()
+    let readBy (var: Var) (reader: Expr) = directAtoms reader |> List.exists (function AVar v -> v.Id = var.Id | _ -> false)
+    let rec walk (e: Expr) : Expr =
+        let links, last = Chain.split e
+        links
+        |> Chain.rebuild
+            (fun link following ->
+                match link.Kind with
+                | Let(var, value, _) ->
+                    let value = walk value
+                    let reader =
+                        match following.Kind with
+                        | Let(next, nextValue, _) when next.Kind <> Temp || made.Contains next.Id -> Some nextValue
+                        | Do(nextValue, _) -> Some nextValue
+                        | Let _ -> None
+                        | _ when (Chain.next following).IsNone -> Some following
+                        | _ -> None
+                    match reader with
+                    | Some reader when var.Kind = Local && readOnce var && isSimple value && isSimple reader && readBy var reader ->
+                        let temp = { var with Kind = Temp }
+                        made.Add temp.Id |> ignore
+                        let renamed = mapVars (fun v -> if v.Id = var.Id then temp else v) id reader
+                        let following =
+                            match following.Kind with
+                            | Let(next, _, after) -> { following with Kind = Let(next, renamed, after) }
+                            | Do(_, after) -> { following with Kind = Do(renamed, after) }
+                            | _ -> renamed
+                        { link with Kind = Let(temp, value, following) }
+                    | _ -> { link with Kind = Let(var, value, following) }
+                | Do(value, _) -> { link with Kind = Do(walk value, following) }
+                | _ -> Chain.relink link following)
+        <| mapNested walk last
+    walk e
+
 /// How many core IR nodes the code after a branch may grow by when it is copied into each branch (see `Simplifier.Sequence`).
 let private copyLimit = 40
 
@@ -172,11 +228,20 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
             | _ -> ()
 
     /// Whether `atom` can be read again where it was not: a constant, or a variable that nothing assigns, whose local
-    /// it has to itself, and that is not a temporary.
+    /// it has to itself, and that is a parameter, a local or a name a pattern binds: not a temporary, which is used once,
+    /// nor a loop's own local, which its body reads through a binding of its own.
     let readable (atom: Atom) =
         match atom with
         | AVar v ->
-            v.Kind <> Temp
+            (match v.Kind with
+             | Param
+             | Local
+             | MatchTemp
+             | PatternBound -> true
+             | Temp
+             | InterpolationHole _
+             | Scratch
+             | ForLoop -> false)
             && not (assigned.Contains v.Id)
             && (match bound.TryGetValue((v.Kind, v.Name)) with
                 | true, 1 -> true
@@ -265,10 +330,11 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
 
     /// A chain, with what each of its bindings tells known in what follows it.
     member this.Sequence (facts: Map<int, Fact>) (e: Expr) : Expr =
-        let links, last = Chain.split e
+        let links, chainEnd = Chain.split e
         let rebuilt = ResizeArray<Expr -> Expr>()
         let mutable facts = facts
         let mutable remaining = links
+        let mutable last = chainEnd
         let mutable branchedLast = None
         // The atom each variable bound in this chain to one is given.
         let aliases = Dictionary<int, Atom>()
@@ -288,13 +354,31 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
                 changed <- true
                 let local = { temp with Kind = Local }
                 remaining <- { link with Kind = Let(local, value, link) } :: { next with Kind = Let(var, { tag with Kind = MakeTag(name, AVar local) }, next) } :: rest
+            // A variable given the value of another of its type is that other: what follows reads it instead. Not a
+            // parameter on the heap, which its function may only borrow: the variable is what takes it over, so that a
+            // match on it can reuse its memory (see `CoreIrReuse`).
+            | Let(var, { Kind = Atom(AVar source) }, _), _ when
+                source.Type = var.Type
+                && not (assigned.Contains var.Id)
+                && readable (AVar source)
+                && not (source.Kind = Param && CoreIrDrop.isHeapType source.Type)
+                ->
+                changed <- true
+                let rest = Chain.rebuild Chain.relink remaining last |> mapVars (fun v -> if v.Id = var.Id then source else v) id
+                let links, chainEnd = Chain.split rest
+                remaining <- links
+                last <- chainEnd
             | Let(var, value, _), _ ->
                 let value = this.Value facts value
-                match this.Branched facts var value remaining last with
-                | Some branched ->
+                match this.Branched facts var value remaining last, last.Kind with
+                | Some branched, _ ->
                     remaining <- []
                     branchedLast <- Some branched
-                | None ->
+                // A chain that ends in the variable its last link binds ends in that link's value.
+                | None, Atom(AVar result) when remaining.IsEmpty && result.Id = var.Id && heldAlike value.Type last.Type ->
+                    changed <- true
+                    branchedLast <- Some value
+                | None, _ ->
                     facts <- learn var (factOfValue facts value) facts
                     match value.Kind with
                     | Atom atom when not (assigned.Contains var.Id) -> aliases.[var.Id] <- atom

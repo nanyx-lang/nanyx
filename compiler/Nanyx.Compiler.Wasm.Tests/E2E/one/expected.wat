@@ -559,20 +559,18 @@
     i32.const 0
   )
 
-  (func $__fn___script (param $__env i32) (result i32) (local $__dbg_value__in1__in1 i32) (local $__inlined3__in1__in1 i32)
+  (func $__fn___script (param $__env i32) (result i32) (local $__owned_0 i32) (local $__owned_1 i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
     i32.const 264
-    local.set $__dbg_value__in1__in1
-    local.get $__dbg_value__in1__in1
+    local.tee $__owned_1
     call $__nanyx_string_quote
-    local.get $__dbg_value__in1__in1
+    local.get $__owned_1
     call $__nanyx_drop_string
-    local.set $__inlined3__in1__in1
-    local.get $__inlined3__in1__in1
+    local.tee $__owned_0
     call $dbg_str
     i32.const 0
-    local.get $__inlined3__in1__in1
+    local.get $__owned_0
     call $__nanyx_drop_string
     drop
     i32.const 0

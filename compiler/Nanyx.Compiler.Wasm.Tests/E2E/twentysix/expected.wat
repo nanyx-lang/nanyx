@@ -665,7 +665,7 @@
   )
   (export "__lambda_11" (func $__lambda_11))
 
-  (func $__fn___script (param $__env i32) (result i32) (local $__inlined9__in1__in1 i32) (local $keep__in1__in1__in1 i32) (local $__inlined14__in1__in1 i32) (local $__dbg_value__in1__in1_i64 i64) (local $__inlined15__in1__in1 i32) (local $__match_tmp_0__in1__in1_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64) (local $__for_cursor_0__in1__in1 i32) (local $__for_end_0__in1__in1_i64 i64) (local $__for___for_element_0__in1__in1_i64 i64)
+  (func $__fn___script (param $__env i32) (result i32) (local $__inlined9__in1__in1 i32) (local $keep__in1__in1__in1 i32) (local $__inlined14__in1__in1 i32) (local $__match_tmp_0__in1__in1_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64) (local $__for_cursor_0__in1__in1 i32) (local $__for_end_0__in1__in1_i64 i64) (local $__for___for_element_0__in1__in1_i64 i64) (local $__owned_0 i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
     call $items
@@ -691,11 +691,9 @@
         local.set $__for___for_element_0__in1__in1_i64
         local.get $__for___for_element_0__in1__in1_i64
     local.set $__match_tmp_0__in1__in1_i64
-    local.get $__match_tmp_0__in1__in1_i64
-    local.set $__dbg_value__in1__in1_i64
     i32.const 0
     local.set $__interp_len
-    local.get $__dbg_value__in1__in1_i64
+    local.get $__match_tmp_0__in1__in1_i64
     local.set $__interp_int
     local.get $__interp_int
     i64.const 0
@@ -737,7 +735,7 @@
     call $__nanyx_string_alloc
     local.tee $__interp_base
     local.set $__interp_cursor
-    local.get $__dbg_value__in1__in1_i64
+    local.get $__match_tmp_0__in1__in1_i64
     local.set $__interp_int
     local.get $__interp_int
     i64.const 0
@@ -825,14 +823,13 @@
       end
     end
     local.get $__interp_base
-    local.set $__inlined15__in1__in1
-    local.get $__inlined15__in1__in1
+    local.tee $__owned_0
     call $dbg_str
     i32.const 0
-    local.get $__inlined15__in1__in1
+    local.get $__owned_0
     call $__nanyx_drop_string
     drop
-    local.get $__for___for_element_0__in1__in1_i64
+    local.get $__match_tmp_0__in1__in1_i64
         drop
         local.get $__for_cursor_0__in1__in1
         i32.load offset=8

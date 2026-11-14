@@ -562,20 +562,18 @@
   (data (i32.const 256) "\00\00\00\00\05\00\00\00Alice\00\00\00")
   (data (i32.const 272) "\00\00\00\00\03\00\00\00Bob\00")
 
-  (func $printPerson (param $p i32) (result i32) (local $__dbg_value i32) (local $__inlined8 i32) (local $__dbg_value_1_i64 i64) (local $__inlined9 i32) (local $__dbg_value_2_i64 i64) (local $__inlined10 i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64)
+  (func $printPerson (param $p i32) (result i32) (local $__dbg_value_1_i64 i64) (local $__dbg_value_2_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32)
     local.get $p
     i32.load offset=8
     call $__nanyx_dup_string
-    local.set $__dbg_value
-    local.get $__dbg_value
+    local.tee $__owned_1
     call $__nanyx_string_quote
-    local.get $__dbg_value
+    local.get $__owned_1
     call $__nanyx_drop_string
-    local.set $__inlined8
-    local.get $__inlined8
+    local.tee $__owned_0
     call $dbg_str
     i32.const 0
-    local.get $__inlined8
+    local.get $__owned_0
     call $__nanyx_drop_string
     drop
     local.get $p
@@ -713,11 +711,10 @@
       end
     end
     local.get $__interp_base
-    local.set $__inlined9
-    local.get $__inlined9
+    local.tee $__owned_2
     call $dbg_str
     i32.const 0
-    local.get $__inlined9
+    local.get $__owned_2
     call $__nanyx_drop_string
     drop
     local.get $p
@@ -855,18 +852,17 @@
       end
     end
     local.get $__interp_base
-    local.set $__inlined10
-    local.get $__inlined10
+    local.tee $__owned_3
     call $dbg_str
     i32.const 0
-    local.get $__inlined10
+    local.get $__owned_3
     call $__nanyx_drop_string
     drop
     i32.const 0
   )
   (export "printPerson" (func $printPerson))
 
-  (func $main (result i32) (local $p i32) (local $__dbg_value__in1 i32) (local $__inlined8__in1 i32) (local $__dbg_value_1__in1_i64 i64) (local $__inlined9__in1 i32) (local $__dbg_value_2__in1_i64 i64) (local $__inlined10__in1 i32) (local $p2 i32) (local $__dbg_value__in2 i32) (local $__inlined8__in2 i32) (local $__dbg_value_1__in2_i64 i64) (local $__inlined9__in2 i32) (local $__dbg_value_2__in2_i64 i64) (local $__inlined10__in2 i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64)
+  (func $main (result i32) (local $p i32) (local $__dbg_value_1__in1_i64 i64) (local $__dbg_value_2__in1_i64 i64) (local $p2 i32) (local $__dbg_value_1__in2_i64 i64) (local $__dbg_value_2__in2_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32) (local $__owned_4 i32) (local $__owned_5 i32) (local $__owned_6 i32) (local $__owned_7 i32)
     i32.const 20
     i32.const 1
     call $__nanyx_new_object
@@ -883,16 +879,14 @@
     local.get $p
     i32.load offset=8
     call $__nanyx_dup_string
-    local.set $__dbg_value__in1
-    local.get $__dbg_value__in1
+    local.tee $__owned_1
     call $__nanyx_string_quote
-    local.get $__dbg_value__in1
+    local.get $__owned_1
     call $__nanyx_drop_string
-    local.set $__inlined8__in1
-    local.get $__inlined8__in1
+    local.tee $__owned_0
     call $dbg_str
     i32.const 0
-    local.get $__inlined8__in1
+    local.get $__owned_0
     call $__nanyx_drop_string
     drop
     local.get $p
@@ -1030,11 +1024,10 @@
       end
     end
     local.get $__interp_base
-    local.set $__inlined9__in1
-    local.get $__inlined9__in1
+    local.tee $__owned_2
     call $dbg_str
     i32.const 0
-    local.get $__inlined9__in1
+    local.get $__owned_2
     call $__nanyx_drop_string
     drop
     local.get $p
@@ -1174,11 +1167,10 @@
       end
     end
     local.get $__interp_base
-    local.set $__inlined10__in1
-    local.get $__inlined10__in1
+    local.tee $__owned_3
     call $dbg_str
     i32.const 0
-    local.get $__inlined10__in1
+    local.get $__owned_3
     call $__nanyx_drop_string
     drop
     i32.const 20
@@ -1197,16 +1189,14 @@
     local.get $p2
     i32.load offset=8
     call $__nanyx_dup_string
-    local.set $__dbg_value__in2
-    local.get $__dbg_value__in2
+    local.tee $__owned_5
     call $__nanyx_string_quote
-    local.get $__dbg_value__in2
+    local.get $__owned_5
     call $__nanyx_drop_string
-    local.set $__inlined8__in2
-    local.get $__inlined8__in2
+    local.tee $__owned_4
     call $dbg_str
     i32.const 0
-    local.get $__inlined8__in2
+    local.get $__owned_4
     call $__nanyx_drop_string
     drop
     local.get $p2
@@ -1344,11 +1334,10 @@
       end
     end
     local.get $__interp_base
-    local.set $__inlined9__in2
-    local.get $__inlined9__in2
+    local.tee $__owned_6
     call $dbg_str
     i32.const 0
-    local.get $__inlined9__in2
+    local.get $__owned_6
     call $__nanyx_drop_string
     drop
     local.get $p2
@@ -1488,11 +1477,10 @@
       end
     end
     local.get $__interp_base
-    local.set $__inlined10__in2
-    local.get $__inlined10__in2
+    local.tee $__owned_7
     call $dbg_str
     i32.const 0
-    local.get $__inlined10__in2
+    local.get $__owned_7
     call $__nanyx_drop_string
     drop
     i32.const 0
