@@ -37,6 +37,7 @@
     <Compile Include="Features\Corpus\CorpusTests.fs" />
     <Compile Include="Features\Command\FormatCommandTests.fs" />
     <Compile Include="Features\Command\FormatInputTests.fs" />
+    <Compile Include="Features\Command\RangeFormattingTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -464,15 +464,6 @@
   (global $items__built (mut i32) (i32.const 0))
   (global $items__value (mut i32) (i32.const 0))
 
-  (func $__host_run__unit__known (param $entry i32) (result i32) (local $__inlined14 i32)
-    local.get $entry
-    local.get $entry
-    i32.load
-    call_indirect (type $ctx_fn_1)
-    local.set $__inlined14
-    i32.const 0
-  )
-
   (func $prelude_reverseOnto__int (param $arg1 i32) (param $arg2 i32) (result i32) (local $__match_tmp_0 i32) (local $__match_tmp_1 i32) (local $__payload_x_i64 i64) (local $__payload_rest i32) (local $__reuse_1 i32)
     local.get $arg1
     local.set $__match_tmp_0
@@ -534,6 +525,15 @@
     )
       )
     )
+  )
+
+  (func $__host_run__unit__known (param $entry i32) (result i32) (local $__inlined15 i32)
+    local.get $entry
+    local.get $entry
+    i32.load
+    call_indirect (type $ctx_fn_1)
+    local.set $__inlined15
+    i32.const 0
   )
 
   (func $prelude_filterReversed__int (param $arg1 i32) (param $arg2 i32) (param $arg3 i32) (result i32) (local $__match_tmp_0 i32) (local $__match_tmp_1 i32) (local $__match_tmp_2 i32) (local $__payload_x_i64 i64) (local $__payload_rest i32) (local $__reuse_1 i32)
@@ -853,37 +853,6 @@
   )
   (export "__fn___script" (func $__fn___script))
 
-  (func $__nanyx_drop_fn_unit_to_unit (param $p i32)
-    ;; (unit -> unit)
-    local.get $p
-    i32.const 8
-    i32.sub
-    call $__nanyx_release
-    if
-      local.get $p
-      local.get $p
-      i32.const 4
-      i32.sub
-      i32.load
-      call_indirect (type $ctx_fn_1)
-      drop
-      local.get $p
-      i32.const 8
-      i32.sub
-      call $__nanyx_free
-    end
-  )
-
-  (func $__nanyx_dup_fn_unit_to_unit (param $p i32) (result i32)
-    block $shared
-      local.get $p
-      i32.const 8
-      i32.sub
-      call $__nanyx_retain
-    end
-    local.get $p
-  )
-
   (func $__nanyx_drop_list_int (param $p i32)
     ;; list(int)
     (local $tail i32)
@@ -919,6 +888,37 @@
       br_if $shared
       local.get $p
       i32.const 4
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
+  )
+
+  (func $__nanyx_drop_fn_unit_to_unit (param $p i32)
+    ;; (unit -> unit)
+    local.get $p
+    i32.const 8
+    i32.sub
+    call $__nanyx_release
+    if
+      local.get $p
+      local.get $p
+      i32.const 4
+      i32.sub
+      i32.load
+      call_indirect (type $ctx_fn_1)
+      drop
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_free
+    end
+  )
+
+  (func $__nanyx_dup_fn_unit_to_unit (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 8
       i32.sub
       call $__nanyx_retain
     end

@@ -12,8 +12,11 @@ export context HostRuntime = protected (
   writeStdout: string -> ()
   --| Writes `text` to standard error, as it is.
   writeStderr: string -> ()
-  --| The next byte of standard input, or -1 when the input has ended.
-  readStdinByte: () -> int
+  --| The next block of standard input, up to 64 KB, or the empty string when the input has ended.
+  readStdinBlock: () -> string
+  --| Standard input up to and including the next line break, or to the end of the block the runtime
+    holds when that has none; the empty string when the input has ended.
+  readStdinLine: () -> string
 )
 
 --| Writes `text` to standard output, as it is.
@@ -26,7 +29,13 @@ export def writeStderr: string -> () = { text ->
   __nanyx_write_stderr(text)
 }
 
---| The next byte of standard input, or -1 when the input has ended.
-export def readStdinByte: () -> int = { _ ->
-  __nanyx_read_stdin_byte()
+--| The next block of standard input, up to 64 KB, or the empty string when the input has ended.
+export def readStdinBlock: () -> string = { _ ->
+  __nanyx_read_stdin_block()
+}
+
+--| Standard input up to and including the next line break, or to the end of the block the runtime
+  holds when that has none; the empty string when the input has ended.
+export def readStdinLine: () -> string = { _ ->
+  __nanyx_read_stdin_line()
 }

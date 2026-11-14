@@ -19,21 +19,30 @@ def withoutCarriageReturn: string -> string = { line ->
     else line
 }
 
---| `acc` followed by the rest of the current line of standard input.
-def readLineAfter: [HostRuntime] string -> #some(string) | #error(IoError) = { acc ->
-  def byte = readStdinByte()
-
-  if byte < 0
-    then (if __nanyx_string_length(acc) == 0 then #error(#endOfInput) else #some(acc))
-    else if byte == 10
-      then #some(withoutCarriageReturn(acc))
-      else readLineAfter(acc ++ __nanyx_string_from_byte(byte))
+--| `parts`, the latest first, joined in the order they were read.
+def joined: list(string) -> string = { parts ->
+  __nanyx_string_join(list.reverse(parts), "")
 }
 
---| `acc` followed by everything left on standard input.
-def readToEndAfter: [HostRuntime] string -> string = { acc ->
-  def byte = readStdinByte()
-  if byte < 0 then acc else readToEndAfter(acc ++ __nanyx_string_from_byte(byte))
+--| The rest of the current line of standard input, after `parts`, the pieces of it read so far (the
+  latest first), each of them not empty.
+def readLineAfter: [HostRuntime] list(string) -> #some(string) | #error(IoError) = { parts ->
+  def part = readStdinLine()
+  def length = __nanyx_string_length(part)
+
+  if length == 0
+    then (if list.isEmpty(parts) then #error(#endOfInput) else #some(joined(parts)))
+    else if __nanyx_string_byte_at(part, length - 1) == 10
+      then #some(
+        withoutCarriageReturn(joined([__nanyx_string_slice(part, 0, length - 1), ...parts]))
+      )
+      else readLineAfter([part, ...parts])
+}
+
+--| Everything left on standard input, after `blocks`, the blocks read so far (the latest first).
+def readToEndAfter: [HostRuntime] list(string) -> string = { blocks ->
+  def block = readStdinBlock()
+  if __nanyx_string_length(block) == 0 then joined(blocks) else readToEndAfter([block, ...blocks])
 }
 
 --| Where the entry of `block` that holds the byte at `index` starts: after the zero byte before it,
@@ -103,8 +112,8 @@ export def run: [HostRuntime] ([Console & Env] () -> a) -> () = { entry ->
   use Console(
     write = writeStdout
     writeError = writeStderr
-    readLine = { _ -> readLineAfter("") }
-    readToEnd = { _ -> #some(readToEndAfter("")) }
+    readLine = { _ -> readLineAfter([]) }
+    readToEnd = { _ -> #some(readToEndAfter([])) }
     flush = { _ -> () }
   )
 

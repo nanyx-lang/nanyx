@@ -22,7 +22,8 @@ the outside world through the contexts the host chose to provide.
 context HostRuntime = protected (
   writeStdout: string -> ()
   writeStderr: string -> ()
-  readStdinByte: () -> int
+  readStdinBlock: () -> string
+  readStdinLine: () -> string
 )
 ```
 
@@ -31,7 +32,9 @@ module's imports. The definitions of the members below are the instance the tool
 
 - `writeStdout`: Writes `text` to standard output, as it is.
 - `writeStderr`: Writes `text` to standard error, as it is.
-- `readStdinByte`: The next byte of standard input, or -1 when the input has ended.
+- `readStdinBlock`: The next block of standard input, up to 64 KB, or the empty string when the input has ended.
+- `readStdinLine`: Standard input up to and including the next line break, or to the end of the block the runtime
+  holds when that has none; the empty string when the input has ended.
 
 ## `writeStdout`
 
@@ -49,12 +52,21 @@ def writeStderr: string -> ()
 
 Writes `text` to standard error, as it is.
 
-## `readStdinByte`
+## `readStdinBlock`
 
 ```nanyx fragment
-def readStdinByte: () -> int
+def readStdinBlock: () -> string
 ```
 
-The next byte of standard input, or -1 when the input has ended.
+The next block of standard input, up to 64 KB, or the empty string when the input has ended.
+
+## `readStdinLine`
+
+```nanyx fragment
+def readStdinLine: () -> string
+```
+
+Standard input up to and including the next line break, or to the end of the block the runtime
+holds when that has none; the empty string when the input has ended.
 
 <!-- End of the generated reference. -->

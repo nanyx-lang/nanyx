@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.FSharp.Core;
 using Nanyx.Formatter;
+using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -35,22 +36,12 @@ public sealed class FormattingHandler : DocumentFormattingHandlerBase
             return new TextEditContainer();
         }
 
-        // Read every time, rather than cached, so an edit to the manifest applies to the next format. A document not on
-        // disk has no manifest. A script's ::formatter directives apply on top.
-        var settings = document.FileName == ""
-            ? FSharpResult<Formatter.Formatter.Options, string>.NewOk(Formatter.Formatter.OptionsModule.defaults)
-            : Settings.forFile(document.FileName);
-        if (settings.IsOk)
+        if (SettingsFor(document, request.TextDocument.Uri, _logger) is not { } settings)
         {
-            settings = Settings.withDirectives(document.FileName, document.Text, settings.ResultValue);
-        }
-        if (settings.IsError)
-        {
-            _logger.LogWarning("Not formatting {Uri}: {Reason}", request.TextDocument.Uri, settings.ErrorValue);
             return new TextEditContainer();
         }
 
-        switch (FormatCommand.formatText(settings.ResultValue, document.FileName, document.Text))
+        switch (FormatCommand.formatText(settings, document.FileName, document.Text))
         {
             case FormatCommand.Formatting.Formatted formatted when formatted.Item != document.Text:
                 // Positions count lines and characters, which are the same in the text and its normalised form.
@@ -62,6 +53,29 @@ public sealed class FormattingHandler : DocumentFormattingHandlerBase
             default:
                 return new TextEditContainer();
         }
+    }
+
+    /// <summary>
+    /// The formatter's settings for <paramref name="document"/>, or null, logged, when they can't be read. They are read
+    /// every time, rather than cached, so an edit to the manifest applies to the next format. A document not on disk
+    /// has no manifest. A script's <c>::formatter</c> directives apply on top.
+    /// </summary>
+    internal static Formatter.Formatter.Options? SettingsFor(OpenDocument document, DocumentUri uri, ILogger logger)
+    {
+        var settings = document.FileName == ""
+            ? FSharpResult<Formatter.Formatter.Options, string>.NewOk(Formatter.Formatter.OptionsModule.defaults)
+            : Settings.forFile(document.FileName);
+        if (settings.IsOk)
+        {
+            settings = Settings.withDirectives(document.FileName, document.Text, settings.ResultValue);
+        }
+        if (settings.IsError)
+        {
+            logger.LogWarning("Not formatting {Uri}: {Reason}", uri, settings.ErrorValue);
+            return null;
+        }
+
+        return settings.ResultValue;
     }
 
     protected override DocumentFormattingRegistrationOptions CreateRegistrationOptions(

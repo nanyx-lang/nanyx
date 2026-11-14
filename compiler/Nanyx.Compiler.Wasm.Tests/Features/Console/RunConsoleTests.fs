@@ -194,3 +194,25 @@ def main = {
 """
     runSourceWithInput "hello\r\nworld\nthe\nrest" source
     |> assertRan "first [hello]\nsecond [world]\nrest [the\nrest]\nend of input\n"
+
+[<Fact>]
+let ``Run - readLine and readToEnd read input longer than the block the runtime reads at once`` () =
+    let source =
+        normalized """import nanyx/text
+
+@entry
+def main = {
+  match readLine()
+    | #some(line) -> println(string.length(line))
+    | #error(_) -> println("no first")
+  match readLine()
+    | #some(line) -> println(line)
+    | #error(_) -> println("no second")
+  match readToEnd()
+    | #some(rest) -> println(string.length(rest))
+    | #error(_) -> println("failed")
+}
+"""
+    let long = String.replicate 100000 "a"
+    runSourceWithInput (long + "\nshort\n" + long + long) source
+    |> assertRan "100000\nshort\n200000\n"
