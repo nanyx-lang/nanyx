@@ -35,16 +35,27 @@ module internal IdentifierNames =
 /// Desugaring before type checking: workflow keywords into calls to their builder's members, `for` loops, a match's
 /// lone `else` and the holes of interpolated strings.
 module WorkflowDesugaring =
+    /// A builder's block: a call, to a name the compiler did not make up, whose last argument is a lambda without
+    /// parameters, as `proc { ... }` and `retrying(3) { ... }` are. The builder's name, its other arguments, the lambda,
+    /// its body, and whether it takes unit.
+    let private (|BuilderBlock|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, args) when not (MadeUpNames.isMadeUp name) ->
+            match List.rev args with
+            | (Kind (Lambda([], body, takesUnit)) as lambda) :: others -> Some (name, List.rev others, lambda, body, takesUnit)
+            | _ -> None
+        | _ -> None
+
     /// `module'` desugared, with the errors desugaring found (a workflow keyword the rest of its builder's block cannot
-    /// follow, see `Unreachable`); the place to report a builder that lacks a member the desugaring reads at, by the
-    /// node of that made-up read: where a block falls off its end without `return`, for its `zero`, and a loop whose
-    /// body uses a keyword, for its `for`; and the expressions of the desugared module made up for each node of
-    /// `module'`, in the order they were made: a workflow bind's are the call to its builder's member and the
-    /// continuation passed to it.
-    let desugarWithDiagnostics (module': Module) : Module * Diagnostic list * Map<NodeId, SourceSpan> * Map<NodeId, NodeId list> =
+    /// follow, see `Unreachable`); each made-up read of a member of a builder's context, by its node, with the place to
+    /// report it at if the context has no such member and the builder's name: a keyword's call, at the keyword, where a
+    /// block falls off its end without `return`, for its `zero`, and a loop whose body uses a keyword, for its `for`;
+    /// and the expressions of the desugared module made up for each node of `module'`, in the order they were made: a
+    /// workflow bind's are the call to its builder's member and the continuation passed to it.
+    let desugarWithDiagnostics (module': Module) : Module * Diagnostic list * Map<NodeId, SourceSpan * Identifier> * Map<NodeId, NodeId list> =
         let isReturnKeyword keyword = keyword = WorkflowSyntax.returnKeyword
         let diagnostics = ResizeArray<Diagnostic>()
-        let mutable memberPlaces: Map<NodeId, SourceSpan> = Map.empty
+        let mutable memberPlaces: Map<NodeId, SourceSpan * Identifier> = Map.empty
 
         // The expressions made up for each node of `module'`, newest first, and the node of `module'` each one was
         // made for. One made for a made-up node was made for the node that one was.
@@ -58,10 +69,9 @@ module WorkflowDesugaring =
         // `Expression.from source kind`, recorded as made for `source`.
         let madeFor (source: Expression) (kind: ExpressionKind) = recordMade source.Id (Expression.from source kind)
 
-        // The builder whose block is being desugared (`proc` in `proc { ... }`), and whether that block used a
-        // workflow keyword. A keyword `k` in the block calls the builder's member `k`, `return` its member `return`.
+        // The builder whose block is being desugared (`proc` in `proc { ... }`). A keyword `k` in the block calls the
+        // member `k` of the context the builder runs its block under, `return` its member `return`.
         let mutable builder: string option = None
-        let mutable builderUsed = false
 
         // Where the expression being desugared is, when the rest of the builder's block cannot follow a keyword
         // there: inside a lambda, which runs when it is called; in the body of a `for` loop, which runs once per
@@ -95,24 +105,19 @@ module WorkflowDesugaring =
             freshNames <- freshNames + 1
             $"__{prefix}_{freshNames}"
 
-        // `k(args)` for the workflow keyword `k`: a call to the member `k` of the builder the block was written
-        // after, through a local of its own (`def m = proc.try` then `m(args)`), so that each use instantiates the
-        // builder's type afresh. Outside a builder's block it is a call to a function named `k`, and an error if `k`
-        // is one of the language's own keywords, `try` or `return`, which no function can be named.
-        // A call to the member `keyword` of the builder `builderName`, and the read of that member.
+        // `k(args)` for the workflow keyword `k`: a call to the member `k` of the context the builder the block was
+        // written after runs it under, which the block's lambda requires, so it is in scope by its name (see
+        // `Contexts.extendEnvForLambdaArgument`). Each call instantiates the member's own type variables afresh. The
+        // call is reported at `source`, with the builder's name, if no context in scope there has a member `k`. Outside
+        // a builder's block it is a call to a function named `k`, and an error if `k` is one of the language's own
+        // keywords, `try` or `return`, which no function can be named.
         let memberCall (source: Expression) (builderName: string) (keyword: string) (args: Expression list) =
-            builderUsed <- true
-            let memberLocal = freshName $"{IdentifierNames.sanitizeIdentifier builderName}_{keyword}"
-            let memberAccess = madeFor source (MemberAccess(madeFor source (IdentifierExpr builderName), keyword, None))
-            memberAccess,
-            madeFor source (
-                Block [
-                    Statement.from source (DefStatement(false, memberLocal, None, memberAccess))
-                    Statement.from source (ExprStatement (madeFor source (FunctionCall(memberLocal, None, args))))
-                ])
+            let call = madeFor source (FunctionCall(keyword, None, args))
+            memberPlaces <- memberPlaces |> Map.add call.Id (source.Span, builderName)
+            call
         let workflowCall (source: Expression) (keyword: string) (args: Expression list) : Expression =
             match builder with
-            | Some builderName -> snd (memberCall source builderName keyword args)
+            | Some builderName -> memberCall source builderName keyword args
             | None ->
                 if keyword = WorkflowSyntax.tryKeyword || isReturnKeyword keyword then
                     let keywordSpan = { source.Span with End = source.Span.Start + keyword.Length }
@@ -137,7 +142,7 @@ module WorkflowDesugaring =
             | Lambda _ -> false
             // A loop's body is a lambda, but a keyword in it is the block's (see `desugarLoop`).
             | ForSyntax.Call(iterables, _, _, body) -> List.exists usesKeyword iterables || usesKeyword body
-            | FunctionCall(name, _, [ Kind (Lambda([], _, _)) ]) when not (MadeUpNames.isMadeUp name) -> false
+            | BuilderBlock(_, others, _, _, _) -> List.exists usesKeyword others
             | FunctionCall(_, _, args)
             | ContextMemberCall(_, _, args) -> List.exists usesKeyword args
             | Pipe(value, _, _, args) -> List.exists usesKeyword (value :: args)
@@ -311,21 +316,19 @@ module WorkflowDesugaring =
             | _ -> { expr with Kind = desugarKind expr }
         and desugarKind expr =
             match expr.Kind with
-            // A block written after a builder's name, `proc { ... }`: when the block uses a workflow keyword, it
-            // is the block itself, with its keywords calling the builder's members (see `workflowCall`). The
-            // documented `proc.apply({ ... })` around it is not made yet: the block runs where it is written.
-            | FunctionCall(name, rangeOpt, [ Kind (Lambda([], body, takesUnit)) as lambda ]) when not (MadeUpNames.isMadeUp name) ->
-                let outerBuilder, outerUsed, outerUnreachable = builder, builderUsed, unreachable
+            // A block written after a builder's name, `proc { ... }` or `retrying(3) { ... }`: the call it is, with
+            // the block's keywords calling the members of the context the builder runs it under (see `workflowCall`).
+            // The builder's other arguments are outside the block.
+            | BuilderBlock(name, others, lambda, body, takesUnit) ->
+                let rangeOpt = match expr.Kind with FunctionCall(_, rangeOpt, _) -> rangeOpt | _ -> None
+                let others' = others |> List.map desugarExpr
+                let outerBuilder, outerUnreachable = builder, unreachable
                 builder <- Some name
-                builderUsed <- false
                 unreachable <- None
                 let body' = desugarExpr body
-                let used = builderUsed
                 builder <- outerBuilder
-                builderUsed <- outerUsed
                 unreachable <- outerUnreachable
-                if used then body'.Kind
-                else FunctionCall(name, rangeOpt, [ { lambda with Kind = Lambda([], body', takesUnit) } ])
+                FunctionCall(name, rangeOpt, others' @ [ { lambda with Kind = Lambda([], body', takesUnit) } ])
             // A `for` loop's body is a lambda of the elements, which the loop runs once per step.
             | ForSyntax.Call(iterables, loop, parameters, body) ->
                 let body' = within InLoopBody (fun () -> desugarExpr body)
@@ -421,10 +424,9 @@ module WorkflowDesugaring =
             let ending () =
                 match builder with
                 | Some builderName ->
-                    let zero = Expression.synthetic (MemberAccess(Expression.synthetic (IdentifierExpr builderName), WorkflowSyntax.zeroMember, None))
+                    let zero = Expression.synthetic (IdentifierExpr WorkflowSyntax.zeroMember)
                     let place = statements |> List.tryLast |> Option.map _.Span |> Option.defaultValue SourceSpan.none
-                    memberPlaces <- memberPlaces |> Map.add zero.Id place
-                    builderUsed <- true
+                    memberPlaces <- memberPlaces |> Map.add zero.Id (place, builderName)
                     zero
                 | None -> Expression.synthetic UnitExpr
             // The chain may end in several places (see `desugarBranching`), each with an ending of its own.
@@ -531,7 +533,7 @@ module WorkflowDesugaring =
         // takes the loop's element and the rest of the loop, which its chain goes on to where it ends; a `try` that
         // fails or a `return` in it ends the whole block, as one outside the loop does.
         //
-        //   proc.for(items, { item, __next_1 -> <body, then __next_1()> }, { <rest of the block> })
+        //   for(items, { item, __next_1 -> <body, then __next_1()> }, { <rest of the block> })
         and desugarLoop (expr: Expression) iterable (loop: Expression) parameters (body: Expression) (rest: Statement list) next =
             let nextName = freshName "next"
             let goOn (last: Expression option) =
@@ -546,10 +548,7 @@ module WorkflowDesugaring =
             let bodyChain = desugarChain (statements |> List.collect liftStatementBinds) goOn
             let bodyFunction = { loop with Kind = Lambda(parameters @ [ nextName, None ], bodyChain, false) }
             let restFunction = madeFor expr (Lambda([], desugarChain rest next, false))
-            let builderName = Option.get builder
-            let memberAccess, call = memberCall expr builderName WorkflowSyntax.forMember [ desugarExpr iterable; bodyFunction; restFunction ]
-            memberPlaces <- memberPlaces |> Map.add memberAccess.Id expr.Span
-            call
+            memberCall expr (Option.get builder) WorkflowSyntax.forMember [ desugarExpr iterable; bodyFunction; restFunction ]
         // A statement followed by the rest of the chain, as a block made up for them that spans from the statement
         // to the end of the rest. The rest is a made-up `()` with no span when the statement is the last one.
         and chainBlock (statement: Statement) (nextExpr: Expression) (desugared: Statement) =

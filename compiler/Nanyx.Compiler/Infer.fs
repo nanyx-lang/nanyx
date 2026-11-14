@@ -215,6 +215,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         Ok (mkTypedExpr expr (TyPrimitive "unit") None None None, state)
     // The placeholder for code not written yet is an error like any other, so a release build refuses it and a debug
     // build defers it: it has the error type, and stops the program if reached.
+    // A workflow keyword's call, or a builder block's `zero`, reads a member of the context the builder runs its block
+    // under, which must be in scope by its name.
+    | IdentifierExpr name
+    | FunctionCall(name, _, _) when WorkflowMembers.isMissing env state expr.Id name -> Error [ WorkflowMembers.missing state expr.Id name ]
     | IdentifierExpr name when name = Parser.Program.Expressions.notImplemented ->
         Error [ Diagnostics.at DiagnosticCodes.NotImplemented expr.Span "Not implemented: `???` stands for code not written yet" ]
     | IdentifierExpr name ->
@@ -242,6 +246,11 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             match contextCheck with
             | Error err -> Error err
             | Ok state ->
+                // A member of a plain context read as a value, as a builder's block reads its `zero`, is used where it
+                // is read, as a call of it is (see `LambdaContexts`).
+                let state =
+                    let ofMember = LambdaContexts.contextOfMember env state name |> Option.map (fun ctx -> TyApply(ctx, [])) |> Option.toList
+                    state |> LambdaContexts.recordUnsupplied env ofMember
                 let ty, next = instantiate (recordReference expr scheme state) scheme
                 let ty, next =
                     match contextRequirementsOf env state name with
@@ -1168,17 +1177,7 @@ and private readMember (env: TypeEnv) (state: InferState) (expr: Expression) (ba
             // What failed to check was reported where it failed; reading from it is not another error.
             | None when Unifier.isError baseTy ->
                 Ok (mkTypedExpr expr Unifier.errorType None None None, { next with UnknownTypeUses = expr.Id :: next.UnknownTypeUses })
-            // A builder block that can end without `return` needs the builder's `zero` to be its value there, and a loop
-            // whose body uses a keyword its `for` to run it.
-            | None when next.WorkflowMemberPlaces.ContainsKey expr.Id ->
-                let builderName = receiver |> Option.defaultValue "builder"
-                let place = next.WorkflowMemberPlaces.[expr.Id]
-                let message =
-                    if memberName = WorkflowSyntax.forMember then
-                        $"This loop's body uses a workflow keyword, and `{builderName}` has no `for` to run it: handle the value with a `match` in the loop's body, or give `{builderName}` a `for`"
-                    else
-                        $"This `{builderName}` block can end here without `return`, and `{builderName}` has no `zero` to be its value then: end the block with `return`, or give `{builderName}` a `zero`"
-                Error [ Diagnostics.at DiagnosticCodes.InvalidWorkflow place message ]
+
             | None -> Error [ unknownMember env memberSpan receiver baseTy memberName ]
 
 /// Infers each of `exprs` in turn, each in the state the one before it left: their typed expressions and the state

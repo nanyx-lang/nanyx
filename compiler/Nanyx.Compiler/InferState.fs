@@ -276,9 +276,11 @@ type InferState =
             /// without another error, since the error that left the value's type unknown has been reported; a debug
             /// build cannot run it, and traps there.
             UnknownTypeUses: NodeId list;
-            /// Where to say so if a builder lacks a member desugaring reads, by the node of the made-up read: the end of
-            /// a block that falls off without `return`, for `zero`, and a loop whose body uses a keyword, for `for`.
-            WorkflowMemberPlaces: Map<NodeId, SourceSpan>;
+            /// Each read of a member of a builder's context that desugaring made up, by its node: where to say so if no
+            /// context in scope there has the member, and the builder's name. A keyword's call is said to be at the
+            /// keyword, `zero` at the end of a block that falls off without `return`, and `for` at a loop whose body
+            /// uses a keyword (see `WorkflowMembers`).
+            WorkflowMemberPlaces: Map<NodeId, SourceSpan * Identifier>;
             /// The rest variables `joinBranchTypes` made up for a branch of a type not known yet. A union with one
             /// of them, joined again, has the rest extended with the other branches' tags rather than shared.
             JoinRests: Set<int>;

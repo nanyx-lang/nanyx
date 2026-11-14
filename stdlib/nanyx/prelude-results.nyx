@@ -7,6 +7,21 @@
 --| A success carrying an `a`, or an error carrying an `e`.
 export type Result(a, e) = #some(a) | #error(e)
 
+--| The context of the result workflow, which `proc` runs its block under: a `try`, `return` or
+  `for` in a `proc { ... }` block calls the member of that name, and a block that ends without
+  `return` has `zero` as its value.
+export context Proc = (
+  --| Continues with the payload of `#some`, and gives back any other tag as is without running
+    the rest of the block.
+  try: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r
+  --| Wraps the value in `#some`.
+  return: a -> #some(a) | r
+  --| The value of a block that ends without `return`.
+  zero: #some() | r
+  --| Runs a loop whose body uses a keyword (see `procFor`).
+  for: [d] (list(x), ([d] x, ([d] () -> #some(y) | s) -> #some(y) | s), ([d] () -> #some(y) | s)) -> #some(y) | s
+)
+
 --| The result workflow: inside `proc { ... }`, `try x` continues with the payload of `#some`, and
   gives back any `#error` as is without running the rest of the block, and `return x` wraps the
   value in `#some`.
@@ -19,11 +34,12 @@ export type Result(a, e) = #some(a) | #error(e)
   }
   ```
 
-  A workflow builder is a record of keyword members. A block written after the builder's name
-  has each `try x` (and each `try x` nested inside an expression) turned into a call to the
-  builder's `try` member, with the rest of the block as its continuation, and each `return x`
-  into a call to its `return` member. A block that ends without `return` has `zero` as its
-  value, `#some()`, so a `proc` that is only run for what it does needs no `return`.
+  A workflow builder is a function that runs its block under a context. `proc { ... }` is the
+  call `proc({ ... })`, and in the block each `try x` (and each `try x` nested inside an
+  expression) is a call to the context's `try` member, with the rest of the block as its
+  continuation, and each `return x` a call to its `return` member. A block that ends without
+  `return` has `zero` as its value, `#some()`, so a `proc` that is only run for what it does
+  needs no `return`.
 
   Every tag other than `#some` is a failure, not only `#error`, and the block collects them: a
   `try` on a `#some(string) | #nil` and another on a `#some(int) | #notFound` make the block a
@@ -34,9 +50,8 @@ export type Result(a, e) = #some(a) | #error(e)
   `try` that fails in the body ends the whole block with that failure, and a `return` ends it
   with its value, as they do outside the loop: the items after it, and what follows the loop,
   don't run.
-export def proc
-  : (try: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r, return: a -> #some(a) | r, zero: #some() | r, for: [d] (list(x), ([d] x, ([d] () -> #some(y) | s) -> #some(y) | s), ([d] () -> #some(y) | s)) -> #some(y) | s)
-  = (
+export def proc: [c] ([Proc & c] () -> #some(b) | r) -> #some(b) | r = { block ->
+  use Proc(
     try = {
       | #some(value), continue -> continue(value)
       | failure, _ -> failure
@@ -44,7 +59,8 @@ export def proc
     return = { value -> #some(value) }
     zero = #some()
     for = { items, body, rest -> procFor(items, body, rest) }
-  )
+  ) in block()
+}
 
 --| The loop of `proc`: `body` is given each item of `items` and the rest of the loop, which it
   calls to go on to the next item; after the last item comes `rest`.
