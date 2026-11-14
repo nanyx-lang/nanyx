@@ -10,7 +10,7 @@ These functions are [attached definitions](../advanced/attached-definitions) on 
 
 For now most of these functions work byte by byte. `length` counts bytes, indices and widths are byte offsets, `uppercase` and `lowercase` change only ASCII letters, and the trimming functions and `words` treat only ASCII whitespace as whitespace. Characters outside ASCII pass through unchanged, except that `padStart` and `padEnd` cut their fill at a byte count, so a `fill` of such characters can be cut in the middle of one.
 
-[`chars`](#chars) and [`reverse`](#reverse) work by character instead. A character here is one Unicode code point, so `"é"` is one character even though it takes two bytes. A letter with a combining accent (a grapheme cluster of two code points) counts as two.
+[`chars`](#chars), [`reverse`](#reverse) and [`codePoints`](#codepoints-fromcodepoint) work by character instead. A character here is one Unicode code point, so `"é"` is one character even though it takes two bytes. A letter with a combining accent (a grapheme cluster of two code points) counts as two.
 
 Every one of them is stack-safe: `repeat`, `split`, `replace`, `lines`, `words`, `chars`, `reverse` and the rest work on a string of any length, and give any number of pieces, without running out of stack. Each walks the string with [tail calls](../tour/functions#tail-recursion).
 
@@ -329,6 +329,28 @@ list.length(string.chars("héllo"))
 
 string.chars("")
 -- []
+```
+
+---
+
+# codePoints, fromCodePoint
+
+```nanyx
+string.codePoints: string -> list(int)
+string.fromCodePoint: int -> #some(string) | #invalidCodePoint
+```
+
+`codePoints` gives the Unicode code point of each character, in order: one number for each of [`chars`](#chars). `fromCodePoint` gives the character with that code point, as a string. A negative number, a surrogate (`0xD800` to `0xDFFF`) or a number past the last code point, `0x10FFFF`, gives `#invalidCodePoint`.
+
+```nanyx
+"aé€😀" \codePoints
+-- [97, 233, 8364, 128512]
+
+string.fromCodePoint(233)
+-- #some("é")
+
+string.fromCodePoint(55296)
+-- #invalidCodePoint
 ```
 
 ---

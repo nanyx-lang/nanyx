@@ -1,6 +1,9 @@
 module contextsAsEffects
 
-import nanyx/math
+import (
+  nanyx/math
+  nanyx/text
+)
 
 ---
 Part one: a Caesar cipher and a frequency-analysis cracker, written with
@@ -9,10 +12,17 @@ ordinary pure functions and pipes.
 
 def letters = 'a'..'z'
 
+-- The code point of a one-character string
+def codePoint: string -> int = { c ->
+  match c \string.codePoints
+    | [p, ..._] -> p
+    | [] -> 0
+}
+
 def rotateChar: string, int -> string = { c, shift ->
   if letters \contains(c) then
-    def base = c.codePoint - 'a'.codePoint
-    string.fromCodePoint('a'.codePoint + (base + shift) % 26)
+    def base = codePoint(c) - codePoint("a")
+    string.fromCodePoint(codePoint("a") + (base + shift) % 26) ?? c
   else c
 }
 
