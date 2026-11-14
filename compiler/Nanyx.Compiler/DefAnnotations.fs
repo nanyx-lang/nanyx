@@ -21,9 +21,11 @@ type internal ReadAnnotation =
       Declared: Ty option
       /// The environment the value is inferred in: with the members of the contexts the type declares.
       Env: TypeEnv
-      /// The input the def's lambda is expected to take: the one its type declares, or, for a def that writes no type,
-      /// the one the type it is attached to gives.
+      /// The input the def's lambda is expected to take: the one its type declares.
       ExpectedInput: Ty option
+      /// For a def that writes no type, attached to a type, whose lambda takes one parameter: the type it is attached
+      /// to, which the parameter is once the body is inferred, if nothing in the body says otherwise.
+      AttachedInput: Ty option
       /// The type the def's lambda is expected to return.
       ExpectedReturn: Ty option
       /// The state once the type was checked and the values its `typeof`s name inferred, before the contexts it
@@ -89,17 +91,13 @@ let internal read
                 | TyFunc(inputTy, returnTy, _) -> TypeHoles.expectedLambdaInput declaredExpr (Some inputTy), Some returnTy, Some ty, state
                 | _ -> None, None, Some ty, state
             | None -> None, None, None, state
-        let expectedInputOpt =
-            match expectedInputOpt with
-            | Some _ -> expectedInputOpt
-            | None when declaredOpt.IsNone -> tryInferAttachedLambdaInput state name expr
-            | None -> None
         { TypeOpt = typeOpt
           Contexts = contextOpt
           DeclaredTypeExpr = declaredTypeExprOpt
           Declared = declaredOpt
           Env = envWithCtx
           ExpectedInput = expectedInputOpt
+          AttachedInput = if declaredOpt.IsNone then tryInferAttachedLambdaInput state name expr else None
           ExpectedReturn = expectedReturnOpt
           Checked = checkedState },
         state)

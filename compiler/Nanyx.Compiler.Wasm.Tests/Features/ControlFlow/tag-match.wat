@@ -54,6 +54,8 @@
   (func $__nanyx_alloc (param $size i32) (result i32)
     (local $link i32)
     (local $ptr i32)
+    (local $found i32)
+    (local $rest i32)
     local.get $size
     i32.const 3
     i32.add
@@ -76,30 +78,91 @@
       i32.const 4128
     end
     local.set $link
-    block $empty
-      loop $search
+    local.get $size
+    i32.const 32
+    i32.le_u
+    if
+      local.get $link
+      i32.load
+      local.tee $ptr
+      if
         local.get $link
+        local.get $ptr
         i32.load
-        local.tee $ptr
-        i32.eqz
-        br_if $empty
+        i32.store
         local.get $ptr
         i32.const 4
         i32.sub
-        i32.load
         local.get $size
-        i32.ge_u
-        if
-          local.get $link
-          local.get $ptr
-          i32.load
-          i32.store
-          local.get $ptr
-          return
-        end
+        i32.store
         local.get $ptr
-        local.set $link
-        br $search
+        return
+      end
+    else
+      block $empty
+        loop $search
+          local.get $link
+          i32.load
+          local.tee $ptr
+          i32.eqz
+          br_if $empty
+          local.get $ptr
+          i32.const 4
+          i32.sub
+          i32.load
+          i32.const -4
+          i32.and
+          local.tee $found
+          local.get $size
+          i32.ge_u
+          if
+            local.get $found
+            local.get $size
+            i32.sub
+            i32.const 40
+            i32.ge_u
+            if
+              local.get $ptr
+              local.get $size
+              i32.add
+              i32.const 4
+              i32.add
+              local.tee $rest
+              i32.const 4
+              i32.sub
+              local.get $found
+              local.get $size
+              i32.sub
+              i32.const 4
+              i32.sub
+              i32.store
+              local.get $rest
+              local.get $ptr
+              i32.load
+              i32.store
+              local.get $link
+              local.get $rest
+              i32.store
+              local.get $size
+              local.set $found
+            else
+              local.get $link
+              local.get $ptr
+              i32.load
+              i32.store
+            end
+            local.get $ptr
+            i32.const 4
+            i32.sub
+            local.get $found
+            i32.store
+            local.get $ptr
+            return
+          end
+          local.get $ptr
+          local.set $link
+          br $search
+        end
       end
     end
     global.get $heap_ptr
@@ -108,23 +171,33 @@
     local.tee $ptr
     local.get $size
     i32.add
+    local.tee $rest
+    local.get $ptr
+    i32.lt_u
+    if
+      unreachable
+    end
+    local.get $rest
     global.set $heap_ptr
-    block $fits
-      loop $grow
-        global.get $heap_ptr
-        memory.size
-        i32.const 65536
-        i32.mul
-        i32.le_u
-        br_if $fits
-        i32.const 1
-        memory.grow
-        i32.const -1
-        i32.eq
-        if
-          unreachable
-        end
-        br $grow
+    global.get $heap_ptr
+    i64.extend_i32_u
+    i64.const 65535
+    i64.add
+    i64.const 16
+    i64.shr_u
+    i32.wrap_i64
+    memory.size
+    i32.sub
+    local.tee $rest
+    i32.const 0
+    i32.gt_s
+    if
+      local.get $rest
+      memory.grow
+      i32.const -1
+      i32.eq
+      if
+        unreachable
       end
     end
     local.get $ptr
@@ -137,6 +210,9 @@
   (func $__nanyx_free (param $ptr i32)
     (local $size i32)
     (local $head i32)
+    (local $next i32)
+    (local $before i32)
+    (local $joined i32)
     local.get $ptr
     i32.const 4
     i32.sub
@@ -153,9 +229,110 @@
       i32.const 4128
     end
     local.set $head
+    local.get $size
+    i32.const 32
+    i32.le_u
+    if
+      local.get $ptr
+      local.get $head
+      i32.load
+      i32.store
+      local.get $head
+      local.get $ptr
+      i32.store
+      return
+    end
+    block $found
+      loop $search
+        local.get $head
+        i32.load
+        local.tee $next
+        i32.eqz
+        br_if $found
+        local.get $next
+        local.get $ptr
+        i32.gt_u
+        br_if $found
+        local.get $head
+        local.set $before
+        local.get $next
+        local.set $head
+        br $search
+      end
+    end
     local.get $ptr
-    local.get $head
-    i32.load
+    local.get $size
+    i32.add
+    i32.const 4
+    i32.add
+    local.get $next
+    i32.eq
+    if
+      local.get $size
+      local.get $next
+      i32.const 4
+      i32.sub
+      i32.load
+      i32.const -4
+      i32.and
+      i32.add
+      i32.const 4
+      i32.add
+      local.set $size
+      local.get $next
+      i32.load
+      local.set $next
+    end
+    local.get $before
+    if
+      local.get $head
+      local.get $head
+      i32.const 4
+      i32.sub
+      i32.load
+      i32.const -4
+      i32.and
+      local.tee $joined
+      i32.add
+      i32.const 4
+      i32.add
+      local.get $ptr
+      i32.eq
+      if
+        local.get $joined
+        local.get $size
+        i32.add
+        i32.const 4
+        i32.add
+        local.set $size
+        local.get $head
+        local.set $ptr
+        local.get $before
+        local.set $head
+      end
+    end
+    local.get $ptr
+    local.get $size
+    i32.add
+    global.get $heap_ptr
+    i32.eq
+    if
+      local.get $head
+      i32.const 0
+      i32.store
+      local.get $ptr
+      i32.const 4
+      i32.sub
+      global.set $heap_ptr
+      return
+    end
+    local.get $ptr
+    i32.const 4
+    i32.sub
+    local.get $size
+    i32.store
+    local.get $ptr
+    local.get $next
     i32.store
     local.get $head
     local.get $ptr
@@ -235,6 +412,9 @@
 
   (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
 
+  (global $r__built (mut i32) (i32.const 0))
+  (global $r__value (mut i64) (i64.const 0))
+
   (func $__host_run__unit__known (param $entry i32) (result i32) (local $__inlined14 i32)
     local.get $entry
     local.get $entry
@@ -244,10 +424,27 @@
     i32.const 0
   )
 
+  (func $r__build (result i64)
+    i64.const 1
+  )
+
+  (func $r (result i64)
+    global.get $r__built
+    i32.eqz
+    if
+      call $r__build
+      global.set $r__value
+      i32.const 1
+      global.set $r__built
+    end
+    global.get $r__value
+  )
+  (export "r" (func $r))
+
   (func $__fn___script (param $__env i32) (result i32) (local $__dbg_value__in1_i64 i64) (local $__inlined3__in1 i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64)
     local.get $__env
     call $__nanyx_drop_rec_0_word
-    i64.const 1
+    call $r
     local.set $__dbg_value__in1_i64
     i32.const 0
     local.set $__interp_len
@@ -475,6 +672,11 @@
     i32.const 264
     call $__host_run__unit__known
     drop
+    global.get $r__built
+    if
+      i32.const 0
+      global.set $r__built
+    end
   )
 
   (start $__nanyx_start)

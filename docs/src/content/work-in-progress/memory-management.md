@@ -22,7 +22,7 @@ place. Generic code is monomorphised, so every object's layout is known when it 
 # Where we are today
 
 The WebAssembly backend's allocator can free (`__nanyx_alloc` and `__nanyx_free` in
-`compiler/Nanyx.Compiler.Wasm/WasmRuntime.fs`; see Allocator below), every object on the heap has a reference count
+`compiler/Nanyx.Compiler.Wasm/WasmAllocator.fs`; see Allocator below), every object on the heap has a reference count
 and a drop function for its type (see Object header below), and the compiler inserts `dup` and `drop` (see
 Inserting counts below), so a program frees each object once nothing refers to it, and reuses an object it takes
 apart and holds the only reference to for a new one of the same size.
@@ -183,16 +183,23 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
   bytes per object but keeps `free` independent of types, and lets the large list hand out a bigger block than
   asked for and still take all of it back.
 - **Classes.** Each size from 4 to 32 bytes (8 words) has its own list, so a freed block goes back to exactly the
-  size Perceus will next ask for. Larger blocks share one list, searched first-fit; a block found there is not
-  split and keeps its own size.
+  size Perceus will next ask for. Larger blocks share one list, kept in address order and searched first-fit.
 - **Lists.** The heads are a table of 9 words at the start of the heap, and `$heap_ptr` starts after it. The
   string literals and static closures run from address 256, and the table goes at 4096 or, when they end past that,
   after them,
-  8-byte aligned (`heapBaseAfter`); the module starts with enough pages of memory to hold them. A free block keeps the next block of its list in its first word. `free` pushes onto the front of the
-  list and `alloc` takes from the front, so the most recently freed block is reused first.
+  8-byte aligned (`heapBaseAfter`); the module starts with enough pages of memory to hold them. A free block keeps the next block of its list in its first word. On a small size's list, `free` pushes onto the
+  front and `alloc` takes from the front, so the most recently freed block is reused first.
+- **Large blocks.** `free` puts a large block into its place on the large list and joins it with the free large
+  blocks just before and after it, and a block that then ends at `$heap_ptr` goes back to the heap instead
+  ([#1290](https://github.com/nanyx-lang/nanyx/issues/1290), done). `alloc` splits a block it takes from the list
+  when the rest would be a large block too; otherwise the block keeps its own size. This is what a string grown
+  by `++` needs: each copy is freed after the next is made, the copies before it join into a block the one after
+  fits in, so the heap holds about two copies of the string, not every copy there was.
+- **Out of memory.** Past 4 GB, the end of a new block wraps around; `alloc` checks for that, and for `memory.grow`
+  failing, and traps with `unreachable`.
 
-Nothing coalesces adjacent free blocks or returns memory to the host; neither matters for the small,
-same-sized objects that dominate, and both can come later if measurements on the examples call for them.
+Small free blocks are never joined, with each other or with large ones, and the heap never shrinks: memory once
+grown is not given back to the host.
 
 ## Core IR
 
@@ -295,6 +302,19 @@ already. A definition (or top-level expression) that holds such errors and canno
 lowered to a trap that reports them as soon as it is called. A definition that is generic only because an error left
 its type open, and is not specialised, is lowered with its type variables defaulted, so that it still exists.
 
+**Top-level values.** A top-level value that is not a lambda is lowered to a function of no parameters, one for each
+type it is used at when it is generic (`proc` once per instance). Each one that computes its value is built once, on
+its first read (`CoreIrCachedValues.fs`, [#1257](https://github.com/nanyx-lang/nanyx/issues/1257),
+[#1151](https://github.com/nanyx-lang/nanyx/issues/1151)): the function is emitted as `<name>__build`, and its own name
+is a getter that calls it the first time, keeps the value in a global, and hands each read one more reference to it.
+So a `dbg` in a value prints once, at the value's first read rather than where it is written, and a list or record a
+value builds is allocated once. The inliner leaves the getters alone (it would put the building back at each read). A
+value that is a constant (a literal, a closure that captures nothing) is not cached, and is inlined as before. A value
+that takes a context's members as parameters is built at each read, as a function is. The start function ends by
+dropping each value that was built and marking it unbuilt, so a program run with memory checks frees everything. A
+script's values that need a context are not top-level values by then: they are local defs of its entry point
+([Hosts](./hosts)).
+
 **Generating code.** `CoreIrEmit.fs` writes WebAssembly text from the IR, with each value in the WebAssembly type of
 its type (see Value representation above). A temporary is not stored: it is used exactly once, by the next instruction that needs
 it, so its value is computed where it is used. An operand that stores to a local on its way to its value (a `match`
@@ -385,7 +405,7 @@ that the examples that compile free every block they allocate, and, counting wha
 mapping over a list, a tuple or a tag's cell held once allocates nothing, and nor does `with` on a record held once.
 
 **Memory checks.** `nanyx run --check-memory` (`WasmOptions.CheckMemory`) compiles the program with an allocator
-and counts that check themselves (`checkedRuntimeHelpers` and `MemoryChecks` in `WasmRuntime.fs`):
+and counts that check themselves (`checkedRuntimeHelpers` in `WasmRuntime.fs` and `MemoryChecks` in `WasmAllocator.fs`):
 
 - `alloc` and `free` count the blocks still in use. The program's start function is exported rather than run on
   instantiation, so the CLI can read the count once the program has finished. A count above 0 fails the run.

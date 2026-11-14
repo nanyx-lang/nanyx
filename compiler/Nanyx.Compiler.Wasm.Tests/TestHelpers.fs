@@ -109,7 +109,8 @@ let private command (arguments: string list) : Shell -> int =
         | path :: rest -> options (outputPath, release, timings, host, paths @ [ path ]) rest
         | [] -> outputPath, release, timings, host, Array.ofList paths
     match arguments with
-    | "new" :: name :: directory -> fun shell -> CliCommands.NewIn(shell, name, Array.ofList directory)
+    | [ "--version" ] -> CliCommands.VersionIn
+    | "new" :: name :: directory ->fun shell -> CliCommands.NewIn(shell, name, Array.ofList directory)
     | "check" :: rest ->
         let _, _, timings, host, path = options (null, false, false, null, []) rest
         fun shell -> CliCommands.CheckIn(shell, path, timings, host)
@@ -285,6 +286,8 @@ type WasmProgram(engine: Wasmtime.Engine, store: Wasmtime.Store, instance: Wasmt
     member _.HeapPointer = counter CheckedExports.heapPointer
     member _.Allocations = counter CheckedExports.allocations
     member _.LiveBlocks = counter CheckedExports.liveBlocks
+    /// The size of the memory in bytes, which never shrinks: how far the heap has ever reached, to the page.
+    member _.MemoryBytes = memory.GetSize() * 65536L
     member _.Word(address: int) = memory.ReadInt32(int64 address)
     member _.Text(pointer: int) = memory.ReadString(int64 pointer, memory.ReadInt32(int64 (pointer - 4)))
     interface IDisposable with

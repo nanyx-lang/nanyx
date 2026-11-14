@@ -2,9 +2,14 @@
   (memory 1)
   (export "memory" (memory 0))
 
+  (global $heap_ptr (mut i32) (i32.const 4132))
+
   (func $__nanyx_free (param $ptr i32)
     (local $size i32)
     (local $head i32)
+    (local $next i32)
+    (local $before i32)
+    (local $joined i32)
     local.get $ptr
     i32.const 4
     i32.sub
@@ -21,9 +26,110 @@
       i32.const 4128
     end
     local.set $head
+    local.get $size
+    i32.const 32
+    i32.le_u
+    if
+      local.get $ptr
+      local.get $head
+      i32.load
+      i32.store
+      local.get $head
+      local.get $ptr
+      i32.store
+      return
+    end
+    block $found
+      loop $search
+        local.get $head
+        i32.load
+        local.tee $next
+        i32.eqz
+        br_if $found
+        local.get $next
+        local.get $ptr
+        i32.gt_u
+        br_if $found
+        local.get $head
+        local.set $before
+        local.get $next
+        local.set $head
+        br $search
+      end
+    end
     local.get $ptr
-    local.get $head
-    i32.load
+    local.get $size
+    i32.add
+    i32.const 4
+    i32.add
+    local.get $next
+    i32.eq
+    if
+      local.get $size
+      local.get $next
+      i32.const 4
+      i32.sub
+      i32.load
+      i32.const -4
+      i32.and
+      i32.add
+      i32.const 4
+      i32.add
+      local.set $size
+      local.get $next
+      i32.load
+      local.set $next
+    end
+    local.get $before
+    if
+      local.get $head
+      local.get $head
+      i32.const 4
+      i32.sub
+      i32.load
+      i32.const -4
+      i32.and
+      local.tee $joined
+      i32.add
+      i32.const 4
+      i32.add
+      local.get $ptr
+      i32.eq
+      if
+        local.get $joined
+        local.get $size
+        i32.add
+        i32.const 4
+        i32.add
+        local.set $size
+        local.get $head
+        local.set $ptr
+        local.get $before
+        local.set $head
+      end
+    end
+    local.get $ptr
+    local.get $size
+    i32.add
+    global.get $heap_ptr
+    i32.eq
+    if
+      local.get $head
+      i32.const 0
+      i32.store
+      local.get $ptr
+      i32.const 4
+      i32.sub
+      global.set $heap_ptr
+      return
+    end
+    local.get $ptr
+    i32.const 4
+    i32.sub
+    local.get $size
+    i32.store
+    local.get $ptr
+    local.get $next
     i32.store
     local.get $head
     local.get $ptr

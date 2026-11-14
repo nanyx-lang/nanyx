@@ -65,6 +65,18 @@ def t = "x" \shout("y")"""
     Assert.Equal("shout", at)
 
 [<Fact>]
+let ``A pipe to a qualified function that does not take the value says only what it takes`` () =
+    let source = """import nanyx/text
+
+type UserId = protected int
+
+def check = { u: UserId -> u \string.isEmpty }"""
+    let code, message, at = onlyDiagnosticIn source (Compiler.compile source)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    Assert.Equal("'string.isEmpty' takes 'string', not 'UserId'", message)
+    Assert.Equal("string.isEmpty", at)
+
+[<Fact>]
 let ``A pipe to a plain function that takes the value calls it`` () =
     let result = Compiler.compile """def shout: string -> string = { s -> s }
 def t = "x" \shout"""

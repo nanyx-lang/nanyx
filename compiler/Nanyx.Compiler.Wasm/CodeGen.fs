@@ -5,6 +5,7 @@ open System.Text
 open NyxCompiler
 open Parser.Program
 open Transpiler.Wasm.Identifiers
+open Transpiler.Wasm.WasmAllocator
 open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
 
@@ -642,9 +643,11 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     // A specialisation is only called by the functions compiled with it; a definition that is not generic is exported,
     // unless the function is one of its specialisations on known context members (see `CoreIrLowerKnown`).
+    let exportNameOf (specialisations: Set<string>) (func: CoreIr.Function) =
+        if func.TypeArguments.IsEmpty && not (specialisations.Contains func.Name) then Some func.Source else None
+
     let emitFromCoreIr (context: CoreIrEmit.EmitContext) (specialisations: Set<string>) (func: CoreIr.Function) =
-        let exportName = if func.TypeArguments.IsEmpty && not (specialisations.Contains func.Name) then Some func.Source else None
-        CoreIrEmit.emitFunction context func exportName
+        CoreIrEmit.emitFunction context func (exportNameOf specialisations func)
 
     // Every definition that is not generic, the start function, and the specialisations and lifted functions they
     // need. Each function is emitted once here only to find out whether it can be (tags, strings and layouts get
@@ -728,10 +731,21 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     let startFunction = lowered.Roots |> Map.tryFind CoreIrLowerInput.startFunctionName |> Option.map fst
 
+    // The top-level values built once, read through a getter (see `CoreIrCachedValues`).
+    let cachedNames =
+        let values =
+            defs
+            |> List.choose (fun (name, _, expr) ->
+                match expr.Kind with
+                | Lambda _ -> None
+                | _ -> Some name)
+            |> Set.ofList
+        definitionFunctions |> List.filter (CoreIrCachedValues.isCached values.Contains) |> List.map _.Name |> Set.ofList
+
     // Inlining, over the whole module at once, since a function is inlined as it is once calls are inlined into it.
     let definitionFunctions, startFunction =
         if options.Inline then
-            let inlined = CoreIrInline.inlineCalls (startFunction |> Option.map _.Name) (definitionFunctions @ Option.toList startFunction)
+            let inlined = CoreIrInline.inlineCalls (startFunction |> Option.map _.Name) cachedNames (definitionFunctions @ Option.toList startFunction)
             List.take definitionFunctions.Length inlined, startFunction |> Option.map (fun _ -> List.last inlined)
         else definitionFunctions, startFunction
 
@@ -793,20 +807,29 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // Whether a function emitted below reads or writes linear memory in its own code.
     let mutable functionsTouchMemory = false
 
-    /// The text of a function from the core IR, noting the helpers it calls and whether it touches memory.
+    let cachedValues = definitionFunctions |> List.filter (fun func -> cachedNames.Contains func.Name)
+
+    /// The text of a function from the core IR, noting the helpers it calls and whether it touches memory. A cached
+    /// value's is the function that builds it, then its getter under its own name.
     let fromCoreIr (func: CoreIr.Function) =
-        let emitted = emitFromCoreIr context specialisations func
-        for helper in emitted.Helpers do
-            usedHelpers.Add helper |> ignore
-        functionsTouchMemory <- functionsTouchMemory || emitted.UsesMemory
-        emitted.Text
+        let note (emitted: CoreIrEmit.Emitted) =
+            for helper in emitted.Helpers do
+                usedHelpers.Add helper |> ignore
+            functionsTouchMemory <- functionsTouchMemory || emitted.UsesMemory
+            emitted.Text
+        if cachedNames.Contains func.Name then
+            let build = note (CoreIrEmit.emitFunction context { func with Name = CoreIrCachedValues.buildName func.Name } None)
+            build + "\n\n" + CoreIrCachedValues.getter func (exportNameOf specialisations func)
+        else note (emitFromCoreIr context specialisations func)
 
     let renderedFunctions = definitionFunctions |> List.map fromCoreIr |> String.concat "\n\n"
+
+    let renderedCachedGlobals = cachedValues |> List.collect CoreIrCachedValues.globals |> String.concat "\n"
 
     let renderedStartFunction, startDirective =
         match startFunction with
         | Some func ->
-            let emitted = CoreIrEmit.emitStart context func
+            let emitted = CoreIrEmit.emitStart context func (CoreIrCachedValues.teardown cachedValues)
             for helper in emitted.Helpers do
                 usedHelpers.Add helper |> ignore
             functionsTouchMemory <- functionsTouchMemory || emitted.UsesMemory
@@ -873,8 +896,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // Anything that writes to stdout or stderr, or reads stdin, shares the WASI import, the memory and the
     // newline byte.
     let moduleUsesIoHelpers = facts.UsesDbgHelpers || moduleUsesStandardStreams
-    // Everything that allocates does it through `$alloc`.
-    let moduleUsesHeap = usedHelperSet.Contains Helpers.alloc
+    // Everything that allocates does it through `$alloc`, and `$free` gives the top of the heap back to it.
+    let moduleUsesHeap = usedHelperSet.Contains Helpers.alloc || usedHelperSet.Contains Helpers.free
     let renderedHelpers =
         let helpers = if options.CheckMemory then checkedRuntimeHelpers heapBase else runtimeHelpers heapBase
         [ yield!
@@ -1001,6 +1024,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         let parts =
             [ if not (String.IsNullOrWhiteSpace allImports) then allImports
               if not (String.IsNullOrWhiteSpace dataSegments) then dataSegments
+              if not (String.IsNullOrWhiteSpace renderedCachedGlobals) then renderedCachedGlobals
               if not (String.IsNullOrWhiteSpace renderedFunctions) then renderedFunctions
               if not (String.IsNullOrWhiteSpace renderedDrops) then renderedDrops
               if not (String.IsNullOrWhiteSpace renderedEqualities) then renderedEqualities
