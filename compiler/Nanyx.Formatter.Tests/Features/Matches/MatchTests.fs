@@ -50,19 +50,33 @@ let ``And-patterns are printed as written`` () =
 
 [<Fact>]
 let ``Record patterns by member name keep their ...`` () =
-    unchanged (lines [ "def f = {"; "  | (name = \"Alice\", ...) -> 1"; "  | (name = n, age = a) -> 2"; "}" ])
+    unchanged (normalized """def f = {
+  | (name = "Alice", ...) -> 1
+  | (name = n, age = a) -> 2
+}""")
     Assert.Equal("def g = { | (a = 1, ...) -> 1 }\n", format "def g = { | ( a = 1 ,... ) -> 1 }")
 
 [<Fact>]
 let ``if, if-is and multi-branch if are printed as written`` () =
     unchanged "def a = { x -> if x > 0 then 1 else 0 }\n"
     unchanged "def b = { x -> if x is #some(y) then y else 0 }\n"
-    unchanged (lines [ "def c = { x ->"; "  if x > 0 then"; "    println(\"positive\")"; "}" ])
-    unchanged (lines [ "def d = { x ->"; "  if"; "    | x < 0 -> \"negative\""; "    | x is 0 -> \"zero\""; "    | else -> \"positive\""; "}" ])
+    unchanged (normalized """def c = { x ->
+  if x > 0 then
+    println("positive")
+}""")
+    unchanged (normalized """def d = { x ->
+  if
+    | x < 0 -> "negative"
+    | x is 0 -> "zero"
+    | else -> "positive"
+}""")
 
 [<Fact>]
 let ``Or-patterns, rec and destructuring defs are printed as written`` () =
-    unchanged (lines [ "def f = {"; "  | 0 | 1 -> \"small\""; "  | _ -> \"big\""; "}" ])
+    unchanged (normalized """def f = {
+  | 0 | 1 -> "small"
+  | _ -> "big"
+}""")
     unchanged (lines [ "def g = {"; "  rec loop = { n -> loop(n) }"; "  loop(1)"; "}" ])
     unchanged "def (a, (b, _)) = pair\n"
     unchanged "def a, (b, _) = pair\n"

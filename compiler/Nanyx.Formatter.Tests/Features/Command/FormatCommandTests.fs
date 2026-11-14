@@ -131,7 +131,12 @@ let ``With no manifest the defaults apply`` () =
 
 [<Fact>]
 let ``With a manifest that has no formatter table the defaults apply`` () =
-    let directory = directoryWith [ "app.nyxp", "name = \"app\"\n\n[dependencies]\n"; "a.nyx", block ]
+    let manifest =
+        """name = "app"
+
+[dependencies]
+"""
+    let directory = directoryWith [ "app.nyxp", manifest.ReplaceLineEndings "\n"; "a.nyx", block ]
     Assert.Equal(Formatter.Options.defaults, settingsOf (Path.Combine(directory, "a.nyx")))
 
 [<Fact>]
@@ -227,7 +232,12 @@ let ``A formatter key that is not a table is an error naming it`` () =
 
 [<Fact>]
 let ``A script's #! line and directives are kept as written, with the comments among them`` () =
-    let header = "#!/usr/bin/env -S nanyx run\n-- Says hello.\n::linters.default.unusedBindings   =  \"error\"\n\n::formatter.lineWidth = 100"
+    let header =
+        """#!/usr/bin/env -S nanyx run
+-- Says hello.
+::linters.default.unusedBindings   =  "error"
+
+::formatter.lineWidth = 100""".ReplaceLineEndings "\n"
     Assert.Equal(header + "\n\ndef add = { a, b -> a + b }\n", formattedWith Formatter.Options.defaults (header + "\n\n\ndef add={a,b->a +  b}"))
     Assert.Equal(header + "\ndef add = { a, b -> a + b }\n", formattedWith Formatter.Options.defaults (header + "\ndef add={a,b->a +  b}"))
     Assert.Equal(header + "\n", formattedWith Formatter.Options.defaults (header + "\n\n"))

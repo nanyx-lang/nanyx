@@ -44,4 +44,4 @@ let ``A $ before a type's name is written as protected`` () =
     Assert.Equal("type Email = protected string\n", format "type $Email = string")
     Assert.Equal("scoped export context Memory = protected ()\n", format "scoped export context $Memory = ()")
     Assert.Equal("type UserId = private int\n", format "type $UserId = private int")
-    Assert.Equal("def e: Email = Email(\"a\")\n", format "def e: $Email = $Email(\"a\")")
+    Assert.Equal(normalized """def e: Email = Email("a")""", format """def e: $Email = $Email("a")""")

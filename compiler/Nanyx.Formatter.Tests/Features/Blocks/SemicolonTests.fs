@@ -78,7 +78,7 @@ let ``A lambda whose statements do not fit puts them on lines of their own`` () 
   log("a message that is long")
   x + 1
 }"""
-    Assert.Equal(expected, formatWith 40 "def f = { x -> log(\"a message that is long\"); x + 1 }\n")
+    Assert.Equal(expected, formatWith 40 (normalized """def f = { x -> log("a message that is long"); x + 1 }"""))
 
 [<Fact>]
 let ``An if keeps the statements of its branches on its line`` () =

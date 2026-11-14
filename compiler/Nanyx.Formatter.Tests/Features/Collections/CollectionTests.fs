@@ -36,9 +36,13 @@ let ``List spreads are printed as written`` () =
 
 [<Fact>]
 let ``Map literals are printed as written, one entry per line when they do not fit`` () =
-    unchanged "def m = [\"a\" => 1, \"b\" => f(2)]\n"
+    unchanged (normalized """def m = ["a" => 1, "b" => f(2)]""")
     Assert.Equal("def m = [1 => #one, 2 => #two]\n", format "def m = [1=>#one,2   =>   #two]")
-    unchanged (lines [ "def prices = ["; "  \"Candy Bar\" => Item(price = 12, count = 7)"; "  \"Chips\" => Item(price = 10, count = 4)"; "  \"Pretzels\" => Item(price = 7, count = 11)"; "]" ])
+    unchanged (normalized """def prices = [
+  "Candy Bar" => Item(price = 12, count = 7)
+  "Chips" => Item(price = 10, count = 4)
+  "Pretzels" => Item(price = 7, count = 11)
+]""")
     unchanged (lines [ "def m = ["; "  -- the first"; "  1 => #one"; "  2 => #two"; "]" ])
 
 [<Fact>]
@@ -50,8 +54,23 @@ let ``A record with comments in it gets a line per field`` () =
 [<Fact>]
 let ``Fields go one per line when one of them spans lines`` () =
     Assert.Equal(
-        lines [ "def main = {"; "  use Log("; "    log = { message ->"; "      println(\"\")"; "      println(message)"; "    }"; "  )"; ""; "  run()"; "}" ],
-        format (lines [ "def main = {"; "  use Log(log = { message ->"; "    println(\"\")"; "    println(message)"; "  })"; "  run()"; "}" ]))
+        normalized """def main = {
+  use Log(
+    log = { message ->
+      println("")
+      println(message)
+    }
+  )
+
+  run()
+}""",
+        format (normalized """def main = {
+  use Log(log = { message ->
+    println("")
+    println(message)
+  })
+  run()
+}"""))
     Assert.Equal(
         lines [ "def pair = ("; "  1"; "  { x ->"; "    x"; "  }"; ")" ],
         format (lines [ "def pair = (1, { x ->"; "  x"; "})" ]))
