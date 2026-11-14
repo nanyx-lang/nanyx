@@ -185,6 +185,7 @@ let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression)
                 | Error _ when snd (Unifier.solve next.Constraints) |> List.exists (snd >> SourceSpan.contains expr.Span) -> Ok next
                 | resolved -> resolved
                 |> Result.bind (fun next -> resolveReferenceInstances env next expr)
+                |> Result.bind (fun next -> localFunctionArguments env next expr)
                 |> Result.bind (fun next ->
                     match next.CalleeTypes |> Map.tryFind expr.Id with
                     | Some calleeTy -> checkComparisonsAt env next expr name (nameSpan spanOpt expr) calleeTy
@@ -1163,6 +1164,26 @@ and private inferMapLookup (env: TypeEnv) (state: InferState) (expr: Expression)
     let lookup = { expr with Kind = FunctionCall(Maps.lookup, spanOpt, map :: args) }
     inferExpr env state lookup
     |> Result.map (fun (typed, next) -> { typed with Expr = expr }, { next with ReadAs = next.ReadAs |> Map.add expr.Id lookup })
+
+/// `state` with each argument of `call` that names a local function that requires a parameterised context read as the
+/// lambda that calls it (see `localFunctionAsLambda`), once the call has settled the argument's type, so that the
+/// lambda's call finds the instance at that type. One whose type is left open is left as it is: `dbg(g)` never calls it.
+and private localFunctionArguments (env: TypeEnv) (state: InferState) (call: Expression) : Result<InferState, Diagnostic list> =
+    match call.Kind with
+    | FunctionCall(_, _, args) ->
+        match args with
+        | [ Kind (TupleExpr items) ] -> items
+        | _ -> args
+        |> List.fold (fun result arg ->
+            result
+            |> Result.bind (fun (current: InferState) ->
+                let settledTy = current.ExprTypes |> Map.tryFind arg.Id |> Option.filter (resolveSoFar current >> TypeEnv.freeTyVars >> Set.isEmpty)
+                match settledTy, localFunctionAsLambda env current arg with
+                | Some argTy, Some lambda ->
+                    inferExpr env { current with ReadAs = current.ReadAs |> Map.add arg.Id lambda } lambda
+                    |> Result.map (fun (typed, next) -> addConstraintAt arg.Span argTy typed.Type next)
+                | _ -> Ok current)) (Ok state)
+    | _ -> Ok state
 
 /// `baseExpr.memberName`, where `expr` is that member access and `receiver` the base as written if it is a name: a
 /// record's field, or else a built-in property of the base's type as far as the code before it settles that type,

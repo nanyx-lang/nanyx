@@ -135,3 +135,21 @@ def main = {
 }
 """
     runSource (normalized source) |> assertRan "(1, 2)\n3\n"
+
+[<Fact>]
+let ``Run - a local function with an inferred context passed as a value, once the call settles its type (#1390)`` () =
+    let source = "import nanyx/console\n" + showContext + """def apply = { g, v -> g(v) }
+def main: [Console] () -> () = {
+  def p = { x -> println(x) }
+  [1, 2] \list.map(p)
+  def f = println
+  [3] \list.map(f)
+  def d = { x -> describe(x) }
+  println(apply(d, Point(x = 1, y = 2)))
+  def g = { x -> describe(x) }
+  dbg(g)
+  ()
+}
+main()
+"""
+    runSource (normalized source) |> assertRan "1\n2\n3\n(1, 2)\ndbg: <function () -> string>\n"
