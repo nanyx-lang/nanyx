@@ -61,10 +61,13 @@ variable `a` of a function that requires `ToString(a)`, that function's member. 
 a def's value, at the type the def writes (`resolveValueInstances`): `def g: [Console] int -> () = println`. Such a
 def is not run in the contexts it writes, as a lambda is: its value is a function that requires them, so they are
 part of its type, as they are of `def k = say` (`Contexts.extractDefContexts`, which the backend reads too). A context
-it requires at a type left open where it is named, with no instance in scope for it, cannot be compiled yet
-([#599](https://github.com/nanyx-lang/nanyx/issues/599)), nor can a function that requires a parameterised context
-named as a value anywhere else whose type is not settled there, such as `def f = println`
-([#807](https://github.com/nanyx-lang/nanyx/issues/807)).
+it requires at a type nothing constrains, as `dbg(twice)` names `twice: [Show(a)] a -> string`, needs no instance:
+when a parameter of the value is of such a type, the value is never called, since no value of that type is ever made,
+so the closure captures a stand-in for each such member, which panics (`CoreIrLowerInstances.neverCalled`,
+[#599](https://github.com/nanyx-lang/nanyx/issues/599)). A function that requires a parameterised context, named as a
+value whose type is settled only by how a local def that doesn't write its type is called, such as `def f = println`,
+cannot be compiled yet: the def would have to require the context
+([#807](https://github.com/nanyx-lang/nanyx/issues/807), [#550](https://github.com/nanyx-lang/nanyx/issues/550)).
 
 A function with a context variable, such as `apply: [c] ([c] a -> b), a -> b`, is specialised on the members of the
 contexts the variable stands for at each call, which it takes after its other parameters and passes to the function

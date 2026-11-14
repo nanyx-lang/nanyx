@@ -5,6 +5,7 @@ module internal Transpiler.Wasm.CoreIrLowerInstances
 open NyxCompiler
 open Parser.Program
 open Transpiler.Wasm.Identifiers
+open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrLowerTypes
 open Transpiler.Wasm.CoreIrLowerInput
 
@@ -54,3 +55,41 @@ let byWrittenKeys (layouts: ContextLayouts) (contexts: Ty list) (written: TypeEx
                 members
                 |> List.tryFind (fst >> (=) (InstanceMember(key, memberName)))
                 |> Option.map (fun (_, value) -> contextMemberKey (Some writtenContext) memberName, value)))
+
+/// Whether a function of the type `fnTy` (`subst` applied) is never called: a parameter of it is of a type variable
+/// nothing constrains, and no value of such a type is ever made (see `toIrType`). Named as a value there, as in
+/// `dbg(twice)` for `twice: [Show(a)] a -> string`, it needs no instance of a context at that variable: none of its
+/// members ever runs, so a stand-in is passed for each (see `standInFunction`).
+let neverCalled (fnTy: Ty) : bool =
+    match Unifier.unalias fnTy with
+    | TyFunc(input, _, _) ->
+        let parameters =
+            match Unifier.unalias input with
+            | TyRecord fields when fields.Keys |> Seq.forall (fun name -> fst (System.Int32.TryParse name)) -> List.ofSeq fields.Values
+            | single -> [ single ]
+        parameters |> List.exists (function TyVar _ -> true | _ -> false)
+    | _ -> false
+
+/// How many parameters the function a stand-in for a context member of the type `ty` is a closure over takes (see
+/// `standInFunction`).
+let standInArity (ty: IrType) =
+    match ty with
+    | IrFunction(input, _, members) -> 1 + (valuesOf input).Length + members.Length
+    | _ -> 1
+
+/// The function `functionName` a stand-in for a context member of the type `ty` is a closure over (see `neverCalled`):
+/// it takes what the member takes, and panics.
+let standInFunction (newVar: string -> VarKind -> IrType -> Var) (functionName: string) (ty: IrType) : Function =
+    let input, result, members =
+        match ty with
+        | IrFunction(input, result, members) -> input, result, members
+        | _ -> internalError $"a stand-in for a context member of type {IrType.show ty}"
+    let environment = newVar ClosureSyntax.envParameter Param (IrRecord [ "0", IrWord ])
+    let values = valuesOf input |> List.mapi (fun index ty -> newVar $"__arg{index + 1}" Param ty)
+    let passed = members |> List.map (fun (key, ty) -> newVar (contextMemberParameter key) Param ty)
+    { Name = functionName
+      Source = functionName
+      TypeArguments = []
+      Params = environment :: values @ passed
+      Result = result
+      Body = Expr.make (Panic [ "a context member at a type nothing constrains was called" ]) result }

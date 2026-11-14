@@ -265,8 +265,8 @@ let private foundMember
 /// order it requires them, given the keys of the members in scope there (`scopeKeys`). Each is found where the type
 /// checker found its context: an instance in scope (a `use`, or a context the caller's type declares), or one built
 /// from attached definitions. One the type checker left to be found by name is the member of that key in scope, or a
-/// compatible one (the same context and member, at other type arguments), or else the ambient instance's member. One of
-/// the keys in `passed` is not found: the callers of the function's value pass it.
+/// compatible one (the same context and member, at other type arguments), or else the ambient instance's member, or else
+/// none (`Unfound`). One of the keys in `passed` is not found: the callers of the function's value pass it.
 let private contextArguments
     (requirements: Map<string, ContextMemberKey list>)
     (contextTypes: Map<string, TypeExpr list>)
@@ -288,16 +288,13 @@ let private contextArguments
         |> Seq.sortBy ContextMemberKey.text
         |> Seq.tryFind (fun availableKey -> not (used.Contains availableKey) && ContextMemberKey.sameMember requiredKey availableKey)
 
-    // The member in scope, else the ambient instance's.
+    // The member in scope, else the ambient instance's, else none (see `ContextArgument.Unfound`).
     let memberFor (requiredKey: ContextMemberKey) (resolvedKey: ContextMemberKey) =
         if scopeKeys.Contains resolvedKey then CoreIrLowerInput.MemberInScope resolvedKey
         else
             match ambientMembers |> Map.tryFind resolvedKey with
             | Some wrapper -> CoreIrLowerInput.ClosureOverWrapper wrapper
-            | None ->
-                let available = (List.ofSeq scopeKeys) @ (ambientMembers |> Map.toList |> List.map fst) |> List.map ContextMemberKey.text |> String.concat ", "
-                // The type checker found every context a call requires, so one missing here is the backend's bug.
-                CoreIr.internalError $"the context member {ContextMemberKey.text requiredKey} is not in scope; those in scope are [{available}]"
+            | None -> CoreIrLowerInput.Unfound requiredKey
 
     // Where the type checker found each context the callee requires, as each required member's instance, in the order
     // of `required`: none for a call it found nothing for. A function that does not write its type may also require

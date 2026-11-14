@@ -42,6 +42,10 @@ type ContextArgument =
     /// None where the function is named: a member of a context its value requires where it is called, which each call
     /// passes (see `IrFunction`).
     | PassedByCaller
+    /// Nowhere: the type checker found no instance of the member's context, and nothing in scope supplies the member of
+    /// this key. That is only right for a member at a type nothing constrains, which is never called (see
+    /// `CoreIrLowerInstances.standInType`).
+    | Unfound of ContextMemberKey
 
 /// What the lowering reads from the typed module.
 type LowerInput =
