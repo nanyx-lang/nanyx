@@ -68,9 +68,15 @@ let private kindOf (typed: TypedModule) (symbol: Symbol) =
         | Some (ty, _) when (match Unifier.unalias ty with TyFunc _ -> true | _ -> false) -> Function
         | _ -> Value
 
-/// What the module at `importPath` (`nanyx/text`) exports, in the order its files declare them, without the names it
-/// reserves, with doc comments whose links lead where `linkTo` says. `None` when no module has that path.
-let exports (linkTo: Func<SourceSpan, string>) (importPath: string) : LibraryExport list option =
+/// A module's exports as `exports` lists them, each with its symbol, together with the module's compile and the
+/// reader of its doc comments, for searching them (see `LibrarySearch`).
+type internal CompiledExports =
+    { Typed: TypedModule
+      Reader: Documentation.Reader
+      Exports: (LibraryExport * Symbol) list }
+
+/// The exports of the module at `importPath`, as `exports` lists them, each with its symbol.
+let internal compiledExports (linkTo: Func<SourceSpan, string>) (importPath: string) : CompiledExports option =
     let moduleName =
         if importPath.StartsWith(StandardLibrary.importPrefix, StringComparison.Ordinal) then
             Some (importPath.Substring StandardLibrary.importPrefix.Length)
@@ -82,14 +88,24 @@ let exports (linkTo: Func<SourceSpan, string>) (importPath: string) : LibraryExp
         let reader = readerOf moduleName linkTo
         let byFile = StandardLibraryDocs.exportsOf moduleName typed reader.ForSymbol
         let import = if moduleName = StandardLibrary.preludeModuleName then None else Some $"import {importPath}"
-        StandardLibrary.moduleFiles moduleName
-        |> List.collect (fun file -> byFile |> Map.tryFind file |> Option.defaultValue [])
-        |> List.map (fun export ->
-            { Name = export.Symbol.Name
-              Kind = kindOf typed export.Symbol
-              Signature = export.Written
-              Doc = export.Doc
-              Import = import
-              Declaration = export.Symbol.Declaration })
-        |> Some
+        let exports =
+            StandardLibrary.moduleFiles moduleName
+            |> List.collect (fun file -> byFile |> Map.tryFind file |> Option.defaultValue [])
+            |> List.map (fun export ->
+                { Name = export.Symbol.Name
+                  Kind = kindOf typed export.Symbol
+                  Signature = export.Written
+                  Doc = export.Doc
+                  Import = import
+                  Declaration = export.Symbol.Declaration },
+                export.Symbol)
+        Some { Typed = typed; Reader = reader; Exports = exports }
     | _ -> None
+
+/// Every module's import path, the prelude first.
+let internal importPaths () = moduleNames () |> List.map (fun moduleName -> StandardLibrary.importPrefix + moduleName)
+
+/// What the module at `importPath` (`nanyx/text`) exports, in the order its files declare them, without the names it
+/// reserves, with doc comments whose links lead where `linkTo` says. `None` when no module has that path.
+let exports (linkTo: Func<SourceSpan, string>) (importPath: string) : LibraryExport list option =
+    compiledExports linkTo importPath |> Option.map (fun compiled -> compiled.Exports |> List.map fst)

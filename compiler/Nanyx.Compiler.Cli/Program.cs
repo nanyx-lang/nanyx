@@ -548,6 +548,47 @@ internal static class CliCommands
         return failed ? 1 : 0;
     }
 
+    /// <summary>
+    /// Search the standard library by name, by type, or both: "trim", "bool -> string" or "trim: string -> string".
+    /// Prints each match's signature, the import it needs and the contexts it still needs, best first.
+    /// </summary>
+    /// <param name="query">A name, a type written as a def's annotation is, or a name and a type with a colon between them.</param>
+    [Consolo("search")]
+    public static int Search(string query) => SearchIn(Shell.Process, query);
+
+    internal static int SearchIn(Shell shell, string query)
+    {
+        var parsed = LibrarySearch.parse(query);
+        if (parsed.IsError)
+        {
+            shell.Error.WriteLine(parsed.ErrorValue);
+            return UsageError;
+        }
+
+        var matches = LibrarySearch.search(_ => "", parsed.ResultValue);
+        if (matches.IsEmpty)
+        {
+            shell.Out.WriteLine("Nothing in the standard library matches.");
+            return 1;
+        }
+
+        foreach (var found in matches)
+        {
+            var line = string.Join(" ", found.Signature.Split((char[])[' ', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries));
+            if (found.Import is { } import)
+            {
+                line += $"  ({import.Value})";
+            }
+            if (!found.Needs.IsEmpty)
+            {
+                line += $"  needs {string.Join(", ", found.Needs)}";
+            }
+            shell.Out.WriteLine(line);
+        }
+
+        return 0;
+    }
+
     private const string HelloWorldSource = """
         import nanyx/console
 

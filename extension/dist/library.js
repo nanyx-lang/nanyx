@@ -33,15 +33,17 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LibraryView = exports.COMMAND_ADD_IMPORT = exports.COMMAND_OPEN_EXPORT = void 0;
+exports.LibraryView = exports.COMMAND_SEARCH = exports.COMMAND_ADD_IMPORT = exports.COMMAND_OPEN_EXPORT = void 0;
 const vscode = __importStar(require("vscode"));
 const infoView_1 = require("./infoView");
 /** The language server's requests for the standard library's modules and exports (see `LibraryHandlers` in the compiler). */
 const MODULES_REQUEST = "nanyx/libraryModules";
 const MODULE_REQUEST = "nanyx/libraryModule";
 const ADD_IMPORT_REQUEST = "nanyx/addImport";
+const SEARCH_REQUEST = "nanyx/librarySearch";
 exports.COMMAND_OPEN_EXPORT = "nanyx.library.open";
 exports.COMMAND_ADD_IMPORT = "nanyx.library.addImport";
+exports.COMMAND_SEARCH = "nanyx.library.search";
 /** The groups a module's exports are shown in, in this order, with attached definitions after them by their type. */
 const GROUPS = [
     ["function", "Functions"],
@@ -64,7 +66,12 @@ class LibraryView {
         this.registrations = [
             vscode.window.registerTreeDataProvider(LibraryView.viewId, this),
             vscode.commands.registerCommand(exports.COMMAND_OPEN_EXPORT, (location) => (0, infoView_1.openLocation)(location)),
-            vscode.commands.registerCommand(exports.COMMAND_ADD_IMPORT, (node) => this.addImport(node))
+            vscode.commands.registerCommand(exports.COMMAND_ADD_IMPORT, (node) => {
+                if (node.kind === "export") {
+                    void this.addImport(node.module);
+                }
+            }),
+            vscode.commands.registerCommand(exports.COMMAND_SEARCH, () => this.search())
         ];
     }
     /** Lists the library again, as the server now running has it. */
@@ -130,11 +137,78 @@ class LibraryView {
         }
         return exports;
     }
-    /** Imports an export's module into the active Nanyx document, where the missing-import quick fix would put it. */
-    async addImport(node) {
+    /**
+     * *Search library by type*: a quick pick that searches the library by name, by type or both as you type, and inserts
+     * the chosen name at the cursor with the import it needs.
+     */
+    async search() {
         const client = this.client();
+        if (!client) {
+            void vscode.window.showWarningMessage("Nanyx: the language server is not running.");
+            return;
+        }
         const editor = vscode.window.activeTextEditor;
-        if (node.kind !== "export" || !client) {
+        const pick = vscode.window.createQuickPick();
+        pick.placeholder = "A name, a type (bool -> string), or both (trim: string -> string)";
+        pick.matchOnDescription = true;
+        pick.matchOnDetail = true;
+        let timer;
+        let latest = 0;
+        pick.onDidChangeValue((query) => {
+            clearTimeout(timer);
+            timer = setTimeout(async () => {
+                const asked = ++latest;
+                if (query.trim() === "") {
+                    pick.items = [];
+                    return;
+                }
+                pick.busy = true;
+                const result = await client.sendRequest(SEARCH_REQUEST, { query });
+                // An answer a later query has overtaken is dropped.
+                if (asked !== latest) {
+                    return;
+                }
+                pick.busy = false;
+                // VS Code filters the items by the text typed, which a query by type never contains, so each item is
+                // always shown.
+                pick.items = result.error
+                    ? [{ label: result.error, alwaysShow: true }]
+                    : result.matches.map((found) => ({
+                        label: found.name,
+                        description: found.signature.replace(/\s+/g, " "),
+                        detail: detailOf(found),
+                        alwaysShow: true,
+                        found
+                    }));
+            }, 200);
+        });
+        pick.onDidAccept(async () => {
+            const found = pick.selectedItems[0]?.found;
+            pick.hide();
+            if (!found) {
+                return;
+            }
+            if (!editor || editor.document.languageId !== "nanyx") {
+                if (found.location) {
+                    await (0, infoView_1.openLocation)(found.location);
+                }
+                return;
+            }
+            await editor.edit((builder) => editor.selections.forEach((selection) => builder.replace(selection, insertedName(found.name))));
+            if (found.import) {
+                await this.addImport(found.import.replace(/^import\s+/, ""), editor);
+            }
+        });
+        pick.onDidHide(() => {
+            clearTimeout(timer);
+            pick.dispose();
+        });
+        pick.show();
+    }
+    /** Imports a module into a Nanyx document, the active one by default, where the missing-import quick fix would put it. */
+    async addImport(module, editor = vscode.window.activeTextEditor) {
+        const client = this.client();
+        if (!client) {
             return;
         }
         if (!editor || editor.document.languageId !== "nanyx") {
@@ -143,14 +217,14 @@ class LibraryView {
         }
         const edits = await client.sendRequest(ADD_IMPORT_REQUEST, {
             textDocument: { uri: client.code2ProtocolConverter.asUri(editor.document.uri) },
-            module: node.module
+            module
         });
         if (edits === null) {
             void vscode.window.showWarningMessage(`Nanyx: ${editor.document.fileName} does not parse, so the import was not added.`);
             return;
         }
         if (edits.length === 0) {
-            vscode.window.setStatusBarMessage(`Nanyx: ${node.module} is already imported`, 3000);
+            vscode.window.setStatusBarMessage(`Nanyx: ${module} is already imported`, 3000);
             return;
         }
         const workspaceEdit = new vscode.WorkspaceEdit();
@@ -197,6 +271,16 @@ function tooltipOf(exported) {
         tooltip.appendCodeblock(exported.import, "nanyx");
     }
     return tooltip;
+}
+/** A match's import and the contexts it still needs, for its second line in the quick pick. */
+function detailOf(found) {
+    const parts = [found.import, found.needs.length > 0 ? `needs ${found.needs.join(", ")}` : undefined].filter((part) => part);
+    return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+/** The name source writes for a match: a context's member by its own name (`toString`), anything else as listed. */
+function insertedName(name) {
+    const member = name.lastIndexOf(").");
+    return member >= 0 ? name.substring(member + 2) : name;
 }
 function iconOf(kind) {
     switch (kind) {

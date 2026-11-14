@@ -318,7 +318,8 @@ module internal ContextInference =
     /// an instance for the type it is called with. `before` are the calls that were waiting for an instance before the
     /// def's value was inferred; the rest are its value's. A call of the value's whose arguments are not all variables
     /// of the def's own type is left to the def around it, and so are a well-known context's (see
-    /// `InferState.LocalComparisons`) and an interpolation hole's.
+    /// `InferState.LocalComparisons`) and an interpolation hole's. A call is taken whether the def around it writes its
+    /// type or not: in one that does, it was left to the end of the module.
     let resolveLocal (name: Identifier) (symbol: SymbolId option) (scheme: TypeScheme) (before: PendingContextInstance list) (state: InferState) : InferState =
         let earlier = before |> List.map (fun p -> p.Call, p.Index) |> Set.ofList
         let candidates =
@@ -328,7 +329,7 @@ module internal ContextInference =
                 && not p.ChecksOnly
                 && (WellKnownContexts.tryFind p.Context).IsNone
                 && not (WellKnownContexts.isOperatorPending p)
-                && not (state.HoleScopes.ContainsKey p.Call))
+                && not (InterpolationHoles.isHole p.Callee))
         if candidates.IsEmpty || scheme.Quantified.IsEmpty then state
         else
             let subst = fst (Unifier.solve state.Constraints)
@@ -346,11 +347,16 @@ module internal ContextInference =
                         let context = contexts.[required |> List.findIndex (fun required -> key required = key (p.Context, vars))]
                         withInstance p (InstanceInScope(context, FromInference)) instances) state.ContextInstances
                 let takenCalls = taken |> List.map (fun (p, _) -> p.Call, p.Index) |> Set.ofList
+                let left = state.PendingContextInstances |> List.filter (fun p -> not (takenCalls.Contains (p.Call, p.Index)))
+                // A call in a def that writes its type was left to the end of the module, in the scope it is written
+                // in (see `InferState.HoleScopes`), which it no longer needs once nothing of it is left.
+                let leftCalls = left |> List.map _.Call |> Set.ofList
                 let registered =
                     registerLocalContextRequirement
                         { state with
                             ContextInstances = instances
-                            PendingContextInstances = state.PendingContextInstances |> List.filter (fun p -> not (takenCalls.Contains (p.Call, p.Index))) }
+                            PendingContextInstances = left
+                            HoleScopes = state.HoleScopes |> Map.filter (fun call _ -> leftCalls.Contains call || not (takenCalls |> Set.exists (fst >> (=) call))) }
                         symbol name contexts (Some signature)
                 match symbol with
                 | Some symbol ->

@@ -25,6 +25,7 @@ nanyx new <name> [<directory>]
 nanyx format [--check | --write] <files or directories>
 nanyx format [--check] --stdin
 nanyx stdlib-docs [--check] <directory>
+nanyx search <query>
 nanyx lsp
 nanyx hello
 ```
@@ -47,6 +48,14 @@ nanyx hello
   `docs/src/content/stdlib`, from the library's doc comments, or with `--check` lists the pages that are out of date
   and exits with 1. It also fails for a file of the library that has no page, and a page that has no file (see
   [Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)).
+- `search` searches the standard library by name, by type, or both, and prints what matches, best first: each
+  match's signature as hover writes it, the import it needs and the contexts it still needs at the types it was
+  matched at. The query is a name (`nanyx search trim`), a type written as a def's annotation is
+  (`nanyx search "bool -> string"`), or a name and a type with a colon between them
+  (`nanyx search "trim: string -> string"`). A name finds the names that contain it; a type, the functions and
+  values whose types can be made equal to it (see
+  [Search by type](./info-view-and-library-browser#search-by-type) for the rules and the ranking). It exits with 1
+  when nothing matches, and with 2 when the query is not a type.
 - `lsp` runs the language server over standard input and output (see
   [Language server and editor](./language-server)).
 

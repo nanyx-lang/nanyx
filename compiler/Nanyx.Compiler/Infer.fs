@@ -1295,8 +1295,14 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
         let mutable errors: Diagnostic list = []
         for statement in statements do
             match statement.Kind with
-            | DefStatement(isExport, name, typeOpt, expr) ->
+            | DefStatement(isExport, name, typeOpt, written) ->
                 if errors.IsEmpty then
+                    let expr =
+                        match (if typeOpt.IsNone then pointFreeAsLambda env' current written else None) with
+                        | Some lambda ->
+                            current <- { current with ReadAs = current.ReadAs |> Map.add written.Id lambda }
+                            lambda
+                        | _ -> written
                     let pendingBefore = current.PendingContextInstances
                     let notSelfReferenced =
                         match LocalRecursion.selfReferences env' name expr with

@@ -248,3 +248,33 @@ def main = {
 }
 """
     runSource (normalized source) |> assertRan "ok\n"
+
+
+[<Fact>]
+let ``Run - a local def whose value is a function that requires a parameterised context, called (#807)`` () =
+    let source = """import nanyx/console
+
+def main: [Console] () -> () = {
+  def f = println
+  f(3)
+}
+
+main()
+"""
+    runSource (normalized source) |> assertRan "3\n"
+
+[<Fact>]
+let ``Run - a point-free local def called at two types, and one of two parameters`` () =
+    let source = twice + """def both: [Show(a)] a, a -> string = { x, y -> describe(x) ++ "&" ++ describe(y) }
+type Point = (x: int, y: int)
+def Point.show: Point -> string = { p -> "({p.x}, {p.y})" }
+@entry
+def main = {
+  def f = println
+  f(3)
+  f("hi")
+  def b = both
+  f(b(Point(x = 1, y = 2), Point(x = 3, y = 4)))
+}
+"""
+    runSource (normalized source) |> assertRan "3\nhi\n(1, 2)&(3, 4)\n"

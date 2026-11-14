@@ -95,7 +95,10 @@ what the compiler keeps: exact spans, resolved names and types.
   name resolution records ([#98](https://github.com/nanyx-lang/nanyx/issues/98)). A declaration's own name goes
   to itself. A definition in an imported source file opens that file. The standard library is embedded in the
   compiler, so a definition in it opens a read-only copy of its module's source, which the server writes under the
-  user's local application data by compiler version (`StandardLibrarySource`). A standard-library file open in the
+  user's local application data by compiler version (`StandardLibrarySource`), and compares with the embedded source
+  only the first time it is asked for each file. The embedded source itself is read once per process
+  (`StandardLibrary.tryLoadFile`), though completion asks for it for each doc comment it shows
+  ([#838](https://github.com/nanyx-lang/nanyx/issues/838)). A standard-library file open in the
   editor, that copy or `stdlib/nanyx/<module>.nyx` in a checkout, is checked as the library module it is a file of,
   as a build of the library checks it (`Compiler.compileStandardLibraryFile`,
   [#922](https://github.com/nanyx-lang/nanyx/issues/922)): with the intrinsics in scope, without importing the prelude
@@ -237,7 +240,11 @@ what the compiler keeps: exact spans, resolved names and types.
   same compile of each module as the generated reference (`StandardLibraryDocs`), made once per process. A third,
   `nanyx/addImport` ([#713](https://github.com/nanyx-lang/nanyx/issues/713)), gives the edit that imports a module into
   an open document, placed as the missing-import quick fix places it: none if the document imports it already, `null`
-  if it does not parse. The extension's *Library* view lists them and uses it.
+  if it does not parse. The extension's *Library* view lists them and uses it. A fourth, `nanyx/librarySearch`
+  ([#714](https://github.com/nanyx-lang/nanyx/issues/714)), given a query, returns what matches it by name, by type or
+  both, best first, with each match's signature, doc comment, import, location and the contexts it still needs, or the
+  reason the query is not a type (`NyxCompiler.LibrarySearch`; see
+  [Search by type](./info-view-and-library-browser#search-by-type)).
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
 - **The extension** highlights syntax, finds `nanyx` (setting, `PATH`, or a downloaded release) and offers
   *Download the compiler* and *Restart the language server*, and shows the info view. Its settings are described for users on the
