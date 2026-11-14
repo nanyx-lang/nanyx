@@ -6,15 +6,7 @@ open System.Text
 open Xunit
 open Nanyx.Formatter
 open Nanyx.Formatter.FormatCommand
-
-/// A new empty directory for one test, with the given files (path relative to it, and text) in it.
-let private directoryWith (files: (string * string) list) =
-    let directory = Path.Combine(Path.GetTempPath(), "nanyx-format-tests", Guid.NewGuid().ToString("N"))
-    for path, text in files do
-        let full = Path.Combine(directory, path)
-        Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
-        File.WriteAllText(full, text)
-    directory
+open Nanyx.Formatter.Tests.TestHelpers
 
 let private found directory paths =
     match findFiles directory paths with

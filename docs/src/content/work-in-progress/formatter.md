@@ -296,11 +296,18 @@ server uses the same settings for the document it formats.
 
 ```bash
 nanyx format [--check | --write] [paths...]
+nanyx format [--check] --stdin
 ```
 
 With no path it formats every `.nyx` file under the current directory; a directory means every `.nyx` file under
 it. `--write` is the default. `--check` writes nothing, lists each file that would change, and exits 1 if any would.
 Exit code 2 means a file could not be formatted (it does not parse, or the safety check failed).
+
+`--stdin` formats standard input and writes the result to standard output, for an editor other than VS Code to format
+a buffer it has not saved ([#858](https://github.com/nanyx-lang/nanyx/issues/858)). The input is formatted as a file
+named `<stdin>` in the current directory, with that directory's settings, and messages name it so. Nothing is written
+out if it cannot be formatted. It is a flag rather than `nanyx format -` because the CLI's argument parser reads `-` as
+an option.
 
 ## The editor
 
@@ -334,7 +341,7 @@ its own:
 10. **The repository** ([#223](https://github.com/nanyx-lang/nanyx/issues/223)). Format `examples/`, `stdlib/` and
     the docs' code blocks, and run `nanyx format --check` in CI.
 
-Later: range formatting, formatting standard input for other editors (`nanyx format -`).
+Later: range formatting.
 
 # Decided
 
