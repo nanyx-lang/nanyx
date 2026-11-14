@@ -104,8 +104,12 @@ passes the instance the type checker found for it there, as a call to a top-leve
   ([#550](https://github.com/nanyx-lang/nanyx/issues/550)), takes the context's members as a lambda takes those of a
   context without parameters. The def may be in one that writes its type or not, and its value may run in a context
   without parameters too, as `def f = { x -> println(x) }` runs in `Console`
-  ([#807](https://github.com/nanyx-lang/nanyx/issues/807)). Passed as a value rather than called, it finds no instance
-  yet ([#1390](https://github.com/nanyx-lang/nanyx/issues/1390)). The type checker keeps such a context out of the function's type (it records it beside
+  ([#807](https://github.com/nanyx-lang/nanyx/issues/807)). Passed as an argument, as in `xs \list.map(f)`, it is read
+  as the lambda that calls it, `{ __p0 -> f(__p0) }`, once the call has settled its type, so that the lambda's call
+  finds the instance there (`localFunctionArguments` in `Infer.fs`,
+  [#1390](https://github.com/nanyx-lang/nanyx/issues/1390)); at a type left open it is passed as it is, as `dbg(f)`
+  does. At a variable of the def around it, a lambda that calls it finds the wrong member yet
+  ([#1397](https://github.com/nanyx-lang/nanyx/issues/1397)). The type checker keeps such a context out of the function's type (it records it beside
   it, `TypedModule.ContextTypes`), so the backend puts it into the type of the function's lambda, in the lambda's own
   type variables (`localContexts` in `CodeGen.fs`). A function generic in variables of its own has a closure for each
   type it is used at (`GenericLocal`), each taking the members of the instances at that type. A call to the function

@@ -619,6 +619,18 @@ let internal pointFreeAsLambda (env: TypeEnv) (state: InferState) (value: Expres
             Some { value with Kind = Lambda(parameters |> List.map (fun parameter -> parameter, None), call, false) }
     | _ -> None
 
+/// The lambda that `value` is read as when it names, as a value, a local function that requires a parameterised
+/// context, as `pointFreeAsLambda` reads it: `xs \list.map(f)` passes `{ __p0 -> f(__p0) }`, whose call finds the
+/// instance at the type `list.map` settles. The local function's closure takes the context's members, which nothing
+/// would pass it named on its own.
+let internal localFunctionAsLambda (env: TypeEnv) (state: InferState) (value: Expression) : Expression option =
+    match value.Kind with
+    | IdentifierExpr name ->
+        match TypeEnv.tryFind name env |> Option.bind _.Symbol |> Option.bind (fun symbol -> state.Symbols |> Map.tryFind symbol) with
+        | Some symbol when symbol.Kind = LocalValue -> pointFreeAsLambda env state value
+        | _ -> None
+    | _ -> None
+
 /// `ContextInference.resolvePending` for the def `name`, building an instance from the definitions attached to the
 /// type it is for, or from the type's parts, as a call does. A hole finds its instance as
 /// `InterpolationHoles.resolvePending` says.
