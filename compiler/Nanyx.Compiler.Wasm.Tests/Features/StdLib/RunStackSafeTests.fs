@@ -10,19 +10,20 @@ open TranspilerWasmTestHelpers
 /// The start of each program: `xs` is the list 1 to 20,000, and `show` gives a list's length, first element and
 /// last element.
 let private withList (body: string) =
-    "import nanyx/console\n" +
-    "import nanyx/text\n" +
-    "\n" +
-    "def upTo: int, list(int) -> list(int) = { n, acc -> if n == 0 then acc else upTo(n - 1, [n, ...acc]) }\n" +
-    "def first: list(int) -> int = {\n" +
-    "  | [x, ..._] -> x\n" +
-    "  | [] -> 0\n" +
-    "}\n" +
-    "def show: list(int) -> string = { ys ->\n" +
-    "  \"{list.length(ys)} {first(ys)} {list.fold(ys, 0, { _, y -> y })}\"\n" +
-    "}\n" +
-    "def xs = upTo(20000, [])\n" +
-    body
+    normalized """import nanyx/console
+import nanyx/text
+
+def upTo: int, list(int) -> list(int) = { n, acc -> if n == 0 then acc else upTo(n - 1, [n, ...acc]) }
+def first: list(int) -> int = {
+  | [x, ..._] -> x
+  | [] -> 0
+}
+def show: list(int) -> string = { ys ->
+  "{list.length(ys)} {first(ys)} {list.fold(ys, 0, { _, y -> y })}"
+}
+def xs = upTo(20000, [])
+"""
+    + body
 
 [<Fact>]
 let ``Run - List.map works on 20,000 elements`` () =

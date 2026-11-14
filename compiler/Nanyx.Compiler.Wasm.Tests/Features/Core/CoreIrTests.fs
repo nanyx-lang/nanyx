@@ -142,30 +142,32 @@ def main = {
 
 [<Fact>]
 let ``Strings, lists and intrinsics go through the core IR`` () =
+    // In `main`, a list literal in front of `++` is put in front of the rest cell by cell; a list that is not one is
+    // copied.
     let source =
-        "def greet: string -> string = { name -> \"Hello, \" ++ name }\n" +
-        "\n" +
-        "def differ: (string, string) -> bool = { a, b -> a != b }\n" +
-        "\n" +
-        "def isNone: #none -> bool = { o -> o == #none }\n" +
-        "\n" +
-        "def heads: list(int) -> int = { xs ->\n" +
-        "  match xs\n" +
-        "    | [] -> 0\n" +
-        "    | [a] -> a\n" +
-        "    | [a, b, ...rest] -> a + b\n" +
-        "}\n" +
-        "\n" +
-        "def word = { s ->\n" +
-        "  match s\n" +
-        "    | \"yes\" -> 1\n" +
-        "    | _ -> 0\n" +
-        "}\n" +
-        "\n" +
-        "def size: string -> int = { s -> s.length }\n" +
-        "\n" +
-        // A list literal in front of `++` is put in front of the rest cell by cell; a list that is not one is copied.
-        (withFinalNewline """def main = heads(([1, 2] ++ []) ++ [3]) + word("yes") + size(greet("Ada"))""")
+        normalized """def greet: string -> string = { name -> "Hello, " ++ name }
+
+def differ: (string, string) -> bool = { a, b -> a != b }
+
+def isNone: #none -> bool = { o -> o == #none }
+
+def heads: list(int) -> int = { xs ->
+  match xs
+    | [] -> 0
+    | [a] -> a
+    | [a, b, ...rest] -> a + b
+}
+
+def word = { s ->
+  match s
+    | "yes" -> 1
+    | _ -> 0
+}
+
+def size: string -> int = { s -> s.length }
+
+def main = heads(([1, 2] ++ []) ++ [3]) + word("yes") + size(greet("Ada"))
+"""
     let wat, report = compileWithReport source
     Assert.Equal<string list>([ "greet"; "differ"; "isNone"; "heads"; "word"; "size"; "main" ], report.Functions)
     Assert.Contains("call $__nanyx_string_equals\n    i32.eqz", wat)

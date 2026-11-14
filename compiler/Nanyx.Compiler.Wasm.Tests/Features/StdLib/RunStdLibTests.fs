@@ -331,15 +331,16 @@ let ``Run - Float.fromString reads decimals and rejects anything else`` () =
           "1e400"; "1e-400"; "NaN"; "Infinity"; "-Infinity"
           ""; "-"; "abc"; "1.2.3"; "."; "e5"; "1e"; "1e+"; " 1.5"; "1.5 "; "1,5"; "--1"; "1x" ]
     let source =
-        "import nanyx/console\n" +
-        "\n" +
-        "def show: [Console] (#some(float) | #invalidFloat) -> () = {\n" +
-        "  | #some(x) -> println(\"#some({x})\")\n" +
-        "  | #invalidFloat -> println(\"#invalidFloat\")\n" +
-        "}\n" +
-        "\n" +
-        (inputs |> List.map (fun input -> $"show(float.fromString(\"{input}\"))\n") |> String.concat "") +
-        (withFinalNewline """show("0.5" \ float.fromString)""")
+        normalized """import nanyx/console
+
+def show: [Console] (#some(float) | #invalidFloat) -> () = {
+  | #some(x) -> println("#some({x})")
+  | #invalidFloat -> println("#invalidFloat")
+}
+
+"""
+        + (inputs |> List.map (fun input -> $"""show(float.fromString("{input}"))""" + "\n") |> String.concat "")
+        + withFinalNewline """show("0.5" \ float.fromString)"""
     let expected =
         [ "#some(1.5)"; "#some(-0.25)"; "#some(42.0)"; "#some(3.0)"; "#some(0.5)"; "#some(5.0)"; "#some(7.5)"
           "#some(1500.0)"; "#some(0.002)"; "#some(1.0e-7)"; "#some(1.0e21)"; "#some(-0.0)"
