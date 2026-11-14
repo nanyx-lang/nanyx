@@ -50,15 +50,8 @@ let private queryType (typeExpr: TypeExpr) : Ty =
     let rec renumber ty =
         match ty with
         | TyVar var -> TyVar { var with Id = -(var.Id + 1) }
-        | TyPrimitive _ -> ty
-        | TyNominal(id, underlying, isPrivate) -> TyNominal(id, renumber underlying, isPrivate)
-        | TyFunc(input, output, contexts) -> TyFunc(renumber input, renumber output, List.map renumber contexts)
-        | TyRecord fields -> TyRecord(Map.map (fun _ field -> renumber field) fields)
         | TyOpenRecord(fields, row) -> TyOpenRecord(Map.map (fun _ field -> renumber field) fields, { row with Id = -(row.Id + 1) })
-        | TyTag(name, payload) -> TyTag(name, Option.map renumber payload)
-        | TyApply(name, args) -> TyApply(name, List.map renumber args)
-        | TyUnion items -> TyUnion(List.map renumber items)
-        | TyAlias(name, args, underlying) -> TyAlias(name, List.map renumber args, renumber underlying)
+        | _ -> Ty.map renumber ty
     renumber ty
 
 /// Reads a query: a name, a type, or a name and a type with a colon between them. Text that is not a name is a type.
@@ -103,30 +96,16 @@ let rec private resolve (subst: Substitution) (ty: Ty) =
 
 /// `ty` with every variable `subst` binds replaced, all the way down.
 let rec private substitute (subst: Substitution) (ty: Ty) : Ty =
-    match resolve subst ty with
-    | TyVar _ as var -> var
-    | TyPrimitive _ as primitive -> primitive
-    | TyNominal(id, underlying, isPrivate) -> TyNominal(id, substitute subst underlying, isPrivate)
-    | TyFunc(input, output, contexts) -> TyFunc(substitute subst input, substitute subst output, List.map (substitute subst) contexts)
-    | TyRecord fields -> TyRecord(Map.map (fun _ field -> substitute subst field) fields)
-    | TyOpenRecord(fields, row) -> TyOpenRecord(Map.map (fun _ field -> substitute subst field) fields, row)
-    | TyTag(name, payload) -> TyTag(name, Option.map (substitute subst) payload)
-    | TyApply(name, args) -> TyApply(name, List.map (substitute subst) args)
-    | TyUnion items -> TyUnion(List.map (substitute subst) items)
-    | TyAlias(name, args, underlying) -> TyAlias(name, List.map (substitute subst) args, substitute subst underlying)
+    resolve subst ty |> Ty.map (substitute subst)
 
 let rec private variablesOf (ty: Ty) : int list =
     match ty with
     | TyVar var -> [ var.Id ]
-    | TyPrimitive _ -> []
+    // A nominal type is matched by its name, an alias by its name and arguments, and a function without its contexts.
     | TyNominal _ -> []
     | TyFunc(input, output, _) -> variablesOf input @ variablesOf output
-    | TyRecord fields -> fields |> Map.values |> Seq.collect variablesOf |> List.ofSeq
-    | TyOpenRecord(fields, row) -> row.Id :: (fields |> Map.values |> Seq.collect variablesOf |> List.ofSeq)
-    | TyTag(_, payload) -> payload |> Option.map variablesOf |> Option.defaultValue []
-    | TyApply(_, args)
     | TyAlias(_, args, _) -> args |> List.collect variablesOf
-    | TyUnion items -> items |> List.collect variablesOf
+    | _ -> Ty.children ty |> List.collect variablesOf
 
 /// The tags of a union in order of their names, so that two unions of the same tags line up.
 let private byTagName (items: Ty list) =
