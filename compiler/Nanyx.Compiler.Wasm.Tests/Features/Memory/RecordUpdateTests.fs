@@ -18,12 +18,6 @@ def simulate: Particle, int -> Particle = { p, n ->
 }
 """
 
-/// How many blocks `name(argument)` allocates, and what it returns.
-let private allocationsOf (program: WasmProgram) (name: string) (argument: int) =
-    let before = program.Allocations
-    let result = program.Call(name, argument)
-    program.Allocations - before, result
-
 [<Fact>]
 let ``Record update - with on a record held once updates it in place`` () =
     // Each step used to copy the record (#1295).
