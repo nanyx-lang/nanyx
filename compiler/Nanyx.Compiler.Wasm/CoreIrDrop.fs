@@ -21,7 +21,8 @@ let rec isHeapType (ty: IrType) =
     | IrF32
     | IrList _
     | IrRecord _
-    | IrFunction _ -> true
+    | IrFunction _
+    | IrBox -> true
     | IrTags tags -> tags |> List.exists (snd >> Option.isSome)
     | IrInt
     | IrSized _
@@ -181,7 +182,8 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
         |> List.mapi (fun slot (_, fieldTy) -> dropField fieldTy [ "local.get $p"; CoreIrLayout.load fieldTy (CoreIrLayout.fieldOffset fields slot) ])
         |> List.concat
         |> releaseThen ty
-    | IrFunction _ ->
+    | IrFunction _
+    | IrBox ->
         // The function in the closure's info word drops what it captures.
         releaseThen ty [ "local.get $p"; "local.get $p"; $"i32.const {Header.infoBefore}"; "i32.sub"; "i32.load"; "call_indirect (type $ctx_fn_1)"; "drop" ]
     | IrTags tags ->

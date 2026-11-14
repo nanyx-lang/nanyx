@@ -266,8 +266,8 @@ The proposal draws the line there, and makes every helper a function that takes 
 
 _Decided on its own, apart from the rest of the proposal:_ builders become a declared context and a function
 ([#1305](https://github.com/nanyx-lang/nanyx/issues/1305)). That needs a member instantiated afresh at each call
-([#1304](https://github.com/nanyx-lang/nanyx/issues/1304)) and compiled with a uniform representation for its own type
-variables ([#1160](https://github.com/nanyx-lang/nanyx/issues/1160)). It doesn't need the rest of this proposal: a
+([#1304](https://github.com/nanyx-lang/nanyx/issues/1304), done) and compiled with a uniform representation for its own
+type variables ([#1160](https://github.com/nanyx-lang/nanyx/issues/1160), done). It doesn't need the rest of this proposal: a
 builder's `use` is of a constructor written in place, as now.
 
 A workflow builder is a record value today: `proc` in `prelude-results.nyx` is a `def` of a structural record type.
@@ -356,12 +356,16 @@ five runs, minus a one-iteration run for compiling and start-up, and runs differ
   needs an adapter, since the members it reads are known. That leaves three continuations and the three calls of them
   in `bind`: 3 allocations and 3 `call_indirect`s per block, fewer than A makes today.
 
-C runs today only with workarounds. The checker doesn't give a lambda the contexts its expected type requires, so
-the block can't name `bind` unless the function around it requires `[Proc]`; C's `step` does, `procH` takes
-`[c] () -> ...`, and `main` loads a `Proc` that is never called. And a generic `Proc`, with `bind` over `a` and `b`
-as `proc`'s `try` is, type-checks but the backend can't compile it: it makes a member's value once, with the
-member's own type variables unit, so it reports a call that has one of them at another type as `NYX0301`
-([#1152](https://github.com/nanyx-lang/nanyx/issues/1152); before, the call trapped). C's `Proc` is on `int`.
+C's `Proc` is on `int`. A generic `Proc`, with `bind` over `a` and `b` as `proc`'s `try` is, compiles since
+[#1160](https://github.com/nanyx-lang/nanyx/issues/1160) with the values of the members' own type variables boxed
+(see `CoreIrLowerBoxes`): the members' values are made once, at `procH`'s `use`, and each call boxes what it passes
+and unboxes what it is given back. Measured by the allocation counter of a `--check-memory` build, with `procH`
+taking `[Proc & c] () -> ...` and a `step` that runs a block of three `bind`s and a `ret` on `int` payloads: 28
+allocations per block with the generic `Proc`, against 11 with the same `Proc` written on `int`, and about 664 ns
+against 533 ns per call from the host. Each `bind` boxes its payload into a new `#some` cell, adapts its continuation
+(which unboxes the payload it is given and boxes the one it returns), and unboxes the result into a new cell again;
+`ret` boxes its value. Inlining ([#745](https://github.com/nanyx-lang/nanyx/issues/745)) would remove the boxes where
+every call is known.
 
 ## What changes
 
@@ -397,9 +401,12 @@ member's own type variables unit, so it reports a call that has one of them at a
   the context's parameters don't give it, are instantiated afresh at each call, in a function that requires the
   context and after a `use` of a plain one (`Contexts.extendEnvWithContextsFrom`, `extendEnvWithRecordFields`), so
   `bind(name(i), { s -> bind(size(s), ...) })`, on a `string` payload and then an `int` one, type-checks. The
-  context's own parameters (`a` in `Eq(a)`) stay fixed by the instance. Settled, not done yet: the backend gives the
-  values of a member's own type variables a uniform, boxed representation
-  ([#1160](https://github.com/nanyx-lang/nanyx/issues/1160)).
+  context's own parameters (`a` in `Eq(a)`) stay fixed by the instance. Done in the backend too
+  ([#1160](https://github.com/nanyx-lang/nanyx/issues/1160)): a member of a context without parameters has the values
+  of its own type variables boxed (`IrBox`, a closure whose function returns the value), in its context's layout and
+  in the lambda a `use` binds to it, and a call converts what it passes and is given back (`CoreIrLowerBoxes`,
+  `FunctionLowering.Coerce`). A member of a parameterised context generic in variables of its own is not boxed yet,
+  and neither is a `use` of an instance built as a value rather than written at the `use`.
 
 # Open questions
 

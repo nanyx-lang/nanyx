@@ -34,6 +34,10 @@ type IrType =
     /// contexts the function requires where it is called, by key, each with its type: a call passes the ones in scope
     /// there after its arguments, in this order (contexts by name, and each context's members in its layout's order).
     | IrFunction of IrType * IrType * members: (ContextMemberKey * IrType) list
+    /// A value of one of a context member's own type variables, which the member's value is made once for, whatever type
+    /// each call has it at: held in a box, a closure block whose function returns the value, so it is passed, kept and
+    /// dropped the same way whatever the value is (see `CoreIrLowerBoxes`).
+    | IrBox
     /// A type that holds itself, as a type alias that names itself in the payload of one of its tags does
     /// (`type Tree(a) = #leaf | #node(Tree(a), a, Tree(a))`): the type is its body, with each `IrSelf` in it the whole
     /// type again. Code that reads what the type is made of reads `IrType.unfold` of it.
@@ -286,6 +290,7 @@ module IrType =
             | IrFloat
             | IrF32
             | IrError
+            | IrBox
             | IrWord -> inner
         match ty with
         | IrRecursive body -> replace body
@@ -336,6 +341,7 @@ module IrType =
         match ty with
         | IrTags _
         | IrFunction _
+        | IrBox
         | IrError -> true
         // A type holds itself only in the payload of a tag.
         | IrRecursive _
@@ -362,6 +368,7 @@ module IrType =
         | IrFloat -> "float"
         | IrF32 -> "F32"
         | IrError -> "?error"
+        | IrBox -> "box"
         | IrTags tags ->
             tags
             |> List.map (fun (name, payload) ->

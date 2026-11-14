@@ -187,6 +187,7 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
           yield! hashPayload
           "local.get $h" ]
     | IrFunction _
+    | IrBox
     | IrError
     | IrRecursive _
     | IrSelf

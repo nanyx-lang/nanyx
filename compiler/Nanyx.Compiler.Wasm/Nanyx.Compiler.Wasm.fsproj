@@ -28,6 +28,7 @@
     <Compile Include="CoreIrLowerLoops.fs" />
     <Compile Include="CoreIrLowerHoles.fs" />
     <Compile Include="CoreIrLowerKnown.fs" />
+    <Compile Include="CoreIrLowerBoxes.fs" />
     <Compile Include="CoreIrLower.fs" />
     <Compile Include="CoreIrLowerModule.fs" />
     <Compile Include="CoreIrDrop.fs" />

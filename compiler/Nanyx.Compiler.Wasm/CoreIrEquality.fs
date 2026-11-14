@@ -29,6 +29,7 @@ let private needsFunction (ty: IrType) =
     | IrF32
     | IrString
     | IrFunction _
+    | IrBox
     | IrError
     | IrSelf
     | IrWord -> false
@@ -134,6 +135,7 @@ let private compare (ty: IrType) (loadA: string list) (loadB: string list) : str
     | IrTags _
     | IrRecursive _ -> loadA @ loadB @ [ $"call ${equalsName ty}" ]
     | IrFunction _
+    | IrBox
     | IrError
     | IrSelf
     | IrWord -> internalError $"an equality of {IrType.show ty}, which has none"

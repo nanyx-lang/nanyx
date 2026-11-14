@@ -342,7 +342,8 @@ let private extractTypeLayouts (module': Module) : Map<string, string list> * Ma
     layouts, fieldTypes
 
 /// The members of each context without parameters in `typeDefs`, each with its key and declared type, in the order
-/// `typeLayouts` stores them (see `CoreIrLowerTypes.ContextLayouts`).
+/// `typeLayouts` stores them (see `CoreIrLowerTypes.ContextLayouts`), its own type variables boxed
+/// (`CoreIrLowerTypes.boxOwnVariables`).
 let private contextLayoutsOf (typeDefs: Map<string, TypeDefInfo>) (typeLayouts: Map<string, string list>) : CoreIrLowerTypes.ContextLayouts =
     typeDefs
     |> Map.filter (fun _ info -> info.IsContext && info.Parameters.IsEmpty)
@@ -350,7 +351,8 @@ let private contextLayoutsOf (typeDefs: Map<string, TypeDefInfo>) (typeLayouts: 
     |> List.choose (fun (name, info) ->
         match Unifier.unalias info.Underlying, typeLayouts |> Map.tryFind name with
         | TyRecord members, Some layout ->
-            Some (name, layout |> List.choose (fun memberName -> members |> Map.tryFind memberName |> Option.map (fun ty -> contextMemberKey None memberName, ty)))
+            let memberOf memberName = members |> Map.tryFind memberName |> Option.map (fun ty -> contextMemberKey None memberName, CoreIrLowerTypes.boxOwnVariables ty)
+            Some (name, layout |> List.choose memberOf)
         | _ -> None)
     |> Map.ofList
 
@@ -609,8 +611,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                                 | TyUnion items -> TyUnion(items |> List.map bind)
                                 | TyAlias(alias, args, underlying) -> TyAlias(alias, args |> List.map bind, bind underlying)
                                 | other -> other
+                            // A context without parameters has its own type variables boxed, as in its layout.
+                            let laidOut = if info.Parameters.IsEmpty then CoreIrLowerTypes.boxOwnVariables else id
                             match Unifier.unalias info.Underlying with
-                            | TyRecord members -> members |> Map.tryFind memberName |> Option.map bind
+                            | TyRecord members -> members |> Map.tryFind memberName |> Option.map (bind >> laidOut)
                             | _ -> None
                         else None
                     | _ -> None
@@ -784,7 +788,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let renderedDrops = CoreIrDrop.render (fun name -> tagIdMap |> Map.tryFind name) drops |> String.concat "\n\n"
     for helper in CoreIrDrop.helpersUsed drops do
         usedHelpers.Add helper |> ignore
-    if drops.Types |> List.exists (function CoreIr.IrFunction _ -> true | _ -> false) then
+    if drops.Types |> List.exists (function CoreIr.IrFunction _ | CoreIr.IrBox -> true | _ -> false) then
         functionTable.IndirectSignatures.Add([ "i32" ], "i32") |> ignore
 
     // An equality function for each record, list and union of tags `==` compares, and for each of their parts that

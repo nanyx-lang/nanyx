@@ -178,6 +178,24 @@ let sortFields (fields: (string * 'a) list) =
 /// the order the context's layout stores them.
 type ContextLayouts = Map<string, (ContextMemberKey * Ty) list>
 
+/// The type a context member's own type variables are at in its context's layout (see `boxOwnVariables`): their values
+/// are boxed (`IrBox`).
+let boxedTy = TyPrimitive "?box"
+
+let (|BoxedType|_|) (ty: Ty) = if ty = boxedTy then Some () else None
+
+/// The type variables of `ty` that are the type of a value: not the rest of a union or record, which changes nothing in
+/// how a value is laid out, nor a context variable.
+let valueVariables (ty: Ty) : int list =
+    let others = Set.union (Unifier.restVarIds true ty) (FunctionContexts.variablesIn ty |> Map.keys |> Set.ofSeq)
+    freeVars ty |> List.filter (others.Contains >> not) |> List.distinct
+
+/// `memberTy`, the type a context without parameters declares for a member, with its own type variables at `boxedTy`:
+/// the member's value is made once, where its instance is, and each call has them at the types it has, so their values
+/// are held in a box, the same whatever they are (see `CoreIrLowerBoxes`).
+let boxOwnVariables (memberTy: Ty) : Ty =
+    substitute (valueVariables memberTy |> List.map (fun id -> id, boxedTy) |> Map.ofList) memberTy
+
 /// The IR type of `ty`, once `subst` is applied. A type variable nothing constrains (the element of `[]`, the rest of
 /// an open union that no use closes) has no value of its own at run time, since nothing can make or inspect one, so it
 /// is unit, and the rest of a union adds no tags. A function type takes the members of the contexts without parameters
@@ -207,6 +225,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | TyPrimitive "float" -> IrFloat
     | TyPrimitive "F32" -> IrF32
     | TyPrimitive "?error" -> IrError
+    | BoxedType -> IrBox
     // A scoped context's scope means nothing at run time: a value of the context's type is unit.
     | FunctionContexts.ScopeType _ -> IrUnit
     // A cell passed to a function is the box it is held in (see `CellSyntax`).
@@ -261,7 +280,8 @@ let contextMembersOf (layouts: ContextLayouts) (contexts: Ty list) : (ContextMem
 
 /// The arguments an adapter from a function value of type `givenTy` to one of `expectedTy` takes and passes on (see
 /// `FunctionLowering.Coerce`): the elements of a tuple, none for unit, or else the one value. An expected input of unit
-/// may be a type variable nothing constrained where the type was found (see `toIrType`), so the given input decides then.
+/// may be a type variable nothing constrained where the type was found (see `toIrType`), so the given input decides then,
+/// unless it is a box, which the adapter makes of unit itself.
 let valuesOf (input: IrType) =
     match input, IrType.tupleElements input with
     | IrUnit, _ -> []
@@ -270,7 +290,7 @@ let valuesOf (input: IrType) =
 
 let adaptedValueTypes (givenTy: IrType) (expectedTy: IrType) : IrType list =
     match givenTy, expectedTy with
-    | IrFunction(given, _, _), IrFunction(IrUnit, _, _) -> valuesOf given
+    | IrFunction(given, _, _), IrFunction(IrUnit, _, _) when given <> IrBox -> valuesOf given
     | _, IrFunction(expected, _, _) -> valuesOf expected
     | _ -> []
 

@@ -150,6 +150,7 @@ let private compareBody (ty: IrType) : string list * string list =
           yield! sign [ "local.get $a"; "i32.const 0"; "i32.ne" ] [ "local.get $b"; "i32.const 0"; "i32.ne" ] ]
     | IrTags _
     | IrFunction _
+    | IrBox
     | IrError
     | IrRecursive _
     | IrSelf
