@@ -295,8 +295,8 @@ The composite host runs each part under the right sub-host and coordinates start
 
 1. **ConsoleHost in Nanyx** ([#1245](https://github.com/nanyx-lang/nanyx/issues/1245)): `nanyx/console.host`'s `run`
    takes the entry, the compiler checks `@entry` against it and starts the program with `run(entry)`, and
-   `HostRuntime` is provided only to the host. Built, but for an entry that doesn't write `Console` in its type: see
-   [What's built](#whats-built).
+   `HostRuntime` is provided only to the host. Built, and the host's `Console` reaches every entry. Left: running
+   scripts under the host too, then removing `nanyx/console`'s ambient instance (see [What's built](#whats-built)).
 2. **`Env`** ([#1246](https://github.com/nanyx-lang/nanyx/issues/1246)): arguments, environment variables and the
    exit code, provided by ConsoleHost.
 3. **Choosing a host** ([#1247](https://github.com/nanyx-lang/nanyx/issues/1247)): `[host]` in the manifest and
@@ -328,12 +328,15 @@ The composite host runs each part under the right sub-host and coordinates start
   and `nanyx/host.runtime`: at each top-level def whose type requires it, written or inferred, and at each top-level
   call it is provided to, other than the call of `run` that `@entry` makes. A module that calls a host's `run` itself
   needs `HostRuntime` for it, so that is an error too.
-- **Where the entry's `Console` comes from.** An entry that writes `[Console]` in its type is passed the members of the
-  `Console` that `run` `use`s, so it reads and writes through the host. An entry that doesn't write its type, which is
-  most programs, still infers `Console` as an ambient context, and the backend calls `nanyx/console`'s definitions for
-  it directly, as before: inference only infers ambient contexts for a def that doesn't write its type, and the
-  backend never passes an ambient context. The output is the same either way. Making the host's `Console` reach those
-  entries too is the open question on [#1245](https://github.com/nanyx-lang/nanyx/issues/1245).
+- **Where the entry's `Console` comes from.** Every entry is passed the members of the `Console` that `run` `use`s, so
+  it reads and writes through the host. An entry that doesn't write its type, which is most programs, infers `Console`
+  as an ambient context, because the module imports `nanyx/console`. A def that infers an ambient context takes its
+  members as a def that writes it does: `InferModule` adds the contexts it inferred to the def's annotation for the
+  backend (`[Console]` on its own, or after the parameterised contexts it was given), and the backend gives a function
+  named as a value the contexts without parameters it requires (`CodeGen.carryPlainContexts`), so `run(main)` passes
+  `main` its members rather than closing it over `nanyx/console`'s. Where the ambient instance is known, at a script's
+  top level, a call is specialised on its members (see [Context calls](./context-calls)) and calls them directly.
+  Nothing wires `Console` to the entry by name.
 - **Scripts** (files without `@entry`) still run their top level in `nanyx/console`'s ambient instance. Until they
   run under the host, `nanyx/console.host` repeats `nanyx/console`'s line reading over `HostRuntime.readStdinByte`.
 

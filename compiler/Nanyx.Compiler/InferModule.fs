@@ -53,6 +53,26 @@ let private checkAnnotationIsRigid (state: InferState) (name: Identifier) (span:
                 let details = String.concat "; " problems
                 Error [ Diagnostics.at DiagnosticCodes.AnnotationTooGeneral span $"Annotation of '{name}' is more general than the inferred type: {details}" ]
 
+/// `item` with the ambient contexts it was inferred to require (`required`, by the def's name) in its annotation, where
+/// it is a def that does not write its type: after the parameterised contexts it was given, or on their own
+/// (`[Console]`). The backend passes their members to it, as it does to a def that writes them, so that whatever is
+/// in scope where it is called (the host's `use`, say) reaches it.
+let private withInferredAmbientContexts (required: Map<Identifier, Set<Identifier>>) (item: TypedTopLevelItem) =
+    match item with
+    | TypedDef (TypedValueDef(isExport, name, annotation, typedExpr)) ->
+        match required |> Map.tryFind name with
+        | Some contexts when not contexts.IsEmpty ->
+            let ambient = contexts |> Set.toList |> List.map (TypeName >> TypeExpr.synthetic)
+            let annotation =
+                match annotation with
+                | Some (Kind (TypeWithContext(parameterised, signature))) -> TypeWithContext(parameterised @ ambient, signature)
+                | Some (Kind (TypeContext parameterised)) -> TypeContext(parameterised @ ambient)
+                | Some signature -> TypeWithContext(ambient, signature)
+                | None -> TypeContext ambient
+            TypedDef (TypedValueDef(isExport, name, Some (TypeExpr.synthetic annotation), typedExpr))
+        | _ -> item
+    | _ -> item
+
 /// Infers a module in `initialEnv`, carrying on past an item that fails to check: the types and items of those
 /// that do, and the diagnostics of those that do not. The constraints are not solved here, so a type mismatch is
 /// not among them.
@@ -381,6 +401,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     |> Map.fold (fun acc name contexts ->
                         let parameterized = acc |> Map.tryFind name |> Option.defaultValue []
                         acc |> Map.add name (parameterized @ (contexts |> Set.toList |> List.map (TypeName >> TypeExpr.synthetic)))) state.ContextRequirements }
+        items <- items |> List.map (fun (index, item) -> index, withInferredAmbientContexts required item)
 
     // Each number literal is checked against its type, now that every type is known (see `NumericLiterals`).
     let checkedLiterals, literalErrors = NumericLiterals.check state

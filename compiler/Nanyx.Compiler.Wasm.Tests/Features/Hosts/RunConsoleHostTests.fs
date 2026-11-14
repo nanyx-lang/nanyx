@@ -32,3 +32,24 @@ let ``The start calls the host's run with the entry point`` () =
     let wat = transpileWat "@entry\ndef main = { println(\"hi\") }\n"
     Assert.Contains("(func $__host_run", wat)
     Assert.Contains("call $__host_run", wat)
+
+[<Fact>]
+let ``An entry point that does not write its type is passed the host's instance`` () =
+    let source =
+        """module main
+
+def greet = { name -> println("hello {name}") }
+
+@entry
+def main = {
+  match readLine()
+    | #some(line) -> greet(line)
+    | #error(_) -> eprintln("no input")
+}
+"""
+    let wat = transpileWat source
+    // `main` takes the members of `Console`, which `run` passes from its `use`: it is not closed over
+    // `nanyx/console`'s instance and adapted to the type `run` takes.
+    Assert.Contains("(func $main (param $__ctx_flush i32)", wat)
+    Assert.DoesNotContain("$__adapt_fn_unit_to_unit_to_fn_unit_to_unit_ctx", wat)
+    runSourceWithInput "Ada\n" source |> assertRan "hello Ada\n"
