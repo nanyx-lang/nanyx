@@ -345,7 +345,8 @@ module Package =
     /// `result`, the compile of the source file at `filePath` of the package `modules`, with the errors of a file that
     /// is not a named module of its own (see `PackageModules.fileErrors`).
     let private withFileErrors (modules: PackageModules) (filePath: string) (source: string) (result: CompileResult) : CompileResult =
-        match PackageModules.fileErrors modules (Path.GetFullPath filePath) source with
+        let compiled = result.Syntax |> Option.map (fun syntax -> result.ModuleName, syntax)
+        match PackageModules.fileErrors modules (Path.GetFullPath filePath) source compiled with
         | [] -> result
         | errors -> { result with Diagnostics = errors @ result.Diagnostics; ErrorsDeferred = false }
 

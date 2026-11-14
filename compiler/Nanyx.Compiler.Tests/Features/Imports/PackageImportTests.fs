@@ -93,6 +93,29 @@ let ``A source file of a package without a module name is an error naming the fi
     Assert.Equal("'src/util.nyx' is in the package 'acme.web', so it must declare a module name: start it with module util", message)
 
 [<Fact>]
+let ``A source file of a package that only holds a module block declares no module name`` () =
+    let diagnostics = buildOf [ "src/main.nyx", plainMain; "src/util.nyx", """
+module helpers =
+  export def one = 1
+""" ]
+    let code, file, message = Assert.Single(diagnostics |> List.filter (fun (code, _, _) -> code = DiagnosticCodes.ScriptInPackage.Code))
+    Assert.Equal(DiagnosticCodes.ScriptInPackage.Code, code)
+    Assert.Equal(Some "src/util.nyx", file)
+    Assert.Equal("'src/util.nyx' is in the package 'acme.web', so it must declare a module name: start it with module util", message)
+
+[<Fact>]
+let ``A source file of a package without a module name is an error even when its imports fail`` () =
+    let diagnostics = buildOf [ "src/main.nyx", plainMain; "src/util.nyx", """
+import missing
+
+export def one = 1
+""" ]
+    Assert.Contains(diagnostics, fun (code, _, _) -> code = DiagnosticCodes.ImportNotFound.Code)
+    let _, file, message = Assert.Single(diagnostics |> List.filter (fun (code, _, _) -> code = DiagnosticCodes.ScriptInPackage.Code))
+    Assert.Equal(Some "src/util.nyx", file)
+    Assert.Equal("'src/util.nyx' is in the package 'acme.web', so it must declare a module name: start it with module util", message)
+
+[<Fact>]
 let ``A source file of a package with top-level statements is an error naming the file`` () =
     let diagnostics = buildOf [ "src/main.nyx", plainMain; "src/extra.nyx", """
 module extra

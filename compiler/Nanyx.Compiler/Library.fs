@@ -813,6 +813,7 @@ module Compiler =
               TypeChecked = false
               ErrorsDeferred = false
               Syntax = None
+              ModuleName = None
               Lowered = Map.empty
               DocComments = lazy DocComments.none }
         | Result.Ok checkedModule ->
@@ -854,6 +855,7 @@ module Compiler =
               TypeChecked = checkedModule.Errors.IsEmpty
               ErrorsDeferred = checkedModule.Undeferred.IsEmpty
               Syntax = Some checkedModule.Syntax
+              ModuleName = checkedModule.Name
               Lowered = checkedModule.Lowered
               DocComments = checkedModule.DocComments }
 
@@ -886,6 +888,7 @@ module Compiler =
               TypeChecked = false
               ErrorsDeferred = false
               Syntax = None
+              ModuleName = None
               Lowered = Map.empty
               DocComments = lazy DocComments.none }
         else
