@@ -54,10 +54,31 @@ type Result(a, e) = #some(a) | #error(e)
 
 A success carrying an `a`, or an error carrying an `e`.
 
+## `Proc`
+
+```nanyx fragment
+context Proc = (
+  try: [c] #some(a) | r, ([c] a -> #some(b) | r) -> #some(b) | r
+  return: a -> #some(a) | r
+  zero: #some() | r
+  for: [d] list(x), ([d] (x, ([d] () -> #some(y) | s)) -> #some(y) | s), ([d] () -> #some(y) | s) -> #some(y) | s
+)
+```
+
+The context of the result workflow, which `proc` runs its block under: a `try`, `return` or
+`for` in a `proc { ... }` block calls the member of that name, and a block that ends without
+`return` has `zero` as its value.
+
+- `try`: Continues with the payload of `#some`, and gives back any other tag as is without running
+  the rest of the block.
+- `return`: Wraps the value in `#some`.
+- `zero`: The value of a block that ends without `return`.
+- `for`: Runs a loop whose body uses a keyword (see `procFor`).
+
 ## `proc`
 
 ```nanyx fragment
-def proc: (for: ([d] (list(x), ([d] (x, ([d] () -> #some(y) | s)) -> #some(y) | s), ([d] () -> #some(y) | s)) -> #some(y) | s), return: (a -> #some(a) | r), try: ([c] (#some(a) | r, ([c] a -> #some(b) | r)) -> #some(b) | r), zero: #some() | r)
+def proc: [c] ([Proc & c] () -> #some(b) | r) -> #some(b) | r
 ```
 
 The result workflow: inside `proc { ... }`, `try x` continues with the payload of `#some`, and
@@ -72,11 +93,12 @@ def total = proc {
 }
 ```
 
-A workflow builder is a record of keyword members. A block written after the builder's name
-has each `try x` (and each `try x` nested inside an expression) turned into a call to the
-builder's `try` member, with the rest of the block as its continuation, and each `return x`
-into a call to its `return` member. A block that ends without `return` has `zero` as its
-value, `#some()`, so a `proc` that is only run for what it does needs no `return`.
+A workflow builder is a function that runs its block under a context. `proc { ... }` is the
+call `proc({ ... })`, and in the block each `try x` (and each `try x` nested inside an
+expression) is a call to the context's `try` member, with the rest of the block as its
+continuation, and each `return x` a call to its `return` member. A block that ends without
+`return` has `zero` as its value, `#some()`, so a `proc` that is only run for what it does
+needs no `return`.
 
 Every tag other than `#some` is a failure, not only `#error`, and the block collects them: a
 `try` on a `#some(string) | #nil` and another on a `#some(int) | #notFound` make the block a
