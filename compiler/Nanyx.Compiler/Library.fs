@@ -723,6 +723,7 @@ module Compiler =
                           // Resolved for the root module only, by `compileChecked`.
                           InferredContextTypes = state.InferredContextTypes
                           ContextTypes = contextTypes
+                          LocalContexts = state.LocalContextRequirements
                           ImportedContextTypes = merged.ImportedContextTypes
                           AmbientContexts = state.AmbientMembers |> Map.values |> Seq.map snd |> Seq.distinct |> Seq.sort |> List.ofSeq
                           AmbientMembers = ambientMembers state merged.CarriedAmbientMembers

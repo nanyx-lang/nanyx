@@ -97,16 +97,18 @@ passes the instance the type checker found for it there, as a call to a top-leve
   ([#778](https://github.com/nanyx-lang/nanyx/issues/778)). It may call a member it names, by its key or its own name,
   in its body or a lambda inside it, and every member when it names a function that requires contexts
   ([#934](https://github.com/nanyx-lang/nanyx/issues/934)).
-- A local function written with a type that requires a parameterised context, such as
-  `def f: [Show(b)] b -> string = { x -> describe(x) }`, takes the context's members as a lambda takes those of a
+- A local function that requires a parameterised context, written, as in
+  `def f: [Show(b)] b -> string = { x -> describe(x) }`, or inferred, as for `def f = { x -> describe(x) }`
+  ([#550](https://github.com/nanyx-lang/nanyx/issues/550)), takes the context's members as a lambda takes those of a
   context without parameters. The type checker keeps such a context out of the function's type (it records it beside
-  it), so the backend puts it into the type of the function's lambda, in the lambda's own type variables, from the
-  annotation (`localContextsOf` in `CodeGen.fs`). A function generic in variables of its own has a closure for each
+  it, `TypedModule.ContextTypes`), so the backend puts it into the type of the function's lambda, in the lambda's own
+  type variables (`localContexts` in `CodeGen.fs`). A function generic in variables of its own has a closure for each
   type it is used at (`GenericLocal`), each taking the members of the instances at that type. A call to the function
   finds each context where the type checker found it at the call, by its place among those the type writes
   (`CoreIrLowerInstances.foundAt`): an instance built from attached definitions, one derived from a type's parts, or
   one in scope, such as the def around the call's own or a `use`'s. In its body, the function has each member by the
-  key the type writes too (`Show_b_show`), which the calls in it find it by. Inlining makes these members direct calls
+  key the type writes too (`Show_b_show`), or that the type checker writes for one it inferred
+  (`TypedModule.LocalContexts`), which the calls in it find it by. Inlining makes these members direct calls
   where they are known, as it does any closure's.
 - A top-level function named as a value is a closure over a wrapper that takes the members its value's type requires
   and captures the others, found where it is named.

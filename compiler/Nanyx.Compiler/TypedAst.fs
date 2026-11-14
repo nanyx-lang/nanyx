@@ -245,13 +245,15 @@ type ImportedFile = { File: string; Name: string option }
 /// `Sum(int)` for `use addInt`, where `def addInt: Sum(int) = (...)`. It is written as `InstanceInScope` writes it, so
 /// that the backend knows the members the `use` loads by the same names a call finds them by.
 ///
-/// `InferredContextTypes` holds the parameterised contexts each top-level def that does not write its type was
-/// inferred to require, by the def's symbol, as types over the variables of its type in `SymbolTypes`: `Show(a)` is
+/// `InferredContextTypes` holds the parameterised contexts each def that does not write its type was inferred to
+/// require, top-level or local, by the def's symbol, as types over the variables of its type in `SymbolTypes`: `Show(a)` is
 /// `TyApply("Show", [a])`. Resolved for the root module only, as `SymbolTypes` is.
 ///
 /// `ContextTypes` holds the contexts each of the module's own top-level defs requires, written or inferred, and those
-/// each local def that writes its type writes, by the def's symbol, as types over the variables of its type in `SymbolTypes`: those in `InferredContextTypes`, then the
-/// ones it writes or needs of the runtime (`Console`). Resolved for the root module only, as `SymbolTypes` is.
+/// each local def requires, written or inferred, by the def's symbol, as types over the variables of its type in
+/// `SymbolTypes`: those in `InferredContextTypes`, then the ones it writes or needs of the runtime (`Console`). Resolved
+/// for the root module only, as `SymbolTypes` is. `LocalContexts` holds the same contexts of each local def as written,
+/// or as the type checker writes those it infers: as an instance in scope in the def's value has them (`InstanceInScope`).
 /// `ImportedContextTypes` holds the same for each def an import brings in, by its symbol, with the def's type they are
 /// over: resolved as the module that declares it resolved them, and with variables of their own that keep the names its
 /// annotation gives them. A def that requires no contexts has none.
@@ -285,6 +287,7 @@ type TypedModule =
       UseContexts: Map<NodeId, TypeExpr>
       InferredContextTypes: Map<SymbolId, Ty list>
       ContextTypes: Map<SymbolId, Ty list>
+      LocalContexts: Map<SymbolId, TypeExpr list>
       ImportedContextTypes: Map<SymbolId, Ty * Ty list>
       AmbientContexts: string list
       AmbientMembers: AmbientMember list

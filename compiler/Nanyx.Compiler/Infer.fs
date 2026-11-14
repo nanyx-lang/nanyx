@@ -1297,6 +1297,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
             match statement.Kind with
             | DefStatement(isExport, name, typeOpt, expr) ->
                 if errors.IsEmpty then
+                    let pendingBefore = current.PendingContextInstances
                     let notSelfReferenced =
                         match LocalRecursion.selfReferences env' name expr with
                         | [] -> Ok ()
@@ -1358,7 +1359,13 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                 if WorkflowRests.isRest name then TypeEnv.mono declaredTy, current
                                 // A cell holds values of one type: its own, not one for each use.
                                 elif (match expr.Kind with MutSyntax.Call _ -> true | _ -> false) then TypeEnv.mono declaredTy, MemoryCells.declareCell env' symbol (NumericLiterals.settleWithin [ declaredTy ] current)
-                                else ArithmeticInference.generalize (fun state -> generalizeDef env' state declaredTy) ArithmeticInference.LocalDef current
+                                else
+                                    let scheme, generalized = ArithmeticInference.generalize (fun state -> generalizeDef env' state declaredTy) ArithmeticInference.LocalDef current
+                                    // The parameterised contexts a local def that writes no type requires are part of
+                                    // its type, as if written.
+                                    if expectedDeclaredOpt.IsNone && contextOpt.IsNone then
+                                        scheme, ContextInference.resolveLocal name symbol scheme pendingBefore generalized
+                                    else scheme, generalized
                             current <-
                                 let used =
                                     [ WellKnownContexts.equality; WellKnownContexts.ordering ]

@@ -333,6 +333,26 @@ def s = twice(Point(x = 1, y = 2)) ++ twice(Size(w = 3))
     | other -> failwith $"Unexpected instances: %A{other}"
 
 [<Fact>]
+let ``A generic local def that does not write its type requires the parameterised context it calls a function with`` () =
+    // #550: `f` requires `Show` of its own parameter's type, as if its type were written, and each call to it finds an
+    // instance for the type it is called with.
+    let source =
+        inferredShow +
+        normalized """type Size = (w: int)
+def Size.show: Size -> string = { s -> "{s.w}px" }
+def s = {
+  def f = { x -> describe(x) }
+  f(Point(x = 1, y = 2)) ++ f(Size(w = 3))
+}
+"""
+    match instancesIn source with
+    | [ _; _
+        [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeVar _) ])), FromInference)) ]
+        [ Some (InstanceSynthesized [ "show", "Point.show" ]) ]
+        [ Some (InstanceSynthesized [ "show", "Size.show" ]) ] ] -> ()
+    | other -> failwith $"Unexpected instances: %A{other}"
+
+[<Fact>]
 let ``A context needed at a type the call leaves open is found once the rest of the def settles it`` () =
     let source =
         inferredShow +
