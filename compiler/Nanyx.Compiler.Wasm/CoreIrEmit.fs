@@ -420,29 +420,8 @@ type private FunctionEmitter(context: EmitContext) =
             let fields = recordFields (atomType record)
             let dup = if CoreIrDrop.isHeapType expr.Type then $"call ${CoreIrDrop.dupName expr.Type}" else ""
             join "\n    " [ atoms [ record ]; load expr.Type (CoreIrLayout.fieldOffset fields slot); dup ]
-        | UpdateRecord(record, updates) ->
-            // A copy of the record, layout and all, with the updated fields overwritten in place. The copy takes a
-            // reference to each field on the heap it keeps.
-            let fields = recordFields (atomType record)
-            let kept =
-                fields
-                |> List.indexed
-                |> List.filter (fun (slot, (_, fieldTy)) -> CoreIrDrop.isHeapType fieldTy && not (updates |> List.exists (fst >> (=) slot)))
-            let keepCode =
-                match kept with
-                | [] -> ""
-                | _ ->
-                    let copy = freshLocal "__update" "i32"
-                    let dups =
-                        kept
-                        |> List.map (fun (slot, (_, fieldTy)) ->
-                            $"local.get ${copy}\n    {load fieldTy (CoreIrLayout.fieldOffset fields slot)}\n    call ${CoreIrDrop.dupName fieldTy}\n    drop")
-                    String.concat "\n    " (($"local.tee ${copy}") :: dups)
-            join "\n    " [
-                atoms [ record ]
-                $"i32.const {CoreIrLayout.recordSize fields}\n    call ${helper Helpers.recordCopy}"
-                keepCode
-                yield! stores (updates |> List.map (fun (slot, value) -> CoreIrLayout.fieldOffset fields slot, value)) ]
+        | UpdateRecord(record, updates) -> this.UpdateRecord record (recordFields (atomType record)) updates atomsAfter storing
+
         | Assign(cell, value) ->
             // The new value is computed before the old one is dropped, since it may be made from it.
             let dropOld = if CoreIrDrop.isHeapType cell.Type then $"local.get ${localName cell}\n    {dropValue cell.Type}" else ""
@@ -586,6 +565,50 @@ type private FunctionEmitter(context: EmitContext) =
             join "\n    " [ this.Value false deferred onStack body; dropVars localOf vars ]
         | Let _
         | Do _ -> this.Sequence tail expr
+
+    /// The code of `record with` the `updates`, each a field's slot in `fields` and its new value, written by `atomsAfter`
+    /// and stored by the helpers `storing` names. The update takes the record over. When it holds the only reference, it
+    /// updates the record in place: it drops the old value of each field on the heap it replaces and gives back the same
+    /// pointer. Otherwise it copies the record, layout and all, taking a reference to each field on the heap it keeps,
+    /// and gives up its reference to the original, which `release` checks and does in one. The new values are computed
+    /// first, since they may be read from the fields they replace.
+    member _.UpdateRecord
+        (record: Atom)
+        (fields: (string * IrType) list)
+        (updates: (int * Atom) list)
+        (atomsAfter: bool -> Atom list -> string)
+        (storing: string -> IrType -> string)
+        : string =
+        let held = freshLocal "__update" "i32"
+        let updated =
+            updates |> List.map (fun (slot, value) -> slot, value, freshLocal "__updated" (CoreIrLayout.valueType (atomType value)))
+        let isUpdated slot = updates |> List.exists (fst >> (=) slot)
+        // `code` on the value of each field on the heap that `keep` picks, read from the original record.
+        let eachField (keep: int -> bool) (code: IrType -> string) =
+            fields
+            |> List.indexed
+            |> List.filter (fun (slot, (_, fieldTy)) -> CoreIrDrop.isHeapType fieldTy && keep slot)
+            |> List.map (fun (slot, (_, fieldTy)) ->
+                $"local.get ${held}\n      {load fieldTy (CoreIrLayout.fieldOffset fields slot)}\n      {code fieldTy}")
+        let inPlace = eachField isUpdated dropValue @ [ $"local.get ${held}" ]
+        let copied =
+            $"local.get ${held}\n      i32.const {CoreIrLayout.recordSize fields}\n      call ${helper Helpers.recordCopy}"
+            :: eachField (isUpdated >> not) (fun fieldTy -> $"call ${CoreIrDrop.dupName fieldTy}\n      drop")
+        join "\n    " [
+            // The record and the new values, in the order they are evaluated, are set into their locals from the last.
+            atomsAfter false (record :: List.map snd updates)
+            yield! updated |> List.rev |> List.map (fun (_, _, local) -> $"local.set ${local}")
+            $"local.set ${held}"
+            $"local.get ${held}\n    i32.const {CoreIrLayout.headerSize (atomType record)}\n    i32.sub\n    call ${helper Helpers.release}"
+            "if (result i32)"
+            "  " + String.concat "\n      " inPlace
+            "else"
+            "  " + String.concat "\n      " copied
+            "end"
+            yield!
+                updated
+                |> List.map (fun (slot, value, local) ->
+                    $"local.get ${local}\n    i32.const {CoreIrLayout.fieldOffset fields slot}\n    call ${storing Helpers.recordSet (atomType value)}") ]
 
     /// The code of the operator `op` on `operands`, one of them at least a sized integer, written by `atomsAfter`, taken
     /// as a value of `ty`. An operand of no known type (see `IrError`) beside a sized integer is taken as one.
