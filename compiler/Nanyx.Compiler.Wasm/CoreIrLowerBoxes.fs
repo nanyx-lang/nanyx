@@ -10,6 +10,7 @@
 /// adapted to do the same (see `FunctionLowering.Coerce`).
 module internal Transpiler.Wasm.CoreIrLowerBoxes
 
+open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrLowerTypes
 
@@ -51,7 +52,11 @@ type BoxTools =
       /// The function a box of a value of this type is a closure over (see `readerFunction`), by its name in
       /// WebAssembly text.
       Reader: IrType -> string
-      /// Converts a part of a value: a function through an adapter, anything else by `convert`.
+      /// The function that converts a list of values of the first type to one of the second (see
+      /// `listConverterFunction`), by its name in WebAssembly text.
+      ListConverter: IrType -> IrType -> string
+      /// Converts a part of a value: a function through an adapter, anything else by `convert`. What it passes on is
+      /// never a temporary, so code that stores can come before it is used.
       Convert: Atom -> IrType -> (Atom -> Expr) -> Expr }
 
 /// `value`, bound to a local of its type, passed to `k`.
@@ -61,7 +66,8 @@ let private bindLocal (tools: BoxTools) (name: string) (value: Expr) (k: Var -> 
     Expr.make (Let(local, value, body)) body.Type
 
 /// `atom`, a value of its type, as a value of `expected`, passed to `k`: boxed where `expected` has a box, unboxed where
-/// it has the value, and a tag's payload or a record's fields that need it converted in turn into a new cell or record.
+/// it has the value, and a tag's payload, a record's fields or a list's elements that need it converted in turn into a
+/// new cell, record or list.
 /// A value that needs nothing converted is passed on as it is. A function is not converted here: `tools.Convert` adapts
 /// it.
 let rec convert (tools: BoxTools) (atom: Atom) (expected: IrType) (k: Atom -> Expr) : Expr =
@@ -101,8 +107,32 @@ let rec convert (tools: BoxTools) (atom: Atom) (expected: IrType) (k: Atom -> Ex
                     bindLocal tools "__field" (Expr.make (Field(AVar record, slot)) fieldTy) (fun field ->
                         tools.Convert (AVar field) expectedTy (fun converted -> fields rest (slot + 1) ((name, converted) :: acc)))
             fields (List.zip givenFields (List.map snd expectedFields)) 0 [])
-    | IrList _, IrList _ -> cannot $"a list of {IrType.show given} passed to or from a context member as one of {IrType.show expected}"
+    | IrList givenElement, IrList expectedElement ->
+        // A new list of the elements, each converted.
+        bindLocal tools "__converted" (Expr.make (Call(tools.ListConverter givenElement expectedElement, [ atom ])) expected) (AVar >> k)
     | _ -> internalError $"a conversion from {IrType.show given} to {IrType.show expected}"
+
+/// The function `functionName` that converts a list of values of `given` to a list of values of `expected`: a new list
+/// of the same length, each element converted (see `convert`).
+let listConverterFunction (tools: BoxTools) (newVar: string -> VarKind -> IrType -> Var) (functionName: string) (given: IrType) (expected: IrType) : Function =
+    let list = newVar "__list" Param (IrList given)
+    let head = newVar "__head" Local given
+    let tail = newVar "__tail" Local (IrList given)
+    let converted = IrList expected
+    let cons =
+        tools.Convert (AVar head) expected (fun element ->
+            let rest = tools.NewLocal "__converted_tail" converted
+            let cell = Expr.make (CallRuntime(Helpers.listCons, [ element; AVar rest ], true)) converted
+            Expr.make (Let(rest, Expr.make (Call(functionName, [ AVar tail ])) converted, cell)) converted)
+    let arms =
+        [ { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = cons }
+          { Patterns = [ PWildcard ]; Body = Expr.make (MakeList []) converted } ]
+    { Name = functionName
+      Source = functionName
+      TypeArguments = []
+      Params = [ list ]
+      Result = converted
+      Body = Expr.make (Match([ list ], arms)) converted }
 
 /// The function `functionName` a box of a value of `ty` is a closure over: it takes the box, which holds the value
 /// after its table slot, and returns the value.

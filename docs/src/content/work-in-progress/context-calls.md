@@ -98,8 +98,8 @@ takes their members as parameters after its others, and each call passes the one
 - A member of a context without parameters that is generic in type variables of its own (`ret: a -> #some(a) | r`)
   is made once, at its `use`, and called at many types, so its context's layout has the values of those variables
   boxed (`IrBox`: a closure whose function returns the value), and so does the lambda a `use` binds to it. A call
-  boxes what it passes and unboxes what it is given back, rebuilding a tag's cell or a record around a converted part,
-  and a function passed to the member or returned by it is adapted the same way (`CoreIrLowerBoxes`,
+  boxes what it passes and unboxes what it is given back, rebuilding a tag's cell, a record or a list around the parts
+  it converts, and a function passed to the member or returned by it is adapted the same way (`CoreIrLowerBoxes`,
   [#1160](https://github.com/nanyx-lang/nanyx/issues/1160)).
 
 So a lambda that uses a context may leave the scope that supplies it, and a function may be named as a value where

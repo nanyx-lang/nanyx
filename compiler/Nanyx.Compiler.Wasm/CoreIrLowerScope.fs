@@ -21,6 +21,9 @@ type internal Lowering =
     | Adapting of IrType * IrType
     /// As the function a box of a value of this type is a closure over (see `CoreIrLowerBoxes`).
     | BoxReading of IrType
+    /// As the function that converts a list of values of the first type to one of the second, element by element (see
+    /// `CoreIrLowerBoxes`).
+    | ListConverting of IrType * IrType
     /// As a function that writes values as text for `dbg` (see `CoreIrLowerDbg`).
     | Printing of CoreIrLowerDbg.Printer
     /// As the start function, from the module's top-level expressions.

@@ -123,3 +123,32 @@ def main = {
 }
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "ab 2\n"
+
+[<Fact>]
+let ``Run - a context member's boxed values may be lists, converted element by element`` () =
+    let source = """import nanyx/console
+
+context Lists = (
+  reversed: list(a) -> list(a)
+  firstOr: (list(a), a) -> a
+)
+
+def describe: [Lists & Console] () -> () = {
+  def numbers = reversed([1, 2, 3])
+  def words = reversed(["x", "y"])
+  println("{firstOr(numbers, 0)} {firstOr(words, "none")} {firstOr(reversed([]), 7)}")
+}
+
+@entry
+def main = {
+  use Lists(
+    reversed = { xs -> xs \list.reverse }
+    firstOr = {
+      | [first, ..._], _ -> first
+      | [], fallback -> fallback
+    }
+  )
+  describe()
+}
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "3 y 7\n"
