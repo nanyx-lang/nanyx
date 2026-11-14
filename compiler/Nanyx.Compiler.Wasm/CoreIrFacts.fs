@@ -62,7 +62,8 @@ let collect (functions: Function list) : ModuleFacts =
         | PGuard(_, guard) -> expr guard
         | _ -> Pattern.parts p |> List.iter pattern
 
-    and expr (e: Expr) =
+    /// What `e` names itself, not counting the expressions inside it.
+    and own (e: Expr) =
         match e.Kind with
         | Atom a -> atom a
         | Prim(_, atoms)
@@ -86,36 +87,31 @@ let collect (functions: Function list) : ModuleFacts =
         | Dbg text ->
             atom text
             usesDbgHelpers.Value <- true
-        | BoxFloat _ -> ()
         | Panic messages -> strings.AddRange messages
-        | ForEach loop ->
-            ForLoop.sourceAtoms loop |> List.iter atom
-            expr loop.Body
-        | While loop ->
-            expr loop.Condition
-            expr loop.Body
+        | ForEach loop -> ForLoop.sourceAtoms loop |> List.iter atom
+        | If(cond, _, _) -> atom cond
+        | _ -> ()
+
+    // What the expression names itself, then the expressions inside it (see `Expr.children`), the last in tail
+    // position, so that a chain as long as a function takes no stack to walk.
+    and expr (e: Expr) =
+        match e.Kind with
         | Let(var, value, body) when var.Kind = Temp ->
             deferred.[var.Id] <- value
             expr body
-        | Let(_, value, body) ->
-            expr value
-            expr body
-        | Do(first, rest) ->
-            expr first
-            expr rest
-        | If(cond, ifTrue, ifFalse) ->
-            atom cond
-            expr ifTrue
-            expr ifFalse
+        // A pattern's strings are named in their places among its guards, so a match walks its arms' patterns itself.
         | Match(_, arms) ->
             for arm in arms do
                 arm.Patterns |> List.iter pattern
                 expr arm.Body
-        | Dup(_, body)
-        | Drop(_, body)
-        | DropAfter(body, _)
-        | Release(_, body)
-        | Reuse(_, body) -> expr body
+        | _ ->
+            own e
+            match Expr.children e with
+            | [] -> ()
+            | children ->
+                for child in List.take (children.Length - 1) children do
+                    expr child
+                expr (List.last children)
 
     for func in functions do
         expr func.Body
