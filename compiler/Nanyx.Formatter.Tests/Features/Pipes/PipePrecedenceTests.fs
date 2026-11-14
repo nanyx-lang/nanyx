@@ -9,7 +9,7 @@ open Nanyx.Formatter.Tests.TestHelpers
 [<Fact>]
 let ``A pipe used as an operand is not bracketed`` () =
     unchanged "def v = [p.r, p.g, p.b] \\min ?? 0.0\n"
-    unchanged "def v = s \\trim == \"\"\n"
+    unchanged (normalized """def v = s \trim == "" """)
     unchanged "def v = a + b \\f\n"
     Assert.Equal("def v = x \\f + 1\n", format "def v = (x \\f) + 1")
     Assert.Equal("def v = xs \\length == 0\n", format "def v = (xs \\length) == 0")
