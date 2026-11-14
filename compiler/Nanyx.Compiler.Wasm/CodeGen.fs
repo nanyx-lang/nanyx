@@ -230,6 +230,37 @@ let private recordLayoutId (table: RecordTable) (fieldNames: string list) =
         layouts.[fieldNames] <- id
         id
 
+/// Where a call finds the member `memberName` of a parameterised context that the type checker found as `instance`
+/// (see `TypedModule.ContextInstances`), given the keys of the members in scope there (`scopeKeys`), and the key of the
+/// member in scope it is, if it is one: none for an instance found any other way.
+let private foundMember
+    (functionWrappers: Map<string, string>)
+    (scopeKeys: Set<ContextMemberKey>)
+    (memberName: string)
+    (instance: ContextInstance)
+    : (Choice<ContextMemberKey, CoreIrLowerInput.ContextArgument>) option =
+    match instance with
+    // An instance in scope, as written where it is: the members of a `use` or of the context a function's type
+    // declares. A `use` of a record value, which the type checker found to be the instance by its shape, binds its
+    // members by their names alone.
+    | InstanceInScope(written, _) ->
+        let writtenKey = contextMemberKey (Some written) memberName
+        Some (Choice1Of2 (if not (scopeKeys.Contains writtenKey) && scopeKeys.Contains (NamedMember memberName) then NamedMember memberName else writtenKey))
+    // An instance built from the attached definitions: each member is one of them, a function passed as a closure over
+    // its wrapper, or a value passed as it is.
+    | InstanceSynthesized members ->
+        let definition = members |> List.find (fun (n, _) -> n = memberName) |> snd
+        match functionWrappers |> Map.tryFind definition with
+        | Some wrapper -> Some (Choice2Of2 (CoreIrLowerInput.ClosureOverWrapper wrapper))
+        | None -> Some (Choice2Of2 (CoreIrLowerInput.DefinitionValue definition))
+    // An instance derived from the parts of a type with variables in it: a closure over its definition and the
+    // instances the definition requires.
+    | InstanceDerived(_, definition, at) ->
+        match functionWrappers |> Map.tryFind definition with
+        | Some wrapper -> Some (Choice2Of2 (CoreIrLowerInput.DerivedClosure(wrapper, at)))
+        | None -> CoreIr.internalError $"the derived definition '{definition}' has no wrapper"
+    | InstanceBuiltIn -> None
+
 /// Where a call to `name`, the call at node `callId`, finds each member of the contexts the callee requires, in the
 /// order it requires them, given the keys of the members in scope there (`scopeKeys`). Each is found where the type
 /// checker found its context: an instance in scope (a `use`, or a context the caller's type declares), or one built
@@ -286,32 +317,13 @@ let private contextArguments
     required
     |> List.mapi (fun index requiredKey -> requiredKey, instances |> Option.map (fun perMember -> perMember.[index]))
     |> List.fold (fun (acc: CoreIrLowerInput.ContextArgument list, used: Set<ContextMemberKey>) (requiredKey, instance) ->
-        match instance with
         // A member its value's callers pass.
-        | _ when passed.Contains requiredKey -> acc @ [ CoreIrLowerInput.PassedByCaller ], used
-        // An instance in scope, as written where it is: the members of a `use` or of the context a function's type
-        // declares. A `use` of a record value, which the type checker found to be the instance by its shape, binds
-        // its members by their names alone.
-        | Some (memberName, Some (InstanceInScope(written, _))) ->
-            let writtenKey = contextMemberKey (Some written) memberName
-            let key = if not (scopeKeys.Contains writtenKey) && scopeKeys.Contains (NamedMember memberName) then NamedMember memberName else writtenKey
-            acc @ [ memberFor requiredKey key ], used.Add key
-        // An instance built from the attached definitions: each member is one of them, a function passed as a closure
-        // over its wrapper, or a value passed as it is.
-        | Some (memberName, Some (InstanceSynthesized members)) ->
-            let definition = members |> List.find (fun (n, _) -> n = memberName) |> snd
-            let argument =
-                match functionWrappers |> Map.tryFind definition with
-                | Some wrapper -> CoreIrLowerInput.ClosureOverWrapper wrapper
-                | None -> CoreIrLowerInput.DefinitionValue definition
-            acc @ [ argument ], used
-        // An instance derived from the parts of a type with variables in it: a closure over its definition and the
-        // instances the definition requires.
-        | Some (_, Some (InstanceDerived(_, definition, at))) ->
-            match functionWrappers |> Map.tryFind definition with
-            | Some wrapper -> acc @ [ CoreIrLowerInput.DerivedClosure(wrapper, at) ], used
-            | None -> CoreIr.internalError $"the derived definition '{definition}' has no wrapper"
-        | _ ->
+        if passed.Contains requiredKey then acc @ [ CoreIrLowerInput.PassedByCaller ], used
+        else
+        match instance |> Option.bind (fun (memberName, found) -> found |> Option.bind (foundMember functionWrappers scopeKeys memberName)) with
+        | Some (Choice1Of2 key) -> acc @ [ memberFor requiredKey key ], used.Add key
+        | Some (Choice2Of2 argument) -> acc @ [ argument ], used
+        | None ->
             let resolvedKey =
                 if scopeKeys.Contains requiredKey then requiredKey
                 else findCompatible used requiredKey |> Option.defaultValue requiredKey
@@ -353,20 +365,23 @@ let private extractTypeLayouts (module': Module) : Map<string, string list> * Ma
     let fieldTypes = results |> List.map (fun (n, _, types) -> (n, types)) |> Map.ofList
     layouts, fieldTypes
 
-/// The members of each context without parameters in `typeDefs`, each with its key and declared type, in the order
-/// `typeLayouts` stores them (see `CoreIrLowerTypes.ContextLayouts`), its own type variables boxed
-/// (`CoreIrLowerTypes.boxOwnVariables`).
-let private contextLayoutsOf (typeDefs: Map<string, TypeDefInfo>) (typeLayouts: Map<string, string list>) : CoreIrLowerTypes.ContextLayouts =
-    typeDefs
-    |> Map.filter (fun _ info -> info.IsContext && info.Parameters.IsEmpty)
-    |> Map.toList
-    |> List.choose (fun (name, info) ->
-        match Unifier.unalias info.Underlying, layoutOf typeLayouts name with
-        | TyRecord members, Some layout ->
-            let memberOf memberName = members |> Map.tryFind memberName |> Option.map (fun ty -> contextMemberKey None memberName, CoreIrLowerTypes.boxOwnVariables ty)
-            Some (name, layout |> List.choose memberOf)
-        | _ -> None)
-    |> Map.ofList
+/// The members of each context in `typeDefs`, each with its declared type, in the order `typeLayouts` stores them (see
+/// `ContextLayouts`): of one without parameters by key, its own type variables boxed
+/// (`CoreIrLowerTypes.boxOwnVariables`), and of a parameterised one by name, in its parameters.
+let private contextLayoutsOf (typeDefs: Map<string, TypeDefInfo>) (typeLayouts: Map<string, string list>) : ContextLayouts =
+    let declared (parameterised: bool) =
+        typeDefs
+        |> Map.filter (fun _ info -> info.IsContext && info.Parameters.IsEmpty <> parameterised)
+        |> Map.toList
+        |> List.choose (fun (name, info) ->
+            match Unifier.unalias info.Underlying, layoutOf typeLayouts name with
+            | TyRecord members, Some layout -> Some (name, info, layout |> List.choose (fun memberName -> members |> Map.tryFind memberName |> Option.map (fun ty -> memberName, ty)))
+            | _ -> None)
+    { Plain =
+        declared false
+        |> List.map (fun (name, _, members) -> name, members |> List.map (fun (memberName, ty) -> contextMemberKey None memberName, CoreIrLowerTypes.boxOwnVariables ty))
+        |> Map.ofList
+      Parameterised = declared true |> List.map (fun (name, info, members) -> name, (info.Parameters, members)) |> Map.ofList }
 
 /// `exprTypes` with the type of each function `module'` names as a value (a closure over its wrapper: `wrapped` gives
 /// the function each wrapper calls) requiring the contexts without parameters that the function requires
@@ -402,6 +417,87 @@ let private carryPlainContexts
             | _ -> acc
         | _ -> acc) exprTypes
 
+/// Each type an annotation writes, matched to the type in the same place in the type it annotates: the type
+/// variables it names, as inference may have merged a written variable with another and dropped its name, and
+/// the types a context's arguments write that are neither variables nor primitives (`Word`, `list(int)`).
+let rec private matchAnnotation (annotation: TypeExpr) (ty: Ty) : (TypeExpr * Ty) list =
+    let within =
+        match annotation.Kind, Unifier.unalias ty with
+        | TypeFunc(input, output), TyFunc(input', output', _) -> matchAnnotation input input' @ matchAnnotation output output'
+        // A function type written with the contexts it requires, `[c] a -> b`.
+        | TypeWithContext(_, inner), _ -> matchAnnotation inner ty
+        | TypeTuple items, TyRecord fields ->
+            items |> List.mapi (fun index item -> fields |> Map.tryFind (string index) |> Option.map (matchAnnotation item) |> Option.defaultValue []) |> List.concat
+        | TypeApply(applied, items), TyApply(applied', items') when applied = applied' && items.Length = items'.Length ->
+            List.map2 matchAnnotation items items' |> List.concat
+        | TypeRecord written, TyRecord fields ->
+            written
+            |> List.collect (function
+                | TypeField(fieldName, _, Some fieldType, _) ->
+                    fields |> Map.tryFind fieldName |> Option.map (matchAnnotation fieldType) |> Option.defaultValue []
+                | _ -> [])
+        // A tag's payload, and each tag of a union by its name, as the union's tags need not be in the same order.
+        | TypeTag(tag, Some payload), TyTag(tag', Some payload') when tag = tag' -> matchAnnotation payload payload'
+        | TypeUnion written, TyUnion items ->
+            written
+            |> List.collect (fun item ->
+                match item.Kind with
+                | TypeTag(tag, Some _) ->
+                    items
+                    |> List.tryFind (function TyTag(tag', Some _) -> tag = tag' | _ -> false)
+                    |> Option.map (matchAnnotation item)
+                    |> Option.defaultValue []
+                | _ -> [])
+        | _ -> []
+    (annotation, ty) :: within
+
+/// The type `argument`, written in an annotation as a context's argument, stands for: a primitive, a type variable by
+/// its name (in `named`, or where the annotation writes it, in `annotated`, see `matchAnnotation`), or another type
+/// where the annotation writes it in place of one (`[ToText(Word)] Word -> int`).
+let private writtenArgumentType (named: (string * Ty) list) (annotated: (TypeExpr * Ty) list) (argument: TypeExpr) : Ty option =
+    let annotatedVars =
+        annotated
+        |> List.choose (fun (written, ty) ->
+            match written.Kind, Unifier.unalias ty with
+            | (TypeName varName | TypeVar varName), TyVar _ -> Some (varName, ty)
+            | _ -> None)
+    let vars = named @ annotatedVars |> Map.ofList
+    let writtenTy (argument: TypeExpr) =
+        annotated |> List.tryFind (fun (written, _) -> written = argument) |> Option.map snd
+    match argument.Kind with
+    | TypeName ("int" | "string" | "bool" | "unit" | "float" as primitive) -> Some (TyPrimitive primitive)
+    | TypeName varName ->
+        vars
+        |> Map.tryFind varName
+        |> Option.orElse (if SizedNumber.isName varName then Some (TyPrimitive varName) else None)
+        |> Option.orElse (writtenTy argument)
+    | TypeVar varName -> vars |> Map.tryFind varName
+    | _ -> writtenTy argument
+
+/// The contexts the local function that `annotation` is written for requires, in the order its type writes them and in
+/// the type variables of `lambdaTy`, the type of its lambda: a parameterised one at the types its arguments stand for
+/// there (see `writtenArgumentType`), and any other by its name. None where an argument's type cannot be worked out.
+let private localContextsOf (annotation: LambdaLifting.LocalAnnotation) (lambdaTy: Ty) : Ty list option =
+    match annotation.Type.Kind with
+    | TypeWithContext(contexts, inner) ->
+        let annotated = matchAnnotation inner lambdaTy
+        let contextTy (context: TypeExpr) =
+            match context.Kind with
+            | TypeApply(name, arguments) ->
+                let argumentTys = arguments |> List.map (writtenArgumentType [] annotated)
+                if argumentTys |> List.forall Option.isSome then Some (TyApply(name, argumentTys |> List.map Option.get)) else None
+            | TypeName name -> Some (TyApply(name, []))
+            | _ -> None
+        let tys = contexts |> List.map contextTy
+        if tys |> List.forall Option.isSome then Some (tys |> List.map Option.get) else None
+    | _ -> None
+
+/// Whether `context` is a parameterised context, at some types.
+let private isInstance (context: Ty) =
+    match context with
+    | TyApply(_, _ :: _) -> true
+    | _ -> false
+
 /// The functions a module was compiled into, from the core IR (see "Core IR" in `docs/src/content/work-in-progress/memory-management.md`).
 type BackendReport =
     { /// The functions, by their names in WebAssembly text, specialisations and the start function included.
@@ -434,14 +530,47 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         || match typed.Types |> Map.tryFind name |> Option.map Unifier.unalias with
            | Some (TyFunc(_, _, contexts)) -> not (Unifier.writtenContexts contexts).IsEmpty
            | _ -> false
-    // The members of each context without parameters, as a function value that requires the context takes them.
-    let contextLayouts: CoreIrLowerTypes.ContextLayouts = contextLayoutsOf typed.TypeDefs (fst (extractTypeLayouts module'))
+    // The members of each context, as a function value that requires the context takes them.
+    let contextLayouts = contextLayoutsOf typed.TypeDefs (fst (extractTypeLayouts module'))
     // A lambda is passed the members of the contexts its type requires at each call, so it does not capture them.
     let passedMembers (lambda: Expression) =
         match checkedTypes |> Map.tryFind lambda.Id with
         | Some (TyFunc(_, _, contexts)) -> CoreIrLowerTypes.contextMembersOf contextLayouts contexts |> List.map fst |> Set.ofList
         | _ -> Set.empty
     let module', liftedOrigins, functionWrappers, useKeys, useBindingContexts = LambdaLifting.lift synthesizedMembers memberCaptures requiresContexts passedMembers typed.UseContexts (typed.AmbientMembers |> List.map _.Definition) module'
+    // Each local function written with a type that requires parameterised contexts, by its lambda's node: its annotation,
+    // its lambda's type, and the contexts it writes in that type's variables (see `localContextsOf`). The type checker
+    // keeps them out of the lambda's type, so they are put there for the backend: a function value carries their members.
+    let localContexts =
+        liftedOrigins
+        |> Map.values
+        |> Seq.choose (fun origin ->
+            match origin.Annotation, checkedTypes |> Map.tryFind origin.Lambda.Id with
+            | Some annotation, Some lambdaTy ->
+                localContextsOf annotation lambdaTy
+                |> Option.filter (List.exists isInstance)
+                |> Option.map (fun contexts -> origin.Lambda.Id, (annotation, lambdaTy, contexts))
+            | _ -> None)
+        |> Map.ofSeq
+    let withLocalContexts (exprTypes: Map<NodeId, Ty>) =
+        localContexts
+        |> Map.fold (fun (acc: Map<NodeId, Ty>) node (_, lambdaTy, contexts) ->
+            match Unifier.unalias lambdaTy with
+            | TyFunc(input, output, own) -> acc |> Map.add node (TyFunc(input, output, own @ List.filter isInstance contexts))
+            | _ -> acc) exprTypes
+    // Each name that refers to one of those functions, by its node, with the contexts it writes and its lambda's type.
+    let localCallees =
+        typed.References
+        |> Map.toSeq
+        |> Seq.choose (fun (node, symbol) ->
+            match typed.Symbols |> Map.tryFind symbol with
+            | Some declared when declared.Kind = LocalValue ->
+                localContexts
+                |> Map.values
+                |> Seq.tryFind (fun (annotation, _, _) -> annotation.Name = declared.Name && SourceSpan.contains annotation.Statement declared.Declaration)
+                |> Option.map (fun (_, lambdaTy, contexts) -> node, (contexts, lambdaTy))
+            | _ -> None)
+        |> Map.ofSeq
     let defs =
         module'
         |> List.choose (function
@@ -536,39 +665,6 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             | TyApply(_, args) -> args |> List.collect namedVars
             | TyUnion items -> items |> List.collect namedVars
             | TyAlias(_, args, underlying) -> (args |> List.collect namedVars) @ namedVars underlying
-        // Each type the annotation writes, matched to the type in the same place in the definition's type: the type
-        // variables it names, as inference may have merged a written variable with another and dropped its name, and
-        // the types a context's arguments write that are neither variables nor primitives (`Word`, `list(int)`).
-        let rec matchAnnotation (annotation: TypeExpr) (ty: Ty) : (TypeExpr * Ty) list =
-            let within =
-                match annotation.Kind, Unifier.unalias ty with
-                | TypeFunc(input, output), TyFunc(input', output', _) -> matchAnnotation input input' @ matchAnnotation output output'
-                // A function type written with the contexts it requires, `[c] a -> b`.
-                | TypeWithContext(_, inner), _ -> matchAnnotation inner ty
-                | TypeTuple items, TyRecord fields ->
-                    items |> List.mapi (fun index item -> fields |> Map.tryFind (string index) |> Option.map (matchAnnotation item) |> Option.defaultValue []) |> List.concat
-                | TypeApply(applied, items), TyApply(applied', items') when applied = applied' && items.Length = items'.Length ->
-                    List.map2 matchAnnotation items items' |> List.concat
-                | TypeRecord written, TyRecord fields ->
-                    written
-                    |> List.collect (function
-                        | TypeField(fieldName, _, Some fieldType, _) ->
-                            fields |> Map.tryFind fieldName |> Option.map (matchAnnotation fieldType) |> Option.defaultValue []
-                        | _ -> [])
-                // A tag's payload, and each tag of a union by its name, as the union's tags need not be in the same order.
-                | TypeTag(tag, Some payload), TyTag(tag', Some payload') when tag = tag' -> matchAnnotation payload payload'
-                | TypeUnion written, TyUnion items ->
-                    written
-                    |> List.collect (fun item ->
-                        match item.Kind with
-                        | TypeTag(tag, Some _) ->
-                            items
-                            |> List.tryFind (function TyTag(tag', Some _) -> tag = tag' | _ -> false)
-                            |> Option.map (matchAnnotation item)
-                            |> Option.defaultValue []
-                        | _ -> [])
-                | _ -> []
-            (annotation, ty) :: within
         let annotated =
             match defs |> List.tryFind (fun (defName, _, _) -> defName = name), definitionTypes |> Map.tryFind name with
             | Some (_, typeOpt, value), Some ty ->
@@ -576,27 +672,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 | Some annotation -> matchAnnotation annotation ty
                 | None -> []
             | _ -> []
-        let annotatedVars =
-            annotated
-            |> List.choose (fun (written, ty) ->
-                match written.Kind, Unifier.unalias ty with
-                | (TypeName varName | TypeVar varName), TyVar _ -> Some (varName, ty)
-                | _ -> None)
-        let vars =
-            (definitionTypes |> Map.tryFind name |> Option.map namedVars |> Option.defaultValue []) @ annotatedVars |> Map.ofList
-        // Another type is the one the annotation writes it in place of, where it does (`[ToText(Word)] Word -> int`).
-        let writtenTy (argument: TypeExpr) =
-            annotated |> List.tryFind (fun (written, _) -> written = argument) |> Option.map snd
-        let argumentTy (argument: TypeExpr) =
-            match argument.Kind with
-            | TypeName ("int" | "string" | "bool" | "unit" | "float" as primitive) -> Some (TyPrimitive primitive)
-            | TypeName varName ->
-                vars
-                |> Map.tryFind varName
-                |> Option.orElse (if SizedNumber.isName varName then Some (TyPrimitive varName) else None)
-                |> Option.orElse (writtenTy argument)
-            | TypeVar varName -> vars |> Map.tryFind varName
-            | _ -> writtenTy argument
+        let argumentTy = writtenArgumentType (definitionTypes |> Map.tryFind name |> Option.map namedVars |> Option.defaultValue []) annotated
         let memberTypes =
             functionContextTypes
             |> Map.tryFind name
@@ -667,6 +743,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 typed.InlinedExprTypes
                 |> Map.fold (fun acc id ty -> acc |> Map.add id ty) checkedTypes
                 |> carryPlainContexts typed.TypeDefs functionContextTypes (functionWrappers |> Map.toList |> List.map (fun (function', wrapper) -> wrapper, function') |> Map.ofList) module'
+                |> withLocalContexts
               CalleeTypes = typed.InlinedCalleeTypes |> Map.fold (fun acc id ty -> acc |> Map.add id ty) typed.CalleeTypes
               DefinitionTypes = typed.Types
               ContextParameters =
@@ -679,6 +756,13 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                                 functionContextRequirements functionContextTypes typeLayouts contextInstances functionWrappers
                                 ambientContextMembers scopeKeys passed name callId)
                     with Failure message -> Error message
+              FoundMember =
+                fun callId index memberName scopeKeys ->
+                    contextInstances
+                    |> Map.tryFind callId
+                    |> Option.bind (List.tryItem index >> Option.flatten)
+                    |> Option.bind (foundMember functionWrappers scopeKeys memberName)
+              LocalCallees = localCallees
               ContextLayouts = contextLayouts
               AmbientMembers = ambientContextMembers
               UseKeys = useKeys
@@ -699,7 +783,12 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               NominalWrappers = nominalWrappers
               NominalTypes = typed.TypeDefs |> Map.filter (fun _ info -> info.IsNominal) |> Map.keys |> Set.ofSeq
               Lifted =
-                [ yield! liftedOrigins |> Map.toList |> List.map (fun (name, origin) -> name, CoreIrLowerInput.LiftedLambda(origin.Lambda, origin.Captured, origin.Owner))
+                [ yield! liftedOrigins |> Map.toList |> List.map (fun (name, origin) ->
+                    let written =
+                        match origin.Annotation with
+                        | Some { Type = Kind (TypeWithContext(contexts, _)) } -> contexts
+                        | _ -> []
+                    name, CoreIrLowerInput.LiftedLambda(origin.Lambda, origin.Captured, origin.Owner, written))
                   yield! functionWrappers |> Map.toList |> List.map (fun (wrapped, wrapper) -> wrapper, CoreIrLowerInput.FunctionWrapper wrapped) ]
                 |> Map.ofList
               TopLevel = topLevelExprs

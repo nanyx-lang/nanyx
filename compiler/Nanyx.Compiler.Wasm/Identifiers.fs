@@ -34,6 +34,31 @@ let contextMemberKey (contextType: TypeExpr option) (memberName: string) =
     | Some ({ TypeExpr.Kind = TypeApply _ } as applied) -> InstanceMember(typeKeyOf applied, memberName)
     | _ -> NamedMember memberName
 
+/// `ty` as a type key, as `typeKeyOf` keys the type an annotation would write for it (`Show(Point)`); none for a type
+/// with a type variable in it, or one an annotation cannot write. A tuple is keyed as a written one is.
+let rec typeKeyOfType (ty: NyxCompiler.Ty) : TypeKey option =
+    let all (tys: NyxCompiler.Ty list) =
+        let keys = tys |> List.map typeKeyOfType
+        if keys |> List.forall Option.isSome then Some (keys |> List.map Option.get) else None
+    match ty with
+    | NyxCompiler.TyVar _
+    | NyxCompiler.TyOpenRecord _ -> None
+    | NyxCompiler.TyPrimitive "unit" -> Some (TypeKey("()", []))
+    | NyxCompiler.TyPrimitive "?error" -> None
+    | NyxCompiler.TyPrimitive name
+    | NyxCompiler.TyAlias(name, [], _) -> Some (TypeKey(name, []))
+    | NyxCompiler.TyNominal(nominal, _, _) -> Some (TypeKey(nominal.Name, []))
+    | NyxCompiler.TyAlias(name, args, _)
+    | NyxCompiler.TyApply(name, args) -> all args |> Option.map (fun args -> TypeKey(name, args))
+    | NyxCompiler.TyRecord fields ->
+        let names, tys = fields |> Map.toList |> List.unzip
+        let isTuple = names |> List.forall (fun name -> fst (Int32.TryParse name))
+        let tys = if isTuple then names |> List.sortBy int |> List.map (fun name -> fields.[name]) else tys
+        all tys |> Option.map (fun keys -> TypeKey((if isTuple then "(,)" else "(" + String.concat "," names + ")"), keys))
+    | NyxCompiler.TyTag(name, payload) -> all (Option.toList payload) |> Option.map (fun keys -> TypeKey("#" + name, keys))
+    | NyxCompiler.TyUnion items -> all items |> Option.map (fun keys -> TypeKey("|", keys))
+    | NyxCompiler.TyFunc(input, output, _) -> all [ input; output ] |> Option.map (fun keys -> TypeKey("->", keys))
+
 /// `name` as a WebAssembly identifier. ASCII letters, digits, `_` and `-` are kept, and a `.` becomes `_`. Any other
 /// character becomes its code in hex between dashes, `-20-` for a space, so that names that differ only there, such
 /// as `` `add points` `` and `add_points`, or `` Point.`==` `` and `` Point.`!=` ``, stay apart. Some names are

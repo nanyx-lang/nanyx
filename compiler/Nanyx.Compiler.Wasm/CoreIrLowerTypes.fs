@@ -174,10 +174,6 @@ let sortFields (fields: (string * 'a) list) =
     let byName = Map.ofList fields
     storageOrder (List.map fst fields) |> List.map (fun name -> name, byName.[name])
 
-/// The members of each context without parameters, by the context's name: each member's key and declared type, in
-/// the order the context's layout stores them.
-type ContextLayouts = Map<string, (ContextMemberKey * Ty) list>
-
 /// The type a context member's own type variables are at in its context's layout (see `boxOwnVariables`): their values
 /// are boxed (`IrBox`).
 let boxedTy = TyPrimitive "?box"
@@ -198,9 +194,10 @@ let boxOwnVariables (memberTy: Ty) : Ty =
 
 /// The IR type of `ty`, once `subst` is applied. A type variable nothing constrains (the element of `[]`, the rest of
 /// an open union that no use closes) has no value of its own at run time, since nothing can make or inspect one, so it
-/// is unit, and the rest of a union adds no tags. A function type takes the members of the contexts without parameters
-/// it requires, which `layouts` gives (see `IrFunction`); a parameterised one is found where the function is made, so
-/// it takes none for that.
+/// is unit, and the rest of a union adds no tags. A function type takes the members of the contexts it requires, which
+/// `layouts` gives (see `IrFunction`): those of a parameterised one at the types it requires it at, each keyed by the
+/// instance (`show` of `Show(Point)`, see `Identifiers.typeKeyOfType`). One required at a type with a variable in it
+/// is found where the function is made, so it takes none for that.
 let rec toIrTypeIn (layouts: ContextLayouts) (ty: Ty) : IrType = toIrTypeExpanding layouts Set.empty [] ty
 
 /// `toIrTypeIn`, inside the members of the contexts `expanding`: a member's type that requires one of them again takes
@@ -261,18 +258,34 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
         let members =
             names
             |> List.collect (fun name ->
-                layouts
+                layouts.Plain
                 |> Map.tryFind name
                 |> Option.defaultValue []
                 |> List.map (fun (key, memberTy) -> key, toIrTypeExpanding layouts (expanding.Add name) recursing memberTy))
             |> List.distinctBy fst
-        IrFunction(toIrType input, toIrType output, members)
+        let instances =
+            concreteContexts contexts
+            |> List.choose (function
+                | TyApply(name, (_ :: _ as args)) as context when
+                    not (expanding.Contains name)
+                    && layouts.Parameterised |> Map.tryFind name |> Option.exists (fun (parameters, _) -> parameters.Length = args.Length) ->
+                    Identifiers.typeKeyOfType context |> Option.map (fun key -> key, name, args)
+                | _ -> None)
+            |> List.distinctBy (fun (key, _, _) -> key)
+            |> List.sortBy (fun (key, _, _) -> ContextMemberKey.text (InstanceMember(key, "")))
+            |> List.collect (fun (key, name, args) ->
+                let parameters, declared = layouts.Parameterised.[name]
+                let bound = List.zip (parameters |> List.map _.Id) args |> Map.ofList
+                declared
+                |> List.map (fun (memberName, memberTy) ->
+                    InstanceMember(key, memberName), toIrTypeExpanding layouts (expanding.Add name) recursing (boxOwnVariables (substitute bound memberTy))))
+        IrFunction(toIrType input, toIrType output, members @ instances)
     | TyOpenRecord _ -> cannot "a record whose other fields are not known here"
     | TyApply(name, _) -> cannot $"a value of type {name}"
     | TyAlias _ -> cannot "an alias"
 
-/// The members of the contexts without parameters among `contexts`, each with its key and IR type, in the order a
-/// function value that requires them takes them (see `IrFunction`).
+/// The members of the contexts among `contexts`, each with its key and IR type, in the order a function value that
+/// requires them takes them (see `IrFunction`).
 let contextMembersOf (layouts: ContextLayouts) (contexts: Ty list) : (ContextMemberKey * IrType) list =
     match toIrTypeIn layouts (TyFunc(TyPrimitive "unit", TyPrimitive "unit", contexts)) with
     | IrFunction(_, _, members) -> members
@@ -301,8 +314,8 @@ let unconstrainedAsUnit (ty: Ty) =
 
 /// The type each context without parameters in `contextLayouts` declares for its member of each key, where only one
 /// declares a member of that key.
-let declaredMemberTypes (contextLayouts: Map<string, (ContextMemberKey * Ty) list>) =
-    contextLayouts
+let declaredMemberTypes (contextLayouts: ContextLayouts) =
+    contextLayouts.Plain
     |> Map.values
     |> Seq.concat
     |> Seq.groupBy fst

@@ -69,8 +69,21 @@ let rec private redirectSelfReferences (from: string) (to': string) (expr: Expre
 /// Where a lifted function came from: the top-level def it was written in, its local name there if it
 /// was a `rec` def, and the names of the variables it captures, in the order they sit in its environment.
 /// A lambda lifted from a call's argument also keeps the lambda as written, to find its type in the owner's. `Lambda`
-/// is the lambda as written for any lifted function, whose node the type checker typed.
-type LiftedOrigin = { Owner: string; LocalName: string option; Captured: string list; Source: Expression option; Lambda: Expression }
+/// is the lambda as written for any lifted function, whose node the type checker typed. `Annotation` is the type a
+/// local function is written with, where it requires contexts.
+type LiftedOrigin =
+    { Owner: string; LocalName: string option; Captured: string list; Source: Expression option; Lambda: Expression; Annotation: LocalAnnotation option }
+
+/// The type a local function that requires contexts is written with (`def f: [Show(b)] b -> string = ...`): its name,
+/// the type, and where its `def` statement is written.
+and LocalAnnotation = { Name: string; Type: TypeExpr; Statement: SourceSpan }
+
+/// The type `typeOpt` the local function `name` is written with in the statement `statement`, where it requires
+/// contexts.
+let private annotationOf (name: string) (typeOpt: TypeExpr option) (statement: Statement) =
+    match typeOpt with
+    | Some (Kind (TypeWithContext _) as written) -> Some { Name = name; Type = written; Statement = statement.Span }
+    | _ -> None
 
 /// `ty` with the type parameters of a context replaced by the arguments of one of its instances.
 let rec private substituteTypeParameters (arguments: Map<string, TypeExpr>) (ty: TypeExpr) : TypeExpr =
@@ -291,7 +304,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
         | ForSyntax.Call(iterables, lambda, args, body) ->
             let innerScope = Set.union (args |> List.map fst |> Set.ofList) (boundNames body |> Set.ofList)
             rebuild (FunctionCall(ForSyntax.builtIn, None, List.map recur iterables @ [ { lambda with Kind = Lambda(args, liftExpr (Set.union scope innerScope) body, false) } ]))
-        | Lambda(args, body, _) -> liftLambda scope expr args body
+        | Lambda(args, body, _) -> liftLambda scope None expr args body
         // A top-level function used as a value: a closure over a wrapper that takes an environment.
         | IdentifierExpr name when topLevelArities.ContainsKey name && not (scope.Contains name) ->
             closureOf expr (wrapperOf name) []
@@ -314,7 +327,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
             // A lambda bound to a context member takes the types of its parameters from the member's declared type.
             let liftMember contextType memberName (value: Expression) =
                 match value.Kind with
-                | Lambda(args, body, _) -> liftLambda scope value (annotateFromMemberType (memberType contextType memberName) args) body
+                | Lambda(args, body, _) -> liftLambda scope None value (annotateFromMemberType (memberType contextType memberName) args) body
                 | _ -> recur value
             // What a `use` in the block loads is in scope until the block ends.
             let outerUseMembers = useMembers
@@ -328,7 +341,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
                 // `rec name = { ... }`: a local function that calls itself. It is lifted under a fresh
                 // name with its self-references redirected there (a self-call passes the environment on),
                 // and the local is bound to its closure.
-                | DefStatement(isExport, name, _, Kind (RecSyntax.Call (Kind (Lambda(args, body, _)) as lambda))) when not args.IsEmpty ->
+                | DefStatement(isExport, name, typeOpt, Kind (RecSyntax.Call (Kind (Lambda(args, body, _)) as lambda))) when not args.IsEmpty ->
                     let liftedName = $"__rec_{sanitizeIdentifier name}_{counter}"
                     counter <- counter + 1
                     let parameterNames = args |> List.map fst |> Set.ofList
@@ -340,7 +353,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
                         |> Set.toList
                         |> withMembers (passedMembers lambda) body liftedBody
                     lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, liftedName, None, liftedLambda lambda args captured liftedBody))))
-                    origins.[liftedName] <- { Owner = owner; LocalName = Some name; Captured = captured; Source = None; Lambda = lambda }
+                    origins.[liftedName] <- { Owner = owner; LocalName = Some name; Captured = captured; Source = None; Lambda = lambda; Annotation = annotationOf name typeOpt statement }
                     [ keep (DefStatement(isExport, name, None, closureOf lambda liftedName captured)) ]
                 | DefStatement(isExport, name, typeOpt, Kind (RecSyntax.Call rhs)) ->
                     [ keep (DefStatement(isExport, name, typeOpt, recur rhs)) ]
@@ -352,6 +365,9 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
                             | NamedField(memberName, value) -> NamedField(memberName, liftMember usedRecords.[name] memberName value)
                             | PositionalField value -> PositionalField(recur value))
                     [ keep (DefStatement(isExport, name, typeOpt, { record with Kind = RecordExpr fields })) ]
+                // A local function written with a type that requires contexts: the lifted function keeps the type.
+                | DefStatement(isExport, name, typeOpt, (Kind (Lambda(args, body, _)) as lambda)) when (annotationOf name typeOpt statement).IsSome ->
+                    [ keep (DefStatement(isExport, name, typeOpt, liftLambda scope (annotationOf name typeOpt statement) lambda args body)) ]
                 | DefStatement(isExport, name, typeOpt, rhs) -> [ keep (DefStatement(isExport, name, typeOpt, recur rhs)) ]
                 | ExprStatement value -> [ keep (ExprStatement(recur value)) ]
                 | UseStatement value ->
@@ -437,8 +453,9 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
             recur { expr with Kind = Block [ Statement.from value (UseStatement value); Statement.from body (ExprStatement body) ] }
         | _ -> SyntaxTree.mapChildren recur expr
 
-    /// Lifts `{ args -> body }` to a fresh top-level function and returns its closure.
-    and liftLambda (scope: Set<string>) (lambda: Expression) (args: (string * TypeExpr option) list) (body: Expression) : Expression =
+    /// Lifts `{ args -> body }` to a fresh top-level function and returns its closure. `annotation` is the type the
+    /// local function it is the value of is written with, if it requires contexts (see `LiftedOrigin`).
+    and liftLambda (scope: Set<string>) (annotation: LocalAnnotation option) (lambda: Expression) (args: (string * TypeExpr option) list) (body: Expression) : Expression =
         let parameterNames = args |> List.map fst |> Set.ofList
         let innerScope = Set.union parameterNames (boundNames body |> Set.ofList)
         // A lambda nested inside may capture what this one binds and what encloses this one alike;
@@ -453,7 +470,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
         counter <- counter + 1
         if not (passedMembers lambda).IsEmpty then passesMembers <- true
         lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, name, None, liftedLambda lambda args captured liftedBody))))
-        origins.[name] <- { Owner = owner; LocalName = None; Captured = captured; Source = Some lambda; Lambda = lambda }
+        origins.[name] <- { Owner = owner; LocalName = None; Captured = captured; Source = Some lambda; Lambda = lambda; Annotation = annotation }
         closureOf lambda name captured
 
     let liftItem (item: TopLevelItem) : TopLevelItem =
