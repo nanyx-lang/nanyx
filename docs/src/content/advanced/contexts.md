@@ -171,7 +171,7 @@ def describe: [Show(a)] a -> string = { v -> Show(a).show(v) }
 def twice = { v -> describe(v) ++ describe(v) }   // [Show(α)] α -> string
 ```
 
-Each call to `twice` then finds a `Show` for the type it is called with, as a call to `describe` does. A generic local `def` cannot have one inferred yet: write its type.
+Each call to `twice` then finds a `Show` for the type it is called with, as a call to `describe` does. A generic local `def` that does not write its type is inferred to require it the same way.
 
 This is also how scoped mutation is enforced: values that still require `memory` cannot escape into code that does not provide that context. See [Memory: Values cannot escape memory scope](../advanced/memory#values-cannot-escape-memory-scope).
 

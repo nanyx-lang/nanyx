@@ -80,3 +80,34 @@ def main = {
 }
 """
     runSource (normalized source) |> assertRan "<size 6>\n"
+
+[<Fact>]
+let ``Run - a local function that does not write its type is inferred to require the context (#550)`` () =
+    let source = showContext + """def local = { v ->
+  def f = { x -> describe(x) }
+  f(v)
+}
+@entry
+def main = { println(local(Point(x = 1, y = 2))) }
+"""
+    runSource (normalized source) |> assertRan "(1, 2)\n"
+
+[<Fact>]
+let ``Run - a local function with an inferred context, called at two types in a def that requires none`` () =
+    let source = showContext + """@entry
+def main = {
+  def f = { x -> "<" ++ describe(x) ++ ">" }
+  println(f(Point(x = 1, y = 2)) ++ " / " ++ f(Size(w = 3)))
+}
+"""
+    runSource (normalized source) |> assertRan "<(1, 2)> / <size 3>\n"
+[<Fact>]
+let ``Run - a local function that writes an operator's context is passed its instance at each type`` () =
+    let source = """@entry
+def main = {
+  def f: [Add(a)] a, a -> a = { x, y -> x + y }
+  println(f(1, 2))
+  println(f(1.5, 2.0))
+}
+"""
+    runSource (normalized source) |> assertRan "3\n3.5\n"

@@ -472,24 +472,6 @@ let private writtenArgumentType (named: (string * Ty) list) (annotated: (TypeExp
     | TypeVar varName -> vars |> Map.tryFind varName
     | _ -> writtenTy argument
 
-/// The contexts the local function that `annotation` is written for requires, in the order its type writes them and in
-/// the type variables of `lambdaTy`, the type of its lambda: a parameterised one at the types its arguments stand for
-/// there (see `writtenArgumentType`), and any other by its name. None where an argument's type cannot be worked out.
-let private localContextsOf (annotation: LambdaLifting.LocalAnnotation) (lambdaTy: Ty) : Ty list option =
-    match annotation.Type.Kind with
-    | TypeWithContext(contexts, inner) ->
-        let annotated = matchAnnotation inner lambdaTy
-        let contextTy (context: TypeExpr) =
-            match context.Kind with
-            | TypeApply(name, arguments) ->
-                let argumentTys = arguments |> List.map (writtenArgumentType [] annotated)
-                if argumentTys |> List.forall Option.isSome then Some (TyApply(name, argumentTys |> List.map Option.get)) else None
-            | TypeName name -> Some (TyApply(name, []))
-            | _ -> None
-        let tys = contexts |> List.map contextTy
-        if tys |> List.forall Option.isSome then Some (tys |> List.map Option.get) else None
-    | _ -> None
-
 /// Whether `context` is a parameterised context, at some types.
 let private isInstance (context: Ty) =
     match context with
@@ -536,39 +518,46 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         | Some (TyFunc(_, _, contexts)) -> CoreIrLowerTypes.contextMembersOf contextLayouts contexts |> List.map fst |> Set.ofList
         | _ -> Set.empty
     let module', liftedOrigins, functionWrappers, useKeys, useBindingContexts = LambdaLifting.lift synthesizedMembers memberCaptures requiresContexts passedMembers typed.UseContexts (typed.AmbientMembers |> List.map _.Definition) module'
-    // Each local function written with a type that requires parameterised contexts, by its lambda's node: its annotation,
-    // its lambda's type, and the contexts it writes in that type's variables (see `localContextsOf`). The type checker
-    // keeps them out of the lambda's type, so they are put there for the backend: a function value carries their members.
+    // Each local function that requires parameterised contexts, written or inferred, by its lambda's node: the
+    // contexts as the type checker writes them (`TypedModule.LocalContexts`), its lambda's type, and the contexts in
+    // that type's variables. The type checker keeps them out of the lambda's type, so they are put there for the
+    // backend: a function value carries their members.
     let localContexts =
+        let localSymbols = typed.Symbols |> Map.values |> Seq.filter (fun symbol -> symbol.Kind = LocalValue) |> List.ofSeq
         liftedOrigins
         |> Map.values
         |> Seq.choose (fun origin ->
-            match origin.Annotation, checkedTypes |> Map.tryFind origin.Lambda.Id with
-            | Some annotation, Some lambdaTy ->
-                localContextsOf annotation lambdaTy
-                |> Option.filter (List.exists isInstance)
-                |> Option.map (fun contexts -> origin.Lambda.Id, (annotation, lambdaTy, contexts))
+            match origin.Local, checkedTypes |> Map.tryFind origin.Lambda.Id with
+            | Some local, Some lambdaTy ->
+                localSymbols
+                |> List.filter (fun symbol -> symbol.Name = local.Name && SourceSpan.contains local.Statement symbol.Declaration)
+                |> List.sortBy _.Declaration.Start
+                |> List.tryHead
+                |> Option.bind (fun symbol ->
+                    // A context the def writes is its alias, `Show(Point)` with its members; one inferred is applied.
+                    let applied (context: Ty) =
+                        match context with
+                        | TyAlias(name, args, _) -> TyApply(name, args)
+                        | other -> other
+                    match typed.LocalContexts |> Map.tryFind symbol.Id, typed.ContextTypes |> Map.tryFind symbol.Id |> Option.map (List.map applied), typed.SymbolTypes |> Map.tryFind symbol.Id with
+                    | Some written, Some contexts, Some symbolTy when written.Length = contexts.Length && List.exists isInstance contexts ->
+                        try
+                            let bindings = CoreIrLowerTypes.bindScheme Map.empty symbolTy lambdaTy
+                            Some (origin.Lambda.Id, (symbol.Id, written, lambdaTy, contexts |> List.map (CoreIrLowerTypes.substitute bindings)))
+                        with CoreIrLowerTypes.CannotLower _ -> None
+                    | _ -> None)
             | _ -> None)
         |> Map.ofSeq
     let withLocalContexts (exprTypes: Map<NodeId, Ty>) =
         localContexts
-        |> Map.fold (fun (acc: Map<NodeId, Ty>) node (_, lambdaTy, contexts) ->
+        |> Map.fold (fun (acc: Map<NodeId, Ty>) node (_, _, lambdaTy, contexts) ->
             match Unifier.unalias lambdaTy with
             | TyFunc(input, output, own) -> acc |> Map.add node (TyFunc(input, output, own @ List.filter isInstance contexts))
             | _ -> acc) exprTypes
-    // Each name that refers to one of those functions, by its node, with the contexts it writes and its lambda's type.
+    // Each name that refers to one of those functions, by its node, with the contexts it requires and its lambda's type.
     let localCallees =
-        typed.References
-        |> Map.toSeq
-        |> Seq.choose (fun (node, symbol) ->
-            match typed.Symbols |> Map.tryFind symbol with
-            | Some declared when declared.Kind = LocalValue ->
-                localContexts
-                |> Map.values
-                |> Seq.tryFind (fun (annotation, _, _) -> annotation.Name = declared.Name && SourceSpan.contains annotation.Statement declared.Declaration)
-                |> Option.map (fun (_, lambdaTy, contexts) -> node, (contexts, lambdaTy))
-            | _ -> None)
-        |> Map.ofSeq
+        let bySymbol = localContexts |> Map.values |> Seq.map (fun (symbol, _, lambdaTy, contexts) -> symbol, (contexts, lambdaTy)) |> Map.ofSeq
+        typed.References |> Map.filter (fun _ symbol -> bySymbol.ContainsKey symbol) |> Map.map (fun _ symbol -> bySymbol.[symbol])
     let defs =
         module'
         |> List.choose (function
@@ -782,10 +771,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               NominalTypes = typed.TypeDefs |> Map.filter (fun _ info -> info.IsNominal) |> Map.keys |> Set.ofSeq
               Lifted =
                 [ yield! liftedOrigins |> Map.toList |> List.map (fun (name, origin) ->
-                    let written =
-                        match origin.Annotation with
-                        | Some { Type = Kind (TypeWithContext(contexts, _)) } -> contexts
-                        | _ -> []
+                    let written = localContexts |> Map.tryFind origin.Lambda.Id |> Option.map (fun (_, written, _, _) -> written) |> Option.defaultValue []
                     name, CoreIrLowerInput.LiftedLambda(origin.Lambda, origin.Captured, origin.Owner, written))
                   yield! functionWrappers |> Map.toList |> List.map (fun (wrapped, wrapper) -> wrapper, CoreIrLowerInput.FunctionWrapper wrapped) ]
                 |> Map.ofList

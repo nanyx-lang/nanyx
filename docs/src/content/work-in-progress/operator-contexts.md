@@ -175,9 +175,12 @@ prelude, or a member to one:
   `OperatorContexts`. They need more than the member: `<` reads `compare`, and both have instances the compiler
   derives from structure. They are inferred for a function that does not write its type already.
 - **Requiring `<` or `!=` by member.** Each would have to be read as the member it stands for.
-- **A local function that is generic in its arithmetic.** It would need local functions to require contexts
-  ([#550](https://github.com/nanyx-lang/nanyx/issues/550)). Until then a local def that writes a requirement,
-  by member or by name, type-checks and fails in the backend with `NYX0301`.
+- **A local function that is generic in its arithmetic without writing its type.** A local def that writes a
+  requirement, such as `def f: [Add(a)] a, a -> a`, is passed the instance at each type it is called with
+  ([#1368](https://github.com/nanyx-lang/nanyx/issues/1368)), and one that calls a function that requires a
+  parameterised context is inferred to require it ([#550](https://github.com/nanyx-lang/nanyx/issues/550)), but an
+  operator in a local def that does not write its type is not inferred to need its context: the def is not generic in
+  it.
 - **Functions named as values**: they wait on [#599](https://github.com/nanyx-lang/nanyx/issues/599). When that
   lands, the fallback in `ArithmeticInference.generalize` (`namedAsValue`) goes.
 - **Calling one of two members of one name by its name.** An operator on a type variable calls its variable's
