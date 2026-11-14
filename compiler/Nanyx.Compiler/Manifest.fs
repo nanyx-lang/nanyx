@@ -1,0 +1,256 @@
+namespace NyxCompiler
+
+open System
+open System.IO
+open System.Text.RegularExpressions
+open Parser.Program
+open Parser.Program.DataValues
+
+/// A package's `.nyxp` manifest, as far as it is read so far: what the package is called, which files are its
+/// sources, which linters check them, and which host runs its `@entry`. Its `formatter` field is the formatter's,
+/// which reads it itself.
+type Manifest =
+    { /// The manifest's full path.
+      Path: string
+      /// The directory the manifest is in, which its `sources` are relative to.
+      Root: string
+      Name: string
+      Version: string
+      /// Globs relative to `Root`: `**/*.nyx` unless the manifest says otherwise.
+      Sources: string list
+      /// The linters the manifest's `linters` turns on, and the severities their `settings` set.
+      Linters: LinterOptions
+      /// The host `host` names, or the console host when the manifest has no `host`.
+      Host: Host }
+
+/// Reading a manifest: one Nanyx record, written as data (see `DataValue.read`), whose shape is the manifest's own.
+module Manifest =
+    /// The manifest's file extension.
+    let extension = ".nyxp"
+
+    /// The fields a manifest may have. `formatter` is the formatter's, which checks what is in it.
+    let private fields = [ "package"; "dependencies"; "linters"; "host"; "formatter" ]
+
+    let private packageFields = [ "name"; "version"; "sources"; "publicModules" ]
+
+    /// The fields of an entry of `linters`, or of `host`.
+    let private entryFields = [ "package"; "version"; "settings" ]
+
+    /// Lower-case dotted names, as packaging.md proposes: `acme.web`, `word_counter`.
+    let internal namePattern = Regex(@"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
+
+    /// What `namePattern` asks of a name, to finish "must be ...".
+    let internal nameRule = "lower case, with words separated by dots: acme.web"
+
+    let private versionPattern = Regex(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$")
+
+    /// The severities a rule can be given, by name, `off` turning it off. A manifest writes them as tags, `#error`.
+    let severities =
+        [ "error", Some Severity.Error
+          "warning", Some Severity.Warning
+          "info", Some Severity.Info
+          "hint", Some Severity.Hint
+          "off", None ]
+
+    /// The manifest in `directory` or the nearest directory above it that has one, or an error if that directory
+    /// has more than one.
+    let rec tryFind (directory: string) : Result<string option, string> =
+        match Directory.GetFiles(directory, "*" + extension) |> Array.sort with
+        | [| manifest |] -> Result.Ok(Some manifest)
+        | [||] ->
+            match Path.GetDirectoryName directory with
+            | null -> Result.Ok None
+            | parent -> tryFind parent
+        | several -> Result.Error $"""{directory} has more than one {extension} manifest: {several |> Array.map Path.GetFileName |> String.concat ", "}"""
+
+    let private quoted (names: string seq) = names |> Seq.map (fun name -> $"'{name}'") |> String.concat ", "
+
+    /// Collects the problems with a manifest as its fields are read.
+    type private Problems() =
+        let found = Collections.Generic.List<Diagnostic>()
+        member _.All = List.ofSeq found
+        member _.Add (code: DiagnosticCode) (span: SourceSpan) (message: string) = found.Add(Diagnostics.at code span message)
+
+        /// The fields of `value`, `what` in messages, if it is a record; each one not in `known` is an error.
+        member this.Record (what: string) (known: string list) (value: DataValue) : DataField list option =
+            match value.Data with
+            | DataRecord fields ->
+                for field in fields do
+                    if not (List.contains field.Name known) then
+                        this.Add DiagnosticCodes.UnknownManifestField field.NameSpan $"{what} has no field '{field.Name}'; its fields are {quoted known}"
+                Some fields
+            | _ ->
+                this.Add DiagnosticCodes.InvalidManifestValue value.Location $"{what} must be a record, (name = value, ...), not {DataValue.describe value}"
+                None
+
+        /// The string in the field `name` of `fields`, `what` in messages, if it has one; one that does not match
+        /// `pattern` is an error that says it must be `rule`.
+        member this.Text (what: string) (fields: DataField list) (name: string) (pattern: Regex) (rule: string) : string option =
+            match DataValue.field name fields with
+            | Some { DataField.Value = { DataValue.Data = DataString text } } when pattern.IsMatch text -> Some text
+            | Some { DataField.Value = { DataValue.Data = DataString text } as value } ->
+                this.Add DiagnosticCodes.InvalidManifestValue value.Location $"""{what}'s {name} "{text}" must be {rule}"""
+                None
+            | Some field ->
+                this.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"{what}'s {name} must be a string, not {DataValue.describe field.Value}"
+                None
+            | None -> None
+
+        /// `Text`, for a field that must be there: its absence is an error at `at`.
+        member this.RequiredText (what: string) (at: SourceSpan) (fields: DataField list) (name: string) (pattern: Regex) (rule: string) =
+            if (DataValue.field name fields).IsNone then
+                this.Add DiagnosticCodes.MissingManifestField at $"{what} has no {name}, which it needs"
+            this.Text what fields name pattern rule
+
+        /// The strings of the list in the field `name` of `fields`, if it has one.
+        member this.Strings (what: string) (fields: DataField list) (name: string) : string list option =
+            match DataValue.field name fields with
+            | Some { DataField.Value = { DataValue.Data = DataList items } } when items |> List.forall (fun item -> item.Data.IsDataString) ->
+                Some(items |> List.choose (fun item -> match item.Data with DataString text -> Some text | _ -> None))
+            | Some field ->
+                this.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"{what}'s {name} must be a list of strings, not {DataValue.describe field.Value}"
+                None
+            | None -> None
+
+    let private anyText = Regex ".*"
+
+    /// The entry `value` of `linters`, or `host`, as `what`: the package it names, which `known` finds, if the entry
+    /// is right. Its `settings`, if any, are left to `settings`.
+    let private entry (problems: Problems) (what: string) (known: string -> Result<'a, string>) (value: DataValue) : (DataField list * 'a) option =
+        problems.Record what entryFields value
+        |> Option.bind (fun fields ->
+            problems.RequiredText what value.Location fields "version" versionPattern "a semantic version: 1.2.0" |> ignore
+            match problems.RequiredText what value.Location fields "package" anyText "" with
+            | Some name ->
+                match known name with
+                | Result.Ok found -> Some(fields, found)
+                | Result.Error message ->
+                    problems.Add DiagnosticCodes.InvalidManifestValue (DataValue.field "package" fields).Value.Value.Location message
+                    None
+            | None -> None)
+
+    /// The severities as a manifest writes them: `#error`, `#warning`, ...
+    let private severityTags = severities |> List.map (fst >> sprintf "#%s") |> String.concat ", "
+
+    /// The linter options of the manifest's `linters`: one entry per linter to run, whose `settings` give its rules'
+    /// severities, `settings = (rules = (unusedBindings = #error))`.
+    let private readLinters (problems: Problems) (value: DataValue) : LinterOptions =
+        let linter (name: string) =
+            match Linters.all |> List.tryFind (fun linter -> linter.Package = name) with
+            | Some linter -> Result.Ok linter
+            | None -> Result.Error $"there is no linter '{name}'; the linters are {quoted (Linters.all |> List.map _.Package)}"
+        let rules (linter: Linter) (settings: DataValue) =
+            let what = $"the settings of {linter.Package}"
+            problems.Record what [ "rules" ] settings
+            |> Option.bind (DataValue.field "rules")
+            |> Option.bind (fun field -> problems.Record $"the rules of {linter.Package}" (linter.Rules @ [ Linters.failedRule ] |> List.map _.Id) field.Value)
+            |> Option.defaultValue []
+            |> List.choose (fun rule ->
+                match rule.Value.Data with
+                | _ when not (linter.Rules @ [ Linters.failedRule ] |> List.exists (fun known -> known.Id = rule.Name)) -> None
+                | DataTag(name, None) when severities |> List.exists (fst >> (=) name) ->
+                    Some(Linters.code linter rule.Name, severities |> List.find (fst >> (=) name) |> snd)
+                | _ ->
+                    problems.Add
+                        DiagnosticCodes.InvalidManifestValue
+                        rule.Value.Location
+                        $"the rule {rule.Name} must be {severityTags}, not {DataValue.describe rule.Value}"
+                    None)
+        let chosen =
+            match value.Data with
+            | DataList entries ->
+                entries
+                |> List.choose (fun value ->
+                    entry problems "a linter" linter value
+                    |> Option.map (fun (fields, linter) ->
+                        linter, DataValue.field "settings" fields |> Option.map (fun field -> rules linter field.Value) |> Option.defaultValue []))
+            | _ ->
+                problems.Add DiagnosticCodes.InvalidManifestValue value.Location $"linters must be a list of linters, [(package = ...)], not {DataValue.describe value}"
+                []
+        // In the order the compiler has them, so diagnostics come out in the same order whatever the manifest's.
+        { Linters = Linters.all |> List.filter (fun linter -> chosen |> List.exists (fun (a, _) -> a.Name = linter.Name))
+          Severities = chosen |> List.collect snd |> Map.ofList }
+
+    /// The host the manifest's `host` names. It takes no settings yet.
+    let private readHost (problems: Problems) (value: DataValue) : Host =
+        let host (name: string) =
+            match Hosts.all |> List.tryFind (fun host -> host.Package = name) with
+            | Some host -> Result.Ok host
+            | None -> Result.Error $"there is no host '{name}'; the hosts are {quoted (Hosts.all |> List.map _.Package)}"
+        match entry problems "the host" host value with
+        | Some (fields, host) ->
+            match DataValue.field "settings" fields with
+            | Some field -> problems.Add DiagnosticCodes.UnsupportedManifestField field.NameSpan $"{host.Package} takes no settings"
+            | None -> ()
+            host
+        | None -> Hosts.console
+
+    /// What is wrong with a file that is not one data value, as diagnostics.
+    let private dataErrors (errors: DataError list) =
+        errors
+        |> List.map (function
+            | NotParsed error -> Diagnostics.at DiagnosticCodes.SyntaxError error.Span error.Message
+            | NotData (span, message) -> Diagnostics.at DiagnosticCodes.CodeInManifest span message)
+
+    /// The manifest at `path`, whose text is `text`, or every problem with it, each at the field it is about.
+    let check (path: string) (text: string) : Result<Manifest, Diagnostic list> =
+        let path = Path.GetFullPath path
+        match DataValue.read path text with
+        | Result.Error errors -> Result.Error(dataErrors errors)
+        | Result.Ok manifest ->
+            let problems = Problems()
+            let top = problems.Record "the manifest" fields manifest |> Option.defaultValue []
+            let field name = DataValue.field name top
+            match field "dependencies" with
+            | Some { DataField.Value = { DataValue.Data = DataList [] } } -> ()
+            | Some { DataField.Value = { DataValue.Data = DataList _ } as value } ->
+                problems.Add
+                    DiagnosticCodes.UnsupportedManifestField
+                    value.Location
+                    "dependencies are not supported yet: a package can only use the standard library and its own files"
+            | Some { DataField.Value = value } ->
+                problems.Add DiagnosticCodes.InvalidManifestValue value.Location $"dependencies must be a list, not {DataValue.describe value}"
+            | None -> ()
+            match field "formatter" with
+            | Some { DataField.Value = { DataValue.Data = DataRecord _ } }
+            | None -> ()
+            | Some { DataField.Value = value } -> problems.Record "formatter" [] value |> ignore
+            let package =
+                match field "package" with
+                | Some field -> problems.Record "package" packageFields field.Value |> Option.map (fun fields -> fields, field.Value.Location)
+                | None ->
+                    if manifest.Data.IsDataRecord then
+                        problems.Add DiagnosticCodes.MissingManifestField manifest.Location "the manifest has no package, which needs at least a name and a version"
+                    None
+            let name, version, sources =
+                match package with
+                | Some (fields, span) ->
+                    let name = problems.RequiredText "package" span fields "name" namePattern nameRule
+                    let version = problems.RequiredText "package" span fields "version" versionPattern "a semantic version: 1.2.0"
+                    problems.Strings "package" fields "publicModules" |> ignore
+                    name, version, problems.Strings "package" fields "sources"
+                | None -> None, None, None
+            let linters = field "linters" |> Option.map (fun field -> readLinters problems field.Value)
+            let host = field "host" |> Option.map (fun field -> readHost problems field.Value)
+            match problems.All with
+            | [] ->
+                Result.Ok
+                    { Path = path
+                      Root = Path.GetDirectoryName path
+                      Name = defaultArg name ""
+                      Version = defaultArg version ""
+                      Sources = defaultArg sources [ "**/*.nyx" ]
+                      // No `linters` means no linters: a package turns on the official one by naming nanyx.lint.
+                      Linters = defaultArg linters Linters.none
+                      Host = defaultArg host Hosts.console }
+            | problems -> Result.Error problems
+
+    /// `diagnostic`, one of a manifest's, as one line: `path:line:column: error NYX0021: message`.
+    let describe (diagnostic: Diagnostic) =
+        let severity = (string diagnostic.Severity).ToLowerInvariant()
+        match diagnostic.Span with
+        | Some span -> $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: {severity} {diagnostic.Code}: {diagnostic.Message}"
+        | None -> $"{severity} {diagnostic.Code}: {diagnostic.Message}"
+
+    /// The manifest at `path`, or every problem with it (see `check`).
+    let read (path: string) : Result<Manifest, Diagnostic list> = check path (File.ReadAllText path)

@@ -70,6 +70,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
         var everyDef = new Rule("everyDef", "Every def", Severity.Warning, "");
         var linter = new Linter(
             "test",
+            "test.lint",
             ListModule.OfSeq([everyDef]),
             FuncConvert.FromFunc<SemanticModel, FSharpList<Report>>(model => ListModule.OfSeq(
                 model.Syntax

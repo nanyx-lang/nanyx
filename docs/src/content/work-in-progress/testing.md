@@ -49,14 +49,12 @@ A test can sit in the module it tests, as `` `adds points` `` does above. There 
 
 ## Tests in their own files
 
-A package can also keep tests in files of their own. The manifest's `tests` key selects them, as `sources` selects the rest:
+A package can also keep tests in files of their own. The `tests` field of the manifest's `package` selects them, as `sources` selects the rest:
 
-```toml
-[package]
-name = "geometry"
-version = "0.1.0"
-sources = ["src/**/*.nyx"]
-tests = ["tests/**/*.nyx"]
+```nanyx fragment
+(
+  package = (name = "geometry", version = "0.1.0", sources = ["src/**/*.nyx"], tests = ["tests/**/*.nyx"])
+)
 ```
 
 Each test file declares a named module, as every file in a package does. It is part of the package in a test build and is left out of every other build. It can import the package's modules and use what they export, but not their private definitions. If `tests` is left out, a package has no test files, and its tests are the ones beside its code.

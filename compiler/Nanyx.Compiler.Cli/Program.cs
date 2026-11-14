@@ -54,7 +54,7 @@ internal static class CliCommands
     /// </summary>
     /// <param name="path">A .nyx file, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported. On a terminal, the tree is shown live while the compile runs.</param>
-    /// <param name="host">The host to run the package's @entry under, in place of its manifest's [host]: a module such as nanyx/console.host. A script always runs under nanyx/console.host.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a module such as nanyx/console.host. A script always runs under nanyx/console.host.</param>
     [Consolo("check")]
     public static int Check(
         [Consolo("timings")] bool timings = false,
@@ -104,7 +104,7 @@ internal static class CliCommands
             return UsageError;
         }
 
-        var created = NewPackage.create(name, shell.FullPath(single ?? NewPackage.defaultDirectory(name)));
+        var created = NewPackage.create(name, ReleaseVersion, shell.FullPath(single ?? NewPackage.defaultDirectory(name)));
         if (created.IsError)
         {
             shell.Error.WriteLine(created.ErrorValue);
@@ -140,7 +140,7 @@ internal static class CliCommands
     /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest, followed by the program's arguments; none means the package the current directory is in.</param>
     /// <param name="checkMemory">Check the program's reference counting as it runs: stop at a block freed twice or an object used after it was freed, and fail if anything is left on the heap at the end.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
-    /// <param name="host">The host to run the package's @entry under, in place of its manifest's [host]: a module such as nanyx/console.host. A script always runs under nanyx/console.host.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a module such as nanyx/console.host. A script always runs under nanyx/console.host.</param>
     /// <param name="noInline">Compile every call as a call, without inlining: for working on the compiler, to tell whether a misbehaving program is the inliner's doing.</param>
     [Consolo("run")]
     public static int Run(
@@ -200,7 +200,7 @@ internal static class CliCommands
     /// <param name="outputPath">Where to write the program; the default is out/&lt;package name&gt;.wat beside the manifest.</param>
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
-    /// <param name="host">The host to run the package's @entry under, in place of its manifest's [host]: a module such as nanyx/console.host. A script always runs under nanyx/console.host.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a module such as nanyx/console.host. A script always runs under nanyx/console.host.</param>
     /// <param name="noInline">Compile every call as a call, without inlining: for working on the compiler, to tell whether a misbehaving program is the inliner's doing.</param>
     [Consolo("build")]
     public static int Build(
@@ -411,11 +411,20 @@ internal static class CliCommands
     /// </summary>
     internal static int VersionIn(Shell shell)
     {
-        var informational = typeof(CliCommands).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "";
-        var plus = informational.IndexOf('+');
-        shell.Out.WriteLine(plus < 0 ? informational : informational[..plus]);
+        shell.Out.WriteLine(ReleaseVersion);
         return 0;
+    }
+
+    /// <summary>The release version, as <c>--version</c> prints it.</summary>
+    private static string ReleaseVersion
+    {
+        get
+        {
+            var informational = typeof(CliCommands).Assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "";
+            var plus = informational.IndexOf('+');
+            return plus < 0 ? informational : informational[..plus];
+        }
     }
 
     /// <summary>

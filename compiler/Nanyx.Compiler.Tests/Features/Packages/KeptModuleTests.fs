@@ -5,7 +5,7 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-let private manifest = "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n"
+let private manifest = """(package = (name = "demo", version = "0.1.0"))"""
 
 let private mainSource =
     withFinalNewline """module main

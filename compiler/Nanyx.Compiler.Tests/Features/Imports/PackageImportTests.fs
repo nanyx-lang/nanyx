@@ -6,12 +6,7 @@ open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
 let private manifest =
-    """
-[package]
-name = "acme.web"
-version = "0.1.0"
-sources = ["src/**/*.nyx"]
-"""
+    """(package = (name = "acme.web", version = "0.1.0", sources = ["src/**/*.nyx"]))"""
 
 let private greetings (name: string) =
     $"""

@@ -56,36 +56,27 @@ A module is found by the name its file declares, not by where the file is: `json
 
 # Package manifests
 
-Every package has a `.nyxp` manifest written in TOML.
+Every package has a `.nyxp` manifest: one Nanyx record, written as data.
 
 The manifest describes the package and the source files and dependencies that make it up.
 
-```toml
-[package]
-name = "acme.web"
-version = "1.2.0"
-sources = ["**/*.nyx"]
-public-modules = [
-  "http",
-  "json"
-]
-
-[dependencies]
-acme.core = "2.1"
+```nanyx fragment
+(
+  package = (name = "acme.web", version = "1.2.0", sources = ["**/*.nyx"], publicModules = ["http", "json"])
+  dependencies = [(package = "acme.core", version = "2.1")]
+)
 ```
 
-The exact set of available package metadata may grow over time, but package manifests are declarative documents rather than Nanyx programs.
+A manifest holds only data: records, lists, tuples, strings, numbers, `true` and `false`, tags such as `#error`, and `--` comments. A name, a call, an operator or any other code in it is an error, so a manifest can always be read without running anything. Its fields are `package`, `dependencies`, `linters`, `host` and `formatter`; any other is an error. `package` must have a `name`, lower case with words separated by dots, and a `version`, a semantic version.
 
 ## Source files
 
 The package manifest determines which Nanyx source files belong to the package:
 
-```toml
-[package]
-sources = [
-  "src/**/*.nyx",
-  "generated/**/*.nyx"
-]
+```nanyx fragment
+(
+  package = (name = "acme.web", version = "1.2.0", sources = ["src/**/*.nyx", "generated/**/*.nyx"])
+)
 ```
 
 If `sources` is omitted, it defaults to:
@@ -100,13 +91,16 @@ An anonymous module is therefore a compilation error when encountered during a p
 
 # Package dependencies
 
-Dependencies on other packages are declared in the package manifest:
+Dependencies on other packages are declared in the package manifest's `dependencies` list:
 
-```toml
-[dependencies]
-acme.core = "2.1"
-nanyx.web = "1.4"
+```nanyx fragment
+(
+  package = (name = "acme.app", version = "0.1.0")
+  dependencies = [(package = "acme.core", version = "2.1"), (package = "nanyx.web", version = "1.4")]
+)
 ```
+
+Dependencies are not supported yet, so for now a `dependencies` list that isn't empty is an error.
 
 Source code imports modules using the dependency's package name:
 
@@ -123,11 +117,13 @@ A package can only import modules from packages that it directly depends on. Dep
 
 # Project references
 
-Packages being developed together can reference each other using project references.
+Packages being developed together can reference each other using project references: a dependency that names the directory the other package is in, instead of a version.
 
-```toml
-[project-references]
-acme.shared = "../shared"
+```nanyx fragment
+(
+  package = (name = "acme.app", version = "0.1.0")
+  dependencies = [(package = "acme.shared", path = "../shared")]
+)
 ```
 
 A project reference uses the referenced package's declared package identity. Source code therefore imports it in exactly the same way as any other dependency:
@@ -155,14 +151,10 @@ Here, `createConnection` is available to other modules in the same package, whil
 
 External package visibility is controlled separately, at the module level, by the package manifest:
 
-```toml
-[package]
-name = "acme.web"
-
-public-modules = [
-  "http",
-  "json"
-]
+```nanyx fragment
+(
+  package = (name = "acme.web", version = "1.2.0", publicModules = ["http", "json"])
+)
 ```
 
 A consuming package can import the public modules:
@@ -196,14 +188,16 @@ Packages without an entrypoint can still be built and consumed normally; they si
 
 The entrypoint is declared entirely in source code and does not need to be repeated in the package manifest.
 
-The entrypoint runs under the package's host, which loads the contexts it may use, such as `Console`. A package runs under `nanyx/console.host`, the host for a command-line program, unless its manifest names another in a `[host]` table:
+The entrypoint runs under the package's host, which loads the contexts it may use, such as `Console`. The manifest's `host` names the host's package, and the version of it to use:
 
-```toml
-[host]
-use = "nanyx/console.host"
+```nanyx fragment
+(
+  package = (name = "acme.web", version = "1.2.0")
+  host = (package = "nanyx.console", version = "0.28.0")
+)
 ```
 
-`nanyx run`, `nanyx build` and `nanyx check` take `--host <module>` to choose one for a single command instead. Until packages can depend on others, the standard library's hosts are the only ones, and a single `.nyx` file always runs under `nanyx/console.host`.
+`nanyx.console` is the host for a command-line program, whose module is `nanyx/console.host`. A package with no `host` runs under it too. `nanyx run`, `nanyx build` and `nanyx check` take `--host <module>` to choose one for a single command instead. Until packages can depend on others, the standard library's hosts are the only ones, and a single `.nyx` file always runs under `nanyx/console.host`.
 
 # Building and running a package
 
@@ -300,7 +294,7 @@ For script mode, Nanyx synthesizes a package description in memory rather than r
 import "./utils" as utils
 ```
 
-Each directive is the manifest's own dotted key, with `= value` when it sets a value: `::linters.default.unusedBindings = "error"` is `unusedBindings = "error"` under `[linters.default]`. `::dependencies.<name> = "<version>"` will stand for `[dependencies]` once dependencies are supported. The directives are listed in [Files and projects](../getting-started/files-and-projects). A file in a package cannot have directives: they go in the package's manifest instead.
+Each directive is a dotted key, with `= value` when it sets a value: `::linters.default.unusedBindings = "error"` says what `linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (unusedBindings = #error)))]` says in a manifest. `::dependencies.<name> = "<version>"` will stand for an entry of `dependencies` once dependencies are supported. The directives are listed in [Files and projects](../getting-started/files-and-projects). A file in a package cannot have directives: they go in the package's manifest instead.
 
 Script modules and named package modules are distinct. A named module is imported through its package or module identity; an anonymous script module is imported by file path.
 

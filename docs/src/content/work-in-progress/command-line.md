@@ -194,23 +194,25 @@ Given a directory or a `.nyxp` manifest instead of a file, or nothing at all, `r
 work on a package: the manifest in that directory (the current one by default) or the nearest directory
 above it.
 
-- `build` checks every source file the manifest's `sources` select, with the linters its `[linters]`
-  table turns on, and writes the program of the package's `@entry` to `out/<package name>.wat` beside the
+- `build` checks every source file the manifest's `sources` select, with the linters its `linters`
+  turns on, and writes the program of the package's `@entry` to `out/<package name>.wat` beside the
   manifest (or to `--out`). A package without an `@entry` is only checked.
 - `run` does the same checks, then runs the `@entry`.
 - `check` does the same checks and writes nothing. Any error fails it, including one a debug build would defer.
 
-The package's `@entry` runs under the host its manifest's `[host]` table names with `use`, or `nanyx/console.host`
-without one (see [Hosts](./hosts#choosing-a-host)). `--host <module>` chooses another for one command, in place of the
-manifest's. A host that isn't one of the standard library's, a module that isn't a host, and a key of `[host]` other than
-`use` are errors that name it; `--host` on a single `.nyx` file is a usage error, since a script always runs under
-the console host.
+The package's `@entry` runs under the host its manifest's `host` names,
+`(package = "nanyx.console", version = "0.28.0")`, or `nanyx/console.host` without one (see
+[Hosts](./hosts#choosing-a-host)). `--host <module>` chooses another for one command, in place of the manifest's. A
+`--host` that isn't one of the standard library's, or a module that isn't a host, is an error that names it, and so
+is a manifest's `host` package other than `nanyx.console`, or `settings` for it; `--host` on a single `.nyx` file is a
+usage error, since a script always runs under the console host.
 
 `nanyx new acme.demo` makes a package in a new directory, `demo` (the name's last segment) unless another
-is given: `acme.demo.nyxp`, with the official linter on, and `src/main.nyx`, whose `@entry` prints
-"Hello, World!". The name must be one the manifest accepts, and the directory must be new or empty.
+is given: `acme.demo.nyxp`, with the official linter on and the console host, both at the compiler's version, and
+`src/main.nyx`, whose `@entry` prints "Hello, World!". The name must be one the manifest accepts, and the directory
+must be new or empty.
 
-A package runs only the linters its manifest names (`[linters.default]` for the official one), and a file
-run on its own only those its `::linters` directives name (`::linters.default`, or
+A package runs only the linters its manifest names (an entry with `package = "nanyx.lint"` for the official one), and
+a file run on its own only those its `::linters` directives name (`::linters.default`, or
 `::linters.default.unusedBindings = "error"` to set a rule's severity too). Without either, no linter runs. See
 `examples/greeter` for a working package, and `examples/directives.nyx` for a script with directives.

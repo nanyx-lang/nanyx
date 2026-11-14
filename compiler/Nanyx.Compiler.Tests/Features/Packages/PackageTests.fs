@@ -8,7 +8,8 @@ open Nanyx.Compiler.Tests.TestSupport
 
 let private repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", ".."))
 
-let private manifest extra = $"[package]\nname = \"demo\"\nversion = \"0.1.0\"\n{extra}"
+/// The manifest of the package `demo`, with `fields` after its `package`: `linters = [...]`.
+let private manifest (fields: string) = $"(\n  package = (name = \"demo\", version = \"0.1.0\")\n  {fields}\n)\n"
 
 let private entrySource = withFinalNewline """module main
 
@@ -26,54 +27,13 @@ let private errorsOf result =
 let private okOf result =
     match result with
     | Result.Ok value -> value
-    | Result.Error errors -> failwith (String.concat "\n" errors)
-
-[<Fact>]
-let ``A manifest's package table is read, with the default sources`` () =
-    use package = new TempPackage([ "demo.nyxp", manifest ""; "main.nyx", entrySource ])
-    let read = okOf (Manifest.read (package.Path "demo.nyxp"))
-    Assert.Equal("demo", read.Name)
-    Assert.Equal("0.1.0", read.Version)
-    Assert.Equal<string list>([ "**/*.nyx" ], read.Sources)
-    Assert.Empty(read.Linters.Linters)
-
-[<Fact>]
-let ``A linters table turns on the linters it names, with the severities it sets`` () =
-    use package =
-        new TempPackage([ "demo.nyxp", manifest "[linters.default]\nunusedBindings = \"error\"\nlinterFailed = \"none\"" ])
-    let read = okOf (Manifest.read (package.Path "demo.nyxp"))
-    Assert.Equal<string list>([ "default" ], read.Linters.Linters |> List.map _.Name)
-    Assert.Equal(Some(Some Severity.Error), read.Linters.Severities |> Map.tryFind "default/unusedBindings")
-    Assert.Equal(Some None, read.Linters.Severities |> Map.tryFind "default/linterFailed")
-
-[<Fact>]
-let ``Every problem with a manifest is reported, naming the key`` () =
-    let text =
-        "[package]\nname = \"Demo\"\nversion = 1\ncolour = \"red\"\n"
-        + "[linters.default]\nunusedBindings = \"loud\"\nnoSuchRule = \"error\"\n"
-        + "[linters.other]\n[dependencies]\nacme.json = \"1.0\"\n[extras]\n"
-    use package = new TempPackage([ "demo.nyxp", text ])
-    let errors = errorsOf (Manifest.read (package.Path "demo.nyxp")) |> List.map (fun e -> e.Substring(e.IndexOf(": ") + 2))
-    Assert.Contains("""[package] name "Demo" must be lower case, with words separated by dots: acme.web""", errors)
-    Assert.Contains("[package] version must be a string, not 1", errors)
-    Assert.Contains("unknown key [package] colour; the keys are 'name', 'version', 'sources', 'public-modules'", errors)
-    Assert.Contains("[linters.default] unusedBindings must be 'error', 'warning', 'info', 'hint', 'none', not the string \"loud\"", errors)
-    Assert.Contains("unknown rule [linters.default] noSuchRule; the rules are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'plusBetweenContexts', 'unannotatedExports', 'unusedResults', 'shadowedPreludeNames', 'semicolons', 'linterFailed'", errors)
-    Assert.Contains("unknown linter [linters.other]; the linters are 'default'", errors)
-    Assert.Contains("[dependencies] is not supported yet: a package can only use the standard library and its own files", errors)
-    Assert.Contains("unknown table [extras]; the tables are 'package', 'dependencies', 'project-references', 'linters', 'formatter', 'host'", errors)
-
-[<Fact>]
-let ``A manifest that is not TOML says so`` () =
-    use package = new TempPackage([ "demo.nyxp", "[package" ])
-    let error = Assert.Single(errorsOf (Manifest.read (package.Path "demo.nyxp")))
-    Assert.Contains("not valid TOML", error)
+    | Result.Error errors -> failwith (String.concat "\n" (errors |> Seq.map string))
 
 [<Fact>]
 let ``A package is found from a directory under it, with its sources and entry`` () =
     use package =
         new TempPackage(
-            [ "demo.nyxp", manifest """sources = ["src/**/*.nyx"]"""
+            [ "demo.nyxp", """(package = (name = "demo", version = "0.1.0", sources = ["src/**/*.nyx"]))"""
               "src/main.nyx", entrySource
               "src/lib/util.nyx", "module util\n\nexport def one = 1\n"
               "scripts/other.nyx", (withFinalNewline """println("not a source")""") ])
@@ -113,7 +73,7 @@ let ``A build tells its caller each source file as it starts on it, in order`` (
     Assert.Equal<string list>(found.Sources, List.ofSeq started)
 
 [<Fact>]
-let ``Without a linters table no linter runs`` () =
+let ``Without linters no linter runs`` () =
     use package = new TempPackage([ "demo.nyxp", manifest ""; "main.nyx", entrySource ])
     let build = Package.build (okOf (Package.find package.Root))
     Assert.Empty(build.Diagnostics)
@@ -123,7 +83,7 @@ let ``Without a linters table no linter runs`` () =
 let ``The manifest's linters check every source file at the severities it sets`` () =
     use package =
         new TempPackage(
-            [ "demo.nyxp", manifest "[linters.default]\nunusedBindings = \"error\""
+            [ "demo.nyxp", (manifest """linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (unusedBindings = #error)))]""")
               "main.nyx", entrySource ])
     let build = Package.build (okOf (Package.find package.Root))
     let diagnostic = Assert.Single(build.Diagnostics)

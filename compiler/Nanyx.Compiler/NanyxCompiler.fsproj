@@ -101,6 +101,7 @@
     <Compile Include="CompileListener.fs" />
     <Compile Include="ModuleLinking.fs" />
     <Compile Include="Library.fs" />
+    <Compile Include="Manifest.fs" />
     <Compile Include="Package.fs" />
     <Compile Include="NewPackage.fs" />
     <Compile Include="Script.fs" />

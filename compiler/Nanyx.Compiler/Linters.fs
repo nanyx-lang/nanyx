@@ -77,6 +77,8 @@ type Report =
 type Linter =
     { /// The first part of its rules' codes: `default`.
       Name: string
+      /// The package a manifest's `linters` names it by: `nanyx.lint`.
+      Package: string
       Rules: Rule list
       Lint: SemanticModel -> Report list }
 
@@ -966,6 +968,7 @@ module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
         { Name = "default"
+          Package = "nanyx.lint"
           Rules =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
               UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule
@@ -977,8 +980,7 @@ module Linters =
                 @ StrayDocComments.lint model @ PlusBetweenContexts.lint model @ UnannotatedExports.lint model
                 @ UnusedResults.lint model @ ShadowedPreludeNames.lint model @ Semicolons.lint model }
 
-    /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linters` directives
-    /// can turn on.
+    /// The linters the compiler has, which a manifest's `linters` or a script's `::linters` directives can turn on.
     let all = [ official ]
 
     /// No linters: what runs where nothing turns any on. Linters are opt-in, like a package's dependencies.

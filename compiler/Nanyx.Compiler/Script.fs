@@ -5,9 +5,9 @@ open Parser.Program
 
 /// What a script's `::` directives say: what a package's manifest would, for a file run on its own, which has none.
 type ScriptDirectives =
-    { /// The linters the `::linters` directives turn on and the severities they set, as a `[linters]` table
-      /// would. None when there is no `::linters` directive: then no linter runs, as for a package whose manifest
-      /// has no `[linters]` table.
+    { /// The linters the `::linters` directives turn on and the severities they set, as a manifest's
+      /// `linters` would. None when there is no `::linters` directive: then no linter runs, as for a package whose
+      /// manifest has no `linters`.
       Linters: LinterOptions option
       /// What is wrong with the directives, each at its line.
       Diagnostics: Diagnostic list }
@@ -19,6 +19,17 @@ module Script =
     let private quoted (names: string seq) = names |> Seq.map (fun name -> $"'{name}'") |> String.concat ", "
 
     let private tableList = quoted (tables |> List.map ((+) "::"))
+
+    /// A directive's value, a TOML value, as an error message names it.
+    let private describe (value: obj) =
+        match value with
+        | :? int64 as n -> string n
+        | :? string as s -> $"the string \"{s}\""
+        | :? float -> "a float"
+        | :? bool -> "a boolean"
+        | :? Tomlyn.Model.TomlTable -> "a table"
+        | :? Tomlyn.Model.TomlArray -> "an array"
+        | _ -> "a date or time"
 
 
     /// What a `::linters` directive says: a linter to run, and the severity it sets for one of its rules, if any.
@@ -45,7 +56,7 @@ module Script =
                             Result.Ok(linter, Some(Linters.code linter ruleId, Manifest.severities |> List.find (fst >> (=) name) |> snd))
                         | other ->
                             Result.Error
-                                $"::{directive.Name} must be {quoted (List.map fst Manifest.severities)}, not {Manifest.describe other}"))
+                                $"::{directive.Name} must be {quoted (List.map fst Manifest.severities)}, not {describe other}"))
         | [ _; _; _ ], None ->
             Result.Error $"::{directive.Name} needs a severity: ::{directive.Name} = \"error\""
         | _ ->

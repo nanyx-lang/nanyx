@@ -6,7 +6,7 @@ order: 6
 
 > **Status: proposal.** None of this is implemented. It fills in three parts of the [packaging design](./packaging) that are only sketched there: who owns a package name, what `nanyx.lock` holds, and whether a program can depend on one file rather than a package. The packaging work's issues carry the [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packaging) label, and the package index is [#209](https://github.com/nanyx-lang/nanyx/issues/209). See [Open questions](#open-questions) at the end.
 
-[Packages and projects](../tour/packages) describes what a user writes: a `.nyxpack` manifest, `[dependencies]` such as `acme.core = "2.1"`, and imports such as `acme.web/http`. This page is about what sits behind those names.
+[Packages and projects](../tour/packages) describes what a user writes: a `.nyxp` manifest, `dependencies` such as `(package = "acme.core", version = "2.1")`, and imports such as `acme.web/http`. This page is about what sits behind those names.
 
 # Who owns a package name
 
@@ -78,7 +78,7 @@ sha256 = "e07a5d…"
 dependencies = ["acme.core"]
 ```
 
-- **One lockfile per build.** A package on its own has `nanyx.lock` beside its `.nyxpack`. In a [project](../tour/packages#projects) the lockfile is beside the `.nyxproj` and covers every package in it, because a build has [one version of each package](./packaging#versions-and-resolution) and packages built together must agree.
+- **One lockfile per build.** A package on its own has `nanyx.lock` beside its `.nyxp`. In a [project](../tour/packages#projects) the lockfile is beside the `.nyxproj` and covers every package in it, because a build has [one version of each package](./packaging#versions-and-resolution) and packages built together must agree.
 - **It is committed**, for libraries as well as programs, so that a library's own tests and CI build the same thing every time. A dependant ignores a library's lockfile and resolves for itself.
 - **It changes only when it must.** `nanyx add` and `nanyx restore` write it. `nanyx build` and `nanyx run` use it as it is, and only update it when the manifest asks for something the lockfile does not satisfy, such as a new dependency. A version already locked is never upgraded as a side effect: `nanyx update` does that, for one package or all of them.
 - **`--locked` makes a stale lockfile an error.** CI runs `nanyx build --locked`, so a manifest change pushed without its lockfile fails instead of resolving something new.
@@ -89,7 +89,7 @@ dependencies = ["acme.core"]
 
 ## Scripts
 
-A script has no manifest, and `#:package` directives stand in for `[dependencies]`. Where its lockfile goes is [open](#open-questions). The proposal is a `hello.nyx.lock` beside `hello.nyx`, written the first time the script runs with a dependency. A script without one still runs and resolves its dependencies each time, which is what someone running a one-off script expects.
+A script has no manifest, and `#:package` directives stand in for `dependencies`. Where its lockfile goes is [open](#open-questions). The proposal is a `hello.nyx.lock` beside `hello.nyx`, written the first time the script runs with a dependency. A script without one still runs and resolves its dependencies each time, which is what someone running a one-off script expects.
 
 # Depending on a single file
 
@@ -99,15 +99,16 @@ Nanyx suits this better than most languages. Packages are distributed as source 
 
 ## Declaring a file
 
-A package lists the files it depends on in a `[files]` table:
+A package lists the files it depends on in its manifest's `files`:
 
-```toml
-[files]
-retry = { github = "acme/snippets", path = "retry.nyx", rev = "v1.0" }
-slugify = { url = "https://example.com/nanyx/slugify.nyx" }
+```nanyx fragment
+files = [
+  (module = "retry", github = "acme/snippets", path = "retry.nyx", rev = "v1.0")
+  (module = "slugify", url = "https://example.com/nanyx/slugify.nyx")
+]
 ```
 
-The key is the module name the file gets in this package. A package's files must all contain named modules, and a downloaded file has no name of its own, so the manifest gives it one:
+`module` is the module name the file gets in this package. A package's files must all contain named modules, and a downloaded file has no name of its own, so the manifest gives it one:
 
 ```nanyx
 import retry
@@ -144,11 +145,11 @@ A file has no manifest, so it cannot declare dependencies. It can import the sta
 
 A file is held to the same rules as any other code. Anything it does through a context, such as reading files or using the network, shows in the types of its definitions, and the caller provides the context. A downloaded file is not trusted more than a package, but it is not trusted less either.
 
-It is a module of the package that depends on it, but it cannot be listed in `public-modules`: a package's public API is code the package publishes, and a file is not published with it.
+It is a module of the package that depends on it, but it cannot be listed in `publicModules`: a package's public API is code the package publishes, and a file is not published with it.
 
 ## Files and publishing
 
-`nanyx publish` refuses a package with a `[files]` table. A published package has to keep building for as long as anyone depends on it, and a file on someone else's GitHub repository can disappear. The same rule applies to git dependencies, below.
+`nanyx publish` refuses a package with `files` in its manifest. A published package has to keep building for as long as anyone depends on it, and a file on someone else's GitHub repository can disappear. The same rule applies to git dependencies, below.
 
 Copying the file into the published package instead is [open](#open-questions). It would keep the build working, but the file's licence travels with it, and the publish step cannot check that it allows redistribution.
 
@@ -156,12 +157,11 @@ Copying the file into the published package instead is [open](#open-questions). 
 
 A package-sized version of the same idea is a dependency on a git repository, as Cargo, Mix and others allow:
 
-```toml
-[dependencies]
-acme.web = { git = "https://github.com/acme/web", tag = "v1.2.0" }
+```nanyx fragment
+dependencies = [(package = "acme.web", git = "https://github.com/acme/web", tag = "v1.2.0")]
 ```
 
-The repository must contain a `.nyxpack` whose `name` is the dependency's key. The lockfile records the commit, and `nanyx publish` refuses a package that has one. This is for trying a fork or a fix that has not been released, not a second way to distribute packages: names on the index stay the only names a published package can depend on.
+The repository must contain a `.nyxp` whose `name` is the dependency's `package`. The lockfile records the commit, and `nanyx publish` refuses a package that has one. This is for trying a fork or a fix that has not been released, not a second way to distribute packages: names on the index stay the only names a published package can depend on.
 
 Because a git dependency never touches the index, the ownership rules above do not apply to it. Choosing to depend on someone's repository is the dependant's decision.
 
@@ -172,6 +172,6 @@ Because a git dependency never touches the index, the ownership rules above do n
 - **Frozen namespaces.** When an owner's GitHub account is deleted, what does it take for the maintainers to hand the namespace to someone else, and are its old packages kept under the old owner?
 - **Other identity providers.** GitLab or Codeberg accounts, or a domain proved by DNS as Maven Central does. Each would need a prefix, such as `gitlab-acme`, or a rule about which provider a bare name belongs to.
 - **Script lockfiles.** A file beside the script, the cache, or a lock written into the script's own `#:` directives so the script stays one file?
-- **Copying files into published packages.** Should `nanyx publish` copy a `[files]` dependency into the package rather than refusing it, and if so, how is the licence handled?
-- **Is `[files]` worth having?** Copying a file into a program already works. What `[files]` adds is a record of where the file came from and an easy update. Is that enough to justify a second kind of dependency, its lockfile entries and its rules?
+- **Copying files into published packages.** Should `nanyx publish` copy a `files` dependency into the package rather than refusing it, and if so, how is the licence handled?
+- **Are `files` worth having?** Copying a file into a program already works. What `files` adds is a record of where the file came from and an easy update. Is that enough to justify a second kind of dependency, its lockfile entries and its rules?
 - **Files from other hosts.** Should `github =` have siblings, such as `gist =` or `gitlab =`, or is `url =` enough? Resolving a tag or branch to a commit needs the host's git protocol, which a plain `url` does not have, so `url` files are pinned by hash only.

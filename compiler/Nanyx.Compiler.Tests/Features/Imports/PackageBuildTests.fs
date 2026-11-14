@@ -5,12 +5,7 @@ open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
 let private manifest =
-    """
-[package]
-name = "app"
-version = "0.1.0"
-sources = ["src/**/*.nyx"]
-"""
+    """(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]))"""
 
 let private shared =
     """

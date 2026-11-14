@@ -75,6 +75,11 @@ module DiagnosticCodes =
     let ScriptInPackage = code 17 "Script in a package" Severity.Error
     let DuplicateModule = code 18 "Module declared by more than one file" Severity.Error
     let UnknownKeywordKind = code 19 "Unknown keyword kind" Severity.Error
+    let CodeInManifest = code 20 "Code in a manifest" Severity.Error
+    let UnknownManifestField = code 21 "Unknown manifest field" Severity.Error
+    let MissingManifestField = code 22 "Missing manifest field" Severity.Error
+    let InvalidManifestValue = code 23 "Invalid manifest value" Severity.Error
+    let UnsupportedManifestField = code 24 "Manifest field not supported yet" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -145,6 +150,7 @@ module DiagnosticCodes =
           InvalidStandardLibraryModule; UnknownAttribute; MisplacedAttribute; InvalidDirective; DirectiveInPackage
           UnsupportedDirective; CodeInModuleBlock; UnexpectedAttributeArgument; PathImportWithoutAlias
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
+          CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField
