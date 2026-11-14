@@ -103,6 +103,8 @@ module Helpers =
     let writeStdout = NyxCompiler.Intrinsics.writeStdout
     let writeStderr = NyxCompiler.Intrinsics.writeStderr
     let readStdinByte = NyxCompiler.Intrinsics.readStdinByte
+    let arguments = NyxCompiler.Intrinsics.arguments
+    let environment = NyxCompiler.Intrinsics.environment
     let exit = NyxCompiler.Intrinsics.exit
     let stringLength = NyxCompiler.Intrinsics.stringLength
     let stringByteAt = NyxCompiler.Intrinsics.stringByteAt
@@ -993,6 +995,38 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "    end"
             "  end"
             ")" ]
+      // The arguments and the environment, each as WASI lays them out: a string of the entries, each followed by a
+      // zero byte. The sizes are read into offsets 0 and 4, and the pointers to the entries that WASI also writes go
+      // to a block of their own, freed straight after.
+      yield!
+          [ Helpers.arguments, "args"; Helpers.environment, "environ" ]
+          |> List.map (fun (name, wasi) ->
+              name,
+              lines
+                  [ $"(func ${name} (result i32)"
+                    "  (local $pointers i32)"
+                    "  (local $block i32)"
+                    "  i32.const 0"
+                    "  i32.const 4"
+                    $"  call ${wasi}_sizes_get"
+                    "  drop"
+                    "  i32.const 4"
+                    "  i32.load"
+                    $"  call ${Helpers.stringAlloc}"
+                    "  local.set $block"
+                    "  i32.const 0"
+                    "  i32.load"
+                    "  i32.const 4"
+                    "  i32.mul"
+                    $"  call ${Helpers.alloc}"
+                    "  local.tee $pointers"
+                    "  local.get $block"
+                    $"  call ${wasi}_get"
+                    "  drop"
+                    "  local.get $pointers"
+                    $"  call ${Helpers.free}"
+                    "  local.get $block"
+                    ")" ])
       // A new record with the layout and the `$size` bytes of fields of the record `$src`: `src size -> record`.
       Helpers.recordCopy,
       lines
@@ -1318,6 +1352,8 @@ let helperDependencies =
       Helpers.writeStdout, [ Helpers.stringLength ]
       Helpers.writeStderr, [ Helpers.stringLength ]
       Helpers.readStdinByte, []
+      Helpers.arguments, [ Helpers.stringAlloc; Helpers.alloc; Helpers.free ]
+      Helpers.environment, [ Helpers.stringAlloc; Helpers.alloc; Helpers.free ]
       Helpers.exit, [ Helpers.procExit ]
       yield! storingDependencies Helpers.listCons (fun _ -> [ Helpers.newCell ])
       yield! storingDependencies Helpers.recordSet (fun _ -> [])

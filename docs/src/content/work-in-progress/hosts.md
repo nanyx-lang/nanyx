@@ -64,7 +64,7 @@ Loose script files, which run top-level statements without a manifest, always ru
 
 # The entry shape is just a type
 
-Each host takes exactly one entry shape. Under `ConsoleHost` the entry is `() -> ()`; a program that wants its arguments or to set its exit code requires the `Env` context, which `ConsoleHost` provides (`Env.args()`, `Env.exit(code)`). Under an HTTP host the entry *is* the handler:
+Each host takes exactly one entry shape. Under `ConsoleHost` the entry is `() -> ()`; a program that wants its arguments or to set its exit code requires the `Env` context from `nanyx/env`, which `ConsoleHost` provides (`args()`, `variable(name)`, `exit(code)`). Under an HTTP host the entry *is* the handler:
 
 ```nanyx
 module main
@@ -94,7 +94,7 @@ A host provides the contexts the program's entry may require, and only those. Th
 
 | Host | Entry shape | Provides |
 | --- | --- | --- |
-| `ConsoleHost` | `() -> ()` | `Console & Env` at first; `FileSystem`, `Clock` and `Random` as they are added |
+| `ConsoleHost` | `() -> ()` | `Console & Env`; `FileSystem`, `Clock` and `Random` as they are added |
 | HTTP host | `Request -> Response` | `Log & Clock & Env & Random & Http` (see [Serving HTTP](#serving-http)) |
 | Browser host | a record of `init`, `update` and `view` | `Dom & Fetch & Clock & Log` |
 | Plugin / sandbox host | host-defined | only what the embedder grants |
@@ -133,8 +133,8 @@ export def run: [HostRuntime] ([Console] () -> a) -> () = { entry ->
 }
 ```
 
-That is `nanyx/console.host` as it is built (`stdlib/nanyx/console.host.nyx`), less the helpers that read a line. Once
-`Env` is added, `run` will `use` it as well, built on more of `HostRuntime`.
+That is `nanyx/console.host` as it is built (`stdlib/nanyx/console.host.nyx`), less the helpers that read a line and
+the `use` of `Env` (see [What's built](#whats-built)).
 
 `HostRuntime` is a context declared `protected` (see [nominal and protected types](../advanced/nominal-and-protected-types))
 that exposes the privileged layer: raw IO, sockets, the process and, on the WASM backend, the module's imports. The
@@ -298,7 +298,7 @@ The composite host runs each part under the right sub-host and coordinates start
    `HostRuntime` is provided only to the host. Done: the host's `Console` reaches every entry and every script, and is
    the only `Console` a program has (see [What's built](#whats-built)).
 2. **`Env`** ([#1246](https://github.com/nanyx-lang/nanyx/issues/1246)): arguments, environment variables and the
-   exit code, provided by ConsoleHost.
+   exit code, provided by ConsoleHost. Done (see [What's built](#whats-built)).
 3. **Choosing a host** ([#1247](https://github.com/nanyx-lang/nanyx/issues/1247)): `[host]` in the manifest and
    `--host` on the CLI, with errors that name the host.
 4. **More contexts for ConsoleHost**, as they are added: [`Random`](https://github.com/nanyx-lang/nanyx/issues/1237),
@@ -362,6 +362,20 @@ The composite host runs each part under the right sub-host and coordinates start
   type (#1288). A def that writes `[c.Console]` for an aliased import is passed the members as `[Console]` is: the
   backend reads the layout of the context's own name (`CodeGen.layoutOf`), and a member called under the alias,
   `c.write`, is written by its own name for the backend (`ModuleLinking.writeMemberAliases`).
+- **`Env`** is declared in `nanyx/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, so its
+  parameter is `[Console & Env] () -> a`; an entry that requires fewer contexts fits. `nanyx/env` is one of the
+  host's `ProvidedModules`, so its members are ambient names where it is imported, but not one of its
+  `ImplicitModules`: a program imports it itself. Its members are functions of the host's own over the intrinsics
+  `__nanyx_arguments` and `__nanyx_environment` (WASI `args_get` and `environ_get`, each read into one string of
+  entries ended by zero bytes) and `__nanyx_exit` (`proc_exit`), not members of `HostRuntime`: a function that
+  requires `HostRuntime` is passed all of its members, as the lambdas of `Console` are, so every program would
+  carry them. A program that doesn't call them doesn't contain them, since a module emits only the functions its
+  start reaches ([#1329](https://github.com/nanyx-lang/nanyx/issues/1329)). `nanyx run` passes what follows the
+  file or package as the arguments, after the program's name, and the process's environment variables (see
+  [The `nanyx` command](./command-line#usage)); an `exit(0)` part-way is a clean end, which `--check-memory` doesn't
+  count as a leak. A script's entry point requires only the plain contexts that are ambient in its module
+  (`Scripts.withAmbientContextsOnly`): a statement that calls a function whose type is an error would otherwise leave it
+  requiring all that `run` provides, `Env` too in a script that doesn't import it.
 
 # Open questions
 

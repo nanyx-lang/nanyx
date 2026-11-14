@@ -514,7 +514,7 @@
   (type $ctx_fn_2_i32_i64_to_i32 (func (param i32 i64) (result i32)))
   (type $ctx_fn_4 (func (param i32 i32 i32 i32) (result i32)))
   (table $ctx_table 8 funcref)
-  (elem (i32.const 0) $__fn_writeStdout $__fn_writeStderr $__fn_readStdinByte $__lambda_3__unit $__nanyx_drop_env__fn_unit_to_int__fn_string_to_unit__fn_string_to_unit $__lambda_5__unit $__lambda_8 $__fn___script)
+  (elem (i32.const 0) $__fn_writeStdout $__fn_writeStderr $__fn_readStdinByte $__lambda_3__unit $__nanyx_drop_env__fn_unit_to_int__fn_string_to_unit__fn_string_to_unit $__lambda_5__unit $__lambda_11 $__fn___script)
 
   (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
   (data (i32.const 268) "\00\00\00\00\00\00\00\00\00\00\00\00")
@@ -1091,7 +1091,7 @@
     call $__nanyx_tag_box
   )
 
-  (func $__lambda_8 (param $__env i32) (param $-3C-arg-3E-_i64 i64) (result i32)
+  (func $__lambda_11 (param $__env i32) (param $-3C-arg-3E-_i64 i64) (result i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
     local.get $-3C-arg-3E-_i64
@@ -1100,7 +1100,7 @@
     i64.const 0
     i64.eq
   )
-  (export "__lambda_8" (func $__lambda_8))
+  (export "__lambda_11" (func $__lambda_11))
 
   (func $__fn___script (param $__env i32) (result i32)
     local.get $__env

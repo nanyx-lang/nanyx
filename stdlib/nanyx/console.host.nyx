@@ -1,11 +1,12 @@
 --| The console host: it runs a command-line program's entry point.
 
   A program's `@entry` is passed to [`run`], which runs it in the contexts this host provides:
-  [`Console`], built on the [`HostRuntime`] the toolchain provides to the host.
+  [`Console`], built on the [`HostRuntime`] the toolchain provides to the host, and [`Env`].
 module console.host
 
 import (
   nanyx/console as (Console, IoError)
+  nanyx/env as (Env)
   nanyx/host.runtime
 )
 
@@ -35,9 +36,70 @@ def readToEndAfter: [HostRuntime] string -> string = { acc ->
   if byte < 0 then acc else readToEndAfter(acc ++ __nanyx_string_from_byte(byte))
 }
 
+--| Where the entry of `block` that holds the byte at `index` starts: after the zero byte before it,
+  or at the start of `block`.
+def entryStart: string, int -> int = { block, index ->
+  if index <= 0 or __nanyx_string_byte_at(block, index - 1) == 0
+    then index
+    else entryStart(block, index - 1)
+}
+
+--| The entries of `block` before `end`, each ended by a zero byte as the runtime lays out the
+  arguments and the environment, in front of `acc`.
+def entriesBefore: string, int, list(string) -> list(string) = { block, end, acc ->
+  def start = entryStart(block, end - 1)
+
+  if end <= 0
+    then acc
+    else entriesBefore(
+      block
+      start
+      __nanyx_list_cons(__nanyx_string_slice(block, start, end - 1 - start), acc)
+    )
+}
+
+--| The entries of `block`, each ended by a zero byte.
+def entriesOf: string -> list(string) = { block ->
+  entriesBefore(block, __nanyx_string_length(block), [])
+}
+
+--| The value in `entries`, each written `NAME=value`, of the variable `name`.
+def variableIn: list(string), string -> #some(string) | #notSet = {
+  | [], _ -> #notSet
+  | [entry, ...rest], name ->
+    def prefix = name ++ "="
+    def length = __nanyx_string_length(prefix)
+
+    if __nanyx_string_slice(entry, 0, length) == prefix
+      then #some(__nanyx_string_slice(entry, length, __nanyx_string_length(entry) - length))
+      else variableIn(rest, name)
+}
+
+-- `Env`'s members read the runtime's intrinsics themselves rather than through `HostRuntime`: a
+-- function that requires `HostRuntime` is passed all of its members, so a member added there would
+-- reach every program, while these are compiled only into a program that calls them.
+
+--| The program's command-line arguments, after its name.
+def arguments: () -> list(string) = { _ ->
+  match entriesOf(__nanyx_arguments())
+    | [] -> []
+    | [_, ...rest] -> rest
+}
+
+--| The value of the environment variable `name`, or `#notSet` when it has none.
+def environmentVariable: string -> #some(string) | #notSet = { name ->
+  variableIn(entriesOf(__nanyx_environment()), name)
+}
+
+--| Ends the program with the exit code `code`.
+def exitProcess: int -> undefined = { code ->
+  __nanyx_exit(code)
+}
+
 --| Runs `entry`, the program's entry point, with a `Console` that reads and writes the standard
-  streams. What `entry` returns is ignored.
-export def run: [HostRuntime] ([Console] () -> a) -> () = { entry ->
+  streams and an `Env` that reads what the program was started with. What `entry` returns is
+  ignored.
+export def run: [HostRuntime] ([Console & Env] () -> a) -> () = { entry ->
   use Console(
     write = writeStdout
     writeError = writeStderr
@@ -45,6 +107,8 @@ export def run: [HostRuntime] ([Console] () -> a) -> () = { entry ->
     readToEnd = { _ -> #some(readToEndAfter("")) }
     flush = { _ -> () }
   )
+
+  use Env(args = arguments, variable = environmentVariable, exit = exitProcess)
 
   ignore(entry())
 }

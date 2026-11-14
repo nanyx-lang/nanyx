@@ -18,11 +18,11 @@ module Attributes =
     let internal hostImport (host: Host) =
         TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport host.Module) (Some Hosts.importAlias) ])
 
-    /// The imports the module that declares the entry point gets from `host`: the modules of the contexts it provides,
-    /// which the module sees without importing them, and the host itself (see `hostImport`).
+    /// The imports the module that declares the entry point gets from `host`: the modules of the contexts it provides
+    /// that the module sees without importing them, and the host itself (see `hostImport`).
     let private hostImports (host: Host) (module': Module) =
         let provided =
-            host.ProvidedModules
+            host.ImplicitModules
             |> List.filter (fun moduleName -> not (importsModule moduleName module'))
             |> List.map (fun moduleName -> TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport moduleName) None ]))
         provided @ [ hostImport host ]

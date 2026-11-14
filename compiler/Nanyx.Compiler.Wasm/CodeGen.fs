@@ -840,10 +840,16 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         usedHelpers.Add Helpers.writeStderr |> ignore
         usedHelpers.Add Helpers.procExit |> ignore
     let usedHelperSet = closeHelpers Set.empty (usedHelpers |> Seq.toList)
-    // Exiting is not a stream, but its WASI import is declared with theirs.
+    // Exiting, the arguments and the environment are not streams, but their WASI imports are declared with theirs.
     let moduleUsesStandardStreams =
-        [ Helpers.writeStdout; Helpers.writeStderr; Helpers.readStdinByte; Helpers.procExit ] |> List.exists usedHelperSet.Contains
+        [ Helpers.writeStdout; Helpers.writeStderr; Helpers.readStdinByte; Helpers.procExit; Helpers.arguments; Helpers.environment ]
+        |> List.exists usedHelperSet.Contains
     let moduleReadsStdin = usedHelperSet.Contains Helpers.readStdinByte
+    let wasiPair (helperName: string) (wasi: string) =
+        if usedHelperSet.Contains helperName then
+            [ $"""  (import "wasi_snapshot_preview1" "{wasi}_sizes_get" (func ${wasi}_sizes_get (param i32 i32) (result i32)))"""
+              $"""  (import "wasi_snapshot_preview1" "{wasi}_get" (func ${wasi}_get (param i32 i32) (result i32)))""" ]
+        else []
     // Anything that writes to stdout or stderr, or reads stdin, shares the WASI import, the memory and the
     // newline byte.
     let moduleUsesIoHelpers = facts.UsesDbgHelpers || moduleUsesStandardStreams
@@ -871,6 +877,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                   """  (import "wasi_snapshot_preview1" "fd_read" (func $fd_read (param i32 i32 i32 i32) (result i32)))"""
               if usedHelperSet.Contains Helpers.procExit then
                   """  (import "wasi_snapshot_preview1" "proc_exit" (func $proc_exit (param i32)))"""
+              yield! wasiPair Helpers.arguments "args"
+              yield! wasiPair Helpers.environment "environ"
               memoryDirective
               """  (export "memory" (memory 0))"""
               if facts.UsesDbgHelpers then

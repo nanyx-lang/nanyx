@@ -13,15 +13,16 @@ A program never imports `nanyx/console.host` itself: `nanyx run` and `nanyx buil
 The console host: it runs a command-line program's entry point.
 
 A program's `@entry` is passed to [`run`](#run), which runs it in the contexts this host provides:
-`Console`, built on the `HostRuntime` the toolchain provides to the host.
+`Console`, built on the `HostRuntime` the toolchain provides to the host, and `Env`.
 
 ## `run`
 
 ```nanyx fragment
-def run: [HostRuntime] ([Console] () -> a) -> ()
+def run: [HostRuntime] ([Console & Env] () -> a) -> ()
 ```
 
 Runs `entry`, the program's entry point, with a `Console` that reads and writes the standard
-streams. What `entry` returns is ignored.
+streams and an `Env` that reads what the program was started with. What `entry` returns is
+ignored.
 
 <!-- End of the generated reference. -->

@@ -650,7 +650,9 @@ module Compiler =
                 let own, resolvedTypes, state =
                     match script with
                     | Some (entry, lambda) ->
-                        let entryTy = state.ExprTypes |> Map.tryFind lambda |> Option.map (Unifier.apply subst) |> Option.defaultValue Unifier.errorType
+                        let entryTy =
+                            state.ExprTypes |> Map.tryFind lambda |> Option.map (Unifier.apply subst) |> Option.defaultValue Unifier.errorType
+                            |> Scripts.withAmbientContextsOnly (state.AmbientMembers |> Map.values |> Seq.map snd |> Set.ofSeq)
                         let own, named = Scripts.asDefinition entry state.ScriptEntryValues entryTy own
                         own, resolvedTypes |> Map.add Scripts.definitionName entryTy, { state with ExprTypes = state.ExprTypes |> Map.add named entryTy }
                     | None -> own, resolvedTypes, state

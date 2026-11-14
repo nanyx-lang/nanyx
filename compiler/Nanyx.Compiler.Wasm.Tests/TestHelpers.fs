@@ -70,9 +70,9 @@ type RunOutcome =
       StandardError: string }
 
 /// Runs `command` in this process, in a shell (see `Shell`) whose directory is `workingDirectory` and whose program
-/// reads `standardInput`. What the command and the program write to stdout is captured, and so is what they write to
-/// stderr, in the order written.
-let private inProcess (workingDirectory: string) (standardInput: string) (command: Shell -> int) : RunOutcome =
+/// reads `standardInput` and sees the environment variables `variables`. What the command and the program write to
+/// stdout is captured, and so is what they write to stderr, in the order written.
+let private inProcess (workingDirectory: string) (standardInput: string) (variables: (string * string) list) (command: Shell -> int) : RunOutcome =
     let inputFile = Path.Combine(Path.GetTempPath(), $"nanyx-stdin-{Guid.NewGuid():N}.txt")
     File.WriteAllText(inputFile, standardInput)
     try
@@ -81,7 +81,7 @@ let private inProcess (workingDirectory: string) (standardInput: string) (comman
         // Flushed at every write, so that the CLI's messages and the program's own output stay in the order written.
         use outputs = new StreamWriter(output, Text.UTF8Encoding(false), AutoFlush = true)
         use errors = new StreamWriter(error, Text.UTF8Encoding(false), AutoFlush = true)
-        let exitCode = command (Shell(workingDirectory, outputs, errors, Nanyx.Runtime.ProgramIo.Redirected(inputFile, output, error)))
+        let exitCode = command (Shell(workingDirectory, outputs, errors, Nanyx.Runtime.ProgramIo.Redirected(inputFile, output, error, variables)))
         { ExitCode = exitCode
           StandardOutput = Text.Encoding.UTF8.GetString(output.ToArray())
           StandardError = Text.Encoding.UTF8.GetString(error.ToArray()) }
@@ -117,17 +117,21 @@ let private command (arguments: string list) : Shell -> int =
 /// Does what `nanyx` does with `arguments`, through the same code (`CliCommands`) but in this process, which saves
 /// starting the CLI and checking the standard library again for every command. `standardInput` is a program's stdin.
 let nanyxWithInput (standardInput: string) (arguments: string list) : RunOutcome =
-    inProcess (Directory.GetCurrentDirectory()) standardInput (command arguments)
+    inProcess (Directory.GetCurrentDirectory()) standardInput [] (command arguments)
+
+/// Does what `nanyx` does with `arguments`, with the environment variables `variables` (see `nanyxWithInput`).
+let nanyxWithVariables (variables: (string * string) list) (arguments: string list) : RunOutcome =
+    inProcess (Directory.GetCurrentDirectory()) "" variables (command arguments)
 
 /// Does what `nanyx` does with `arguments` in `directory`, as a user does who has changed to it (see `nanyxWithInput`).
 let nanyxIn (directory: string) (arguments: string list) : RunOutcome =
-    inProcess directory "" (command arguments)
+    inProcess directory "" [] (command arguments)
 
 /// Does what `nanyx run <inputPath>` does, with `--check-memory` when `checkMemory` is set (see `nanyxWithInput`).
 /// `standardInput` is the program's stdin. Its stdout is captured, and so is its stderr, with the compiler's diagnostics
 /// and the run's own errors in it as the CLI prints them.
 let runScriptWith (checkMemory: bool) (standardInput: string) (inputPath: string) : RunOutcome =
-    inProcess (Directory.GetCurrentDirectory()) standardInput (fun shell -> CliCommands.RunScript(shell, inputPath, checkMemory))
+    inProcess (Directory.GetCurrentDirectory()) standardInput [] (fun shell -> CliCommands.RunScript(shell, inputPath, checkMemory))
 /// Runs the program in `inputPath` with its memory checked, so that every program a test runs also fails it when it
 /// frees a block twice, uses an object after freeing it, or leaves anything on the heap.
 let runFileWithInput (standardInput: string) (inputPath: string) : RunOutcome = runScriptWith true standardInput inputPath
