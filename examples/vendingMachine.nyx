@@ -2,15 +2,9 @@ module vendingMachine
 
 type Item = (price: int, count: int)
 
-type Machine = (
-  inventory: map(string, Item)
-  coinsDeposited: int
-)
+type Machine = (inventory: map(string, Item), coinsDeposited: int)
 
-export type VendError =
-  | #invalidSelection
-  | #outOfStock
-  | #insufficientFunds(int)   -- how many more coins are needed
+export type VendError = #invalidSelection | #outOfStock | #insufficientFunds(int) -- how many more coins are needed
 
 export def newMachine = Machine(
   inventory = [
@@ -21,23 +15,25 @@ export def newMachine = Machine(
   coinsDeposited = 0
 )
 
-export def Machine.deposit: (Machine, int) -> Machine = { machine, coins ->
+export def Machine.deposit: Machine, int -> Machine = { machine, coins ->
   machine with coinsDeposited = machine.coinsDeposited + coins
 }
 
 -- Vending is a function from the machine before to the machine after
-export def Machine.vend: (Machine, string) -> #some(Machine) | #error(VendError) = { machine, name ->
+export def Machine.vend: Machine, string -> #some(Machine) | #error(VendError) = { machine, name ->
   match machine.inventory(name)
     | #notFound -> #error(#invalidSelection)
-    | #some(count = 0, ...) -> #error(#outOfStock)
+    | #some((count = 0, ...)) -> #error(#outOfStock)
     | #some(item) ->
       if item.price > machine.coinsDeposited then
         #error(#insufficientFunds(item.price - machine.coinsDeposited))
       else
-        #some(machine with (
-          coinsDeposited = machine.coinsDeposited - item.price
-          inventory = machine.inventory \map.insert(name, item with count = item.count - 1)
-        ))
+        #some(
+          machine with (
+            coinsDeposited = machine.coinsDeposited - item.price
+            inventory = machine.inventory \map.insert(name, item with count = item.count - 1)
+          )
+        )
 }
 
 @entry
@@ -45,8 +41,8 @@ def main = {
   def result = proc {
     def machine = newMachine \deposit(20)
     def afterChips = try machine \vend("Chips")
-    def afterCandy = try afterChips \vend("Candy Bar")
-    return afterCandy
+    def afterPretzels = try afterChips \vend("Pretzels")
+    return afterPretzels
   }
 
   match result

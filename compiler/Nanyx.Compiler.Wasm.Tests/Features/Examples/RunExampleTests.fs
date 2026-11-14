@@ -45,6 +45,10 @@ public object this[string name]
 """
 
 [<Fact>]
+let ``Running - vendingMachine.nyx dispenses two items and prints the coins left`` () =
+    "vendingMachine.nyx" |> assertExamplePrints "Dispensed; 3 coins left\n"
+
+[<Fact>]
 let ``Running - fizzbuzzbaz.nyx prints the numbers with their words`` () =
     "fizzbuzzbaz.nyx"
     |> assertExamplePrints
