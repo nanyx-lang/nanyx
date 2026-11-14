@@ -91,26 +91,27 @@ let private inProcess (workingDirectory: string) (standardInput: string) (variab
 /// The `nanyx` command `arguments` names, with its options, as a call of what the CLI runs for it (see `CliCommands`).
 /// Only the commands and options the tests use are read.
 let private command (arguments: string list) : Shell -> int =
-    let rec options (outputPath: string, release: bool, timings: bool, paths: string list) (rest: string list) =
+    let rec options (outputPath: string, release: bool, timings: bool, host: string, paths: string list) (rest: string list) =
         match rest with
-        | ("--out" | "-o") :: path :: rest -> options (path, release, timings, paths) rest
-        | "--release" :: rest -> options (outputPath, true, timings, paths) rest
-        | "--timings" :: rest -> options (outputPath, release, true, paths) rest
-        | path :: rest -> options (outputPath, release, timings, paths @ [ path ]) rest
-        | [] -> outputPath, release, timings, Array.ofList paths
+        | ("--out" | "-o") :: path :: rest -> options (path, release, timings, host, paths) rest
+        | "--release" :: rest -> options (outputPath, true, timings, host, paths) rest
+        | "--timings" :: rest -> options (outputPath, release, true, host, paths) rest
+        | "--host" :: name :: rest -> options (outputPath, release, timings, name, paths) rest
+        | path :: rest -> options (outputPath, release, timings, host, paths @ [ path ]) rest
+        | [] -> outputPath, release, timings, host, Array.ofList paths
     match arguments with
     | "new" :: name :: directory -> fun shell -> CliCommands.NewIn(shell, name, Array.ofList directory)
     | "check" :: rest ->
-        let _, _, timings, path = options (null, false, false, []) rest
-        fun shell -> CliCommands.CheckIn(shell, path, timings)
+        let _, _, timings, host, path = options (null, false, false, null, []) rest
+        fun shell -> CliCommands.CheckIn(shell, path, timings, host)
     | "run" :: rest ->
-        let _, _, timings, path = options (null, false, false, []) rest
-        fun shell -> CliCommands.RunIn(shell, false, path, timings)
+        let _, _, timings, host, path = options (null, false, false, null, []) rest
+        fun shell -> CliCommands.RunIn(shell, false, path, timings, host)
     | "build" :: rest ->
-        let outputPath, release, timings, path = options (null, false, false, []) rest
-        fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings)
+        let outputPath, release, timings, host, path = options (null, false, false, null, []) rest
+        fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings, host)
     | "wasm" :: inputFile :: rest ->
-        let outputPath, release, _, _ = options (null, false, false, []) rest
+        let outputPath, release, _, _, _ = options (null, false, false, null, []) rest
         fun shell -> CliCommands.WasmIn(shell, inputFile, outputPath, release)
     | _ -> failwith $"""The tests do not run `nanyx {String.concat " " arguments}`"""
 

@@ -196,6 +196,15 @@ Packages without an entrypoint can still be built and consumed normally; they si
 
 The entrypoint is declared entirely in source code and does not need to be repeated in the package manifest.
 
+The entrypoint runs under the package's host, which loads the contexts it may use, such as `Console`. A package runs under `nanyx/console.host`, the host for a command-line program, unless its manifest names another in a `[host]` table:
+
+```toml
+[host]
+use = "nanyx/console.host"
+```
+
+`nanyx run`, `nanyx build` and `nanyx check` take `--host <module>` to choose one for a single command instead. Until packages can depend on others, the standard library's hosts are the only ones, and a single `.nyx` file always runs under `nanyx/console.host`.
+
 # Building and running a package
 
 In a package's directory (or any directory under it), `nanyx build` checks every source file the manifest selects and writes the program to `out/<package name>.wat`, and `nanyx run` checks them and runs the package's `@entry`. Both also take the package's directory or manifest:

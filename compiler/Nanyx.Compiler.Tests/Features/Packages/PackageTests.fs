@@ -61,7 +61,7 @@ let ``Every problem with a manifest is reported, naming the key`` () =
     Assert.Contains("unknown rule [linters.default] noSuchRule; the rules are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'plusBetweenContexts', 'unannotatedExports', 'unusedResults', 'shadowedPreludeNames', 'semicolons', 'linterFailed'", errors)
     Assert.Contains("unknown linter [linters.other]; the linters are 'default'", errors)
     Assert.Contains("[dependencies] is not supported yet: a package can only use the standard library and its own files", errors)
-    Assert.Contains("unknown table [extras]; the tables are 'package', 'dependencies', 'project-references', 'linters', 'formatter'", errors)
+    Assert.Contains("unknown table [extras]; the tables are 'package', 'dependencies', 'project-references', 'linters', 'formatter', 'host'", errors)
 
 [<Fact>]
 let ``A manifest that is not TOML says so`` () =
