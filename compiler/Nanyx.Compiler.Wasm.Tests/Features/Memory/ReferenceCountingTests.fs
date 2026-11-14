@@ -17,16 +17,18 @@ let private assertRunsInConstantMemory (source: string) =
     Assert.Equal(heapAfterFirstRun, program.HeapPointer)
 
 let private count =
-    "def count: list(string) -> int = {\n" +
-    "  | [] -> 0\n" +
-    "  | [_s, ...rest] -> 1 + count(rest)\n" +
-    "}\n"
+    normalized """def count: list(string) -> int = {
+  | [] -> 0
+  | [_s, ...rest] -> 1 + count(rest)
+}
+"""
 
 let private loop =
-    "def go: (int, int) -> int = { i, acc ->\n" +
-    "  if i == 0 then acc else go(i - 1, acc + step(i))\n" +
-    "}\n" +
-    "def run: int -> int = { n -> go(n, 0) }\n"
+    normalized """def go: (int, int) -> int = { i, acc ->
+  if i == 0 then acc else go(i - 1, acc + step(i))
+}
+def run: int -> int = { n -> go(n, 0) }
+"""
 
 [<Fact>]
 let ``Counting - a loop over lists and records runs in constant memory`` () =

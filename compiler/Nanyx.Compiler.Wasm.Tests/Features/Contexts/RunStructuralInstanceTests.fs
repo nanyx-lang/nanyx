@@ -21,8 +21,8 @@ let private comparing (definitions: string list) (comparisons: string list) =
     printing
         [ "type $Ci = string"
           "def $Ci.`==`: $Ci, $Ci -> bool = { _, _ -> true }"
-          "def a = $Ci(\"a\")"
-          "def b = $Ci(\"b\")"
+          """def a = $Ci("a")"""
+          """def b = $Ci("b")"""
           yield! definitions ]
         comparisons
 
@@ -30,12 +30,12 @@ let private comparing (definitions: string list) (comparisons: string list) =
 let ``Run - a hole writes a tag with a payload, a tuple, a record and a list part by part`` () =
     printing
         []
-        [ "#some(\"hi\")"
-          "#pair(1, \"a\")"
+        [ """#some("hi")"""
+          """#pair(1, "a")"""
           "#rect(width = 1.0, height = 2.0)"
           "#done(())"
           "(x = 1, y = 2)"
-          "(1, \"x\")"
+          """(1, "x")"""
           "((), 1)"
           "[1, 2, 3]"
           "[#some([(1, true)]), #some([])]" ]
@@ -46,10 +46,10 @@ let ``Run - a hole writes a tag with a payload, a tuple, a record and a list par
 let ``Run - a derived toString writes each part through its own ToString`` () =
     printing
         [ "type Point = (x: int, y: int)"
-          "def Point.toString = { p -> \"<{p.x},{p.y}>\" }"
-          "def show = { value -> \"{#some(value)}\" }"
-          "def list: [ToString(a)] a -> string = { value -> \"{[value, value]}\" }"
-          "def passed: [ToString(a)] a -> string = { value -> \"{value}\" }" ]
+          """def Point.toString = { p -> "<{p.x},{p.y}>" }"""
+          """def show = { value -> "{#some(value)}" }"""
+          """def list: [ToString(a)] a -> string = { value -> "{[value, value]}" }"""
+          """def passed: [ToString(a)] a -> string = { value -> "{value}" }""" ]
         [ "#at(Point(x = 1, y = 2))"
           "show(Point(x = 3, y = 4))"
           "show(5)"
@@ -62,7 +62,7 @@ let ``Run - a derived toString writes each part through its own ToString`` () =
 let ``Run - a value of every tag of a union is written by the one derived toString`` () =
     printing
         [ "def describe: int -> string = { n ->"
-          "  def found = if n > 1 then #many(n, \"things\") else if n == 1 then #one(\"thing\") else #none"
+          """  def found = if n > 1 then #many(n, "things") else if n == 1 then #one("thing") else #none"""
           "  \"{found}\""
           "}" ]
         [ "describe(0)"; "describe(1)"; "describe(2)" ]
@@ -109,14 +109,14 @@ let ``Run - a structure of a type variable is compared with the Eq the function 
 let ``Run - a function is passed the toString derived for a structure of a type variable`` () =
     printing
         [ "type Point = (x: int, y: int)"
-          "def Point.toString = { p -> \"<{p.x},{p.y}>\" }"
-          "def show: [ToString(a)] a -> string = { x -> \"{x}\" }"
+          """def Point.toString = { p -> "<{p.x},{p.y}>" }"""
+          """def show: [ToString(a)] a -> string = { x -> "{x}" }"""
           "def wrap: [ToString(a)] a -> string = { x -> show(#some(x)) }"
           "def nested: [ToString(a)] a -> string = { x -> show([#some(x)]) }"
           "def inferred = { x -> show((x, 1)) }" ]
         [ "wrap(1)"
           "wrap(Point(x = 1, y = 2))"
-          "nested(\"s\")"
+          """nested("s")"""
           "nested(Point(x = 3, y = 4))"
           "inferred(Point(x = 5, y = 6))" ]
     |> runSource
@@ -146,7 +146,7 @@ let ``Run - a generic call compares maps and sets through the Eq the function wa
     comparing
         [ "def same: [Eq(a)] a, a -> bool = { x, y -> x == y }"
           "def count: [Eq(a)] list(set(a)) -> int = { xs -> list.distinct(xs) \\list.length }"
-          "def mapped: [Eq(a)] a, a -> bool = { x, y -> same([\"k\" => x], [\"k\" => y]) }" ]
+          """def mapped: [Eq(a)] a, a -> bool = { x, y -> same(["k" => x], ["k" => y]) }""" ]
         [ "count([set.fromList([1]), set.fromList([1]), set.fromList([2])])"
           "mapped(a, b)"
           "mapped(1, 2)" ]
@@ -156,19 +156,19 @@ let ``Run - a generic call compares maps and sets through the Eq the function wa
 [<Fact>]
 let ``Run - a part of a structure is written and compared through an instance loaded with use in its block`` () =
     printing
-        [ "def pounds: ToString(int) = (toString = { p -> \"£{p}\" })"
+        [ """def pounds: ToString(int) = (toString = { p -> "£{p}" })"""
           "def always: Eq(string) = (`==` = { a, b -> true })"
-          "def show: [ToString(a)] a -> string = { x -> \"{x}\" }"
+          """def show: [ToString(a)] a -> string = { x -> "{x}" }"""
           "def same: [Eq(a)] a, a -> bool = { x, y -> x == y }"
           "def priced: int -> string = { n ->"
           "  use pounds"
-          "  \"{[n, n]} {#some(n)} \" ++ show((n, 1))"
+          """  "{[n, n]} {#some(n)} " ++ show((n, 1))"""
           "}"
           "def loose: string, string -> string = { a, b ->"
           "  use always"
           "  \"{#some(a) == #some(b)} {same((a, 1), (b, 1))}\""
           "}" ]
-        [ "priced(5)"; "loose(\"a\", \"b\")"; "[5]"; "#some(\"a\") == #some(\"b\")" ]
+        [ "priced(5)"; """loose("a", "b")"""; "[5]"; """#some("a") == #some("b")""" ]
     |> runSource
     |> assertRan "[£5, £5] #some(£5) (£5, £1)\ntrue true\n[5]\nfalse\n"
 
@@ -176,8 +176,8 @@ let ``Run - a part of a structure is written and compared through an instance lo
 let ``Run - a local function writes a structure of a variable it is generic in, and an empty list is written`` () =
     printing
         [ "def outer = { y ->"
-          "  def wrap = { x -> \"{#some(x)}\" }"
-          "  wrap(y) ++ \" \" ++ wrap(\"s\")"
+          """  def wrap = { x -> "{#some(x)}" }"""
+          """  wrap(y) ++ " " ++ wrap("s")"""
           "}" ]
         [ "outer(1)"; "[]" ]
     |> runSource

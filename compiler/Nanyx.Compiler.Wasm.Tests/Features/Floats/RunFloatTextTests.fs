@@ -54,11 +54,12 @@ let ``Run - NaN, the infinities and the zeros are written as themselves`` () =
 [<Fact>]
 let ``Run - Float.toString and dbg write a float as interpolation does`` () =
     let source =
-        "import nanyx/console\n" +
-        "\n" +
-        "@entry\n" +
-        "def main = {\n" +
-        "  println(float.toString(0.1 + 0.2))\n" +
-        "  dbg(1.0e-7)\n" +
-        "}\n"
+        normalized """import nanyx/console
+
+@entry
+def main = {
+  println(float.toString(0.1 + 0.2))
+  dbg(1.0e-7)
+}
+"""
     runSource source |> assertRan "0.30000000000000004\ndbg: 1.0e-7\n"

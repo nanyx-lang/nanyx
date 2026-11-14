@@ -16,13 +16,13 @@ let private assertDropFreesEverything (program: WasmProgram) (make: string) (ty:
 
 [<Fact>]
 let ``Drop - a list of strings frees every cell and every string`` () =
-    let source = "def build: int -> list(string) = { n -> [\"a {n}\", \"b {n}\", \"c {n}\"] }\n"
+    let source = withFinalNewline """def build: int -> list(string) = { n -> ["a {n}", "b {n}", "c {n}"] }"""
     use program = instantiateWasm source [ IrList IrString ]
     assertDropFreesEverything program "build" (IrList IrString)
 
 [<Fact>]
 let ``Drop - a record frees the strings in its fields`` () =
-    let source = "def pair: int -> (string, int) = { n -> (\"pair {n}\", n) }\n"
+    let source = withFinalNewline """def pair: int -> (string, int) = { n -> ("pair {n}", n) }"""
     let ty = IrRecord [ "0", IrString; "1", IrInt ]
     use program = instantiateWasm source [ ty ]
     assertDropFreesEverything program "pair" ty
@@ -30,11 +30,12 @@ let ``Drop - a record frees the strings in its fields`` () =
 [<Fact>]
 let ``Drop - a tag's cell is freed with its payload, and a tag without one is left alone`` () =
     let source =
-        "def wrap: int -> #some(string) | #none = { n ->\n" +
-        "  match n\n" +
-        "  | 0 -> #none\n" +
-        "  | _ -> #some(\"wrapped {n}\")\n" +
-        "}\n"
+        normalized """def wrap: int -> #some(string) | #none = { n ->
+  match n
+  | 0 -> #none
+  | _ -> #some("wrapped {n}")
+}
+"""
     let ty = IrTags [ "none", None; "some", Some IrString ]
     use program = instantiateWasm source [ ty ]
     assertDropFreesEverything program "wrap" ty
@@ -43,11 +44,12 @@ let ``Drop - a tag's cell is freed with its payload, and a tag without one is le
 [<Fact>]
 let ``Drop - a tag's payload is dropped by the type its code gives it`` () =
     let source =
-        "def describe: int -> #name(string) | #age(int) = { n ->\n" +
-        "  match n\n" +
-        "  | 0 -> #age(n)\n" +
-        "  | _ -> #name(\"name {n}\")\n" +
-        "}\n"
+        normalized """def describe: int -> #name(string) | #age(int) = { n ->
+  match n
+  | 0 -> #age(n)
+  | _ -> #name("name {n}")
+}
+"""
     let ty = IrTags [ "age", Some IrInt; "name", Some IrString ]
     use program = instantiateWasm source [ ty ]
     assertDropFreesEverything program "describe" ty
@@ -70,17 +72,18 @@ def build: int -> Tree = { n -> if n == 0 then #leaf else #node(build(n - 1), "n
 [<Fact>]
 let ``Drop - a closure frees what it captures`` () =
     let source =
-        "def prefixer: int -> (string -> string) = { n ->\n" +
-        "  def prefix = \"{n}: \"\n" +
-        "  { s -> prefix ++ s }\n" +
-        "}\n"
+        normalized """def prefixer: int -> (string -> string) = { n ->
+  def prefix = "{n}: "
+  { s -> prefix ++ s }
+}
+"""
     let ty = IrFunction(IrString, IrString, [])
     use program = instantiateWasm source [ ty ]
     assertDropFreesEverything program "prefixer" ty
 
 [<Fact>]
 let ``Drop - a string literal is never freed`` () =
-    let source = "def greeting: int -> string = { _n -> \"hello\" }\n"
+    let source = withFinalNewline """def greeting: int -> string = { _n -> "hello" }"""
     use program = instantiateWasm source [ IrString ]
     let literal = program.Call("greeting", 0)
     program.Drop(IrString, literal)

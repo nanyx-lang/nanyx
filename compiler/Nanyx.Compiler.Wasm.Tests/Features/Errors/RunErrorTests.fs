@@ -83,7 +83,10 @@ let ``Run - importing an unknown standard library module is a diagnostic`` () =
 [<Fact>]
 let ``Run - a compile error that cannot be deferred exits 1 with the diagnostic on stderr`` () =
     // An error in a type definition is not deferred to run time, so nothing runs.
-    let outcome = runSource "import nanyx/console\n\ntype T = (a: Missing)\nprintln(\"never\")\n"
+    let outcome = runSource (withFinalNewline """import nanyx/console
+
+type T = (a: Missing)
+println("never")""")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
     // `file:line:col: error CODE: message`, at the type.
@@ -93,11 +96,12 @@ let ``Run - a compile error that cannot be deferred exits 1 with the diagnostic 
 [<Fact>]
 let ``Run - a type error that is never reached does not stop the program`` () =
     let source =
-        "import nanyx/console\n" +
-        "\n" +
-        "def unused = { x -> missing(x) }\n" +
-        "\n" +
-        "println(\"fine\")\n"
+        normalized """import nanyx/console
+
+def unused = { x -> missing(x) }
+
+println("fine")
+"""
     let outcome = runSource source
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal("fine\n", outcome.StandardOutput)
@@ -108,13 +112,14 @@ let ``Run - a type error that is never reached does not stop the program`` () =
 [<Fact>]
 let ``Run - reaching a deferred error reports it and stops the program`` () =
     let source =
-        "import nanyx/console\n" +
-        "\n" +
-        "def broken = { x -> missing(x) }\n" +
-        "\n" +
-        "println(\"before\")\n" +
-        "broken(1)\n" +
-        "println(\"after\")\n"
+        normalized """import nanyx/console
+
+def broken = { x -> missing(x) }
+
+println("before")
+broken(1)
+println("after")
+"""
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("before\n", outcome.StandardOutput)
@@ -124,7 +129,17 @@ let ``Run - reaching a deferred error reports it and stops the program`` () =
 
 /// A package whose @entry reaches a deferred error, with another file that has one it never reaches.
 let private packageWithDeferredErrors =
-    [ "main.nyx", "module main\n\n@entry\ndef main = {\n  println(\"before\")\n  missing(1)\n  println(\"after\")\n}\n"
+    let main =
+        normalized """module main
+
+@entry
+def main = {
+  println("before")
+  missing(1)
+  println("after")
+}
+"""
+    [ "main.nyx", main
       "other.nyx", "module other\n\ndef unused = { x -> nope }\n" ]
 
 [<Fact>]
@@ -174,18 +189,19 @@ let ``Run - a function whose body uses a value of no known type runs up to the e
     // The pipe and the member read need `y`'s type, which the error left unknown. They trap rather than keep the
     // whole of `main` from compiling, so `start` is printed before the program stops at `nope`.
     let source =
-        "@entry\n" +
-        "def main = {\n" +
-        "  println(\"start\")\n" +
-        "\n" +
-        "  def y = nope\n" +
-        "  def a = y + 1\n" +
-        "  def b: string = y\n" +
-        "  def c = y \\contains(\"s\")\n" +
-        "  def d = y.length\n" +
-        "\n" +
-        "  println(\"end\")\n" +
-        "}\n"
+        normalized """@entry
+def main = {
+  println("start")
+
+  def y = nope
+  def a = y + 1
+  def b: string = y
+  def c = y \contains("s")
+  def d = y.length
+
+  println("end")
+}
+"""
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("start\n", outcome.StandardOutput)
@@ -194,17 +210,18 @@ let ``Run - a function whose body uses a value of no known type runs up to the e
 [<Fact>]
 let ``Run - piping a value of no known type that did not stop the program stops it there`` () =
     let source =
-        "import nanyx/text\n" +
-        "\n" +
-        "def g = { x -> if x == 0 then nope else x }\n" +
-        "\n" +
-        "@entry\n" +
-        "def main = {\n" +
-        "  def y = g(5)\n" +
-        "  println(\"before\")\n" +
-        "  def c = y \\contains(\"s\")\n" +
-        "  println(\"never\")\n" +
-        "}\n"
+        normalized """import nanyx/text
+
+def g = { x -> if x == 0 then nope else x }
+
+@entry
+def main = {
+  def y = g(5)
+  println("before")
+  def c = y \contains("s")
+  println("never")
+}
+"""
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("before\n", outcome.StandardOutput)
@@ -213,13 +230,14 @@ let ``Run - piping a value of no known type that did not stop the program stops 
 [<Fact>]
 let ``Run - ??? runs until it is reached, and stops the program there`` () =
     let source =
-        "import nanyx/console\n" +
-        "\n" +
-        "def replace: string, string, string -> string = { s, pattern, replacement -> ??? }\n" +
-        "\n" +
-        "println(\"start\")\n" +
-        "println(replace(\"a\", \"b\", \"c\"))\n" +
-        "println(\"never\")\n"
+        normalized """import nanyx/console
+
+def replace: string, string, string -> string = { s, pattern, replacement -> ??? }
+
+println("start")
+println(replace("a", "b", "c"))
+println("never")
+"""
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("start\n", outcome.StandardOutput)
@@ -229,19 +247,20 @@ let ``Run - ??? runs until it is reached, and stops the program there`` () =
 let ``Run - interpolating a call to a function with a deferred error runs up to the call`` () =
     // `dist` cannot be typed, so neither can `a \dist`: the line before it still runs, and the call reports the error.
     let source =
-        "import (\n" +
-        "  nanyx/console\n" +
-        "  nanyx/math\n" +
-        ")\n" +
-        "\n" +
-        "type Point = (x: int, y: int)\n" +
-        "\n" +
-        "def Point.dist = { p -> hypot(p.x, p.y) }\n" +
-        "\n" +
-        "def a = Point(x = 5, y = 4)\n" +
-        "\n" +
-        "println(\"x = {a.x}, y = {a.y}\")\n" +
-        "println(\"dist = {a \\dist}\")\n"
+        normalized """import (
+  nanyx/console
+  nanyx/math
+)
+
+type Point = (x: int, y: int)
+
+def Point.dist = { p -> hypot(p.x, p.y) }
+
+def a = Point(x = 5, y = 4)
+
+println("x = {a.x}, y = {a.y}")
+println("dist = {a \dist}")
+"""
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("x = 5, y = 4\n", outcome.StandardOutput)
@@ -250,13 +269,14 @@ let ``Run - interpolating a call to a function with a deferred error runs up to 
 [<Fact>]
 let ``Run - interpolating a value of no known type that does not stop the program stops it there`` () =
     let source =
-        "import nanyx/console\n" +
-        "\n" +
-        "def g = { x -> if x == 0 then nope else x }\n" +
-        "\n" +
-        "println(\"start\")\n" +
-        "println(\"g = {g(5)}\")\n" +
-        "println(\"never\")\n"
+        normalized """import nanyx/console
+
+def g = { x -> if x == 0 then nope else x }
+
+println("start")
+println("g = {g(5)}")
+println("never")
+"""
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("start\n", outcome.StandardOutput)
@@ -265,18 +285,19 @@ let ``Run - interpolating a value of no known type that does not stop the progra
 [<Fact>]
 let ``Run - a non-exhaustive match runs the cases it handles and traps on the rest`` () =
     let source =
-        "import nanyx/console\n" +
-        "\n" +
-        "def name: #a | #b | #c -> string = { x ->\n" +
-        "  match x\n" +
-        "  | #a -> \"a\"\n" +
-        "  | #b -> \"b\"\n" +
-        "}\n" +
-        "\n" +
-        "println(name(#a))\n" +
-        "println(name(#b))\n" +
-        "println(name(#c))\n" +
-        "println(\"never\")\n"
+        normalized """import nanyx/console
+
+def name: #a | #b | #c -> string = { x ->
+  match x
+  | #a -> "a"
+  | #b -> "b"
+}
+
+println(name(#a))
+println(name(#b))
+println(name(#c))
+println("never")
+"""
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("a\nb\n", outcome.StandardOutput)
@@ -284,12 +305,14 @@ let ``Run - a non-exhaustive match runs the cases it handles and traps on the re
 
 [<Fact>]
 let ``Run - each kind of deferred error traps where it was found`` () =
-    let run body = runSource ("import nanyx/console\n\n" + body + "\nprintln(\"start\")\nprintln(f(1))\n")
+    let run body = runSource ("import nanyx/console\n\n" + body + (withFinalNewline """
+println("start")
+println(f(1))"""))
     // A type mismatch, an unknown name inside a def, and a def whose annotation names an unknown type.
     for body, expected in
-        [ "def f = { x -> if x == 1 then \"one\" else 2 }", "Type mismatch"
+        [ """def f = { x -> if x == 1 then "one" else 2 }""", "Type mismatch"
           "def f = { x ->\n  def y = nope\n  \"{y}\"\n}", "Unknown identifier 'nope'"
-          "def f: Missing -> string = { x -> \"one\" }", "Unknown type 'Missing'" ] do
+          """def f: Missing -> string = { x -> "one" }""", "Unknown type 'Missing'" ] do
         let outcome = run body
         Assert.True((outcome.ExitCode = 1), $"Expected exit code 1 for {body}, got {outcome.ExitCode}. stderr:\n{outcome.StandardError}")
         Assert.Equal("start\n", outcome.StandardOutput)
@@ -300,25 +323,26 @@ let ``Run - each kind of deferred error traps where it was found`` () =
 let ``Run - a def whose annotation is too general does not change another def's type variables of the same name`` () =
     // `broken`'s body makes its `b` a `#some(α)`. `mapError`'s `b` is its own, so its calls still compile (#453).
     let source =
-        "import nanyx/console\n" +
-        "\n" +
-        "def broken: #some(α) | ω, (ω -> b) -> #some(α) | b = {\n" +
-        "  | #some(x), _ -> #some(x)\n" +
-        "  | other, f -> f(other)\n" +
-        "}\n" +
-        "\n" +
-        "def mapError: #some(α) | ω, (ω -> #some(α) | b) -> #some(α) | b = {\n" +
-        "  | #some(x), _ -> #some(x)\n" +
-        "  | other, f -> f(other)\n" +
-        "}\n" +
-        "\n" +
-        "def show: #some(int) | #bad(string) -> string = {\n" +
-        "  | #some(n) -> \"some {n}\"\n" +
-        "  | #bad(s) -> s\n" +
-        "}\n" +
-        "\n" +
-        "println(show(mapError(int.fromString(\"12\"), { #invalidInt -> #bad(\"bad\") })))\n" +
-        "println(show(mapError(int.fromString(\"zz\"), { #invalidInt -> #bad(\"bad\") })))\n"
+        normalized """import nanyx/console
+
+def broken: #some(α) | ω, (ω -> b) -> #some(α) | b = {
+  | #some(x), _ -> #some(x)
+  | other, f -> f(other)
+}
+
+def mapError: #some(α) | ω, (ω -> #some(α) | b) -> #some(α) | b = {
+  | #some(x), _ -> #some(x)
+  | other, f -> f(other)
+}
+
+def show: #some(int) | #bad(string) -> string = {
+  | #some(n) -> "some {n}"
+  | #bad(s) -> s
+}
+
+println(show(mapError(int.fromString("12"), { #invalidInt -> #bad("bad") })))
+println(show(mapError(int.fromString("zz"), { #invalidInt -> #bad("bad") })))
+"""
     let outcome = runSource source
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal("some 12\nbad\n", outcome.StandardOutput)
@@ -329,12 +353,13 @@ let ``Run - a def whose annotation is too general does not change another def's 
 let ``Run - a match with no matching arm exits 1 with a runtime error`` () =
     // A match on an int with no catch-all is a non-exhaustive match, so the trap is the deferred error.
     let source =
-        "def pick = { x ->\n" +
-        "    match x\n" +
-        "    | 1 -> 10\n" +
-        "}\n" +
-        "\n" +
-        "dbg(pick(2))\n"
+        normalized """def pick = { x ->
+    match x
+    | 1 -> 10
+}
+
+dbg(pick(2))
+"""
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Contains("Non-exhaustive match, missing int values, such as 0 (deferred from compile time)", outcome.StandardError)
@@ -342,15 +367,16 @@ let ``Run - a match with no matching arm exits 1 with a runtime error`` () =
 [<Fact>]
 let ``Run - matching on a value of no known type that did not stop the program stops it there`` () =
     let source =
-        "import nanyx/console\n" +
-        "\n" +
-        "def g = { x -> if x == 0 then nope else x }\n" +
-        "\n" +
-        "println(\"start\")\n" +
-        "println(match g(5)\n" +
-        "  | #a -> \"a\"\n" +
-        "  | else -> \"other\")\n" +
-        "println(\"never\")\n"
+        normalized """import nanyx/console
+
+def g = { x -> if x == 0 then nope else x }
+
+println("start")
+println(match g(5)
+  | #a -> "a"
+  | else -> "other")
+println("never")
+"""
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("start\n", outcome.StandardOutput)

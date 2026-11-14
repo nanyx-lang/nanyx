@@ -14,6 +14,13 @@ let private featureRootDir = Path.Combine(testRootDir, "Features")
 let normalizeOutput (value: string) =
     value.Replace("\r\n", "\n").TrimEnd()
 
+/// `source` with `\n` line breaks, whatever the line endings of the test file's checkout.
+let normalized (source: string) = source.ReplaceLineEndings "\n"
+
+/// `normalized source` with a line break after it: for a source that ends in a line break, written with its closing
+/// quotes, and the code after them, on its last line.
+let withFinalNewline (source: string) = normalized source + "\n"
+
 /// The text of the test data file `fileName` in `directory`.
 let loadTestFile (directory: string) (fileName: string) =
     let filePath = Path.Combine(directory, fileName)

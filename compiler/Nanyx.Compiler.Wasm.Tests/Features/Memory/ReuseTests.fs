@@ -7,16 +7,17 @@ open TranspilerWasmTestHelpers
 // new value into the old one's memory (see `CoreIrReuse`). The tests count the blocks the allocator hands out.
 
 let private lists =
-    "def build: int -> list(int) = { n -> if n == 0 then [] else [n, ...build(n - 1)] }\n" +
-    "def sum: list(int) -> int = {\n" +
-    "  | [] -> 0\n" +
-    "  | [x, ...rest] -> x + sum(rest)\n" +
-    "}\n" +
-    "def double: list(int) -> list(int) = {\n" +
-    "  | [] -> []\n" +
-    "  | [x, ...rest] -> [x * 2, ...double(rest)]\n" +
-    "}\n" +
-    "def built: int -> int = { n -> sum(build(n)) }\n"
+    normalized """def build: int -> list(int) = { n -> if n == 0 then [] else [n, ...build(n - 1)] }
+def sum: list(int) -> int = {
+  | [] -> 0
+  | [x, ...rest] -> x + sum(rest)
+}
+def double: list(int) -> list(int) = {
+  | [] -> []
+  | [x, ...rest] -> [x * 2, ...double(rest)]
+}
+def built: int -> int = { n -> sum(build(n)) }
+"""
 
 /// How many blocks `name(argument)` allocates, and what it returns.
 let private allocationsOf (program: WasmProgram) (name: string) (argument: int) =
@@ -48,11 +49,12 @@ let ``Reuse - List.map with a closure over a list held once rewrites its cells i
 let ``Reuse - mapping over a list still used afterwards leaves it as it was`` () =
     let source =
         lists +
-        "def run: int -> int = { n ->\n" +
-        "  def xs = build(n)\n" +
-        "  def ys = double(xs)\n" +
-        "  sum(xs) * 1000 + sum(ys)\n" +
-        "}\n"
+        normalized """def run: int -> int = { n ->
+  def xs = build(n)
+  def ys = double(xs)
+  sum(xs) * 1000 + sum(ys)
+}
+"""
     use program = instantiateWasm source []
     let allocations, result = allocationsOf program "run" 10
     Assert.Equal(20, allocations)
@@ -61,14 +63,15 @@ let ``Reuse - mapping over a list still used afterwards leaves it as it was`` ()
 [<Fact>]
 let ``Reuse - a tuple taken apart and rebuilt is rewritten in place`` () =
     let source =
-        "def step: (int, (int, string)) -> (int, string) = { i, state ->\n" +
-        "  match state\n" +
-        "  | (count, label) -> (count + i, label)\n" +
-        "}\n" +
-        "def go: (int, (int, string)) -> int = { i, state ->\n" +
-        "  if i == 0 then state.0 else go(i - 1, step(i, state))\n" +
-        "}\n" +
-        "def run: int -> int = { n -> go(n, (0, \"total\")) }\n"
+        normalized """def step: (int, (int, string)) -> (int, string) = { i, state ->
+  match state
+  | (count, label) -> (count + i, label)
+}
+def go: (int, (int, string)) -> int = { i, state ->
+  if i == 0 then state.0 else go(i - 1, step(i, state))
+}
+def run: int -> int = { n -> go(n, (0, "total")) }
+"""
     use program = instantiateWasm source []
     let allocations, result = allocationsOf program "run" 100
     // The record built at the start, and nothing after.
@@ -78,18 +81,19 @@ let ``Reuse - a tuple taken apart and rebuilt is rewritten in place`` () =
 [<Fact>]
 let ``Reuse - a tag's cell taken apart and rebuilt is rewritten in place`` () =
     let source =
-        "def bump: #some(int) | #none -> #some(int) | #none = {\n" +
-        "  | #some(n) -> #some(n + 1)\n" +
-        "  | #none -> #none\n" +
-        "}\n" +
-        "def go: (int, #some(int) | #none) -> #some(int) | #none = { i, value ->\n" +
-        "  if i == 0 then value else go(i - 1, bump(value))\n" +
-        "}\n" +
-        "def run: int -> int = { n ->\n" +
-        "  match go(n, #some(0))\n" +
-        "  | #some(total) -> total\n" +
-        "  | #none -> -1\n" +
-        "}\n"
+        normalized """def bump: #some(int) | #none -> #some(int) | #none = {
+  | #some(n) -> #some(n + 1)
+  | #none -> #none
+}
+def go: (int, #some(int) | #none) -> #some(int) | #none = { i, value ->
+  if i == 0 then value else go(i - 1, bump(value))
+}
+def run: int -> int = { n ->
+  match go(n, #some(0))
+  | #some(total) -> total
+  | #none -> -1
+}
+"""
     use program = instantiateWasm source []
     let allocations, result = allocationsOf program "run" 100
     Assert.Equal(1, allocations)

@@ -10,13 +10,13 @@ let private sameHash = "def same: [Hash(a)] a, a -> bool = { x, y -> hash(x) == 
 let ``Run - values equal by their structure have the same hash`` () =
     comparing
         [ sameHash ]
-        [ "same(s, \"aa\")"
+        [ """same(s, "aa")"""
           "same(42, 42)"
           "same(true, true)"
           "same((x = 1, y = [2.0]), (x = 1, y = [2.0]))"
-          "same((1, s), (1, \"aa\"))"
-          "same([[s], [\"b\"]], [[\"aa\"], [\"b\"]])"
-          "same(#some(s), #some(\"aa\"))"
+          """same((1, s), (1, "aa"))"""
+          """same([[s], ["b"]], [["aa"], ["b"]])"""
+          """same(#some(s), #some("aa"))"""
           "same(#rgb(1, 2, 3), #rgb(1, 2, 3))"
           "same(0.0, -0.0)" ]
     |> runSource
@@ -26,7 +26,7 @@ let ``Run - values equal by their structure have the same hash`` () =
 let ``Run - the hash tells apart values that differ in a part`` () =
     comparing
         [ sameHash ]
-        [ "same(\"ab\", \"ba\")"
+        [ """same("ab", "ba")"""
           "same(1, 2)"
           "same((x = 1, y = 2), (x = 2, y = 1))"
           "same([1, 2], [2, 1])"
@@ -44,8 +44,8 @@ let ``Run - a nominal type's own hash is used, and the built-in types' hashes ca
           "type $Name = string"
           "def $Name.`==`: $Name, $Name -> bool = { a, b -> true }"
           "def $Name.hash: $Name -> int = { n -> 7 }" ]
-        [ "same($Name(\"Ada\"), $Name(\"Grace\"))"
-          "string.hash(s) == string.hash(\"aa\")"
+        [ """same($Name("Ada"), $Name("Grace"))"""
+          """string.hash(s) == string.hash("aa")"""
           "int.hash(3) == int.hash(1 + 2)"
           "bool.hash(true) != bool.hash(false)"
           "float.hash(0.0) == float.hash(-0.0)" ]
@@ -61,13 +61,13 @@ let ``Run - a structure is hashed through its parts' own hashes`` () =
           "def $Name.`==`: $Name, $Name -> bool = { a, b -> true }"
           "def $Name.hash: $Name -> int = { n -> 7 }"
           "def inList: [Hash(a)] a, a -> bool = { x, y -> same([x], [y]) }" ]
-        [ "same([$Name(\"Ada\")], [$Name(\"Grace\")])"
-          "same(($Name(\"Ada\"), 1), ($Name(\"Grace\"), 1))"
-          "same((who = $Name(\"Ada\"), n = 1), (who = $Name(\"Grace\"), n = 1))"
-          "same(#to($Name(\"Ada\")), #to($Name(\"Grace\")))"
-          "same([#to([$Name(\"Ada\")])], [#to([$Name(\"Grace\")])])"
-          "inList($Name(\"Ada\"), $Name(\"Grace\"))"
-          "same(($Name(\"Ada\"), 1), ($Name(\"Ada\"), 2))"
-          "same([$Name(\"Ada\")], [$Name(\"Ada\"), $Name(\"Ada\")])" ]
+        [ """same([$Name("Ada")], [$Name("Grace")])"""
+          """same(($Name("Ada"), 1), ($Name("Grace"), 1))"""
+          """same((who = $Name("Ada"), n = 1), (who = $Name("Grace"), n = 1))"""
+          """same(#to($Name("Ada")), #to($Name("Grace")))"""
+          """same([#to([$Name("Ada")])], [#to([$Name("Grace")])])"""
+          """inList($Name("Ada"), $Name("Grace"))"""
+          """same(($Name("Ada"), 1), ($Name("Ada"), 2))"""
+          """same([$Name("Ada")], [$Name("Ada"), $Name("Ada")])""" ]
     |> runSource
     |> assertRan "T\nT\nT\nT\nT\nT\nF\nF\n"

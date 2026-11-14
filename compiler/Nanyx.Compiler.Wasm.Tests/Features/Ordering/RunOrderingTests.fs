@@ -18,7 +18,7 @@ let private version =
 let private orElse = "def orElse = { o, fallback -> match o | #some(x) -> x | _ -> fallback }"
 
 /// Writes a list of ints, each followed by a space.
-let private ints = "def ints = { xs -> list.fold(xs, \"\", { acc, x -> acc ++ \"{x} \" }) }"
+let private ints = """def ints = { xs -> list.fold(xs, "", { acc, x -> acc ++ "{x} " }) }"""
 
 [<Fact>]
 let ``Run - strings are ordered by their bytes`` () =
@@ -38,13 +38,13 @@ let ``Run - strings are ordered by their bytes`` () =
 let ``Run - tuples and lists are ordered position by position`` () =
     comparing
         [ "def empty: list(int) = []" ]
-        [ "(1, \"b\") < (1, \"c\")"
-          "(2, \"a\") < (1, \"z\")"
-          "(1, s) >= (1, \"aa\")"
+        [ """(1, "b") < (1, "c")"""
+          """(2, "a") < (1, "z")"""
+          """(1, s) >= (1, "aa")"""
           "[1, 2] < [1, 2, 0]"
           "[3] <= [2, 9]"
           "empty < [0]"
-          "[[s], [\"b\"]] > [[\"aa\"], [\"a\"]]"
+          """[[s], ["b"]] > [["aa"], ["a"]]"""
           "(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0) > (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9)" ]
     |> runSource
     |> assertRan "T\nF\nT\nT\nF\nT\nT\nT\n"
@@ -85,8 +85,8 @@ let ``Run - sort, min and max order a list by the compiler's own Ord`` () =
         [ orElse
           "def none: list(int) = []" ]
         [ "list.sort([3, 1, 2]) == [1, 2, 3]"
-          "list.sort([\"pear\", \"apple\", s]) == [\"aa\", \"apple\", \"pear\"]"
-          "list.sort([(2, \"a\"), (1, \"z\"), (1, \"b\")]) == [(1, \"b\"), (1, \"z\"), (2, \"a\")]"
+          """list.sort(["pear", "apple", s]) == ["aa", "apple", "pear"]"""
+          """list.sort([(2, "a"), (1, "z"), (1, "b")]) == [(1, "b"), (1, "z"), (2, "a")]"""
           "list.sort([[2], [1, 5], [1]]) == [[1], [1, 5], [2]]"
           "orElse(list.min([4, 2, 8]), 0) == 2"
           "orElse(list.max([4, 2, 8]), 0) == 8"
@@ -99,12 +99,12 @@ let ``Run - sort, min and max order a list by the compiler's own Ord`` () =
 [<Fact>]
 let ``Run - sortBy orders by a key of any type with an order, keeping ties in order`` () =
     comparing
-        [ "def people = [(name = \"Cy\", age = 30), (name = \"Al\", age = 40), (name = \"Bo\", age = 30)]"
+        [ """def people = [(name = "Cy", age = 30), (name = "Al", age = 40), (name = "Bo", age = 30)]"""
           "def names = { ps -> list.map(ps, { p -> p.name }) }" ]
-        [ "names(list.sortBy(people, { p -> p.name })) == [\"Al\", \"Bo\", \"Cy\"]"
-          "names(list.sortBy(people, { p -> p.age })) == [\"Cy\", \"Bo\", \"Al\"]"
-          "names(list.sortBy(people, { p -> (p.age, p.name) })) == [\"Bo\", \"Cy\", \"Al\"]"
-          "list.sortBy([\"bbb\", \"a\", \"cc\"], { w -> w }) == [\"a\", \"bbb\", \"cc\"]" ]
+        [ """names(list.sortBy(people, { p -> p.name })) == ["Al", "Bo", "Cy"]"""
+          """names(list.sortBy(people, { p -> p.age })) == ["Cy", "Bo", "Al"]"""
+          """names(list.sortBy(people, { p -> (p.age, p.name) })) == ["Bo", "Cy", "Al"]"""
+          """list.sortBy(["bbb", "a", "cc"], { w -> w }) == ["a", "bbb", "cc"]""" ]
     |> runSource
     |> assertRan "T\nT\nT\nT\n"
 
@@ -134,8 +134,8 @@ let ``Run - an Ord loaded with use changes how its block orders`` () =
           "  use backwards"
           "  a < b"
           "}" ]
-        [ "sortedBackwards([\"a\", \"c\", \"b\"]) == [\"c\", \"b\", \"a\"]"
-          "lessBackwards(\"b\", \"a\")"
+        [ """sortedBackwards(["a", "c", "b"]) == ["c", "b", "a"]"""
+          """lessBackwards("b", "a")"""
           "\"b\" < \"a\"" ]
     |> runSource
     |> assertRan "T\nT\nF\n"
@@ -144,8 +144,8 @@ let ``Run - an Ord loaded with use changes how its block orders`` () =
 let ``Each type ordered gets one ordering function, and its parts their own`` () =
     let wat =
         transpileWat (
-            "def a: list((int, string)), list((int, string)) -> bool = { p, q -> p < q }\n" +
-            "def b: list((int, string)), list((int, string)) -> bool = { p, q -> p >= q }\n")
+            withFinalNewline """def a: list((int, string)), list((int, string)) -> bool = { p, q -> p < q }
+def b: list((int, string)), list((int, string)) -> bool = { p, q -> p >= q }""")
     Assert.Equal(1, countOccurrences "(func $__nanyx_compare_list_" wat)
     Assert.Equal(1, countOccurrences "(func $__nanyx_compare_rec_" wat)
     Assert.Equal(1, countOccurrences "(func $__nanyx_compare_string" wat)
@@ -159,7 +159,7 @@ let ``Run - a local function orders at each type it is called with`` () =
           "}" ]
         [ "both(1, 2)"
           "both(2, 1)"
-          "both(\"a\", \"b\")" ]
+          """both("a", "b")""" ]
     |> runSource
     |> assertRan "T\nF\nT\n"
 

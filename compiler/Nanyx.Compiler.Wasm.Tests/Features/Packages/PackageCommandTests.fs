@@ -41,7 +41,7 @@ let ``New - refuses a name the manifest would refuse`` () =
     use directory = new TempDirectory()
     let outcome = nanyxIn directory.Path [ "new"; "Demo" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("The package name \"Demo\" must be lower case, with words separated by dots: acme.web", outcome.StandardError)
+    Assert.Contains("""The package name "Demo" must be lower case, with words separated by dots: acme.web""", outcome.StandardError)
     Assert.Empty(Directory.GetFileSystemEntries directory.Path)
 
 [<Fact>]
