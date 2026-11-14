@@ -82,6 +82,7 @@ let rec mapVars (var: Var -> Var) (depth: int -> int) (e: Expr) : Expr =
         | PList(elements, rest) -> PList(List.map pattern elements, Option.map pattern rest)
         | PWildcard
         | PInt _
+        | PFloat _
         | PBool _
         | PString _ -> p
     let source (s: ForSource) =

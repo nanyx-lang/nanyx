@@ -235,6 +235,8 @@ and Pattern =
     | PWildcard
     /// An integer equal to this one, in the bits it is held in (see `intBits`).
     | PInt of int64
+    /// A float equal to this literal, compared in the width the value is held in: an `f32` for an `F32`.
+    | PFloat of float
     | PBool of bool
     /// A tag, and the pattern its payload must match if it has one.
     | PTag of string * Pattern option
@@ -470,6 +472,7 @@ module Pattern =
         | PGuard _
         | PWildcard
         | PInt _
+        | PFloat _
         | PBool _
         | PString _ -> []
 
@@ -485,6 +488,7 @@ module Pattern =
         | PGuard _
         | PWildcard
         | PInt _
+        | PFloat _
         | PBool _
         | PString _ -> pattern
 
@@ -648,6 +652,7 @@ module Print =
         match p with
         | PWildcard -> "_"
         | PInt value -> string value
+        | PFloat value -> string value
         | PBool value -> if value then "true" else "false"
         | PTag(name, Some payload) -> $"#{name}({pattern indent payload})"
         | PTag(name, None) -> $"#{name}"

@@ -57,6 +57,7 @@ let lowerMatch (tools: MatchTools) (scope: Scope) (expr: Expression) (values: Ex
                 PBind var
             | LiteralPattern(IntLit value) -> PInt(intBits value)
             | LiteralPattern(StringLit value) -> PString value
+            | LiteralPattern(FloatLit value) -> PFloat value
             // `| { % 2 == 0 } ->`: the predicate is inlined, its parameter a local the value matched here is put
             // in each time the arm is tested. It sees what is in scope at the match, not what the arm binds.
             | GuardPattern(Kind (Lambda([ (parameter, _) ], predicateBody, _))) ->

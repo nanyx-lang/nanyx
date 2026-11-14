@@ -38,6 +38,31 @@ main()
     runSource source |> assertRan "2.89\n289p\nfree\n294\n"
 
 [<Fact>]
+let ``Run - the constructor of an alias whose shape is not a record makes a value of its shape`` () =
+    // Regression: `Pair(1, 2)` and `Meters(5)` type-checked, and the backend could not compile the call (#869).
+    let source =
+        normalized """import nanyx/console
+
+type Pair = (int, int)
+type Meters = int
+type Name = string
+type Ints = list(int)
+type Answer = #yes(int) | #no
+
+def main = {
+  def p = Pair(1, 2)
+  println("{p.0 + p.1}")
+  println("{Meters(5) + 1}")
+  println(Name("Ada"))
+  println(Ints([1, 2]))
+  println(Answer(#yes(3)))
+}
+
+main()
+"""
+    runSource source |> assertRan "3\n6\nAda\n[1, 2]\n#yes(3)\n"
+
+[<Fact>]
 let ``Run - tuple destructuring with def`` () =
     // Regression: `def (x, y) = point` was a parse error (#41).
     let source =

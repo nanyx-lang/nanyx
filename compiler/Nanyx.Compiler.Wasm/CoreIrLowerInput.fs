@@ -92,9 +92,10 @@ type LowerInput =
       TopLevelReferences: Map<NodeId, SourceSpan>
       /// The record types the module defines, whose names construct a record: `Person(name = "Ada", age = 36)`.
       RecordConstructors: Set<string>
-      /// The nominal types whose shape is not a record (`type Money = private int`). A value of one is its shape's
-      /// value, so its constructor and the pattern that takes it apart are no-ops.
-      NominalWrappers: Set<string>
+      /// The types the module defines whose shape is not a record: nominal (`type Money = private int`) or not
+      /// (`type Pair = (int, int)`). A value of one is its shape's value, so its constructor is a no-op, and so is the
+      /// pattern that takes a nominal one apart.
+      ShapeWrappers: Set<string>
       /// The names of the nominal types in scope, the module's and those it imports: `Money(p)` with one of them takes a
       /// nominal value apart.
       NominalTypes: Set<string>

@@ -32,6 +32,31 @@ println(greet(#name("Ada")) ++ " / " ++ greet(#name("Bob")) ++ " / " ++ greet(#a
     runSource source |> assertRan "weekend weekend weekday\nweekend\nhello, Ada! / hello, someone / hello, stranger\n"
 
 [<Fact>]
+let ``Run - matching on float literals, of a float and of an F32`` () =
+    // Regression: `| 1.5 -> ...` type-checked, and the backend could not compile the pattern (#869).
+    let source =
+        normalized """import nanyx/console
+
+def size: float -> string = { x ->
+  match x
+    | 0.5 -> "half"
+    | 1.5 -> "one and a half"
+    | _ -> "other"
+}
+def narrow: F32 -> string = { x ->
+  match x
+    | 0.25 -> "quarter"
+    | _ -> "other"
+}
+println("{size(0.5)} / {size(1.5)} / {size(2.0)}")
+println("{narrow(0.25)} / {narrow(0.5)}")
+match (#some(2.5), 1)
+  | (#some(2.5), 1) -> println("payload")
+  | _ -> println("no")
+"""
+    runSource source |> assertRan "half / one and a half / other\nquarter / other\npayload\n"
+
+[<Fact>]
 let ``Run - tuple patterns in match arms`` () =
     // Regression: `| (0, _) -> ...` failed with "Unsupported match pattern" (#33).
     let source =

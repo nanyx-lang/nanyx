@@ -576,10 +576,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     let typeLayouts, typeFieldTypes = extractTypeLayouts module'
 
-    let nominalWrappers =
+    let shapeWrappers =
         module'
         |> List.choose (function
-            | Kind (Def (TypeDef(name, modifiers, _, body))) when TypeDefModifier.isNominal modifiers && (match body.Kind with TypeRecord _ -> false | _ -> true) -> Some name
+            | Kind (Def (TypeDef(name, _, _, body))) when (match body.Kind with TypeRecord _ -> false | _ -> true) -> Some name
             | _ -> None)
         |> Set.ofList
 
@@ -771,7 +771,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                     |> Option.map (fun declared -> node, declared.Declaration))
                 |> Map.ofSeq
               RecordConstructors = typeLayouts.Keys |> Set.ofSeq
-              NominalWrappers = nominalWrappers
+              ShapeWrappers = shapeWrappers
               NominalTypes = typed.TypeDefs |> Map.filter (fun _ info -> info.IsNominal) |> Map.keys |> Set.ofSeq
               Lifted =
                 [ yield! liftedOrigins |> Map.toList |> List.map (fun (name, origin) ->

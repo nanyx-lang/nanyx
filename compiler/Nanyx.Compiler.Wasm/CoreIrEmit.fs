@@ -752,6 +752,11 @@ type private FunctionEmitter(context: EmitContext) =
                 // An int, or a sized integer held as its type is.
                 let held = match ty with IrSized _ -> CoreIrLayout.valueType ty | _ -> "i64"
                 $"{valueCode}\n      {held}.const {value}\n      {held}.eq"
+            | PFloat value ->
+                // The value is a box: what it holds is compared, as an `f32` for an `F32`.
+                let held = if ty = IrF32 then "f32" else "f64"
+                let unbox = touching $"{held}.load"
+                $"{valueCode}\n      {unbox}\n      {held}.const {wasmFloatConst value}\n      {held}.eq"
             | PBool value ->
                 let flag = if value then 1 else 0
                 $"{valueCode}\n      i32.const {flag}\n      i32.eq"
