@@ -106,11 +106,13 @@ The language server sets each compiler diagnostic's `codeDescription.href` to th
 
 # Plan
 
-_To do._ Candidate items, not yet filed:
+_To do._ Candidate items:
 
-1. **Inventory.** List every error the parser and type checker can produce, with an example program for each.
-2. **Codes and wording.** Allocate codes and rewrite messages to the house style, as each error moves to the
-   structured `Diagnostic` (after [#97](https://github.com/nanyx-lang/nanyx/issues/97)).
+1. ~~**Inventory.** List every error the parser and type checker can produce, with an example program for each.~~
+   Done ([#878](https://github.com/nanyx-lang/nanyx/issues/878)): [the error reference](#the-error-reference) is the
+   inventory, a section and a compiled example for each code.
+2. **Codes and wording.** Every error has a code. What is left is to rewrite the messages to the house style
+   ([#879](https://github.com/nanyx-lang/nanyx/issues/879)).
 3. ~~**CLI rendering.** File, source excerpt and underline; colour when the output is a terminal.~~ Done
    ([#880](https://github.com/nanyx-lang/nanyx/issues/880)); see Where the compiler is today.
 4. ~~**Suggestions.** "Did you mean" for unknown names; missing context and missing match cases, with fixes.~~
