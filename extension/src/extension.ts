@@ -129,7 +129,7 @@ async function startOrRestart(context: vscode.ExtensionContext): Promise<void> {
  */
 async function runCurrentFile(context: vscode.ExtensionContext, uri?: vscode.Uri): Promise<void> {
   const document = uri ? await vscode.workspace.openTextDocument(uri) : vscode.window.activeTextEditor?.document;
-  if (!document || document.languageId !== "nanyx") {
+  if (!document || document.languageId !== "nanyx" || document.fileName.endsWith(".nyxp")) {
     void vscode.window.showWarningMessage("Nanyx: open a .nyx file to run it.");
     return;
   }

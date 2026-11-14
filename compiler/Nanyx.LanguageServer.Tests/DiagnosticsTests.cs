@@ -114,6 +114,23 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task A_manifest_is_checked_not_compiled_and_its_problems_are_published_at_the_field()
+    {
+        var uri = DocumentUri.FromFileSystemPath(TempPath("demo.nyxp"));
+
+        Open(uri, """
+            (
+              package = (name = "demo", version = "0.1.0")
+              colour = "red"
+            )
+            """.ReplaceLineEndings("\n"));
+
+        var diagnostic = Assert.Single((await NextPublished(uri)).Diagnostics!);
+        Assert.Equal("NYX0021", diagnostic.Code?.String);
+        Assert.Equal(new Range(2, 2, 2, 8), diagnostic.Range);
+    }
+
+    [Fact]
     public async Task Related_locations_are_published_as_related_information()
     {
         var uri = DocumentUri.FromFileSystemPath(TempPath("private.nyx"));

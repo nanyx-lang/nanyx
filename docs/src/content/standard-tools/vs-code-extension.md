@@ -4,7 +4,7 @@ description: "Installing and configuring the Nanyx extension for Visual Studio C
 order: 3
 ---
 
-The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in a definition attached to a built-in type, `def string.shout`, is coloured as a type, the escapes in a double-quoted string, such as `\n` and `\{`, are coloured as escapes, a [doc comment](../getting-started/basics#doc-comments) is coloured as one throughout its lines, only [Nanyx's operators](../tour/operators#the-operators) are coloured as operators, and every word the language reserves is coloured as a keyword, as is `scoped` before `context`) and runs the compiler as a language server (`nanyx lsp`), which gives you:
+The Nanyx extension for Visual Studio Code highlights `.nyx` files and package manifests, `.nyxp` files, which are Nanyx too (the type in a definition attached to a built-in type, `def string.shout`, is coloured as a type, the escapes in a double-quoted string, such as `\n` and `\{`, are coloured as escapes, a [doc comment](../getting-started/basics#doc-comments) is coloured as one throughout its lines, only [Nanyx's operators](../tour/operators#the-operators) are coloured as operators, and every word the language reserves is coloured as a keyword, as is `scoped` before `context`) and runs the compiler as a language server (`nanyx lsp`), which gives you:
 
 - errors and warnings as you type, each compiler error's code (such as `NYX0201`) a link to its section of
   [Compiler errors](./errors)
@@ -17,7 +17,8 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in 
 - **Format Document**, which formats the file as `nanyx format` does, and **Format Selection**, which formats the definitions the selection touches
 - an [info view](#info-view), a view in the secondary side bar that shows what the compiler knows at the cursor
 - a [library browser](#library), which lists what the standard library exports, and a [search](#searching-the-library) of it by name and by type
-- a run button, which runs the file as `nanyx run` does
+- a run button, which runs the file as `nanyx run` does; a manifest has none
+- in a `.nyxp` manifest, the problems with it as you type, each at the field it is about, and formatting
 
 All of the settings below are under **Nanyx** in VS Code's settings, or can be written in `settings.json`. Changing any of them restarts the language server.
 

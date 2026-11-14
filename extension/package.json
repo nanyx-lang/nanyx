@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.9.17",
+  "version": "0.9.18",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -33,7 +33,8 @@
           "nanyx"
         ],
         "extensions": [
-          ".nyx"
+          ".nyx",
+          ".nyxp"
         ],
         "configuration": "./language-configuration.json"
       }
@@ -161,7 +162,7 @@
       "editor/title/run": [
         {
           "command": "nanyx.runFile",
-          "when": "resourceLangId == nanyx && !isInDiffEditor",
+          "when": "resourceExtname == .nyx && !isInDiffEditor",
           "group": "navigation"
         }
       ]

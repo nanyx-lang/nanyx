@@ -242,6 +242,12 @@ public sealed class DocumentStore
         // The compiler names a file by its full path.
         var path = uri.Scheme == "file" ? FileNameOf(uri) : null;
         var read = new Dictionary<string, string>(FilePaths);
+        if (path is not null && path.EndsWith(ManifestModule.extension, StringComparison.OrdinalIgnoreCase))
+        {
+            // A package's manifest is data, not a module: it is checked, not compiled.
+            return new OpenDocument(text, path, ManifestModule.compile(path, text), null) { Sources = read };
+        }
+
         try
         {
             var directives = Script.read(path ?? string.Empty, text);

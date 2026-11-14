@@ -89,6 +89,69 @@ internal static class CliCommands
     }
 
     /// <summary>
+    /// Print a package's manifest, for tools outside the compiler, once it is checked.
+    /// </summary>
+    /// <param name="json">Print it as JSON: a record is an object, a list an array, and a tag such as #error the string "#error". This is the only form so far, so it is needed.</param>
+    /// <param name="path">A package's directory or .nyxp manifest; none means the package the current directory is in.</param>
+    [Consolo("manifest")]
+    public static int PrintManifest([Consolo("json")] bool json = false, params string[] path) =>
+        ManifestIn(Shell.Process, json, path);
+
+    /// <summary>What <c>nanyx manifest</c> does, run in <paramref name="shell"/>.</summary>
+    internal static int ManifestIn(Shell shell, bool json, string[] path)
+    {
+        if (!TrySinglePath(shell, path, out var single))
+        {
+            return UsageError;
+        }
+
+        if (!json)
+        {
+            shell.Error.WriteLine("nanyx manifest prints the manifest as JSON, so it needs --json: nanyx manifest --json");
+            return UsageError;
+        }
+
+        var full = single is null ? shell.Directory : shell.FullPath(single);
+        string? manifestPath;
+        if (File.Exists(full) && full.EndsWith(ManifestModule.extension, StringComparison.OrdinalIgnoreCase))
+        {
+            manifestPath = full;
+        }
+        else if (Directory.Exists(full))
+        {
+            var found = ManifestModule.tryFind(full);
+            if (found.IsError)
+            {
+                shell.Error.WriteLine(found.ErrorValue);
+                return 1;
+            }
+
+            manifestPath = found.ResultValue?.Value;
+        }
+        else
+        {
+            shell.Error.WriteLine($"Not a directory or a {ManifestModule.extension} manifest: {single}");
+            return UsageError;
+        }
+
+        if (manifestPath is null)
+        {
+            shell.Error.WriteLine($"No {ManifestModule.extension} manifest in {full} or any directory above it");
+            return 1;
+        }
+
+        var read = ManifestModule.read(manifestPath);
+        if (read.IsError)
+        {
+            PrintDiagnostics(shell, read.ErrorValue, shell.Error);
+            return 1;
+        }
+
+        shell.Out.WriteLine(ManifestModule.toJson(read.ResultValue.Value));
+        return 0;
+    }
+
+    /// <summary>
     /// Make a new package: a .nyxp manifest and src/main.nyx, whose @entry prints a greeting.
     /// </summary>
     /// <param name="name">The package's name: lower case, with words separated by dots, as in acme.web.</param>

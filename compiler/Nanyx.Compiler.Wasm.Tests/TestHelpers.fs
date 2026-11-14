@@ -121,6 +121,8 @@ let private command (arguments: string list) : Shell -> int =
     match arguments with
     | [ "--version" ] -> CliCommands.VersionIn
     | "new" :: name :: directory ->fun shell -> CliCommands.NewIn(shell, name, Array.ofList directory)
+    | "manifest" :: rest ->
+        fun shell -> CliCommands.ManifestIn(shell, List.contains "--json" rest, rest |> List.except [ "--json" ] |> Array.ofList)
     | "check" :: rest ->
         let _, _, timings, host, path = options (null, false, false, null, []) rest
         fun shell -> CliCommands.CheckIn(shell, path, timings, host)
