@@ -4,8 +4,9 @@ description: "The inliner in the WebAssembly backend, aggressive for workflows, 
 order: 25
 ---
 
-This page describes the inliner of the WebAssembly backend: its first step is built (`CoreIrInline.fs`,
-[#745](https://github.com/nanyx-lang/nanyx/issues/745)), and the rest is the plan below. It is part of the [compilation](./compilation) workstream, and builds on
+This page describes the inliner of the WebAssembly backend: its first two steps are built (`CoreIrInline.fs`,
+[#745](https://github.com/nanyx-lang/nanyx/issues/745), and `CoreIrSimplify.fs`,
+[#1339](https://github.com/nanyx-lang/nanyx/issues/1339)), and the rest is the plan below. It is part of the [compilation](./compilation) workstream, and builds on
 [context calls](./context-calls), where static closures ([#743](https://github.com/nanyx-lang/nanyx/issues/743)) and
 specialising on known members ([#744](https://github.com/nanyx-lang/nanyx/issues/744)) are done.
 
@@ -35,7 +36,8 @@ match getA()
 ```
 
 That means: no closure for the block, none for each continuation, no call through `Proc`'s members, and no boxing of
-the members' generic values. The block makes 29 allocations, with the first step of inlining as without it. Before builders became a context and a function
+the members' generic values. The block makes 29 allocations without inlining, and 17 with the steps built so far,
+which leave the boxing. Before builders became a context and a function
 ([#1305](https://github.com/nanyx-lang/nanyx/issues/1305)) it made 15: the uniform representation for a member's own
 type variables ([#1160](https://github.com/nanyx-lang/nanyx/issues/1160)) boxes each value that crosses a member.
 
@@ -119,44 +121,82 @@ no behaviour either:
 - **`--no-inline`** on `nanyx run` and `nanyx build` turns it off, for working on the compiler: it tells at once whether
   a misbehaving program is the inliner's doing. Some tests run programs both ways and check they print the same.
 
-# The first step, as built
+# As built
 
 `CoreIrInline.inlineCalls` runs over every function of the module after lowering, in `CodeGen.fs`, and before
 counting, unless `WasmOptions.Inline` is off (`--no-inline`). It takes the functions so that each comes after those it
-calls, and goes over each one up to four times, each time inlining what the time before exposed.
+calls, and goes over each one up to sixteen times, each time simplifying (`CoreIrSimplify.simplify`) and then inlining
+what the time before exposed, and simplifies it once more at the end.
+
+## Inlining
 
 - **What is inlined.** A call to a top-level function, when the function is a handler (its body ends in a call
-  through one of its parameters) or has no more than `sizeLimit` (40) core IR nodes. A call through a local that a
-  `let` gives a closure over a lifted lambda, when that local is named nowhere else, or the lambda is small. Once a
-  handler is inlined, its parameter is the caller's closure, so the next time over the block is inlined too.
+  through one of its parameters), or a lambda the caller makes a closure over and calls once, or has no more than
+  `sizeLimit` (40) core IR nodes. A call through a closure is inlined once simplifying has made it a call of the
+  lambda, with the closure as its environment. Once a handler is inlined, its parameter is the caller's closure, so
+  the next time over the block is inlined too, then the members its `use` binds, then the continuations they are
+  given.
 - **What is not.** A function in a cycle of calls, found with Tarjan's algorithm over calls and the closures a function
   makes. The start function, whose body must stay a sequence of top-level expressions, takes nothing inlined, and
   nothing is inlined into a guard. A function stops taking more once it has 4,000 nodes.
 - **How.** The callee's body is copied in with every variable it binds made new, with a new name, so that none shares a
   local with the caller's: variables of the same kind and name share one. A parameter is the caller's variable when the
   argument is one of its type, and a new local let-bound to the argument otherwise (a lambda's environment, which it
-  reads as a record, is bound to the closure). A call is inlined as what a chain ends in or as a `let`'s or `do`'s
-  value, a temporary's among them (`acc + double(n)`). Every temporary of the chain still waiting to be used becomes
-  a local first, since the inlined body stores before it reads what it is given, and nothing may be stored while a
-  temporary waits; temporaries are bound in the order they are evaluated, so the order holds. The body's loops are
-  numbered inside the caller's, and a chain that is a `let`'s value is flattened into the chain around it.
+  reads as a record, is bound to the closure, and a tag to a parameter whose type has other tags). A call is inlined
+  as what a chain ends in or as a `let`'s or `do`'s value, a temporary's among them (`acc + double(n)`). Every
+  temporary of the chain still waiting to be used becomes a local first, since the inlined body stores before it reads
+  what it is given, and nothing may be stored while a temporary waits; temporaries are bound in the order they are
+  evaluated, so the order holds. The body's loops are numbered inside the caller's, and a chain that is a `let`'s value
+  is flattened into the chain around it. The walk over the IR that this needs is shared with simplifying
+  (`CoreIrRewrite.fs`).
 - **What is left.** A function inlined wherever it is called is no longer reached from the start, so it is not
   emitted (`CoreIrReach`, which runs after inlining).
 - **Tail calls and traps.** A call in tail position in the callee is still in tail position where the call was in
   the caller's tail, so it is still a tail call. A trap's message has its span in it from lowering, so it reports the
   line it was written on.
 
-Measured as the [Context escape](./context-escape#what-it-costs) page measures it, by the allocation counter of a
-`--check-memory` build over 100 blocks, a `proc` block of three `try`s and a `return` on `int` payloads still makes
-29 allocations a block (`A proc block allocates no more inlined` in `InliningTests.fs`). `proc` and its block are
-inlined, but the members reach the block through the adapters and boxes of #1160, which only the next steps remove.
+## Simplifying
 
+`CoreIrSimplify.simplify` walks a function's body with what is known about each variable at each point: the closure or
+tag its binding makes, or another variable's value it is given, and, inside a `match` arm, the tag the arm's pattern
+tests and the tags the arms before it tested and failed. From that:
+
+- **A call through a known closure** is a direct call of the lambda, with the closure as its environment, which the
+  inliner may inline in turn. A call that stays (a lambda that calls the function back, say) is a `call`, not a
+  `call_indirect`.
+- **A field of a known closure's environment** is the value the closure captured there, so an inlined lambda, or an
+  adapter of #1160, reads the caller's variables and not the block.
+- **A `match` on known scrutinees** takes the arm they match, binding the names its patterns bind; an arm they cannot
+  match is left out, and a scrutinee every arm matches whatever it is is no longer tested.
+- **A binding that nothing reads** is not made when its value has no effect (no call, no write, and no operator that
+  can trap), and a closure, tag or record that only it held goes with it.
+
+A value is only read again somewhere new from a constant, or from a variable that nothing assigns, that has its local
+to itself (no other variable of its kind has its name), and that is not a temporary. Two rules make temporaries into
+what can be read: a temporary given at once to a variable is that variable's value, and a temporary a tag is made of,
+given at once to a variable, becomes a local. A temporary whose value is a chain keeps the chain whole, since it is
+evaluated where it is used.
+
+## What it costs
+
+Measured as the [Context escape](./context-escape#what-it-costs) page measures it, by the allocation counter of a
+`--check-memory` build over 100 blocks, a `proc` block of three `try`s and a `return` on `int` payloads makes 29
+allocations a block without inlining and 17 with it (`A proc block allocates fewer inlined` in `InliningTests.fs`).
+`proc`, the block, the members and the continuations are inlined, and none of them is a closure any more, but the
+members' generic values are still boxed (#1160): each `try` boxes its payload and unboxes it again in the
+continuation, and boxes and unboxes the result it returns. Timed by `run(100000)` from the host, the block takes about
+92 ns inlined and 231 ns not.
+
+Inlining with simplifying also leaves out of a program what only unused closures needed: a host whose `use` binds
+members the program never calls no longer makes their closures, so their functions and the helpers they use are not
+emitted.
 # Plan
 
 1. ~~**The inliner and its first rules**~~ ([#745](https://github.com/nanyx-lang/nanyx/issues/745), done): lambdas
    called once, small functions, handlers, the recursion check, keeping tail calls and spans, in every build, and
    `--no-inline`. Tests show a call inlined and one that isn't (`InliningTests.fs`).
-2. **Simplification after inlining:** known calls, unused closures, known matches.
+2. ~~**Simplification after inlining**~~ ([#1339](https://github.com/nanyx-lang/nanyx/issues/1339), done): known
+   calls, unused closures, known matches (CoreIrSimplify.fs, tests in InliningTests.fs).
 3. **Unboxing members at known types,** after #1160.
 4. **The `proc` block above compiles to its nested match,** checked against the WAT of the hand-written match, with
    the allocation count of the generated-code performance review's `proc` benchmark going to zero for the block.

@@ -161,7 +161,7 @@ let ``Transpile magic dbg for bare tag literal`` () =
 
 def main = dbg(#test)"""
 
-    let wat = transpileWat source
+    let wat = transpileWatNotInlined source
 
     // Printed through a printer of its type, which needs nothing from the host.
     Assert.Contains("call $__dbg_show_tag_test", wat)

@@ -8,38 +8,7 @@ module internal Transpiler.Wasm.CoreIrReach
 
 open System.Collections.Generic
 open Transpiler.Wasm.CoreIr
-
-/// The atoms an expression reads itself, not those of the expressions inside it.
-let private atomsOf (e: Expr) : Atom list =
-    match e.Kind with
-    | Atom a
-    | MakeTag(_, a)
-    | Field(a, _)
-    | Dbg a -> [ a ]
-    | Prim(_, atoms)
-    | Call(_, atoms)
-    | MakeList atoms
-    | CallRuntime(_, atoms, _)
-    | MakeClosure(_, _, atoms)
-    | CallClosure(_, atoms) -> atoms
-    | MakeRecord fields -> fields |> List.map snd
-    | UpdateRecord(record, updates) -> record :: (updates |> List.map snd)
-    | Assign(_, value)
-    | SetField(_, _, value) -> [ value ]
-    | ForEach loop -> ForLoop.sourceAtoms loop
-    | If(cond, _, _) -> [ cond ]
-    | Interpolate _
-    | BoxFloat _
-    | Panic _
-    | While _
-    | Let _
-    | Do _
-    | Match _
-    | Dup _
-    | Drop _
-    | DropAfter _
-    | Release _
-    | Reuse _ -> []
+open Transpiler.Wasm.CoreIrRewrite
 
 /// The functions `func` names: those it calls, and those it makes a closure over.
 let private namedBy (func: Function) : string list =
@@ -52,27 +21,13 @@ let private namedBy (func: Function) : string list =
         | Call(name, _)
         | MakeClosure(name, _, _) -> names.Add name
         | _ -> ()
-        for atom in atomsOf e do
+        for atom in directAtoms e do
             match atom with
             | AStaticClosure(name, _, _) -> names.Add name
             | _ -> ()
         for child in Expr.children e do
             pending.Push child
     List.ofSeq names
-
-/// `e` with `f` applied to each expression directly inside it that is not what follows a link of a chain.
-let private mapNested (f: Expr -> Expr) (e: Expr) : Expr =
-    let kind =
-        match e.Kind with
-        | If(cond, ifTrue, ifFalse) -> If(cond, f ifTrue, f ifFalse)
-        | Match(scrutinees, arms) ->
-            Match(scrutinees, arms |> List.map (fun arm -> { Patterns = arm.Patterns |> List.map (Pattern.mapGuards f); Body = f arm.Body }))
-        | ForEach loop -> ForEach { loop with Body = f loop.Body }
-        | While loop -> While { loop with Condition = f loop.Condition; Body = f loop.Body }
-        | DropAfter(body, vars) -> DropAfter(f body, vars)
-        | Reuse(token, body) -> Reuse(token, f body)
-        | kind -> kind
-    { e with Kind = kind }
 
 /// `e` without the bindings of the variables `unread`.
 let rec private withoutBindings (unread: Set<int>) (e: Expr) : Expr =

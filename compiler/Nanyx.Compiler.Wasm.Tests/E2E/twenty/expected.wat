@@ -461,7 +461,7 @@
   (data (i32.const 312) "\00\00\00\00\00\00\00\00\00\00\00\00")
   (data (i32.const 324) "\00\00\00\00\00\00\00\00\01\00\00\00")
 
-  (func $compareStrings__int__string (param $x_i64 i64) (param $y i32) (param $__ctx_ToString_a_toString i32) (param $__ctx_ToString_b_toString i32) (result i32) (local $xString i32) (local $yString i32) (local $__dbg_value i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32)
+  (func $compareStrings__int__string (param $x_i64 i64) (param $y i32) (param $__ctx_ToString_a_toString i32) (param $__ctx_ToString_b_toString i32) (result i32) (local $xString i32) (local $yString i32) (local $__dbg_value i32) (local $__inlined11 i32) (local $__owned_0 i32) (local $__owned_1 i32)
     local.get $__ctx_ToString_a_toString
     local.get $x_i64
     local.get $__ctx_ToString_a_toString
@@ -489,15 +489,16 @@
     call $__nanyx_drop_string
     local.set $__dbg_value
     local.get $__dbg_value
-    call $__dbg_show_string
-    local.tee $__owned_2
-    call $dbg_str
-    i32.const 0
-    local.get $__owned_2
-    call $__nanyx_drop_string
-    drop
+    call $__nanyx_string_quote
     local.get $__dbg_value
     call $__nanyx_drop_string
+    local.set $__inlined11
+    local.get $__inlined11
+    call $dbg_str
+    i32.const 0
+    local.get $__inlined11
+    call $__nanyx_drop_string
+    drop
     local.get $xString
     local.get $yString
     call $__nanyx_string_equals
@@ -507,7 +508,7 @@
     call $__nanyx_drop_string
   )
 
-  (func $main (result i32) (local $fakeInt i32) (local $__use_ToString_int_toString_1 i32) (local $plainString i32) (local $__use_ToString_string_toString_3 i32) (local $x__in1_i64 i64) (local $y__in1 i32) (local $xString__in1 i32) (local $yString__in1 i32) (local $__dbg_value__in1 i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32)
+  (func $main (result i32) (local $fakeInt i32) (local $__use_ToString_int_toString_1 i32) (local $plainString i32) (local $__use_ToString_string_toString_3 i32) (local $x__in1_i64 i64) (local $y__in1 i32) (local $xString__in1 i32) (local $yString__in1 i32) (local $__dbg_value__in1 i32) (local $__inlined11__in1 i32) (local $__owned_0 i32) (local $__owned_1 i32)
     i32.const 4
     i32.const 1
     call $__nanyx_new_object
@@ -565,15 +566,16 @@
     call $__nanyx_drop_string
     local.set $__dbg_value__in1
     local.get $__dbg_value__in1
-    call $__dbg_show_string
-    local.tee $__owned_2
-    call $dbg_str
-    i32.const 0
-    local.get $__owned_2
-    call $__nanyx_drop_string
-    drop
+    call $__nanyx_string_quote
     local.get $__dbg_value__in1
     call $__nanyx_drop_string
+    local.set $__inlined11__in1
+    local.get $__inlined11__in1
+    call $dbg_str
+    i32.const 0
+    local.get $__inlined11__in1
+    call $__nanyx_drop_string
+    drop
     local.get $xString__in1
     local.get $yString__in1
     call $__nanyx_string_equals

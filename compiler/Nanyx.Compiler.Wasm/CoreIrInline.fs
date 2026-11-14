@@ -12,6 +12,7 @@ module internal Transpiler.Wasm.CoreIrInline
 
 open System.Collections.Generic
 open Transpiler.Wasm.CoreIr
+open Transpiler.Wasm.CoreIrRewrite
 
 /// The most core IR nodes a function has to be inlined for its size alone.
 let sizeLimit = 40
@@ -19,66 +20,9 @@ let sizeLimit = 40
 /// The most core IR nodes a function grows to by inlining; nothing more is inlined into it after that.
 let private growthLimit = 4000
 
-/// How many times a function's body is gone over, each time inlining what the time before exposed: a handler's block,
-/// then the members its `use` binds.
-let private rounds = 4
-
-/// Every expression in `e`, each once, in no particular order.
-let private allExprs (e: Expr) : Expr seq =
-    seq {
-        let pending = Stack<Expr>()
-        pending.Push e
-        while pending.Count > 0 do
-            let current = pending.Pop()
-            yield current
-            for child in Expr.children current do
-                pending.Push child
-    }
-
-/// How many core IR nodes `e` has.
-let private size (e: Expr) = Seq.length (allExprs e)
-
-/// The atoms `e` reads directly.
-let private directAtoms (e: Expr) : Atom list =
-    match e.Kind with
-    | Atom atom
-    | MakeTag(_, atom)
-    | Field(atom, _)
-    | Assign(_, atom)
-    | SetField(_, _, atom)
-    | Dbg atom
-    | If(atom, _, _) -> [ atom ]
-    | Prim(_, atoms)
-    | Call(_, atoms)
-    | MakeList atoms
-    | CallRuntime(_, atoms, _)
-    | MakeClosure(_, _, atoms)
-    | CallClosure(_, atoms) -> atoms
-    | MakeRecord fields -> List.map snd fields
-    | UpdateRecord(record, updates) -> record :: List.map snd updates
-    | ForEach loop -> ForLoop.sourceAtoms loop
-    | Interpolate _
-    | BoxFloat _
-    | Panic _
-    | While _
-    | Let _
-    | Do _
-    | Match _
-    | Dup _
-    | Drop _
-    | DropAfter _
-    | Release _
-    | Reuse _ -> []
-
-/// The variables `e` reads directly, other than through its atoms.
-let private directVars (e: Expr) : Var list =
-    match e.Kind with
-    | CallClosure(var, _)
-    | Assign(var, _)
-    | SetField(var, _, _) -> [ var ]
-    | Match(scrutinees, _) -> scrutinees
-    | Interpolate parts -> parts |> List.choose (function Hole(var, _) -> Some var | Text _ -> None)
-    | _ -> []
+/// How many times a function's body is gone over, each time simplifying and inlining what the time before exposed: a
+/// handler's block, then the members its `use` binds, then the continuations they are given, and so on down a workflow.
+let private rounds = 16
 
 /// The functions `e` calls or makes a closure over, by name.
 let private references (e: Expr) : string list =
@@ -92,100 +36,6 @@ let private references (e: Expr) : string list =
         let static' = directAtoms e |> List.choose (function AStaticClosure(name, _, _) -> Some name | _ -> None)
         named @ static')
     |> List.ofSeq
-
-/// `e` with each variable, bound or read, replaced as `var` says, and each loop's depth as `depth` says.
-let rec private mapVars (var: Var -> Var) (depth: int -> int) (e: Expr) : Expr =
-    let go = mapVars var depth
-    let atom (a: Atom) =
-        match a with
-        | AVar v -> AVar(var v)
-        | _ -> a
-    let atoms = List.map atom
-    let rec pattern (p: Pattern) =
-        match p with
-        | PBind v -> PBind(var v)
-        | PGuard(v, guard) -> PGuard(var v, go guard)
-        | PTag(name, inner) -> PTag(name, Option.map pattern inner)
-        | PFields fields -> PFields(fields |> List.map (fun (slot, inner) -> slot, pattern inner))
-        | PAll parts -> PAll(List.map pattern parts)
-        | PList(elements, rest) -> PList(List.map pattern elements, Option.map pattern rest)
-        | PWildcard
-        | PInt _
-        | PBool _
-        | PString _ -> p
-    let source (s: ForSource) =
-        match s with
-        | OverList list -> OverList(atom list)
-        | OverRange(first, last) -> OverRange(atom first, atom last)
-        | OverRangeFrom first -> OverRangeFrom(atom first)
-    let kind =
-        match e.Kind with
-        | Atom a -> Atom(atom a)
-        | Prim(op, args) -> Prim(op, atoms args)
-        | Call(name, args) -> Call(name, atoms args)
-        | MakeTag(name, payload) -> MakeTag(name, atom payload)
-        | MakeRecord fields -> MakeRecord(fields |> List.map (fun (name, value) -> name, atom value))
-        | Field(record, slot) -> Field(atom record, slot)
-        | UpdateRecord(record, updates) -> UpdateRecord(atom record, updates |> List.map (fun (slot, value) -> slot, atom value))
-        | Assign(target, value) -> Assign(var target, atom value)
-        | SetField(target, slot, value) -> SetField(var target, slot, atom value)
-        | MakeList items -> MakeList(atoms items)
-        | CallRuntime(name, args, returnsValue) -> CallRuntime(name, atoms args, returnsValue)
-        | MakeClosure(name, arity, captured) -> MakeClosure(name, arity, atoms captured)
-        | CallClosure(closure, args) -> CallClosure(var closure, atoms args)
-        | Interpolate parts -> Interpolate(parts |> List.map (function Hole(v, holeType) -> Hole(var v, holeType) | text -> text))
-        | Dbg value -> Dbg(atom value)
-        | BoxFloat _
-        | Panic _ -> e.Kind
-        | ForEach loop ->
-            ForEach
-                { Streams =
-                    loop.Streams
-                    |> List.map (fun stream ->
-                        { Source = source stream.Source
-                          Cursor = var stream.Cursor
-                          End = var stream.End
-                          Element = var stream.Element })
-                  Depth = depth loop.Depth
-                  Body = go loop.Body }
-        | While loop -> While { Condition = go loop.Condition; Depth = depth loop.Depth; Body = go loop.Body }
-        // A chain is walked in a loop, so that a long one cannot overflow the stack.
-        | Let _
-        | Do _ ->
-            let links, last = Chain.split e
-            let mapped =
-                links
-                |> List.map (fun link ->
-                    match link.Kind with
-                    | Let(v, value, _) -> { link with Kind = Let(var v, go value, link) }
-                    | Do(value, _) -> { link with Kind = Do(go value, link) }
-                    | _ -> internalError "inlining after reference counting")
-            (Chain.rebuild Chain.relink mapped (go last)).Kind
-        | If(condition, ifTrue, ifFalse) -> If(atom condition, go ifTrue, go ifFalse)
-        | Match(scrutinees, arms) ->
-            Match(List.map var scrutinees, arms |> List.map (fun arm -> { Patterns = List.map pattern arm.Patterns; Body = go arm.Body }))
-        | Dup _
-        | Drop _
-        | DropAfter _
-        | Release _
-        | Reuse _ -> internalError "inlining after reference counting"
-    { e with Kind = kind }
-
-/// The chain `value` starts, with `link` of what it ends in in place of what it ends in, and each link of the type of
-/// `rest`: how a value that is a chain is flattened into the chain it is a value in, since a let's or a do's value is
-/// never a let itself.
-let private flattened (value: Expr) (rest: Expr) (link: Expr -> Expr) : Expr =
-    let links, last = Chain.split value
-    Chain.rebuild (fun (outer: Expr) next -> { Chain.relink outer next with Type = rest.Type }) links (link last)
-
-/// `let var = value in rest`, with a value that is a chain flattened into the chain it starts.
-let private bindValue (var: Var) (value: Expr) (rest: Expr) : Expr =
-    flattened value rest (fun last -> Expr.make (Let(var, last, rest)) rest.Type)
-
-/// `do value then rest`, with a value that is a chain flattened as `bindValue` flattens one.
-let private doValue (value: Expr) (rest: Expr) : Expr =
-    flattened value rest (fun last -> Expr.make (Do(last, rest)) rest.Type)
-
 /// Whether `f` is a handler: a function whose body ends in a call through one of its parameters, as one that runs its
 /// lambda parameter under a `use` does.
 let private isHandler (f: Function) =
@@ -293,58 +143,56 @@ type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string
 
     /// One time over `body`: each call that is to be inlined is.
     member this.Round (body: Expr) : Expr * bool =
-        // The closure each local holds, when a `let` gives it one over a lifted function, and how often each variable is
-        // named, its binding included.
-        let closures = Dictionary<int, string>()
-        let named = Dictionary<int, int>()
-        let count (v: Var) = named.[v.Id] <- (match named.TryGetValue v.Id with | true, n -> n + 1 | _ -> 1)
+        // How often each function is called here, and the functions this body makes a closure over.
+        let calls = Dictionary<string, int>()
+        let closures = HashSet<string>()
         for e in allExprs body do
             match e.Kind with
-            | Let(v, { Kind = MakeClosure(name, _, _) }, _)
-            | Let(v, { Kind = Atom(AStaticClosure(name, _, _)) }, _) -> closures.[v.Id] <- name
-            | _ -> ()
-            match e.Kind with
-            | Let(v, _, _) -> count v
+            | Call(name, _) -> calls.[name] <- (match calls.TryGetValue name with | true, n -> n + 1 | _ -> 1)
+            | MakeClosure(name, _, _) -> closures.Add name |> ignore
             | _ -> ()
             for atom in directAtoms e do
                 match atom with
-                | AVar v -> count v
+                | AStaticClosure(name, _, _) -> closures.Add name |> ignore
                 | _ -> ()
-            directVars e |> List.iter count
         let mutable changed = false
         let mutable grown = size body
 
-        // The function a call is inlined from, with what it is given, if it is to be.
+        // Whether `args` are of the types of `callee`'s parameters. A lambda's first parameter is its environment, the
+        // closure (or box) read as a record of what it captures, and a tag is held alike whatever tags its type has.
+        let typed (callee: Function) (args: Atom list) =
+            List.forall2
+                (fun (param: Var) arg ->
+                    match param.Type, atomType arg with
+                    | IrTags _, IrTags _ -> true
+                    | IrRecord _, (IrFunction _ | IrBox) -> param.Name = ClosureSyntax.envParameter
+                    | paramTy, argTy -> paramTy = argTy)
+                callee.Params
+                args
+
+        // The function a call is inlined from, with what it is given, if it is to be. A call through a known closure is
+        // a call to its function by now (see `CoreIrSimplify`), with the closure as the environment.
         let site (call: Expr) : (Function * Atom list) option =
-            // A lambda's first parameter is its environment, the closure read as a record of what it captures.
-            let target, args, always, typed =
-                match call.Kind with
-                | Call(name, args) -> Some name, args, isHandler, (fun (callee: Function) -> List.forall2 (fun (param: Var) arg -> param.Type = atomType arg) callee.Params args)
-                | CallClosure(closure, args) ->
-                    match closures.TryGetValue closure.Id with
-                    | true, name ->
-                        let typed (callee: Function) =
-                            match callee.Params with
-                            | { Type = IrRecord _ } :: values -> List.forall2 (fun (param: Var) arg -> param.Type = atomType arg) values args
-                            | _ -> false
-                        Some name, AVar closure :: args, (fun _ -> named.[closure.Id] = 2), typed
-                    | _ -> None, [], (fun _ -> false), (fun _ -> false)
-                | _ -> None, [], (fun _ -> false), (fun _ -> false)
-            match target |> Option.bind (fun name -> match functions.TryGetValue name with | true, callee -> Some callee | _ -> None) with
-            | Some callee when
-                not (cyclic.Contains callee.Name)
-                && callee.Name <> f.Name
-                && callee.Params.Length = args.Length
-                && typed callee
-                && callee.Result = call.Type
-                && callee.Body.Type = callee.Result
-                && grown < growthLimit
-                ->
-                let calleeSize = size callee.Body
-                if always callee || calleeSize <= sizeLimit then
-                    grown <- grown + calleeSize
-                    Some(callee, args)
-                else None
+            match call.Kind with
+            | Call(name, args) ->
+                match functions.TryGetValue name with
+                | true, callee when
+                    not (cyclic.Contains callee.Name)
+                    && callee.Name <> f.Name
+                    && callee.Params.Length = args.Length
+                    && typed callee args
+                    && callee.Result = call.Type
+                    && callee.Body.Type = callee.Result
+                    && grown < growthLimit
+                    ->
+                    let calleeSize = size callee.Body
+                    // A handler is inlined whatever its size, and so is a lambda this body makes and calls once.
+                    let always = isHandler callee || (closures.Contains name && calls.[name] = 1)
+                    if always || calleeSize <= sizeLimit then
+                        grown <- grown + calleeSize
+                        Some(callee, args)
+                    else None
+                | _ -> None
             | _ -> None
 
         let rec sequence (loopDepth: int) (e: Expr) : Expr =
@@ -445,9 +293,10 @@ let inlineCalls (start: string option) (functions: Function list) : Function lis
             let mutable round = 0
             let mutable changed = true
             while changed && round < rounds do
-                let next, didChange = inliner.Round body
+                let simplified, didSimplify = CoreIrSimplify.simplify current { f with Body = body }
+                let next, didInline = inliner.Round simplified
                 body <- next
-                changed <- didChange
+                changed <- didSimplify || didInline
                 round <- round + 1
-            current.[name] <- { f with Body = body }
+            current.[name] <- { f with Body = fst (CoreIrSimplify.simplify current { f with Body = body }) }
     functions |> List.map (fun f -> current.[f.Name])

@@ -741,29 +741,9 @@
   )
   (export "__fn_writeStderr" (func $__fn_writeStderr))
 
-  (func $__lambda_3__unit (param $__env i32) (param $__ctx_readStdinByte i32) (param $__ctx_writeStderr i32) (param $__ctx_writeStdout i32) (result i32) (local $_ i32) (local $__ctx_readStdinByte_1 i32) (local $__ctx_writeStderr_1 i32) (local $__ctx_writeStdout_1 i32)
-    i32.const 0
-    local.set $_
-    local.get $__env
-    i32.load offset=4
-    call $__nanyx_dup_fn_unit_to_int
-    local.set $__ctx_readStdinByte_1
-    local.get $__ctx_readStdinByte_1
-    call $__nanyx_drop_fn_unit_to_int
-    local.get $__env
-    i32.load offset=8
-    call $__nanyx_dup_fn_string_to_unit
-    local.set $__ctx_writeStderr_1
-    local.get $__ctx_writeStderr_1
-    call $__nanyx_drop_fn_string_to_unit
-    local.get $__env
-    i32.load offset=12
-    call $__nanyx_dup_fn_string_to_unit
+  (func $__lambda_3__unit (param $__env i32) (param $__ctx_readStdinByte i32) (param $__ctx_writeStderr i32) (param $__ctx_writeStdout i32) (result i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word_1_fn_unit_to_int_2_fn_string_to_unit_3_fn_string_to_unit
-    local.set $__ctx_writeStdout_1
-    local.get $__ctx_writeStdout_1
-    call $__nanyx_drop_fn_string_to_unit
     i32.const 264
     local.get $__ctx_readStdinByte
     local.get $__ctx_writeStderr
@@ -771,29 +751,9 @@
     return_call $console_host_readLineAfter
   )
 
-  (func $__lambda_5__unit (param $__env i32) (param $__ctx_readStdinByte i32) (param $__ctx_writeStderr i32) (param $__ctx_writeStdout i32) (result i32) (local $_ i32) (local $__ctx_readStdinByte_1 i32) (local $__ctx_writeStderr_1 i32) (local $__ctx_writeStdout_1 i32)
-    i32.const 0
-    local.set $_
-    local.get $__env
-    i32.load offset=4
-    call $__nanyx_dup_fn_unit_to_int
-    local.set $__ctx_readStdinByte_1
-    local.get $__ctx_readStdinByte_1
-    call $__nanyx_drop_fn_unit_to_int
-    local.get $__env
-    i32.load offset=8
-    call $__nanyx_dup_fn_string_to_unit
-    local.set $__ctx_writeStderr_1
-    local.get $__ctx_writeStderr_1
-    call $__nanyx_drop_fn_string_to_unit
-    local.get $__env
-    i32.load offset=12
-    call $__nanyx_dup_fn_string_to_unit
+  (func $__lambda_5__unit (param $__env i32) (param $__ctx_readStdinByte i32) (param $__ctx_writeStderr i32) (param $__ctx_writeStdout i32) (result i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word_1_fn_unit_to_int_2_fn_string_to_unit_3_fn_string_to_unit
-    local.set $__ctx_writeStdout_1
-    local.get $__ctx_writeStdout_1
-    call $__nanyx_drop_fn_string_to_unit
     i32.const 7
     i32.const 264
     local.get $__ctx_readStdinByte
@@ -807,11 +767,9 @@
     call $__nanyx_tag_box
   )
 
-  (func $__lambda_7__unit (param $__env i32) (result i32) (local $_ i32)
+  (func $__lambda_7__unit (param $__env i32) (result i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
-    i32.const 0
-    local.set $_
     i32.const 0
   )
 
@@ -851,11 +809,9 @@
   )
   (export "__fn___script" (func $__fn___script))
 
-  (func $__fn_readStdinByte (param $__env i32) (result i64) (local $__arg1 i32)
+  (func $__fn_readStdinByte (param $__env i32) (result i64)
     local.get $__env
     call $__nanyx_drop_rec_0_word
-    i32.const 0
-    local.set $__arg1
     call $__nanyx_read_stdin_byte
     i64.extend_i32_s
   )

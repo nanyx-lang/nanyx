@@ -55,7 +55,8 @@ let ``Static closure - every use of a top-level function as a value shares one b
         + """
 def run: int -> int = { n -> apply(double, n) + apply(double, n + 1) }
 """
-    let wat = transpileWat (source.ReplaceLineEndings "\n")
+    // Inlined, pply calls double directly, and no closure is left to share.
+    let wat = transpileWatNotInlined (source.ReplaceLineEndings "\n")
     Assert.Equal(0, countOccurrences "call $__nanyx_new_object" wat)
     // No string literals: the only data segment is the closure's.
     Assert.Equal(1, countOccurrences "(data " wat)
