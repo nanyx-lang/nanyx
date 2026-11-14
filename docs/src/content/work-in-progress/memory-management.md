@@ -251,7 +251,9 @@ Every operand is an atom, so every intermediate value has a name. Each variable 
 local the program declares, a scrutinee, a name a pattern binds, or a temporary (a value the source does not name).
 
 **Lowering.** `CoreIrLower.fs` lowers each definition from the typed module: its expressions as the backend sees
-them, with each node's type from `ExprTypes` and the type of the function at each call from `CalleeTypes`. A
+them, with each node's type from `ExprTypes` and the type of the function at each call from `CalleeTypes`. Its
+`FunctionLowering` hands parts of the work to files of their own through records of what they need from it, such as
+`CoreIrLowerMatch.fs` for a `match` and its patterns and `CoreIrLowerBoxes.fs` for boxed values. A
 definition whose type is concrete is lowered as it is. A call to a generic definition binds the definition's type
 variables to the types at the call, and asks for the specialisation at those type arguments (`id__int`,
 `id__string`), which is lowered in turn with the variables replaced. Each specialisation is lowered once, however
