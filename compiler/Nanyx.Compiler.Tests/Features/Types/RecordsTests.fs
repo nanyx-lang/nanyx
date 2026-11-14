@@ -112,6 +112,21 @@ def older = alice with height = 1""")
     Assert.False(unknownField.Diagnostics.IsEmpty, "updating a field the record lacks should not type-check")
 
 [<Fact>]
+let ``A record update takes apart a payload a match binds of a call's result`` () =
+    // #619: the payload's type is known only once the call's constraints are solved.
+    let source =
+        normalized """type Item = (price: int, count: int)
+def find: string -> #some(Item) | #notFound = { name -> #some(Item(price = 1, count = 2)) }
+def left: int = match find("x")
+  | #notFound -> 0
+  | #some(item) ->
+    def after = item with count = item.count - 1
+    after.count
+"""
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+
+[<Fact>]
 let ``Typecheck allows member access on the result of a call`` () =
     // #60: the call's result used to be an unsolved variable when the member access looked for fields.
     let declared =
