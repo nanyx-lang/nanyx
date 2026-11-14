@@ -390,7 +390,14 @@ let format (options: Options) (parsed: SourceModule) : string =
     and pattern (p: Pattern) : Doc = PatternPrinter(source, sourceText, literalDoc, expr full).Pattern p
 
     /// The types in the module, with the expressions in them printed as `expr` prints them.
-    and types () = TypePrinter(expr full, expr { full with Tail = false })
+    and types () = TypePrinter(expr full, expr { full with Tail = false }, attributeDoc)
+
+    /// An attribute written at `span`, on a line of its own or before a field: `@entry`, `@customKeywordType(#bind)`.
+    and attributeDoc (name: Identifier) (argument: Expression option) (span: SourceSpan) : Doc =
+        match argument with
+        | None -> text $"@{name}"
+        | Some (Kind UnitExpr) -> text $"@{name}()"
+        | Some argument -> cat [ text ("@" + name); parenFields argument (span.Start + 1 + name.Length) span.End ]
 
     and signature (t: TypeExpr) : Doc = (types ()).Signature t
 
@@ -439,9 +446,13 @@ let format (options: Options) (parsed: SourceModule) : string =
     ///     price: int
     ///     stock: int
     ///   )
+    ///
+    /// A record with an attribute among its fields is laid out so too, each attribute on a line of its own above its
+    /// field.
     and typeBody (body: TypeExpr) : Doc =
+        let hasAttribute fields = fields |> List.exists (function TypeFieldAttribute _ -> true | _ -> false)
         match body.Kind with
-        | TypeRecord fields when fields.Length > 3 || (sourceText.Valid body.Span && hasCommentsIn body.Span.Start body.Span.End) ->
+        | TypeRecord fields when fields.Length > 3 || hasAttribute fields || (sourceText.Valid body.Span && hasCommentsIn body.Span.Start body.Span.End) ->
             let isPositional field =
                 match field with
                 | TypeField(n, false, Some _, None) -> n.Length > 0 && Seq.forall Char.IsDigit n
@@ -455,10 +466,12 @@ let format (options: Options) (parsed: SourceModule) : string =
                 | TypeMember(_, Some t) -> t.Span.Start, t.Span.End
                 | _ -> -1, -1
             let children =
-                fields
-                |> List.map (fun field ->
+                TypeRecordField.withAttributes fields
+                |> List.map (fun (attributes, field) ->
                     let start, finish = spanOf field
-                    start, finish, fun () -> cat [ recordTypeField field; (if isPositional field then text "," else Doc.empty) ])
+                    let start = match attributes with (_, _, span) :: _ when sourceText.Valid span -> span.Start | _ -> start
+                    let attributeLines = [ for name, argument, span in attributes -> cat [ attributeDoc name argument span; hard ] ]
+                    start, finish, fun () -> cat (attributeLines @ [ recordTypeField field; (if isPositional field then text "," else Doc.empty) ]))
             cat [ text "("; nest (cat [ hard; sequence false body.Span.Start body.Span.End children ]); hard; text ")" ]
         | _ -> typeExpr body
 
@@ -517,9 +530,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | Import items -> importDoc i.Span.Start i.Span.End items
         | ReExport item -> cat [ text "export "; imports.ImportSource item.Source; text " "; imports.ImportSelection (Option.defaultValue [] item.Selection) ]
         | Expr value -> expr statementPosition value
-        | Attribute(n, None) -> text $"@{n}"
-        | Attribute(n, Some (Kind UnitExpr)) -> text $"@{n}()"
-        | Attribute(n, Some argument) -> cat [ text ("@" + n); parenFields argument (i.Span.Start + 1 + n.Length) i.Span.End ]
+        | Attribute(n, argument) -> attributeDoc n argument i.Span
 
     let code = Doc.render options.LineWidth (topLevel true headerEnd source.Length parsed.Items)
     if headerEnd = 0 then

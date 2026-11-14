@@ -56,7 +56,8 @@ let private ofType (typeExpr: TypeExpr) : Field list list =
               | TypeField(name, _, Some fieldType, _)
               | TypeMember(name, Some fieldType) -> Some (name, fieldType.Id, fieldType.Span)
               | TypeField _
-              | TypeMember _ -> None) ]
+              | TypeMember _
+              | TypeFieldAttribute _ -> None) ]
     | _ -> []
 
 /// The error for each field of a record in `module'` that a field before it in the record names already. `declared`

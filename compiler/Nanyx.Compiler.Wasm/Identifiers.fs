@@ -17,9 +17,10 @@ let rec private typeKeyOf (t: TypeExpr) =
     | TypeRecord fields ->
         let names, types =
             fields
-            |> List.map (function
+            |> List.choose (function
                 | TypeField(name, _, typeOpt, _)
-                | TypeMember(name, typeOpt) -> name, typeOpt |> Option.map typeKeyOf |> Option.defaultValue (TypeKey("_", [])))
+                | TypeMember(name, typeOpt) -> Some (name, typeOpt |> Option.map typeKeyOf |> Option.defaultValue (TypeKey("_", [])))
+                | TypeFieldAttribute _ -> None)
             |> List.unzip
         TypeKey("(" + String.concat "," names + ")", types)
     | TypeTag(name, payload) -> TypeKey("#" + name, payload |> Option.map typeKeyOf |> Option.toList)

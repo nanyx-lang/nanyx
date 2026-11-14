@@ -228,8 +228,9 @@ export def proc: [c] ([Proc & c] () -> #some(b) | r) -> #some(b) | r = { block -
   members: the checker can't infer that `f` in `{ f -> use Proc(...) in f() }` requires `Proc`. A member that takes a
   continuation takes one with a context variable (`[c] a -> ...`), since the continuation calls members too.
 - **`apply` and `@workflow` are gone.** The builder function is what `apply` did, and what `@workflow` would have
-  generated. `@customKeywordType` goes on the member in the `context` declaration; the parser doesn't read it there
-  yet ([#1317](https://github.com/nanyx-lang/nanyx/issues/1317)), as it didn't on a record field.
+  generated. `@customKeywordType` goes on the member in the `context` declaration
+  ([#1317](https://github.com/nanyx-lang/nanyx/issues/1317)): the parser reads it there as a `TypeFieldAttribute`,
+  and `Attributes.fieldAttributeErrors` accepts only `#bind`, the one kind the desugaring implements.
 - **A block without a keyword is an ordinary call.** `proc { 1 + 2 }` used to be its block, `3`. Now it is
   `proc({ 1 + 2 })`, a type error, and `proc { #some(3) }` is `#some(3)`.
 - **Members are generic at each call** ([#1304](https://github.com/nanyx-lang/nanyx/issues/1304)): a member's own type

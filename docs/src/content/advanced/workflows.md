@@ -145,8 +145,8 @@ def retrying: [c] int, ([Retry & c] () -> Attempt(a)) -> Attempt(a) = { times, b
 | Kind | Description |
 |---------|-------------|
 | `#bind`  | The keyword takes a value and a continuation function. The workflow will call the continuation with the result of the keyword operation. |
-| `#bindF` | Like bind, but a function returning the target value is passed instead of the value itself. This allows for workflows such as lazy evaluation and querying |
-| | _More coming soon..._ |
+
+`#bind` is the only kind for now, and a member without the attribute is a `#bind` keyword too. Any other kind is a compile error at the attribute, as is the attribute anywhere but before a member of a `context` declaration.
 
 # Workflow keywords
 
@@ -157,7 +157,7 @@ context Async = (
   @customKeywordType(#bind)
   await: [c] (Task(a), ([c] a -> Task(b))) -> Task(b)
 
-  @customKeywordType(#bindF)
+  @customKeywordType(#bind)
   defer: [c] (([c] () -> ()), ([c] () -> Task(a))) -> Task(a)
 
   zero: Task(())
@@ -167,7 +167,7 @@ context Async = (
 ```nanyx fragment
 def main = {
   async {
-    defer! println("This runs at the end of the block")
+    defer! { println("This runs at the end of the block") }
     println("This runs first")
   }
 }
@@ -200,7 +200,7 @@ A workflow can also provide a `return` keyword that exits the block early, and a
 ```nanyx
 def main = {
   async {
-    defer! println("This runs at the end of the block")
+    defer! { println("This runs at the end of the block") }
 
     if b then return "Early exit"
 
