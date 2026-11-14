@@ -29,8 +29,13 @@ compile error that lists the ones it does.
 Each standard-library module is checked once per process, the first time a compile imports it, and every later
 compile reuses the result (`checkedStandardLibrary` in `Nanyx.Compiler/Library.fs`, keyed by the module and its
 source). So the language server and the compiler's tests check the prelude once, not on every compile. A user's own
-modules are checked again in each compile, but once in a package build, which hands each file's compile the modules
-the files before it checked (`Package.build`).
+module that a compile imports is kept too, once it checks without errors (`checkedSourceFiles`), with the text of
+every file its check read: its own, its other fragments' and those of the modules it imports, all the way down. A
+later compile reuses it while each of those files reads the same, through the compile's own reader (the editor's
+buffer for a file it has open), and while the package's module table is the same; otherwise it is checked again
+([#1270](https://github.com/nanyx-lang/nanyx/issues/1270)). So typing in a small file that imports a large module
+does not check the large one again on every change. A package build also hands each file's compile the modules the
+files before it checked (`Package.build`).
 
 One module, `nanyx/prelude`, is never imported by name: the compiler imports it, unqualified, into every
 other module, so its definitions are what a file sees with no imports at all. A module's own definitions
