@@ -115,3 +115,83 @@ main()
     Assert.Contains("""(func $shout (param $name i32) (param $__ctx_greet i32) (result i32)""", wat)
     Assert.Contains("call_indirect", wat)
     runSource source |> assertRan "a?!\n"
+
+[<Fact>]
+let ``A use of a top-level function and a constant makes both members known`` () =
+    let source =
+        normalized """import nanyx/console
+
+context Counter = (
+  bump: int -> int
+  limit: int
+)
+
+def stepOnce: [Counter] int -> int = { n ->
+  bump(n) % limit
+}
+
+def run: [Counter] int, int -> int = { n, acc ->
+  if n == 0 then acc else run(n - 1, stepOnce(acc + n))
+}
+
+def addThree: int -> int = { n -> n + 3 }
+
+@entry
+def main = {
+  println(use Counter(bump = addThree, limit = 1000003) in run(2000, 0))
+}
+"""
+    let wat = transpileWat source
+    // `run` and `stepOnce` are specialised on both members (#1299): `addThree` is called directly and the limit is a
+    // constant, so neither is passed a member.
+    Assert.Contains("""(func $run__known (param $n_i64 i64) (param $acc_i64 i64) (result i64)""", wat)
+    let stepOnce = functionText "stepOnce__known" wat
+    Assert.Contains("call $addThree", stepOnce)
+    Assert.Contains("i64.const 1000003", stepOnce)
+    Assert.DoesNotContain("call_indirect", stepOnce)
+    Assert.DoesNotContain("call_indirect", functionText "run__known" wat)
+    runSource source |> assertRan "6994\n"
+
+[<Fact>]
+let ``Two uses with different constants have a specialisation each`` () =
+    let source =
+        normalized """import nanyx/console
+
+context Limit = (limit: int)
+
+def clamp: [Limit] int -> int = { n -> if n > limit then limit else n }
+
+def main = {
+  println(use Limit(limit = 5) in clamp(9))
+  println(use Limit(limit = 50) in clamp(9))
+  def ten = 10
+  println(use Limit(limit = ten) in clamp(90))
+}
+
+main()
+"""
+    let wat = transpileWat source
+    Assert.Equal(3, countOccurrences "(func $clamp__known" wat)
+    runSource source |> assertRan "5\n9\n10\n"
+[<Fact>]
+let ``A use of a cell's value passes the value the cell holds then`` () =
+    let source =
+        normalized """import nanyx/console
+
+context Limit = (limit: int)
+
+def clamp: [Limit] int -> int = { n -> if n > limit then limit else n }
+
+def main = {
+  memory {
+    mut cap = 5
+    cap := 7
+    println(use Limit(limit = cap) in clamp(9))
+    cap := 8
+    println(use Limit(limit = cap) in clamp(9))
+  }
+}
+
+main()
+"""
+    runSource source |> assertRan "7\n8\n"
