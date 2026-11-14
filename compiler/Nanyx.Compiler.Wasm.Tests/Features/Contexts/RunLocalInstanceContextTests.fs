@@ -111,3 +111,27 @@ def main = {
 }
 """
     runSource (normalized source) |> assertRan "3\n3.5\n"
+
+[<Fact>]
+let ``Run - a local function with an inferred context that runs in Console, in a def that writes its type (#807)`` () =
+    let source = "import nanyx/console\n" + showContext + """def main: [Console] () -> () = {
+  def f = { x -> println(describe(x)) }
+  f(Point(x = 1, y = 2))
+  def g = { x -> println(x) }
+  g(3)
+}
+main()
+"""
+    runSource (normalized source) |> assertRan "(1, 2)\n3\n"
+
+[<Fact>]
+let ``Run - a local function with an inferred context that runs in Console, in a def that doesn't write its type`` () =
+    let source = showContext + """@entry
+def main = {
+  def f = { x -> println(describe(x)) }
+  f(Point(x = 1, y = 2))
+  def g = { x -> println(x) }
+  g(3)
+}
+"""
+    runSource (normalized source) |> assertRan "(1, 2)\n3\n"
