@@ -64,6 +64,7 @@ public static class NanyxLanguageServer
                 logging.AddFilter("Nanyx.LanguageServer", LogLevel.Information);
             })
             .WithHandler<TextDocumentSyncHandler>()
+            .WithHandler<WatchedFilesHandler>()
             .WithHandler<HoverHandler>()
             .WithHandler<DefinitionHandler>()
             .WithHandler<ReferencesHandler>()

@@ -25,9 +25,6 @@ public sealed class DiagnosticsPublisher
     /// <summary>The <c>source</c> field on every diagnostic, so the editor can attribute them.</summary>
     public const string Source = "nanyx";
 
-    private static readonly StringComparison PathComparison =
-        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-
     private readonly ILanguageServerFacade _server;
     private readonly DocumentStore _documents;
     private readonly object _lock = new();
@@ -289,7 +286,7 @@ public sealed class DiagnosticsPublisher
         FSharpOption<Parser.Program.SourceSpan>.get_IsSome(span) ? span.Value : null;
 
     private static bool IsDocumentFile(string file, OpenDocument document) =>
-        string.Equals(file, document.FileName, PathComparison);
+        DocumentStore.FilePaths.Equals(file, document.FileName);
 
     /// <summary>A file as a message names it: relative to the document's folder, if both are on disk.</summary>
     private static string Shown(string file, OpenDocument document) =>
@@ -298,8 +295,9 @@ public sealed class DiagnosticsPublisher
             : file;
 
     /// <summary>
-    /// Finds the LSP location of a span: in the document from its text, and in another file on disk from that
-    /// file's text, read once. A file that is not on disk (a module of the embedded standard library) has none.
+    /// Finds the LSP location of a span: in the document from its text, and in another file from the text the compile
+    /// read of it (see <see cref="OpenDocument.Sources"/>), or else from the file on disk, read once. A file that is not
+    /// on disk (a module of the embedded standard library) has none.
     /// </summary>
     private sealed class Locator(DocumentUri uri, OpenDocument document)
     {
@@ -314,7 +312,9 @@ public sealed class DiagnosticsPublisher
 
             if (!_files.TryGetValue(span.File, out var positions))
             {
-                positions = Path.IsPathRooted(span.File) && File.Exists(span.File)
+                positions = document.Sources.TryGetValue(span.File, out var source)
+                    ? new SourcePositions(source)
+                    : Path.IsPathRooted(span.File) && File.Exists(span.File)
                     ? new SourcePositions(File.ReadAllText(span.File))
                     : null;
                 _files[span.File] = positions;
