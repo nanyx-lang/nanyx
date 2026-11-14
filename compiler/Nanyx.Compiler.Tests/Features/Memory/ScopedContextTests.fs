@@ -230,5 +230,7 @@ def withConsoleLog: [Console & c] ([Log & c] () -> a) -> a = { body ->
 def greet: [Log] () -> () = { log("x") }
 
 def f = withConsoleLog { greet }
+
+dbg(0)
 """
     |> ignore

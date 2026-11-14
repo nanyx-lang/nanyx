@@ -91,6 +91,14 @@ let private unwrapContextType (typeExpr: TypeExpr option) (value: Expression) : 
     snd (Contexts.extractDefContexts typeExpr value)
 
 
+/// The members of the context `name` in `typeLayouts`, in the order they are stored. A context an import names under its
+/// alias (`c.Console`) has the layout of its own name, which the type definition the import brings in keeps.
+let private layoutOf (typeLayouts: Map<string, string list>) (name: string) : string list option =
+    match typeLayouts |> Map.tryFind name with
+    | Some layout -> Some layout
+    | None when name.Contains '.' -> typeLayouts |> Map.tryFind (name.Substring(name.LastIndexOf '.' + 1))
+    | None -> None
+
 /// The keys of the members of the contexts each definition in `defs` requires, by the definition's name, from the
 /// members of each context in `typeLayouts`. For a parameterised context the key is the instance's member (`toString`
 /// of `ToString(a)`), and for a plain one it is the member's name (`println`).
@@ -105,7 +113,7 @@ let private contextMemberKeys (defs: (string * TypeExpr option * Expression) lis
                     | TypeName n
                     | TypeApply(n, _) -> n
                     | _ -> "unknown"
-                typeLayouts |> Map.tryFind baseName |> Option.defaultValue [] |> List.map (contextMemberKey (Some ctxType)))
+                layoutOf typeLayouts baseName |> Option.defaultValue [] |> List.map (contextMemberKey (Some ctxType)))
         if keys.IsEmpty then None else Some (name, keys))
     |> Map.ofList
 
@@ -267,7 +275,7 @@ let private contextArguments
             List.zip types found
             |> List.collect (fun (contextType, instance) ->
                 let baseName = match contextType.Kind with TypeName n | TypeApply(n, _) -> n | _ -> "unknown"
-                typeLayouts |> Map.tryFind baseName |> Option.defaultValue [] |> List.map (fun memberName -> memberName, instance))
+                layoutOf typeLayouts baseName |> Option.defaultValue [] |> List.map (fun memberName -> memberName, instance))
             |> fun (perMember: (string * ContextInstance option) list) -> if perMember.Length = required.Length then Some perMember else None
         | _ -> None
 
@@ -349,7 +357,7 @@ let private contextLayoutsOf (typeDefs: Map<string, TypeDefInfo>) (typeLayouts: 
     |> Map.filter (fun _ info -> info.IsContext && info.Parameters.IsEmpty)
     |> Map.toList
     |> List.choose (fun (name, info) ->
-        match Unifier.unalias info.Underlying, typeLayouts |> Map.tryFind name with
+        match Unifier.unalias info.Underlying, layoutOf typeLayouts name with
         | TyRecord members, Some layout ->
             let memberOf memberName = members |> Map.tryFind memberName |> Option.map (fun ty -> contextMemberKey None memberName, CoreIrLowerTypes.boxOwnVariables ty)
             Some (name, layout |> List.choose memberOf)
@@ -499,7 +507,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         |> List.collect (fun ctxType ->
             match ctxType.Kind with
             | TypeApply(baseName, _) ->
-                typeLayouts |> Map.tryFind baseName |> Option.defaultValue []
+                layoutOf typeLayouts baseName |> Option.defaultValue []
                 |> List.map (fun memberName -> memberName, contextMemberKey (Some ctxType) memberName)
             | _ -> [])
         |> List.groupBy fst
@@ -618,7 +626,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                             | _ -> None
                         else None
                     | _ -> None
-                typeLayouts |> Map.tryFind baseName |> Option.defaultValue []
+                layoutOf typeLayouts baseName |> Option.defaultValue []
                 |> List.map (fun memberName -> contextMemberKey (Some ctxType) memberName, memberTy memberName))
             |> Map.ofList
         let parameters =

@@ -165,7 +165,7 @@ match readToEnd()
 flush: [Console] () -> ()
 ```
 
-Flushes buffered output streams. The runtime doesn't buffer its writes, so this does nothing there; it is a member of `Console` for instances that do.
+Flushes buffered output streams. The console host doesn't buffer its writes, so this does nothing there; it is a member of `Console` for instances that do.
 
 ```nanyx
 print("processing...")

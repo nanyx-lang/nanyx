@@ -84,7 +84,7 @@ println(line)
     let statements =
         typed.Module
         |> List.pick (function
-            | Kind (Expr (Kind (FunctionCall(_, _, [ Kind (Lambda(_, Kind (Block statements), _)) ])))) -> Some statements
+            | Kind (Def (ValueDef(_, "__script", _, Kind (Lambda(_, Kind (Block statements), _))))) -> Some statements
             | _ -> None)
     let shape =
         statements
@@ -95,3 +95,15 @@ println(line)
             | ExprStatement _ -> "statement"
             | _ -> "other")
     Assert.Equal<string list>([ "statement"; "def line"; "statement"; "()" ], shape)
+
+[<Fact>]
+let ``A value that needs a context in a module without statements is an error, as nothing would run it`` () =
+    let source =
+        """import nanyx/console
+
+def line = readLine()
+"""
+    let code, message, text = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, code)
+    Assert.Equal("'line' needs the context 'Console' to be computed, which only a script's statements run in: compute it in a statement, or make 'line' a function", message)
+    Assert.Equal("line", text)

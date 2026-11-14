@@ -398,6 +398,13 @@ let internal scriptRunValue (valueName: Identifier) (inFunction: bool) (span: So
         else $"'{valueName}' is computed when the script runs, so it can't be read before its def: move the def up"
     Diagnostics.at DiagnosticCodes.ScriptRunValue span message
 
+/// The error for the value `valueName` of a module without a `module` line, declared at `span`, that needs the context
+/// `ctxName` to be computed, where the module has no statements for it to run among: nothing at the top level supplies
+/// a context, only the host, to a script's statements (see `Scripts`).
+let internal valueWithoutEntry (valueName: Identifier) (ctxName: Identifier) (span: SourceSpan) =
+    Diagnostics.at DiagnosticCodes.UndeclaredContext span
+        $"'{valueName}' needs the context '{ctxName}' to be computed, which only a script's statements run in: compute it in a statement, or make '{valueName}' a function"
+
 /// `infer` run on `state`, but at the top level's ambient contexts where `state` is in a named module's value: for a
 /// lambda written in the value, which building the value does not run. One passed to a call is not inferred this
 /// way, since the call may run it.

@@ -96,6 +96,8 @@ def double: int -> int = { x -> x * 2 }
 def four = twice(double, 1)
 
 def five = twice({ x -> x + 1 }, 4)
+
+dbg(0)
 """
     |> ignore
 

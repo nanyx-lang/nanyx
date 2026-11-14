@@ -6,17 +6,12 @@
   so an instance supplies [`write`] and [`writeError`] and gets all four.
 module console
 
--- The definitions of the members below are the instance the runtime supplies to the program's entry
--- point (and to the top level of a script): each reads or writes the standard streams through the
--- host, via the compiler intrinsics `__nanyx_write_stdout`, `__nanyx_write_stderr` and
--- `__nanyx_read_stdin_byte`.
-
 --| Why reading from standard input gave no line: the input has ended.
 export type IoError = #endOfInput
 
 --| The terminal: standard output, standard error and standard input. Code that needs it declares
-  `[Console]`, and its caller supplies an instance; the runtime supplies the one in this module to
-  the program's entry point. `print`, `println`, `eprint` and `eprintln` write through it.
+  `[Console]`, and its caller supplies an instance; the host supplies one to the program's entry point
+  (`nanyx/console.host`'s reads and writes the standard streams). `print`, `println`, `eprint` and `eprintln` write through it.
 export context Console = (
   --| Writes `text` to standard output, as it is.
   write: string -> ()
@@ -30,16 +25,6 @@ export context Console = (
   --| Writes out anything the streams hold back.
   flush: () -> ()
 )
-
---| Writes `text` to standard output, as it is.
-export def write: string -> () = { text ->
-  __nanyx_write_stdout(text)
-}
-
---| Writes `text` to standard error, as it is.
-export def writeError: string -> () = { text ->
-  __nanyx_write_stderr(text)
-}
 
 --| Writes `value` to standard output as its `toString` writes it: a string as it is, `print(42)`
   as `42`, `print([1, 2])` as `[1, 2]`.
@@ -63,44 +48,3 @@ export def eprintln: [Console & ToString(a)] a -> () = { value ->
   writeError(toString(value))
   writeError(__nanyx_string_from_byte(10))
 }
-
---| `line` without a carriage return at its end.
-def withoutCarriageReturn: string -> string = { line ->
-  def length = __nanyx_string_length(line)
-
-  if length > 0 and __nanyx_string_byte_at(line, length - 1) == 13
-    then __nanyx_string_slice(line, 0, length - 1)
-    else line
-}
-
---| `acc` followed by the rest of the current line of standard input.
-def readLineAfter: string -> #some(string) | #error(IoError) = { acc ->
-  def byte = __nanyx_read_stdin_byte()
-
-  if byte < 0
-    then (if __nanyx_string_length(acc) == 0 then #error(#endOfInput) else #some(acc))
-    else if byte == 10
-      then #some(withoutCarriageReturn(acc))
-      else readLineAfter(acc ++ __nanyx_string_from_byte(byte))
-}
-
---| The next line of standard input, without its line break (a "\r\n" one included), or
-  `#error(#endOfInput)` when the input has ended. A last line without a line break is still a line.
-export def readLine: () -> #some(string) | #error(IoError) = { _ ->
-  readLineAfter("")
-}
-
---| `acc` followed by everything left on standard input.
-def readToEndAfter: string -> string = { acc ->
-  def byte = __nanyx_read_stdin_byte()
-  if byte < 0 then acc else readToEndAfter(acc ++ __nanyx_string_from_byte(byte))
-}
-
---| Everything left on standard input (the empty string when nothing is), as is.
-export def readToEnd: () -> #some(string) | #error(IoError) = { _ ->
-  #some(readToEndAfter(""))
-}
-
---| Writes out anything the streams hold back. The runtime's writes are not buffered, so there is
-  nothing to do; it is here so that code written for a buffered `Console` runs unchanged.
-export def flush: () -> () = { _ -> () }
