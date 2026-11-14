@@ -23,7 +23,7 @@ export def Machine.deposit: Machine, int -> Machine = { machine, coins ->
 export def Machine.vend: Machine, string -> #some(Machine) | #error(VendError) = { machine, name ->
   match machine.inventory(name)
     | #notFound -> #error(#invalidSelection)
-    | #some((count = 0, ...)) -> #error(#outOfStock)
+    | #some(count = 0, ...) -> #error(#outOfStock)
     | #some(item) ->
       if item.price > machine.coinsDeposited then
         #error(#insufficientFunds(item.price - machine.coinsDeposited))
