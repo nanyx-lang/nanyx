@@ -234,6 +234,33 @@ The proposal draws the line there, and makes every helper a function that takes 
 
   It takes parameters as any function does, and its members' extra contexts are discharged at its `use`, so
   `withDefaultLogger` requires `Console`.
+- **A lambda can name a context it is given, and can only `use` it.** A lambda may write `context x` before its
+  parameters, as in `memory { context m -> ... }`. `x` names the instance of a context the lambda's type requires,
+  the one whoever calls the lambda supplies. The only thing `x` can do is be loaded: `use x` or `use x in ...`. It
+  can't be passed, returned, stored, compared or written in a type, so the instance still never becomes a value.
+
+  ```nanyx fragment
+  memory { context outer ->
+    mut total = 0
+    memory {
+      use outer
+      mut z = 0          -- belongs to the outer block, as total does
+      ...
+    }
+  }
+  ```
+
+  - **It isn't a parameter.** The lambda's arity and type don't change: `memory`'s block is `[Memory & c] () -> a`,
+    not `Memory -> a`, and a caller passes nothing for it.
+  - **Which context.** When the lambda's type requires one context, `context x` names it. When it requires several,
+    the name says which, `context m: Memory`, and a lambda can name more than one (`{ context m: Memory, context l:
+    Log -> ... }`).
+  - **Inner lambdas.** An inner lambda may capture the name, but only to `use` it. For a scoped context such as
+    `Memory`, the scope check ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057)) keeps the name inside its
+    block, as it keeps everything that requires the context.
+  - **Any lambda.** It's general: a def's lambda can name its own required context, as in `def run: [Log] () -> () = {
+    context l -> ... use l in other() }`, which loads the same `Log` again, for instance after an inner `use`
+    shadowed it.
 
 ## Workflows
 
@@ -344,7 +371,10 @@ member's own type variables unit, so it reports a call that has one of them at a
   `bobChooses` there, the monoid instances in `examples/traitsAndTypeclasses.nyx`, and `connection` in
   `examples/sql-utils.nyx`.
 - [#1137](https://github.com/nanyx-lang/nanyx/issues/1137) (the backend can't compile `use f()` or `use x`) is no
-  longer needed: both become type errors.
+  longer needed: both become type errors, except `use x` of a name a lambda bound with `context x`.
+- `memory { m -> ... }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)) becomes
+  `memory { context m -> ... }`, and `memory`'s signature becomes `[c] ([Memory & c] () -> a) -> a`. The Memory page
+  and the tests change with it.
 - [#1059](https://github.com/nanyx-lang/nanyx/issues/1059) is settled for context instances, which never carry
   contexts because they are never values. It stays open for records.
 - A `use` of a record written out becomes a declared context and its constructor. The tour's collection builders in
@@ -354,9 +384,6 @@ member's own type variables unit, so it reports a call that has one of them at a
 
 ## Questions
 
-- **`memory { m -> ... }`.** The block is given its `Memory` instance as a value, and `use m` loads it in an inner
-  block ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)). Under the proposal `m` can't be a value. It could
-  stay as a name only `use` accepts, as an exception, or the block could be named another way, such as a label.
 - **Whether one context can serve for another.** Today contexts are structural, so a function that requires `Add(a)`
   is given the `Num(a)` in scope, because a `Num` has every member an `Add` has (the Contexts page's `mean`, and the
   [Operator contexts](./operator-contexts) rule that an operator reads the smallest context with its member). If
