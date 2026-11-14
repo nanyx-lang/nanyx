@@ -110,7 +110,7 @@ In a new terminal, run:
 nanyx --version
 ```
 
-It prints the compiler's version, such as `0.27.0.0`. Run `nanyx --help` to see its commands.
+It prints the compiler's version, such as `0.27.0`. Run `nanyx --help` to see its commands.
 
 # Editor support
 
