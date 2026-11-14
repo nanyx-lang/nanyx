@@ -153,3 +153,22 @@ def main: [Console] () -> () = {
 main()
 """
     runSource (normalized source) |> assertRan "1\n2\n3\n(1, 2)\ndbg: <function () -> string>\n"
+
+[<Fact>]
+let ``Run - a local function called at a variable of the def around it, in a lambda and passed as a value (#1397)`` () =
+    let source = showContext + """def apply = { g, v -> g(v) }
+def inLambda = { v ->
+  def f = { x -> describe(x) }
+  apply({ x -> f(x) }, v)
+}
+def asValue = { v ->
+  def f: [Show(b)] b -> string = { x -> describe(x) }
+  apply(f, v)
+}
+@entry
+def main = {
+  println(inLambda(Point(x = 1, y = 2)))
+  println(asValue(Size(w = 3)))
+}
+"""
+    runSource (normalized source) |> assertRan "(1, 2)\nsize 3\n"
