@@ -36,8 +36,7 @@ export def print: [Console & ToString(a)] a -> () = { value ->
 
 --| Writes `value` followed by a line break to standard output, as `print` writes it.
 export def println: [Console & ToString(a)] a -> () = { value ->
-  write(toString(value))
-  write(__nanyx_string_from_byte(10))
+  write(toString(value) ++ "\n")
 }
 
 --| Writes `value` to standard error, as `print` writes it.
@@ -47,6 +46,5 @@ export def eprint: [Console & ToString(a)] a -> () = { value ->
 
 --| Writes `value` followed by a line break to standard error, as `print` writes it.
 export def eprintln: [Console & ToString(a)] a -> () = { value ->
-  writeError(toString(value))
-  writeError(__nanyx_string_from_byte(10))
+  writeError(toString(value) ++ "\n")
 }

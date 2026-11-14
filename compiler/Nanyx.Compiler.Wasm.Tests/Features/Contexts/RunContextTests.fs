@@ -33,7 +33,7 @@ main()
 greet("loud")
 """
     // `println` writes through whichever `write` is in scope, once for the value and once for the line break.
-    runSource source |> assertRan "[quiet][\n]loud\n"
+    runSource source |> assertRan "[quiet\n]loud\n"
 
 /// A context with one member, and a function that requires it, for the tests of what a `use` can bind (#88).
 let private myConsolePrelude =

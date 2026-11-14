@@ -66,4 +66,4 @@ def main = {
 
 main()
 """
-    runSource source |> assertRan "plain!\n[framed!][\n]"
+    runSource source |> assertRan "plain!\n[framed!\n]"
