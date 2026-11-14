@@ -363,12 +363,8 @@ module Unifier =
         let apply = applyResolving resolve
         match ty with
         | TyVar v -> resolve v
-        | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, apply underlying, isPrivate)
-        | TyAlias(name, args, underlying) -> TyAlias(name, args |> List.map apply, apply underlying)
         | TyFunc(arg, ret, contexts) ->
             TyFunc(apply arg, apply ret, contexts |> List.map apply |> FunctionContexts.flatten)
-        | TyRecord fields ->
-            fields |> Map.map (fun _ v -> apply v) |> TyRecord
         // A solved row adds its fields: to a record when it was solved to one, still open when to an open one.
         | TyOpenRecord(fields, row) ->
             let applied = fields |> Map.map (fun _ v -> apply v)
@@ -380,8 +376,6 @@ module Unifier =
             // Renamed for a reader (see `displayRenaming`): the row takes the name.
             | TyPrimitive name -> TyOpenRecord(applied, { row with Name = Some name })
             | _ -> TyOpenRecord(applied, row)
-        | TyTag(name, payload) -> TyTag(name, payload |> Option.map apply)
-        | TyApply(name, args) -> TyApply(name, args |> List.map apply)
         // A rest variable solved to a union (`r` := `#notFound`) is spliced into the union it is the rest of. One
         // solved to the empty union leaves the others; when that is just one, the union is that one. A member that
         // is an alias of a tag or union is spliced in as what it stands for, as a union's members are tags. A tag
@@ -403,7 +397,7 @@ module Unifier =
             | _ when spliced |> List.exists isError -> errorType
             | [ single ] when items.Length > 1 -> single
             | _ -> TyUnion spliced
-        | TyPrimitive _ -> ty
+        | _ -> Ty.map apply ty
 
     /// `ty` with `subst` applied: each variable it solves replaced by what it was solved to, itself with `subst`
     /// applied.
@@ -466,16 +460,13 @@ module Unifier =
             | TyPrimitive _
             | TyNominal _ -> Set.empty
             | TyAlias(_, args, _) -> args |> List.map collect |> Set.unionMany
-            | TyFunc(arg, ret, contexts) -> (collect arg :: collect ret :: List.map collect contexts) |> Set.unionMany
-            | TyRecord fields -> fields |> Map.toList |> List.map (snd >> collect) |> Set.unionMany
             | TyOpenRecord(fields, row) -> collect (TyRecord fields) |> Set.add row.Id
-            | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue Set.empty
-            | TyApply(_, args) -> args |> List.map collect |> Set.unionMany
             | TyUnion items ->
                 let rests =
                     if ofUnions then items |> List.choose (function TyVar v -> Some v.Id | _ -> None) |> Set.ofList
                     else Set.empty
                 items |> List.map collect |> Set.unionMany |> Set.union rests
+            | _ -> Ty.fold (fun ids child -> Set.union ids (collect child)) Set.empty ty
         collect ty
 
     /// The ids of the made-up variables in `ty` that stand for the rest of an open record or union and appear nowhere
@@ -589,16 +580,14 @@ module Unifier =
             | TyNominal(_, underlying, _) -> collect true underlying
             | TyAlias(_, _, underlying) -> collect input underlying
             | TyFunc(arg, ret, contexts) -> collect (not input) arg @ collect input ret @ List.collect (collect input) contexts
-            | TyRecord fields -> fields |> Map.toList |> List.collect (snd >> collect input)
             // A record's row is not a union's rest: it is never solved to the empty union.
             | TyOpenRecord(fields, row) -> collect input (TyRecord fields) @ [ row, false, input ]
-            | TyTag(_, payload) -> payload |> Option.map (collect input) |> Option.defaultValue []
-            | TyApply(_, args) -> args |> List.collect (collect input)
             | TyUnion items ->
                 items
                 |> List.collect (function
                     | TyVar v -> [ v, true, input ]
                     | item -> collect input item)
+            | _ -> Ty.children ty |> List.collect (collect input)
         let occurrences = collect false ty
         let inInput = occurrences |> List.choose (fun (v, _, input) -> if input then Some v.Id else None) |> Set.ofList
         occurrences
@@ -624,11 +613,8 @@ module Unifier =
                     | TyVar v -> [ v, true, inInput ]
                     | other -> collect inInput other
                 collect true arg @ collect inInput ret @ List.collect ofContext contexts
-            | TyRecord fields -> fields |> Map.toList |> List.collect (snd >> collect inInput)
             | TyOpenRecord(fields, row) -> collect inInput (TyRecord fields) @ [ row, false, inInput ]
-            | TyTag(_, payload) -> payload |> Option.map (collect inInput) |> Option.defaultValue []
-            | TyApply(_, items)
-            | TyUnion items -> items |> List.collect (collect inInput)
+            | _ -> Ty.children ty |> List.collect (collect inInput)
         let occurrences = collect false ty
         let inInput = occurrences |> List.choose (fun (v, _, input) -> if input then Some v.Id else None) |> Set.ofList
         occurrences
@@ -638,30 +624,16 @@ module Unifier =
     let rec occurs (varId: int) (ty: Ty) : bool =
         match ty with
         | TyVar v -> v.Id = varId
-        | TyNominal(_, underlying, _) -> occurs varId underlying
+        // What an alias stands for is read, not its arguments: an argument it does not use is not in the type.
         | TyAlias(_, _, underlying) -> occurs varId underlying
-        | TyFunc(arg, ret, contexts) -> occurs varId arg || occurs varId ret || contexts |> List.exists (occurs varId)
-        | TyRecord fields -> fields |> Map.exists (fun _ v -> occurs varId v)
-        | TyOpenRecord(fields, row) -> row.Id = varId || fields |> Map.exists (fun _ v -> occurs varId v)
-        | TyTag(_, payload) -> payload |> Option.exists (occurs varId)
-        | TyApply(_, args) -> args |> List.exists (occurs varId)
-        | TyUnion items -> items |> List.exists (occurs varId)
-        | TyPrimitive _ -> false
+        | _ -> Ty.exists (occurs varId) ty
 
     /// The highest number of a variable in `constraints`, or 0 when they have none.
     let private highestVarId (constraints: ConstraintSet) =
         let rec maxId ty =
             match ty with
             | TyVar v -> v.Id
-            | TyPrimitive _ -> 0
-            | TyNominal(_, underlying, _) -> maxId underlying
-            | TyAlias(_, args, underlying) -> List.fold (fun acc arg -> max acc (maxId arg)) (maxId underlying) args
-            | TyFunc(arg, ret, contexts) -> List.fold (fun acc context -> max acc (maxId context)) (max (maxId arg) (maxId ret)) contexts
-            | TyRecord fields -> fields |> Map.fold (fun acc _ fieldTy -> max acc (maxId fieldTy)) 0
-            | TyOpenRecord(fields, row) -> fields |> Map.fold (fun acc _ fieldTy -> max acc (maxId fieldTy)) row.Id
-            | TyTag(_, payload) -> payload |> Option.map maxId |> Option.defaultValue 0
-            | TyApply(_, args)
-            | TyUnion args -> List.fold (fun acc arg -> max acc (maxId arg)) 0 args
+            | _ -> Ty.fold (fun acc child -> max acc (maxId child)) 0 ty
         constraints |> List.fold (fun acc (left, right, _, _) -> max acc (max (maxId left) (maxId right))) 0
 
     /// Whether the order a list of constraints was solved in could show (see `unifyFrom`).
@@ -1044,15 +1016,7 @@ module Unifier =
                     || match subst.TryFind v.Id with
                        | Some bound -> visit bound
                        | None -> false)
-            | TyPrimitive _ -> false
-            | TyNominal(_, underlying, _) -> visit underlying
-            | TyAlias(_, args, underlying) -> List.exists visit args || visit underlying
-            | TyFunc(arg, ret, contexts) -> visit arg || visit ret || List.exists visit contexts
-            | TyRecord fields -> fields |> Map.exists (fun _ fieldTy -> visit fieldTy)
-            | TyOpenRecord(fields, row) -> visit (TyVar row) || fields |> Map.exists (fun _ fieldTy -> visit fieldTy)
-            | TyTag(_, payload) -> payload |> Option.exists visit
-            | TyApply(_, args)
-            | TyUnion args -> List.exists visit args
+            | _ -> Ty.exists visit ty
         List.exists visit tys
 
     let private sides (constraints: ConstraintSet) =
