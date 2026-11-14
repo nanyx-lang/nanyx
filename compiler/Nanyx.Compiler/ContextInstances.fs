@@ -220,12 +220,13 @@ let private contextArgTysAtCall (state: InferState) (signature: TypeExpr option)
             let signatureTy = read signature
             let argTys = args |> List.map read
             // A function named as a value requires its own contexts, which its signature leaves out (see
-            // `ContextVariables.ofNamedValue`).
-            let withoutOwnContexts =
-                match Unifier.unalias calleeTy with
+            // `ContextVariables.ofNamedValue`). The signature a local def was inferred to have writes those its value
+            // runs in, `[Console] a -> ()` for `{ x -> println(describe(x)) }`, which are not what the arguments name.
+            let withoutOwnContexts ty =
+                match Unifier.unalias ty with
                 | TyFunc(input, output, _) -> TyFunc(input, output, [])
                 | other -> other
-            current <- addConstraint signatureTy withoutOwnContexts current
+            current <- addConstraint (withoutOwnContexts signatureTy) (withoutOwnContexts calleeTy) current
             argTys
         | None ->
             let names = namedVarsIn generalTy calleeTy
@@ -597,6 +598,26 @@ let internal resolveReferenceInstances (env: TypeEnv) (state: InferState) (call:
         | _ -> args
         |> List.fold (fun result arg -> result |> Result.bind (fun current -> resolveValueInstances env current arg)) (Ok state)
     | _ -> Ok state
+
+/// The lambda that `value`, the value of a local def that writes no type, is read as when it names a function that
+/// requires a parameterised context: `def f = println` is `def f = { __p0 -> println(__p0) }`, a function whose calls
+/// find the context, so the def requires it at its own type, as `ContextInference.resolveLocal` makes it. The lambda
+/// keeps `value`'s node. Named as it is, the function would have nothing to find the context at.
+let internal pointFreeAsLambda (env: TypeEnv) (state: InferState) (value: Expression) : Expression option =
+    match value.Kind with
+    | IdentifierExpr name when contextRequirementsOf env state name |> Option.exists (List.exists (isParameterizedContext state)) ->
+        let arity =
+            match TypeEnv.tryFind name env |> Option.map (_.Type >> Unifier.unalias) with
+            | Some (TyFunc(TyPrimitive "unit", _, _)) -> 0
+            | Some (TyFunc(TyRecord fields, _, _)) when not fields.IsEmpty && Set.ofSeq fields.Keys = Set.ofList (List.init fields.Count string) -> fields.Count
+            | Some (TyFunc _) -> 1
+            | _ -> 0
+        if arity = 0 then None
+        else
+            let parameters = List.init arity (fun index -> $"__p{index}")
+            let call = Expression.from value (FunctionCall(name, Some value.Span, parameters |> List.map (IdentifierExpr >> Expression.from value)))
+            Some { value with Kind = Lambda(parameters |> List.map (fun parameter -> parameter, None), call, false) }
+    | _ -> None
 
 /// `ContextInference.resolvePending` for the def `name`, building an instance from the definitions attached to the
 /// type it is for, or from the type's parts, as a call does. A hole finds its instance as

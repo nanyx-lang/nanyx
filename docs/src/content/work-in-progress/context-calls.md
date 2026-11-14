@@ -64,10 +64,12 @@ part of its type, as they are of `def k = say` (`Contexts.extractDefContexts`, w
 it requires at a type nothing constrains, as `dbg(twice)` names `twice: [Show(a)] a -> string`, needs no instance:
 when a parameter of the value is of such a type, the value is never called, since no value of that type is ever made,
 so the closure captures a stand-in for each such member, which panics (`CoreIrLowerInstances.neverCalled`,
-[#599](https://github.com/nanyx-lang/nanyx/issues/599)). A function that requires a parameterised context, named as a
-value whose type is settled only by how a local def that doesn't write its type is called, such as `def f = println`,
-cannot be compiled yet: the def would have to require the context
-([#807](https://github.com/nanyx-lang/nanyx/issues/807), [#550](https://github.com/nanyx-lang/nanyx/issues/550)).
+[#599](https://github.com/nanyx-lang/nanyx/issues/599)). A local def that doesn't write its type and names such a
+function point-free, as `def f = println` does, is read as the lambda that calls it, `{ __p0 -> println(__p0) }`
+(`ContextInstances.pointFreeAsLambda`, recorded in `ReadAs`), so it requires the context at its own type as any local
+function that calls one does ([below](#function-values-that-require-contexts),
+[#807](https://github.com/nanyx-lang/nanyx/issues/807)). A top-level def written that way finds no instance yet
+([#1389](https://github.com/nanyx-lang/nanyx/issues/1389)).
 
 A function with a context variable, such as `apply: [c] ([c] a -> b), a -> b`, is specialised on the members of the
 contexts the variable stands for at each call, which it takes after its other parameters and passes to the function
@@ -100,7 +102,10 @@ passes the instance the type checker found for it there, as a call to a top-leve
 - A local function that requires a parameterised context, written, as in
   `def f: [Show(b)] b -> string = { x -> describe(x) }`, or inferred, as for `def f = { x -> describe(x) }`
   ([#550](https://github.com/nanyx-lang/nanyx/issues/550)), takes the context's members as a lambda takes those of a
-  context without parameters. The type checker keeps such a context out of the function's type (it records it beside
+  context without parameters. The def may be in one that writes its type or not, and its value may run in a context
+  without parameters too, as `def f = { x -> println(x) }` runs in `Console`
+  ([#807](https://github.com/nanyx-lang/nanyx/issues/807)). Passed as a value rather than called, it finds no instance
+  yet ([#1390](https://github.com/nanyx-lang/nanyx/issues/1390)). The type checker keeps such a context out of the function's type (it records it beside
   it, `TypedModule.ContextTypes`), so the backend puts it into the type of the function's lambda, in the lambda's own
   type variables (`localContexts` in `CodeGen.fs`). A function generic in variables of its own has a closure for each
   type it is used at (`GenericLocal`), each taking the members of the instances at that type. A call to the function
