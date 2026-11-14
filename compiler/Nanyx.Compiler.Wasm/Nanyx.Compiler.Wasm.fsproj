@@ -39,6 +39,7 @@
     <Compile Include="CoreIrHashing.fs" />
     <Compile Include="CoreIrCounting.fs" />
     <Compile Include="CoreIrReuse.fs" />
+    <Compile Include="CoreIrReach.fs" />
     <Compile Include="CoreIrEmit.fs" />
     <Compile Include="CodeGen.fs" />
   </ItemGroup>

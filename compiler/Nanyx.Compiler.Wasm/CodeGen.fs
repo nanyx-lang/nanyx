@@ -715,6 +715,11 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     let startFunction = lowered.Roots |> Map.tryFind CoreIrLowerInput.startFunctionName |> Option.map fst
 
+    // Only what the program can run (see `CoreIrReach`).
+    let startFunction = startFunction |> Option.map CoreIrReach.withoutUnreadClosures
+    let definitionFunctions =
+        definitionFunctions |> List.map CoreIrReach.withoutUnreadClosures |> CoreIrReach.reachedFrom startFunction
+
     // Reference counting, inserted over the whole module at once, since which parameters a function owns depends on
     // the functions it calls; then drop specialisation and reuse.
     let definitionFunctions, startFunction =
