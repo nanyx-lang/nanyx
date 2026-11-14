@@ -9,11 +9,11 @@ let ``Run - a def that does not write its type adds whatever type it is called w
     let source =
         normalized """import nanyx/console
 
-type $Money = (pence: int)
-def $Money.zero: $Money = $Money(pence = 0)
-def $Money.`+`: $Money, $Money -> $Money = { p, q -> $Money(pence = p.pence + q.pence) }
-def $Money.`-`: $Money, $Money -> $Money = { p, q -> $Money(pence = p.pence - q.pence) }
-def $Money.negate: $Money -> $Money = { p -> $Money(pence = 0 - p.pence) }
+type Money = protected (pence: int)
+def Money.zero: Money = Money(pence = 0)
+def Money.`+`: Money, Money -> Money = { p, q -> Money(pence = p.pence + q.pence) }
+def Money.`-`: Money, Money -> Money = { p, q -> Money(pence = p.pence - q.pence) }
+def Money.negate: Money -> Money = { p -> Money(pence = 0 - p.pence) }
 
 def add = { x, y -> x + y }
 def neg = { x -> -x }
@@ -25,8 +25,8 @@ def local = { n ->
 }
 @entry
 def main = {
-  println("{add(1, 2)} {add(1.5, 2.25)} {add($Money(pence = 1), $Money(pence = 2)).pence}")
-  println("{neg(4)} {neg(2.5)} {neg($Money(pence = 7)).pence}")
+  println("{add(1, 2)} {add(1.5, 2.25)} {add(Money(pence = 1), Money(pence = 2)).pence}")
+  println("{neg(4)} {neg(2.5)} {neg(Money(pence = 7)).pence}")
   println("{lerp(0.0, 10.0, 0.5)} {lerp(0, 10, 2)}")
   println("{sumOfSquares([1, 2, 3])} {sumOfSquares([0.5, 1.5])} {local(5)}")
 }
@@ -94,8 +94,8 @@ let ``Run - ++ on a type variable is read through Append, whose instances join s
         """
 import nanyx/console
 
-type $Path = (parts: list(string))
-def $Path.`++`: $Path, $Path -> $Path = { p, q -> $Path(parts = p.parts ++ q.parts) }
+type Path = protected (parts: list(string))
+def Path.`++`: Path, Path -> Path = { p, q -> Path(parts = p.parts ++ q.parts) }
 
 def surround: [Append(a)] a, a -> a = { edge, x -> edge ++ x ++ edge }
 def join = { x, y -> x ++ y }
@@ -103,7 +103,7 @@ def join = { x, y -> x ++ y }
 def main = {
   println(surround("*", "hi"))
   println("{surround([0], [1, 2])} {join("a", "b")} {join([1.5], [2.5])}")
-  println("{join($Path(parts = ["a"]), $Path(parts = ["b", "c"])).parts}")
+  println("{join(Path(parts = ["a"]), Path(parts = ["b", "c"])).parts}")
 }
 """
     runSource source |> assertRan "*hi*\n[0, 1, 2, 0] ab [1.5, 2.5]\n[a, b, c]\n"

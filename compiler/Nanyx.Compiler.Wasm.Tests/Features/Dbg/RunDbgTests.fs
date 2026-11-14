@@ -160,10 +160,10 @@ dbg(tree)
 [<Fact>]
 let ``Run - dbg prints a nominal value by its name around its shape`` () =
     """
-type $Money = int
-type $Point = (x: int, y: int)
-dbg($Money(250))
-dbg($Point(x = 1, y = 2))
+type Money = protected int
+type Point = protected (x: int, y: int)
+dbg(Money(250))
+dbg(Point(x = 1, y = 2))
 """
     |> printsAs "dbg: Money(250)\ndbg: Point(x = 1, y = 2)\n"
 
@@ -171,8 +171,8 @@ dbg($Point(x = 1, y = 2))
 let ``Run - dbg prints a protected value's shape outside its module`` () =
     """
 module ids =
-  export type $UserId = private int
-  export def make = { n: int -> $UserId(n) }
+  export type UserId = private int
+  export def make = { n: int -> UserId(n) }
 
 dbg(ids.make(42))
 """
@@ -181,12 +181,12 @@ dbg(ids.make(42))
 [<Fact>]
 let ``Run - dbg ignores the ToString a type has`` () =
     """
-type $Money = int
-def $Money.toString: $Money -> string = { m ->
-  def $Money(pence) = m
+type Money = protected int
+def Money.toString: Money -> string = { m ->
+  def Money(pence) = m
   "£{pence}"
 }
-def price = $Money(250)
+def price = Money(250)
 dbg(price)
 dbg("{price}")
 """

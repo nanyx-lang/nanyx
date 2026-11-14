@@ -208,15 +208,15 @@ let backtickedNameNoWs: Parser<Identifier, ParseState> =
 /// A name that may be an identifier or a name in backticks.
 let nameNoWs: Parser<Identifier, ParseState> = identifierNoWs <|> backtickedNameNoWs
 
-/// A type's name as it is declared, and whether it is written with the `$` that declared a protected type before
-/// `protected` did (`type $Email = string`). The `$` is not part of the name.
-let declaredTypeName: Parser<Identifier * bool, ParseState> =
-    opt (pchar '$') .>>. identifierNoWs |>> fun (dollar, name) -> name, dollar.IsSome
-
-/// A type's name. A `$` before it, which a protected type's name was written with before `protected` declared one, is
-/// read and is not part of the name: `$Email` is `Email`.
+/// A type's name. A `$` before it, as a nominal type's name was written before `protected` declared one
+/// (`type $Email = string`), is an error at the `$` that says how the type is declared now.
 let typeNameIdentifier: Parser<Identifier, ParseState> =
-    declaredTypeName |>> fst
+    let dollar =
+        getPosition .>>. attempt (pchar '$' >>. lookAhead identifierNoWs) >>= fun (position, name) ->
+            reportFocused
+                position
+                $"A type's name is written without a `$`: write `{name}`, and declare a nominal type with `protected` after its `=`, as in `type {name} = protected string`"
+    optional dollar >>. identifierNoWs
 
 /// A name qualified with dots, any part of which may be a type's, and whose parts may be names in backticks:
 /// `m.Email.parse`, `` Point.`+` ``.
@@ -251,20 +251,6 @@ let withSpan (p: Parser<'a, ParseState>) : Parser<'a * SourceSpan, ParseState> =
 
 /// The span of `name`, written from `start` on one line, with its backticks if it has them.
 let internal nameSpan (start: Position) (name: Identifier) = spanOf start (int start.Index + (Names.written name).Length)
-
-/// The span of `name`, written at `start` and already read: as `nameSpan`, but counting a `$` written before any of its
-/// parts (`$Email.parse`), which is not part of the name (see `typeNameIdentifier`).
-let internal writtenNameSpan (start: Position) (name: Identifier) : Parser<SourceSpan, ParseState> =
-    fun stream ->
-        let back = int (stream.Index - start.Index)
-        let length = (Names.written name).Length
-        let mutable offset = 0
-        let mutable read = 0
-        while read < length do
-            let partStart = offset = 0 || stream.Peek(offset - 1 - back) = '.'
-            if not (partStart && stream.Peek(offset - back) = '$') then read <- read + 1
-            offset <- offset + 1
-        Reply(spanOf start (int start.Index + offset))
 
 /// Notes `name`, written at `start`, as declared by the construct being parsed: see `collectingNames`.
 let internal noteName (start: Position) (name: Identifier) : Parser<unit, ParseState> =

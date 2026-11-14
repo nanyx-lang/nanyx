@@ -25,7 +25,6 @@ let internal nameSpan (expr: Expression) =
 /// applied type's arguments.
 let internal typeNameSpan (typeExpr: TypeExpr) =
     match typeExpr.Kind with
-    // All of it: a `$` written before the name is not part of the name (see the parser's `typeNameIdentifier`).
     | TypeName _ -> Some typeExpr.Span
     | TypeApply(name, _) -> Some { typeExpr.Span with End = min typeExpr.Span.End (typeExpr.Span.Start + name.Length) }
     | _ -> None

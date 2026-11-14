@@ -25,16 +25,16 @@ let ``Run - a hole writes a value through its type's attached toString`` () =
 type Point = (x: int, y: int)
 def Point.toString = { p -> "({p.x}, {p.y})" }
 
-type $Money = private int
-def $Money.toString: $Money -> string = { m ->
-  def $Money(pence) = m
+type Money = private int
+def Money.toString: Money -> string = { m ->
+  def Money(pence) = m
   "£{pence / 100}.{pence % 100}"
 }
 
 @entry
 def main = {
   def p = Point(x = 1, y = 2)
-  println("p is {p}, costing {$Money(250)}")
+  println("p is {p}, costing {Money(250)}")
 }
 """
     runSource source |> assertRan "p is (1, 2), costing £2.50\n"

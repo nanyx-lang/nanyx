@@ -278,9 +278,9 @@ context Show(a) = (show: a -> string)
 type Point = (x: int, y: int)
 def Point.show: Point -> string = { p -> "({p.x}, {p.y})" }
 
-type $Money = private int
-def $Money.show: $Money -> string = { m ->
-  def $Money(pence) = m
+type Money = private int
+def Money.show: Money -> string = { m ->
+  def Money(pence) = m
   "{pence}p"
 }
 
@@ -294,13 +294,13 @@ def main = {
   def p = Point(x = 1, y = 2)
   println(plain(p))
   println(describe(p))
-  println(both($Money(5), p))
+  println(both(Money(5), p))
   println(twice(p))
   println(p \describe)
   def nearer: Show(Point) = ( show = { q -> "nearer {q.y}" } )
   use nearer
   println(describe(p))
-  println(describe($Money(7)))
+  println(describe(Money(7)))
 }
 """
     runSource source
@@ -340,8 +340,8 @@ let ``Run - a context member named by an operator is synthesized from an attache
 
 context Eq(a) = (`==`: (a, a) -> bool)
 
-type $Point = (x: int, y: int)
-def $Point.`==`: $Point, $Point -> bool = { p, q -> p.x == q.x }
+type Point = protected (x: int, y: int)
+def Point.`==`: Point, Point -> bool = { p, q -> p.x == q.x }
 def same: [Eq(a)] a, a -> bool = { x, y -> Eq(a).`==`(x, y) }
 def `<+>`: int, int -> int = { a, b -> a * 10 + b }
 
@@ -350,8 +350,8 @@ def main = {
   println(int.toString(`<+>`(1, 2)))
   def combine = `<+>`
   println(int.toString(combine(3, 4)))
-  println(if same($Point(x = 1, y = 2), $Point(x = 1, y = 9)) then "same" else "different")
-  println(if $Point.`==`($Point(x = 1, y = 2), $Point(x = 2, y = 2)) then "same" else "different")
+  println(if same(Point(x = 1, y = 2), Point(x = 1, y = 9)) then "same" else "different")
+  println(if Point.`==`(Point(x = 1, y = 2), Point(x = 2, y = 2)) then "same" else "different")
 }
 """
     runSource source |> assertRan "12\n34\nsame\ndifferent\n"

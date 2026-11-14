@@ -11,25 +11,25 @@ let ``Run - a nominal value over a primitive is made and taken apart with its ty
     let source =
         normalized """import nanyx/console
 
-type $Money = private int
+type Money = private int
 
-def $Money.toString: $Money -> string = { m ->
-  def $Money(pence) = m
+def Money.toString: Money -> string = { m ->
+  def Money(pence) = m
   "{pence / 100}.{pence % 100}"
 }
 
-def describe: $Money -> string = { m ->
+def describe: Money -> string = { m ->
   match m
-    | $Money(0) -> "free"
-    | $Money(p) -> "{p}p"
+    | Money(0) -> "free"
+    | Money(p) -> "{p}p"
 }
 
 def main = {
-  def price = $Money(289)
-  println($Money.toString(price))
+  def price = Money(289)
+  println(Money.toString(price))
   println(describe(price))
-  println(describe($Money(0)))
-  def (n, $Money(q)) = (5, price)
+  println(describe(Money(0)))
+  def (n, Money(q)) = (5, price)
   println("{n + q}")
 }
 
@@ -230,14 +230,14 @@ let ``Run - records, tuples and nominal values through the core IR`` () =
 
 type Person = (name: string, age: int)
 
-type $Money = private int
+type Money = private int
 
 def older: Person -> Person = { p -> p with age = p.age + 1 }
 
 def nOf = { r -> r.n }
 
-def pence: $Money -> int = { m ->
-  def $Money(p) = m
+def pence: Money -> int = { m ->
+  def Money(p) = m
   p
 }
 
@@ -253,7 +253,7 @@ def main = {
   println(ada.name)
   println(show(ada.age))
   println(show(nOf((n = 1)) + nOf((a = 20, n = 2)) + nOf((a = 30, b = 40, n = 3))))
-  println(show(pence($Money(250))))
+  println(show(pence(Money(250))))
   println(show(swapped((1, 2)).0))
 }
 

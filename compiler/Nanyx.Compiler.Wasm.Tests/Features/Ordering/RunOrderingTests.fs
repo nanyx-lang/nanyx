@@ -3,16 +3,16 @@ module TranspilerWasmTests.Features.Ordering.Run
 open Xunit
 open TranspilerWasmTestHelpers
 
-/// A `$Version` ordered by its attached `compare`: by major version, then minor.
+/// A `Version` ordered by its attached `compare`: by major version, then minor.
 let private version =
-    [ "type $Version = (major: int, minor: int)"
-      "def $Version.compare: $Version, $Version -> #less | #equal | #greater = { a, b ->"
+    [ "type Version = protected (major: int, minor: int)"
+      "def Version.compare: Version, Version -> #less | #equal | #greater = { a, b ->"
       "  if a.major < b.major then #less"
       "  else if a.major > b.major then #greater"
       "  else int.compare(a.minor, b.minor)"
       "}"
-      "def v = { major, minor -> $Version(major = major, minor = minor) }"
-      "def minor: $Version -> int = { x -> x.minor }" ]
+      "def v = { major, minor -> Version(major = major, minor = minor) }"
+      "def minor: Version -> int = { x -> x.minor }" ]
 
 /// The value of an option, or `fallback`.
 let private orElse = "def orElse = { o, fallback -> match o | #some(x) -> x | _ -> fallback }"
