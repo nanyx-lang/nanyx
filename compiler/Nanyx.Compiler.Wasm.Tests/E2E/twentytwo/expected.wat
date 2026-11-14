@@ -229,28 +229,10 @@
     end
   )
   (func $__nanyx_copy_bytes (param $dst i32) (param $src i32) (param $len i32)
-    (local $i i32)
-    block $done
-      loop $copy
-        local.get $i
-        local.get $len
-        i32.ge_s
-        br_if $done
-        local.get $dst
-        local.get $i
-        i32.add
-        local.get $src
-        local.get $i
-        i32.add
-        i32.load8_u
-        i32.store8
-        local.get $i
-        i32.const 1
-        i32.add
-        local.set $i
-        br $copy
-      end
-    end
+    local.get $dst
+    local.get $src
+    local.get $len
+    memory.copy
   )
   (func $__nanyx_string_length (param $s i32) (result i32)
     local.get $s
@@ -1034,7 +1016,7 @@
   )
   (export "__fn_readStdinByte" (func $__fn_readStdinByte))
 
-  (func $__dbg_show_int (param $__dbg_value_i64 i64) (result i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_src i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64)
+  (func $__dbg_show_int (param $__dbg_value_i64 i64) (result i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64)
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_i64

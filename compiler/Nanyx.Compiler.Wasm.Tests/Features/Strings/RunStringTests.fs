@@ -249,3 +249,22 @@ main()
 """
     runSource source
     |> assertRan "n is 3, positive true, pick #yes\nn is -1, positive false, pick #no\nouter inner x end\ndbg: 2\ndbg: #some(2)\ndbg: #yes\n"
+
+[<Fact>]
+let ``Run - strings are copied with memory.copy, not a byte at a time`` () =
+    // The runtime's byte copy and an interpolated string's string holes use one `memory.copy` each (#1300).
+    let source =
+        normalized """import nanyx/console
+import nanyx/text
+
+def word = "nanyx"
+def empty = ""
+def joined = word ++ empty ++ " " ++ word
+println(joined)
+println(string.substring(joined, start = 2, length = 6))
+println("[{empty}]<{word}>{joined}")
+"""
+    let wat = transpileWat source
+    Assert.Contains("memory.copy", wat)
+    Assert.DoesNotContain("loop $interp_copy", wat)
+    runSource source |> assertRan "nanyx nanyx\nnyx na\n[]<nanyx>nanyx nanyx\n"
