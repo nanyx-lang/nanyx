@@ -38,7 +38,7 @@ module ImportFixes =
     /// module's last top-level import; else after its `module` line, with a blank line between; else after the `#!`
     /// line and `::` directives at the top, which must come before any code, with a blank line between; else at the
     /// top, with a blank line after it.
-    let private insertion (source: string) (syntax: Module) (line: string) : int * string =
+    let private insertionFor (source: string) (syntax: Module) (line: string) : int * string =
         let lineAfter (offset: int) =
             match source.IndexOf('\n', offset) with
             | -1 -> None
@@ -59,20 +59,23 @@ module ImportFixes =
             | 0 -> 0, line + "\n\n"
             | headerEnd -> headerEnd, "\n\n" + line
 
+    /// The imports the module `syntax` writes, each with its alias if it has one.
+    let private existingImports (syntax: Module) =
+        syntax
+        |> List.collect (function Kind (Import items) -> items |> List.map (fun item -> item.Source, item.Alias) | _ -> [])
+        |> Set.ofList
+
     let private fixesFor (exports: Map<string, string list>) (source: string) (syntax: Module) (span: SourceSpan) : Fix list =
         let written = source.Substring(span.Start, span.End - span.Start)
         if not (writtenName.IsMatch written) then
             []
         else
-            let existing =
-                syntax
-                |> List.collect (function Kind (Import items) -> items |> List.map (fun item -> item.Source, item.Alias) | _ -> [])
-                |> Set.ofList
+            let existing = existingImports syntax
             StandardLibraryImports.candidates exports written
             |> List.filter (fun import -> not (existing.Contains (ModuleImport import.Path, import.Alias)))
             |> List.map (fun import ->
                 let line = StandardLibraryImports.line import
-                let offset, text = insertion source syntax line
+                let offset, text = insertionFor source syntax line
                 { Title = $"Add `{line}`"; Edits = [ { Span = TextEdit.spanBetween source span offset offset; NewText = text } ] })
 
     /// `diagnostics` with a fix for each import that would bring an unknown name into scope, given the modules that
@@ -94,3 +97,19 @@ module ImportFixes =
     /// `addWith` for the standard library's exports.
     let add (source: string) (syntax: Module) (diagnostics: Diagnostic list) : Diagnostic list =
         addWith standardLibraryExportPaths.Value source syntax diagnostics
+
+    /// Where an import goes in a module's text, and what to insert there, as the quick fix places it.
+    type ImportInsertion =
+        | Insert of offset: int * text: string
+        /// The module imports it already, without an alias.
+        | AlreadyImported
+        /// The text does not parse, so there is nowhere to put it yet.
+        | NotParsed
+
+    /// The insertion that imports the module at `path` (`nanyx/text`) into the module whose text is `source` (with its
+    /// line endings made `\n`), placed as the missing-import quick fix places one: for a library browser's button.
+    let insertion (source: string) (path: string) : ImportInsertion =
+        match parseModuleFileWithNames "" source with
+        | Result.Error _ -> NotParsed
+        | Result.Ok (syntax, _, _) when (existingImports syntax).Contains (ModuleImport path, None) -> AlreadyImported
+        | Result.Ok (syntax, _, _) -> Insert (insertionFor source syntax $"import {path}")

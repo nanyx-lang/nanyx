@@ -13,6 +13,7 @@ import {
 } from "./compiler";
 import { copyBuild, removeOldCopies, watchBuild } from "./developmentMode";
 import { InfoView } from "./infoView";
+import { LibraryView } from "./library";
 import { runFile } from "./run";
 
 const COMMAND_DOWNLOAD = "nanyx.downloadCompiler";
@@ -31,6 +32,7 @@ let compiler: string | undefined;
 let buildWatcher: vscode.Disposable | undefined;
 let outputChannel: vscode.OutputChannel;
 let infoView: InfoView | undefined;
+let libraryView: LibraryView | undefined;
 let declinedDownload = false;
 let declinedUpdate = false;
 
@@ -39,9 +41,12 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(outputChannel);
   const view = new InfoView(() => client);
   infoView = view;
+  const library = new LibraryView(() => client);
+  libraryView = library;
 
   context.subscriptions.push(
     view,
+    library,
     vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()),
     vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
       declinedDownload = false;
@@ -318,6 +323,7 @@ async function restartClient(context: vscode.ExtensionContext, executable: strin
   try {
     await client.start();
     infoView?.refresh();
+    libraryView?.refresh();
   } catch (error) {
     void vscode.window.showErrorMessage(`Nanyx: the language server failed to start (${messageOf(error)}). See the Nanyx output channel.`);
     client = undefined;

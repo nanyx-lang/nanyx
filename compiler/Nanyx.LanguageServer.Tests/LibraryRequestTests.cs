@@ -1,9 +1,15 @@
 using Nanyx.LanguageServer.Handlers;
+using OmniSharp.Extensions.LanguageServer.Protocol;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Xunit;
+using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Nanyx.LanguageServer.Tests;
 
-/// <summary><c>nanyx/libraryModules</c> and <c>nanyx/libraryModule</c>: the standard library's modules and what each exports.</summary>
+/// <summary>
+/// <c>nanyx/libraryModules</c> and <c>nanyx/libraryModule</c>: the standard library's modules and what each exports; and
+/// <c>nanyx/addImport</c>, which imports one.
+/// </summary>
 public sealed class LibraryRequestTests : LanguageServerTestBase
 {
     private async Task<IReadOnlyList<LibraryModuleItem>> Modules() =>
@@ -53,6 +59,34 @@ public sealed class LibraryRequestTests : LanguageServerTestBase
         Assert.Null(eq.Import);
         Assert.Contains(exports!, export => export.Kind == "function");
         Assert.DoesNotContain(exports!, export => export.Name.StartsWith("__", StringComparison.Ordinal));
+    }
+
+    private async Task<IReadOnlyList<TextEdit>?> AddImport(DocumentUri uri, string module) =>
+        await _client
+            .SendRequest(AddImportHandler.Method, new AddImportParams { TextDocument = new TextDocumentIdentifier(uri), Module = module })
+            .Returning<IReadOnlyList<TextEdit>?>(_cancellation.Token);
+
+    [Fact]
+    public async Task Adding_an_import_puts_it_after_the_last_import_and_not_twice()
+    {
+        var uri = DocumentUri.From("untitled:imports.nyx");
+        Open(uri, "import nanyx/console\n\nprintln(\"hi\")\n");
+        await NextPublished(uri);
+
+        var edit = Assert.Single((await AddImport(uri, "nanyx/text"))!);
+        Assert.Equal(new Range(1, 0, 1, 0), edit.Range);
+        Assert.Equal("import nanyx/text\n", edit.NewText);
+        Assert.Empty((await AddImport(uri, "nanyx/console"))!);
+    }
+
+    [Fact]
+    public async Task Adding_an_import_to_a_document_that_does_not_parse_gives_nothing()
+    {
+        var uri = DocumentUri.From("untitled:broken.nyx");
+        Open(uri, "def = \n");
+        await NextPublished(uri);
+
+        Assert.Null(await AddImport(uri, "nanyx/text"));
     }
 
     [Fact]

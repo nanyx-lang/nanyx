@@ -16,6 +16,7 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in 
 - quick fixes, such as adding the import for a standard-library name, or writing `int.fromString` for the deprecated `Int.fromString`
 - **Format Document**, which formats the file as `nanyx format` does
 - an [info view](#info-view), a view in the secondary side bar that shows what the compiler knows at the cursor
+- a [library browser](#library), which lists what the standard library exports
 - a run button, which runs the file as `nanyx run` does
 
 All of the settings below are under **Nanyx** in VS Code's settings, or can be written in `settings.json`. Changing any of them restarts the language server.
@@ -167,6 +168,18 @@ keeps the view on the cursor's current position while you move around and edit e
 again. After an edit, the view catches up when the compiler has checked the new text, without the cursor moving. While
 the file does not parse, the view shows what the compiler knew the last time it did. It needs a compiler
 newer than 0.23.0.
+
+# Library
+
+The **Library** view, under the info view in the **Nanyx** tab, lists the standard library's modules, `nanyx/prelude`
+first, each with the first line of its doc comment. Open a module to see what it exports, grouped into functions,
+values, types and contexts, and then the definitions attached to each type under the type's name (`string.trim`
+under `string`). Each export shows its signature; hover over it for its doc comment and the import it needs.
+
+Click an export to open its declaration in the library's source, as go to definition does. The **+** button beside an
+export of any module but the prelude, whose names need no import, adds that module's import to the active `.nyx`
+file, where the quick fix for a missing import would put it. It adds nothing if the file imports the module already,
+and nothing while the file does not parse. It needs a compiler newer than 0.28.0.
 
 # Running a file
 
