@@ -102,17 +102,11 @@ type private Rewriter() =
                 | Let(var, value, body) -> { link with Kind = Let(var, this.Expr value, body) }
                 | Do(value, rest) -> { link with Kind = Do(this.Expr value, rest) }
                 | _ -> link)
-        let recur = this.Expr
-        let kind =
+        let last =
             match last.Kind with
-            | If(cond, ifTrue, ifFalse) -> If(cond, recur ifTrue, recur ifFalse)
-            | Match(scrutinees, arms) -> Match(scrutinees, arms |> List.map (this.Arm scrutinees))
-            | ForEach loop -> ForEach { loop with Body = recur loop.Body }
-            | While loop -> While { loop with Condition = recur loop.Condition; Body = recur loop.Body }
-            | DropAfter(body, vars) -> DropAfter(recur body, vars)
-            | Reuse(token, body) -> Reuse(token, recur body)
-            | other -> other
-        Chain.rebuild Chain.relink links { last with Kind = kind }
+            | Match(scrutinees, arms) -> { last with Kind = Match(scrutinees, arms |> List.map (this.Arm scrutinees)) }
+            | _ -> Expr.map this.Expr last
+        Chain.rebuild Chain.relink links last
 
     /// An arm with each scrutinee it takes apart and drops released instead, and the first released object's block
     /// reused by an allocation of the same size, if the arm always makes one.

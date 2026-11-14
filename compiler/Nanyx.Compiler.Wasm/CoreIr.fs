@@ -508,8 +508,8 @@ module Expr =
 
     /// The expressions directly inside `e`, in the order its code runs them: a let's or a do's value and then what
     /// follows it, an if's branches, each arm's guards and then its body, a loop's condition and body, and what a
-    /// count instruction wraps. An instruction on atoms has none. A walk over the IR recurses through these, so a new
-    /// case is added here and nowhere else. What follows a link of a chain is the last child, and a function's body is
+    /// count instruction wraps. An instruction on atoms has none. A walk over the IR recurses through these, and a rewrite
+    /// through `map`, so a new case is added to those two and nowhere else. What follows a link of a chain is the last child, and a function's body is
     /// a chain as long as the function: a walk must recurse into the last child in tail position (or walk the chain in
     /// a loop, see `Chain`), or a long function overflows the stack.
     let children (e: Expr) : Expr list =
@@ -542,6 +542,43 @@ module Expr =
         | Dbg _
         | BoxFloat _
         | Panic _ -> []
+
+    /// `e` with `f` applied to each expression directly inside it, those `children` gives, in the same order. Mapping
+    /// a link of a chain maps what follows it too, so a pass that rewrites a long chain splits it (see `Chain`) and
+    /// maps only the expression it ends in.
+    let map (f: Expr -> Expr) (e: Expr) : Expr =
+        let kind =
+            match e.Kind with
+            | Let(var, value, body) -> Let(var, f value, f body)
+            | Do(value, body) -> Do(f value, f body)
+            | If(cond, ifTrue, ifFalse) -> If(cond, f ifTrue, f ifFalse)
+            | Match(scrutinees, arms) ->
+                Match(scrutinees, arms |> List.map (fun arm -> { arm with Patterns = List.map (Pattern.mapGuards f) arm.Patterns; Body = f arm.Body }))
+            | ForEach loop -> ForEach { loop with Body = f loop.Body }
+            | While loop -> While { loop with Condition = f loop.Condition; Body = f loop.Body }
+            | Dup(vars, body) -> Dup(vars, f body)
+            | Drop(vars, body) -> Drop(vars, f body)
+            | DropAfter(body, vars) -> DropAfter(f body, vars)
+            | Release(released, body) -> Release(released, f body)
+            | Reuse(token, body) -> Reuse(token, f body)
+            | Atom _
+            | Prim _
+            | Call _
+            | MakeTag _
+            | MakeRecord _
+            | Field _
+            | UpdateRecord _
+            | Assign _
+            | SetField _
+            | MakeList _
+            | CallRuntime _
+            | MakeClosure _
+            | CallClosure _
+            | Interpolate _
+            | Dbg _
+            | BoxFloat _
+            | Panic _ -> e.Kind
+        { e with Kind = kind }
 
 /// The statements of a block: a chain of `Let`s, `Do`s, `Dup`s, `Drop`s and `Release`s, each followed by the next. A
 /// function's body is a chain as long as the function, so a pass walks one in a loop, and recurses only as deep as an
