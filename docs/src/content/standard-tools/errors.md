@@ -303,6 +303,94 @@ context Lazy = (
 
 To fix it, write a kind from the list, as `@customKeywordType(#bind)`.
 
+# NYX0020: Module not public
+
+A module imports a module of a package it depends on that the package does not make public. Another package can import
+only the modules a package lists in its manifest's `public-modules`.
+
+```nanyx
+-- file: main.nyx
+module main
+
+import acme.util/secrets  -- error NYX0020: The module 'secrets' of the package 'acme.util' is not public, ...
+
+@entry
+def run = { () -> ignore(mark) }
+-- file: app.nyxp
+[package]
+name = "app"
+version = "0.1.0"
+sources = ["*.nyx"]
+
+[dependencies]
+"acme.util" = { path = "util" }
+-- file: util/util.nyxp
+[package]
+name = "acme.util"
+version = "0.1.0"
+public-modules = ["strings"]
+-- file: util/strings.nyx
+module strings
+
+export def shout = { s: string -> s ++ "!" }
+-- file: util/secrets.nyx
+module secrets
+
+export def mark = "!"
+```
+
+To fix it, import one of the package's public modules, or, if you maintain the package, add the module to its
+`public-modules`.
+
+# NYX0021: Package is not a direct dependency
+
+A module imports a package that only one of its package's dependencies depends on. A package can import only the
+packages its own manifest lists in `[dependencies]`.
+
+```nanyx
+-- file: main.nyx
+module main
+
+import acme.util/strings  -- error NYX0021: The package 'acme.util' is not a dependency of 'app', only of a package it depends on: ...
+
+@entry
+def run = { () -> ignore(shout("hi")) }
+-- file: app.nyxp
+[package]
+name = "app"
+version = "0.1.0"
+sources = ["*.nyx"]
+
+[dependencies]
+"acme.loud" = { path = "loud" }
+-- file: loud/loud.nyxp
+[package]
+name = "acme.loud"
+version = "0.1.0"
+public-modules = ["louder"]
+
+[dependencies]
+"acme.util" = { path = "../util" }
+-- file: loud/louder.nyx
+module louder
+
+import acme.util/strings
+
+export def louder = { s: string -> shout(shout(s)) }
+-- file: util/util.nyxp
+[package]
+name = "acme.util"
+version = "0.1.0"
+public-modules = ["strings"]
+-- file: util/strings.nyx
+module strings
+
+export def shout = { s: string -> s ++ "!" }
+```
+
+To fix it, add the package to `[dependencies]` in your own manifest, with the same path as the dependency that uses
+it.
+
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which

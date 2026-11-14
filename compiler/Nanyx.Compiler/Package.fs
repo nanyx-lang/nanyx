@@ -8,9 +8,16 @@ open Parser.Program
 open Tomlyn
 open Tomlyn.Model
 
+/// A package another depends on, in a directory on disk: `"acme.util" = { path = "../util" }` in `[dependencies]`.
+type Dependency =
+    { /// The package's name, which its own manifest must give it too.
+      Name: string
+      /// The full path of the directory its manifest is in.
+      Directory: string }
+
 /// A package's `.nyxp` manifest, as far as it is read so far: what the package is called, which files are its
-/// sources, which linters check them, and which host runs its `@entry`. The `[formatter]` table is the formatter's,
-/// which reads it itself.
+/// sources, which of its modules other packages may import, what it depends on, which linters check it, and which
+/// host runs its `@entry`. The `[formatter]` table is the formatter's, which reads it itself.
 type Manifest =
     { /// The manifest's full path.
       Path: string
@@ -20,6 +27,10 @@ type Manifest =
       Version: string
       /// Globs relative to `Root`: `**/*.nyx` unless the manifest says otherwise.
       Sources: string list
+      /// The names of the modules a package that depends on this one may import: `[package] public-modules`.
+      PublicModules: string list
+      /// The packages it depends on, in the order `[dependencies]` lists them.
+      Dependencies: Dependency list
       /// The linters the manifest turns on, each with a table under `[linters]`, and the severities it sets.
       Linters: LinterOptions
       /// The host `[host] use` names, or the console host when the manifest has no `[host]`.
@@ -114,6 +125,49 @@ module Manifest =
         | Result.Ok _ -> Result.Error configuration
         | Result.Error errors -> Result.Error (errors @ configuration)
 
+    /// The dependencies a `[dependencies]` table lists, each a directory, or what is wrong with the table. A dotted
+    /// name written without quotes, `acme.util = { path = "../util" }`, is a table in TOML, `acme` holding `util`, and
+    /// is read as the name it spells. A version alone names a package to download, which isn't supported yet.
+    let private readDependencies (path: string) (text: string) (root: string) (table: TomlTable) : Result<Dependency list, string list> =
+        let rec entries (prefix: string) (table: TomlTable) : (string * obj) list =
+            table
+            |> Seq.collect (fun entry ->
+                let name = prefix + entry.Key
+                match entry.Value with
+                | :? TomlTable as inner when not (inner.ContainsKey "path") -> entries (name + ".") inner
+                | value -> [ name, value ])
+            |> List.ofSeq
+        let at (name: string) = keyLocation path text "dependencies" name
+        let example (name: string) = $"\"{name}\" = {{ path = \"../{name.Substring(name.LastIndexOf '.' + 1)}\" }}"
+        let read (name: string, value: obj) =
+            let location = at name
+            let named =
+                if namePattern.IsMatch name then []
+                else [ $"{location}: [dependencies] {name}: a package's name must be {nameRule}" ]
+            let directory =
+                match value with
+                | :? string as version ->
+                    Result.Error [ $"{location}: [dependencies] {name} = \"{version}\" names a version, but packages can't be downloaded yet: give the directory the package is in, {example name}" ]
+                | :? TomlTable as dependency ->
+                    let unknown =
+                        dependency.Keys
+                        |> Seq.filter ((<>) "path")
+                        |> Seq.map (fun key -> $"{location}: [dependencies] {name}: unknown key '{key}'; the only key is 'path'")
+                        |> List.ofSeq
+                    match dependency.["path"] with
+                    | :? string as directory when unknown.IsEmpty -> Result.Ok (Path.GetFullPath(Path.Combine(root, directory)))
+                    | :? string -> Result.Error unknown
+                    | other -> Result.Error ($"{location}: [dependencies] {name}: path must be a string, the directory the package is in, not {describe other}" :: unknown)
+                | other -> Result.Error [ $"{location}: [dependencies] {name} must be a table giving the directory the package is in, {example name}, not {describe other}" ]
+            match named, directory with
+            | [], Result.Ok directory -> Result.Ok { Name = name; Directory = directory }
+            | errors, Result.Ok _ -> Result.Error errors
+            | errors, Result.Error more -> Result.Error (errors @ more)
+        let read = entries "" table |> List.map read
+        match read |> List.collect (function Result.Error errors -> errors | Result.Ok _ -> []) with
+        | [] -> Result.Ok (read |> List.choose (function Result.Ok dependency -> Some dependency | Result.Error _ -> None))
+        | errors -> Result.Error errors
+
     /// The linter options of a `[linters]` table: one table per linter to run, of rule ids and severities.
     let private readLinters (path: string) (table: TomlTable) : Result<LinterOptions, string list> =
         let configured =
@@ -172,11 +226,10 @@ module Manifest =
             for entry in document do
                 if not (List.contains entry.Key tables) then
                     errors.Add $"{path}: unknown table [{entry.Key}]; the tables are {quoted tables}"
-            for unsupported in [ "dependencies"; "project-references" ] do
-                match table unsupported with
-                | Some entries when entries.Count > 0 ->
-                    errors.Add $"{path}: [{unsupported}] is not supported yet: a package can only use the standard library and its own files"
-                | _ -> ()
+            match table "project-references" with
+            | Some entries when entries.Count > 0 ->
+                errors.Add $"{path}: [project-references] is not supported yet: a package can depend on others with [dependencies]"
+            | _ -> ()
             let package = table "package"
             if package.IsNone && not (document.ContainsKey "package") then
                 errors.Add $"{path}: the manifest has no [package] table, which needs at least a name and a version"
@@ -207,7 +260,14 @@ module Manifest =
                     defaults
                 | false, _ -> defaults
             let sources = strings "sources" [ "**/*.nyx" ]
-            strings "public-modules" [] |> ignore
+            let publicModules = strings "public-modules" []
+            let dependencies =
+                match table "dependencies" |> Option.map (readDependencies path source (Path.GetDirectoryName path)) with
+                | Some (Result.Ok dependencies) -> dependencies
+                | Some (Result.Error problems) ->
+                    errors.AddRange problems
+                    []
+                | None -> []
             // No [linters] table means no linters: a package turns on the official one with [linters.default].
             let linters =
                 match table "linters" |> Option.map (readLinters path) with
@@ -232,15 +292,20 @@ module Manifest =
                       Name = name
                       Version = version
                       Sources = sources
+                      PublicModules = publicModules
+                      Dependencies = dependencies
                       Linters = linters
                       Host = host }
 
-/// A package on disk: its manifest, its source files, and the one that declares its `@entry`, if any.
+/// A package on disk: its manifest, its source files, the one that declares its `@entry`, if any, and the packages it
+/// depends on, each with its own.
 type Package =
     { Manifest: Manifest
       /// Full paths, in order.
       Sources: string list
-      Entry: string option }
+      Entry: string option
+      /// In the order its manifest lists them.
+      Dependencies: Package list }
 
 /// What building a package found: each source file's compile, and every diagnostic once. Each module is checked once
 /// for the whole build, though a file imported by another is compiled as part of both.
@@ -272,20 +337,75 @@ module Package =
         | Result.Ok items -> items |> List.exists (function Kind (Attribute(name, _)) -> name = Attributes.entryAttribute | _ -> false)
         | Result.Error _ -> false
 
-    /// The package whose manifest is at `manifestPath`, or what is wrong with it.
-    let ofManifest (manifestPath: string) : Result<Package, string list> =
-        Manifest.read manifestPath
-        |> Result.bind (fun manifest ->
-            let files = sources manifest
-            let display (file: string) = Path.GetRelativePath(manifest.Root, file)
+    /// The packages a build has read so far, by name, each with its manifest's path: a build has one of each.
+    type private Reached = Collections.Generic.Dictionary<string, string>
+
+    /// The manifest of the package in `directory`, the one `.nyxp` file there, or what is wrong.
+    let private manifestIn (directory: string) : Result<string, string> =
+        if not (Directory.Exists directory) then Result.Error $"{directory} is not a directory"
+        else
+            match Directory.GetFiles(directory, "*" + Manifest.extension) |> Array.sort with
+            | [| manifest |] -> Result.Ok (Path.GetFullPath manifest)
+            | [||] -> Result.Error $"{directory} has no {Manifest.extension} manifest"
+            | several -> Result.Error $"""{directory} has more than one {Manifest.extension} manifest: {several |> Array.map Path.GetFileName |> String.concat ", "}"""
+
+    /// The package `manifest` describes, with the packages it depends on. `chain` is the manifests of the packages
+    /// that led to it, nearest first, each with its package's name, and `reached` every package the build has read so far.
+    let rec private ofManifestIn (reached: Reached) (chain: (string * string) list) (manifest: Manifest) : Result<Package, string list> =
+        let files = sources manifest
+        let display (file: string) = Path.GetRelativePath(manifest.Root, file)
+        let entry =
             if files.IsEmpty then
                 Result.Error [ $"""{manifest.Path}: no source files match {manifest.Sources |> List.map (sprintf "'%s'") |> String.concat ", "}""" ]
             else
                 match files |> List.filter declaresEntry with
-                | [] -> Result.Ok { Manifest = manifest; Sources = files; Entry = None }
-                | [ entry ] -> Result.Ok { Manifest = manifest; Sources = files; Entry = Some entry }
+                | [] -> Result.Ok None
+                | [ entry ] -> Result.Ok (Some entry)
                 | several ->
-                    Result.Error [ $"""{manifest.Path}: a package can have one @entry, but these files each declare one: {several |> List.map display |> String.concat ", "}""" ])
+                    Result.Error [ $"""{manifest.Path}: a package can have one @entry, but these files each declare one: {several |> List.map display |> String.concat ", "}""" ]
+        match entry, dependenciesIn reached ((manifest.Path, manifest.Name) :: chain) manifest with
+        | Result.Ok entry, Result.Ok dependencies -> Result.Ok { Manifest = manifest; Sources = files; Entry = entry; Dependencies = dependencies }
+        | entry, dependencies ->
+            let errorsOf = function Result.Error errors -> errors | Result.Ok _ -> []
+            Result.Error (errorsOf entry @ errorsOf dependencies)
+
+    /// The packages `manifest` depends on, each read with its own dependencies, or what is wrong: a directory with no
+    /// manifest, a package named other than its dependant names it, one that depends on itself through others, or one
+    /// reached by two paths. `chain` holds `manifest` itself first.
+    and private dependenciesIn (reached: Reached) (chain: (string * string) list) (manifest: Manifest) : Result<Package list, string list> =
+        let read (dependency: Dependency) =
+            let at = $"{manifest.Path}: [dependencies] {dependency.Name}"
+            match manifestIn dependency.Directory with
+            | Result.Error message -> Result.Error [ $"{at}: {message}" ]
+            | Result.Ok path ->
+                match Manifest.read path with
+                | Result.Error errors -> Result.Error errors
+                | Result.Ok found when found.Name <> dependency.Name ->
+                    Result.Error [ $"{at}: the package in {dependency.Directory} is named {found.Name}, not {dependency.Name}: the names must match" ]
+                | Result.Ok found when chain |> List.exists (fst >> PackageModules.samePath path) ->
+                    let names = (chain |> List.rev |> List.map snd) @ [ found.Name ]
+                    Result.Error [ $"""{at}: packages can't depend on each other in a cycle: {String.concat " -> " names}""" ]
+                | Result.Ok found ->
+                    match reached.TryGetValue found.Name with
+                    | true, other when not (PackageModules.samePath other path) ->
+                        Result.Error [ $"{at}: the build reaches the package {found.Name} by two paths, {Path.GetDirectoryName other} and {dependency.Directory}; a build has one of each package" ]
+                    | _ ->
+                        reached.[found.Name] <- path
+                        ofManifestIn reached chain found
+        let read = manifest.Dependencies |> List.map read
+        match read |> List.collect (function Result.Error errors -> errors | Result.Ok _ -> []) with
+        | [] -> Result.Ok (read |> List.choose (function Result.Ok package -> Some package | Result.Error _ -> None))
+        | errors -> Result.Error (List.distinct errors)
+
+    /// The packages of a build whose root is `manifest`: none read yet but the root.
+    let private reachedFrom (manifest: Manifest) : Reached =
+        let reached = Reached()
+        reached.[manifest.Name] <- manifest.Path
+        reached
+
+    /// The package whose manifest is at `manifestPath`, with the packages it depends on, or what is wrong with them.
+    let ofManifest (manifestPath: string) : Result<Package, string list> =
+        Manifest.read manifestPath |> Result.bind (fun manifest -> ofManifestIn (reachedFrom manifest) [] manifest)
 
     /// `package` run under `host` in place of its manifest's, as `--host` chooses.
     let withHost (host: Host) (package: Package) : Package =
@@ -324,12 +444,19 @@ module Package =
                 directive.Span
                 $"{name} is a directive for a script, but this file is in a package: say it in the package's manifest, {manifestPath}")
 
-    /// The modules of `package`, by the names its source files declare.
+    /// The modules of the package `manifest` describes, whose source files are `files`, with those of `dependencies`.
+    let rec private modulesOf (manifest: Manifest) (files: string list) (dependencies: Package list) : PackageModules =
+        { PackageModules.ofFiles manifest.Name manifest.Root manifest.Host files with
+            PublicModules = manifest.PublicModules
+            Dependencies = dependencies |> List.map (fun dependency -> modulesOf dependency.Manifest dependency.Sources dependency.Dependencies) }
+
+    /// The modules of `package`, by the names its source files declare, with those of the packages it depends on.
     let modules (package: Package) : PackageModules =
-        PackageModules.ofFiles package.Manifest.Name package.Manifest.Root package.Manifest.Host package.Sources
+        modulesOf package.Manifest package.Sources package.Dependencies
 
     /// The modules of the package the file at `filePath` is a source file of, if it is one of a package whose
-    /// manifest reads. A file the manifest selects that is not on disk yet (an editor's new buffer) is one of them.
+    /// manifest reads, with those of the packages it depends on, if they read too. A file the manifest selects that is
+    /// not on disk yet (an editor's new buffer) is one of them.
     let modulesFor (filePath: string) : PackageModules option =
         let filePath = Path.GetFullPath filePath
         let directory = Path.GetDirectoryName filePath
@@ -337,7 +464,11 @@ module Package =
         | Result.Ok (Some manifestPath) ->
             match Manifest.read manifestPath with
             | Result.Ok manifest when selects manifest filePath ->
-                let modules = PackageModules.ofFiles manifest.Name manifest.Root manifest.Host (sources manifest)
+                let dependencies =
+                    match dependenciesIn (reachedFrom manifest) [ manifest.Path, manifest.Name ] manifest with
+                    | Result.Ok dependencies -> dependencies
+                    | Result.Error _ -> []
+                let modules = modulesOf manifest (sources manifest) dependencies
                 Some (if PackageModules.contains modules filePath then modules else { modules with Files = modules.Files @ [ filePath ] })
             | _ -> None
         | _ -> None

@@ -55,7 +55,8 @@ let ``Every section has an example, unless no program reports its code`` () =
 let errorExamples () : obj array seq =
     docExamplesOf pagePath |> Map.keys |> Seq.map (fun line -> [| box line |])
 
-/// The files of an example: each starts with a line `-- file: <name>`, and the first is the one compiled. An example
+/// The files of an example: each starts with a line `-- file: <name>`, which may be in a directory (`util/util.nyxp`),
+/// and the first is the one compiled. An example
 /// with no such line is one file, `main.nyx`.
 let private filesOf (code: string) =
     let lines = code.TrimEnd().Split('\n') |> List.ofArray
@@ -75,7 +76,9 @@ let private errorsOf (code: string) =
     use directory = new TempDirectory()
     let files = filesOf code
     for name, text in files do
-        File.WriteAllText(Path.Combine(directory.Path, name), text)
+        let path = Path.Combine(directory.Path, name)
+        Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
+        File.WriteAllText(path, text)
     let name, text = List.head files
     let result = Script.compileSource (Path.Combine(directory.Path, name)) text
     let errors = result.Diagnostics |> List.filter Diagnostics.isError

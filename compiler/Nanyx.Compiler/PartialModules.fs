@@ -32,7 +32,8 @@ module PartialModules =
     /// the file `edited` names, every file of its module but that one. A package's files are read by `readFile`.
     let otherFragments (readFile: string -> string) (package: PackageModules option) (edited: EditedLibraryFile option) (origin: ModuleOrigin) (name: string) : ModuleFragments =
         match origin, package with
-        | SourceFile path, Some modules when PackageModules.contains modules path ->
+        | SourceFile path, Some build when (PackageModules.ownerOf build path).IsSome ->
+            let modules = (PackageModules.ownerOf build path).Value
             let others =
                 modules.Modules
                 |> Map.tryFind name

@@ -119,7 +119,16 @@ import (
 
 Versions are resolved by the package tooling and do not appear in Nanyx import expressions.
 
-A package can only import modules from packages that it directly depends on. Dependencies of dependencies are not implicitly available to source code.
+A dependency can also be a package in a directory on disk, given by its path relative to the manifest. This is the only kind the compiler supports so far: a version alone is an error until packages can be downloaded.
+
+```toml
+[dependencies]
+acme.core = { path = "../core" }
+```
+
+The directory holds the package's own `.nyxp`, whose name must be the one the dependency gives it. A build has one copy of each package, so two dependencies that reach the same package must reach it in the same directory, and packages can't depend on each other in a cycle.
+
+A package can only import modules from packages that it directly depends on, and only the modules those packages list in `public-modules` (see [Public modules](#public-modules)). Dependencies of dependencies are not implicitly available to source code.
 
 # Project references
 

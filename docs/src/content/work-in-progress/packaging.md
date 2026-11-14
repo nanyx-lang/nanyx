@@ -46,13 +46,24 @@ Out of scope here:
 A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issues/279)); the rest is only in the docs.
 
 - **A package can be built and run** (`Package.fs`). The manifest's `[package]` table (`name`, `version`,
-  `sources`; `public-modules` is accepted but not used) and `[linters]` table are read, with an error naming the
+  `sources`, `public-modules`), `[dependencies]` and `[linters]` table are read, with an error naming the
   key for anything wrong or unknown. `nanyx build`, `nanyx check` and `nanyx run` without a file (or with a
   directory or manifest) check every source file, each module once however many files import it (`Package.build`,
   [#698](https://github.com/nanyx-lang/nanyx/issues/698)), and `run` runs the one `@entry`; `build` writes it to
   `out/<name>.wat`. `nanyx new` makes a package (`NewPackage.fs`). The language server reads the manifest's linter
-  configuration too. `[dependencies]` and `[project-references]` are refused when non-empty, and there is no
-  `.nyxproj` or `restore`. The formatter still reads its `[formatter]` table itself.
+  configuration too. `[project-references]` is refused when non-empty, and there is no `.nyxproj` or `restore`. The
+  formatter still reads its `[formatter]` table itself.
+- **A package can depend on another in a directory** ([#862](https://github.com/nanyx-lang/nanyx/issues/862)):
+  `"acme.util" = { path = "../util" }` in `[dependencies]` (`Manifest.Dependencies`; a dotted name without quotes is
+  read as the name it spells). A version alone is an error saying packages can't be downloaded yet. `Package.find`
+  reads each dependency's manifest, with its own dependencies (`Package.Dependencies`), and refuses a directory with
+  no manifest, a package named other than its dependant names it, a cycle, and a package reached by two paths, since
+  a build has one of each. `PackageModules` holds the dependencies' modules too, with each package's
+  `public-modules`, and resolves an import in any package's file (`PackageModules.ownerOf`): `import acme.util/strings`
+  reaches a public module of a direct dependency. A module that isn't public is `NYX0020`, and a package only a
+  dependency depends on is `NYX0021`. A dependency's modules are checked once per build, like the package's own,
+  into the same WebAssembly module. The language server resolves the same way, since it compiles through
+  `Package.modulesFor`.
 - **A package's imports go through its module table** (`PackageModules.fs`). Every source file the manifest
   selects is keyed by the module name it declares (`PackageModules.ofFiles`), and in those files `import greetings`
   and `import acme.web/greetings` both reach the file that declares `module greetings`, wherever it is
@@ -259,14 +270,14 @@ Decided by the maintainer. Packaging is built in two halves, so that hosts and l
 
 Local packages first (items 3a to 3c), then remote packages. Each produces something usable on its own:
 
-1. **Imports by module name within a package.** Done ([#287](https://github.com/nanyx-lang/nanyx/issues/287)) but
-   for `public-modules`, which only matters once another package can import this one.
+1. **Imports by module name within a package.** Done ([#287](https://github.com/nanyx-lang/nanyx/issues/287)), and
+   `public-modules` with path dependencies (3a).
 2. **The rest of the import syntax.** Done ([#289](https://github.com/nanyx-lang/nanyx/issues/289)): selections and
    re-exports, which `public-modules` relies on.
 3. **Local packages:**
-   - **3a. Path dependencies** ([#862](https://github.com/nanyx-lang/nanyx/issues/862)): a dependency on a package in
-     a directory, importing its `public-modules` as `acme.util/strings`, one version of each package per build, only
-     direct dependencies importable, with an error for each rule.
+   - **3a. Path dependencies** ([#862](https://github.com/nanyx-lang/nanyx/issues/862)). Done: a dependency on a
+     package in a directory, importing its `public-modules` as `acme.util/strings`, one version of each package per
+     build, only direct dependencies importable, with an error for each rule.
    - **3b. Packages shipped with the compiler** ([#1342](https://github.com/nanyx-lang/nanyx/issues/1342)): source
      directories in the distribution, named with an exact version.
    - **3c. The console host as a shipped package** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)), then the

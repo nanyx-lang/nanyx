@@ -75,6 +75,8 @@ module DiagnosticCodes =
     let ScriptInPackage = code 17 "Script in a package" Severity.Error
     let DuplicateModule = code 18 "Module declared by more than one file" Severity.Error
     let UnknownKeywordKind = code 19 "Unknown keyword kind" Severity.Error
+    let ModuleNotPublic = code 20 "Module not public" Severity.Error
+    let IndirectDependency = code 21 "Package is not a direct dependency" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -145,6 +147,7 @@ module DiagnosticCodes =
           InvalidStandardLibraryModule; UnknownAttribute; MisplacedAttribute; InvalidDirective; DirectiveInPackage
           UnsupportedDirective; CodeInModuleBlock; UnexpectedAttributeArgument; PathImportWithoutAlias
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
+          ModuleNotPublic; IndirectDependency
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField

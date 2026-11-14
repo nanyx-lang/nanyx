@@ -7,7 +7,8 @@ open Parser.Program
 
 /// A package's modules by the names its source files declare, which the imports in its files are resolved through:
 /// `import greetings` and `import acme.web/greetings` both reach the file that declares `module greetings`, wherever
-/// it is in the package.
+/// it is in the package. It holds the packages it depends on too, each with its own modules, so that
+/// `import acme.util/strings` reaches a public module of a direct dependency.
 type PackageModules =
     { /// The package's name, which an import of one of its own modules may start with.
       Package: string
@@ -19,7 +20,11 @@ type PackageModules =
       /// split across files, each marked `@partial` (see `PartialModules`).
       Modules: Map<string, string list>
       /// The host the package's `@entry` runs under: its manifest's `[host]`, or `--host`.
-      Host: Host }
+      Host: Host
+      /// The modules a package that depends on this one may import: its manifest's `public-modules`.
+      PublicModules: string list
+      /// The packages it depends on directly, each with its own dependencies.
+      Dependencies: PackageModules list }
 
 module PackageModules =
     /// Whether two full paths name the same file: file names differ only in case on Windows and macOS, and an editor
@@ -49,12 +54,14 @@ module PackageModules =
             name
 
     /// The modules of the package called `name`, whose manifest is in `root`, whose source files are `files` and whose
-    /// `@entry` runs under `host`.
+    /// `@entry` runs under `host`, without public modules or dependencies.
     let ofFiles (name: string) (root: string) (host: Host) (files: string list) : PackageModules =
         { Package = name
           Host = host
           Root = root
           Files = files
+          PublicModules = []
+          Dependencies = []
           Modules =
             files
             |> List.choose (fun file -> declaredName file |> Option.map (fun moduleName -> moduleName, file))
@@ -66,12 +73,41 @@ module PackageModules =
     let contains (modules: PackageModules) (filePath: string) =
         modules.Files |> List.exists (samePath filePath)
 
+    /// The package of the build `modules` that `filePath` is a source file of: the package itself, or one it depends
+    /// on, directly or through others.
+    let rec ownerOf (modules: PackageModules) (filePath: string) : PackageModules option =
+        if contains modules filePath then Some modules else modules.Dependencies |> List.tryPick (fun dependency -> ownerOf dependency filePath)
+
+    /// The package named `name` among those of the build `modules`, the package itself or one it depends on.
+    let rec private tryFindPackage (modules: PackageModules) (name: string) : PackageModules option =
+        if modules.Package = name then Some modules else modules.Dependencies |> List.tryPick (fun dependency -> tryFindPackage dependency name)
+
+    let private quoted (names: string seq) = names |> Seq.map (fun name -> $"'{name}'") |> String.concat ", "
+
     /// A file of the package as messages name it: relative to the manifest, with forward slashes.
     let display (modules: PackageModules) (filePath: string) =
         Path.GetRelativePath(modules.Root, filePath).Replace('\\', '/')
 
-    /// The file of the package that the import `item` of the module `name` names.
-    let private resolveModule (modules: PackageModules) (item: ImportItem) (name: string) : Result<string, Diagnostic> =
+    /// The file of the public module `moduleName` of `dependency`, a direct dependency of the package whose file has the
+    /// import `item` of `name`.
+    let private resolvePublicModule (dependency: PackageModules) (item: ImportItem) (name: string) (moduleName: string) : Result<string, Diagnostic> =
+        let isPublic = List.contains moduleName dependency.PublicModules
+        match dependency.Modules |> Map.tryFind moduleName with
+        | Some (file :: _) when isPublic -> Ok file
+        | Some _ ->
+            let publicOnes =
+                match dependency.PublicModules with
+                | [] -> "it has none: a package lists them in its manifest's [package] public-modules"
+                | modules -> $"its public modules are {quoted modules}"
+            Error (Diagnostics.at DiagnosticCodes.ModuleNotPublic item.Span $"The module '{moduleName}' of the package '{dependency.Package}' is not public, so another package can't import it: {publicOnes}")
+        | None ->
+            let hint = NameSuggestions.question (NameSuggestions.closest dependency.PublicModules moduleName)
+            Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"Import not found: {name}: the package '{dependency.Package}' has no module '{moduleName}'{hint}")
+
+    /// The file that the import `item` of the module `name`, in a source file of the package `modules`, names: one of the
+    /// package's own modules, or a public module of a package it depends on directly. `build` is the package the build
+    /// is of, which holds every package the build reaches.
+    let private resolveModule (build: PackageModules) (modules: PackageModules) (item: ImportItem) (name: string) : Result<string, Diagnostic> =
         let notFound message = Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"Import not found: {name}: {message}")
         let package, moduleName =
             match name.IndexOf '/' with
@@ -79,7 +115,16 @@ module PackageModules =
             | slash -> Some (name.Substring(0, slash)), name.Substring(slash + 1)
         match package with
         | Some other when other <> modules.Package ->
-            notFound $"there is no package '{other}': a package can only import the standard library and its own modules, as {modules.Package}/<module> or by the module's name alone"
+            match modules.Dependencies |> List.tryFind (fun dependency -> dependency.Package = other), tryFindPackage build other with
+            | Some dependency, _ -> resolvePublicModule dependency item name moduleName
+            | None, Some _ ->
+                Error (Diagnostics.at DiagnosticCodes.IndirectDependency item.Span $"The package '{other}' is not a dependency of '{modules.Package}', only of a package it depends on: a package can import only the packages it depends on itself, so add '{other}' to its [dependencies]")
+            | None, None ->
+                let dependencies =
+                    match modules.Dependencies with
+                    | [] -> "it has no [dependencies]"
+                    | dependencies -> $"its dependencies are {quoted (dependencies |> List.map _.Package)}"
+                notFound $"there is no package '{other}': '{modules.Package}' can import the standard library, its own modules, and the public modules of the packages it depends on, and {dependencies}"
         | _ ->
             // A module in several files is checked from its first, which brings in the others.
             match modules.Modules |> Map.tryFind moduleName with
@@ -101,12 +146,16 @@ module PackageModules =
                 notFound $"the package '{modules.Package}' has no module '{moduleName}'{hint}"
 
     /// The full path of the file the import `item`, in the file at `importer`, names. In a source file of the package
-    /// `modules`, a module import names one of the package's own modules, by its name alone or after the package's
-    /// name, wherever its file is; anywhere else, and for an import by file path, it names a file relative to the
+    /// `modules`, or of a package it depends on, a module import names one of that package's own modules, by its name
+    /// alone or after the package's name, wherever its file is, or a public module of a package it depends on directly,
+    /// after that package's name; anywhere else, and for an import by file path, it names a file relative to the
     /// importer (see `FileImports.resolvePath`).
     let resolveImport (modules: PackageModules option) (importer: string) (item: ImportItem) : Result<string, Diagnostic> =
         match modules, item.Source with
-        | Some modules, ModuleImport name when contains modules importer -> resolveModule modules item name
+        | Some modules, ModuleImport name ->
+            match ownerOf modules importer with
+            | Some owner -> resolveModule modules owner item name
+            | None -> FileImports.resolvePath (Path.GetDirectoryName importer) item
         | _ -> FileImports.resolvePath (Path.GetDirectoryName importer) item
 
     /// The errors in the source file at `filePath` of the package `modules`, whose text is `source`: a package's files
