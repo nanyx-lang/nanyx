@@ -3,6 +3,7 @@ using Microsoft.FSharp.Collections;
 using Microsoft.FSharp.Core;
 using Nanyx.Runtime;
 using NyxCompiler;
+using System.Reflection;
 using Transpiler.Wasm;
 
 enum Target
@@ -393,6 +394,26 @@ internal static class CliCommands
 
         package = found.ResultValue;
         return true;
+    }
+
+    /// <summary>
+    /// Print the compiler's version.
+    /// </summary>
+    [Consolo("--version")]
+    public static int PrintVersion() => VersionIn(Shell.Process);
+
+    /// <summary>
+    /// Print the release version, the &lt;Version&gt; in the project file (such as 0.27.0): the assembly's
+    /// informational version without the commit the SDK appends after a '+'. The assembly version always has four
+    /// parts, so it is not the one printed.
+    /// </summary>
+    internal static int VersionIn(Shell shell)
+    {
+        var informational = typeof(CliCommands).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "";
+        var plus = informational.IndexOf('+');
+        shell.Out.WriteLine(plus < 0 ? informational : informational[..plus]);
+        return 0;
     }
 
     /// <summary>

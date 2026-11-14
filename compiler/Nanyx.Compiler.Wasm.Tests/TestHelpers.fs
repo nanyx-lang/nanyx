@@ -109,7 +109,8 @@ let private command (arguments: string list) : Shell -> int =
         | path :: rest -> options (outputPath, release, timings, host, paths @ [ path ]) rest
         | [] -> outputPath, release, timings, host, Array.ofList paths
     match arguments with
-    | "new" :: name :: directory -> fun shell -> CliCommands.NewIn(shell, name, Array.ofList directory)
+    | [ "--version" ] -> CliCommands.VersionIn
+    | "new" :: name :: directory ->fun shell -> CliCommands.NewIn(shell, name, Array.ofList directory)
     | "check" :: rest ->
         let _, _, timings, host, path = options (null, false, false, null, []) rest
         fun shell -> CliCommands.CheckIn(shell, path, timings, host)
