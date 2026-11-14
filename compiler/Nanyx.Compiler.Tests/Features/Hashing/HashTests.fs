@@ -9,9 +9,10 @@ let private hashing = "def h: [Hash(a)] a -> int = { x -> hash(x) }\n"
 
 /// A nominal type that attaches its own `==`, and `hash` when `withHash` is set.
 let private email (withHash: bool) =
-    "type Email = protected string\n" +
-    "def Email.`==`: Email, Email -> bool = { a, b -> true }\n" +
-    (if withHash then "def Email.hash: Email -> int = { e -> 7 }\n" else "")
+    normalized """type Email = protected string
+def Email.`==`: Email, Email -> bool = { a, b -> true }
+"""
+    + (if withHash then "def Email.hash: Email -> int = { e -> 7 }\n" else "")
 
 [<Fact>]
 let ``A call that requires Hash of a type with no hash of its own is passed the compiler's own`` () =

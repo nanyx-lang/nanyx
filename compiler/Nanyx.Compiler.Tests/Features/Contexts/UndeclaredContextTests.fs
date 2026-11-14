@@ -29,8 +29,13 @@ let ``A def whose type declares no context cannot call a member of the runtime's
 [<Fact>]
 let ``A def whose type declares no context cannot call a function that requires one`` () =
     let source =
-        "def sayHello: [Console] () -> () = { println(\"hello\") }\n" +
-        "def g: int -> int = { n ->\n  sayHello()\n  n\n}\n" + entryCalling """println("{g(1)}")"""
+        normalized """def sayHello: [Console] () -> () = { println("hello") }
+def g: int -> int = { n ->
+  sayHello()
+  n
+}
+"""
+        + entryCalling """println("{g(1)}")"""
     match undeclaredContexts source with
     | [ text, message ] ->
         Assert.Equal("sayHello", text)
@@ -40,8 +45,13 @@ let ``A def whose type declares no context cannot call a function that requires 
 [<Fact>]
 let ``A lambda runs in the contexts of the def it is written in`` () =
     let source =
-        "def twice: (() -> ()) -> () = { k ->\n  k()\n  k()\n}\n" +
-        (withFinalNewline """def run: () -> () = { twice({ println("x") }) }""") + entryCalling "run()"
+        normalized """def twice: (() -> ()) -> () = { k ->
+  k()
+  k()
+}
+def run: () -> () = { twice({ println("x") }) }
+"""
+        + entryCalling "run()"
     match undeclaredContexts source with
     | [ text, _ ] -> Assert.Equal("println", text)
     | other -> failwith $"Expected one diagnostic, got %A{other}"
@@ -64,9 +74,14 @@ def main = {
 let ``An unannotated def infers the contexts it uses, so a def that declares none cannot call it`` () =
     // `g` comes first: what `f` needs is only known once every def has been inferred.
     let source =
-        "def g: int -> int = { n -> f(n) }\n" +
-        "def f = { n ->\n  h()\n  n + 1\n}\n" +
-        "def h = { println(\"x\") }\n" + entryCalling """println("{g(1)}")"""
+        normalized """def g: int -> int = { n -> f(n) }
+def f = { n ->
+  h()
+  n + 1
+}
+def h = { println("x") }
+"""
+        + entryCalling """println("{g(1)}")"""
     match undeclaredContexts source with
     | [ text, message ] ->
         Assert.Equal("f", text)

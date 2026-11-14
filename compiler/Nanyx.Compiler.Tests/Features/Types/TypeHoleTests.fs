@@ -42,12 +42,12 @@ def n: _ = f(2)"""
 
 [<Fact>]
 let ``Holes are generalised as an unannotated def is, not as named variables`` () =
+    // The hole in `inc` is bound to `int` by its body, where `a -> a` would be too general.
     let source =
-        "def id: _ -> _ = { x -> x }\n" +
-        "def a = id(1)\n" +
-        "def b = id(\"s\")\n" +
-        // Bound to `int` by its body, where `a -> a` would be too general.
-        "def inc: _ -> _ = { x -> x + 1 }"
+        normalized """def id: _ -> _ = { x -> x }
+def a = id(1)
+def b = id("s")
+def inc: _ -> _ = { x -> x + 1 }"""
     let types = typesOf source
     Assert.Equal("int", Unifier.tyToString types.["a"])
     Assert.Equal("string", Unifier.tyToString types.["b"])
