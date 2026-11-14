@@ -72,6 +72,8 @@ let ``An instance built as a value cannot give a member a lambda that needs more
         log
         + """
 def inst = Log(log = { m -> println(m) })
+
+dbg(0)
 """
     let code, text = singleError (source.ReplaceLineEndings "\n")
     Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)

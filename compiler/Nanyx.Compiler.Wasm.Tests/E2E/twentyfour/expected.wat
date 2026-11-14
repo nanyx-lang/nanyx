@@ -455,27 +455,13 @@
   (table $ctx_table 12 funcref)
   (elem (i32.const 0) $__fn_writeStdout $__fn_writeStderr $__fn_readStdinByte $__lambda_3__unit $__nanyx_drop_env__fn_unit_to_int__fn_string_to_unit__fn_string_to_unit $__lambda_5__unit $__lambda_7__unit $__adapt_fn_unit_to_tags_error_tags_endOfInput_some_string_ctx_readStdinByte_writeStderr_writeStdout_to_fn_unit_to_tags_error_tags_endOfInput_some_string $__nanyx_drop_env__fn_unit_to_tags_error_tags_endOfInput_some_string_ctx_readStdinByte_writeStderr_writeStdout__fn_unit_to_int__fn_string_to_unit__fn_string_to_unit $__adapt_fn_unit_to_tags_some_string_ctx_readStdinByte_writeStderr_writeStdout_to_fn_unit_to_tags_error_tags_endOfInput_some_string $__nanyx_drop_env__fn_unit_to_tags_some_string_ctx_readStdinByte_writeStderr_writeStdout__fn_unit_to_int__fn_string_to_unit__fn_string_to_unit $__fn_main)
 
-  (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
-  (data (i32.const 268) "\00\00\00\00\0d\00\00\00Hello, World!\00\00\00")
+  (data (i32.const 256) "\00\00\00\00\0d\00\00\00Hello, World!\00\00\00")
+  (data (i32.const 280) "\00\00\00\00\00\00\00\00\00\00\00\00")
   (data (i32.const 292) "\00\00\00\00\00\00\00\00\00\00\00\00")
   (data (i32.const 304) "\00\00\00\00\00\00\00\00\01\00\00\00")
   (data (i32.const 316) "\00\00\00\00\00\00\00\00\02\00\00\00")
   (data (i32.const 328) "\00\00\00\00\00\00\00\00\06\00\00\00")
   (data (i32.const 340) "\00\00\00\00\00\00\00\00\0b\00\00\00")
-
-  (func $write (param $text i32) (result i32)
-    local.get $text
-    call $__nanyx_write_stdout
-    i32.const 0
-  )
-  (export "write" (func $write))
-
-  (func $writeError (param $text i32) (result i32)
-    local.get $text
-    call $__nanyx_write_stderr
-    i32.const 0
-  )
-  (export "writeError" (func $writeError))
 
   (func $println__string__known (param $value i32) (param $__ctx_flush i32) (param $__ctx_readLine i32) (param $__ctx_readToEnd i32) (param $__ctx_write i32) (param $__ctx_writeError i32) (result i32)
     local.get $__ctx_flush
@@ -504,183 +490,6 @@
     i32.load
     return_call_indirect (type $ctx_fn_2)
   )
-
-  (func $console_withoutCarriageReturn (param $line i32) (result i32) (local $length_i64 i64)
-    local.get $line
-    call $__nanyx_string_length
-    i64.extend_i32_s
-    local.set $length_i64
-    local.get $length_i64
-    i64.const 0
-    i64.gt_s
-    local.get $line
-    local.get $length_i64
-    i64.const 1
-    call $__nanyx_int_sub
-    call $__nanyx_int_to_index
-    call $__nanyx_string_byte_at
-    i64.extend_i32_s
-    i64.const 13
-    i64.eq
-    i32.and
-    (if (result i32)
-      (then
-        local.get $line
-    i64.const 0
-    call $__nanyx_int_to_index
-    local.get $length_i64
-    i64.const 1
-    call $__nanyx_int_sub
-    call $__nanyx_int_to_index
-    call $__nanyx_string_slice
-    local.get $line
-    call $__nanyx_drop_string
-      )
-      (else
-        local.get $line
-      )
-    )
-  )
-  (export "console.withoutCarriageReturn" (func $console_withoutCarriageReturn))
-
-  (func $console_readLineAfter (param $acc i32) (result i32) (local $byte_i64 i64) (local $__owned_0 i32)
-    call $__nanyx_read_stdin_byte
-    i64.extend_i32_s
-    local.set $byte_i64
-    local.get $byte_i64
-    i64.const 0
-    i64.lt_s
-    (if (result i32)
-      (then
-        local.get $acc
-    call $__nanyx_string_length
-    i64.extend_i32_s
-    i64.const 0
-    i64.eq
-    (if (result i32)
-      (then
-        local.get $acc
-    call $__nanyx_drop_string
-    i32.const 5
-    i32.const 3
-    call $__nanyx_tag_box
-      )
-      (else
-        i32.const 7
-    local.get $acc
-    call $__nanyx_tag_box
-      )
-    )
-      )
-      (else
-        local.get $byte_i64
-    i64.const 10
-    i64.eq
-    (if (result i32)
-      (then
-        i32.const 7
-    local.get $acc
-    call $console_withoutCarriageReturn
-    call $__nanyx_tag_box
-      )
-      (else
-        local.get $acc
-    local.get $byte_i64
-    i32.wrap_i64
-    call $__nanyx_string_from_byte
-    local.tee $__owned_0
-    call $__nanyx_string_concat
-    local.get $acc
-    call $__nanyx_drop_string
-    local.get $__owned_0
-    call $__nanyx_drop_string
-    return_call $console_readLineAfter
-      )
-    )
-      )
-    )
-  )
-  (export "console.readLineAfter" (func $console_readLineAfter))
-
-  (func $readLine (param $_ i32) (result i32)
-    i32.const 264
-    return_call $console_readLineAfter
-  )
-  (export "readLine" (func $readLine))
-
-  (func $console_readToEndAfter (param $acc i32) (result i32) (local $byte_i64 i64) (local $__owned_0 i32)
-    call $__nanyx_read_stdin_byte
-    i64.extend_i32_s
-    local.set $byte_i64
-    local.get $byte_i64
-    i64.const 0
-    i64.lt_s
-    (if (result i32)
-      (then
-        local.get $acc
-      )
-      (else
-        local.get $acc
-    local.get $byte_i64
-    i32.wrap_i64
-    call $__nanyx_string_from_byte
-    local.tee $__owned_0
-    call $__nanyx_string_concat
-    local.get $acc
-    call $__nanyx_drop_string
-    local.get $__owned_0
-    call $__nanyx_drop_string
-    return_call $console_readToEndAfter
-      )
-    )
-  )
-  (export "console.readToEndAfter" (func $console_readToEndAfter))
-
-  (func $readToEnd (param $_ i32) (result i32)
-    i32.const 7
-    i32.const 264
-    call $console_readToEndAfter
-    call $__nanyx_tag_box
-  )
-  (export "readToEnd" (func $readToEnd))
-
-  (func $flush (param $_ i32) (result i32)
-    i32.const 0
-  )
-  (export "flush" (func $flush))
-
-  (func $console_write (param $text i32) (result i32)
-    local.get $text
-    call $__nanyx_write_stdout
-    i32.const 0
-  )
-  (export "console.write" (func $console_write))
-
-  (func $console_writeError (param $text i32) (result i32)
-    local.get $text
-    call $__nanyx_write_stderr
-    i32.const 0
-  )
-  (export "console.writeError" (func $console_writeError))
-
-  (func $console_readLine (param $_ i32) (result i32)
-    i32.const 264
-    return_call $console_readLineAfter
-  )
-  (export "console.readLine" (func $console_readLine))
-
-  (func $console_readToEnd (param $_ i32) (result i32)
-    i32.const 7
-    i32.const 264
-    call $console_readToEndAfter
-    call $__nanyx_tag_box
-  )
-  (export "console.readToEnd" (func $console_readToEnd))
-
-  (func $console_flush (param $_ i32) (result i32)
-    i32.const 0
-  )
-  (export "console.flush" (func $console_flush))
 
   (func $writeStdout (param $text i32) (result i32)
     local.get $text
@@ -993,7 +802,7 @@
   (export "string.toString" (func $string_toString))
 
   (func $main (param $__ctx_flush i32) (param $__ctx_readLine i32) (param $__ctx_readToEnd i32) (param $__ctx_write i32) (param $__ctx_writeError i32) (result i32)
-    i32.const 276
+    i32.const 264
     local.get $__ctx_flush
     local.get $__ctx_readLine
     local.get $__ctx_readToEnd
@@ -1042,7 +851,7 @@
     local.set $__ctx_writeStdout_1
     local.get $__ctx_writeStdout_1
     call $__nanyx_drop_fn_string_to_unit
-    i32.const 264
+    i32.const 288
     local.get $__ctx_readStdinByte
     local.get $__ctx_writeStderr
     local.get $__ctx_writeStdout
@@ -1073,7 +882,7 @@
     local.get $__ctx_writeStdout_1
     call $__nanyx_drop_fn_string_to_unit
     i32.const 7
-    i32.const 264
+    i32.const 288
     local.get $__ctx_readStdinByte
     local.get $__ctx_writeStderr
     local.get $__ctx_writeStdout
@@ -1278,6 +1087,37 @@
     local.get $p
   )
 
+  (func $__nanyx_drop_fn_unit_to_int (param $p i32)
+    ;; (unit -> int)
+    local.get $p
+    i32.const 8
+    i32.sub
+    call $__nanyx_release
+    if
+      local.get $p
+      local.get $p
+      i32.const 4
+      i32.sub
+      i32.load
+      call_indirect (type $ctx_fn_1)
+      drop
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_free
+    end
+  )
+
+  (func $__nanyx_dup_fn_unit_to_int (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
+  )
+
   (func $__nanyx_drop_tags_error_tags_endOfInput_some_string (param $p i32)
     ;; #error(#endOfInput) | #some(string)
     local.get $p
@@ -1386,37 +1226,6 @@
       br_if $shared
       local.get $p
       i32.const 4
-      i32.sub
-      call $__nanyx_retain
-    end
-    local.get $p
-  )
-
-  (func $__nanyx_drop_fn_unit_to_int (param $p i32)
-    ;; (unit -> int)
-    local.get $p
-    i32.const 8
-    i32.sub
-    call $__nanyx_release
-    if
-      local.get $p
-      local.get $p
-      i32.const 4
-      i32.sub
-      i32.load
-      call_indirect (type $ctx_fn_1)
-      drop
-      local.get $p
-      i32.const 8
-      i32.sub
-      call $__nanyx_free
-    end
-  )
-
-  (func $__nanyx_dup_fn_unit_to_int (param $p i32) (result i32)
-    block $shared
-      local.get $p
-      i32.const 8
       i32.sub
       call $__nanyx_retain
     end

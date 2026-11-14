@@ -295,8 +295,8 @@ The composite host runs each part under the right sub-host and coordinates start
 
 1. **ConsoleHost in Nanyx** ([#1245](https://github.com/nanyx-lang/nanyx/issues/1245)): `nanyx/console.host`'s `run`
    takes the entry, the compiler checks `@entry` against it and starts the program with `run(entry)`, and
-   `HostRuntime` is provided only to the host. Built: the host's `Console` reaches every entry, and scripts run under
-   the host too. Left: removing `nanyx/console`'s ambient instance (see [What's built](#whats-built)).
+   `HostRuntime` is provided only to the host. Done: the host's `Console` reaches every entry and every script, and is
+   the only `Console` a program has (see [What's built](#whats-built)).
 2. **`Env`** ([#1246](https://github.com/nanyx-lang/nanyx/issues/1246)): arguments, environment variables and the
    exit code, provided by ConsoleHost.
 3. **Choosing a host** ([#1247](https://github.com/nanyx-lang/nanyx/issues/1247)): `[host]` in the manifest and
@@ -343,17 +343,25 @@ The composite host runs each part under the right sub-host and coordinates start
   ambient contexts as before. A script's value that needs a context, directly or through the functions and values it
   names (`def line = readLine()`), is inferred in a scope of its own (`ScriptValueScope`) that records what it
   needs; once the module is inferred, those values (`InferState.ScriptEntryValues`) move into the entry point as local
-  defs, in the order written (`Scripts.withEntryValues`), so each is computed once
+  defs, in the order written, so each is computed once
   ([#1257](https://github.com/nanyx-lang/nanyx/issues/1257)). A value that needs no context stays at the top level,
   where a function can name it. A function that names a value that moved, or a statement that reads one before its def,
   is `NYX0239`. The ambient contexts the statements and the moved values need through unannotated functions are
   only known once the module is inferred, so the lambda's type is given them then (`InferModule.withEntryContexts`),
-  and the host passes their members. A lambda inside a statement does not take them from the entry point yet: it still
-  finds `nanyx/console`'s ambient instance. Every script now carries the host's `Console`, about 20 KB of WebAssembly text for hello world, as an
-  entry program already did.
-- **`nanyx/console`'s ambient instance** is still there, and `nanyx/console.host` repeats its line reading over
-  `HostRuntime.readStdinByte`. Removing both is what is left of
-  [#1245](https://github.com/nanyx-lang/nanyx/issues/1245).
+  and the host passes their members. Once typed, the entry point is a def of its own, `def __script: [Console] = { ... }`,
+  which `__host.run(__script)` names (`Scripts.asDefinition`), so a lambda in a statement captures its members as a
+  lambda in any def does. Statements beside an `@entry` are a script entry too, run before the `@entry`'s, as they ran
+  at the top level. A value that needs a context in a module with no statements, which nothing would run, is an error
+  at the value. Every script carries the host's `Console`, about 24 KB of WebAssembly text for hello world, as an
+  entry program does.
+- **`Console` only comes from the host.** `nanyx/console` declares the context and `print`, `println`, `eprint` and
+  `eprintln`, but no instance: the line reading lives in `nanyx/console.host` alone. Importing a module a host
+  provides (`Hosts.providesContexts`) binds the names of its plain contexts' members, `readLine` and the rest, each a
+  symbol of its own (`Library.mergeImport`), so `Console` is still an ambient context: a script's statements and an
+  unannotated def can call `readLine()`, and the def infers `Console`. A function named as a value carries it in its
+  type (#1288). A def that writes `[c.Console]` for an aliased import is passed the members as `[Console]` is: the
+  backend reads the layout of the context's own name (`CodeGen.layoutOf`), and a member called under the alias,
+  `c.write`, is written by its own name for the backend (`ModuleLinking.writeMemberAliases`).
 
 # Open questions
 

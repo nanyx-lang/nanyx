@@ -68,8 +68,8 @@ The parser, type checker, WebAssembly backend and runtime are libraries; the `na
 - `dbg(...)` of a value of any type, and `nanyx/console`, write to stdout through WASI `fd_write`; `dbg` writes the
   value through a printer function generated for its type (`CoreIrLowerDbg.fs`)
 - a function that requires a context (`[Console]`) takes its members as function-table slots; a
-  `use` binding supplies them, otherwise a module-level function of the member's name does (that is how
-  the runtime's `Console` reaches `@entry`); a function value whose type requires contexts, a lambda or a function
+  `use` binding supplies them, otherwise a module-level function of the member's name does (as
+  `HostRuntime`'s reach a host); a function value whose type requires contexts, a lambda or a function
   passed as a value (`list.map(xs, println)`), is passed their members at each call, as they are where it is called
   (see [Context calls](./context-calls#functions-that-require-contexts-as-values))
 
