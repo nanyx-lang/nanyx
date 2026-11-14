@@ -435,9 +435,10 @@ internal static class CliCommands
     /// </summary>
     /// <param name="check">Write nothing; list the files that are not formatted, and exit with 1 if there are any.</param>
     /// <param name="write">Rewrite the files that are not formatted, which is what happens without --check too.</param>
+    /// <param name="stdin">Format standard input, as a file in the current directory, and write the result to standard output, for an editor to format a buffer it has not saved.</param>
     /// <param name="paths">Files or directories to format; a directory means every .nyx file under it, and none means the current directory.</param>
     [Consolo("format")]
-    public static int Format(bool check = false, bool write = false, params string[] paths)
+    public static int Format(bool check = false, bool write = false, bool stdin = false, params string[] paths)
     {
         if (check && write)
         {
@@ -445,16 +446,32 @@ internal static class CliCommands
             return UsageError;
         }
 
-        var shell = Shell.Process;
-        var found = Nanyx.Formatter.FormatCommand.findFiles(shell.Directory, ListModule.OfSeq(paths));
-        if (found.IsError)
+        if (stdin && paths.Length > 0)
         {
-            Console.Error.WriteLine(found.ErrorValue);
+            Console.Error.WriteLine("Format standard input (--stdin) or files, not both.");
             return UsageError;
         }
 
+        var shell = Shell.Process;
         var mode = check ? Nanyx.Formatter.FormatCommand.Mode.Check : Nanyx.Formatter.FormatCommand.Mode.Write;
-        var results = Nanyx.Formatter.FormatCommand.run(Nanyx.Formatter.Settings.cached(), mode, found.ResultValue);
+        FSharpList<Tuple<string, Nanyx.Formatter.FormatCommand.FileResult>> results;
+        if (stdin)
+        {
+            using var input = Console.OpenStandardInput();
+            using var output = Console.OpenStandardOutput();
+            results = ListModule.OfSeq([Nanyx.Formatter.FormatCommand.runInput(Nanyx.Formatter.Settings.cached(), mode, shell.Directory, input, output)]);
+        }
+        else
+        {
+            var found = Nanyx.Formatter.FormatCommand.findFiles(shell.Directory, ListModule.OfSeq(paths));
+            if (found.IsError)
+            {
+                Console.Error.WriteLine(found.ErrorValue);
+                return UsageError;
+            }
+
+            results = Nanyx.Formatter.FormatCommand.run(Nanyx.Formatter.Settings.cached(), mode, found.ResultValue);
+        }
 
         // Every file under a manifest with bad settings fails the same way, so each message is printed once.
         var settingsErrors = new HashSet<string>();
