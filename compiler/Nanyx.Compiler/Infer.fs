@@ -1167,8 +1167,17 @@ and private inferMapLookup (env: TypeEnv) (state: InferState) (expr: Expression)
 
 /// `state` with each argument of `call` that names a local function that requires a parameterised context read as the
 /// lambda that calls it (see `localFunctionAsLambda`), once the call has settled the argument's type, so that the
-/// lambda's call finds the instance at that type. One whose type is left open is left as it is: `dbg(g)` never calls it.
+/// lambda's call finds the instance at that type. A type may be settled as one of the variables of the def around the
+/// call, which then requires the context, as `apply(f, v)` does at `v`'s type. One left open otherwise is left as it
+/// is: `dbg(g)` never calls it.
 and private localFunctionArguments (env: TypeEnv) (state: InferState) (call: Expression) : Result<InferState, Diagnostic list> =
+    let settled (current: InferState) (ty: Ty) =
+        let subst = fst (Unifier.solve current.Constraints)
+        let envVars =
+            TypeEnv.freeEnvVars env
+            |> Seq.map (fun id -> TypeEnv.freeTyVars (Unifier.apply subst (TyVar { Id = id; Name = None })))
+            |> Set.unionMany
+        Set.isSubset (TypeEnv.freeTyVars (Unifier.apply subst ty)) envVars
     match call.Kind with
     | FunctionCall(_, _, args) ->
         match args with
@@ -1177,9 +1186,8 @@ and private localFunctionArguments (env: TypeEnv) (state: InferState) (call: Exp
         |> List.fold (fun result arg ->
             result
             |> Result.bind (fun (current: InferState) ->
-                let settledTy = current.ExprTypes |> Map.tryFind arg.Id |> Option.filter (resolveSoFar current >> TypeEnv.freeTyVars >> Set.isEmpty)
-                match settledTy, localFunctionAsLambda env current arg with
-                | Some argTy, Some lambda ->
+                match localFunctionAsLambda env current arg |> Option.bind (fun lambda -> current.ExprTypes |> Map.tryFind arg.Id |> Option.map (fun ty -> ty, lambda)) with
+                | Some (argTy, lambda) when settled current argTy ->
                     inferExpr env { current with ReadAs = current.ReadAs |> Map.add arg.Id lambda } lambda
                     |> Result.map (fun (typed, next) -> addConstraintAt arg.Span argTy typed.Type next)
                 | _ -> Ok current)) (Ok state)

@@ -504,9 +504,13 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let memberCaptures =
         let defs = module' |> List.choose (function Kind (Def (ValueDef(_, name, typeOpt, expr))) -> Some(name, typeOpt, expr) | _ -> None)
         contextMemberKeys defs (fst (extractTypeLayouts module'))
-    // A function that is passed context members where it is called: one whose type requires contexts, or context variables.
+    // A function that is passed context members where it is called: one whose type requires contexts, or context variables,
+    // or a local function that requires parameterised ones, whose call may be passed one the def around it has.
+    let localsRequiringContexts =
+        typed.LocalContexts |> Map.keys |> Seq.choose (fun symbol -> typed.Symbols |> Map.tryFind symbol |> Option.map _.Name) |> Set.ofSeq
     let requiresContexts (name: string) =
         memberCaptures.ContainsKey name
+        || localsRequiringContexts.Contains name
         || match typed.Types |> Map.tryFind name |> Option.map Unifier.unalias with
            | Some (TyFunc(_, _, contexts)) -> not (Unifier.writtenContexts contexts).IsEmpty
            | _ -> false

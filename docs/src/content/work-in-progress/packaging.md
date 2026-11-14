@@ -252,6 +252,7 @@ Decided by the maintainer. Packaging is built in two halves, so that hosts and l
     an error saying which version is available, and `nanyx new` writes the right one.
   - **Projects** (`.nyxproj`, project references) wait until a workspace of several packages needs them
     ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
+- **The manifest moves to Nanyx first** ([The package manifest](./package-manifest)), before path dependencies add to the TOML form.
 - **Remote packages, later:** `.nyxpkg`, the cache, `nanyx.lock`, resolving versions, `nanyx add` and `restore`,
   publishing and `api.json`. None of this page's open questions block the local half.
 
