@@ -73,3 +73,31 @@ def main = { println("then main") }
     let wat = transpileWat source
     Assert.Equal(2, countOccurrences "call $__host_run" wat)
     runSourceWithInput "a\n" source |> assertRan "first #some(a)\nthen main\n"
+
+[<Fact>]
+let ``A script's own def named like a member of Console is the one its calls run`` () =
+    let source =
+        """import nanyx/console
+
+def write = { s: string -> println("mine: " ++ s) }
+def flush = { s: string -> "flushed " ++ s }
+
+write("x")
+println(flush("y"))
+println(["z"] \list.map(flush))
+"""
+    runSource source |> assertRan "mine: x\nflushed y\n[flushed z]\n"
+
+[<Fact>]
+let ``An entry point's module's own def named like a member of Console is the one its calls run`` () =
+    let source =
+        """module main
+
+def write = { s: string -> println("mine: " ++ s) }
+
+@entry
+def main = {
+  write("x")
+}
+"""
+    runSource source |> assertRan "mine: x\n"
