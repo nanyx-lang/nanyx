@@ -109,7 +109,7 @@ let valueDef: Parser<TopLevelItem, ParseState> =
         spannedItem (
             pipe2
                 (opt (attempt (pstring "export" >>. ws)))
-                (parseDefWith lineStart typedQualifiedIdentifier valueDefExprParser)
+                (parseDefOrDeclarationWith lineStart typedQualifiedIdentifier valueDefExprParser)
                 (fun exportOpt (name, typeOpt, expr) -> Def(ValueDef(exportOpt.IsSome, name, typeOpt, expr))))
     <?> "value definition"
 

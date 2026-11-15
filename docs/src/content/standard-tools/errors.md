@@ -516,6 +516,17 @@ the one it ships. The compiler ships each of them at its own version, and a mani
 
 To fix it, write the version the message names, which `nanyx --version` prints too. `nanyx new` writes it for you.
 
+# NYX0030: Definition without a value
+
+A def at the top level of a module has a type and nothing after it. Only a foreign function, which the embedder
+provides, is written that way, marked `@extern` (see [NYX0241](#nyx0241)).
+
+```nanyx
+def size: () -> int  -- error NYX0030: 'size' has no value: write `= value` after it, or mark it `@extern("module", "name")` to declare a foreign function
+```
+
+To fix it, write the value: `def size: () -> int = { -> 3 }`.
+
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which
@@ -1248,6 +1259,57 @@ def greet: [Console] = { name -> "hello " ++ name } >> shout  -- error NYX0240: 
 ```
 
 To fix it, write the function type with its contexts, `def greet: [Console] string -> () = ...`.
+
+# NYX0241: Invalid foreign function
+
+A def marked `@extern("module", "name")` declares a foreign function: a function the embedder provides, which the
+compiled module imports. It has a written type and no value, and the type takes and returns only WebAssembly's value
+types, written `I32`, `I64`, `F32` and `F64`, or `()` for no result. Strings, records and lists don't cross the
+boundary: a host passes addresses and lengths in the module's memory instead.
+
+```nanyx
+import nanyx/host.runtime
+
+@extern("env", "log")
+def log: [HostRuntime] string -> ()  -- error NYX0241: A foreign function takes and returns only WebAssembly's value types, I32, I64, F32 and F64, not 'string'
+```
+
+The same code is reported for a foreign function written with a value, one without a type, and an `@extern` that
+doesn't give the import's module and name as two strings.
+
+To fix it, write the type in value types, `def log: [HostRuntime] I32, I32 -> ()`, passing the string's address and
+length.
+
+# NYX0242: Foreign function without HostRuntime
+
+A foreign function's type must require `HostRuntime`. Only a host is given `HostRuntime`, so only a host's code can
+call a foreign function, and a library reaches the outside world only through the contexts its host provides.
+
+```nanyx
+@extern("wasi_snapshot_preview1", "sched_yield")
+def yield: () -> I32  -- error NYX0242: A foreign function's type must require 'HostRuntime', so that only a host can call it: write [HostRuntime] before it
+```
+
+To fix it, import `nanyx/host.runtime` and write `[HostRuntime]` before the type:
+`def yield: [HostRuntime] () -> I32`.
+
+# NYX0243: Import declared with different types
+
+Two foreign functions name the same import, its module and name, with different types. A WebAssembly module imports
+each function once, at one type.
+
+```nanyx
+import nanyx/host.runtime
+
+@extern("wasi_snapshot_preview1", "proc_exit")
+def procExit: [HostRuntime] I32 -> ()
+
+@extern("wasi_snapshot_preview1", "proc_exit")
+def exitWith: [HostRuntime] I64 -> ()  -- error NYX0243: 'exitWith' imports "proc_exit" from "wasi_snapshot_preview1" as (I64) -> (), but 'procExit' imports it as (I32) -> ()
+```
+
+To fix it, declare the import once, with the type the embedder gives it, and call that one.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

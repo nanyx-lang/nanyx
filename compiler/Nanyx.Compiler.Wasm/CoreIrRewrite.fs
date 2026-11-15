@@ -35,6 +35,7 @@ let directAtoms (e: Expr) : Atom list =
     | Call(_, atoms)
     | MakeList atoms
     | CallRuntime(_, atoms, _)
+    | CallImport(_, atoms)
     | MakeClosure(_, _, atoms)
     | CallClosure(_, atoms) -> atoms
     | MakeRecord fields -> List.map snd fields
@@ -103,6 +104,7 @@ let rec mapVars (var: Var -> Var) (depth: int -> int) (e: Expr) : Expr =
         | SetField(target, slot, value) -> SetField(var target, slot, atom value)
         | MakeList items -> MakeList(atoms items)
         | CallRuntime(name, args, returnsValue) -> CallRuntime(name, atoms args, returnsValue)
+        | CallImport(declared, args) -> CallImport(declared, atoms args)
         | MakeClosure(name, arity, captured) -> MakeClosure(name, arity, atoms captured)
         | CallClosure(closure, args) -> CallClosure(var closure, atoms args)
         | Interpolate parts -> Interpolate(parts |> List.map (function Hole(v, holeType) -> Hole(var v, holeType) | text -> text))

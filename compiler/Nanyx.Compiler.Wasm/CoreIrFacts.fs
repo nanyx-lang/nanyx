@@ -1,5 +1,6 @@
 /// What a module needs besides its functions, worked out from the core IR it is emitted from: the tags it numbers,
-/// the string literals and static closures in its data segment, and whether `dbg` prints.
+/// the string literals and static closures in its data segment, the foreign functions it imports, and whether `dbg`
+/// prints.
 module Transpiler.Wasm.CoreIrFacts
 
 open System.Collections.Generic
@@ -13,6 +14,8 @@ type ModuleFacts =
       /// Every closure that captures nothing (see `AStaticClosure`), by its function's name and arity, in the order the
       /// functions' IR first names them.
       StaticClosures: (string * int) list
+      /// Every foreign function a call is made to (see `CallImport`), in the order the functions' IR first names them.
+      Imports: NyxCompiler.Extern list
       /// Whether some `dbg` prints through `$dbg_str`.
       UsesDbgHelpers: bool }
 
@@ -21,6 +24,7 @@ let collect (functions: Function list) : ModuleFacts =
     let tags = HashSet<string>()
     let strings = ResizeArray<string>()
     let staticClosures = ResizeArray<string * int>()
+    let imports = ResizeArray<NyxCompiler.Extern>()
     let usesDbgHelpers = ref false
 
     // A temporary's value is emitted where the temporary is used, not where it is bound, so it is looked at there too:
@@ -72,6 +76,9 @@ let collect (functions: Function list) : ModuleFacts =
         | CallRuntime(_, atoms, _)
         | MakeClosure(_, _, atoms)
         | CallClosure(_, atoms) -> atoms |> List.iter atom
+        | CallImport(declared, atoms) ->
+            imports.Add declared
+            atoms |> List.iter atom
         | MakeTag(name, payload) ->
             tags.Add name |> ignore
             atom payload
@@ -124,4 +131,5 @@ let collect (functions: Function list) : ModuleFacts =
     { Tags = tags |> Seq.sort |> List.ofSeq
       Strings = strings |> Seq.distinct |> List.ofSeq
       StaticClosures = staticClosures |> Seq.distinct |> List.ofSeq
+      Imports = imports |> Seq.distinct |> List.ofSeq
       UsesDbgHelpers = usesDbgHelpers.Value }

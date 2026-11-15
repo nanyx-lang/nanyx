@@ -386,6 +386,7 @@ def main = {
 let private lowerInput (typed: TypedModule) : CoreIrLowerInput.LowerInput =
     { Definitions =
         typed.Module |> List.choose (function Kind (Def (ValueDef(_, name, _, expr))) -> Some (name, expr) | _ -> None)
+      Externs = Map.empty
       ExprTypes = typed.ExprTypes
       CalleeTypes = typed.CalleeTypes
       DefinitionTypes = typed.Types

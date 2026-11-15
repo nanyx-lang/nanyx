@@ -341,6 +341,14 @@ let format (options: Options) (parsed: SourceModule) : string =
     and defDoc (isExport: bool) (keyword: string) (name: string) (typeOpt: TypeExpr option) (value: Expression) : Doc =
         defDocNamed isExport keyword (text (Names.written name)) typeOpt value
 
+    /// A def with no value, a foreign function's declaration (see `ExternSyntax`): its name and its type, which goes on
+    /// the next line when it does not fit on the def's.
+    and declarationDoc (isExport: bool) (name: string) (typeOpt: TypeExpr option) : Doc =
+        let name = cat [ (if isExport then text "export " else Doc.empty); text "def "; text (Names.written name) ]
+        match typeOpt with
+        | Some t -> Doc.group (cat [ name; nest (cat [ Doc.softLine; text ": "; signature t ]) ])
+        | None -> name
+
     /// A def whose name (or destructuring pattern) is already laid out.
     and defDocNamed (isExport: bool) (keyword: string) (nameDoc: Doc) (typeOpt: TypeExpr option) (value: Expression) : Doc =
         let name = cat [ (if isExport then text "export " else Doc.empty); text $"{keyword} "; nameDoc ]
@@ -525,6 +533,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         match i.Kind with
         | ModuleDecl n -> text $"module {n}"
         | ModuleBlock(n, items) -> cat [ text $"module {n} ="; nest (cat [ hard; topLevel true i.Span.Start i.Span.End items ]) ]
+        | Def(ValueDef(isExport, n, t, Kind ExternSyntax.Bodiless)) -> declarationDoc isExport n t
         | Def(ValueDef(isExport, n, t, value)) -> defDoc isExport "def" n t value
         | Def(TypeDef(n, modifiers, parameters, body)) -> typeDefDoc n modifiers parameters body
         | Import items -> importDoc i.Span.Start i.Span.End items

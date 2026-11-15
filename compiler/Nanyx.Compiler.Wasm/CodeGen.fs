@@ -485,11 +485,36 @@ type BackendReport =
       /// The specialisations among them, each with the definition it specialises.
       Specialisations: (string * string) list }
 
+/// The foreign functions `typed` declares (see `ExternSyntax`), by name, and its items without them: each is an import
+/// of the module, not a function it defines. Two that import one function with different types are an error, which
+/// the type checker reports only for two in one module.
+let private foreignFunctions (typed: TypedModule) : Map<string, Extern> * TopLevelItem list =
+    let declared =
+        typed.Module
+        |> List.choose (fun item ->
+            match item.Kind with
+            | Def (ValueDef(_, name, _, ({ Kind = ExternSyntax.Import(importModule, importName) } as value))) ->
+                match typed.Types |> Map.tryFind name |> Option.bind Externs.signatureOfType with
+                | Some (parameters, result) ->
+                    Some (name, { Module = importModule; Name = importName; Parameters = parameters; Result = result }, value.Span)
+                | None -> raise (BackendFailure (internalErrorDiagnostic $"the foreign function '{name}' has a type other than value types" (Some value.Span)))
+            | _ -> None)
+    match Externs.conflicts declared with
+    | error :: _ -> raise (BackendFailure error)
+    | [] ->
+        let names = declared |> List.map (fun (name, _, _) -> name) |> Set.ofList
+        let others =
+            typed.Module
+            |> List.filter (function
+                | Kind (Def (ValueDef(_, name, _, _))) -> not (names.Contains name)
+                | _ -> true)
+        declared |> List.map (fun (name, declared, _) -> name, declared) |> Map.ofList, others
+
 /// `typed` as WebAssembly text compiled with `options`, and the functions it was compiled into.
 let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) : string * BackendReport =
     let contextInstances = typed.ContextInstances
     let checkedTypes = typed.ExprTypes
-    let module' = typed.Module
+    let externs, module' = foreignFunctions typed
     // The definitions synthesized instances are made of are passed as function values.
     let synthesizedMembers =
         contextInstances
@@ -730,6 +755,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let lowered =
         let input: CoreIrLowerInput.LowerInput =
             { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
+              Externs = externs
               ExprTypes =
                 typed.InlinedExprTypes
                 |> Map.fold (fun acc id ty -> acc |> Map.add id ty) checkedTypes
@@ -1064,8 +1090,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         | CoreIr.IrBool
         | CoreIr.IrUnit -> true
         | _ -> false
+    // A foreign function deals in addresses in the module's memory, so a module that imports one exports it.
     let functionsUseMemory =
         functionsTouchMemory
+        || not facts.Imports.IsEmpty
         || usedHelperSet |> Set.exists touchesMemory
         || renderedDrops <> ""
         || equalityTypes @ orderingTypes @ hashingTypes |> List.exists (computedOnValue >> not)
@@ -1084,10 +1112,14 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         else
             ""
 
-    // Imports must precede every function definition in a WebAssembly module, so the prelude, which imports WASI's
-    // functions, comes first.
+    // Each foreign function a call is made to, imported once.
+    let foreignImports = facts.Imports |> List.map CoreIrEmit.importDeclaration |> String.concat "\n"
+
+    // Imports must precede every function definition in a WebAssembly module, so the foreign functions and the prelude,
+    // which imports WASI's functions, come first.
     let allImports =
-        [ if not (String.IsNullOrWhiteSpace dbgPrelude) then dbgPrelude
+        [ if not (String.IsNullOrWhiteSpace foreignImports) then foreignImports
+          if not (String.IsNullOrWhiteSpace dbgPrelude) then dbgPrelude
           if not (String.IsNullOrWhiteSpace memorySection) then memorySection
           if not (String.IsNullOrWhiteSpace heapSection) then heapSection
           if not (String.IsNullOrWhiteSpace renderedHelpers) then renderedHelpers

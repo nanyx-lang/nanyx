@@ -6,7 +6,7 @@ order: 3
 
 This page is about how Nanyx code reaches what's outside the WebAssembly module: the WASI calls a console program
 makes, and later the JavaScript a page provides. It is part of the [hosts](./hosts) work. The maintainer decided the
-design; the [plan](#plan) lists the issues.
+design; the [plan](#plan) lists the issues, and [What's built](#whats-built) says how far they have got.
 
 # Two kinds of outside call
 
@@ -84,13 +84,38 @@ Written on `@extern` and `nanyx/host.memory`, it uses no intrinsics:
 # Plan
 
 1. **`@extern`** ([#1424](https://github.com/nanyx-lang/nanyx/issues/1424)): the attribute, its type rules, the
-   `HostRuntime` requirement, and the module's imports.
+   `HostRuntime` requirement, and the module's imports. Done (see [What's built](#whats-built)).
 2. **Host memory** ([#1425](https://github.com/nanyx-lang/nanyx/issues/1425)): `nanyx/host.memory`.
 3. **The console host on them** ([#1426](https://github.com/nanyx-lang/nanyx/issues/1426)): no intrinsics in
    `console.host`, `env` or `host.runtime`, with every program printing what it did and no bigger code.
 4. Then the console host ships as a package ([#1342](https://github.com/nanyx-lang/nanyx/issues/1342),
    [#1344](https://github.com/nanyx-lang/nanyx/issues/1344)).
 5. **Later:** the browser host's imports, which a page's JavaScript provides ([Hosts](./hosts#a-browser-host)).
+
+# What's built
+
+- **Declaring one.** A top-level `def` with a type and nothing after it parses as a def whose value is a call to the
+  built-in `__extern` (`ExternSyntax`, `parseDefOrDeclarationWith`), and the formatter prints it as it is written, with
+  no `=`. `Attributes.applyAttributes` reads the `@extern` before it (`Externs.declared`) and makes the value
+  `__extern("module", "name")`, so the import travels with the def into every module that inlines it. A def with no
+  value and no `@extern` is `NYX0030`. A value, a missing type, a part of the type other than `I32`, `I64`, `F32`,
+  `F64` or `()`, a context other than `HostRuntime`, or an argument other than two strings is `NYX0241`; a type
+  without `HostRuntime` is `NYX0242`. Two externs in a module that name one import with different types are
+  `NYX0243`.
+- **Checking it.** The type checker takes an extern's value to have the def's written type. `Hosts.runtimeErrors`
+  doesn't report `NYX0238` at an extern, so any module may declare one, but a def that calls one requires
+  `HostRuntime` and is reported as any other def that does.
+- **Compiling it.** `CodeGen` takes the externs out of the module before anything else is compiled from it, with each
+  one's value types read from its type (`Externs.signatureOfType`), and reports two that name one import with
+  different types, wherever they came from, as `NYX0243`. A call to one is a `CallImport` in the core IR: its
+  arguments as the value types the import takes (a float out of its box), then a direct `call` of the import, and a
+  float result boxed; an import that returns nothing leaves unit. The module declares each import a call reaches once
+  (`CoreIrFacts.Imports`, `CoreIrEmit.importDeclaration`), as `$import_<module>_<name>`, before every other import,
+  and exports its memory.
+- **Running it.** `nanyx run` links Wasmtime's WASI, so an extern of a WASI preview 1 function runs. Any other import
+  fails when the module is instantiated, with Wasmtime's message naming it.
+- **Not yet.** An extern named as a value, rather than called, isn't compiled. No host in the standard library uses
+  an extern yet ([#1426](https://github.com/nanyx-lang/nanyx/issues/1426)).
 
 # Open questions
 

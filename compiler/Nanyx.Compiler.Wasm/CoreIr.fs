@@ -146,6 +146,9 @@ and ExprKind =
     /// A call to a runtime helper (see `WasmRuntime.Helpers`): an intrinsic, or the helper an operator on strings, lists
     /// or tags needs. One that returns nothing (an intrinsic whose result is unit) leaves unit, as every value must.
     | CallRuntime of string * Atom list * returnsValue: bool
+    /// A call to a foreign function (see `ExternSyntax`): the module's import of it, with the atoms as its arguments,
+    /// each a number of the value type it takes. One that returns nothing leaves unit.
+    | CallImport of Extern * Atom list
     /// Allocates the closure block of a lifted function (by its name in WebAssembly text, and how many parameters it
     /// takes, the environment included) over the values it captures, one or more (see `closureOver`).
     | MakeClosure of string * arity: int * Atom list
@@ -545,6 +548,7 @@ module Expr =
         | SetField _
         | MakeList _
         | CallRuntime _
+        | CallImport _
         | MakeClosure _
         | CallClosure _
         | Interpolate _
@@ -582,6 +586,7 @@ module Expr =
             | SetField _
             | MakeList _
             | CallRuntime _
+            | CallImport _
             | MakeClosure _
             | CallClosure _
             | Interpolate _
@@ -690,6 +695,7 @@ module Print =
         | SetField(record, slot, value) -> $"{record.Name}[{slot}] := {atom value}"
         | MakeList items -> $"[{atoms items}]"
         | CallRuntime(name, args, _) -> $"{name}({atoms args})"
+        | CallImport(declared, args) -> $"import {declared.Module}.{declared.Name}({atoms args})"
         | MakeClosure(name, _, captured) -> $"closure {name}({atoms captured})"
         | CallClosure(v, args) -> $"{v.Name}({atoms args})"
         | Interpolate parts ->

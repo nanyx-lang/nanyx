@@ -317,17 +317,39 @@ let definableName (start: Position) (name: Identifier) : Parser<unit, ParseState
     else
         preturn ()
 
-/// `def name = value`, written from `lineStart` (where an `export` before it starts). The def's name is declared by its
-/// value.
-let parseDefWith (lineStart: Position) (identParser: Parser<Identifier * TypeExpr option, ParseState>) (exprParser: Parser<Expression, ParseState>) =
+/// A def written from `lineStart` (where an `export` before it starts), its value read by `valueParser` from after its
+/// name and type. The def's name is declared by its value.
+let private defWith (lineStart: Position) (identParser: Parser<Identifier * TypeExpr option, ParseState>) (valueParser: Parser<Expression, ParseState>) =
     (pstring "def" >>. ws >>. getPosition .>>. defNameAndType lineStart.Column identParser)
     >>= fun (start, (name, typeOpt)) ->
         definableName start name
-        >>. defEqualsContinuation lineStart.Column >>. pstring "=" >>. wsInline >>. exprParser
+        >>. valueParser
         >>= fun expr ->
             declare DefValue expr.Id [ name, nameSpan start name ]
             >>. noteDocumentable lineStart (int start.Index)
             >>% (name, typeOpt, expr)
+
+/// `= value`, after a def's name and type, written from `lineStart`.
+let private defValue (lineStart: Position) (exprParser: Parser<Expression, ParseState>) =
+    defEqualsContinuation lineStart.Column >>. pstring "=" >>. wsInline >>. exprParser
+
+/// `def name = value`, written from `lineStart` (where an `export` before it starts). The def's name is declared by its
+/// value.
+let parseDefWith (lineStart: Position) (identParser: Parser<Identifier * TypeExpr option, ParseState>) (exprParser: Parser<Expression, ParseState>) =
+    defWith lineStart identParser (defValue lineStart exprParser)
+
+/// `parseDefWith`, or a def with nothing after its name and type on the line: a foreign function's declaration (see
+/// `ExternSyntax`), whose value is a call to the built-in "__extern" spanning the declaration, to the end of its type.
+let parseDefOrDeclarationWith (lineStart: Position) (identParser: Parser<Identifier * TypeExpr option, ParseState>) (exprParser: Parser<Expression, ParseState>) =
+    let declaration =
+        followedBy (wsInline >>. (skipNewline <|> eof <|> skipString "--"))
+        >>. getPosition
+        |>> fun finish -> Expression.at (spanOf lineStart (int finish.Index)) (FunctionCall(ExternSyntax.builtIn, None, []))
+    defWith lineStart identParser (defValue lineStart exprParser <|> declaration)
+    |>> fun (name, typeOpt, value) ->
+        match value.Kind, typeOpt with
+        | ExternSyntax.Bodiless, Some typeExpr -> name, typeOpt, { value with Span = endingAt typeExpr.Span value.Span }
+        | _ -> name, typeOpt, value
 
 /// A type's or a context's parameter, with an optional bound: `a`, `a :: Shape`. It is a type variable in the
 /// definition's body, so it is a single lowercase letter, as any type variable is.
