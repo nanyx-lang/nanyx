@@ -3,7 +3,7 @@
     <!-- The compiler's release version. Every project has it, so the compiler knows the version it ships its
          packages at (see Toolchain.fs). Bumped for each release: when main has a Version with no compiler/<version>
          tag, the compiler workflow releases it (see README.md). -->
-    <Version>0.28.0</Version>
+    <Version>0.29.0</Version>
   </PropertyGroup>
 </Project>
 
