@@ -49,7 +49,9 @@ Local packages work: a package and the packages it depends on by path are built,
 - **A package can be built and run** (`Package.fs`). The manifest is one Nanyx record written as data, read by
   `Manifest.check` ([The package manifest](./package-manifest)). Its `package` (`name`, `version`, `sources`,
   `publicModules`), `dependencies`, `linters` and `host` are read, with an error at the field for anything
-  wrong or unknown (`NYX0020` to `NYX0024`). `nanyx build`, `nanyx check` and `nanyx run` without a file (or with a
+  wrong or unknown (`NYX0020` to `NYX0024`), a repeated `publicModules` or `dependencies` entry among them. A
+  `publicModules` entry that names no module of the package's source files is `NYX0023` at the entry, when the
+  package is read for a build (`Package.publicModuleErrors`) and in the editor. `nanyx build`, `nanyx check` and `nanyx run` without a file (or with a
   directory or manifest) check every source file, each module once however many files import it (`Package.build`,
   [#698](https://github.com/nanyx-lang/nanyx/issues/698)), and `run` runs the one `@entry`; `build` writes it to
   `out/<name>.wat`. `nanyx new` makes a package (`NewPackage.fs`). The language server reads the manifest's linter
