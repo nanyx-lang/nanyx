@@ -81,7 +81,7 @@ context Console = (
 
 The terminal: standard output, standard error and standard input. Code that needs it declares
 `[Console]`, and its caller supplies an instance; the host supplies one to the program's entry point
-(`nanyx/console.host`'s reads and writes the standard streams). `print`, `println`, `eprint` and `eprintln` write through it.
+(the console host's, `nanyx.console`, reads and writes the standard streams). `print`, `println`, `eprint` and `eprintln` write through it.
 
 - `write`: Writes `text` to standard output, as it is.
 - `writeError`: Writes `text` to standard error, as it is.

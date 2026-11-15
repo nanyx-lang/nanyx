@@ -2,6 +2,7 @@
 /// docs/src/content/work-in-progress/hosts.md).
 module Nanyx.Compiler.Tests.Features.Hosts.ConsoleHost
 
+open System.IO
 open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
@@ -17,7 +18,7 @@ def main = { name: string -> println("Hello, {name}!") }
     let code, message, text = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.EntryDoesNotFitHost.Code, code)
     Assert.Equal(
-        """The entry point 'main' doesn't fit the host 'nanyx/console.host'
+        """The entry point 'main' doesn't fit the host 'nanyx.console/console.host'
   expected: [Console & Env] () -> a
   found:    string -> ()""".ReplaceLineEndings "\n",
         message)
@@ -84,7 +85,7 @@ free(0)
 [<Fact>]
 let ``Calling a host's run outside a host is an error, as it requires HostRuntime`` () =
     let source =
-        """import nanyx/console.host as h
+        """import nanyx.console/console.host as h
 
 h.run({ () })
 """
@@ -94,12 +95,12 @@ h.run({ () })
 
 [<Fact>]
 let ``The console host, nanyx/env and nanyx/host.runtime call no compiler intrinsic`` () =
-    for moduleName in [ "console.host"; "env"; "host.runtime" ] do
+    for moduleName in [ "env"; "host.runtime" ] do
         Assert.DoesNotContain(Intrinsics.prefix, (StandardLibrary.tryLoadSource moduleName).Value)
+    Assert.DoesNotContain(Intrinsics.prefix, File.ReadAllText consoleHostFile)
 
 [<Fact>]
 let ``The console host requires HostRuntime, and checks`` () =
-    let source = (StandardLibrary.tryLoadSource "console.host").Value
-    let result = Compiler.compileFrom Linters.everyLinter (StandardLibraryModule "console.host") source
+    let result = compileAsHost Linters.everyLinter (File.ReadAllText consoleHostFile)
     Assert.True(result.TypeChecked, $"%A{result.Diagnostics}")
     Assert.Empty(result.Diagnostics |> List.filter Diagnostics.isError)

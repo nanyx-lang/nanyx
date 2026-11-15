@@ -1,0 +1,4 @@
+import nanyx/console
+
+println("Hello, Nanyx!")
+

@@ -25,10 +25,10 @@ the rest) are in `compiler/Nanyx.Compiler/Linters.fs`, about 970 lines, run by t
 [linter host](./linters#4-the-linter-host-internal). Linters written in Nanyx aren't possible yet: their contract is
 [#107](https://github.com/nanyx-lang/nanyx/issues/107).
 
-**The console host** is already written in Nanyx ([Hosts](./hosts)), but it lives in the embedded standard library as
-`nanyx/console.host`, with `Console`, `Env` and `HostRuntime` beside it. The compiler knows it by name. `Hosts.fs` has a
-table of hosts, all of them standard-library modules, the default host is in that table, and `HostRuntime` is provided
-only to a module that is.
+**The console host** is written in Nanyx on [foreign functions](./foreign-functions), with no compiler intrinsics, and
+ships with the compiler as a source directory, the package `nanyx.console` (see [What's built](#whats-built)). `Console`,
+`Env` and `HostRuntime` are still in the standard library, and the compiler still knows the host by name: `Hosts.fs` has
+a table of hosts, the default host is in that table, and `HostRuntime` is provided only to a host in it.
 
 # Where they're going
 
@@ -100,8 +100,7 @@ level, so a field is never mistaken for a package's configuration:
   ([#864](https://github.com/nanyx-lang/nanyx/issues/864)). See [Packaging](./packaging).
 - **The public linter contract** ([#107](https://github.com/nanyx-lang/nanyx/issues/107)): how a linter written in
   Nanyx sees the semantic model and reports diagnostics, run on the embedded Wasmtime engine.
-- **A host that needs no intrinsics.** The console host calls the compiler's private intrinsics, which only the
-  standard library may. It moves onto typed foreign functions and host memory first
+- **A host that needs no intrinsics.** Done: the console host is written on typed foreign functions and host memory
   ([Foreign functions](./foreign-functions), [#1426](https://github.com/nanyx-lang/nanyx/issues/1426)).
 
 # Plan
@@ -109,14 +108,27 @@ level, so a field is never mistaken for a package's configuration:
 1. **Ship packages with the compiler** ([#1342](https://github.com/nanyx-lang/nanyx/issues/1342)), as source
    directories in the distribution (`.nyxpkg` once [#863](https://github.com/nanyx-lang/nanyx/issues/863) lands), each
    named at the compiler's version. A manifest names a shipped package at that version exactly: anything else is
-   `NYX0029`, naming the version shipped. That check is done (`Toolchain.version`, the `<Version>` in
-   `compiler/Directory.Build.props`, which every compiler project has); the console host as the first shipped source
-   directory is next.
+   `NYX0029`, naming the version shipped. Done, with the console host as the first (see [What's built](#whats-built)).
 2. **The console host as a package** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)), as the first shipped
    source directory.
 3. **The official linter as a package** ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)), once the linter
    contract is designed. The rules move one at a time, with the tests checking that each one reports what it did.
 
+# What's built
+
+- **Shipped packages are source directories.** `packages/` at the repository root holds them, each named for its
+  package, with its manifest at the compiler's version and its sources under `src`: `packages/nanyx.console`, with
+  `console.host`. Every build of the compiler copies the directory beside it (a `None` item in `NanyxCompiler.fsproj`
+  with `CopyToOutputDirectory` and `CopyToPublishDirectory`), so the tests, the language server and the published
+  `nanyx` all find it at `ShippedPackages.directory`, and each release archive holds it beside the executable. A test
+  checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with the compiler.
+- **The console host is resolved in its package.** `Hosts.console` is the module `console.host` of the package
+  `nanyx.console`, imported as `nanyx.console/console.host` (`Host.Import`). `ShippedPackages.tryModules` reads the
+  package's modules, and the module that declares an `@entry`, a script, or a module given as source, imports the host
+  through them, as do the host's own files (`PackageModules.resolveWithin`); it needs no `dependencies` entry.
+  `HostRuntime` goes to the host's file (`Hosts.mayRequireRuntime`, given the files that declare the host's module),
+  and a statement in that file isn't a script's. A shipped package's file is named after its package in messages,
+  `nanyx.console/src/console.host.nyx`, wherever the compiler is installed (`ShippedPackages.tryDisplay`).
 # Open questions
 
 - **What else is built in.** The standard library itself is embedded, and stays the package `nanyx`, versioned with

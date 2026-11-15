@@ -18,7 +18,7 @@ def argsSizesGet: [HostRuntime] (I32, I32) -> I32
 
 def sizes: [HostRuntime] () -> I32 = { -> argsSizesGet(0, 4) }
 """
-    let result = Compiler.compileFrom Linters.none (StandardLibraryModule "console.host") source
+    let result = compileAsHost Linters.none source
     Assert.True(result.TypeChecked, $"%A{result.Diagnostics}")
     Assert.Empty(result.Diagnostics)
 

@@ -145,6 +145,12 @@ module PackageModules =
                     | found -> "; " + String.concat "; " found
                 notFound $"the package '{modules.Package}' has no module '{moduleName}'{hint}"
 
+    /// The file of the module `name`, by its name alone or after the package's name, among the modules of `modules`
+    /// alone, for the import `item`: how a host's import, and the imports in a host's own files, are resolved (see
+    /// `ShippedPackages`).
+    let resolveWithin (modules: PackageModules) (item: ImportItem) (name: string) : Result<string, Diagnostic> =
+        resolveModule modules modules item name
+
     /// The full path of the file the import `item`, in the file at `importer`, names. In a source file of the package
     /// `modules`, or of a package it depends on, a module import names one of that package's own modules, by its name
     /// alone or after the package's name, wherever its file is, or a public module of a package it depends on directly,

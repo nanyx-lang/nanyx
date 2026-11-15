@@ -3,6 +3,7 @@ module TranspilerWasmTests.Features.Packages.Commands
 open System.IO
 open System.Text.RegularExpressions
 open Xunit
+open NyxCompiler
 open TranspilerWasmTestHelpers
 
 let private greeterExample = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", "..", "examples", "greeter"))
@@ -119,11 +120,11 @@ let ``Check --timings - writes the modules' checks as a tree, with a module chec
               "c.nyx", "module c\n\nexport def zero = 0\n" ]
             [ "check"; "--timings"; "{package}" ]
     assertSucceeded outcome
-    // The package's own modules, without their times or where the package is; the standard library's lines are left
-    // out, since which of them a check reports depends on what the process checked before.
+    // The package's own modules, without their times or where the package is; the standard library's lines and the
+    // console host's are left out, since which of them a check reports depends on what the process checked before.
     let shape =
         (normalizeOutput outcome.StandardError).Split('\n')
-        |> Array.filter (fun line -> line.Contains ".nyx")
+        |> Array.filter (fun line -> line.Contains ".nyx" && not (line.Contains(Hosts.console.Package + "/")))
         |> Array.map (fun line ->
             let line = Regex.Replace(line, @"\S*src[\\/](\w+\.nyx)", "src/$1")
             Regex.Replace(line, @" \((\d+\.\d\ds of )?\d+\.\d\ds\)", ""))

@@ -4,7 +4,7 @@ description: The privileged layer a host is written on
 order: 14
 ---
 
-Only a host imports `nanyx/host.runtime`, as [`nanyx/console.host`](console-host) does. How hosts work is described in [Hosts](../work-in-progress/hosts).
+Only a host imports `nanyx/host.runtime`, as the console host the compiler ships, `nanyx.console/console.host`, does. How hosts work is described in [Hosts](../work-in-progress/hosts).
 
 # Reference
 
@@ -14,7 +14,7 @@ The capability a host is written on: what lets it call the foreign functions its
 (those declared with `@extern`) and reach the module's linear memory (with `nanyx/host.memory`).
 
 [`HostRuntime`](#hostruntime) is provided only to the host, the module that runs the program's entry point (as
-`nanyx/console.host` does). Anywhere else, requiring it is an error, so a library can only reach
+the console host, `nanyx.console`, does). Anywhere else, requiring it is an error, so a library can only reach
 the outside world through the contexts the host chose to provide.
 
 ## `HostRuntime`

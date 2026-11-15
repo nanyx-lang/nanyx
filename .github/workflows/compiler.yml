@@ -49,9 +49,9 @@ jobs:
         run: dotnet build Nyx.Compiler.slnx --no-restore --configuration Release
 
       # Once is enough, and Linux checkouts keep the repository's line endings as they are.
-      - name: Check the standard library is formatted
+      - name: Check the standard library and the shipped packages are formatted
         if: matrix.os == 'ubuntu-latest'
-        run: dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj --no-build --configuration Release -- format --check ../stdlib
+        run: dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj --no-build --configuration Release -- format --check ../stdlib ../packages
 
       # AGENTS.md's limit for the compiler's F# and C# sources. Each file over it is a warning on the run, and the run
       # still passes.
@@ -138,7 +138,9 @@ jobs:
       - name: Remove files that are not part of the binary
         run: rm -f publish/${{ matrix.rid }}/*.xml
 
-      # Also proves the embedded Wasmtime native library survives single-file publishing.
+      # Also proves the embedded Wasmtime native library survives single-file publishing, and that the packages the
+      # compiler ships (packages/, beside the binary) are where it finds them: a script and a new package both run
+      # under the console host.
       - name: Smoke test the published binary
         if: matrix.rid == 'linux-x64'
         run: |
@@ -148,6 +150,10 @@ jobs:
           output="$(./publish/linux-x64/nanyx run hello.nyx)"
           echo "$output"
           [ "$output" = "Hello, Nanyx!" ]
+          ./publish/linux-x64/nanyx new acme.smoke smoke
+          output="$(./publish/linux-x64/nanyx run smoke)"
+          echo "$output"
+          [ "$output" = "Hello, World!" ]
 
       - name: Package
         id: package

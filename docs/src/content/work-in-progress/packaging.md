@@ -59,6 +59,10 @@ Local packages work: a package and the packages it depends on by path are built,
   name that doesn't match, a cycle (`NYX0027`) or a package reached by two paths (`NYX0028`) is an error; a
   dependency's `version` is refused (`NYX0024`). There is no `.nyxproj` or `restore`. The formatter
   reads the manifest's `formatter` field itself.
+- **The compiler ships packages as source directories** beside it (`ShippedPackages`): the console host,
+  `packages/nanyx.console`, at the compiler's version, which a manifest's `host` names at that version exactly
+  (`NYX0029`). A program imports nothing from it itself; the host's import resolves in it (see
+  [Built-ins as packages](./built-ins-as-packages#whats-built)).
 - **A package's imports go through its module table** (`PackageModules.fs`). Every source file the manifest
   selects is keyed by the module name it declares (`PackageModules.ofFiles`), and in those files `import greetings`
   and `import acme.web/greetings` both reach the file that declares `module greetings`, wherever it is

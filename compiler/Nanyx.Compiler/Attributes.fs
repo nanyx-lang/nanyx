@@ -16,7 +16,7 @@ module Attributes =
 
     /// The import of `host` itself, under an alias of its own, which a module that runs under it gets.
     let internal hostImport (host: Host) =
-        TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport host.Module) (Some Hosts.importAlias) ])
+        TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport host.Import) (Some Hosts.importAlias) ])
 
     /// The imports the module that declares the entry point gets from `host`: the modules of the contexts it provides
     /// that the module sees without importing them, and the host itself (see `hostImport`).

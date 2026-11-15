@@ -1201,13 +1201,13 @@ To fix it, remove the context, or give a parameter the type it is on.
 
 The definition marked `@entry` does not have the type its [host](../work-in-progress/hosts) runs. The host is a
 function that takes the entry point, so the entry point must fit the type of its parameter. A command-line program runs
-under `nanyx/console.host`, whose entry point takes nothing and may require `Console`.
+under the console host, `nanyx.console/console.host`, whose entry point takes nothing and may require `Console`.
 
 ```nanyx
 module main
 
 @entry
-def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: The entry point 'main' doesn't fit the host 'nanyx/console.host' ...
+def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: The entry point 'main' doesn't fit the host 'nanyx.console/console.host' ...
 ```
 
 The error is reported at `@entry`, and shows the type the host expects and the type the entry point has. To fix it,
