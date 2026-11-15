@@ -43,7 +43,8 @@ Out of scope here:
 
 # Where the compiler is today
 
-A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issues/279)); the rest is only in the docs.
+Local packages work: a package and the packages it depends on by path are built, checked and run together. Projects
+(`.nyxproj`) and everything that needs a downloaded package are only in the docs.
 
 - **A package can be built and run** (`Package.fs`). The manifest is one Nanyx record written as data, read by
   `Manifest.check` ([The package manifest](./package-manifest)). Its `package` (`name`, `version`, `sources`,

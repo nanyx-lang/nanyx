@@ -53,7 +53,8 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
   linter or host entry has `package`, `version` and `settings`. An unknown field (`NYX0021`), a missing `name`
   (`NYX0022`), a string where a list is expected (`NYX0023`) or a field that isn't supported yet (`NYX0024`) is an
   error at that field.
-- **What works today.** `dependencies` must be empty until path dependencies. The only linter is `nanyx.lint`, whose
+- **What works today.** A dependency gives a `path`; one with a `version` is `NYX0024` until packages can be
+  downloaded. The only linter is `nanyx.lint`, whose
   `settings` hold `rules`, each set to `#error`, `#warning`, `#info`, `#hint` or `#off`. The only host is
   `nanyx.console`, which takes no `settings`.
 - **Settings are typed by their package.** A linter or host exports its settings as a record type, and the entry's
