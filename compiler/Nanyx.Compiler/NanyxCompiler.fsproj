@@ -84,6 +84,7 @@
     <Compile Include="Builtins.fs" />
     <Compile Include="Toolchain.fs" />
     <Compile Include="Hosts.fs" />
+    <Compile Include="Externs.fs" />
     <Compile Include="Attributes.fs" />
     <Compile Include="Scripts.fs" />
     <Compile Include="TailPosition.fs" />

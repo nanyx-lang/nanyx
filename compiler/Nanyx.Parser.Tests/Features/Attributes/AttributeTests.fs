@@ -39,6 +39,20 @@ let ``Empty parentheses after an attribute are its unit argument`` () =
     | other -> failwith $"Unexpected parse result: %A{other}"
 
 [<Fact>]
+let ``A def with nothing after its type is a foreign function's declaration, whose value is a call to __extern`` () =
+    let source = "@extern(\"wasi_snapshot_preview1\", \"proc_exit\")\ndef procExit: [HostRuntime] I32 -> () -- ends\ndef next = 1"
+    match parseModule source with
+    | Result.Ok [ Kind (Attribute("extern", Some _)); Kind (Def (ValueDef(false, "procExit", Some _, value))); Kind (Def (ValueDef(false, "next", None, _))) ] ->
+        match value.Kind with
+        | ExternSyntax.Bodiless -> Assert.Equal((47, 84), (value.Span.Start, value.Span.End))
+        | other -> failwith $"Unexpected value: %A{other}"
+    | other -> failwith $"Unexpected parse result: %A{other}"
+
+[<Fact>]
+let ``A def with something other than a value after its type is still an error`` () =
+    parseModule "def x: int 5" |> isError |> should equal true
+
+[<Fact>]
 let ``An attribute before a context's member is a field attribute before the member`` () =
     let source =
         """context Async = (

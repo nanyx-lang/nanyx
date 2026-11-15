@@ -95,6 +95,21 @@ let private conversion (from: IrType) (into: IrType) =
 /// Any other helper is given an int's low 32 bits.
 let private takesIndices = set [ Helpers.stringByteAt; Helpers.stringSlice ]
 
+/// The name of the function the module imports a foreign function as.
+let importName (declared: Extern) = sanitizeIdentifier $"import_{declared.Module}_{declared.Name}"
+
+/// The import of a foreign function, as the module declares it.
+let importDeclaration (declared: Extern) =
+    let valueType (value: ExternValue) =
+        match value with
+        | ExternValue.I32 -> "i32"
+        | ExternValue.I64 -> "i64"
+        | ExternValue.F32 -> "f32"
+        | ExternValue.F64 -> "f64"
+    let parameters = if declared.Parameters.IsEmpty then "" else $""" (param {declared.Parameters |> List.map valueType |> String.concat " "})"""
+    let result = declared.Result |> Option.map (fun value -> $" (result {valueType value})") |> Option.defaultValue ""
+    $"""  (import "{declared.Module}" "{declared.Name}" (func ${importName declared}{parameters}{result}))"""
+
 /// The temporaries an expression uses directly, which it computes as part of its own code.
 let rec private tempsUsedBy (expr: Expr) : Var list =
     let ofAtoms atoms = atoms |> List.choose (function AVar v when v.Kind = Temp -> Some v | _ -> None)
@@ -104,6 +119,7 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | Call(_, atoms)
     | MakeList atoms
     | CallRuntime(_, atoms, _)
+    | CallImport(_, atoms)
     | MakeClosure(_, _, atoms)
     | CallClosure(_, atoms) -> ofAtoms atoms
     | MakeRecord fields -> ofAtoms (List.map snd fields)
@@ -519,6 +535,26 @@ type private FunctionEmitter(context: EmitContext) =
             | IrSized integer -> join "\n    " [ atoms [ arg ]; $"call ${helper (SizedIntegerCode.fromIntHelper integer)}" ]
             | IrF32 -> join "\n    " [ atoms [ arg ]; "f32.convert_i64_s"; $"call ${helper Helpers.f32Box}" ]
             | other -> internalError $"{Intrinsics.fromInt} at {IrType.show other}, which is not a sized integer"
+        | CallImport(declared, args) ->
+            // Each argument as the value type the import takes, a float out of its box; a float it returns is boxed, and
+            // an import that returns nothing leaves unit, 0.
+            if args.Length <> declared.Parameters.Length then
+                internalError $"a call to the import {declared.Module}.{declared.Name} with {args.Length} arguments for {declared.Parameters.Length} parameters"
+            let unboxed (value: ExternValue) =
+                match value with
+                | ExternValue.F32 -> touching "f32.load"
+                | ExternValue.F64 -> touching "f64.load"
+                | ExternValue.I32
+                | ExternValue.I64 -> ""
+            let arguments = List.zip args declared.Parameters |> List.mapi (fun index (arg, value) -> join "\n    " [ atomsAfter (index > 0) [ arg ]; unboxed value ])
+            let result =
+                match declared.Result with
+                | Some ExternValue.F32 -> $"call ${helper Helpers.f32Box}"
+                | Some ExternValue.F64 -> $"call ${helper Helpers.floatBox}"
+                | Some ExternValue.I32
+                | Some ExternValue.I64 -> ""
+                | None -> "i32.const 0"
+            join "\n    " [ yield! arguments; $"call ${importName declared}"; result ]
         | CallRuntime(name, args, returnsValue) ->
             // An int argument and an int result are converted where the helper holds them in `i32`s, and a helper that
             // returns nothing leaves unit, 0.

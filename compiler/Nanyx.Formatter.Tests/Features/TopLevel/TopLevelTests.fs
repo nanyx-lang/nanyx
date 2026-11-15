@@ -33,6 +33,13 @@ let ``A context member's attribute is printed on the line above the member`` () 
     unchanged (expected.ReplaceLineEndings "\n")
 
 [<Fact>]
+let ``A foreign function's declaration, a def with no value, is printed with its type alone`` () =
+    let source = lines [ "@extern(\"wasi_snapshot_preview1\", \"args_sizes_get\")"; "def argsSizesGet: [HostRuntime] I32, I32 -> I32" ]
+    unchanged source
+    Assert.Equal(source, format (lines [ "@extern( \"wasi_snapshot_preview1\",\"args_sizes_get\" )"; "def  argsSizesGet :[HostRuntime]  (I32,I32)->I32" ]))
+    unchanged (lines [ "@extern(\"env\", \"tick\")"; "export def tick: [HostRuntime] () -> () -- every frame" ])
+
+[<Fact>]
 let ``An attribute's argument is printed as a tag's payload is`` () =
     unchanged (lines [ "@test(#io)"; "def readsConfig = 1" ])
     unchanged (lines [ "@test()"; "def x = 1" ])

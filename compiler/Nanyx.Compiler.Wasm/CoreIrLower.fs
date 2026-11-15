@@ -405,6 +405,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let ty = tyOf expr
             this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
                 k (Expr.make (CallRuntime(name, atoms, not (Intrinsics.returnsUnit name))) ty))
+        | FunctionCall(name, _, args) when input.Externs.ContainsKey name && not (scope.Vars.ContainsKey name) ->
+            // A foreign function: a direct call to the module's import of it. It takes no context members: it requires
+            // only `HostRuntime`, which marks who may call it.
+            let ty = tyOf expr
+            this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms -> k (Expr.make (CallImport(input.Externs.[name], atoms)) ty))
         | ClosureSyntax.Closure(target, captured) ->
             // A function value: the closure block of a lifted function over what it captures.
             match input.Lifted |> Map.tryFind target with

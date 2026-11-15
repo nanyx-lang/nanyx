@@ -299,7 +299,7 @@ The composite host runs each part under the right sub-host and coordinates start
 4. **More contexts for ConsoleHost**, as they are added: [`Random`](https://github.com/nanyx-lang/nanyx/issues/1237),
    then `Clock` and `FileSystem`.
 4a. **Hosts on foreign functions** ([Foreign functions](./foreign-functions)): `@extern` imports that only code with
-   `HostRuntime` can call ([#1424](https://github.com/nanyx-lang/nanyx/issues/1424)), host access to linear memory
+   `HostRuntime` can call ([#1424](https://github.com/nanyx-lang/nanyx/issues/1424), done), host access to linear memory
    ([#1425](https://github.com/nanyx-lang/nanyx/issues/1425)), and the console host written on them with no compiler
    intrinsics ([#1426](https://github.com/nanyx-lang/nanyx/issues/1426)), so it can ship as a package.
 5. **Console in a page**, for the [playground](./playground): the embedder changes in "`ConsoleHost` in a page"
@@ -331,8 +331,9 @@ The composite host runs each part under the right sub-host and coordinates start
   whose block ends in an expression (`dbg(x)`) returned a value that the old `main()` call dropped.
 - **`HostRuntime`** is declared in `nanyx/host.runtime`, with an instance made of the runtime's intrinsics, so it is an
   ambient context wherever that module is imported. `Hosts.runtimeErrors` reports `NYX0238` in any module but a host
-  and `nanyx/host.runtime`: at each top-level def whose type requires it, written or inferred, and at each top-level
-  call it is provided to, other than the call of `run` that `@entry` makes. A module that calls a host's `run` itself
+  and `nanyx/host.runtime`: at each top-level def whose type requires it, written or inferred, other than a
+  [foreign function](./foreign-functions), which any module may declare, and at each top-level call it is provided to,
+  other than the call of `run` that `@entry` makes. A module that calls a host's `run` itself
   needs `HostRuntime` for it, so that is an error too.
 - **Where the entry's `Console` comes from.** Every entry is passed the members of the `Console` that `run` `use`s, so
   it reads and writes through the host. An entry that doesn't write its type, which is most programs, infers `Console`

@@ -90,22 +90,44 @@ module Attributes =
                 Some (Diagnostics.at DiagnosticCodes.UnknownKeywordKind span $"Attribute '@{name}' takes the keyword's kind, as `@{name}(#bind)`: the kinds are {kinds}")
         misplaced @ List.choose onMember members
 
+    /// The errors for the defs in `items` written with no value that no `@extern` declares a foreign function: those in
+    /// module blocks, where no attribute applies, and those at the top level `applyAttributes` leaves as they are.
+    let rec private bodilessErrors (items: TopLevelItem list) : Diagnostic list =
+        items
+        |> List.collect (fun item ->
+            match item.Kind with
+            | Def (ValueDef(_, name, _, Kind ExternSyntax.Bodiless)) ->
+                [ Diagnostics.at
+                      DiagnosticCodes.DefinitionWithoutValue
+                      item.Span
+                      $"'{name}' has no value: write `= value` after it, or mark it `@{Externs.attribute}(\"module\", \"name\")` to declare a foreign function" ]
+            | ModuleBlock(_, blockItems) -> bodilessErrors blockItems
+            | _ -> [])
+
     /// Resolves `@attribute` lines. `@entry` on a definition appends a call of the host's `run` with that definition
     /// at the end of the module, so it runs as the program's start function, and imports the host and the modules of
-    /// the contexts it provides (see `Host`); any other attribute, or an attribute that does not precede a value
-    /// definition, is an error. `@entry` takes no argument. The host is `host`: the package's, or the console host for a
-    /// file in no package. With the module, each entry point (see `EntryPoint`). An attribute before a member of a
-    /// context declaration is checked here too, and stays where it is (see `fieldAttributeErrors`).
+    /// the contexts it provides (see `Host`). `@extern("module", "name")` on a definition written with a type and no
+    /// value makes it a foreign function (see `Externs`): its value becomes the import's module and name (see
+    /// `ExternSyntax`). Any other attribute, an attribute that does not precede a value definition, or a definition with
+    /// no value and no `@extern`, is an error. `@entry` takes no argument. The host is `host`: the package's, or the
+    /// console host for a file in no package. With the module, each entry point (see `EntryPoint`). An attribute before
+    /// a member of a context declaration is checked here too, and stays where it is (see `fieldAttributeErrors`).
     let applyAttributes (host: Host) (module': Module) : Result<Module * EntryPoint list, Diagnostic list> =
-        let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entries: (EntryPoint * TopLevelItem) list) (errors: Diagnostic list) =
+        let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entries: (EntryPoint * TopLevelItem) list) (externs: (string * Extern * SourceSpan) list) (errors: Diagnostic list) =
             match remaining with
-            | [] -> List.rev acc, List.rev entries, List.rev errors
-            | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute ->
-                loop rest acc entries (Diagnostics.at DiagnosticCodes.UnknownAttribute attribute.Span $"Unknown attribute '@{name}'" :: errors)
-            | Kind (Attribute(name, Some argument)) :: rest ->
+            | [] -> List.rev acc, List.rev entries, List.rev externs, List.rev errors
+            | Kind (Attribute(name, argument)) as attribute :: (Kind (Def (ValueDef(isExport, defName, typeOpt, value))) as def) :: rest when name = Externs.attribute ->
+                match Externs.declared attribute.Span argument defName def.Span typeOpt value with
+                | Ok declared ->
+                    let imported = { def with Kind = Def (ValueDef(isExport, defName, typeOpt, ExternSyntax.import declared.Module declared.Name value)) }
+                    loop rest (imported :: acc) entries ((defName, declared, def.Span) :: externs) errors
+                | Error diagnostics -> loop rest (def :: acc) entries externs (List.rev diagnostics @ errors)
+            | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute && name <> Externs.attribute ->
+                loop rest acc entries externs (Diagnostics.at DiagnosticCodes.UnknownAttribute attribute.Span $"Unknown attribute '@{name}'" :: errors)
+            | Kind (Attribute(name, Some argument)) :: rest when name = entryAttribute ->
                 let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span $"Attribute '@{name}' takes no argument"
-                loop rest acc entries (error :: errors)
-            | Kind (Attribute _) as attribute :: (Kind (Def (ValueDef(_, name, _, value))) as def) :: rest ->
+                loop rest acc entries externs (error :: errors)
+            | Kind (Attribute(attributeName, _)) as attribute :: (Kind (Def (ValueDef(_, name, _, value))) as def) :: rest when attributeName = entryAttribute ->
                 // The call is made up for the def, and reported there. The entry point passed to `run` is at the
                 // attribute, so that a mismatch with the host's `run` is told apart from any other.
                 let argument = Expression.at attribute.Span (IdentifierExpr name)
@@ -117,12 +139,14 @@ module Attributes =
                       Host = host
                       Argument = attribute.Span
                       Call = SyntaxTree.ofItem call |> List.collect SyntaxTree.expressionsWithin |> List.map _.Id }
-                loop rest (def :: acc) ((entry, call) :: entries) errors
+                loop rest (def :: acc) ((entry, call) :: entries) externs (List.rev (bodilessErrors [ def ]) @ errors)
             | Kind (Attribute(name, _)) as attribute :: rest ->
-                loop rest acc entries (Diagnostics.at DiagnosticCodes.MisplacedAttribute attribute.Span $"Attribute '@{name}' must be followed by a definition" :: errors)
-            | item :: rest -> loop rest (item :: acc) entries errors
-        match loop module' [] [] (List.rev (fieldAttributeErrors module')) with
-        | items, entries, [] ->
-            let entryImport = if entries.IsEmpty then [] else hostImports host items
-            Ok (entryImport @ items @ List.map snd entries, List.map fst entries)
-        | _, _, errors -> Error errors
+                loop rest acc entries externs (Diagnostics.at DiagnosticCodes.MisplacedAttribute attribute.Span $"Attribute '@{name}' must be followed by a definition" :: errors)
+            | item :: rest -> loop rest (item :: acc) entries externs (List.rev (bodilessErrors [ item ]) @ errors)
+        match loop module' [] [] [] (List.rev (fieldAttributeErrors module')) with
+        | items, entries, externs, errors ->
+            match errors @ Externs.conflicts externs with
+            | [] ->
+                let entryImport = if entries.IsEmpty then [] else hostImports host items
+                Ok (entryImport @ items @ List.map snd entries, List.map fst entries)
+            | errors -> Error errors

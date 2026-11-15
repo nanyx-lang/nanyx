@@ -51,6 +51,9 @@ type ContextArgument =
 type LowerInput =
     { /// The module's top-level definitions as the backend compiles them, in order: a function is a lambda.
       Definitions: (string * Expression) list
+      /// The foreign functions (see `ExternSyntax`), by name: a call to one is a call to the module's import of it, and they
+      /// are not among `Definitions`.
+      Externs: Map<string, NyxCompiler.Extern>
       /// The type of each expression, and of the function at each call, by node (`TypedModule.ExprTypes` and
       /// `CalleeTypes`). Type variables in them are the generalised variables of the definition they are in.
       ExprTypes: Map<NodeId, Ty>

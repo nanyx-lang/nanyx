@@ -109,9 +109,10 @@ module Hosts =
             $"{what} requires the context '{runtimeContext}', which only a host may require. Use the contexts the host provides, such as 'Console'."
 
     /// The errors for each place a module that is not a host requires `HostRuntime` (see `mayRequireRuntime`): each of
-    /// its top-level defs whose type requires it (`contextTypes`, by symbol), and each call at its top level that the
-    /// runtime provides it to (`providers`, by the call's node), other than the calls of the host's `run` that its
-    /// entry points make (`entries`).
+    /// its top-level defs whose type requires it (`contextTypes`, by symbol), other than its foreign functions, which
+    /// any module may declare (see `ExternSyntax`), and each call at its top level that the runtime provides it to
+    /// (`providers`, by the call's node), other than the calls of the host's `run` that its entry points make
+    /// (`entries`).
     let runtimeErrors
         (origin: ModuleOrigin)
         (entries: EntryPoint list)
@@ -124,11 +125,18 @@ module Hosts =
             []
         else
             let startCalls = entries |> List.collect _.Call |> Set.ofList
+            let externs =
+                module'
+                |> List.choose (function
+                    | Kind (Def (ValueDef(_, name, _, Kind (ExternSyntax.Import _)))) -> Some name
+                    | _ -> None)
+                |> Set.ofList
             let defErrors =
                 contextTypes
                 |> Map.toList
                 |> List.filter (fun (_, contexts) -> contexts |> List.exists isRuntime)
                 |> List.choose (fun (id, _) -> symbols |> Map.tryFind id)
+                |> List.filter (fun symbol -> not (externs.Contains symbol.Name))
                 |> List.sortBy _.Declaration.Start
                 |> List.map (fun symbol -> runtimeError symbol.Declaration $"'{symbol.Name}'")
             let callErrors =

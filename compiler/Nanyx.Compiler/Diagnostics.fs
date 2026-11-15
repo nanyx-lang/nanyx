@@ -85,6 +85,7 @@ module DiagnosticCodes =
     let PackageCycle = code 27 "Packages depend on each other in a cycle" Severity.Error
     let PackageReachedTwice = code 28 "Package reached by two paths" Severity.Error
     let VersionNotShipped = code 29 "Version not shipped" Severity.Error
+    let DefinitionWithoutValue = code 30 "Definition without a value" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -143,6 +144,9 @@ module DiagnosticCodes =
     let HostRuntimeOutsideHost = code 238 "HostRuntime required outside a host" Severity.Error
     let ScriptRunValue = code 239 "Value the script computes as it runs, named outside it" Severity.Error
     let ContextsWithoutType = code 240 "Contexts written without a type on a value" Severity.Error
+    let InvalidExtern = code 241 "Invalid foreign function" Severity.Error
+    let ExternWithoutHostRuntime = code 242 "Foreign function without HostRuntime" Severity.Error
+    let ConflictingExterns = code 243 "Import declared with different types" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -156,7 +160,7 @@ module DiagnosticCodes =
           UnsupportedDirective; CodeInModuleBlock; UnexpectedAttributeArgument; PathImportWithoutAlias
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
-          ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped
+          ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped; DefinitionWithoutValue
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField
@@ -168,6 +172,7 @@ module DiagnosticCodes =
           UnboundContextVariable; ContextsNotAllowed; UnguardedRecursiveAlias
           LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotNominal; ScopedContextEscapes
           NotACellArgument; MisplacedCellType; UndeterminedContextType; EntryDoesNotFitHost; HostRuntimeOutsideHost; ScriptRunValue; ContextsWithoutType
+          InvalidExtern; ExternWithoutHostRuntime; ConflictingExterns
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

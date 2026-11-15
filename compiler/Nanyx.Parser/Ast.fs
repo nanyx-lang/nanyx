@@ -583,6 +583,32 @@ module MutSyntax =
         | FunctionCall(name, _, [ value ]) when name = builtIn -> Some value
         | _ -> None
 
+/// A foreign function (see the foreign functions page): `def name: T` at the top level with no value, which an
+/// `@extern("module", "name")` before it makes an import of the WebAssembly module. The parser makes its value a call
+/// to the built-in "__extern" with no arguments, spanning the declaration; once the attribute is applied, the call has
+/// the import's module and name as its arguments. Nothing else makes such a call.
+module ExternSyntax =
+    let builtIn = "__extern"
+
+    /// The value of a def written without one, before an `@extern` names its import.
+    let (|Bodiless|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, []) when name = builtIn -> Some ()
+        | _ -> None
+
+    /// The module and name of the import a foreign function is.
+    let (|Import|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, [ Kind (LiteralExpr(StringLit importModule)); Kind (LiteralExpr(StringLit importName)) ]) when name = builtIn ->
+            Some (importModule, importName)
+        | _ -> None
+
+    /// `value`, the bodiless value of a def, as the value of a foreign function that imports `importName` from
+    /// `importModule`. It is the same node, so the def's name is still declared by it.
+    let import (importModule: string) (importName: string) (value: Expression) =
+        let literal text = Expression.from value (LiteralExpr(StringLit text))
+        { value with Kind = FunctionCall(builtIn, None, [ literal importModule; literal importName ]) }
+
 /// `x := e` (see the memory page): a call to the built-in "__assign" with the cell and its new value. Its name span is
 /// the `:=`.
 module AssignSyntax =

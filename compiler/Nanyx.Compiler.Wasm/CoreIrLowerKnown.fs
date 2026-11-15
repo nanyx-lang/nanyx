@@ -123,6 +123,7 @@ let usedOf (ids: Set<int>) (body: Expr) : Set<int> =
         | Call(_, atoms)
         | MakeList atoms
         | CallRuntime(_, atoms, _)
+        | CallImport(_, atoms)
         | MakeClosure(_, _, atoms) -> List.iter atom atoms
         | MakeRecord fields -> fields |> List.iter (snd >> atom)
         | UpdateRecord(record, updates) -> atom record; updates |> List.iter (snd >> atom)
