@@ -83,7 +83,7 @@ dependencies = ["acme.core"]
 - **It changes only when it must.** `nanyx add` and `nanyx restore` write it. `nanyx build` and `nanyx run` use it as it is, and only update it when the manifest asks for something the lockfile does not satisfy, such as a new dependency. A version already locked is never upgraded as a side effect: `nanyx update` does that, for one package or all of them.
 - **`--locked` makes a stale lockfile an error.** CI runs `nanyx build --locked`, so a manifest change pushed without its lockfile fails instead of resolving something new.
 - **Entries are sorted by name**, and each sits in its own table, so two branches adding different dependencies rarely conflict, and when they do, `nanyx restore` can redo the resolution from the manifests.
-- **Path dependencies and [project references](../tour/packages#project-references) are not locked.** Their source is on disk and changes with the code around it, so there is nothing to pin.
+- **Path dependencies and [project references](../tour/packages#packages-developed-together) are not locked.** Their source is on disk and changes with the code around it, so there is nothing to pin.
 
 `source` says where a package came from. `"index"` means the package index. The other sources are a git repository and a single file, described below.
 
