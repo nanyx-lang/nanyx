@@ -37,7 +37,10 @@ any linter uses, and it reports the same diagnostics, codes and fixes as today's
 host: loading linter packages, severities, configuration and suppression. The rules themselves go.
 ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343))
 
-**The console host is a package**, for example `nanyx.console`, with `Console` and `Env`. Any module that exports a host
+**The console host is a pair of packages** ([Libraries for a host](./hosts#libraries-for-a-host)): an interface
+package that declares `Console` and `Env`, which libraries depend on, and the host that implements them, which
+applications name. The working names are `nanyx.console.core` and `nanyx.console`, while the naming is open. Any
+module that exports a host
 `run` is a host, from any package. `HostRuntime` goes to the module the manifest's `host` (or `--host`) names, rather
 than to a list the compiler keeps. The table of hosts in `Hosts.fs` goes. The standard library keeps only what every
 program needs, whatever its host. ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344))
