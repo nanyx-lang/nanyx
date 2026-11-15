@@ -63,7 +63,7 @@ The manifest describes the package and the source files and dependencies that ma
 ```nanyx fragment
 (
   package = (name = "acme.web", version = "1.2.0", sources = ["**/*.nyx"], publicModules = ["http", "json"])
-  dependencies = [(package = "acme.core", version = "2.1")]
+  dependencies = [(package = "acme.core", path = "../core")]
 )
 ```
 
@@ -119,26 +119,9 @@ Only the modules a package lists in its `publicModules` can be imported from ano
 
 A package can only import modules from packages that it directly depends on (`NYX0026`). Dependencies of dependencies are not implicitly available to source code. A build has one copy of each package: two dependencies that reach the same package in different directories are an error (`NYX0028`), and so is a cycle of packages that depend on each other (`NYX0027`). The dependencies' modules are checked once each and compiled into the same program as the package's own.
 
-# Project references
+## Packages developed together
 
-Packages being developed together can reference each other with path dependencies, as above: a dependency that names the directory the other package is in, instead of a version.
-
-```nanyx fragment
-(
-  package = (name = "acme.app", version = "0.1.0")
-  dependencies = [(package = "acme.shared", path = "../shared")]
-)
-```
-
-A project reference uses the referenced package's declared package identity. Source code therefore imports it in exactly the same way as any other dependency:
-
-```nanyx fragment
-import acme.shared/models
-```
-
-Whether `acme.shared` comes from a local project reference or an external package dependency does not change the source code that consumes it.
-
-Project references are only meaningful when packages are being built in the context of a project. A standalone package cannot use a project reference to reach an arbitrary local package.
+Packages that are developed together depend on each other by path, as above. Any package can name another in a directory beside it; no project is needed. The package is imported by its own name, `acme.shared/models`, so the code that uses it stays the same when the dependency later comes from a downloaded package instead. [Projects](#projects) are planned as a way to group such packages and build them together.
 
 # Public modules
 
@@ -201,7 +184,7 @@ The entrypoint runs under the package's host, which loads the contexts it may us
 )
 ```
 
-`nanyx.console` is the host for a command-line program, whose module is `nanyx/console.host`. A package with no `host` runs under it too. `nanyx run`, `nanyx build` and `nanyx check` take `--host <module>` to choose one for a single command instead. Until packages can depend on others, the standard library's hosts are the only ones, and a single `.nyx` file always runs under `nanyx/console.host`.
+`nanyx.console` is the host for a command-line program, whose module is `nanyx/console.host`. A package with no `host` runs under it too. `nanyx run`, `nanyx build` and `nanyx check` take `--host <module>` to choose one for a single command instead. A host isn't a package of its own yet, so the standard library's hosts are the only ones, and a single `.nyx` file always runs under `nanyx/console.host`.
 
 # Building and running a package
 
@@ -222,56 +205,7 @@ The linters that check a package are the ones its manifest names; see [Linters](
 
 # Projects
 
-A project is an optional grouping of packages that are developed together. It is described by a `.nyxproj` TOML document.
-
-For example:
-
-```text
-myProject.nyxproj
-src/
-  app/
-    app.nyxp
-    ...
-  shared/
-    shared.nyxp
-    ...
-  domain/
-    domain.nyxp
-    ...
-```
-
-A project manifest lists its constituent packages:
-
-```toml
-[project]
-packages = [
-  "src/app",
-  "src/shared",
-  "src/domain"
-]
-```
-
-Packages do not need to belong to a project. A package without a project can be restored, built, and distributed independently.
-
-Projects primarily exist to describe packages that should be treated as a single development workspace and to make project references between them possible.
-
-## Running a project
-
-A project can optionally nominate one of its packages as its entry package:
-
-```toml
-[project]
-packages = [
-  "src/app",
-  "src/shared"
-]
-
-entrypoint = "src/app"
-```
-
-Running the project runs the `@entry` declared by that package.
-
-If the selected package does not contain an `@entry`, the project cannot be run.
+Projects are planned: a `.nyxproj` file that groups packages developed together, so they can be built, checked and run as one workspace. They aren't built yet, and their file's format isn't settled. Packages will never need to belong to one: a package on its own can already be built, and can depend on others by path.
 
 # Script mode
 
@@ -298,7 +232,7 @@ For script mode, Nanyx synthesizes a package description in memory rather than r
 import "./utils" as utils
 ```
 
-Each directive is a dotted key, with `= value` when it sets a value: `::linters.default.unusedBindings = "error"` says what `linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (unusedBindings = #error)))]` says in a manifest. `::dependencies.<name> = "<version>"` will stand for an entry of `dependencies` once dependencies are supported. The directives are listed in [Files and projects](../getting-started/files-and-projects). A file in a package cannot have directives: they go in the package's manifest instead.
+Each directive is a dotted key, with `= value` when it sets a value: `::linters.default.unusedBindings = "error"` says what `linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (unusedBindings = #error)))]` says in a manifest. `::dependencies.<name> = "<version>"` names a package to download, which isn't supported yet, so it is an error for now. The directives are listed in [Files and projects](../getting-started/files-and-projects). A file in a package cannot have directives: they go in the package's manifest instead.
 
 Script modules and named package modules are distinct. A named module is imported through its package or module identity; an anonymous script module is imported by file path.
 
