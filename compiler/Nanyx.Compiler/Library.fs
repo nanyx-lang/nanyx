@@ -476,6 +476,14 @@ module Compiler =
     /// `typecheckModule`, unreported.
     and private checkModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
+        // A package's files run under its host (see `PackageModules.Host`); a loose script, under the console host. The
+        // host is a module of a package the compiler ships, which the import of it and the host's own imports resolve in.
+        let host = checkedModules.Package |> Option.map _.Host |> Option.defaultValue Hosts.console
+        let hostModules = ShippedPackages.tryModules host.Package
+        let isHost (path: string) =
+            hostModules
+            |> Option.bind (fun modules -> modules.Modules |> Map.tryFind host.Module)
+            |> Option.exists (List.exists (PackageModules.samePath path))
         let resolved =
             parseWithDocs (checkedModules.FileName origin) source
             // A module split across files is checked as one: its other files' items join this one's.
@@ -492,13 +500,12 @@ module Compiler =
                 match WorkflowDesugaring.desugarWithDiagnostics items with
                 | _, (_ :: _ as errors), _, _ -> Error (Desugared, errors)
                 | desugaredAst, [], memberPlaces, lowered ->
-                    // A package's files run under its host (see `PackageModules.Host`); a loose script, under the console host.
-                    let host = checkedModules.Package |> Option.map _.Host |> Option.defaultValue Hosts.console
                     Attributes.applyAttributes host desugaredAst
                     |> Result.map (fun (desugared, entries) ->
                         // A module's statements run as an entry point of their own (see `Scripts`).
                         let desugared, script =
                             match origin, entries with
+                            | SourceFile path, _ when isHost path -> desugared, None
                             | (SourceFile _ | InMemory), _ -> Scripts.asEntry host (fun span -> (NyxCompiler.InferState.blockAround moduleBlocks span).IsSome) entries desugared
                             | _ -> desugared, None
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
@@ -565,8 +572,21 @@ module Compiler =
                             | Ok imported when not imported.Errors.IsEmpty -> Error (Typed, throughThis imported.Errors)
                             | Error (phase, diagnostics) -> Error (phase, throughThis diagnostics)
                             | checkedImport -> checkedImport
-                    match StandardLibrary.tryModuleName item with
-                    | Some moduleName ->
+                    // The import of the host, and an import in one of the host package's own files, are of its modules.
+                    let inHostPackage =
+                        match hostModules, item.Source, origin with
+                        | Some modules, ModuleImport name, _ when name.StartsWith(modules.Package + "/") -> Some (modules, name)
+                        | Some modules, ModuleImport name, SourceFile path when PackageModules.contains modules path && StandardLibrary.tryModuleName item = None -> Some (modules, name)
+                        | _ -> None
+                    match StandardLibrary.tryModuleName item, inHostPackage with
+                    | None, Some (modules, name) ->
+                        match PackageModules.resolveWithin modules item name with
+                        | Error diag -> fail [ diag ]
+                        | Ok importPath ->
+                            match checkImport (SourceFile importPath) (fun () -> checkedModules.ReadFile importPath) with
+                            | Error (_, diags) -> fail diags
+                            | Ok imported -> mergeWritten preludeKey reExportItems (SourceFile importPath) item imported merged
+                    | Some moduleName, _ ->
                         match StandardLibrary.tryLoadSource moduleName with
                         | None ->
                             let available = String.concat ", " (StandardLibrary.moduleNames |> List.map (fun name -> StandardLibrary.importPrefix + name))
@@ -578,7 +598,7 @@ module Compiler =
                                 let declared = imported.Name |> Option.defaultValue "(none)"
                                 fail [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"Standard library module '{StandardLibrary.importPrefix}{moduleName}' declares the module name '{declared}'" ]
                             | Ok imported -> mergeWritten preludeKey reExportItems (StandardLibraryModule moduleName) item imported merged
-                    | None ->
+                    | None, None ->
                         match origin with
                         | SourceFile fullPath ->
                             match FileImports.missingAlias item, PackageModules.resolveImport checkedModules.Package fullPath item with
@@ -669,7 +689,7 @@ module Compiler =
                         | _ -> []
                     ofDef @ ofType
                 let runtimeErrors =
-                    Hosts.runtimeErrors origin (entries @ (script |> Option.map fst |> Option.toList)) state.Symbols contextTypes state.ContextProviders calleeContexts desugared
+                    Hosts.runtimeErrors isHost origin (entries @ (script |> Option.map fst |> Option.toList)) state.Symbols contextTypes state.ContextProviders calleeContexts desugared
                 // A script whose statements need `HostRuntime` is told so where they need it: that its entry point, which
                 // has no span, then doesn't fit the host's `run` says nothing more.
                 let mismatchErrors =

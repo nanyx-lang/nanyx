@@ -2,7 +2,7 @@
   (those declared with `@extern`) and reach the module's linear memory (with `nanyx/host.memory`).
 
   [`HostRuntime`] is provided only to the host, the module that runs the program's entry point (as
-  [`nanyx/console.host`] does). Anywhere else, requiring it is an error, so a library can only reach
+  the console host, `nanyx.console`, does). Anywhere else, requiring it is an error, so a library can only reach
   the outside world through the contexts the host chose to provide.
 module host.runtime
 

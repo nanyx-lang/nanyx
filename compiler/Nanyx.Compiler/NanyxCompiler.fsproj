@@ -96,6 +96,7 @@
     <Compile Include="TypeNames.fs" />
     <Compile Include="FileImports.fs" />
     <Compile Include="PackageModules.fs" />
+    <Compile Include="ShippedPackages.fs" />
     <Compile Include="PartialModules.fs" />
     <Compile Include="WorkflowDesugaring.fs" />
     <Compile Include="DeferredErrors.fs" />
@@ -129,6 +130,12 @@
       starting `@partial module <module>` (see StandardLibrary in Builtins.fs).
     -->
     <EmbeddedResource Include="..\..\stdlib\nanyx\*.nyx" LogicalName="nanyx/%(Filename)%(Extension)" />
+    <!--
+      The packages the compiler ships (the console host) are source directories in packages/ at the repository root.
+      They are copied beside the compiler, in every project that uses it and in the published `nanyx`, which finds them
+      there (see ShippedPackages.fs).
+    -->
+    <None Include="..\..\packages\**\*" Link="packages\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

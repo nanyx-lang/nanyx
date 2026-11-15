@@ -14,7 +14,7 @@ let beginMarker = "<!-- The reference below is generated from the doc comments i
 let endMarker = "<!-- End of the generated reference. -->"
 
 /// The page of the library's file `file` (its resource name, as `nanyx/prelude-lists.nyx`): its name without the
-/// package and the extension, with a `-` for each `.`, so `nanyx/console.host.nyx` is on `console-host`.
+/// package and the extension, with a `-` for each `.`, so `nanyx/host.runtime.nyx` is on `host-runtime`.
 let pageOf (file: string) =
     Path.GetFileNameWithoutExtension(file.Substring StandardLibrary.importPrefix.Length).Replace('.', '-')
 

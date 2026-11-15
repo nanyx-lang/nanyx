@@ -1,0 +1,8 @@
+(
+  package = (
+    name = "nanyx.console"
+    version = "0.28.0"
+    sources = ["src/**/*.nyx"]
+    publicModules = ["console.host"]
+  )
+)

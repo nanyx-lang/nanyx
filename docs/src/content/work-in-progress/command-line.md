@@ -202,9 +202,9 @@ above it.
 - `check` does the same checks and writes nothing. Any error fails it, including one a debug build would defer.
 
 The package's `@entry` runs under the host its manifest's `host` names,
-`(package = "nanyx.console", version = "0.28.0")`, or `nanyx/console.host` without one (see
+`(package = "nanyx.console", version = "0.28.0")`, or `nanyx.console/console.host` without one (see
 [Hosts](./hosts#choosing-a-host)). `--host <module>` chooses another for one command, in place of the manifest's. A
-`--host` that isn't one of the standard library's, or a module that isn't a host, is an error that names it, and so
+`--host` that isn't one the compiler ships, or a module that isn't a host, is an error that names it, and so
 is a manifest's `host` package other than `nanyx.console`, or `settings` for it; `--host` on a single `.nyx` file is a
 usage error, since a script always runs under the console host.
 

@@ -59,7 +59,7 @@ let ``A host without a package is an error`` () =
 [<InlineData("build")>]
 [<InlineData("check")>]
 let ``--host chooses the package's host in place of its manifest's`` (command: string) =
-    let outcome = onPackage "" main [ command; "--host"; "nanyx/console.host" ]
+    let outcome = onPackage "" main [ command; "--host"; "nanyx.console/console.host" ]
     Assert.Equal("", outcome.StandardError)
     Assert.Equal(0, outcome.ExitCode)
 
@@ -68,7 +68,7 @@ let ``--host naming a module that isn't a host is a usage error naming it`` () =
     let outcome = onPackage "" main [ "run"; "--host"; "nanyx/console" ]
     Assert.Equal(2, outcome.ExitCode)
     Assert.Equal(
-        "--host: 'nanyx/console' is not a host: it has no 'run' that runs an entry point. The hosts are 'nanyx/console.host'",
+        "--host: 'nanyx/console' is not a host: until any package can be one, a host is one the compiler ships, 'nanyx.console/console.host'",
         outcome.StandardError.Trim())
 
 [<Fact>]
@@ -76,9 +76,9 @@ let ``--host on a script is a usage error: a script runs under the console host`
     use directory = new TempDirectory()
     let path = Path.Combine(directory.Path, "script.nyx")
     File.WriteAllText(path, "import nanyx/console\n\nprintln(\"hi\")\n")
-    let outcome = nanyxIn directory.Path [ "run"; "--host"; "nanyx/console.host"; path ]
+    let outcome = nanyxIn directory.Path [ "run"; "--host"; "nanyx.console/console.host"; path ]
     Assert.Equal(2, outcome.ExitCode)
-    Assert.Equal("--host chooses a package's host: a script always runs under nanyx/console.host.", outcome.StandardError.Trim())
+    Assert.Equal("--host chooses a package's host: a script always runs under nanyx.console/console.host.", outcome.StandardError.Trim())
 
 [<Fact>]
 let ``An entry that doesn't fit the package's host names the host, in the editor as on the command line`` () =
@@ -103,4 +103,4 @@ def main = { x -> x + 1 }
     // The editor compiles a package's file as `Package.compileSourceWith` does.
     let result = Package.compileSourceWith Linters.none path source
     let mismatch = result.Diagnostics |> List.find (fun diagnostic -> diagnostic.Code = DiagnosticCodes.EntryDoesNotFitHost.Code)
-    Assert.StartsWith("The entry point 'main' doesn't fit the host 'nanyx/console.host'", mismatch.Message)
+    Assert.StartsWith("The entry point 'main' doesn't fit the host 'nanyx.console/console.host'", mismatch.Message)

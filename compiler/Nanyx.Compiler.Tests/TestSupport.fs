@@ -41,6 +41,12 @@ let spanOf (diagnostic: Diagnostic) =
     diagnostic.Span.Value
 
 /// The one diagnostic compiling `source` gives.
+/// The console host's file, in the package the compiler ships (see `ShippedPackages`).
+let consoleHostFile = Path.Combine(ShippedPackages.directoryOf Hosts.console.Package, "src", "console.host.nyx")
+
+/// `source` checked as the console host's file is, so that it may require `HostRuntime`, with `linters`.
+let compileAsHost (linters: LinterOptions) (source: string) = Compiler.compileFrom linters (SourceFile consoleHostFile) source
+
 let diagnosticOf (source: string) = single (Compiler.compile source)
 
 /// The one diagnostic `result`, compiled from `source`, has: its code, its message, and the text its span covers.

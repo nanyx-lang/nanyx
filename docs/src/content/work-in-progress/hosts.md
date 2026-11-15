@@ -51,7 +51,7 @@ A program's host is a deployment concern. It decides which runtime gets linked, 
 )
 ```
 
-`host` names the host's package and its version, and its `settings` are the host's configuration, passed to the host at startup. The CLI can override the host, for example `nanyx run --host nanyx/console.host`. Until packages resolve, the only host a manifest can name is `nanyx.console`, the standard library's `nanyx/console.host`, and it takes no `settings` yet (`NYX0024`).
+`host` names the host's package and its version, and its `settings` are the host's configuration, passed to the host at startup. The CLI can override the host, for example `nanyx run --host nanyx.console/console.host`. Until any package can be a host, the only host a manifest can name is `nanyx.console`, the package the compiler ships with `nanyx.console/console.host` in it, and it takes no `settings` yet (`NYX0024`).
 
 Once hosts are packages, there is no default host: a manifest with no `host` can't be run, and `nanyx new` writes one ([Built-ins as packages](./built-ins-as-packages#the-manifest)). Until then, a package with no `host` runs under the console host.
 Loose script files, which run top-level statements without a manifest, always run under `ConsoleHost`.
@@ -127,7 +127,7 @@ export def run: [HostRuntime] ([Console] () -> a) -> () = { entry ->
 }
 ```
 
-That is `nanyx/console.host` as it is built (`stdlib/nanyx/console.host.nyx`), less the helpers that read a line and
+That is `nanyx.console/console.host` as it is built (`packages/nanyx.console/src/console.host.nyx`), less the helpers that read a line and
 the `use` of `Env` (see [What's built](#whats-built)).
 
 `HostRuntime` is a context declared `protected` (see [nominal and protected types](../advanced/nominal-and-protected-types))
@@ -324,17 +324,17 @@ The composite host runs each part under the right sub-host and coordinates start
 - **Hosts whose platform can't block are Elm-style for now.** The browser host's entry is `init`, `update` and `view`,
   and effects such as fetching and timers come back to `update` as messages. Nothing in the language suspends, so this
   can be built without async. Async is a separate design, for later.
-- **Hosts live in the standard library until packages resolve**, and then become ordinary packages that the compiler
-  ships but doesn't treat specially ([Built-ins as packages](./built-ins-as-packages)): `nanyx/console.host` first, then
-  `nanyx/browser.host`. They are chosen with the manifest's `host` field or `--host` on the CLI. (The issues
-  wrote `nanyx/console/host`; a module path has one `/`, between the package and the module, so the module is
-  `console.host`.)
+- **Hosts are ordinary packages** that the compiler ships but doesn't treat specially
+  ([Built-ins as packages](./built-ins-as-packages)): `nanyx.console`, with its module `console.host`, first, then a
+  browser host. They are chosen with the manifest's `host` field or `--host` on the CLI. The console host ships with
+  the compiler as a source directory already; the compiler still keeps a table of hosts until any package can be one
+  ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)).
 - **ConsoleHost written in Nanyx comes first.** It replaces the compiler's hard-coded entry wiring with no change for
   users, and builds what every other host needs.
 
 # Plan
 
-1. **ConsoleHost in Nanyx** ([#1245](https://github.com/nanyx-lang/nanyx/issues/1245)): `nanyx/console.host`'s `run`
+1. **ConsoleHost in Nanyx** ([#1245](https://github.com/nanyx-lang/nanyx/issues/1245)): the console host's `run`
    takes the entry, the compiler checks `@entry` against it and starts the program with `run(entry)`, and
    `HostRuntime` is provided only to the host. Done: the host's `Console` reaches every entry and every script, and is
    the only `Console` a program has (see [What's built](#whats-built)).
@@ -358,10 +358,12 @@ The composite host runs each part under the right sub-host and coordinates start
 
 # What's built
 
-- **The host is a module the compiler resolves.** `Hosts.fs` describes each host the standard library ships (`Host`:
-  the package a manifest names it by, `nanyx.console`, the module, and the modules of the contexts it provides) and names the default, `Hosts.console`. Choosing another
-  host is choosing another `Host` there: `Hosts.tryFind` gives the one a module name (`nanyx/console.host`) is, or an
-  error that names it, for a module that doesn't exist or isn't a host.
+- **The host is a module the compiler resolves.** `Hosts.fs` describes each host the compiler ships (`Host`: the
+  package a manifest names it by, `nanyx.console`, its module, `console.host`, and the modules of the contexts it
+  provides) and names the default, `Hosts.console`. The package is a source directory beside the compiler
+  (`ShippedPackages`, see [Built-ins as packages](./built-ins-as-packages#whats-built)), and the host is imported from
+  it as `nanyx.console/console.host` (`Host.Import`). Choosing another host is choosing another `Host` there:
+  `Hosts.tryFind` gives the one an import (`nanyx.console/console.host`) is, or an error that names it.
 - **A package chooses its host.** `Manifest.check` reads the manifest's `host`, `(package = "nanyx.console", version
   = "0.28.0")`, into `Manifest.Host` (the console host without a `host` field). A package that isn't a host is
   `NYX0023`, and `settings` is `NYX0024`, since no host takes configuration yet.
@@ -410,7 +412,7 @@ The composite host runs each part under the right sub-host and coordinates start
   at the value. Every script carries the host's `Console`, about 24 KB of WebAssembly text for hello world, as an
   entry program does.
 - **`Console` only comes from the host.** `nanyx/console` declares the context and `print`, `println`, `eprint` and
-  `eprintln`, but no instance: the line reading lives in `nanyx/console.host` alone. Importing a module a host
+  `eprintln`, but no instance: the line reading lives in the console host alone. Importing a module a host
   provides (`Hosts.providesContexts`) binds the names of its plain contexts' members, `readLine` and the rest, each a
   symbol of its own (`Library.mergeImport`), so `Console` is still an ambient context: a script's statements and an
   unannotated def can call `readLine()`, and the def infers `Console`. A function named as a value carries it in its

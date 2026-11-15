@@ -31,7 +31,7 @@ if name == "nobody" then exit(1) else ()
 What a program is started with, and how it ends: its command-line arguments, its environment
 variables and its exit code.
 
-[`Env`](#env) is a context the host provides: under `nanyx/console.host`, a program that imports this
+[`Env`](#env) is a context the host provides: under the console host (`nanyx.console`), a program that imports this
 module calls `args`, `variable` and `exit` from its entry point, or from any function that
 declares `[Env]`.
 
@@ -45,7 +45,7 @@ context Env = (
 )
 ```
 
-The process the program runs as. The host supplies the instance: `nanyx/console.host`'s reads
+The process the program runs as. The host supplies the instance: the console host's reads
 what the program was started with.
 
 - `args`: The program's command-line arguments, after its name: `nanyx run tool.nyx a b` gives

@@ -20,7 +20,10 @@ are not there yet.
 The `Compiler` workflow (`.github/workflows/compiler.yml`) publishes `nanyx` for five runtime identifiers:
 `win-x64`, `linux-x64`, `linux-arm64`, `osx-x64` and `osx-arm64`. Each build is self-contained, so no .NET runtime
 is needed, and is packed as `nanyx-<version>-<rid>.zip` on Windows and `nanyx-<version>-<rid>.tar.gz` elsewhere. An
-archive holds the one executable, `nanyx.exe` or `nanyx` (with its executable bit set).
+archive holds the executable, `nanyx.exe` or `nanyx` (with its executable bit set), and beside it `packages/`, the
+packages the compiler ships as source directories (the console host, `packages/nanyx.console`), which it finds there
+([Built-ins as packages](./built-ins-as-packages)). The workflow's smoke test runs a script and a package `nanyx new`
+made with the published binary, so an archive without them fails.
 
 Merging a change to the compiler's version on `main` is the release: the `Release` job tags the commit
 `compiler/<version>` and attaches the archives it has just built and tested to a GitHub release, unless that tag
