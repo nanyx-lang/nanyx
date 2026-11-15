@@ -135,7 +135,7 @@ module DiagnosticCodes =
     let LiteralOutOfRange = code 229 "Literal out of range" Severity.Error
     let OptionLikeFallback = code 230 "Option-like right operand of ??" Severity.Error
     let InvalidRecordSpread = code 231 "Invalid record spread" Severity.Error
-    let ScopedContextNotNominal = code 232 "Scoped context is not nominal" Severity.Error
+    let ScopedContextNotProtected = code 232 "Scoped context is neither protected nor private" Severity.Error
     let ScopedContextEscapes = code 233 "Scoped context escapes the call that supplies it" Severity.Error
     let NotACellArgument = code 234 "mut argument is not a cell" Severity.Error
     let MisplacedCellType = code 235 "Cell type inside another type" Severity.Error
@@ -170,7 +170,7 @@ module DiagnosticCodes =
           GuardNotAPredicate; NameBoundTwiceInPattern; MisplacedTypeHole; EndlessForLoop; PositionalForNamedArgument
           UnattachableDefinition; BlockWithoutResult; MutOutsideMemory; NotACell; CellAssignmentMismatch
           UnboundContextVariable; ContextsNotAllowed; UnguardedRecursiveAlias
-          LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotNominal; ScopedContextEscapes
+          LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotProtected; ScopedContextEscapes
           NotACellArgument; MisplacedCellType; UndeterminedContextType; EntryDoesNotFitHost; HostRuntimeOutsideHost; ScriptRunValue; ContextsWithoutType
           InvalidExtern; ExternWithoutHostRuntime; ConflictingExterns
           UnsupportedByBackend; BackendInternalError ]

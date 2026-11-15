@@ -25,7 +25,7 @@ The full form of a context definition is `scoped export context Name(params) = p
 scoped export context Memory = protected ()
 ```
 
-A scoped context must be nominal, so that each of its instances comes from the function its module provides to supply it: `scoped context Tx = (...)` is an error. Any module may declare one. The compiler doesn't yet check that nothing requiring a scoped context leaves its scope ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057)).
+A scoped context must be either `protected` or `private`, so that each of its instances comes from the function its module provides to supply it: `scoped context Tx = (...)` is an error. Any module may declare one. The compiler doesn't yet check that nothing requiring a scoped context leaves its scope ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057)).
 
 # Requiring a context
 
