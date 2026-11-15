@@ -13,7 +13,9 @@ A program never imports `nanyx/console.host` itself: `nanyx run` and `nanyx buil
 The console host: it runs a command-line program's entry point.
 
 A program's `@entry` is passed to [`run`](#run), which runs it in the contexts this host provides:
-`Console`, built on the `HostRuntime` the toolchain provides to the host, and `Env`.
+`Console`, which reads and writes the standard streams, and `Env`. Both are written on WASI's
+functions, which the host declares with `@extern` and calls with the `HostRuntime` the toolchain
+provides to it, passing their buffers in memory with `nanyx/host.memory`.
 
 ## `run`
 

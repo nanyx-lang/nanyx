@@ -102,6 +102,27 @@ def byteLength: [HostRuntime] string -> I32
 
 How many bytes of UTF-8 `text` takes, which [`addressOf`](#addressof) gives the first of.
 
+## `hostState`
+
+```nanyx fragment
+def hostState: [HostRuntime] () -> I32
+```
+
+The address of 4096 bytes the module sets aside for its host, all zero when the program starts:
+where a host keeps what it needs from one call to the next, such as how much of standard input it
+has read, and the small buffers it passes to foreign functions, without allocating. Nothing else
+reads or writes them.
+
+## `keepAlive`
+
+```nanyx fragment
+def keepAlive: [HostRuntime] string -> ()
+```
+
+Keeps `text` alive until here. Reference counting follows an address of `text` only through
+values made from it, not through memory: when the address is written into memory that a foreign
+function reads, as an iovec is for WASI's `fd_write`, call this after the foreign function.
+
 ## `stringAt`
 
 ```nanyx fragment

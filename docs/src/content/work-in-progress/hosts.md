@@ -116,10 +116,10 @@ import (
 
 export def run: [HostRuntime] ([Console] () -> a) -> () = { entry ->
   use Console(
-    write = writeStdout
-    writeError = writeStderr
-    readLine = { _ -> readLineAfter("") }
-    readToEnd = { _ -> #some(readToEndAfter("")) }
+    write = { text -> writeTo(1, text) }
+    writeError = { text -> writeTo(2, text) }
+    readLine = { _ -> readLineAfter([]) }
+    readToEnd = { _ -> #some(readToEndAfter([])) }
     flush = { _ -> () }
   )
 
@@ -131,8 +131,9 @@ That is `nanyx/console.host` as it is built (`stdlib/nanyx/console.host.nyx`), l
 the `use` of `Env` (see [What's built](#whats-built)).
 
 `HostRuntime` is a context declared `protected` (see [nominal and protected types](../advanced/nominal-and-protected-types))
-that exposes the privileged layer: raw IO, sockets, the process and, on the WASM backend, the module's imports. The
-toolchain provides `HostRuntime` only to the module named as the host. Libraries can't require it, so they can't bypass
+that marks the host: only code that has it can call the [foreign functions](./foreign-functions) the embedder provides
+(raw IO, the process and, on the WASM backend, the module's imports) and reach linear memory. The toolchain provides
+`HostRuntime` only to the module named as the host. Libraries can't require it, so they can't bypass
 the capabilities the host chose to provide.
 
 A host takes one entry shape. Arguments and the exit code, which would otherwise call for a second shape, come through a context instead.
@@ -346,7 +347,7 @@ The composite host runs each part under the right sub-host and coordinates start
 4a. **Hosts on foreign functions** ([Foreign functions](./foreign-functions)): `@extern` imports that only code with
    `HostRuntime` can call ([#1424](https://github.com/nanyx-lang/nanyx/issues/1424), done), host access to linear memory
    ([#1425](https://github.com/nanyx-lang/nanyx/issues/1425), done), and the console host written on them with no compiler
-   intrinsics ([#1426](https://github.com/nanyx-lang/nanyx/issues/1426)), so it can ship as a package.
+   intrinsics ([#1426](https://github.com/nanyx-lang/nanyx/issues/1426), done), so it can ship as a package.
 5. **Console in a page**, for the [playground](./playground): the embedder changes in "`ConsoleHost` in a page"
    above, starting with writing `.wasm` ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).
 6. **The browser host**: `init`, `update` and `view`, with `Dom`, `Clock` and `Log`, and the JavaScript it ships
@@ -374,12 +375,13 @@ The composite host runs each part under the right sub-host and coordinates start
   `NYX0237`, reported at `@entry`, with the type the host expects and the one the entry has.
 - **`run` ignores what the entry returns.** Its parameter is `[Console] () -> a`, not `() -> ()`, because an entry
   whose block ends in an expression (`dbg(x)`) returned a value that the old `main()` call dropped.
-- **`HostRuntime`** is declared in `nanyx/host.runtime`, with an instance made of the runtime's intrinsics, so it is an
-  ambient context wherever that module is imported. `Hosts.runtimeErrors` reports `NYX0238` in any module but a host,
-  `nanyx/host.runtime` and `nanyx/host.memory`: at each top-level def whose type requires it, written or inferred, other than a
-  [foreign function](./foreign-functions), which any module may declare, and at each top-level call it is provided to,
-  other than the call of `run` that `@entry` makes. A module that calls a host's `run` itself
-  needs `HostRuntime` for it, so that is an error too.
+- **`HostRuntime`** is declared in `nanyx/host.runtime`, a context with no members: the capability that lets code
+  call [foreign functions](./foreign-functions) and use `nanyx/host.memory`. With no members, a function that requires
+  it is passed nothing, and the type checker treats it as available wherever it is required, so `Hosts.runtimeErrors`
+  reports `NYX0238` in any module but a host, `nanyx/host.runtime` and `nanyx/host.memory` by what each call calls: at
+  each top-level def that requires it, as its written contexts say or a call in it does, other than a foreign function,
+  which any module may declare, and at each call at the top level that requires it, other than the call of `run` that
+  `@entry` makes. A module that calls a host's `run` itself needs `HostRuntime` for it, so that is an error too.
 - **Where the entry's `Console` comes from.** Every entry is passed the members of the `Console` that `run` `use`s, so
   it reads and writes through the host. An entry that doesn't write its type, which is most programs, infers `Console`
   as an ambient context, because the module imports `nanyx/console`. A def that infers an ambient context takes its
@@ -418,11 +420,10 @@ The composite host runs each part under the right sub-host and coordinates start
 - **`Env`** is declared in `nanyx/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, so its
   parameter is `[Console & Env] () -> a`; an entry that requires fewer contexts fits. `nanyx/env` is one of the
   host's `ProvidedModules`, so its members are ambient names where it is imported, but not one of its
-  `ImplicitModules`: a program imports it itself. Its members are functions of the host's own over the intrinsics
-  `__nanyx_arguments` and `__nanyx_environment` (WASI `args_get` and `environ_get`, each read into one string of
-  entries ended by zero bytes) and `__nanyx_exit` (`proc_exit`), not members of `HostRuntime`: a function that
-  requires `HostRuntime` is passed all of its members, as the lambdas of `Console` are, so every program would
-  carry them. A program that doesn't call them doesn't contain them, since a module emits only the functions its
+  `ImplicitModules`: a program imports it itself. Its members are functions of the host's own over WASI's
+  `args_sizes_get` and `args_get`, `environ_sizes_get` and `environ_get`, and `proc_exit`, declared with `@extern`, with
+  their buffers allocated with `nanyx/host.memory` (see [Foreign functions](./foreign-functions#the-console-host)). A
+  program that doesn't call them doesn't contain them, since a module emits only the functions its
   start reaches ([#1329](https://github.com/nanyx-lang/nanyx/issues/1329)). `nanyx run` passes what follows the
   file or package as the arguments, after the program's name, and the process's environment variables (see
   [The `nanyx` command](./command-line#usage)); an `exit(0)` part-way is a clean end, which `--check-memory` doesn't

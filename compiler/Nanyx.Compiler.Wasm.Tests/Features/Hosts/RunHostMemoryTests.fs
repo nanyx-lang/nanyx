@@ -6,7 +6,8 @@ open Xunit
 open NyxCompiler
 open TranspilerWasmTestHelpers
 
-/// A host whose start calls `main`, with `nanyx/host.memory` imported, and `definitions` before it.
+/// A host whose start calls `main`, with `nanyx/host.memory` imported, `writeStdout` (see `hostWriteStdout`), and
+/// `definitions` before it.
 let private host (definitions: string) =
     $"""module console.host
 
@@ -15,6 +16,7 @@ import (
   nanyx/host.runtime
 )
 
+{hostWriteStdout}
 {definitions}
 main()
 """
@@ -107,10 +109,7 @@ def main: [HostRuntime] () -> () = { ->
 [<Fact>]
 let ``The memory functions require HostRuntime, so a module that isn't a host can't use them`` () =
     let source =
-        """import (
-  nanyx/host.memory
-  nanyx/host.runtime
-)
+        """import nanyx/host.memory
 
 def peek = { address -> readByte(address) }
 """

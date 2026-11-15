@@ -1,6 +1,6 @@
 /// What a module needs besides its functions, worked out from the core IR it is emitted from: the tags it numbers,
-/// the string literals and static closures in its data segment, the foreign functions it imports, and whether `dbg`
-/// prints.
+/// the string literals and static closures in its data segment, the foreign functions it imports, whether `dbg` prints,
+/// and whether its host keeps state in memory.
 module Transpiler.Wasm.CoreIrFacts
 
 open System.Collections.Generic
@@ -17,7 +17,9 @@ type ModuleFacts =
       /// Every foreign function a call is made to (see `CallImport`), in the order the functions' IR first names them.
       Imports: NyxCompiler.Extern list
       /// Whether some `dbg` prints through `$dbg_str`.
-      UsesDbgHelpers: bool }
+      UsesDbgHelpers: bool
+      /// Whether some function reads the address of the block the module sets aside for its host.
+      UsesHostState: bool }
 
 /// The facts of a module made of `functions`.
 let collect (functions: Function list) : ModuleFacts =
@@ -26,6 +28,7 @@ let collect (functions: Function list) : ModuleFacts =
     let staticClosures = ResizeArray<string * int>()
     let imports = ResizeArray<NyxCompiler.Extern>()
     let usesDbgHelpers = ref false
+    let usesHostState = ref false
 
     // A temporary's value is emitted where the temporary is used, not where it is bound, so it is looked at there too:
     // the strings are then in the order the code uses them.
@@ -70,6 +73,7 @@ let collect (functions: Function list) : ModuleFacts =
     and own (e: Expr) =
         match e.Kind with
         | Atom a -> atom a
+        | CallRuntime(name, _, _) when name = NyxCompiler.Intrinsics.hostState -> usesHostState.Value <- true
         | Prim(_, atoms)
         | Call(_, atoms)
         | MakeList atoms
@@ -132,4 +136,5 @@ let collect (functions: Function list) : ModuleFacts =
       Strings = strings |> Seq.distinct |> List.ofSeq
       StaticClosures = staticClosures |> Seq.distinct |> List.ofSeq
       Imports = imports |> Seq.distinct |> List.ofSeq
-      UsesDbgHelpers = usesDbgHelpers.Value }
+      UsesDbgHelpers = usesDbgHelpers.Value
+      UsesHostState = usesHostState.Value }

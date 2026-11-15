@@ -1,108 +1,197 @@
 --| The console host: it runs a command-line program's entry point.
 
   A program's `@entry` is passed to [`run`], which runs it in the contexts this host provides:
-  [`Console`], built on the [`HostRuntime`] the toolchain provides to the host, and [`Env`].
+  [`Console`], which reads and writes the standard streams, and [`Env`]. Both are written on WASI's
+  functions, which the host declares with `@extern` and calls with the [`HostRuntime`] the toolchain
+  provides to it, passing their buffers in memory with `nanyx/host.memory`.
 module console.host
 
 import (
   nanyx/console as (Console, IoError)
   nanyx/env as (Env)
+  nanyx/host.memory
   nanyx/host.runtime
+  nanyx/text
 )
 
---| `line` without a carriage return at its end.
-def withoutCarriageReturn: string -> string = { line ->
-  def length = __nanyx_string_length(line)
+@extern("wasi_snapshot_preview1", "fd_write")
+def fdWrite: [HostRuntime] I32, I32, I32, I32 -> I32
 
-  if length > 0 and __nanyx_string_byte_at(line, length - 1) == 13
-    then __nanyx_string_slice(line, 0, length - 1)
-    else line
+@extern("wasi_snapshot_preview1", "fd_read")
+def fdRead: [HostRuntime] I32, I32, I32, I32 -> I32
+
+@extern("wasi_snapshot_preview1", "args_sizes_get")
+def argsSizesGet: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi_snapshot_preview1", "args_get")
+def argsGet: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi_snapshot_preview1", "environ_sizes_get")
+def environSizesGet: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi_snapshot_preview1", "environ_get")
+def environGet: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi_snapshot_preview1", "proc_exit")
+def procExit: [HostRuntime] I32 -> ()
+
+-- The host keeps its state in the block the module sets aside for it (see `hostState`): at 4 and 8,
+-- where what is left of the standard input it has read starts and ends in its buffer; at 12, an
+-- iovec, the address and length of the bytes to write or read; at 20, the count of bytes written or
+-- read; and from 64 to the end of the block, the buffer standard input is read into.
+
+--| The address `offset` bytes into the host's state.
+def stateAt: [HostRuntime] I32 -> I32 = { offset ->
+  I32.wrappingAdd(hostState(), offset)
+}
+
+--| How many bytes of standard input are read at a time: the rest of the host's block.
+def bufferSize: I32 = 4032
+
+--| Writes `text` to the file descriptor `fd`, as it is.
+def writeTo: [HostRuntime] I32, string -> () = { fd, text ->
+  writeI32(stateAt(12), addressOf(text))
+  writeI32(stateAt(16), byteLength(text))
+  ignore(fdWrite(fd, stateAt(12), 1, stateAt(20)))
+  keepAlive(text)
+}
+
+--| How many bytes of standard input are left in the buffer, read into it when none are; 0 when the
+  input has ended, or cannot be read.
+def fill: [HostRuntime] () -> I32 = { _ ->
+  def start = readI32(stateAt(4))
+  def end = readI32(stateAt(8))
+
+  if start < end then end - start else
+    writeI32(stateAt(12), stateAt(64))
+    writeI32(stateAt(16), bufferSize)
+    def read = if fdRead(0, stateAt(12), 1, stateAt(20)) == 0 then readI32(stateAt(20)) else 0
+    writeI32(stateAt(4), 0)
+    writeI32(stateAt(8), read)
+    read
+}
+
+--| Where the line from `index` ends in the buffer at `held`: after its first line break before
+  `end`, or at `end`.
+def lineEnd: [HostRuntime] I32, I32, I32 -> I32 = { held, index, end ->
+  if index >= end
+    then end
+    else if readByte(I32.wrappingAdd(held, index)) == 10
+      then index + 1
+      else lineEnd(held, index + 1, end)
+}
+
+--| The standard input left in the buffer, read into it when none is, up to and including its first
+  line break when `toLineBreak`; the empty string when the input has ended.
+def readStdin: [HostRuntime] bool -> string = { toLineBreak ->
+  def left = fill()
+  def start = readI32(stateAt(4))
+  def stop = if toLineBreak then lineEnd(stateAt(64), start, start + left) else start + left
+  writeI32(stateAt(4), stop)
+  stringAt(stateAt(I32.wrappingAdd(64, start)), stop - start)
 }
 
 --| `parts`, the latest first, joined in the order they were read.
 def joined: list(string) -> string = { parts ->
-  __nanyx_string_join(list.reverse(parts), "")
+  string.concat(list.reverse(parts))
 }
 
 --| The rest of the current line of standard input, after `parts`, the pieces of it read so far (the
   latest first), each of them not empty.
 def readLineAfter: [HostRuntime] list(string) -> #some(string) | #error(IoError) = { parts ->
-  def part = readStdinLine()
-  def length = __nanyx_string_length(part)
+  def part = readStdin(true)
 
-  if length == 0
+  if string.isEmpty(part)
     then (if list.isEmpty(parts) then #error(#endOfInput) else #some(joined(parts)))
-    else if __nanyx_string_byte_at(part, length - 1) == 10
+    else if string.endsWith(part, "\n")
       then #some(
-        withoutCarriageReturn(joined([__nanyx_string_slice(part, 0, length - 1), ...parts]))
+        string.removeSuffix(joined([string.take(part, string.length(part) - 1), ...parts]), "\r")
       )
       else readLineAfter([part, ...parts])
 }
 
 --| Everything left on standard input, after `blocks`, the blocks read so far (the latest first).
 def readToEndAfter: [HostRuntime] list(string) -> string = { blocks ->
-  def block = readStdinBlock()
-  if __nanyx_string_length(block) == 0 then joined(blocks) else readToEndAfter([block, ...blocks])
+  def block = readStdin(false)
+  if string.isEmpty(block) then joined(blocks) else readToEndAfter([block, ...blocks])
 }
 
---| Where the entry of `block` that holds the byte at `index` starts: after the zero byte before it,
-  or at the start of `block`.
-def entryStart: string, int -> int = { block, index ->
-  if index <= 0 or __nanyx_string_byte_at(block, index - 1) == 0
-    then index
-    else entryStart(block, index - 1)
+--| How many bytes the string ending in a zero byte at `address` has before it, after `count`.
+def lengthFrom: [HostRuntime] I32, I32 -> I32 = { address, count ->
+  if readByte(address + count) == 0 then count else lengthFrom(address, count + 1)
 }
 
---| The entries of `block` before `end`, each ended by a zero byte as the runtime lays out the
-  arguments and the environment, in front of `acc`.
-def entriesBefore: string, int, list(string) -> list(string) = { block, end, acc ->
-  def start = entryStart(block, end - 1)
-
-  if end <= 0
-    then acc
-    else entriesBefore(
-      block
-      start
-      __nanyx_list_cons(__nanyx_string_slice(block, start, end - 1 - start), acc)
-    )
+--| The first `count` of the strings ending in a zero byte that `pointers` holds the addresses of, in
+  front of `acc`.
+def entriesBefore: [HostRuntime] I32, I32, list(string) -> list(string) = { pointers, count, acc ->
+  if count == 0 then acc else
+    def address = readI32(pointers + (count - 1) * 4)
+    entriesBefore(pointers, count - 1, [stringAt(address, lengthFrom(address, 0)), ...acc])
 }
 
---| The entries of `block`, each ended by a zero byte.
-def entriesOf: string -> list(string) = { block ->
-  entriesBefore(block, __nanyx_string_length(block), [])
+--| How many of the program's arguments or environment variables there are, and how many bytes they
+  take, written at `sizes` and `sizes + 4`.
+def sizesOf: [HostRuntime] (#arguments | #environment), I32 -> I32 = { which, sizes ->
+  match which
+    | #arguments -> argsSizesGet(sizes, sizes + 4)
+    | #environment -> environSizesGet(sizes, sizes + 4)
 }
 
---| The value in `entries`, each written `NAME=value`, of the variable `name`.
+--| Writes the program's arguments or environment variables in `buffer`, each ended by a zero byte,
+  and their addresses at `pointers`.
+def entriesAt
+  : [HostRuntime] (#arguments | #environment), I32, I32 -> I32
+  = { which, pointers, buffer ->
+    match which
+      | #arguments -> argsGet(pointers, buffer)
+      | #environment -> environGet(pointers, buffer)
+  }
+
+--| The program's arguments, its own name first, or its environment variables, each `NAME=value`.
+def entriesOf: [HostRuntime] (#arguments | #environment) -> list(string) = { which ->
+  def sizes = allocate(8)
+  ignore(sizesOf(which, sizes))
+  def count = readI32(sizes)
+  def pointers = allocate(count * 4 + 4)
+  def buffer = allocate(readI32(sizes + 4) + 1)
+  free(sizes)
+  ignore(entriesAt(which, pointers, buffer))
+  def entries = entriesBefore(pointers, count, [])
+  free(pointers)
+  free(buffer)
+  entries
+}
+
+--| The value in `entries`, each written `NAME=value`, of the variable whose entries start `prefix`.
 def variableIn: list(string), string -> #some(string) | #notSet = {
   | [], _ -> #notSet
-  | [entry, ...rest], name ->
-    def prefix = name ++ "="
-    def length = __nanyx_string_length(prefix)
-
-    if __nanyx_string_slice(entry, 0, length) == prefix
-      then #some(__nanyx_string_slice(entry, length, __nanyx_string_length(entry) - length))
-      else variableIn(rest, name)
+  | [entry, ...rest], prefix ->
+    if string.startsWith(entry, prefix)
+      then #some(string.skip(entry, string.length(prefix)))
+      else variableIn(rest, prefix)
 }
 
--- `Env`'s members read the runtime's intrinsics themselves rather than through `HostRuntime`: a
--- function that requires `HostRuntime` is passed all of its members, so a member added there would
--- reach every program, while these are compiled only into a program that calls them.
-
 --| The program's command-line arguments, after its name.
-def arguments: () -> list(string) = { _ ->
-  match entriesOf(__nanyx_arguments())
+def arguments: [HostRuntime] () -> list(string) = { _ ->
+  match entriesOf(#arguments)
     | [] -> []
     | [_, ...rest] -> rest
 }
 
 --| The value of the environment variable `name`, or `#notSet` when it has none.
-def environmentVariable: string -> #some(string) | #notSet = { name ->
-  variableIn(entriesOf(__nanyx_environment()), name)
+def environmentVariable: [HostRuntime] string -> #some(string) | #notSet = { name ->
+  variableIn(entriesOf(#environment), name ++ "=")
 }
 
---| Ends the program with the exit code `code`.
-def exitProcess: int -> undefined = { code ->
-  __nanyx_exit(code)
+--| Ends the program with the exit code `code`, or 1 for a code that doesn't fit an `I32`. WASI's
+  `proc_exit` never returns: the call after it only gives the function its type.
+def exitProcess: [HostRuntime] int -> undefined = { code ->
+  def exitCode = match int.toI32(code)
+    | #some(fits) -> fits
+    | #outOfRange -> 1
+
+  procExit(exitCode)
+  exitProcess(code)
 }
 
 --| Runs `entry`, the program's entry point, with a `Console` that reads and writes the standard
@@ -110,14 +199,18 @@ def exitProcess: int -> undefined = { code ->
   ignored.
 export def run: [HostRuntime] ([Console & Env] () -> a) -> () = { entry ->
   use Console(
-    write = writeStdout
-    writeError = writeStderr
+    write = { text -> writeTo(1, text) }
+    writeError = { text -> writeTo(2, text) }
     readLine = { _ -> readLineAfter([]) }
     readToEnd = { _ -> #some(readToEndAfter([])) }
     flush = { _ -> () }
   )
 
-  use Env(args = arguments, variable = environmentVariable, exit = exitProcess)
+  use Env(
+    args = { _ -> arguments() }
+    variable = { name -> environmentVariable(name) }
+    exit = { code -> exitProcess(code) }
+  )
 
   ignore(entry())
 }

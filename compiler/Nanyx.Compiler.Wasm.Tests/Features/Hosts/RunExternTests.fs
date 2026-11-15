@@ -8,12 +8,14 @@ open Nanyx.Runtime
 open Transpiler.Wasm.CodeGen
 open TranspilerWasmTestHelpers
 
+/// A test host's source: its imports, `writeStdout` (see `hostWriteStdout`), then `body`.
+let private host (body: string) =
+    "module console.host\n\nimport (\n  nanyx/host.memory\n  nanyx/host.runtime\n)\n\n" + hostWriteStdout + "\n" + body
+
 /// A host that calls WASI's `args_sizes_get` twice, and writes what it returned each time: 0, for success.
 let private argsSizes =
-    """module console.host
-
-import nanyx/host.runtime
-
+    host
+        """
 @extern("wasi_snapshot_preview1", "args_sizes_get")
 def argsSizesGet: [HostRuntime] (I32, I32) -> I32
 
@@ -26,8 +28,8 @@ writeStdout("{sizes()} {argsSizesGet(0, 4)}")
 let ``An extern is one import of the module, however many places call it`` () =
     let wat = hostWatWith WasmOptions.Default argsSizes
     Assert.Equal(1, countOccurrences "(import \"wasi_snapshot_preview1\" \"args_sizes_get\"" wat)
-    Assert.Contains("(func $import_wasi_snapshot_preview1_args_sizes_get (param i32 i32) (result i32))", wat)
-    Assert.Contains("call $import_wasi_snapshot_preview1_args_sizes_get", wat)
+    Assert.Contains("(func $args_sizes_get (param i32 i32) (result i32))", wat)
+    Assert.Contains("call $args_sizes_get", wat)
 
 [<Fact>]
 let ``A host calls an extern of a WASI function, which the CLI's runtime provides`` () =
@@ -36,10 +38,8 @@ let ``A host calls an extern of a WASI function, which the CLI's runtime provide
 [<Fact>]
 let ``An extern takes and returns each of the value types`` () =
     let source =
-        """module console.host
-
-import nanyx/host.runtime
-
+        host
+            """
 @extern("test", "numbers")
 def numbers: [HostRuntime] (I32, I64, F32, F64) -> F64
 
@@ -60,10 +60,8 @@ writeStdout("{numbers(1, 2, 3.0, 4.0)}")
 [<Fact>]
 let ``An extern the runtime doesn't provide fails when the module is instantiated, naming the import`` () =
     let source =
-        """module console.host
-
-import nanyx/host.runtime
-
+        host
+            """
 @extern("elsewhere", "missing")
 def missing: [HostRuntime] () -> I32
 

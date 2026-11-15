@@ -543,7 +543,7 @@
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
   (type $ctx_fn_2_i32_i64_to_i32 (func (param i32 i64) (result i32)))
   (table $ctx_table 2 funcref)
-  (elem (i32.const 0) $__lambda_11 $__fn___script)
+  (elem (i32.const 0) $__lambda_16 $__fn___script)
 
   (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
   (data (i32.const 268) "\00\00\00\00\00\00\00\00\01\00\00\00")
@@ -614,12 +614,12 @@
     )
   )
 
-  (func $__host_run__unit__known (param $entry i32) (result i32) (local $__inlined15 i32)
+  (func $__host_run__unit (param $entry i32) (result i32) (local $__inlined11 i32)
     local.get $entry
     local.get $entry
     i32.load
     call_indirect (type $ctx_fn_1)
-    local.set $__inlined15
+    local.set $__inlined11
     i32.const 0
   )
 
@@ -749,7 +749,7 @@
   )
   (export "items" (func $items))
 
-  (func $__lambda_11 (param $__env i32) (param $-3C-arg-3E-_i64 i64) (result i32)
+  (func $__lambda_16 (param $__env i32) (param $-3C-arg-3E-_i64 i64) (result i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
     local.get $-3C-arg-3E-_i64
@@ -758,7 +758,7 @@
     i64.const 0
     i64.eq
   )
-  (export "__lambda_11" (func $__lambda_11))
+  (export "__lambda_16" (func $__lambda_16))
 
   (func $__fn___script (param $__env i32) (result i32) (local $__inlined9__in1__in1 i32) (local $keep__in1__in1__in1 i32) (local $__inlined14__in1__in1 i32) (local $__match_tmp_0__in1__in1_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__for_cursor_0__in1__in1 i32) (local $__for_end_0__in1__in1_i64 i64) (local $__for___for_element_0__in1__in1_i64 i64) (local $__owned_0 i32)
     local.get $__env
@@ -979,7 +979,7 @@
 
   (func $__nanyx_start
     i32.const 276
-    call $__host_run__unit__known
+    call $__host_run__unit
     drop
     global.get $items__built
     if

@@ -335,6 +335,22 @@ let instantiateWat (wat: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
 let instantiateWasm (source: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
     instantiateWat (transpileWatWith checkedOptions source) dropped
 
+/// The definitions a test host (see `hostWatWith`) writes to stdout with: `writeStdout`, over WASI's `fd_write`, with
+/// `nanyx/host.memory` for its iovec. The host imports `nanyx/host.memory` and `nanyx/host.runtime`.
+let hostWriteStdout =
+    """@extern("wasi_snapshot_preview1", "fd_write")
+def fdWrite: [HostRuntime] I32, I32, I32, I32 -> I32
+
+def writeStdout: [HostRuntime] string -> () = { text ->
+  def iovec = allocate(12)
+  writeI32(iovec, addressOf(text))
+  writeI32(iovec + 4, byteLength(text))
+  ignore(fdWrite(1, iovec, 1, iovec + 8))
+  keepAlive(text)
+  free(iovec)
+}
+"""
+
 /// `source` checked as the standard library's `console.host`, a host, which may require `HostRuntime`, and compiled
 /// with `options`; any diagnostic fails.
 let hostWatWith (options: WasmOptions) (source: string) =

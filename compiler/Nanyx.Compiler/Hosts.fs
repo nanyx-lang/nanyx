@@ -102,10 +102,13 @@ module Hosts =
     /// alias).
     let private isRuntime (ty: Ty) =
         let named (name: string) = name = runtimeContext || name.EndsWith("." + runtimeContext)
-        match Unifier.unalias ty with
-        | TyApply(name, _) -> named name
-        | TyNominal(id, _, _) -> named id.Name
-        | _ -> false
+        match ty with
+        | TyAlias(name, _, _) when named name -> true
+        | _ ->
+            match Unifier.unalias ty with
+            | TyApply(name, _) -> named name
+            | TyNominal(id, _, _) -> named id.Name
+            | _ -> false
 
     let private runtimeError (span: SourceSpan) (what: string) =
         Diagnostics.at
@@ -114,34 +117,47 @@ module Hosts =
             $"{what} requires the context '{runtimeContext}', which only a host may require. Use the contexts the host provides, such as 'Console'."
 
     /// The errors for each place a module that is not a host requires `HostRuntime` (see `mayRequireRuntime`): each of
-    /// its top-level defs whose type requires it (`contextTypes`, by symbol), other than its foreign functions, which
-    /// any module may declare (see `ExternSyntax`), and each call at its top level that the runtime provides it to
-    /// (`providers`, by the call's node), other than the calls of the host's `run` that its entry points make
-    /// (`entries`).
+    /// its top-level defs that requires it, as `contextTypes` (by symbol) has its contexts or a call in it does, other
+    /// than its foreign functions, which any module may declare (see `ExternSyntax`), and each call at its top level that
+    /// requires it, other than the calls of the host's `run` that its entry points make (`entries`). A call requires it
+    /// when the runtime provides it there (`providers`, by the call's node), or when the def it calls requires it
+    /// (`calleeContexts`, by the call's node): `HostRuntime` has no members, so nothing else records where it is needed.
     let runtimeErrors
         (origin: ModuleOrigin)
         (entries: EntryPoint list)
         (symbols: Map<SymbolId, Symbol>)
         (contextTypes: Map<SymbolId, Ty list>)
         (providers: Map<NodeId, ProvidedContext list>)
+        (calleeContexts: NodeId -> Ty list)
         (module': Module)
         : Diagnostic list =
         if mayRequireRuntime origin then
             []
         else
             let startCalls = entries |> List.collect _.Call |> Set.ofList
-            let externs =
-                module'
-                |> List.choose (function
-                    | Kind (Def (ValueDef(_, name, _, Kind (ExternSyntax.Import _)))) -> Some name
-                    | _ -> None)
-                |> Set.ofList
+            let needsRuntime (expr: Expression) =
+                not (startCalls.Contains expr.Id)
+                && (calleeContexts expr.Id |> List.exists isRuntime
+                    || providers
+                       |> Map.tryFind expr.Id
+                       |> Option.exists (List.exists (fun provided -> provided.Provider = FromRuntime && isRuntime provided.Context)))
+            let rec defs (items: TopLevelItem list) =
+                items
+                |> List.collect (fun item ->
+                    match item.Kind with
+                    | Def (ValueDef(_, _, _, Kind (ExternSyntax.Import _))) -> []
+                    | Def (ValueDef(_, name, _, value)) -> [ name, item, value ]
+                    | ModuleBlock(_, blockItems) -> defs blockItems
+                    | _ -> [])
+            let declared = symbols |> Map.values |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue) |> List.ofSeq
             let defErrors =
-                contextTypes
-                |> Map.toList
-                |> List.filter (fun (_, contexts) -> contexts |> List.exists isRuntime)
-                |> List.choose (fun (id, _) -> symbols |> Map.tryFind id)
-                |> List.filter (fun symbol -> not (externs.Contains symbol.Name))
+                defs module'
+                |> List.choose (fun (name, item, value) ->
+                    declared
+                    |> List.tryFind (fun symbol -> symbol.Name = name && SourceSpan.contains item.Span symbol.Declaration)
+                    |> Option.filter (fun symbol ->
+                        contextTypes |> Map.tryFind symbol.Id |> Option.exists (List.exists isRuntime)
+                        || SyntaxTree.expressionsWithin value |> List.exists needsRuntime))
                 |> List.sortBy _.Declaration.Start
                 |> List.map (fun symbol -> runtimeError symbol.Declaration $"'{symbol.Name}'")
             let callErrors =
@@ -151,11 +167,7 @@ module Hosts =
                     | _ -> None)
                 |> List.collect SyntaxTree.ofItem
                 |> List.collect SyntaxTree.expressionsWithin
-                |> List.filter (fun expr ->
-                    not (startCalls.Contains expr.Id)
-                    && providers
-                       |> Map.tryFind expr.Id
-                       |> Option.exists (List.exists (fun provided -> provided.Provider = FromRuntime && isRuntime provided.Context)))
+                |> List.filter needsRuntime
                 |> List.map (fun expr ->
                     match expr.Kind with
                     | FunctionCall(name, _, _)
