@@ -43,7 +43,10 @@ let rec typeKeyOfType (ty: NyxCompiler.Ty) : TypeKey option =
         if keys |> List.forall Option.isSome then Some (keys |> List.map Option.get) else None
     match ty with
     | NyxCompiler.TyVar _
-    | NyxCompiler.TyOpenRecord _ -> None
+    | NyxCompiler.TyOpenRecord _
+    | NyxCompiler.TyRecursive _
+    | NyxCompiler.TySelf _
+    | NyxCompiler.TyParam _ -> None
     | NyxCompiler.TyPrimitive "unit" -> Some (TypeKey("()", []))
     | NyxCompiler.TyPrimitive "?error" -> None
     | NyxCompiler.TyPrimitive name

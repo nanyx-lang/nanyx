@@ -34,15 +34,8 @@ let rec private scopeIn (name: Identifier) (ty: Ty) : Ty option =
     | FunctionContexts.ScopedContext(found, scope) when found = name -> Some scope
     | FunctionContexts.CellType(_, scope) when name = FunctionContexts.cellContext -> Some scope
     | TyFunc(input, output, contexts) -> within (contexts @ [ input; output ])
-    | TyNominal(_, underlying, _) -> scopeIn name underlying
-    | TyAlias(_, args, underlying) -> within (args @ [ underlying ])
-    | TyRecord fields
     | TyOpenRecord(fields, _) -> within (List.ofSeq fields.Values)
-    | TyTag(_, payload) -> payload |> Option.bind (scopeIn name)
-    | TyApply(_, items)
-    | TyUnion items -> within items
-    | TyVar _
-    | TyPrimitive _ -> None
+    | _ -> within (Ty.children ty)
 
 /// The contexts among `written`, a def's own as its type writes them, that take no arguments, as a function type
 /// carries them. A scoped one is of the scope `ty`, the def's type where it is named, has for it, or of a scope of its

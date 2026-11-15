@@ -45,14 +45,8 @@ let rec private withoutOpenRests (ty: Ty) =
     match ty with
     | TyUnion items -> TyUnion(items |> List.filter (function TyVar _ -> false | _ -> true) |> List.map withoutOpenRests)
     | TyFunc(input, output, _) -> TyFunc(withoutOpenRests input, withoutOpenRests output, [])
-    | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> withoutOpenRests))
-    | TyTag(name, payload) -> TyTag(name, payload |> Option.map withoutOpenRests)
-    | TyApply(name, args) -> TyApply(name, args |> List.map withoutOpenRests)
-    | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, withoutOpenRests underlying, isPrivate)
-    | TyAlias(name, args, underlying) -> TyAlias(name, args |> List.map withoutOpenRests, withoutOpenRests underlying)
-    | TyVar _
-    | TyPrimitive _
     | TyOpenRecord _ -> ty
+    | _ -> Ty.map withoutOpenRests ty
 
 /// The top-level function that `wrapper` wraps, and the type a closure over the wrapper is at as a context member of
 /// type `memberTy`: the function's own type, or, for a generic function, `memberTy`.

@@ -69,7 +69,7 @@ let declareCell (env: TypeEnv) (symbol: SymbolId option) (state: InferState) =
 
 /// The value of a cell's declaration, `mut x = value`, at `expr`: a cell holding `value`, of its type. It needs `Memory`.
 let inferMut (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>) (env: TypeEnv) (state: InferState) (expr: Expression) (value: Expression) =
-    if env.ContainsKey scopeKey then
+    if env.Names.ContainsKey scopeKey then
         infer env state value |> Result.map (fun (typedValue, next) -> mkTypedExpr expr typedValue.Type None None None, next)
     else
         let message = $"`mut` needs the context '{context}', which only a `memory {{ ... }}` block provides: make the cell inside one"
@@ -86,7 +86,7 @@ let inferAssign (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr 
                 let assigned = addAssignableConstraintAt expr.Span typedValue.Type typedTarget.Type next
                 mkTypedExpr expr (TyPrimitive "unit") None None None,
                 { assigned with CellAssignments = assigned.CellAssignments.Add expr.Span }))
-    | IdentifierExpr name when env.ContainsKey name ->
+    | IdentifierExpr name when env.Names.ContainsKey name ->
         Error [ Diagnostics.at DiagnosticCodes.NotACell target.Span $"'{name}' is not a cell, so `:=` cannot change it: only a name declared with `mut` is one" ]
     | _ -> Error [ Diagnostics.at DiagnosticCodes.NotACell target.Span "Only a cell can be assigned with `:=`: a name declared with `mut name = value`" ]
 

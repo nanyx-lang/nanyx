@@ -204,6 +204,11 @@ module Unifier =
             members
             |> List.map (function TyPrimitive "" -> spread | item -> grouped item)
             |> String.concat " | "
+        // Only inside what a recursive alias stands for, which is written by the alias's name.
+        | TyRecursive(body, _) -> printTy spread signature body
+        | TySelf [] -> "self"
+        | TySelf args -> $"self({items args})"
+        | TyParam index -> $"${index}"
 
     /// `ty` as it would be written in a def's annotation: see `printTy`.
     let tyToString (ty: Ty) : string = printTy "..." true ty
@@ -216,8 +221,11 @@ module Unifier =
             match ty with
             | TyVar v -> [ v ]
             | TyPrimitive _
+            | TyParam _
             | TyNominal _ -> []
-            | TyAlias(_, args, _) -> args |> List.collect collect
+            | TyAlias(_, args, _)
+            | TyRecursive(_, args)
+            | TySelf args -> args |> List.collect collect
             | TyFunc(arg, ret, contexts) ->
                 (writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect) @ collect arg @ collect ret
             | TyRecord fields ->

@@ -13,22 +13,13 @@ let cannot message = raise (CannotLower message)
 let rec freeVars (ty: Ty) : int list =
     match ty with
     | TyVar v -> [ v.Id ]
-    | TyPrimitive _ -> []
-    | TyNominal(_, underlying, _) -> freeVars underlying
     | TyFunc(input, output, _) -> freeVars input @ freeVars output
-    | TyRecord fields -> fields |> Map.toList |> List.collect (snd >> freeVars)
-    | TyOpenRecord(fields, rest) -> (fields |> Map.toList |> List.collect (snd >> freeVars)) @ [ rest.Id ]
-    | TyTag(_, payload) -> payload |> Option.map freeVars |> Option.defaultValue []
-    | TyApply(_, args) -> args |> List.collect freeVars
-    | TyUnion items -> items |> List.collect freeVars
-    | TyAlias(_, args, underlying) -> (args |> List.collect freeVars) @ freeVars underlying
+    | _ -> Ty.children ty |> List.collect freeVars
 
 let rec substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
     let go = substitute subst
     match ty with
     | TyVar v -> subst |> Map.tryFind v.Id |> Option.defaultValue ty
-    | TyPrimitive _ -> ty
-    | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, go underlying, isPrivate)
     | TyFunc(input, output, contexts) -> TyFunc(go input, go output, contexts |> List.map go |> FunctionContexts.flatten)
     | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> go))
     | TyOpenRecord(fields, rest) ->
@@ -38,10 +29,7 @@ let rec substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
         | Some (TyRecord others) -> TyRecord(Map.fold (fun acc name fieldTy -> acc |> Map.add name fieldTy) others fields)
         | Some (TyOpenRecord(others, rest')) -> TyOpenRecord(Map.fold (fun acc name fieldTy -> acc |> Map.add name fieldTy) others fields, rest')
         | _ -> TyOpenRecord(fields, rest)
-    | TyTag(name, payload) -> TyTag(name, payload |> Option.map go)
-    | TyApply(name, args) -> TyApply(name, args |> List.map go)
-    | TyUnion items -> TyUnion(items |> List.map go)
-    | TyAlias(name, args, underlying) -> TyAlias(name, args |> List.map go, go underlying)
+    | _ -> Ty.map go ty
 
 /// The contexts a function type requires that are contexts rather than context variables: a variable still free
 /// stands for none. A scoped context's scope means nothing at run time, so it is left out.
@@ -283,6 +271,9 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | TyOpenRecord _ -> cannot "a record whose other fields are not known here"
     | TyApply(name, _) -> cannot $"a value of type {name}"
     | TyAlias _ -> cannot "an alias"
+    | TyRecursive _
+    | TySelf _
+    | TyParam _ -> cannot "a recursive alias's definition outside the alias"
 
 /// The members of the contexts among `contexts`, each with its key and IR type, in the order a function value that
 /// requires them takes them (see `IrFunction`).
