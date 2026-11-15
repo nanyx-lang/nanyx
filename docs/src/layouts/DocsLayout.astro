@@ -29,7 +29,7 @@ const searchItems = (await getAllPages()).map(({ page, section }) => ({
         <slot />
       </main>
     </div>
-    <SearchDialog client:idle items={searchItems} />
+    <SearchDialog client:idle transition:persist items={searchItems} />
   </div>
 </Base>
 
@@ -40,29 +40,35 @@ const searchItems = (await getAllPages()).map(({ page, section }) => ({
   const checkIcon =
     '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 
-  for (const pre of document.querySelectorAll<HTMLPreElement>(".prose pre")) {
-    const wrapper = document.createElement("div");
-    wrapper.className = "code-block";
-    pre.parentNode?.insertBefore(wrapper, pre);
-    wrapper.appendChild(pre);
+  // This script runs once per visit, and the client router swaps the content in under it,
+  // so the page's elements are wired up on every page load rather than at the top level.
+  document.addEventListener("astro:page-load", wirePage);
 
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "copy-button";
-    button.setAttribute("aria-label", "Copy code");
-    button.innerHTML = copyIcon;
-    button.addEventListener("click", async () => {
-      await navigator.clipboard.writeText(pre.innerText.replace(/\n$/, ""));
-      button.innerHTML = checkIcon;
-      setTimeout(() => (button.innerHTML = copyIcon), 2000);
-    });
-    wrapper.appendChild(button);
-  }
+  function wirePage() {
+    for (const pre of document.querySelectorAll<HTMLPreElement>(".prose pre")) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "code-block";
+      pre.parentNode?.insertBefore(wrapper, pre);
+      wrapper.appendChild(pre);
 
-  // Heading anchors copy their link to the clipboard as well as navigating.
-  for (const anchor of document.querySelectorAll<HTMLAnchorElement>("[data-heading-anchor]")) {
-    anchor.addEventListener("click", () => {
-      navigator.clipboard.writeText(anchor.href).catch(() => {});
-    });
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "copy-button";
+      button.setAttribute("aria-label", "Copy code");
+      button.innerHTML = copyIcon;
+      button.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(pre.innerText.replace(/\n$/, ""));
+        button.innerHTML = checkIcon;
+        setTimeout(() => (button.innerHTML = copyIcon), 2000);
+      });
+      wrapper.appendChild(button);
+    }
+
+    // Heading anchors copy their link to the clipboard as well as navigating.
+    for (const anchor of document.querySelectorAll<HTMLAnchorElement>("[data-heading-anchor]")) {
+      anchor.addEventListener("click", () => {
+        navigator.clipboard.writeText(anchor.href).catch(() => {});
+      });
+    }
   }
 </script>

@@ -1,4 +1,5 @@
 ---
+import { ClientRouter } from "astro:transitions";
 import "@/styles/global.css";
 
 interface Props {
@@ -17,8 +18,11 @@ const ogImage = Astro.site ? new URL("/nanyx.svg", Astro.site).href : "/nanyx.sv
 ---
 
 <!doctype html>
-<html lang="en">
+<!-- The pages are prerendered; the client router swaps them in place so that navigating
+     between them doesn't flash. "none" swaps at once rather than cross-fading. -->
+<html lang="en" transition:animate="none">
   <head>
+    <ClientRouter />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>
@@ -44,6 +48,11 @@ const ogImage = Astro.site ? new URL("/nanyx.svg", Astro.site).href : "/nanyx.sv
         apply(media.matches);
         media.addEventListener("change", function (event) {
           apply(event.matches);
+        });
+        // The client router replaces <html>'s attributes with the next page's, which
+        // drops the class; put it back before the new page paints.
+        document.addEventListener("astro:after-swap", function () {
+          apply(media.matches);
         });
       })();
     </script>
