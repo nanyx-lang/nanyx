@@ -62,7 +62,7 @@ let ``A public module of a dependency is imported by the package's name and the 
         new TempPackage(util @ [ app [ "acme.util", "util" ]; mainImporting "acme.util/strings" "ignore(shout(\"hi\"))" ])
     let found = okOf (Package.find (package.Path "app"))
     Assert.Equal<string list>([ "acme.util" ], found.Dependencies |> List.map _.Manifest.Name)
-    Assert.Equal<string list>([ "strings" ], found.Dependencies.Head.Manifest.PublicModules)
+    Assert.Equal<string list>([ "strings" ], found.Dependencies.Head.Manifest.PublicModules |> List.map fst)
     let build = Package.build found
     Assert.Empty(build.Diagnostics)
     Assert.True((Package.entryResult build).Value.Typed.IsSome)
@@ -115,6 +115,19 @@ let ``A module a dependency does not make public can't be imported`` () =
     Assert.Equal(
         "The module 'secrets' of the package 'acme.util' is not public, so another package can't import it: its public modules are 'strings'",
         error.Message)
+
+[<Fact>]
+let ``A public module that no source file declares is an error at its entry, naming the closest module`` () =
+    let misspelt = [ "util/util.nyxp", manifest "acme.util" [ "strngs" ] [] ] @ List.tail util
+    use package = new TempPackage(misspelt @ [ app [ "acme.util", "util" ]; mainImporting "acme.util/strings" "ignore(shout(\"hi\"))" ])
+    let message = "publicModules names the module 'strngs', but no source file of acme.util declares it: did you mean 'strings'?"
+    Assert.EndsWith($"util.nyxp:2:70: error NYX0023: {message}", Assert.Single(errorsOf (Package.find (package.Path "util"))))
+    Assert.EndsWith($"error NYX0023: {message}", Assert.Single(errorsOf (Package.find (package.Path "app"))))
+    let manifestPath = package.Path "util/util.nyxp"
+    let error = Assert.Single((Package.compileManifest manifestPath (File.ReadAllText manifestPath)).Diagnostics)
+    Assert.Equal(DiagnosticCodes.InvalidManifestValue.Code, error.Code)
+    Assert.Equal(message, error.Message)
+    Assert.Equal("\"strings\"", (Assert.Single (Assert.Single error.Fixes).Edits).NewText)
 
 [<Fact>]
 let ``A package a dependency depends on can't be imported without depending on it`` () =
