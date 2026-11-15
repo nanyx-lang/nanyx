@@ -91,8 +91,9 @@ level, so a field is never mistaken for a package's configuration:
 
 # What it needs
 
-- **Packages that resolve**: local dependencies ([#862](https://github.com/nanyx-lang/nanyx/issues/862)), the
-  `.nyxpkg` format and the package cache ([#863](https://github.com/nanyx-lang/nanyx/issues/863)), and resolution
+- **Packages that resolve**: local dependencies are done ([#862](https://github.com/nanyx-lang/nanyx/issues/862)),
+  which is all a shipped source directory needs. Shipping them as `.nyxpkg` waits for the format and the package cache
+  ([#863](https://github.com/nanyx-lang/nanyx/issues/863)), and taking a newer one from the index waits for resolution
   ([#864](https://github.com/nanyx-lang/nanyx/issues/864)). See [Packaging](./packaging).
 - **The public linter contract** ([#107](https://github.com/nanyx-lang/nanyx/issues/107)): how a linter written in
   Nanyx sees the semantic model and reports diagnostics, run on the embedded Wasmtime engine.
@@ -105,8 +106,8 @@ level, so a field is never mistaken for a package's configuration:
    `NYX0029`, naming the version shipped. That check is done (`Toolchain.version`, the `<Version>` in
    `compiler/Directory.Build.props`, which every compiler project has); the console host as the first shipped source
    directory is next.
-2. **The console host as a package** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)), once packages
-   resolve.
+2. **The console host as a package** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)), as the first shipped
+   source directory.
 3. **The official linter as a package** ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)), once the linter
    contract is designed. The rules move one at a time, with the tests checking that each one reports what it did.
 
