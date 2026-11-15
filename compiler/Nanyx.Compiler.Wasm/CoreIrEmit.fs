@@ -34,7 +34,9 @@ type EmitContext =
       /// The types of the parameters and the result of the top-level function of this name, if the module has it, so
       /// that a value of no known type (see `IrError`) is passed as the parameter takes it and the result taken as the
       /// call's, or the other way round.
-      Signature: string -> (IrType list * IrType) option }
+      Signature: string -> (IrType list * IrType) option
+      /// Where the block the module sets aside for its host is (see `WasmRuntime.hostStateSize`).
+      HostState: int }
 
 /// A function as WebAssembly text, the runtime helpers (see `WasmRuntime.Helpers`) it calls, and whether its own code
 /// reads or writes linear memory.
@@ -106,8 +108,21 @@ let private conversion (from: IrType) (into: IrType) =
 /// Any other helper is given an int's low 32 bits.
 let private takesIndices = set [ Helpers.stringByteAt; Helpers.stringSlice ]
 
-/// The name of the function the module imports a foreign function as.
-let importName (declared: Extern) = sanitizeIdentifier $"import_{declared.Module}_{declared.Name}"
+/// WASI's module, which the runtime's own imports come from.
+let private wasi = "wasi_snapshot_preview1"
+
+/// The name of the function the module imports a foreign function as. A WASI function is named as the runtime names
+/// its own imports, so that a foreign function of one the runtime imports is that import.
+let importName (declared: Extern) =
+    if declared.Module = wasi then sanitizeIdentifier declared.Name
+    else sanitizeIdentifier $"import_{declared.Module}_{declared.Name}"
+
+/// WASI's `fd_write` and `proc_exit`, as the runtime imports them: what `dbg`, a deferred error and a failed memory
+/// check write with, and exit with.
+let wasiFdWrite =
+    { Module = wasi; Name = "fd_write"; Parameters = List.replicate 4 ExternValue.I32; Result = Some ExternValue.I32 }
+
+let wasiProcExit = { Module = wasi; Name = "proc_exit"; Parameters = [ ExternValue.I32 ]; Result = None }
 
 /// The import of a foreign function, as the module declares it.
 let importDeclaration (declared: Extern) =
@@ -554,6 +569,8 @@ type private FunctionEmitter(context: EmitContext) =
             join "\n    " [ atoms [ address ]; $"call ${helper Helpers.free}"; "i32.const 0" ]
         // A string is the address of its bytes, with its length in the word before them.
         | CallRuntime(name, [ text ], _) when name = Intrinsics.stringAddress -> atoms [ text ]
+        | CallRuntime(name, _, _) when name = Intrinsics.hostState -> touching $"i32.const {context.HostState}"
+        | CallRuntime(name, [ text ], _) when name = Intrinsics.keepAlive -> join "\n    " [ atoms [ text ]; "drop"; "i32.const 0" ]
         | CallRuntime(name, [ text ], _) when name = Intrinsics.stringByteLength ->
             join "\n    " [ atoms [ text ]; $"call ${helper Helpers.stringLength}" ]
         | CallImport(declared, args) ->

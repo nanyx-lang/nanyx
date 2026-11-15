@@ -1220,9 +1220,12 @@ host, the module that runs the program's entry point, so that a library can only
 contexts the host provides.
 
 ```nanyx
-import nanyx/host.runtime
+import (
+  nanyx/host.memory
+  nanyx/host.runtime
+)
 
-def shout = { text -> writeStdout(text ++ "!") }  -- error NYX0238: 'shout' requires the context 'HostRuntime', which only a host may require. ...
+def peek = { address -> readByte(address) }  -- error NYX0238: 'peek' requires the context 'HostRuntime', which only a host may require. ...
 ```
 
 To fix it, require the context the host provides instead, such as `Console`, and call its members.

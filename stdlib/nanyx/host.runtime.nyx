@@ -1,41 +1,11 @@
---| The privileged layer a host is written on: the raw reads and writes the runtime does for it.
+--| The capability a host is written on: what lets it call the foreign functions its embedder provides
+  (those declared with `@extern`) and reach the module's linear memory (with `nanyx/host.memory`).
 
   [`HostRuntime`] is provided only to the host, the module that runs the program's entry point (as
   [`nanyx/console.host`] does). Anywhere else, requiring it is an error, so a library can only reach
   the outside world through the contexts the host chose to provide.
 module host.runtime
 
---| What the runtime does for the host. On the WebAssembly backend each member is one of the
-  module's imports. The definitions of the members below are the instance the toolchain supplies.
-export context HostRuntime = protected (
-  --| Writes `text` to standard output, as it is.
-  writeStdout: string -> ()
-  --| Writes `text` to standard error, as it is.
-  writeStderr: string -> ()
-  --| The next block of standard input, up to 64 KB, or the empty string when the input has ended.
-  readStdinBlock: () -> string
-  --| Standard input up to and including the next line break, or to the end of the block the runtime
-    holds when that has none; the empty string when the input has ended.
-  readStdinLine: () -> string
-)
-
---| Writes `text` to standard output, as it is.
-export def writeStdout: string -> () = { text ->
-  __nanyx_write_stdout(text)
-}
-
---| Writes `text` to standard error, as it is.
-export def writeStderr: string -> () = { text ->
-  __nanyx_write_stderr(text)
-}
-
---| The next block of standard input, up to 64 KB, or the empty string when the input has ended.
-export def readStdinBlock: () -> string = { _ ->
-  __nanyx_read_stdin_block()
-}
-
---| Standard input up to and including the next line break, or to the end of the block the runtime
-  holds when that has none; the empty string when the input has ended.
-export def readStdinLine: () -> string = { _ ->
-  __nanyx_read_stdin_line()
-}
+--| The capability that marks the host. It has no members: every foreign function, and every function
+  of `nanyx/host.memory`, requires it, so only the host's code can call them.
+export context HostRuntime = protected ()

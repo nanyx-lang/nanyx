@@ -25,7 +25,7 @@ type ProgramIo =
 ///
 /// The backend turns top-level expressions into a WebAssembly start function, so instantiating the module
 /// runs the program. The program's output goes to its stdout (see `ProgramIo`) through WASI `fd_write`, from
-/// `nanyx/console` (the `__nanyx_write_stdout` intrinsic) and from `dbg`.
+/// `nanyx/console.host` (which declares it with `@extern`) and from `dbg`.
 module WasmRunner =
     /// Writes the buffers of the `count` WASI iovecs at `iovecs` in `memory` to `stream`, and gives how many bytes that
     /// was.

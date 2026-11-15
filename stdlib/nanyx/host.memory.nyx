@@ -63,6 +63,21 @@ export def byteLength: [HostRuntime] string -> I32 = { text ->
   __nanyx_string_byte_length(text)
 }
 
+--| The address of 4096 bytes the module sets aside for its host, all zero when the program starts:
+  where a host keeps what it needs from one call to the next, such as how much of standard input it
+  has read, and the small buffers it passes to foreign functions, without allocating. Nothing else
+  reads or writes them.
+export def hostState: [HostRuntime] () -> I32 = { _ ->
+  __nanyx_host_state()
+}
+
+--| Keeps `text` alive until here. Reference counting follows an address of `text` only through
+  values made from it, not through memory: when the address is written into memory that a foreign
+  function reads, as an iovec is for WASI's `fd_write`, call this after the foreign function.
+export def keepAlive: [HostRuntime] string -> () = { text ->
+  __nanyx_keep_alive(text)
+}
+
 --| A new string holding a copy of the `length` bytes at `address`, which are taken to be UTF-8.
 export def stringAt: [HostRuntime] I32, I32 -> string = { address, length ->
   __nanyx_string_from_memory(address, length)

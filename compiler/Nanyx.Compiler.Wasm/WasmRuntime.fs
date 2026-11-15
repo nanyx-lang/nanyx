@@ -102,14 +102,7 @@ module Helpers =
     let f32ToString = "__nanyx_f32_to_string"
     /// `%` on floats, which WebAssembly has no instruction for.
     let floatRem = "__nanyx_float_rem"
-    let writeStdout = NyxCompiler.Intrinsics.writeStdout
     let writeStderr = NyxCompiler.Intrinsics.writeStderr
-    let readStdinBlock = NyxCompiler.Intrinsics.readStdinBlock
-    let readStdinLine = NyxCompiler.Intrinsics.readStdinLine
-    /// Not an intrinsic: what `readStdinBlock` and `readStdinLine` share, taking 1 to stop after a line break.
-    let readStdin = "__nanyx_read_stdin"
-    let arguments = NyxCompiler.Intrinsics.arguments
-    let environment = NyxCompiler.Intrinsics.environment
     let exit = NyxCompiler.Intrinsics.exit
     let stringLength = NyxCompiler.Intrinsics.stringLength
     let stringByteAt = NyxCompiler.Intrinsics.stringByteAt
@@ -373,7 +366,7 @@ let private checkedIntHelper (name: string) (instruction: string) (overflowed: s
 /// With `checks`, `alloc`, `free`, `retain` and `release` also count blocks and stop the program on a double free or a
 /// use after free, drawing on `memoryCheckFunctions`.
 /// How many bytes of standard input one `fd_read` asks for.
-let private stdinBufferSize = 65536
+
 
 let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
     [ Helpers.alloc, allocHelper checks heapBase
@@ -648,25 +641,8 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  end"
             "  i32.const 1"
             ")" ]
-      // Writes a string to stdout (fd 1) with the iovec at 0 and nwritten at 8, like the dbg helpers.
-      Helpers.writeStdout,
-      lines
-          [ $"(func ${Helpers.writeStdout} (param $s i32)"
-            "  i32.const 0"
-            "  local.get $s"
-            "  i32.store"
-            "  i32.const 4"
-            "  local.get $s"
-            $"  call ${Helpers.stringLength}"
-            "  i32.store"
-            "  i32.const 1"
-            "  i32.const 0"
-            "  i32.const 1"
-            "  i32.const 8"
-            "  call $fd_write"
-            "  drop"
-            ")" ]
-      // The same as writing to stdout, on stderr (fd 2).
+      // Writes a string to stderr (fd 2) with the iovec at 0 and nwritten at 8, like the dbg helpers: what a deferred error
+      // and a failed memory check write.
       Helpers.writeStderr,
       lines
           [ $"(func ${Helpers.writeStderr} (param $s i32)"
@@ -684,151 +660,6 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  call $fd_write"
             "  drop"
             ")" ]
-      // Standard input is read into a buffer of `stdinBufferSize` bytes, allocated at the first read and kept for the
-      // rest of the program (`$__nanyx_stdin_buffer`), and given out from `$__nanyx_stdin_start` to `$__nanyx_stdin_end`. When none is left,
-      // one `fd_read` on stdin (fd 0), through the iovec at 0 with the count read at 8, fills it again; a failed read
-      // counts as the end of the input. `$toLineBreak` 1 gives out only up to and including the first line break.
-      Helpers.readStdin,
-      lines
-          [ "(global $__nanyx_stdin_buffer (mut i32) (i32.const 0))"
-            "(global $__nanyx_stdin_start (mut i32) (i32.const 0))"
-            "(global $__nanyx_stdin_end (mut i32) (i32.const 0))"
-            $"(func ${Helpers.readStdin} (param $toLineBreak i32) (result i32)"
-            "  (local $len i32)"
-            "  (local $i i32)"
-            "  (local $out i32)"
-            "  global.get $__nanyx_stdin_start"
-            "  global.get $__nanyx_stdin_end"
-            "  i32.ge_u"
-            "  if"
-            "    global.get $__nanyx_stdin_buffer"
-            "    i32.eqz"
-            "    if"
-            $"      i32.const {stdinBufferSize}"
-            $"      call ${Helpers.alloc}"
-            "      global.set $__nanyx_stdin_buffer"
-            // The buffer is never freed, so the memory checks do not count it as a live block.
-            if checks then
-                $"      global.get ${MemoryChecks.liveBlocks}"
-                "      i32.const 1"
-                "      i32.sub"
-                $"      global.set ${MemoryChecks.liveBlocks}"
-            "    end"
-            "    i32.const 0"
-            "    global.get $__nanyx_stdin_buffer"
-            "    i32.store"
-            "    i32.const 4"
-            $"    i32.const {stdinBufferSize}"
-            "    i32.store"
-            "    i32.const 0"
-            "    global.set $__nanyx_stdin_start"
-            "    i32.const 0"
-            "    i32.const 0"
-            "    i32.const 1"
-            "    i32.const 8"
-            "    call $fd_read"
-            "    if (result i32)"
-            "      i32.const 0"
-            "    else"
-            "      i32.const 8"
-            "      i32.load"
-            "    end"
-            "    global.set $__nanyx_stdin_end"
-            "  end"
-            "  global.get $__nanyx_stdin_end"
-            "  global.get $__nanyx_stdin_start"
-            "  i32.sub"
-            "  local.set $len"
-            "  local.get $toLineBreak"
-            "  if"
-            "    block $found"
-            "      loop $scan"
-            "        local.get $i"
-            "        local.get $len"
-            "        i32.ge_u"
-            "        br_if $found"
-            "        global.get $__nanyx_stdin_buffer"
-            "        global.get $__nanyx_stdin_start"
-            "        i32.add"
-            "        local.get $i"
-            "        i32.add"
-            "        i32.load8_u"
-            "        i32.const 10"
-            "        i32.eq"
-            "        if"
-            "          local.get $i"
-            "          i32.const 1"
-            "          i32.add"
-            "          local.set $len"
-            "          br $found"
-            "        end"
-            "        local.get $i"
-            "        i32.const 1"
-            "        i32.add"
-            "        local.set $i"
-            "        br $scan"
-            "      end"
-            "    end"
-            "  end"
-            "  local.get $len"
-            $"  call ${Helpers.stringAlloc}"
-            "  local.tee $out"
-            "  global.get $__nanyx_stdin_buffer"
-            "  global.get $__nanyx_stdin_start"
-            "  i32.add"
-            "  local.get $len"
-            $"  call ${Helpers.copyBytes}"
-            "  global.get $__nanyx_stdin_start"
-            "  local.get $len"
-            "  i32.add"
-            "  global.set $__nanyx_stdin_start"
-            "  local.get $out"
-            ")" ]
-      // A call `f()` to an intrinsic passes no argument for the unit, so these take none.
-      Helpers.readStdinBlock,
-      lines
-          [ $"(func ${Helpers.readStdinBlock} (result i32)"
-            "  i32.const 0"
-            $"  call ${Helpers.readStdin}"
-            ")" ]
-      Helpers.readStdinLine,
-      lines
-          [ $"(func ${Helpers.readStdinLine} (result i32)"
-            "  i32.const 1"
-            $"  call ${Helpers.readStdin}"
-            ")" ]
-      // The arguments and the environment, each as WASI lays them out: a string of the entries, each followed by a
-      // zero byte. The sizes are read into offsets 0 and 4, and the pointers to the entries that WASI also writes go
-      // to a block of their own, freed straight after.
-      yield!
-          [ Helpers.arguments, "args"; Helpers.environment, "environ" ]
-          |> List.map (fun (name, wasi) ->
-              name,
-              lines
-                  [ $"(func ${name} (result i32)"
-                    "  (local $pointers i32)"
-                    "  (local $block i32)"
-                    "  i32.const 0"
-                    "  i32.const 4"
-                    $"  call ${wasi}_sizes_get"
-                    "  drop"
-                    "  i32.const 4"
-                    "  i32.load"
-                    $"  call ${Helpers.stringAlloc}"
-                    "  local.set $block"
-                    "  i32.const 0"
-                    "  i32.load"
-                    "  i32.const 4"
-                    "  i32.mul"
-                    $"  call ${Helpers.alloc}"
-                    "  local.tee $pointers"
-                    "  local.get $block"
-                    $"  call ${wasi}_get"
-                    "  drop"
-                    "  local.get $pointers"
-                    $"  call ${Helpers.free}"
-                    "  local.get $block"
-                    ")" ])
       // A new record with the layout and the `$size` bytes of fields of the record `$src`: `src size -> record`.
       Helpers.recordCopy,
       lines
@@ -1208,6 +1039,11 @@ let checkedRuntimeHelpers (heapBase: int) = helpersWith true heapBase
 /// `heapBaseAfter`).
 let stringDataBaseOffset = 256
 
+/// How many bytes the block the module sets aside for its host takes (see `nanyx/host.memory`'s `hostState`). A module
+/// that uses it has it after its data segment, before the heap, where nothing else reads or writes it, so it is zero
+/// when the program starts.
+let hostStateSize = 4096
+
 let dbgDataBaseOffset = 128
 
 let dbgStrNewlineOffset = dbgDataBaseOffset + 96  // the newline byte, at 224
@@ -1246,13 +1082,7 @@ let helperDependencies =
       Helpers.stringFromMemory, [ Helpers.stringAlloc; Helpers.copyBytes ]
       Helpers.stringConcat, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.copyBytes ]
       Helpers.stringEquals, [ Helpers.stringLength ]
-      Helpers.writeStdout, [ Helpers.stringLength ]
       Helpers.writeStderr, [ Helpers.stringLength ]
-      Helpers.readStdin, [ Helpers.alloc; Helpers.stringAlloc; Helpers.copyBytes ]
-      Helpers.readStdinBlock, [ Helpers.readStdin ]
-      Helpers.readStdinLine, [ Helpers.readStdin ]
-      Helpers.arguments, [ Helpers.stringAlloc; Helpers.alloc; Helpers.free ]
-      Helpers.environment, [ Helpers.stringAlloc; Helpers.alloc; Helpers.free ]
       Helpers.exit, [ Helpers.procExit ]
       yield! storingDependencies Helpers.listCons (fun _ -> [ Helpers.newCell ])
       yield! storingDependencies Helpers.recordSet (fun _ -> [])

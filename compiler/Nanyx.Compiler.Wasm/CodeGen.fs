@@ -747,7 +747,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           RecordLayoutId = (fun _ -> 0)
           FunctionSlot = (fun _ _ -> 0)
           IndirectCall = ignore
-          Signature = (fun _ -> None) }
+          Signature = (fun _ -> None)
+          HostState = 0 }
     let lowered =
         let input: CoreIrLowerInput.LowerInput =
             { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
@@ -870,7 +871,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let stringLiteralMap, stringLiteralData = buildStringLiteralMap literals
     // The static closures go after the literals, and the free-list heads and the heap after them, however far they run.
     let staticClosureMap = staticClosureOffsets facts.StaticClosures (stringDataEnd stringLiteralData)
-    let heapBase = heapBaseAfter (stringDataEnd stringLiteralData + facts.StaticClosures.Length * staticClosureBytes)
+    // The block the host keeps its state in goes after them, 8-byte aligned, in a module whose host uses it.
+    let dataEnd = stringDataEnd stringLiteralData + facts.StaticClosures.Length * staticClosureBytes
+    let hostStateAddress = (dataEnd + 7) &&& ~~~7
+    let heapBase = heapBaseAfter (if facts.UsesHostState then hostStateAddress + hostStateSize else dataEnd)
     let memoryDirective = $"  (memory {initialMemoryPages (heapStartOffset heapBase)})"
 
     // The parameters and result of each function, which a call converts a value of no known type to and from.
@@ -899,7 +903,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           RecordLayoutId = recordLayoutId recordTable
           FunctionSlot = functionValueSlot functionTable
           IndirectCall = functionTable.IndirectSignatures.Add >> ignore
-          Signature = fun name -> signatures |> Map.tryFind name }
+          Signature = fun name -> signatures |> Map.tryFind name
+          HostState = hostStateAddress }
 
     let specialisations = lowered.Specialisations |> Map.values |> Seq.concat |> Seq.map (fun (func, _) -> func.Name) |> Set.ofSeq
 
@@ -982,19 +987,25 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         usedHelpers.Add Helpers.writeStderr |> ignore
         usedHelpers.Add Helpers.procExit |> ignore
     let usedHelperSet = closeHelpers Set.empty (usedHelpers |> Seq.toList)
-    // Exiting, the arguments and the environment are not streams, but their WASI imports are declared with theirs.
-    let moduleUsesStandardStreams =
-        [ Helpers.writeStdout; Helpers.writeStderr; Helpers.readStdin; Helpers.procExit; Helpers.arguments; Helpers.environment ]
-        |> List.exists usedHelperSet.Contains
-    let moduleReadsStdin = usedHelperSet.Contains Helpers.readStdin
-    let wasiPair (helperName: string) (wasi: string) =
-        if usedHelperSet.Contains helperName then
-            [ $"""  (import "wasi_snapshot_preview1" "{wasi}_sizes_get" (func ${wasi}_sizes_get (param i32 i32) (result i32)))"""
-              $"""  (import "wasi_snapshot_preview1" "{wasi}_get" (func ${wasi}_get (param i32 i32) (result i32)))""" ]
-        else []
-    // Anything that writes to stdout or stderr, or reads stdin, shares the WASI import, the memory and the
-    // newline byte.
+    // Exiting is not a stream, but its WASI import is declared with stderr's.
+    let moduleUsesStandardStreams = [ Helpers.writeStderr; Helpers.procExit ] |> List.exists usedHelperSet.Contains
+    // Anything that writes to stderr, or `dbg`, shares the WASI import, the memory and the newline byte.
     let moduleUsesIoHelpers = facts.UsesDbgHelpers || moduleUsesStandardStreams
+    // The WASI functions the runtime imports itself. A foreign function of one of them is the same import (see
+    // `CoreIrEmit.importName`), so the module declares it once.
+    let runtimeImports =
+        [ if moduleUsesIoHelpers then CoreIrEmit.wasiFdWrite
+          if usedHelperSet.Contains Helpers.procExit then CoreIrEmit.wasiProcExit ]
+    let foreignImports =
+        facts.Imports
+        |> List.filter (fun declared ->
+            match runtimeImports |> List.tryFind (fun runtime -> runtime.Module = declared.Module && runtime.Name = declared.Name) with
+            | Some runtime when runtime = declared -> false
+            | Some runtime ->
+                raise (BackendFailure (Diagnostics.general DiagnosticCodes.ConflictingExterns $"A foreign function imports \"{declared.Name}\" from \"{declared.Module}\" with another type than the runtime's: declare it as {CoreIrEmit.importDeclaration runtime |> fun text -> text.Trim()}"))
+            | None -> true)
+        |> List.map CoreIrEmit.importDeclaration
+        |> String.concat "\n"
     // Everything that allocates does it through `$alloc`, and `$free` gives the top of the heap back to it.
     let moduleUsesHeap = usedHelperSet.Contains Helpers.alloc || usedHelperSet.Contains Helpers.free
     let renderedHelpers =
@@ -1014,13 +1025,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     let dbgPrelude =
         if moduleUsesIoHelpers then
-            [ """  (import "wasi_snapshot_preview1" "fd_write" (func $fd_write (param i32 i32 i32 i32) (result i32)))"""
-              if moduleReadsStdin then
-                  """  (import "wasi_snapshot_preview1" "fd_read" (func $fd_read (param i32 i32 i32 i32) (result i32)))"""
-              if usedHelperSet.Contains Helpers.procExit then
-                  """  (import "wasi_snapshot_preview1" "proc_exit" (func $proc_exit (param i32)))"""
-              yield! wasiPair Helpers.arguments "args"
-              yield! wasiPair Helpers.environment "environ"
+            [ yield! runtimeImports |> List.map CoreIrEmit.importDeclaration
+
               memoryDirective
               """  (export "memory" (memory 0))"""
               if facts.UsesDbgHelpers then
@@ -1107,9 +1113,6 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             $"  (global $heap_ptr (mut i32) (i32.const {heapStartOffset heapBase}))"
         else
             ""
-
-    // Each foreign function a call is made to, imported once.
-    let foreignImports = facts.Imports |> List.map CoreIrEmit.importDeclaration |> String.concat "\n"
 
     // Imports must precede every function definition in a WebAssembly module, so the foreign functions and the prelude,
     // which imports WASI's functions, come first.

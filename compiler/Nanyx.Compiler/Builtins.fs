@@ -29,19 +29,8 @@ module Intrinsics =
     let private element = TyVar elementVar
     let private listOf = Lists.ofType
 
-    /// Writes a string to standard output, with nothing added.
-    let writeStdout = prefix + "write_stdout"
-    /// Writes a string to standard error, with nothing added.
+    /// Writes a string to standard error, with nothing added: what `panic` writes.
     let writeStderr = prefix + "write_stderr"
-    /// The standard input the runtime has read and not yet given out, reading the next block (up to 64 KB) when it has
-    /// none; the empty string at the end of the input (or when it cannot be read).
-    let readStdinBlock = prefix + "read_stdin_block"
-    /// What `readStdinBlock` gives, but only up to and including its first line break when it has one.
-    let readStdinLine = prefix + "read_stdin_line"
-    /// The program's command-line arguments, its own name first, as one string: each argument followed by a zero byte.
-    let arguments = prefix + "arguments"
-    /// The program's environment variables as one string: each `NAME=value` followed by a zero byte.
-    let environment = prefix + "environment"
     /// The number of bytes in a string.
     let stringLength = prefix + "string_length"
     /// The byte at an index of a string, or -1 when the index is out of range.
@@ -125,6 +114,11 @@ module Intrinsics =
     let stringByteLength = prefix + "string_byte_length"
     /// A new string holding a copy of the bytes at an address, as many as a length.
     let stringFromMemory = prefix + "string_from_memory"
+    /// Does nothing but read a string, so that it is alive until then: its address may be in memory a foreign function
+    /// reads, which reference counting does not follow.
+    let keepAlive = prefix + "keep_alive"
+    /// The address of the block the module sets aside for its host, all zero when the program starts.
+    let hostState = prefix + "host_state"
 
     /// The intrinsics that give back their argument as a value of another type, which the backend holds the same way.
     let reinterpretations : Set<string> = set [ mapOfEntries; mapEntries; setOfElements; setElements ]
@@ -137,12 +131,7 @@ module Intrinsics =
 
     /// Every intrinsic with its type scheme.
     let all : (string * TypeScheme) list =
-        [ writeStdout, TypeEnv.mono (TyFunc(stringTy, unitTy, []))
-          writeStderr, TypeEnv.mono (TyFunc(stringTy, unitTy, []))
-          readStdinBlock, TypeEnv.mono (TyFunc(unitTy, stringTy, []))
-          readStdinLine, TypeEnv.mono (TyFunc(unitTy, stringTy, []))
-          arguments, TypeEnv.mono (TyFunc(unitTy, stringTy, []))
-          environment, TypeEnv.mono (TyFunc(unitTy, stringTy, []))
+        [ writeStderr, TypeEnv.mono (TyFunc(stringTy, unitTy, []))
           exit, TypeEnv.mono (TyFunc(intTy, Unifier.bottomType, []))
           memoryAllocate, TypeEnv.mono (TyFunc(i32Ty, i32Ty, []))
           memoryFree, TypeEnv.mono (TyFunc(i32Ty, unitTy, []))
@@ -155,6 +144,8 @@ module Intrinsics =
           stringAddress, TypeEnv.mono (TyFunc(stringTy, i32Ty, []))
           stringByteLength, TypeEnv.mono (TyFunc(stringTy, i32Ty, []))
           stringFromMemory, TypeEnv.mono (TyFunc(tuple [ i32Ty; i32Ty ], stringTy, []))
+          keepAlive, TypeEnv.mono (TyFunc(stringTy, unitTy, []))
+          hostState, TypeEnv.mono (TyFunc(unitTy, i32Ty, []))
           stringLength, TypeEnv.mono (TyFunc(stringTy, intTy, []))
           stringByteAt, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy ], intTy, []))
           stringSlice, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; intTy ], stringTy, []))

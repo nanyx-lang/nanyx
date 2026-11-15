@@ -651,7 +651,25 @@ module Compiler =
                     |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue)
                     |> List.ofSeq
                 let contextTypes = RequiredContexts.ofDefs state subst ownTopLevel
-                let runtimeErrors = Hosts.runtimeErrors origin (entries @ (script |> Option.map fst |> Option.toList)) state.Symbols contextTypes state.ContextProviders desugared
+                // What each call requires of the def it calls, by the call's node: `HostRuntime`, which has no members,
+                // is found by it.
+                // A function that is not a lambda, as a foreign function is, has the contexts it requires in its type.
+                let calleeContexts (call: NodeId) =
+                    let ofDef =
+                        match state.References |> Map.tryFind call with
+                        | Some symbol ->
+                            match merged.ImportedContextTypes |> Map.tryFind symbol, contextTypes |> Map.tryFind symbol with
+                            | Some (_, contexts), _
+                            | None, Some contexts -> contexts
+                            | None, None -> []
+                        | None -> []
+                    let ofType =
+                        match state.CalleeTypes |> Map.tryFind call |> Option.map (Unifier.apply subst >> Unifier.unalias) with
+                        | Some (TyFunc(_, _, contexts)) -> contexts
+                        | _ -> []
+                    ofDef @ ofType
+                let runtimeErrors =
+                    Hosts.runtimeErrors origin (entries @ (script |> Option.map fst |> Option.toList)) state.Symbols contextTypes state.ContextProviders calleeContexts desugared
                 // A script whose statements need `HostRuntime` is told so where they need it: that its entry point, which
                 // has no span, then doesn't fit the host's `run` says nothing more.
                 let mismatchErrors =

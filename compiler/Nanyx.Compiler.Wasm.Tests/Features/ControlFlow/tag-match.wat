@@ -502,12 +502,12 @@
   (global $r__built (mut i32) (i32.const 0))
   (global $r__value (mut i64) (i64.const 0))
 
-  (func $__host_run__unit__known (param $entry i32) (result i32) (local $__inlined15 i32)
+  (func $__host_run__unit (param $entry i32) (result i32) (local $__inlined11 i32)
     local.get $entry
     local.get $entry
     i32.load
     call_indirect (type $ctx_fn_1)
-    local.set $__inlined15
+    local.set $__inlined11
     i32.const 0
   )
 
@@ -642,7 +642,7 @@
 
   (func $__nanyx_start
     i32.const 264
-    call $__host_run__unit__known
+    call $__host_run__unit
     drop
     global.get $r__built
     if

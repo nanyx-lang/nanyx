@@ -440,7 +440,9 @@ On the examples that compile (blocks allocated, and the heap's peak in bytes):
   closure it is called with, which it does not capture.
 - **Closures and contexts.** Capturing a value duplicates it, and freeing a closure drops what it captured. Context
   members that are not known where a function is called are passed as closures and follow the same rules.
-- **Host calls.** Strings handed to the runtime (stdout, `dbg`) are borrowed for the call.
+- **Host calls.** Strings handed to the runtime (`dbg`, a deferred error) are borrowed for the call. The console host
+  writes a string with WASI's `fd_write`, through an iovec that holds its address, and keeps it alive past the call with
+  `keepAlive`.
 - **Addresses of strings.** A host takes a string's address with `nanyx/host.memory`'s `addressOf`, to pass to a
   foreign function, and nothing else may read the string after that: inlined, its last use can come before the call
   the address is passed to. So counting treats a value made from an address (by arithmetic, a copy, or a call of a

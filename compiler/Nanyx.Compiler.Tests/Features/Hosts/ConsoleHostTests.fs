@@ -36,32 +36,50 @@ let ``An entry point that returns a value fits the console host, which ignores i
 [<Fact>]
 let ``A def that requires HostRuntime outside a host is an error, reported at its name`` () =
     let source =
-        """import nanyx/host.runtime
+        """import (
+  nanyx/host.memory
+  nanyx/host.runtime
+)
 
-def shout = { text -> writeStdout(text ++ "!") }
+def peek = { address -> readByte(address) }
 """
     let code, message, text = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.HostRuntimeOutsideHost.Code, code)
-    Assert.StartsWith("'shout' requires the context 'HostRuntime', which only a host may require", message)
-    Assert.Equal("shout", text)
+    Assert.StartsWith("'peek' requires the context 'HostRuntime', which only a host may require", message)
+    Assert.Equal("peek", text)
+
+[<Fact>]
+let ``A def that calls something requiring HostRuntime is an error, even where nanyx/host.runtime isn't imported`` () =
+    let source =
+        """import nanyx/host.memory
+
+def peek = { address -> readByte(address) }
+"""
+    Assert.Equal((DiagnosticCodes.HostRuntimeOutsideHost.Code, "peek"), singleError source)
 
 [<Fact>]
 let ``A def that writes HostRuntime in its type outside a host is an error`` () =
     let source =
-        """import nanyx/host.runtime
+        """import (
+  nanyx/host.memory
+  nanyx/host.runtime
+)
 
-def shout: [HostRuntime] string -> () = { text -> writeStdout(text) }
+def peek: [HostRuntime] I32 -> I32 = { address -> readByte(address) }
 """
-    Assert.Equal((DiagnosticCodes.HostRuntimeOutsideHost.Code, "shout"), singleError source)
+    Assert.Equal((DiagnosticCodes.HostRuntimeOutsideHost.Code, "peek"), singleError source)
 
 [<Fact>]
 let ``A call at the top level that needs HostRuntime outside a host is an error, reported at the call`` () =
     let source =
-        """import nanyx/host.runtime
+        """import (
+  nanyx/host.memory
+  nanyx/host.runtime
+)
 
-writeStdout("hi")
+free(0)
 """
-    Assert.Equal((DiagnosticCodes.HostRuntimeOutsideHost.Code, """writeStdout("hi")"""), singleError source)
+    Assert.Equal((DiagnosticCodes.HostRuntimeOutsideHost.Code, "free(0)"), singleError source)
 
 [<Fact>]
 let ``Calling a host's run outside a host is an error, as it requires HostRuntime`` () =
@@ -73,6 +91,11 @@ h.run({ () })
     let code, message, _ = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.HostRuntimeOutsideHost.Code, code)
     Assert.StartsWith("'h.run' requires the context 'HostRuntime'", message)
+
+[<Fact>]
+let ``The console host, nanyx/env and nanyx/host.runtime call no compiler intrinsic`` () =
+    for moduleName in [ "console.host"; "env"; "host.runtime" ] do
+        Assert.DoesNotContain(Intrinsics.prefix, (StandardLibrary.tryLoadSource moduleName).Value)
 
 [<Fact>]
 let ``The console host requires HostRuntime, and checks`` () =

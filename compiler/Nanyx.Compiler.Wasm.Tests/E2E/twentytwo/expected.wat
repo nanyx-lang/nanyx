@@ -637,12 +637,12 @@
   (data (i32.const 256) "\00\00\00\00\0b\00\00\00Hello world\00")
   (data (i32.const 276) "\00\00\00\00\00\00\00\00\00\00\00\00")
 
-  (func $__host_run__unit__known (param $entry i32) (result i32) (local $__inlined15 i32)
+  (func $__host_run__unit (param $entry i32) (result i32) (local $__inlined11 i32)
     local.get $entry
     local.get $entry
     i32.load
     call_indirect (type $ctx_fn_1)
-    local.set $__inlined15
+    local.set $__inlined11
     i32.const 0
   )
 
@@ -771,7 +771,7 @@
 
   (func $__nanyx_start
     i32.const 284
-    call $__host_run__unit__known
+    call $__host_run__unit
     drop
   )
 
