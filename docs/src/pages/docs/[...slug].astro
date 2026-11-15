@@ -24,7 +24,11 @@ const { page, section } = Astro.props;
 const { Content, headings } = await render(page.entry);
 const adjacent = await getAdjacentPages(page.path);
 
-const titleId = slugify(page.title);
+// The title's id is made apart from the content's, so it must not take one a heading already has (a page titled
+// `console` with a `Console` heading): two headings with one id break links to them and the table of contents.
+const headingIds = new Set(headings.map((heading) => heading.slug));
+let titleId = slugify(page.title);
+while (headingIds.has(titleId)) titleId = `${titleId}-page`;
 const tocHeadings = [
   { id: titleId, text: page.title, level: 1 },
   ...headings.map((heading) => ({ id: heading.slug, text: heading.text, level: heading.depth })),
