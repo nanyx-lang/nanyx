@@ -2,7 +2,8 @@
 import { Menu, Search } from "lucide-react";
 ---
 
-<header class="docs-header">
+<!-- Kept across page swaps, with the sidebar, so the buttons' listeners stay bound. -->
+<header class="docs-header" transition:persist>
   <div class="docs-header-inner">
     <button
       type="button"

@@ -11,6 +11,8 @@ import { sectionRedirects } from "./site/sections.mjs";
 export default defineConfig({
   site: "https://nanyx.dev",
   trailingSlash: "never",
+  // Fetch a page when its link is hovered, so the client router can swap it in at once.
+  prefetch: true,
   build: {
     format: "file",
   },
