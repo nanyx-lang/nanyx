@@ -16,10 +16,6 @@ open NyxCompiler.Contexts
 // definitions attached to the type, as
 // `Point.0` and `Point.+` make a `Sum(Point)`. Where it was found is kept by the call's node, for the backend.
 
-/// What the names of the instances in scope start with, in the environment. No name written in the source can, so
-/// an instance never shadows a name, or is shadowed by one.
-let private instancePrefix = "@instance "
-
 /// Whether `name` is the name of a context.
 let private isContextName (state: InferState) (name: Identifier) =
     state.ContextDefs.ContainsKey name || (state.TypeDefs |> Map.tryFind name |> Option.exists _.IsContext)
@@ -30,14 +26,10 @@ let internal isParameterizedContext (state: InferState) (ctx: TypeExpr) =
     | TypeApply(name, _ :: _) -> isContextName state name
     | _ -> false
 
-/// `env` with the instance of `ctxName` applied to `argTys` in scope, as `written`: bound under a name of its own, with
-/// the context applied to its arguments as its type (`Sum(Point)` is `TyApply("Sum", [Point])`), and `provider`, the
-/// `use` or the signature that puts it there, kept beside it. Of two instances of one context, the one put in scope
-/// later is nearer.
-let private bindInstanceOf (env: TypeEnv) (state: InferState) (provider: ContextProvider) (ctxName: Identifier) (argTys: Ty list) (written: TypeExpr) : TypeEnv * InferState =
-    let bindingName = $"{instancePrefix}{ctxName} {state.NextId}"
-    let state = { state with NextId = state.NextId + 1; InstanceContexts = state.InstanceContexts |> Map.add bindingName (written, provider) }
-    TypeEnv.extend bindingName (TypeEnv.mono (TyApply(ctxName, argTys))) env, state
+/// `env` with the instance of `ctxName` applied to `argTys` in scope, as `written`, put there by `provider`, the `use`
+/// or the signature (see `InstanceBinding`). Of two instances of one context, the one put in scope later is nearer.
+let private bindInstanceOf (env: TypeEnv) (provider: ContextProvider) (ctxName: Identifier) (argTys: Ty list) (written: TypeExpr) : TypeEnv =
+    TypeEnv.withInstance { Context = TyApply(ctxName, argTys); Written = written; Provider = provider } env
 
 /// `env` with the instance `ctx` in scope, if it is one of a parameterised context, as `providerOf ctx` puts it there
 /// (see `bindInstanceOf`).
@@ -45,7 +37,7 @@ let private bindInstance (env: TypeEnv) (state: InferState) (providerOf: TypeExp
     match ctx.Kind with
     | TypeApply(ctxName, args) when isParameterizedContext state ctx ->
         let argTys, state = args |> List.mapFold typeExprToTy state
-        bindInstanceOf env state (providerOf ctx) ctxName argTys ctx
+        bindInstanceOf env (providerOf ctx) ctxName argTys ctx, state
     | _ -> env, state
 
 /// `env` with each instance of a parameterised context among `contexts`, which a `use` loads or a signature declares,
@@ -107,22 +99,23 @@ let private contextMemberTypes (state: InferState) (ctxName: Identifier) (argTys
         | _ -> None
     | _ -> None
 
+/// The instance nearest in scope in `env` that `choose` gives something for, given its context's name and arguments
+/// resolved as far as the constraints so far tell, with what it gives.
+let private nearestInstance (env: TypeEnv) (state: InferState) (choose: Identifier -> Ty list -> 'a option) : (InstanceBinding * 'a) option =
+    env.Instances
+    |> List.tryPick (fun instance ->
+        match resolveSoFar state instance.Context with
+        | TyApply(ctxName, argTys) -> choose ctxName argTys |> Option.map (fun chosen -> instance, chosen)
+        | _ -> None)
+
 /// The instance of `ctxName` applied to `argTys` nearest in scope in `env`, as written where it is put in scope: one of
 /// `ctxName` itself, else one of a context that has all its members (see `ContextShapes`), with what put it there.
 let private instanceInScope (env: TypeEnv) (state: InferState) (ctxName: Identifier) (argTys: Ty list) : (TypeExpr * ContextProvider) option =
     let ofContext (ctxName: Identifier) =
-        let prefix = $"{instancePrefix}{ctxName} "
-        env
-        |> Map.toSeq
-        |> Seq.filter (fun (name, _) -> name.StartsWith prefix)
-        |> Seq.choose (fun (name, scheme) ->
-            match resolveSoFar state scheme.Type with
-            | TyApply(_, instanceArgs) when instanceArgs.Length = argTys.Length && List.forall2 sameType instanceArgs argTys ->
-                Some (int (name.Substring prefix.Length), name)
-            | _ -> None)
-        |> Seq.sortByDescending fst
-        |> Seq.tryHead
-        |> Option.bind (fun (_, name) -> state.InstanceContexts |> Map.tryFind name)
+        nearestInstance env state (fun name instanceArgs ->
+            if name = ctxName && instanceArgs.Length = argTys.Length && List.forall2 sameType instanceArgs argTys then Some ()
+            else None)
+        |> Option.map (fun (instance, ()) -> instance.Written, instance.Provider)
     ofContext ctxName
     |> Option.orElse (ContextShapes.wider state (fun other -> contextMemberTypes state other argTys) ctxName |> List.tryPick ofContext)
 
@@ -132,22 +125,16 @@ let private instanceInScope (env: TypeEnv) (state: InferState) (ctxName: Identif
 let internal memberOfInstanceInScope (env: TypeEnv) (state: InferState) (memberName: Identifier) (operandTy: Ty) : (TypeExpr * TypeScheme) option =
     match resolveSoFar state operandTy with
     | TyVar operand ->
-        env
-        |> Map.toSeq
-        |> Seq.filter (fun (name, _) -> name.StartsWith instancePrefix)
-        |> Seq.choose (fun (name, scheme) ->
-            match resolveSoFar state scheme.Type with
-            | TyApply(ctxName, (TyVar forVar :: _ as argTys)) when forVar.Id = operand.Id ->
-                let prefix = $"{instancePrefix}{ctxName} "
+        nearestInstance env state (fun ctxName argTys ->
+            match argTys with
+            | TyVar forVar :: _ when forVar.Id = operand.Id ->
                 contextMemberTypes state ctxName argTys
                 |> Option.bind (List.tryFind (fst >> (=) memberName))
                 |> Option.map (fun (_, memberTy) ->
                     let symbol = state.TypeDefs |> Map.tryFind ctxName |> Option.bind (fun info -> info.Members |> Map.tryFind memberName)
-                    int (name.Substring prefix.Length), name, { TypeEnv.mono memberTy with Symbol = symbol })
+                    { TypeEnv.mono memberTy with Symbol = symbol })
             | _ -> None)
-        |> Seq.sortByDescending (fun (order, _, _) -> order)
-        |> Seq.tryHead
-        |> Option.bind (fun (_, name, scheme) -> state.InstanceContexts |> Map.tryFind name |> Option.map (fun (written, _) -> written, scheme))
+        |> Option.map (fun (instance, scheme) -> instance.Written, scheme)
     | _ -> None
 
 /// Whether an instance of a context applied to `argTys` can be built from attached definitions: whether the type it
@@ -261,8 +248,8 @@ let internal useInstance (env: TypeEnv) (state: InferState) (value: Expression) 
         let context = TyApply(ctxName, argTys)
         match ContextInference.typeExprOf (ContextInference.varNames context) context with
         | Some written ->
-            let env, state = bindInstanceOf env state (FromUse value.Id) ctxName argTys written
-            env, { state with UseContexts = state.UseContexts |> Map.add value.Id written }
+            bindInstanceOf env (FromUse value.Id) ctxName argTys written,
+            { state with UseContexts = state.UseContexts |> Map.add value.Id written }
         | None -> env, state
     | _ -> bindInstancesFrom env state (fun _ -> FromUse value.Id) (contextsOfValue state valueTy)
 

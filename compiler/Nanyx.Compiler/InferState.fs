@@ -258,10 +258,6 @@ type InferState =
             /// `TypedModule.ContextProviders`). Those of parameterised contexts are added from `ContextInstances` once
             /// the module is inferred.
             ContextProviders: Map<NodeId, ProvidedContext list>;
-            /// The instances of parameterised contexts that `use` statements and the types of functions put in scope,
-            /// as written there, with the `use` or the signature that puts each there, by the name they are bound under
-            /// in the environment (see `bindInstanceOf`).
-            InstanceContexts: Map<string, TypeExpr * ContextProvider>;
             /// The instance of a parameterised context each `use` loads, by the node of the value it loads (see
             /// `TypedModule.UseContexts`).
             UseContexts: Map<NodeId, TypeExpr>;
@@ -387,7 +383,6 @@ let emptyState =
             ImportSites = Map.empty;
             ContextInstances = Map.empty;
             ContextProviders = Map.empty;
-            InstanceContexts = Map.empty;
             UseContexts = Map.empty;
             FailedExprs = [];
             UnhandledMatches = [];

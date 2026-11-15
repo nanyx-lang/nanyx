@@ -9,20 +9,39 @@ type TypeScheme =
       Symbol: SymbolId option
       ProvidedBy: ContextProvider option }
 
-type TypeEnv = Map<string, TypeScheme>
+/// An instance of a parameterised context in scope, put there by a `use` or a signature (see `ContextInstances`): the
+/// context applied to its arguments (`Sum(Point)` is `TyApply("Sum", [Point])`), as written where it is put in scope,
+/// and what puts it there.
+type InstanceBinding =
+    { Context: Ty
+      Written: Parser.Program.TypeExpr
+      Provider: ContextProvider }
+
+/// The names in scope, each with its type, and the instances of parameterised contexts in scope, nearest first.
+type TypeEnv =
+    { Names: Map<string, TypeScheme>
+      Instances: InstanceBinding list }
 
 module TypeEnv =
-    let empty : TypeEnv = Map.empty
+    let empty : TypeEnv = { Names = Map.empty; Instances = [] }
 
     let extend (name: string) (scheme: TypeScheme) (env: TypeEnv) =
-        env |> Map.add name scheme
+        { env with Names = env.Names |> Map.add name scheme }
 
     /// Binds `name` to `scheme` as a reference to the declaration `symbol`.
     let declare (name: string) (symbol: SymbolId option) (scheme: TypeScheme) (env: TypeEnv) =
-        env |> Map.add name { scheme with Symbol = symbol }
+        extend name { scheme with Symbol = symbol } env
 
     let tryFind (name: string) (env: TypeEnv) =
-        env |> Map.tryFind name
+        env.Names |> Map.tryFind name
+
+    /// `env` without `name` in scope.
+    let remove (name: string) (env: TypeEnv) =
+        { env with Names = env.Names |> Map.remove name }
+
+    /// `env` with `instance` in scope, nearer than those already in it.
+    let withInstance (instance: InstanceBinding) (env: TypeEnv) =
+        { env with Instances = instance :: env.Instances }
 
     let mono (ty: Ty) : TypeScheme =
         { Quantified = Set.empty
@@ -40,9 +59,10 @@ module TypeEnv =
         Set.difference (freeTyVars scheme.Type) scheme.Quantified
 
     let freeEnvVars (env: TypeEnv) : Set<int> =
-        env
+        env.Names
         |> Map.values
         |> Seq.map freeSchemeVars
+        |> Seq.append (env.Instances |> Seq.map (_.Context >> freeTyVars))
         |> Seq.fold Set.union Set.empty
 
     let generalize (env: TypeEnv) (ty: Ty) : TypeScheme =
