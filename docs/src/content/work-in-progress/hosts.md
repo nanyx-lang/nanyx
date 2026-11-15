@@ -232,6 +232,51 @@ a `Request -> Response`. That is the next section's rule.
   serve without WASI: `nanyx run` listens on a port (from the `settings` of the manifest's `host`) and calls the handler for
   each request, which is enough for local development and for the [HTTP server cookbook](../cookbook/http-server).
 
+# Libraries for a host
+
+Some libraries only make sense with a certain kind of host: middleware for the web host, or a terminal UI for the
+console host. Decided by the maintainer: such a library depends on what a host provides, its contexts and types,
+never on the host itself.
+
+- **Middleware** is a function from handler to handler, `[Log & Clock] (Request -> Response) -> (Request -> Response)`.
+  It needs the `Request` and `Response` types and the `Log` and `Clock` contexts, not the host that serves them.
+- **A terminal UI** needs raw keys, the terminal's size, cursor control and colour: a `Terminal` context, which the
+  console host provides and a browser host doesn't. The library is ordinary `[Terminal]` code.
+
+So each host is **two packages**:
+
+- **An interface package** that declares the types and contexts: `Request`, `Response` and the HTTP host's own
+  contexts; `Console`, `Env` and `Terminal` for the console. It is small, with no code beyond those declarations.
+- **The host** that implements it, its `run` built on [foreign functions](./foreign-functions). It depends on its
+  interface package.
+
+A library depends only on the interface package. The capability check does the rest: a program whose host doesn't
+provide `Terminal` gets a compile error naming `Terminal` at the library's call, as it does for `FileSystem` today.
+The same interface can have more than one host, so middleware works under a local server, a serverless host or a
+WASI one, and a third-party HTTP host is another implementation of the same interface, with every library already
+written for it. This is the split WASI makes between an interface (WIT) and its implementation, and that WSGI makes
+between a server and a framework.
+
+The package index can show which hosts a library works with, with nothing written by its author: a package's
+`api.json` lists the contexts it requires, and a host lists those it provides.
+
+**Naming the pair.** Since an application names its host in its manifest more often than a library author names an
+interface, the host could take the shorter name:
+
+| | Host | Interface |
+|---|---|---|
+| Console | `nanyx.console` | `nanyx.console.core` |
+| HTTP | `nanyx.http` | `nanyx.http.core` |
+
+Rust's `futures` and `futures-core` follow this pattern. The alternative gives the interface the short name
+(`nanyx.http` for the types, `nanyx.http.host` for the server), as Rust's `http` crate (types) beside `hyper` (a
+server) does: a library author then writes the obvious name, and an application names the host it picked. This is an
+open question below.
+
+**What it needs from hosts.** Not every interface fits WASI. A terminal's raw mode and size aren't in WASI preview 1,
+so the console host's `Terminal` would be built on imports the CLI's own runtime provides. A program using it then
+runs under `nanyx run`, but not under another WASI runtime, which is accurate: it needs that host.
+
 # Hosts are not frameworks
 
 A host owns the *process lifecycle*. A framework is something that needs effects or produces an entry. Keeping these separate stops the ecosystem from fragmenting:
@@ -389,7 +434,9 @@ The composite host runs each part under the right sub-host and coordinates start
 
 - **Host configuration typing.** The `settings` of the manifest's `host` should be checked against a record type the host exports, so that misspelt keys are errors.
 - **Async and workflows.** Can a host change how the entry runs, for example by running it as a [workflow](../advanced/workflows) or on an event loop, without changing the entry's written type?
-- **Libraries that require a host.** Should a library be able to say "I only make sense under an HTTP host", or is requiring the right contexts always enough?
+- **Naming a host and its interface.** Does the host take the short name (`nanyx.console`, with `nanyx.console.core` for
+  the interface), or the interface (`nanyx.http`, with `nanyx.http.host`)? See
+  [Libraries for a host](#libraries-for-a-host).
 - **Host code in another language.** A browser host needs JavaScript beside the module. How does a host package carry it, and how does the build write it out?
 - **Calls that can't block, later.** The browser host starts Elm-style, with effects as messages. Whether contexts may
   one day suspend the program, so that a `fetch` reads like an ordinary call, is the async question above.
