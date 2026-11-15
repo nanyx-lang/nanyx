@@ -72,6 +72,17 @@ let private bitwiseOperations =
           Intrinsics.shiftRight, [ "i64.shr_s" ]
           Intrinsics.shiftRightUnsigned, [ "i64.shr_u" ] ]
 
+/// The intrinsics that read and write linear memory at an address (see `nanyx/host.memory`), each with the instruction
+/// that does it after the address and the value written, and whether it writes, leaving unit.
+let private memoryAccesses =
+    Map.ofList
+        [ Intrinsics.memoryReadByte, ("i32.load8_u", false)
+          Intrinsics.memoryWriteByte, ("i32.store8", true)
+          Intrinsics.memoryReadI32, ("i32.load", false)
+          Intrinsics.memoryWriteI32, ("i32.store", true)
+          Intrinsics.memoryReadI64, ("i64.load", false)
+          Intrinsics.memoryWriteI64, ("i64.store", true) ]
+
 /// The integer type of a value of `ty`, as `SizedIntegerCode` takes it: a sized integer, or `None` for an int.
 let private integerType (ty: IrType) =
     match ty with
@@ -535,6 +546,16 @@ type private FunctionEmitter(context: EmitContext) =
             | IrSized integer -> join "\n    " [ atoms [ arg ]; $"call ${helper (SizedIntegerCode.fromIntHelper integer)}" ]
             | IrF32 -> join "\n    " [ atoms [ arg ]; "f32.convert_i64_s"; $"call ${helper Helpers.f32Box}" ]
             | other -> internalError $"{Intrinsics.fromInt} at {IrType.show other}, which is not a sized integer"
+        | CallRuntime(name, args, _) when memoryAccesses.ContainsKey name ->
+            let instruction, writes = memoryAccesses.[name]
+            join "\n    " [ atoms args; touching instruction; (if writes then "i32.const 0" else "") ]
+        | CallRuntime(name, [ size ], _) when name = Intrinsics.memoryAllocate -> join "\n    " [ atoms [ size ]; $"call ${helper Helpers.alloc}" ]
+        | CallRuntime(name, [ address ], _) when name = Intrinsics.memoryFree ->
+            join "\n    " [ atoms [ address ]; $"call ${helper Helpers.free}"; "i32.const 0" ]
+        // A string is the address of its bytes, with its length in the word before them.
+        | CallRuntime(name, [ text ], _) when name = Intrinsics.stringAddress -> atoms [ text ]
+        | CallRuntime(name, [ text ], _) when name = Intrinsics.stringByteLength ->
+            join "\n    " [ atoms [ text ]; $"call ${helper Helpers.stringLength}" ]
         | CallImport(declared, args) ->
             // Each argument as the value type the import takes, a float out of its box; a float it returns is boxed, and
             // an import that returns nothing leaves unit, 0.

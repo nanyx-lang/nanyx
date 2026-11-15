@@ -18,6 +18,7 @@ The standard library is the modules under `nanyx/`. The [prelude](./prelude) is 
 - [env](./env) — a program's arguments, environment variables and exit code (`nanyx/env`)
 - [console.host](./console-host) — the host that runs a command-line program (`nanyx/console.host`)
 - [host.runtime](./host-runtime) — the privileged layer a host is written on (`nanyx/host.runtime`)
+- [host.memory](./host-memory) — a host's access to linear memory, for the foreign functions it calls (`nanyx/host.memory`)
 
 # Named parameters
 

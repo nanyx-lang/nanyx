@@ -334,3 +334,34 @@ let instantiateWat (wat: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
 /// `source` compiled with memory checks, instantiated and run (see `instantiateWat`).
 let instantiateWasm (source: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
     instantiateWat (transpileWatWith checkedOptions source) dropped
+
+/// `source` checked as the standard library's `console.host`, a host, which may require `HostRuntime`, and compiled
+/// with `options`; any diagnostic fails.
+let hostWatWith (options: WasmOptions) (source: string) =
+    match Compiler.compileFrom Linters.none (StandardLibraryModule "console.host") (normalized source) with
+    | { Typed = Some typed } as result when result.Diagnostics.IsEmpty -> transpileTypedModuleWithOptions options typed |> fst
+    | result -> failwith $"""Compile error: {result.Diagnostics |> List.map _.Message |> String.concat "\n"}"""
+
+/// What the module `wat` writes to stdout when the CLI's runtime runs it with the command-line arguments `arguments`,
+/// its name first, or why it did not run.
+let runHost (arguments: string list) (wat: string) : Result<string, Nanyx.Runtime.RunError> =
+    let input = Path.GetTempFileName()
+    try
+        use output = new MemoryStream()
+        use error = new MemoryStream()
+        Nanyx.Runtime.WasmRunner.run (Nanyx.Runtime.Redirected(input, output, error, [])) arguments wat
+        |> Result.map (fun () -> Text.Encoding.UTF8.GetString(output.ToArray()))
+    finally
+        File.Delete input
+
+/// `runHost` for a module compiled with `checkedOptions`: what it writes to stdout, and how many blocks it left
+/// allocated.
+let runCheckedHost (arguments: string list) (wat: string) : Result<string * int, Nanyx.Runtime.RunError> =
+    let input = Path.GetTempFileName()
+    try
+        use output = new MemoryStream()
+        use error = new MemoryStream()
+        Nanyx.Runtime.WasmRunner.runReading (Nanyx.Runtime.Redirected(input, output, error, [])) arguments CheckedExports.start [| CheckedExports.liveBlocks |] wat
+        |> Result.map (fun counters -> Text.Encoding.UTF8.GetString(output.ToArray()), counters.[0])
+    finally
+        File.Delete input

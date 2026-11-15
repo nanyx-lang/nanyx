@@ -19,6 +19,7 @@ module Intrinsics =
     let private intTy = TyPrimitive "int"
     let private floatTy = TyPrimitive "float"
     let private unitTy = TyPrimitive "unit"
+    let private i32Ty = SizedInteger.ty SizedInteger.I32
 
     /// The input type of a function taking several arguments: a positional record, as inference builds it.
     let private tuple (items: Ty list) =
@@ -108,6 +109,23 @@ module Intrinsics =
     /// Ends the program with an exit code. It never returns, so its result is `undefined`.
     let exit = prefix + "exit"
 
+    /// A host's access to linear memory (see `nanyx/host.memory`), at addresses that are `I32`s. A new block of a number
+    /// of bytes, from the allocator every object comes from, and the block given back.
+    let memoryAllocate = prefix + "memory_allocate"
+    let memoryFree = prefix + "memory_free"
+    /// The byte (as an `I32`, 0 to 255), the `I32` and the `I64` at an address, and each written there.
+    let memoryReadByte = prefix + "memory_read_byte"
+    let memoryWriteByte = prefix + "memory_write_byte"
+    let memoryReadI32 = prefix + "memory_read_i32"
+    let memoryWriteI32 = prefix + "memory_write_i32"
+    let memoryReadI64 = prefix + "memory_read_i64"
+    let memoryWriteI64 = prefix + "memory_write_i64"
+    /// Where a string's bytes are, and how many there are, as `I32`s.
+    let stringAddress = prefix + "string_address"
+    let stringByteLength = prefix + "string_byte_length"
+    /// A new string holding a copy of the bytes at an address, as many as a length.
+    let stringFromMemory = prefix + "string_from_memory"
+
     /// The intrinsics that give back their argument as a value of another type, which the backend holds the same way.
     let reinterpretations : Set<string> = set [ mapOfEntries; mapEntries; setOfElements; setElements ]
 
@@ -126,6 +144,17 @@ module Intrinsics =
           arguments, TypeEnv.mono (TyFunc(unitTy, stringTy, []))
           environment, TypeEnv.mono (TyFunc(unitTy, stringTy, []))
           exit, TypeEnv.mono (TyFunc(intTy, Unifier.bottomType, []))
+          memoryAllocate, TypeEnv.mono (TyFunc(i32Ty, i32Ty, []))
+          memoryFree, TypeEnv.mono (TyFunc(i32Ty, unitTy, []))
+          memoryReadByte, TypeEnv.mono (TyFunc(i32Ty, i32Ty, []))
+          memoryWriteByte, TypeEnv.mono (TyFunc(tuple [ i32Ty; i32Ty ], unitTy, []))
+          memoryReadI32, TypeEnv.mono (TyFunc(i32Ty, i32Ty, []))
+          memoryWriteI32, TypeEnv.mono (TyFunc(tuple [ i32Ty; i32Ty ], unitTy, []))
+          memoryReadI64, TypeEnv.mono (TyFunc(i32Ty, intTy, []))
+          memoryWriteI64, TypeEnv.mono (TyFunc(tuple [ i32Ty; intTy ], unitTy, []))
+          stringAddress, TypeEnv.mono (TyFunc(stringTy, i32Ty, []))
+          stringByteLength, TypeEnv.mono (TyFunc(stringTy, i32Ty, []))
+          stringFromMemory, TypeEnv.mono (TyFunc(tuple [ i32Ty; i32Ty ], stringTy, []))
           stringLength, TypeEnv.mono (TyFunc(stringTy, intTy, []))
           stringByteAt, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy ], intTy, []))
           stringSlice, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; intTy ], stringTy, []))

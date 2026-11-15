@@ -441,6 +441,12 @@ On the examples that compile (blocks allocated, and the heap's peak in bytes):
 - **Closures and contexts.** Capturing a value duplicates it, and freeing a closure drops what it captured. Context
   members that are not known where a function is called are passed as closures and follow the same rules.
 - **Host calls.** Strings handed to the runtime (stdout, `dbg`) are borrowed for the call.
+- **Addresses of strings.** A host takes a string's address with `nanyx/host.memory`'s `addressOf`, to pass to a
+  foreign function, and nothing else may read the string after that: inlined, its last use can come before the call
+  the address is passed to. So counting treats a value made from an address (by arithmetic, a copy, or a call of a
+  function that returns one made from its arguments, `CoreIrCounting.inferAddressResults`) as a use of the strings it
+  is an address in (`addressFlow`): an instruction that reads it reads them last, and they live until it is done. A
+  string made in the argument of `addressOf` is a temporary with no name to follow, and is dropped at once.
 - **Tail calls.** The language guarantees that a tail call uses no stack ([Tail calls](./tail-calls)), so a
   variable that dies at a tail call is dropped before the call, and an argument the caller owns is passed owned:
   if the callee only borrowed it, the caller would have to outlive the call.

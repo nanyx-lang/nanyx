@@ -39,6 +39,10 @@ module Hosts =
     /// The standard-library module whose context, `HostRuntime`, the toolchain provides only to hosts.
     let runtimeModule = "host.runtime"
 
+    /// The standard-library modules a host is written on, whose functions all require `HostRuntime`: the one that
+    /// declares it, and `nanyx/host.memory`.
+    let private runtimeModules = [ runtimeModule; "host.memory" ]
+
     /// The context a host is written on: raw reads and writes, which only a host may require.
     let runtimeContext = "HostRuntime"
 
@@ -74,11 +78,12 @@ module Hosts =
         | SourceFile _
         | InMemory -> false
 
-    /// Whether the module `origin` may require `HostRuntime`: a host, or the module that declares it.
+    /// Whether the module `origin` may require `HostRuntime`: a host, or a module a host is written on (see
+    /// `runtimeModules`).
     let mayRequireRuntime (origin: ModuleOrigin) =
         match origin with
         | StandardLibraryModule name ->
-            name = runtimeModule || all |> List.exists (fun host -> host.Module = StandardLibrary.importPrefix + name)
+            List.contains name runtimeModules || all |> List.exists (fun host -> host.Module = StandardLibrary.importPrefix + name)
         | SourceFile _
         | InMemory -> false
 

@@ -115,6 +115,7 @@ module Helpers =
     let stringByteAt = NyxCompiler.Intrinsics.stringByteAt
     let stringSlice = NyxCompiler.Intrinsics.stringSlice
     let stringFromByte = NyxCompiler.Intrinsics.stringFromByte
+    let stringFromMemory = NyxCompiler.Intrinsics.stringFromMemory
     let stringJoin = NyxCompiler.Intrinsics.stringJoin
     let listCons = NyxCompiler.Intrinsics.listCons
     let floatSqrt = NyxCompiler.Intrinsics.floatSqrt
@@ -550,6 +551,19 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  local.get $out"
             "  local.get $byte"
             "  i32.store8"
+            "  local.get $out"
+            ")" ]
+      // A new string holding a copy of `$len` bytes at `$address`, for a host (see `nanyx/host.memory`).
+      Helpers.stringFromMemory,
+      lines
+          [ $"(func ${Helpers.stringFromMemory} (param $address i32) (param $len i32) (result i32)"
+            "  (local $out i32)"
+            "  local.get $len"
+            $"  call ${Helpers.stringAlloc}"
+            "  local.tee $out"
+            "  local.get $address"
+            "  local.get $len"
+            $"  call ${Helpers.copyBytes}"
             "  local.get $out"
             ")" ]
       Helpers.stringJoin,
@@ -1229,6 +1243,7 @@ let helperDependencies =
       Helpers.stringByteAt, [ Helpers.stringLength ]
       Helpers.stringSlice, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.copyBytes ]
       Helpers.stringFromByte, [ Helpers.stringAlloc ]
+      Helpers.stringFromMemory, [ Helpers.stringAlloc; Helpers.copyBytes ]
       Helpers.stringConcat, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.copyBytes ]
       Helpers.stringEquals, [ Helpers.stringLength ]
       Helpers.writeStdout, [ Helpers.stringLength ]

@@ -82,6 +82,88 @@ let rec private nodes (e: Expr) : Expr seq =
             yield! nodes (List.last children)
     }
 
+/// The expressions whose values `e` gives: the end of its chain, in each branch and arm.
+let rec private results (e: Expr) : Expr list =
+    match e.Kind with
+    | Let(_, _, body)
+    | Do(_, body) -> results body
+    | If(_, ifTrue, ifFalse) -> results ifTrue @ results ifFalse
+    | Match(_, arms) -> arms |> List.collect (fun arm -> results arm.Body)
+    | _ -> [ e ]
+
+/// For each function whose result can be an address in a string (see `addressFlow`), the parameters it comes from, by
+/// index: a string whose bytes it is an address of, or an address the caller made.
+type internal AddressResults = Map<string, int list>
+
+/// Which strings each value in `func` is an address in, as variables of `func`: the bytes of a string (see
+/// `nanyx/host.memory`'s `addressOf`), an operation on such an address, a variable that holds one, or what a call
+/// gives of a function that returns one made from its arguments (`addressResults`). With `fromParams`, each parameter
+/// that is not on the heap stands for the strings the caller's address is in, so that a function's result can be
+/// told apart by the parameters it comes from. A variable that holds an address keeps its strings alive, so that a
+/// host's address stays valid for as long as it uses it, though nothing else reads the string.
+let private addressFlow (addressResults: AddressResults) (fromParams: bool) (func: Function) : (Expr -> Var list) * (Atom -> Var list) =
+    let temps = Dictionary<int, Expr>()
+    let held = Dictionary<int, Var list>()
+    let rec ofValue (e: Expr) : Var list =
+        match e.Kind with
+        | CallRuntime(name, [ AVar text ], _) when name = NyxCompiler.Intrinsics.stringAddress && text.Kind <> Temp -> [ text ]
+        | Call(name, args) ->
+            addressResults
+            |> Map.tryFind name
+            |> Option.defaultValue []
+            |> List.collect (fun index ->
+                match args |> List.tryItem index with
+                | Some (AVar text) when text.Kind <> Temp && isHeapType text.Type -> [ text ]
+                | Some atom -> ofAtom atom
+                | None -> [])
+        | Atom atom -> ofAtom atom
+        | Prim(_, atoms) -> atoms |> List.collect ofAtom
+        | _ -> []
+        |> List.distinctBy _.Id
+    and ofAtom (atom: Atom) : Var list =
+        match atom with
+        | AVar var when var.Kind = Temp ->
+            match temps.TryGetValue var.Id with
+            | true, value -> ofValue value
+            | _ -> []
+        | AVar var ->
+            match held.TryGetValue var.Id with
+            | true, strings -> strings
+            | _ -> []
+        | _ -> []
+    if fromParams then
+        for parameter in func.Params do
+            if not (isHeapType parameter.Type) then held.[parameter.Id] <- [ parameter ]
+    for e in nodes func.Body do
+        match e.Kind with
+        | Let(var, value, _) when var.Kind = Temp -> temps.[var.Id] <- value
+        | Let(var, value, _) ->
+            match ofValue value with
+            | [] -> ()
+            | strings -> held.[var.Id] <- strings
+        | _ -> ()
+    ofValue, ofAtom
+
+/// Which functions return an address in a string made from their arguments (see `AddressResults`).
+let internal inferAddressResults (functions: Function list) : AddressResults =
+    let mutable found: AddressResults = Map.empty
+    let mutable changed = true
+    while changed do
+        changed <- false
+        for f in functions do
+            let ofValue, _ = addressFlow found true f
+            let parameters = f.Params |> List.mapi (fun index parameter -> parameter.Id, index) |> Map.ofList
+            let indices =
+                results f.Body
+                |> List.collect ofValue
+                |> List.choose (fun var -> parameters |> Map.tryFind var.Id)
+                |> List.distinct
+                |> List.sort
+            if not indices.IsEmpty && found |> Map.tryFind f.Name <> Some indices then
+                found <- found |> Map.add f.Name indices
+                changed <- true
+    found
+
 /// The calls `e` makes in tail position, by the rules of `docs/src/content/work-in-progress/tail-calls.md`.
 let rec private tailCalls (e: Expr) : (string * Atom list) list =
     match e.Kind with
@@ -140,8 +222,9 @@ let internal inferOwnership (functions: Function list) : Ownership =
                     | _ -> ())
     current ()
 
-/// Counts one function's body.
-type private Counter(ownership: Ownership, func: Function) =
+/// Counts one function's body. `addresses` gives the strings a value is an address in (see `addressFlow`), which a use
+/// of the value uses too.
+type private Counter(ownership: Ownership, addresses: Atom -> Var list, func: Function) =
     let temps = Dictionary<int, Expr>()
     let vars = Dictionary<int, Var>()
     let counted = Dictionary<int, Expr>()
@@ -219,7 +302,7 @@ type private Counter(ownership: Ownership, func: Function) =
     member this.FreeIn (atom: Atom) : Set<int> =
         match atom with
         | AVar var when var.Kind = Temp -> this.Free temps.[var.Id]
-        | AVar var -> Set.singleton var.Id
+        | AVar var -> addresses atom |> List.map _.Id |> Set.ofList |> Set.add var.Id
         | AInt _
         | ASized _
         | ABool _
@@ -311,7 +394,10 @@ type private Counter(ownership: Ownership, func: Function) =
         | Reuse _
         | FreeToken _ -> internalError "the core IR is counted twice"
         | _ ->
-            let dups, drops = this.Operands owned after (operands ownership e)
+            // An instruction that reads an address reads the strings it is in, last, so that they live until it is done.
+            let items = operands ownership e
+            let addressed = items |> List.collect (fst >> addresses) |> List.distinctBy _.Id |> List.map (fun text -> AVar text, Borrowed)
+            let dups, drops = this.Operands owned after (items @ addressed)
             this.Wrap dups drops e
 
     /// Counts the operands of an instruction, evaluated in this order: the variables it has to take a reference to
@@ -363,6 +449,7 @@ type private Counter(ownership: Ownership, func: Function) =
 
 /// `functions` with reference counting inserted, by the parameters `ownership` says each owns.
 let internal insert (ownership: Ownership) (functions: Function list) : Function list =
+    let addressResults = inferAddressResults functions
     functions
     |> List.map (fun func ->
         let owned =
@@ -371,4 +458,4 @@ let internal insert (ownership: Ownership) (functions: Function list) : Function
             |> List.filter (fun (index, parameter) -> isHeapType parameter.Type && parameterUse ownership func.Name index = Owned)
             |> List.map (snd >> _.Id)
             |> Set.ofList
-        { func with Body = Counter(ownership, func).Count owned Set.empty func.Body })
+        { func with Body = Counter(ownership, snd (addressFlow addressResults false func), func).Count owned Set.empty func.Body })
