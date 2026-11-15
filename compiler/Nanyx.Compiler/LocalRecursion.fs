@@ -14,7 +14,7 @@ let isRec (value: Expression) =
 /// An error at each place the value of the local def `name` names it, when the def is not `rec` and `env`, the scope
 /// around the def, binds nothing of that name either.
 let selfReferences (env: TypeEnv) (name: Identifier) (value: Expression) : Diagnostic list =
-    if isRec value || env.ContainsKey name then []
+    if isRec value || env.Names.ContainsKey name then []
     else
         SyntaxTree.freeReferences value
         |> List.filter (fst >> (=) name)

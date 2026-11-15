@@ -697,7 +697,7 @@ module Compiler =
                 // the prelude's), less the names the module declares at the top level itself.
                 let declaredHere = ownTopLevel |> List.map (fun symbol -> symbol.Name) |> Set.ofList
                 let imported =
-                    env
+                    env.Names
                     |> Map.toList
                     |> List.choose (fun (name, scheme) ->
                         match scheme.Symbol with

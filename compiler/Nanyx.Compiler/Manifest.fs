@@ -29,8 +29,9 @@ type Manifest =
       Version: string
       /// Globs relative to `Root`: `**/*.nyx` unless the manifest says otherwise.
       Sources: string list
-      /// The names of the modules a package that depends on this one may import: `package`'s `publicModules`.
-      PublicModules: string list
+      /// The names of the modules a package that depends on this one may import, `package`'s `publicModules`, each
+      /// with where it is written.
+      PublicModules: (string * SourceSpan) list
       /// The packages it depends on, in the order `dependencies` lists them.
       Dependencies: Dependency list
       /// The linters the manifest's `linters` turns on, and the severities their `settings` set.
@@ -119,15 +120,22 @@ module Manifest =
                 this.Add DiagnosticCodes.MissingManifestField at $"{what} has no {name}, which it needs"
             this.Text what fields name pattern rule
 
-        /// The strings of the list in the field `name` of `fields`, if it has one.
-        member this.Strings (what: string) (fields: DataField list) (name: string) : string list option =
+        /// The strings of the list in the field `name` of `fields`, each with where it is written, if it has one.
+        member this.Strings (what: string) (fields: DataField list) (name: string) : (string * SourceSpan) list option =
             match DataValue.field name fields with
             | Some { DataField.Value = { DataValue.Data = DataList items } } when items |> List.forall (fun item -> item.Data.IsDataString) ->
-                Some(items |> List.choose (fun item -> match item.Data with DataString text -> Some text | _ -> None))
+                Some(items |> List.choose (fun item -> match item.Data with DataString text -> Some(text, item.Location) | _ -> None))
             | Some field ->
                 this.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"{what}'s {name} must be a list of strings, not {DataValue.describe field.Value}"
                 None
             | None -> None
+
+        /// An error at each of `entries` whose name an earlier one has already, which `message` describes given the name.
+        member this.Repeats (entries: (string * SourceSpan) list) (message: string -> string) =
+            let seen = Collections.Generic.HashSet<string>()
+            for name, span in entries do
+                if not (seen.Add name) then
+                    this.Add DiagnosticCodes.InvalidManifestValue span (message name)
 
     let private anyText = Regex ".*"
 
@@ -247,7 +255,12 @@ module Manifest =
                             $"a dependency's path must be a string, the directory the package is in, not {DataValue.describe path.Value}"
                         None)
         match value.Data with
-        | DataList entries -> entries |> List.choose read
+        | DataList entries ->
+            let dependencies = entries |> List.choose read
+            problems.Repeats
+                (dependencies |> List.map (fun dependency -> dependency.Name, dependency.NameSpan))
+                (fun name -> $"the dependency {name} is listed twice: a package lists each package it depends on once")
+            dependencies
         | _ ->
             problems.Add DiagnosticCodes.InvalidManifestValue value.Location $"dependencies must be a list, [(package = ..., path = ...)], not {DataValue.describe value}"
             []
@@ -285,7 +298,10 @@ module Manifest =
                 | Some (fields, span) ->
                     let name = problems.RequiredText "package" span fields "name" namePattern nameRule
                     let version = problems.RequiredText "package" span fields "version" versionPattern "a semantic version: 1.2.0"
-                    name, version, problems.Strings "package" fields "sources", problems.Strings "package" fields "publicModules"
+                    let publicModules = problems.Strings "package" fields "publicModules"
+                    publicModules
+                    |> Option.iter (fun entries -> problems.Repeats entries (fun name -> $"the module '{name}' is listed twice in publicModules"))
+                    name, version, problems.Strings "package" fields "sources" |> Option.map (List.map fst), publicModules
                 | None -> None, None, None, None
             let linters = field "linters" |> Option.map (fun field -> readLinters problems field.Value)
             let host = field "host" |> Option.map (fun field -> readHost problems field.Value)
@@ -304,6 +320,19 @@ module Manifest =
                       Host = defaultArg host Hosts.console
                       Value = manifest }
             | problems -> Result.Error problems
+
+    /// An error at each entry of the manifest's `publicModules` that names none of `declared`, the modules its
+    /// package's source files declare, with the closest of them as a suggestion.
+    let unknownPublicModules (manifest: Manifest) (declared: string seq) : Diagnostic list =
+        manifest.PublicModules
+        |> List.filter (fun (name, _) -> not (Seq.contains name declared))
+        |> List.map (fun (name, span) ->
+            let suggestions = NameSuggestions.closest declared name
+            { Diagnostics.at
+                  DiagnosticCodes.InvalidManifestValue
+                  span
+                  $"publicModules names the module '{name}', but no source file of {manifest.Name} declares it{NameSuggestions.question suggestions}" with
+                Fixes = suggestions |> List.map (fun suggestion -> { Title = $"Write `\"{suggestion}\"`"; Edits = [ { Span = span; NewText = $"\"{suggestion}\"" } ] }) })
 
     /// `diagnostic`, one of a manifest's, as one line: `path:line:column: error NYX0021: message`.
     let describe (diagnostic: Diagnostic) =

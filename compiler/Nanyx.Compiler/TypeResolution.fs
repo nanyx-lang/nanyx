@@ -101,7 +101,7 @@ let internal tryResolveAttachedFunction (env: TypeEnv) (lhsType: Ty) (funcName: 
     else
         attachedTypeNames lhsType
         |> List.map (fun typeName -> $"{typeName}.{funcName}")
-        |> List.tryFind (fun name -> env.ContainsKey name)
+        |> List.tryFind (fun name -> env.Names.ContainsKey name)
 
 /// The names of the built-in properties, whatever type has them.
 let builtInPropertyNames = [ "length" ]

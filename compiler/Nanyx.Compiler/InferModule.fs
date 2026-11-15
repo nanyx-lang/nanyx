@@ -151,7 +151,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         |> Option.defaultValue []
         |> List.fold (fun acc alias -> TypeEnv.declare alias symbol scheme acc) (TypeEnv.declare name symbol scheme env)
     let withoutTopLevel (name: string) (env: TypeEnv) =
-        aliasesOf |> Map.tryFind name |> Option.defaultValue [] |> List.fold (fun acc alias -> acc |> Map.remove alias) (env |> Map.remove name)
+        aliasesOf |> Map.tryFind name |> Option.defaultValue [] |> List.fold (fun acc alias -> TypeEnv.remove alias acc) (TypeEnv.remove name env)
 
     // A value of a module without a `module` line is a script's, computed at the top level, unless it is in a module
     // block, which is a named module.

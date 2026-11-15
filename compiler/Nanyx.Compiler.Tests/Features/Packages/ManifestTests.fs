@@ -223,5 +223,25 @@ let ``A linter or host must be named at the version the compiler ships, exactly`
     )
 
 [<Fact>]
+let ``A public module or a dependency listed twice is an error at the repeat`` () =
+    let text =
+        """
+(
+  package = (name = "demo", version = "0.1.0", publicModules = ["strings", "lists", "strings"])
+  dependencies = [(package = "acme.web", path = "../web"), (package = "acme.web", path = "../web")]
+)
+"""
+    let errors =
+        match check text with
+        | Result.Error errors -> errors
+        | Result.Ok _ -> failwith "Expected errors"
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.InvalidManifestValue.Code, "the dependency acme.web is listed twice: a package lists each package it depends on once"
+          DiagnosticCodes.InvalidManifestValue.Code, "the module 'strings' is listed twice in publicModules" ],
+        errors |> List.map (fun error -> error.Code, error.Message)
+    )
+    Assert.Equal<(int * int) list>([ 3, 70; 2, 84 ], errors |> List.map (fun error -> error.Span.Value.StartLine, error.Span.Value.StartColumn))
+
+[<Fact>]
 let ``The compiler's version is its release, with no commit`` () =
     Assert.Matches(@"^\d+\.\d+\.\d+$", Toolchain.version)

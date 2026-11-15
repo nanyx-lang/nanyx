@@ -140,8 +140,8 @@ context where it is (`DeferredContextUse.Providers`), and records the def's cont
 
 A parameterised context keeps its provider in `ContextInstances` itself, rather than in a table beside it:
 `InstanceInScope of TypeExpr * ContextProvider`. Each instance put in scope (`bindInstanceOf` in
-`ContextInstances.fs`) keeps the `use` or the signature that put it there beside it, in `InferState.InstanceContexts`,
-and `instanceInScope` returns it with the instance. An instance a def that does not write its type was inferred to
+`ContextInstances.fs`) keeps the `use` or the signature that put it there beside it, in the environment's own list of
+instances (`TypeEnv.Instances`, of `InstanceBinding` records), and `instanceInScope` returns it with the instance. An instance a def that does not write its type was inferred to
 require is provided by inference (`ContextInference.resolvePending`). Once the module is inferred,
 `ContextInstances.recordInstanceProviders` adds an entry to `ContextProviders` for each `InstanceInScope` a call
 found, before the contexts found by their members' names, as written where it is put in scope (`Show(a)`, over

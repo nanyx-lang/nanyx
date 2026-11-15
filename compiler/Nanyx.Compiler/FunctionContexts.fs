@@ -108,15 +108,8 @@ module FunctionContexts =
         | TyFunc(input, output, contexts) ->
             let own = contexts |> List.choose (function TyVar v -> Some (v.Id, v.Name) | _ -> None) |> Map.ofList
             Map.fold (fun acc id name -> Map.add id name acc) own (all (input :: output :: contexts))
-        | TyVar _
-        | TyPrimitive _ -> Map.empty
-        | TyNominal(_, underlying, _) -> variablesIn underlying
-        | TyAlias(_, args, underlying) -> all (underlying :: args)
-        | TyRecord fields
         | TyOpenRecord(fields, _) -> all (List.ofSeq fields.Values)
-        | TyTag(_, payload) -> payload |> Option.map variablesIn |> Option.defaultValue Map.empty
-        | TyApply(_, items)
-        | TyUnion items -> all items
+        | _ -> all (Ty.children ty)
 
     /// `contexts` once a substitution is applied to them: a variable solved to a union of contexts is those contexts,
     /// and each context is there once.

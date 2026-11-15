@@ -50,14 +50,17 @@ module internal WellKnownContexts =
             match ty with
             | TyFunc _
             | TyVar _
-            | TyPrimitive _ -> None
+            | TyPrimitive _
+            | TyParam _ -> None
             | TyAlias(_, _, underlying)
             | TyNominal(_, underlying, _) -> offendingPart kindOf underlying
             | TyRecord fields
             | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.tryPick (fun (name, fieldTy) -> inPart $"its field '{name}'" false fieldTy)
             | TyTag(name, payload) -> payload |> Option.bind (inPart $"the payload of '#{name}'" false)
             | Lists.ListType element -> inPart "its elements" true element
-            | TyApply(_, args) -> args |> List.tryPick (inPart "a value it holds" false)
+            | TyApply _
+            | TyRecursive _
+            | TySelf _ -> Ty.children ty |> List.tryPick (inPart "a value it holds" false)
             | TyUnion items -> items |> List.tryPick (offendingPart kindOf)
 
     /// Why values of the type `ty` have no `property`, if they have none: they are, or hold, a part `kindOf` names.
@@ -184,11 +187,14 @@ module internal WellKnownContexts =
                     | TyRecord fields
                     | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.tryPick (snd >> find)
                     | TyTag(_, payload) -> payload |> Option.bind find
-                    | TyApply(_, args) -> args |> List.tryPick find
-                    | TyUnion items -> items |> List.tryPick find
+                    | TyApply _
+                    | TyRecursive _
+                    | TySelf _
+                    | TyUnion _ -> Ty.children ty |> List.tryPick find
                     | TyFunc _
                     | TyVar _
-                    | TyPrimitive _ -> None
+                    | TyPrimitive _
+                    | TyParam _ -> None
             find ty
     /// The error for using `op` on values of the type `ty`, which have no instance of `wellKnown` for `reason`.
     let cannotUse (wellKnown: WellKnownContext) (op: string) (ty: Ty) (reason: string) =
@@ -202,13 +208,16 @@ module internal WellKnownContexts =
             match ty with
             | TyVar v -> if rests then [] else [ v ]
             | TyPrimitive _
+            | TyParam _
             | TyFunc _ -> []
             | TyAlias(_, _, underlying)
             | TyNominal(_, underlying, _) -> collect underlying
             | TyRecord fields
             | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
-            | TyApply(_, args) -> args |> List.collect collect
+            | TyApply _
+            | TyRecursive _
+            | TySelf _ -> Ty.children ty |> List.collect collect
             | TyUnion items ->
                 let unionRests, tags = items |> List.partition (function TyVar _ -> true | _ -> false)
                 (if rests then unionRests |> List.choose (function TyVar v -> Some v | _ -> None) else []) @ List.collect collect tags

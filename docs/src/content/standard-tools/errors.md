@@ -344,7 +344,9 @@ To fix it, add the field: `version = "0.1.0"`.
 A field of the manifest has a value of the wrong kind, such as a string where a list is expected, or a value its rule
 does not allow: a package name that isn't lower case with words separated by dots, a version that isn't a semantic
 version, a severity that isn't `#error`, `#warning`, `#info`, `#hint` or `#off`, or a linter or host package the
-compiler doesn't have.
+compiler doesn't have. A `publicModules` entry that names no module the package's source files declare is one too,
+with the closest module as a suggestion, and so is a module listed twice in `publicModules` or a package listed twice in
+`dependencies`, at the repeat.
 
 ```nanyx
 -- file: demo.nyxp

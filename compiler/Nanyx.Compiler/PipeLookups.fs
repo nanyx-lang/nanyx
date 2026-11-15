@@ -22,7 +22,7 @@ type Lookup =
 /// `name` could call if the piped value's type were known. `isTypeName` says which names are types.
 let private attachedAnywhere (env: TypeEnv) (isTypeName: string -> bool) (name: string) : string list =
     let suffix = "." + name
-    env
+    env.Names
     |> Map.keys
     |> Seq.filter (fun key -> key.EndsWith suffix && isTypeName (key.Substring(0, key.Length - suffix.Length)))
     |> Seq.sort
@@ -51,7 +51,7 @@ let private notAttached (env: TypeEnv) (state: InferState) (isTypeName: string -
     let aliased () =
         attachedNames
         |> List.tryPick (fun attachedName ->
-            env
+            env.Names
             |> Map.keys
             |> Seq.filter (fun key -> key.EndsWith("." + attachedName))
             |> Seq.sort
