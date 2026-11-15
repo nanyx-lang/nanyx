@@ -298,6 +298,10 @@ The composite host runs each part under the right sub-host and coordinates start
    `--host` on the CLI, with errors that name the host. Done (see [What's built](#whats-built)).
 4. **More contexts for ConsoleHost**, as they are added: [`Random`](https://github.com/nanyx-lang/nanyx/issues/1237),
    then `Clock` and `FileSystem`.
+4a. **Hosts on foreign functions** ([Foreign functions](./foreign-functions)): `@extern` imports that only code with
+   `HostRuntime` can call ([#1424](https://github.com/nanyx-lang/nanyx/issues/1424)), host access to linear memory
+   ([#1425](https://github.com/nanyx-lang/nanyx/issues/1425)), and the console host written on them with no compiler
+   intrinsics ([#1426](https://github.com/nanyx-lang/nanyx/issues/1426)), so it can ship as a package.
 5. **Console in a page**, for the [playground](./playground): the embedder changes in "`ConsoleHost` in a page"
    above, starting with writing `.wasm` ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).
 6. **The browser host**: `init`, `update` and `view`, with `Dom`, `Clock` and `Log`, and the JavaScript it ships

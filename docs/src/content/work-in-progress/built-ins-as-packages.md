@@ -97,6 +97,9 @@ level, so a field is never mistaken for a package's configuration:
   ([#864](https://github.com/nanyx-lang/nanyx/issues/864)). See [Packaging](./packaging).
 - **The public linter contract** ([#107](https://github.com/nanyx-lang/nanyx/issues/107)): how a linter written in
   Nanyx sees the semantic model and reports diagnostics, run on the embedded Wasmtime engine.
+- **A host that needs no intrinsics.** The console host calls the compiler's private intrinsics, which only the
+  standard library may. It moves onto typed foreign functions and host memory first
+  ([Foreign functions](./foreign-functions), [#1426](https://github.com/nanyx-lang/nanyx/issues/1426)).
 
 # Plan
 
