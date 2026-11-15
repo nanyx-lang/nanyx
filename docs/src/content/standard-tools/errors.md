@@ -1136,16 +1136,16 @@ def f = { r -> (...r, a = 1) }  -- error NYX0231: a spread (`...`) needs a recor
 
 To fix it, annotate the value's type, so that its fields are known.
 
-# NYX0232: Scoped context is not nominal
+# NYX0232: Scoped context is neither protected nor private
 
-A `scoped context` is not declared `protected`. A scoped context must be nominal, so that only its own module can
-make its instances.
+A `scoped context` is declared neither `protected` nor `private`. A scoped context must be one or the other, so that
+only its own module can make its instances.
 
 ```nanyx
-scoped context Tx = (commit: () -> ())  -- error NYX0232: The scoped context 'Tx' must be nominal, declared `scoped context Tx = protected (...)`, ...
+scoped context Tx = (commit: () -> ())  -- error NYX0232: The scoped context 'Tx' must be either protected or private, ...
 ```
 
-To fix it, declare the context `protected` after its `=`, as in `scoped context Tx = protected (...)`.
+To fix it, declare the context `protected` or `private` after its `=`, as in `scoped context Tx = protected (...)`.
 
 # NYX0233: Scoped context escapes the call that supplies it
 

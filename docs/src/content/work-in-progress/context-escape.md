@@ -141,7 +141,7 @@ scoped export context Memory = protected ()
   regions, with the scope variable implied by the marker rather than written, so users never see it.
 - **Only scoped contexts are restricted.** Every other context keeps "require, don't capture", so
   `withConsoleLog { { log("x") } }` above may return a lambda that requires `Log`.
-- **Instances come only from their supplier.** A scoped context must be nominal (`protected`), so only its own module can
+- **Instances come only from their supplier.** A scoped context must be either `protected` or `private`, so only its own module can
   construct an instance, and its supplying function is where each instance and scope starts. `use` only loads an
   instance it is given. `scoped context Tx = (...)` is an error. Any module may declare a scoped context, such as a
   `Transaction` in a database library.
@@ -197,7 +197,7 @@ checks, since a lambda with no parameters ignores one.
 
 # Workflows: a context and a function
 
-Done ([#1305](https://github.com/nanyx-lang/nanyx/issues/1305)), decided apart from the proposal below, which it doesn't
+Done ([#1305](https://github.com/nanyx-lang/nanyx/issues/1305)), decided apart from the design below, which it doesn't
 need: a builder's `use` is of a constructor written in place. A workflow builder is a function that runs its block
 under a declared context, whose members are the builder's keywords. `proc` in `prelude-results.nyx` is the context
 `Proc` and the function `proc`:
@@ -308,9 +308,10 @@ five runs, minus a one-iteration run for compiling and start-up, and runs differ
   functions. The block lambda isn't made, `f()`, `bind` and `ret` become direct calls, and a continuation no longer
   needs an adapter, since the members it reads are known. That leaves three continuations and the three calls of them
   in `bind`: 3 allocations and 3 `call_indirect`s per block, fewer than A makes today.
-# Proposal: contexts are not types
+# Contexts are not types
 
-_Proposed in [#1141](https://github.com/nanyx-lang/nanyx/issues/1141), not yet decided._
+Decided by the maintainer in [#1141](https://github.com/nanyx-lang/nanyx/issues/1141). The work is in the issues under
+[What changes](#what-changes).
 
 A context instance can be built only where a `use` loads it, so it is never a value. Today the rule above (only an
 instance written at the `use` discharges) means a handler can't be moved into a function of its own:
@@ -326,7 +327,7 @@ def main = {
 }
 ```
 
-The proposal draws the line there, and makes every helper a function that takes the code to run:
+The design draws the line there, and makes every helper a function that takes the code to run:
 
 - **A context is not a type.** A context's name may appear only in a context list (`[Log]`) and as the constructor in
   a `use`. It can't be a parameter's, a result's or a field's type, so `() -> Log` is an error.
@@ -334,8 +335,8 @@ The proposal draws the line there, and makes every helper a function that takes 
   call is valid only as the instance of a `use`.
 - **`use` loads only a declared context.** Its instance is always a context's constructor, `use Log(log = ...)`. A plain
   record, `use (log = ...)`, can no longer be loaded, so loose members are never in scope. Contexts are their own kind
-  of thing: not types and not records, so whether they are structural or nominal, as types are, doesn't apply to them.
-  A context is what its declaration says, and `use` and a context list both name it.
+  of thing, a system parallel to types, but they behave as types do: a plain one matches by members, and a `protected`
+  or `private` one only itself (see [Decided along the way](#decided-along-the-way)). `use` and a context list both name a declared context.
 - **A reusable handler is a function that runs a lambda under a `use`.** This is the form the section above calls "a
   reusable handler", and the only one:
 
@@ -380,31 +381,50 @@ The proposal draws the line there, and makes every helper a function that takes 
 - ~~The prelude's builders (`proc` and any others) become a `context` and a function. The cookbook's `OptionChain` and
   the `@workflow` and `@customKeywordType` docs change with them, and `[typeof optionChain]` goes.~~ Done, see
   [Workflows](#workflows-a-context-and-a-function).
-- Named instances become handlers: `def perfect = Move(...)` and `def cheating = Move(...)` in `examples/Nim.nyx`,
-  `bobChooses` there, the monoid instances in `examples/traitsAndTypeclasses.nyx`, and `connection` in
-  `examples/sql-utils.nyx`.
-- [#1137](https://github.com/nanyx-lang/nanyx/issues/1137) (the backend can't compile `use f()` or `use x`) is no
-  longer needed: both become type errors, except `use x` of a name a lambda bound with `context x`.
+- `context x` in a lambda, usable only by `use` ([#1445](https://github.com/nanyx-lang/nanyx/issues/1445)).
 - `memory { m -> ... }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)) becomes
   `memory { context m -> ... }`, and `memory`'s signature becomes `[c] ([Memory & c] () -> a) -> a`. The Memory page
-  and the tests change with it.
+  and the tests change with it ([#1446](https://github.com/nanyx-lang/nanyx/issues/1446), after #1445).
+- A context's name in a type is an error, and so is a constructor call that isn't a `use`'s instance
+  ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)). Named instances become handlers: `def perfect = Move(...)`
+  and `def cheating = Move(...)` in `examples/Nim.nyx`, `bobChooses` there, the monoid instances in
+  `examples/traitsAndTypeclasses.nyx`, and `connection` in `examples/sql-utils.nyx`.
+- [#1137](https://github.com/nanyx-lang/nanyx/issues/1137) (the backend can't compile `use f()` or `use x`) is no
+  longer needed: both become type errors, except `use x` of a name a lambda bound with `context x`
+  ([#1448](https://github.com/nanyx-lang/nanyx/issues/1448), after #1445 and #1447).
 - [#1059](https://github.com/nanyx-lang/nanyx/issues/1059) is settled for context instances, which never carry
   contexts because they are never values. It stays open for records.
-- A `use` of a record written out becomes a declared context and its constructor. The tour's collection builders in
+- A `use` of a record written out becomes a declared context and its constructor (#1448). The tour's collection builders in
   `collections.md` (`use (yield = ...)` and ``use (`=>` = ...)``) and the examples in
   [Context-qualified types](./context-qualified-types) change with it. The Contexts page's "contexts are structural by
   default", and its `use addInt` loading a record as each context it has the shape of, go.
+- A protected or private context matches only itself ([#1443](https://github.com/nanyx-lang/nanyx/issues/1443)), and
+  a private one's members can be called only in its home module
+  ([#1449](https://github.com/nanyx-lang/nanyx/issues/1449)).
 
-## Questions
+## Decided along the way
 
-- **Whether one context can serve for another.** Today contexts are structural, so a function that requires `Add(a)`
-  is given the `Num(a)` in scope, because a `Num` has every member an `Add` has (the Contexts page's `mean`, and the
-  [Operator contexts](./operator-contexts) rule that an operator reads the smallest context with its member). If
-  contexts are their own thing, that needs a rule of its own: a declared relation (`Num` includes `Add`), matching by
-  members kept as a rule about contexts, or none, so that `mean` requires `Add` and `Div` separately.
-- **What `protected` means on a context.** On a type, `protected` makes it nominal: only its home module can construct one. On a
-  context it would mean only its home module can write its constructor in a `use`, which is what `Memory` and a
-  `scoped context` need.
+- **Whether one context can serve for another.** Decided by the maintainer: contexts match as types do, though they
+  are a system parallel to types, not types.
+  - **A plain context matches by members.** A function that requires `Add(a)` is given the `Num(a)` in scope, because
+    a `Num` has every member an `Add` has. This keeps the Contexts page's `mean` and the
+    [Operator contexts](./operator-contexts) rule that an operator reads the smallest context with its member, so
+    given `def f = { + }`, a `g: [Num(a)]` can call `f`. No relation needs declaring.
+  - **A `protected` or `private` context matches only itself.** Otherwise any context with the same members could be
+    loaded in its place, and the guarantee those words give (only the home module makes an instance) would be
+    forgeable: `use Fake(commit = ...)` would satisfy a function that requires a protected `Tx`. Today it does
+    ([#1443](https://github.com/nanyx-lang/nanyx/issues/1443)).
+  - **A protected context may serve for a plain one** whose members it has, as a protected type may be used as its
+    representation: that hands out nothing the plain context didn't already allow.
+  - Declaring the relation (`Num` includes `Add`) and having no relation at all were considered. Declaring it would
+    need every relation written out, including for users' own contexts, and having none would make `mean` require
+    `Add` and `Div` separately.
+- **What `protected` and `private` mean on a context.** Decided: they're about access only, not identity. Other
+  modules can name a `protected` context in a context list and call its members, but only its home module can write
+  its constructor in a `use`. A `private` one can also be named anywhere, but only its home module can call its members
+  as well, so it's a capability token: `[Tx]` can be required everywhere, but only `Tx`'s module uses what it holds.
+  That differs from leaving out `export`, which would stop other modules naming it at all. Decided already: a scoped
+  context must be one or the other (NYX0232), since a scope starts where its supplier makes the instance.
 
 # Open questions
 
@@ -412,7 +432,7 @@ The proposal draws the line there, and makes every helper a function that takes 
   ([#1059](https://github.com/nanyx-lang/nanyx/issues/1059)). `(f = { m: string -> println(m) })` would be
   `[Console] (f: string -> ())`, and `Log(log = { m -> println(m) })` would be `[Console] Log`, which `use` would
   require. That is the general design in [Context-qualified types](./context-qualified-types), and it would let an
-  instance built as a value discharge a context, as one written at a `use` can. Under the proposal above, context
+  instance built as a value discharge a context, as one written at a `use` can. Since contexts are not types, context
   instances are never values, and this is about records only.
 
 # Plan
@@ -422,9 +442,9 @@ The proposal draws the line there, and makes every helper a function that takes 
 2. ~~Make a lambda that uses a cell require `Memory`~~ ([#1055](https://github.com/nanyx-lang/nanyx/issues/1055)).
    Done: a read or change of a cell requires `Memory` of the lambda around it (`MemoryCells.recordUse`), so
    `{ word -> count := count + 1 }` is `[Memory] string -> ()`, and a lambda that calls it requires `Memory` too.
-3. ~~Parse and format `scoped context`, which must be nominal~~ ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
+3. ~~Parse and format `scoped context`, which must be protected or private~~ ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
    Done: the parser records `Scoped` (with the keyword's span) among the definition's modifiers,
-   `TypeDefInfo.IsScoped` carries it, a scoped context that isn't nominal is NYX0232, and `Memory` is declared
+   `TypeDefInfo.IsScoped` carries it, a scoped context that is neither is NYX0232, and `Memory` is declared
    `scoped`.
 4. ~~Keep what requires a scoped context inside the call that supplies it, replacing NYX0224~~
    ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057)). Done in two steps:

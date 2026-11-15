@@ -468,13 +468,13 @@ let private readTypeDefBody (state: InferState) (name: Identifier) (modifiers: T
 let internal unguardedSelfReferences (name: Identifier) (modifiers: TypeDefModifier list) (body: TypeExpr) : Diagnostic list =
     if TypeDefModifier.isNominal modifiers || isContextDef modifiers then [] else RecursiveAliases.unguardedReferences name body
 
-/// The error for a scoped context that isn't nominal: only the context's own module may make its instances, so that
-/// each one comes from the function that supplies it.
+/// The error for a scoped context that is neither protected nor private: only the context's own module may make its
+/// instances, so that each one comes from the function that supplies it.
 let internal unnominalScopedContext (name: Identifier) (modifiers: TypeDefModifier list) : Diagnostic list =
     match TypeDefModifier.scopedSpan modifiers with
     | Some span when not (TypeDefModifier.isNominal modifiers) ->
-        [ Diagnostics.at DiagnosticCodes.ScopedContextNotNominal span
-            $"The scoped context '{name}' must be nominal, declared `scoped context {Names.written name} = protected (...)`, so that only its own module can make its instances" ]
+        [ Diagnostics.at DiagnosticCodes.ScopedContextNotProtected span
+            $"The scoped context '{name}' must be either protected or private, as in `scoped context {Names.written name} = protected (...)`, so that only its own module can make its instances" ]
     | _ -> []
 
 let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
