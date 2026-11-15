@@ -53,16 +53,17 @@ def argsSizesGet: [HostRuntime] (I32, I32) -> I32
 # Memory
 
 A foreign function deals in addresses in the module's linear memory: `args_get` writes the arguments into a buffer
-the caller allocates, and `fd_write` reads the bytes to write from one. `nanyx/host.memory` gives a host typed access
-to that memory. Every function in it requires `HostRuntime`:
+the caller allocates, and `fd_write` reads the bytes to write from one. [`nanyx/host.memory`](../stdlib/host-memory)
+gives a host typed access to that memory. Every function in it requires `HostRuntime`:
 
 - `allocate` and `free` a block of bytes;
-- read and write a byte, an `I32` and an `I64` at an address;
-- a string's address and byte length, valid while the string is alive;
-- a new string copied from an address and a length.
+- `readByte` and `writeByte`, `readI32` and `writeI32`, `readI64` and `writeI64` at an address;
+- `addressOf` and `byteLength`, a string's address and byte length;
+- `stringAt`, a new string copied from an address and a length.
 
 These are the only unchecked operations a host performs. Reading or writing outside the module's memory traps, as
-WebAssembly does, and a string whose address is taken is kept alive for the call.
+WebAssembly does. A string held in a name is kept alive for as long as the host uses its address, or a number made
+from it.
 
 # The console host
 
@@ -85,7 +86,8 @@ Written on `@extern` and `nanyx/host.memory`, it uses no intrinsics:
 
 1. **`@extern`** ([#1424](https://github.com/nanyx-lang/nanyx/issues/1424)): the attribute, its type rules, the
    `HostRuntime` requirement, and the module's imports. Done (see [What's built](#whats-built)).
-2. **Host memory** ([#1425](https://github.com/nanyx-lang/nanyx/issues/1425)): `nanyx/host.memory`.
+2. **Host memory** ([#1425](https://github.com/nanyx-lang/nanyx/issues/1425)): `nanyx/host.memory`. Done (see
+   [What's built](#whats-built)).
 3. **The console host on them** ([#1426](https://github.com/nanyx-lang/nanyx/issues/1426)): no intrinsics in
    `console.host`, `env` or `host.runtime`, with every program printing what it did and no bigger code.
 4. Then the console host ships as a package ([#1342](https://github.com/nanyx-lang/nanyx/issues/1342),
@@ -114,6 +116,13 @@ Written on `@extern` and `nanyx/host.memory`, it uses no intrinsics:
   and exports its memory.
 - **Running it.** `nanyx run` links Wasmtime's WASI, so an extern of a WASI preview 1 function runs. Any other import
   fails when the module is instantiated, with Wasmtime's message naming it.
+- **Host memory.** `nanyx/host.memory` is written over intrinsics of its own, private to the standard library as the
+  others are (`__nanyx_memory_allocate`, `__nanyx_memory_read_i32`, `__nanyx_string_address`, ...): a read or a
+  write is the one instruction that does it (`CoreIrEmit`'s `memoryAccesses`), a block comes from the allocator every
+  object does, and `stringAt` is a helper that copies the bytes into a new string. `Hosts.mayRequireRuntime` lets it
+  require `HostRuntime`, as `nanyx/host.runtime` does. Reference counting keeps a string alive while a value made
+  from its address is used (`CoreIrCounting.addressFlow`, see
+  [Memory management](./memory-management#things-that-need-care)), with inlining and without.
 - **Not yet.** An extern named as a value, rather than called, isn't compiled. No host in the standard library uses
   an extern yet ([#1426](https://github.com/nanyx-lang/nanyx/issues/1426)).
 

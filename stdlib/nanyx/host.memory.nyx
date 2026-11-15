@@ -1,0 +1,69 @@
+--| A host's access to the WebAssembly module's linear memory, where it passes buffers to and from the foreign
+  functions it calls (those declared with `@extern`). An address is an `I32`, the place of a byte in memory.
+
+  These are the only unchecked operations a host performs. Nothing checks that an address is in a block the host
+  allocated, or that a read or a write stays inside it: one outside the module's memory traps, as WebAssembly does,
+  but one inside it where the host has no block reads or overwrites the program's own data. Every function requires
+  [`HostRuntime`], so only a host can call them.
+module host.memory
+
+import nanyx/host.runtime
+
+--| A new block of `size` bytes, whose address nothing else is given until the block is given back with [`free`]. Its
+  bytes are not cleared.
+export def allocate: [HostRuntime] I32 -> I32 = { size ->
+  __nanyx_memory_allocate(size)
+}
+
+--| Gives back the block at `address`, which [`allocate`] made. The block must not be read, written or freed again.
+export def free: [HostRuntime] I32 -> () = { address ->
+  __nanyx_memory_free(address)
+}
+
+--| The byte at `address`, from 0 to 255.
+export def readByte: [HostRuntime] I32 -> I32 = { address ->
+  __nanyx_memory_read_byte(address)
+}
+
+--| Writes the low 8 bits of `value` at `address`.
+export def writeByte: [HostRuntime] I32, I32 -> () = { address, value ->
+  __nanyx_memory_write_byte(address, value)
+}
+
+--| The `I32` in the 4 bytes at `address`, little-endian.
+export def readI32: [HostRuntime] I32 -> I32 = { address ->
+  __nanyx_memory_read_i32(address)
+}
+
+--| Writes `value` in the 4 bytes at `address`, little-endian.
+export def writeI32: [HostRuntime] I32, I32 -> () = { address, value ->
+  __nanyx_memory_write_i32(address, value)
+}
+
+--| The `I64` in the 8 bytes at `address`, little-endian.
+export def readI64: [HostRuntime] I32 -> I64 = { address ->
+  __nanyx_memory_read_i64(address)
+}
+
+--| Writes `value` in the 8 bytes at `address`, little-endian.
+export def writeI64: [HostRuntime] I32, I64 -> () = { address, value ->
+  __nanyx_memory_write_i64(address, value)
+}
+
+--| Where the bytes of `text` are, in UTF-8. When `text` is held in a name, a parameter or a def, it is kept alive
+  for as long as the code uses the address, or a value made from it, such as `addressOf(text) + 4`. A string made in
+  the argument itself, as in `addressOf(a ++ b)`, is not: give it a name first. Writing at the address changes
+  `text`, which must not be done.
+export def addressOf: [HostRuntime] string -> I32 = { text ->
+  __nanyx_string_address(text)
+}
+
+--| How many bytes of UTF-8 `text` takes, which [`addressOf`] gives the first of.
+export def byteLength: [HostRuntime] string -> I32 = { text ->
+  __nanyx_string_byte_length(text)
+}
+
+--| A new string holding a copy of the `length` bytes at `address`, which are taken to be UTF-8.
+export def stringAt: [HostRuntime] I32, I32 -> string = { address, length ->
+  __nanyx_string_from_memory(address, length)
+}

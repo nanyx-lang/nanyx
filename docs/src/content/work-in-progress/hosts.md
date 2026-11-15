@@ -300,7 +300,7 @@ The composite host runs each part under the right sub-host and coordinates start
    then `Clock` and `FileSystem`.
 4a. **Hosts on foreign functions** ([Foreign functions](./foreign-functions)): `@extern` imports that only code with
    `HostRuntime` can call ([#1424](https://github.com/nanyx-lang/nanyx/issues/1424), done), host access to linear memory
-   ([#1425](https://github.com/nanyx-lang/nanyx/issues/1425)), and the console host written on them with no compiler
+   ([#1425](https://github.com/nanyx-lang/nanyx/issues/1425), done), and the console host written on them with no compiler
    intrinsics ([#1426](https://github.com/nanyx-lang/nanyx/issues/1426)), so it can ship as a package.
 5. **Console in a page**, for the [playground](./playground): the embedder changes in "`ConsoleHost` in a page"
    above, starting with writing `.wasm` ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).
@@ -330,8 +330,8 @@ The composite host runs each part under the right sub-host and coordinates start
 - **`run` ignores what the entry returns.** Its parameter is `[Console] () -> a`, not `() -> ()`, because an entry
   whose block ends in an expression (`dbg(x)`) returned a value that the old `main()` call dropped.
 - **`HostRuntime`** is declared in `nanyx/host.runtime`, with an instance made of the runtime's intrinsics, so it is an
-  ambient context wherever that module is imported. `Hosts.runtimeErrors` reports `NYX0238` in any module but a host
-  and `nanyx/host.runtime`: at each top-level def whose type requires it, written or inferred, other than a
+  ambient context wherever that module is imported. `Hosts.runtimeErrors` reports `NYX0238` in any module but a host,
+  `nanyx/host.runtime` and `nanyx/host.memory`: at each top-level def whose type requires it, written or inferred, other than a
   [foreign function](./foreign-functions), which any module may declare, and at each top-level call it is provided to,
   other than the call of `run` that `@entry` makes. A module that calls a host's `run` itself
   needs `HostRuntime` for it, so that is an error too.
