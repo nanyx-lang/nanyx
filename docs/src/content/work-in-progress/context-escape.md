@@ -141,7 +141,7 @@ scoped export context Memory = protected ()
   regions, with the scope variable implied by the marker rather than written, so users never see it.
 - **Only scoped contexts are restricted.** Every other context keeps "require, don't capture", so
   `withConsoleLog { { log("x") } }` above may return a lambda that requires `Log`.
-- **Instances come only from their supplier.** A scoped context must be nominal (`protected`), so only its own module can
+- **Instances come only from their supplier.** A scoped context must be either `protected` or `private`, so only its own module can
   construct an instance, and its supplying function is where each instance and scope starts. `use` only loads an
   instance it is given. `scoped context Tx = (...)` is an error. Any module may declare a scoped context, such as a
   `Transaction` in a database library.
@@ -402,9 +402,12 @@ The proposal draws the line there, and makes every helper a function that takes 
   [Operator contexts](./operator-contexts) rule that an operator reads the smallest context with its member). If
   contexts are their own thing, that needs a rule of its own: a declared relation (`Num` includes `Add`), matching by
   members kept as a rule about contexts, or none, so that `mean` requires `Add` and `Div` separately.
-- **What `protected` means on a context.** On a type, `protected` makes it nominal: only its home module can construct one. On a
-  context it would mean only its home module can write its constructor in a `use`, which is what `Memory` and a
-  `scoped context` need.
+- **What `protected` and `private` mean on a context.** Proposed: they're about access only, not identity. Other
+  modules can name a `protected` context in a context list and call its members, but only its home module can write
+  its constructor in a `use`. A `private` one can also be named anywhere, but only its home module can call its members
+  as well, so it's a capability token: `[Tx]` can be required everywhere, but only `Tx`'s module uses what it holds.
+  That differs from leaving out `export`, which would stop other modules naming it at all. Decided already: a scoped
+  context must be one or the other (NYX0232), since a scope starts where its supplier makes the instance.
 
 # Open questions
 
@@ -422,9 +425,9 @@ The proposal draws the line there, and makes every helper a function that takes 
 2. ~~Make a lambda that uses a cell require `Memory`~~ ([#1055](https://github.com/nanyx-lang/nanyx/issues/1055)).
    Done: a read or change of a cell requires `Memory` of the lambda around it (`MemoryCells.recordUse`), so
    `{ word -> count := count + 1 }` is `[Memory] string -> ()`, and a lambda that calls it requires `Memory` too.
-3. ~~Parse and format `scoped context`, which must be nominal~~ ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
+3. ~~Parse and format `scoped context`, which must be protected or private~~ ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
    Done: the parser records `Scoped` (with the keyword's span) among the definition's modifiers,
-   `TypeDefInfo.IsScoped` carries it, a scoped context that isn't nominal is NYX0232, and `Memory` is declared
+   `TypeDefInfo.IsScoped` carries it, a scoped context that is neither is NYX0232, and `Memory` is declared
    `scoped`.
 4. ~~Keep what requires a scoped context inside the call that supplies it, replacing NYX0224~~
    ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057)). Done in two steps:
