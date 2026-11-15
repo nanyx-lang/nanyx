@@ -75,6 +75,11 @@ module Package =
         | [] -> Result.Ok(results |> List.choose (function Result.Ok value -> Some value | Result.Error _ -> None))
         | errors -> Result.Error(List.distinct errors)
 
+    /// An error at each entry of the manifest's `publicModules` that names none of the modules `files`, the package's
+    /// source files, declare.
+    let private publicModuleErrors (manifest: Manifest) (files: string list) : Diagnostic list =
+        Manifest.unknownPublicModules manifest (PackageModules.ofFiles manifest.Name manifest.Root manifest.Host files).Modules.Keys
+
     /// The package `manifest` describes, with the packages it depends on. `chain` is the manifests of the packages
     /// that led to it, nearest first, each with its package's name, and `reached` every package the build has read so far.
     let rec private ofManifestIn (reached: Reached) (chain: (string * string) list) (manifest: Manifest) : Result<Package, Problem list> =
@@ -89,11 +94,13 @@ module Package =
                 | [ entry ] -> Result.Ok(Some entry)
                 | several ->
                     Result.Error [ AboutPackage $"""{manifest.Path}: a package can have one @entry, but these files each declare one: {several |> List.map display |> String.concat ", "}""" ]
+        let publicModules = publicModuleErrors manifest files |> List.map AtManifest
         match entry, dependenciesIn reached ((manifest.Path, manifest.Name) :: chain) manifest with
-        | Result.Ok entry, Result.Ok dependencies -> Result.Ok { Manifest = manifest; Sources = files; Entry = entry; Dependencies = dependencies }
+        | Result.Ok entry, Result.Ok dependencies when publicModules.IsEmpty ->
+            Result.Ok { Manifest = manifest; Sources = files; Entry = entry; Dependencies = dependencies }
         | entry, dependencies ->
             let errorsOf = function Result.Error errors -> errors | Result.Ok _ -> []
-            Result.Error(errorsOf entry @ errorsOf dependencies)
+            Result.Error(errorsOf entry @ publicModules @ errorsOf dependencies)
 
     /// The packages `manifest` depends on, each read with its own dependencies, or what is wrong: a directory with no
     /// manifest, a package named other than its dependant names it, one that depends on itself through others, or one
@@ -139,19 +146,22 @@ module Package =
         |> Result.bind (fun manifest -> ofManifestIn (reachedFrom manifest) [] manifest |> Result.mapError (List.map describe))
 
     /// The manifest at `path`, whose text is `text`, as the editor shows it: a compile whose diagnostics are the problems
-    /// with it (see `Manifest.check`) and with the packages it depends on, nothing compiled, since a manifest is data.
+    /// with it (see `Manifest.check`), with the modules its `publicModules` names, and with the packages it depends on,
+    /// nothing compiled, since a manifest is data.
     let compileManifest (path: string) (text: string) : CompileResult =
         let diagnostics =
             match Manifest.check path text with
             | Result.Error problems -> problems
             | Result.Ok manifest ->
-                match dependenciesIn (reachedFrom manifest) [ manifest.Path, manifest.Name ] manifest with
-                | Result.Ok _ -> []
-                | Result.Error problems ->
-                    problems
-                    |> List.map (function
-                        | AtManifest diagnostic -> diagnostic
-                        | AboutPackage message -> Diagnostics.at DiagnosticCodes.InvalidManifestValue manifest.Value.Location message)
+                let dependencyErrors =
+                    match dependenciesIn (reachedFrom manifest) [ manifest.Path, manifest.Name ] manifest with
+                    | Result.Ok _ -> []
+                    | Result.Error problems ->
+                        problems
+                        |> List.map (function
+                            | AtManifest diagnostic -> diagnostic
+                            | AboutPackage message -> Diagnostics.at DiagnosticCodes.InvalidManifestValue manifest.Value.Location message)
+                publicModuleErrors manifest (sources manifest) @ dependencyErrors
         { Phase = Parsed
           Diagnostics = diagnostics
           Typed = None
@@ -202,7 +212,7 @@ module Package =
     /// The modules of the package `manifest` describes, whose source files are `files`, with those of `dependencies`.
     let rec private modulesOf (manifest: Manifest) (files: string list) (dependencies: Package list) : PackageModules =
         { PackageModules.ofFiles manifest.Name manifest.Root manifest.Host files with
-            PublicModules = manifest.PublicModules
+            PublicModules = manifest.PublicModules |> List.map fst
             Dependencies = dependencies |> List.map (fun dependency -> modulesOf dependency.Manifest dependency.Sources dependency.Dependencies) }
 
     /// The modules of `package`, by the names its source files declare, with those of the packages it depends on.
