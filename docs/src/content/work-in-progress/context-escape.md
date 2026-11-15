@@ -334,8 +334,8 @@ The proposal draws the line there, and makes every helper a function that takes 
   call is valid only as the instance of a `use`.
 - **`use` loads only a declared context.** Its instance is always a context's constructor, `use Log(log = ...)`. A plain
   record, `use (log = ...)`, can no longer be loaded, so loose members are never in scope. Contexts are their own kind
-  of thing: not types and not records, so whether they are structural or nominal, as types are, doesn't apply to them.
-  A context is what its declaration says, and `use` and a context list both name it.
+  of thing, a system parallel to types, but they behave as types do: a plain one matches by members, and a `protected`
+  or `private` one only itself (see [Questions](#questions)). `use` and a context list both name a declared context.
 - **A reusable handler is a function that runs a lambda under a `use`.** This is the form the section above calls "a
   reusable handler", and the only one:
 
@@ -397,11 +397,21 @@ The proposal draws the line there, and makes every helper a function that takes 
 
 ## Questions
 
-- **Whether one context can serve for another.** Today contexts are structural, so a function that requires `Add(a)`
-  is given the `Num(a)` in scope, because a `Num` has every member an `Add` has (the Contexts page's `mean`, and the
-  [Operator contexts](./operator-contexts) rule that an operator reads the smallest context with its member). If
-  contexts are their own thing, that needs a rule of its own: a declared relation (`Num` includes `Add`), matching by
-  members kept as a rule about contexts, or none, so that `mean` requires `Add` and `Div` separately.
+- **Whether one context can serve for another.** Decided by the maintainer: contexts match as types do, though they
+  are a system parallel to types, not types.
+  - **A plain context matches by members.** A function that requires `Add(a)` is given the `Num(a)` in scope, because
+    a `Num` has every member an `Add` has. This keeps the Contexts page's `mean` and the
+    [Operator contexts](./operator-contexts) rule that an operator reads the smallest context with its member, so
+    given `def f = { + }`, a `g: [Num(a)]` can call `f`. No relation needs declaring.
+  - **A `protected` or `private` context matches only itself.** Otherwise any context with the same members could be
+    loaded in its place, and the guarantee those words give (only the home module makes an instance) would be
+    forgeable: `use Fake(commit = ...)` would satisfy a function that requires a protected `Tx`. Today it does
+    ([#1443](https://github.com/nanyx-lang/nanyx/issues/1443)).
+  - **A protected context may serve for a plain one** whose members it has, as a protected type may be used as its
+    representation: that hands out nothing the plain context didn't already allow.
+  - Declaring the relation (`Num` includes `Add`) and having no relation at all were considered. Declaring it would
+    need every relation written out, including for users' own contexts, and having none would make `mean` require
+    `Add` and `Div` separately.
 - **What `protected` and `private` mean on a context.** Proposed: they're about access only, not identity. Other
   modules can name a `protected` context in a context list and call its members, but only its home module can write
   its constructor in a `use`. A `private` one can also be named anywhere, but only its home module can call its members
