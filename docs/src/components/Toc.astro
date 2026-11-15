@@ -85,25 +85,37 @@ const items = headings.map((heading, index) => {
 }
 
 <script>
-  // Mobile toggle
-  const toggle = document.getElementById("toc-toggle");
-  const panel = document.getElementById("toc-mobile-panel");
-  toggle?.addEventListener("click", () => {
-    const open = panel?.classList.toggle("hidden") === false;
-    toggle.setAttribute("aria-expanded", String(open));
-  });
-  panel?.addEventListener("click", (event) => {
-    if ((event.target as HTMLElement).closest("a")) {
-      panel.classList.add("hidden");
-      toggle?.setAttribute("aria-expanded", "false");
-    }
+  // The table of contents is replaced on every page swap, so it is wired up on each page load,
+  // and the previous page's window listeners are dropped before the swap.
+  let teardown: AbortController | undefined;
+
+  document.addEventListener("astro:before-swap", () => teardown?.abort());
+  document.addEventListener("astro:page-load", () => {
+    teardown = new AbortController();
+    wireToc(teardown.signal);
   });
 
-  // Scroll-spy: a heading's section is "active" while any part of it is in view.
-  const links = Array.from(document.querySelectorAll<HTMLAnchorElement>("[data-toc-id]"));
-  const ids = Array.from(new Set(links.map((link) => link.dataset.tocId!)));
+  function wireToc(signal: AbortSignal) {
+    // Mobile toggle
+    const toggle = document.getElementById("toc-toggle");
+    const panel = document.getElementById("toc-mobile-panel");
+    toggle?.addEventListener("click", () => {
+      const open = panel?.classList.toggle("hidden") === false;
+      toggle.setAttribute("aria-expanded", String(open));
+    });
+    panel?.addEventListener("click", (event) => {
+      if ((event.target as HTMLElement).closest("a")) {
+        panel.classList.add("hidden");
+        toggle?.setAttribute("aria-expanded", "false");
+      }
+    });
 
-  if (ids.length > 0) {
+    // Scroll-spy: a heading's section is "active" while any part of it is in view.
+    const links = Array.from(document.querySelectorAll<HTMLAnchorElement>("[data-toc-id]"));
+    const ids = Array.from(new Set(links.map((link) => link.dataset.tocId!)));
+
+    if (ids.length === 0) return;
+
     const viewportTop = 112;
     let ticking = false;
 
@@ -142,8 +154,8 @@ const items = headings.map((heading, index) => {
       }
     };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true, signal });
+    window.addEventListener("resize", onScroll, { passive: true, signal });
     requestAnimationFrame(update);
   }
 </script>

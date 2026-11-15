@@ -217,6 +217,29 @@
   transform: rotate(180deg);
 }
 
+/* The current page is marked by aria-current, which the sidebar's script moves when the
+   client router swaps a page in, so the styles key on the attribute rather than classes. */
+.docs-sidebar-link {
+  display: block;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  border-radius: calc(var(--radius) - 2px);
+  color: hsl(var(--muted-foreground));
+  transition: color 150ms, background-color 150ms;
+}
+
+.docs-sidebar-link:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--accent) / 0.5);
+}
+
+.docs-sidebar-link[aria-current="page"] {
+  color: hsl(var(--accent-foreground));
+  background: hsl(var(--accent));
+  font-weight: 500;
+}
+
 .docs-article {
   max-width: 80rem;
 }

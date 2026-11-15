@@ -2,22 +2,23 @@
 import { ChevronDown } from "lucide-react";
 import { getNav } from "@/lib/nav";
 import { sectionIcon } from "@/lib/icons";
-import { cn } from "@/lib/utils";
 
 const nav = await getNav();
 const currentPath = Astro.url.pathname.replace(/\.html$/, "");
 ---
 
-<div class="docs-sidebar-overlay" id="docs-sidebar-overlay" data-open="false"></div>
+<!-- The sidebar is kept across page swaps (transition:persist) so that its scroll position
+     and open sections survive navigation. The script below moves the "current page" mark. -->
+<div class="docs-sidebar-overlay" id="docs-sidebar-overlay" data-open="false" transition:persist></div>
 
-<aside class="docs-sidebar" id="docs-sidebar" data-open="false">
+<aside class="docs-sidebar" id="docs-sidebar" data-open="false" transition:persist>
   <nav class="p-4 space-y-1" aria-label="Documentation">
     {
       nav.map((section) => {
         const Icon = sectionIcon(section.icon);
         const isActive = currentPath.startsWith(section.basePath);
         return (
-          <details open={isActive}>
+          <details open={isActive} data-base-path={section.basePath}>
             <summary class="flex items-center gap-2 w-full px-3 py-2 text-sm font-semibold rounded-md hover:bg-accent transition-colors">
               <Icon className="h-4 w-4 text-primary" />
               <span class="flex-1 text-left" style="font-family: 'Space Grotesk', system-ui, sans-serif">
@@ -30,12 +31,7 @@ const currentPath = Astro.url.pathname.replace(/\.html$/, "");
                 <a
                   href={page.path}
                   aria-current={currentPath === page.path ? "page" : undefined}
-                  class={cn(
-                    "block px-3 py-1.5 text-sm rounded-md transition-colors",
-                    currentPath === page.path
-                      ? "bg-accent text-accent-foreground font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                  )}
+                  class="docs-sidebar-link"
                 >
                   {page.title}
                 </a>
@@ -63,4 +59,24 @@ const currentPath = Astro.url.pathname.replace(/\.html$/, "");
     setOpen(sidebar?.getAttribute("data-open") !== "true");
   });
   overlay?.addEventListener("click", () => setOpen(false));
+
+  // After the client router swaps a page in, mark the new page as current and make sure its
+  // section is open. The sidebar itself is prerendered for the page it was first loaded on.
+  document.addEventListener("astro:page-load", () => {
+    const currentPath = location.pathname.replace(/\.html$/, "");
+    setOpen(false);
+    for (const link of sidebar?.querySelectorAll<HTMLAnchorElement>(".docs-sidebar-link") ?? []) {
+      const path = new URL(link.href).pathname.replace(/\.html$/, "");
+      if (path === currentPath) {
+        link.setAttribute("aria-current", "page");
+      } else {
+        link.removeAttribute("aria-current");
+      }
+    }
+    for (const section of sidebar?.querySelectorAll<HTMLDetailsElement>("details[data-base-path]") ?? []) {
+      if (currentPath.startsWith(section.dataset.basePath!)) {
+        section.open = true;
+      }
+    }
+  });
 </script>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { navigate } from "astro:transitions/client";
 import { FileText } from "lucide-react";
 import {
   CommandDialog,
@@ -60,7 +61,7 @@ export default function SearchDialog({ items }: SearchDialogProps) {
                 value={`${item.section} ${item.title} ${item.description ?? ""}`}
                 onSelect={() => {
                   setOpen(false);
-                  window.location.assign(item.path);
+                  navigate(item.path);
                 }}
               >
                 <FileText className="mr-2 h-4 w-4 text-muted-foreground" />
