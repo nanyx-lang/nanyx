@@ -63,16 +63,8 @@ let rec private replaceNamedVars (names: Map<string, Ty>) (ty: Ty) : Ty =
     let recur = replaceNamedVars names
     match ty with
     | TyVar { Name = Some name } when names.ContainsKey name -> names.[name]
-    | TyVar _
-    | TyPrimitive _ -> ty
-    | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, recur underlying, isPrivate)
-    | TyAlias(name, args, underlying) -> TyAlias(name, List.map recur args, recur underlying)
     | TyFunc(arg, ret, contexts) -> TyFunc(recur arg, recur ret, contexts |> List.map recur |> FunctionContexts.flatten)
-    | TyRecord fields -> TyRecord(fields |> Map.map (fun _ fieldTy -> recur fieldTy))
-    | TyOpenRecord(fields, row) -> TyOpenRecord(fields |> Map.map (fun _ fieldTy -> recur fieldTy), row)
-    | TyTag(name, payload) -> TyTag(name, Option.map recur payload)
-    | TyApply(name, args) -> TyApply(name, List.map recur args)
-    | TyUnion items -> TyUnion(List.map recur items)
+    | _ -> Ty.map recur ty
 
 /// The type each type variable of `general` that `keyOf` gives a key stands for in `specific`, a type of the same
 /// shape: a function's type as it is declared, against the same type instantiated at a call.

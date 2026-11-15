@@ -647,15 +647,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         let rec namedVars (ty: Ty) : (string * Ty) list =
             match ty with
             | TyVar { Name = Some varName } -> [ varName, ty ]
-            | TyVar _ | TyPrimitive _ -> []
-            | TyNominal(_, underlying, _) -> namedVars underlying
             | TyFunc(input, output, _) -> namedVars input @ namedVars output
-            | TyRecord fields -> fields |> Map.toList |> List.collect (snd >> namedVars)
             | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> namedVars)
-            | TyTag(_, payload) -> payload |> Option.map namedVars |> Option.defaultValue []
-            | TyApply(_, args) -> args |> List.collect namedVars
-            | TyUnion items -> items |> List.collect namedVars
-            | TyAlias(_, args, underlying) -> (args |> List.collect namedVars) @ namedVars underlying
+            | _ -> Ty.children ty |> List.collect namedVars
         let annotated =
             match defs |> List.tryFind (fun (defName, _, _) -> defName = name), definitionTypes |> Map.tryFind name with
             | Some (_, typeOpt, value), Some ty ->
@@ -689,6 +683,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                                 | TyApply(applied, args) -> TyApply(applied, args |> List.map bind)
                                 | TyUnion items -> TyUnion(items |> List.map bind)
                                 | TyAlias(alias, args, underlying) -> TyAlias(alias, args |> List.map bind, bind underlying)
+                                | TyRecursive _
+                                | TySelf _ -> Ty.map bind ty
                                 | other -> other
                             // A context without parameters has its own type variables boxed, as in its layout.
                             let laidOut = if info.Parameters.IsEmpty then CoreIrLowerTypes.boxOwnVariables else id

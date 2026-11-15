@@ -33,27 +33,8 @@ module TypeEnv =
     let rec freeTyVars (ty: Ty) : Set<int> =
         match ty with
         | TyVar v -> Set.singleton v.Id
-        | TyPrimitive _ -> Set.empty
-        | TyNominal(_, underlying, _) -> freeTyVars underlying
         | TyAlias(_, _, underlying) -> freeTyVars underlying
-        | TyFunc(arg, ret, contexts) ->
-            Set.union (freeTyVars arg) (freeTyVars ret) |> Set.union (contexts |> List.map freeTyVars |> Set.unionMany)
-        | TyRecord fields ->
-            fields
-            |> Map.values
-            |> Seq.map freeTyVars
-            |> Seq.fold Set.union Set.empty
-        | TyOpenRecord(fields, row) -> freeTyVars (TyRecord fields) |> Set.add row.Id
-        | TyTag(_, payloadOpt) ->
-            payloadOpt |> Option.map freeTyVars |> Option.defaultValue Set.empty
-        | TyApply(_, args) ->
-            args
-            |> List.map freeTyVars
-            |> List.fold Set.union Set.empty
-        | TyUnion items ->
-            items
-            |> List.map freeTyVars
-            |> List.fold Set.union Set.empty
+        | _ -> Ty.children ty |> List.map freeTyVars |> Set.unionMany
 
     let freeSchemeVars (scheme: TypeScheme) : Set<int> =
         Set.difference (freeTyVars scheme.Type) scheme.Quantified

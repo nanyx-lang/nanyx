@@ -60,10 +60,7 @@ let rec private tagsOf (ty: Ty) : (string * Ty option) list =
 let rec private mangle (ty: Ty) : string =
     let all (tys: Ty list) = tys |> List.map mangle |> String.concat "_"
     match ty with
-    | RecursiveAliases.RecursiveAlias _ ->
-        match ty with
-        | TyAlias(name, args, _) -> $"{name}_{all args}"
-        | _ -> internalError "a recursive alias that is not an alias"
+    | TyAlias(name, args, TyRecursive _) -> $"{name}_{all args}"
     | TyAlias(_, _, underlying) -> mangle underlying
     | TyNominal(nominal, shape, _) -> $"{nominal.Name}_{mangle shape}"
     | TyPrimitive name -> name
@@ -77,6 +74,9 @@ let rec private mangle (ty: Ty) : string =
     | TyFunc(input, output, _) -> $"fn_{mangle input}_to_{mangle output}"
     | TyVar _
     | TyOpenRecord _ -> "unit"
+    | TyRecursive _
+    | TySelf _
+    | TyParam _ -> internalError "a recursive alias's definition outside the alias"
 
 /// The name a printer is asked for by, and its function's name.
 let key (printer: Printer) : string =

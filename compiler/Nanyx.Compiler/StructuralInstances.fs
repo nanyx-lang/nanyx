@@ -94,12 +94,18 @@ module internal StructuralInstances =
         match ty with
         | TyVar _
         | TyPrimitive _
+        | TyParam _
         | TyNominal _ -> Some ty
         | TyAlias(name, args, underlying) ->
             match all args, closed rigid underlying with
             | Some args, Some underlying -> Some (TyAlias(name, args, underlying))
             | _ -> None
         | TyApply(name, args) -> all args |> Option.map (fun args -> TyApply(name, args))
+        | TySelf args -> all args |> Option.map TySelf
+        | TyRecursive(body, args) ->
+            match all (body :: args) with
+            | Some (body :: args) -> Some (TyRecursive(body, args))
+            | _ -> None
         | TyFunc(arg, ret, contexts) -> all [ arg; ret ] |> Option.map (fun parts -> TyFunc(parts.[0], parts.[1], contexts))
         | TyRecord fields -> fieldsOf fields |> Option.map TyRecord
         | TyOpenRecord(fields, row) -> fieldsOf fields |> Option.map (fun fields -> TyOpenRecord(fields, row))

@@ -454,6 +454,8 @@ module PatternSpace =
         | TyTag(name, Some payload) -> Set.add name (tagsWithPayloads payload)
         | TyUnion items
         | TyApply(_, items) -> items |> List.map tagsWithPayloads |> Set.unionMany
+        | TyRecursive _
+        | TySelf _ as closed -> Ty.children closed |> List.map tagsWithPayloads |> Set.unionMany
         | TyRecord fields
         | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.map (snd >> tagsWithPayloads) |> Set.unionMany
         | _ -> Set.empty

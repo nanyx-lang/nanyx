@@ -99,17 +99,29 @@ type Ty =
     /// the name the user gave it (`Customer`, not `(name: string)`). An alias that names itself holds its definition
     /// closed instead, and is unfolded where it is looked through (see `RecursiveAliases`).
     | TyAlias of string * Ty list * Ty
+    /// What a recursive alias stands for, closed: its definition, in which its parameters are `TyParam`s and it names
+    /// itself as `TySelf`, so that it has no type variables, and the arguments it is applied to. It is only ever what
+    /// a `TyAlias` stands for (see `RecursiveAliases`).
+    | TyRecursive of body: Ty * args: Ty list
+    /// The recursive alias being defined, named inside its own definition, with its arguments.
+    | TySelf of Ty list
+    /// The parameter at this position of the recursive alias whose definition this is in.
+    | TyParam of int
 
 /// The types a type is made of, one level down, for walks that treat most cases alike: such a walk matches the cases it
 /// treats differently, and hands the others to `Ty.map`, `Ty.fold` or `Ty.exists`.
 module Ty =
     /// The types `ty` is made of, one level down: a nominal's underlying type, an alias's arguments then what it stands
     /// for, a function's input, result and contexts, a record's fields in order of their names, an open record's fields
-    /// then its row as a variable, a tag's payload, an applied type's arguments, and a union's members.
+    /// then its row as a variable, a tag's payload, an applied type's arguments, a union's members, a closed recursive
+    /// definition then its arguments, and the arguments of a reference to the alias inside one.
     let children (ty: Ty) : Ty list =
         match ty with
         | TyVar _
-        | TyPrimitive _ -> []
+        | TyPrimitive _
+        | TyParam _ -> []
+        | TyRecursive(body, args) -> body :: args
+        | TySelf args -> args
         | TyNominal(_, underlying, _) -> [ underlying ]
         | TyAlias(_, args, underlying) -> args @ [ underlying ]
         | TyFunc(input, output, contexts) -> input :: output :: contexts
@@ -124,7 +136,10 @@ module Ty =
     let map (f: Ty -> Ty) (ty: Ty) : Ty =
         match ty with
         | TyVar _
-        | TyPrimitive _ -> ty
+        | TyPrimitive _
+        | TyParam _ -> ty
+        | TyRecursive(body, args) -> TyRecursive(f body, List.map f args)
+        | TySelf args -> TySelf(List.map f args)
         | TyNominal(id, underlying, isPrivate) -> TyNominal(id, f underlying, isPrivate)
         | TyAlias(name, args, underlying) -> TyAlias(name, List.map f args, f underlying)
         | TyFunc(input, output, contexts) -> TyFunc(f input, f output, List.map f contexts)

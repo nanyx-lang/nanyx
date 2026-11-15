@@ -16,11 +16,14 @@ module internal ContextInference =
             match ty with
             | TyVar v -> [ v ]
             | TyPrimitive _
+            | TyParam _
             | TyNominal _
             | FunctionContexts.ScopedContext _ -> []
             | FunctionContexts.CellType(held, _) -> collect held
             | TyAlias(_, args, _)
             | TyApply(_, args)
+            | TyRecursive(_, args)
+            | TySelf args
             | TyUnion args -> args |> List.collect collect
             | TyFunc(arg, ret, contexts) ->
                 (Unifier.writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect) @ collect arg @ collect ret
@@ -84,6 +87,10 @@ module internal ContextInference =
             | TyTag(name, Some payload) -> typeExprOf names payload |> Option.map (fun payload -> TypeTag(name, Some payload))
             | TyUnion [] -> None
             | TyUnion items -> all items |> Option.map TypeUnion
+            // Only inside what a recursive alias stands for, which is written by the alias's name.
+            | TyRecursive _
+            | TySelf _
+            | TyParam _ -> None
         kind |> Option.map TypeExpr.synthetic
 
     /// The annotation an unannotated def of the type `defTy` would write to require `contexts`, each a context's name
@@ -132,9 +139,12 @@ module internal ContextInference =
             match ty with
             | TyVar _
             | TyPrimitive _
+            | TyParam _
             | TyNominal _ -> []
             | TyAlias(_, args, _)
-            | TyApply(_, args) -> args |> List.collect collect
+            | TyApply(_, args)
+            | TyRecursive(_, args)
+            | TySelf args -> args |> List.collect collect
             | TyUnion items -> items |> List.collect (function TyVar v -> [ v ] | item -> collect item)
             | TyFunc(arg, ret, _) -> collect arg @ collect ret
             | TyRecord fields
