@@ -40,7 +40,8 @@ module SyntaxTree =
         | ExprStatement value
         | UseStatement value -> [ value ]
         | TypeDefStatement _
-        | ImportStatement _ -> []
+        | ImportStatement _
+        | AttributeStatement _ -> []
 
     /// The arguments of a call, with a call of one tuple, `f((a, b))` as the backend sees `f(a, b)`, taken as its items.
     let flattenCallArgs (args: Expression list) =
@@ -57,7 +58,8 @@ module SyntaxTree =
             | ExprStatement value -> { statement with Kind = ExprStatement(f value) }
             | UseStatement value -> { statement with Kind = UseStatement(f value) }
             | TypeDefStatement _
-            | ImportStatement _ -> statement
+            | ImportStatement _
+            | AttributeStatement _ -> statement
         let inArms (arms: MatchArm list) = arms |> List.map (fun (patterns, body) -> patterns |> List.map (Pattern.mapExpressions f), f body)
         let rebuild kind = { expr with Kind = kind }
         match expr.Kind with
@@ -134,7 +136,8 @@ module SyntaxTree =
                 | TypeDefStatement(_, _, parameters, body) -> (parameters |> List.choose snd) @ [ body ]
                 | UseStatement _
                 | ExprStatement _
-                | ImportStatement _ -> [])
+                | ImportStatement _
+                | AttributeStatement _ -> [])
         | ContextMemberAccess(context, _)
         | ContextMemberCall(context, _, _) -> [ context ]
         | _ -> []
@@ -234,7 +237,8 @@ module SyntaxTree =
         | ExprStatement value -> referencedNames value
         | UseStatement value -> referencedNames value
         | ImportStatement _
-        | TypeDefStatement _ -> []
+        | TypeDefStatement _
+        | AttributeStatement _ -> []
 
     and referencedNamesInPattern (pattern: Pattern) : string list =
         match pattern.Kind with

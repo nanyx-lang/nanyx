@@ -201,10 +201,20 @@ fix types, the version scheme, the time budget per keystroke) to be written here
 
 ## 6. Suppression in source
 
-Decided ([#106](https://github.com/nanyx-lang/nanyx/issues/106)): an attribute, `@allow(default/unusedBindings)`,
+Built ([#106](https://github.com/nanyx-lang/nanyx/issues/106)): an attribute, `@allow(default/unusedBindings)`,
 before a def (a local one too), suppresses that rule's diagnostics inside it; several rules are listed
-comma-separated. There's no comment form. An `@allow` that suppresses nothing is itself reported. The `_`-prefixed
-name for an intentionally unused binding stays as a convention alongside it.
+comma-separated. There's no comment form. The `_`-prefixed name for an intentionally unused binding stays as a
+convention alongside it.
+
+- The parser reads `linter/rule` in an attribute's argument with no spaces around the `/`, which an operator would
+  need, as a division of the two names (`LinterRuleSyntax`), and a block's attribute line as an `AttributeStatement`.
+- `Attributes.applyAttributes` checks them: an `@allow` names rules and is followed by a def, perhaps after other
+  attributes, and `@allow` is the only attribute a block can hold. It drops the top-level ones; inference skips a
+  block's, and lambda lifting drops them.
+- The host (`Linters.run`) applies them to every linter's diagnostics: one is suppressed when its code is a rule an
+  `@allow` names and its span is within the def (`Allows`). When the official linter runs, a rule an `@allow` names
+  that suppressed nothing is reported by its `unusedAllows` rule, a warning, whose fix removes an `@allow` naming only
+  that rule.
 
 # Code with errors
 

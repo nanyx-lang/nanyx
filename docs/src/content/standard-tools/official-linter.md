@@ -201,6 +201,30 @@ The rule (`semicolons`) reports every `;` that separates two statements on one l
 linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (semicolons = #off)))]
 ```
 
+## `@allow` that suppresses nothing
+
+```nanyx
+@allow(default/unusedBindings) -- Linter warning: `default/unusedBindings` reports nothing in this definition
+def total: () -> int = { -> 100 }
+```
+
+The rule (`unusedAllows`) reports each rule an [`@allow`](../tour/attributes#allow) names that suppresses nothing in the def after it, so that an `@allow` doesn't outlive the code it was written for. It also reports a rule or linter there is none of. It is a warning by default. When the `@allow` names only that rule, its fix removes the `@allow`.
+
+# Suppressing a rule in one place
+
+A project's manifest turns a rule off everywhere. To let one definition break a rule, write `@allow` before it, naming the rules it may break: their diagnostics inside that def, a local one too, are left out.
+
+```nanyx fragment
+def total: () -> int = { ->
+  @allow(default/unusedBindings)
+  def draft = { ->
+    def rate = 2 -- not reported
+    100
+  }
+  draft()
+}
+```
+
 # Learn more
 
 For the full linter model (diagnostic levels, configuration, and custom linters), see [Linters](../advanced/linters).

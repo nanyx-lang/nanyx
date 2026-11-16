@@ -79,6 +79,10 @@ do
                     >>. noteDocumentable lineStart (int start.Index)
                     >>% DefStatement(false, name, typeOpt, value)
 
+    // An attribute line in a block, `@allow(default/unusedBindings)`, which applies to the local def after it.
+    let attributeStatement =
+        pchar '@' >>. identifierNoWs .>>. opt attributeArgument .>> statementTail |>> AttributeStatement
+
     let exprStatement =
         wsInline
         >>. exprWithoutCrossingNewlines
@@ -87,7 +91,7 @@ do
     
     statementItemsRef := (attempt destructuringDefStatement <|> (statement |>> List.singleton)) <?> "statement"
     statementRef :=
-        spannedStatement (attempt importStatement <|> attempt typeDefStatement <|> attempt defStatement <|> attempt recStatement <|> attempt mutStatement <|> attempt useStatement <|> exprStatement)
+        spannedStatement (attempt importStatement <|> attempt typeDefStatement <|> attempt defStatement <|> attempt recStatement <|> attempt mutStatement <|> attempt useStatement <|> attempt attributeStatement <|> exprStatement)
         <?> "statement"
 
 /// Runs `p` and makes what it built a top-level item spanning the text it consumed.
@@ -132,7 +136,20 @@ let topLevelExpr: Parser<TopLevelItem, ParseState> =
     spannedItem (exprWithoutCrossingNewlines |>> Expr)
     <?> "top-level expression"
 
-do attributeArgumentRef := attempt unitExpr <|> parenArguments
+// `(default/unusedBindings, default/unusedResults)`: linter rules, written with no spaces around the `/`, which an
+// operator would need (see `LinterRuleSyntax`).
+let private linterRules: Parser<Expression, ParseState> =
+    let name = withSpan identifierNoWs |>> fun (name, span) -> Expression.at span (IdentifierExpr name)
+    let rule =
+        withSpan (name .>>. withSpan (pstring LinterRuleSyntax.separator) .>>. name)
+        |>> fun (((linter, (_, opSpan)), rule), span) -> Expression.at span (BinaryOp(LinterRuleSyntax.separator, Some opSpan, linter, rule))
+    withSpan (pchar '(' >>. ws >>. sepBy1 rule (pchar ',' >>. ws) .>> ws .>> pchar ')')
+    |>> fun (rules, span) ->
+        match rules with
+        | [ single ] -> single
+        | _ -> Expression.at span (TupleExpr rules)
+
+do attributeArgumentRef := attempt linterRules <|> attempt unitExpr <|> parenArguments
 
 // Parser for an attribute line such as `@entry`; it annotates the next top-level item. Its argument, if it has one,
 // is written straight after the name as a tag's payload is, `@test(#io)`, so `@entry (x)` is an attribute and then an

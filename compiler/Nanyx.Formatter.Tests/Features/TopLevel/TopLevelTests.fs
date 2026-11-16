@@ -15,6 +15,12 @@ let ``An attribute stays on the line before its item`` () =
         format (lines [ "def a = 1"; "@entry"; "def main = {"; "  a"; "}" ]))
 
 [<Fact>]
+let ``Linter rules are written with no spaces around their slash`` () =
+    let source = lines [ "@allow(default/unusedBindings, default/unusedResults)"; "def main = {"; "  @allow(default/unusedBindings)"; "  def x = 1"; "  1"; "}" ]
+    Assert.Equal(source, format source)
+    Assert.Equal(source, format (lines [ "@allow(default / unusedBindings, default / unusedResults)"; "def main = {"; "  @allow( default/unusedBindings )"; "  def x = 1"; "  1"; "}" ]))
+
+[<Fact>]
 let ``@partial stays on the line of the module declaration it marks`` () =
     let source = lines [ "@partial module utils"; ""; "export def one = 1" ]
     Assert.Equal(source, format source)

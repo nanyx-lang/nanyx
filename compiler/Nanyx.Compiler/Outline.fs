@@ -96,7 +96,8 @@ let rec private localItems (declared: DeclaredNames) (value: Expression) : Outli
         | TypeDefStatement(_, modifiers, _, body) -> typeItem declared statement.Span modifiers body |> Option.toList
         | ImportStatement _
         | UseStatement _
-        | ExprStatement _ -> SyntaxTree.ofStatement statement |> List.collect within
+        | ExprStatement _
+        | AttributeStatement _ -> SyntaxTree.ofStatement statement |> List.collect within
     // An or-pattern's arms share their body, which is walked once for each.
     within value |> List.distinctBy (fun item -> item.NameSpan.Start, item.Name) |> List.sortBy (fun item -> item.Span.Start)
 

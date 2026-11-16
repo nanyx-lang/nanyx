@@ -332,6 +332,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | ImportStatement items -> importDoc s.Span.Start s.Span.End items
         | UseStatement value -> cat [ text "use "; useValue full value ]
         | ExprStatement value -> expr statementPosition value
+        | AttributeStatement(n, argument) -> attributeDoc n argument s.Span
 
     /// What a `use` loads. An instance written out is printed as written, `Add(Point)(zero = ...)` (see
     /// `UseInstanceSyntax`).
@@ -407,6 +408,9 @@ let format (options: Options) (parsed: SourceModule) : string =
         match argument with
         | None -> text $"@{name}"
         | Some (Kind UnitExpr) -> text $"@{name}()"
+        | Some (LinterRuleSyntax.Rules rules) ->
+            let written = rules |> List.map (fun (linter, rule, _) -> $"{linter}{LinterRuleSyntax.separator}{rule}") |> String.concat ", "
+            text $"@{name}({written})"
         | Some argument -> cat [ text ("@" + name); parenFields argument (span.Start + 1 + name.Length) span.End ]
 
     and signature (t: TypeExpr) : Doc = (types ()).Signature t

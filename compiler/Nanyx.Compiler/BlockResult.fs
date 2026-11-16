@@ -12,6 +12,7 @@ let private describe (kind: StatementKind) =
     | ImportStatement _ -> "an import"
     | UseStatement _ -> "a `use`"
     | ExprStatement _ -> "an expression"
+    | AttributeStatement(name, _) -> $"the attribute '@{name}'"
 
 /// A block's value is that of its last statement, so a block that does not end with an expression has none. An empty
 /// block is unit; any other is an error, as in `{ i -> def r = f(i) }`, where the `r` the block should give back has

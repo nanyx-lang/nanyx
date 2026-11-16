@@ -74,6 +74,21 @@ def argsSizesGet: [HostRuntime] I32, I32 -> I32
 
 See [Foreign functions](../work-in-progress/foreign-functions), which is still being built.
 
+## `@allow(...)`
+
+Lets a definition break [linter](../standard-tools/official-linter) rules: before a def, a local one too, it suppresses the diagnostics of the rules it names inside that def. Each rule is written as its linter and its name, with no spaces around the `/`, and several are separated by commas. It is the only attribute a block can hold.
+
+```nanyx fragment
+@allow(default/unusedBindings, default/unusedResults)
+def draft: [Console] () -> int = { ->
+  def rate = 2
+  readLine()
+  100
+}
+```
+
+An `@allow` that suppresses nothing is itself reported, by the official linter's `unusedAllows` rule.
+
 ## `@baseUnit`
 
 Marks a unit declaration as a base unit of its dimension. Base units name the dimension and are never defined in terms of other units.

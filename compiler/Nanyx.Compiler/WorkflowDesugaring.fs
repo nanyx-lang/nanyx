@@ -135,7 +135,8 @@ module WorkflowDesugaring =
                 | ExprStatement value
                 | UseStatement value -> usesKeyword value
                 | ImportStatement _
-                | TypeDefStatement _ -> false
+                | TypeDefStatement _
+                | AttributeStatement _ -> false
             match expr.Kind with
             | WorkflowBindExpr _
             | WorkflowReturnExpr _ -> true
@@ -306,7 +307,8 @@ module WorkflowDesugaring =
                 prefix @ [ { statement with Kind = ExprStatement value' } ]
             | UseStatement _
             | ImportStatement _
-            | TypeDefStatement _ -> [ statement ]
+            | TypeDefStatement _
+            | AttributeStatement _ -> [ statement ]
 
         // A workflow bind or return becomes a call to the workflow's members, whose type is not that of the bind as
         // written (a bind's call is the whole rest of the workflow), so that call is a node of its own, with a new id.
@@ -419,7 +421,8 @@ module WorkflowDesugaring =
             | ExprStatement expr -> { stmt with Kind = ExprStatement (desugarExpr expr) }
             | UseStatement value -> { stmt with Kind = UseStatement (desugarExpr value) }
             | ImportStatement _
-            | TypeDefStatement _ -> stmt
+            | TypeDefStatement _
+            | AttributeStatement _ -> stmt
         // The statements of a block from its first workflow keyword on, as that keyword's call with the rest of the
         // block as its continuation, and so on. A block that falls off its end without `return` has the builder's
         // `zero` as its value there (`#some()` for `proc`), its last value only run; outside a builder's block, `()`.
@@ -476,7 +479,8 @@ module WorkflowDesugaring =
                         chainBlock statement (restOfChain ()) { statement with Kind = ExprStatement (desugarExpr expr) }
                 | UseStatement _
                 | ImportStatement _
-                | TypeDefStatement _ ->
+                | TypeDefStatement _
+                | AttributeStatement _ ->
                     chainBlock statement (restOfChain ()) (desugarStatement statement)
         // An `if` or a `match` statement with a workflow keyword in a branch, `expr`, followed by `rest`. The rest of
         // the block, up to `next`, is bound once to a local function, and each branch is a chain of its own that goes

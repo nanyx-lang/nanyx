@@ -95,8 +95,8 @@ A program cannot cause this error. It is reported when the standard library itse
 
 # NYX0007: Unknown attribute
 
-A definition is marked with an attribute the compiler does not know. The attributes are listed in
-[Attributes](../tour/attributes).
+A definition is marked with an attribute the compiler does not know, or a local def with one other than `@allow`,
+the only attribute a block can hold. The attributes are listed in [Attributes](../tour/attributes).
 
 ```nanyx
 @inline  -- error NYX0007: Unknown attribute '@inline'
@@ -165,14 +165,15 @@ To fix it, move the code out of the block, or make it a definition.
 
 # NYX0013: Unexpected attribute argument
 
-An attribute that takes no argument is given one.
+An attribute that takes no argument is given one, or one that takes an argument is given one it can't take: `@allow`
+takes the linter rules it allows, such as `@allow(default/unusedBindings)`.
 
 ```nanyx
 @entry(main)  -- error NYX0013: Attribute '@entry' takes no argument
 def main = { () }
 ```
 
-To fix it, remove the argument.
+To fix it, remove the argument, or write the one the attribute takes.
 
 # NYX0014: File-path import without an alias
 
