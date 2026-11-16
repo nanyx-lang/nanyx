@@ -550,7 +550,30 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
             match members |> List.filter (fun memberName -> TypeEnv.tryFind memberName env |> Option.isNone) with
             | [] -> None
             | absent -> Some (ctx, absent))
-    if missing.IsEmpty || not reportMissing then
+    // A protected or private context matches only itself: each of its members in scope must be its own, not another
+    // context's of the same name (#1443). A plain one matches any context with its members.
+    let forged =
+        contexts
+        |> List.choose (fun ctx ->
+            match ctx.Kind with
+            | TypeName ctxName ->
+                match state.TypeDefs |> Map.tryFind ctxName with
+                | Some info when info.IsContext && info.IsNominal ->
+                    let members, _ = collectContextMembers state ctx
+                    let isOther (memberName, _, symbol: SymbolId option) =
+                        match TypeEnv.tryFind (inScopeAs ctx memberName) env with
+                        | Some scheme -> symbol.IsSome && scheme.Symbol <> symbol
+                        | None -> false
+                    if members |> List.exists isOther then Some (ctxName, info) else None
+                | _ -> None
+            | _ -> None)
+    if reportMissing && not forged.IsEmpty then
+        let ctxName, info = forged.Head
+        let kind = if info.IsPrivate then "private" else "protected"
+        let message =
+            $"'{name}' requires the context '{ctxName}', which is not available here: '{ctxName}' is {kind}, so only an instance its own module makes serves for it, not another context with the same members"
+        Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
+    elif missing.IsEmpty || not reportMissing then
         // Every member is in scope, but one the ambient instance supplies is only available where its context is.
         requiredMembers
         |> List.fold (fun result (ctx, members) ->

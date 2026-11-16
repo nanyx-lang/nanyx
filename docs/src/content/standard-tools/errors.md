@@ -818,6 +818,23 @@ def less = ["a" => 1] < ["a" => 1]  -- error NYX0205: 'map(string, int)' cannot 
 To fix it, use values whose type has the context, give a nominal type the definition it needs (such as `==`), or add
 the context to the definition's type, as the message says ([Contexts](../advanced/contexts)).
 
+A call also needs a context that nothing in scope supplies. A plain context is supplied by any context with its
+members, but a `protected` or `private` one only by an instance of itself, which only its own module can make:
+
+```nanyx
+context Tx = protected (commit: () -> ())
+context Fake = (commit: () -> ())
+
+def needsTx: [Tx] () -> () = { commit() }
+
+def main = {
+  use Fake(commit = { () })
+  needsTx()  -- error NYX0205: 'needsTx' requires the context 'Tx', which is not available here: 'Tx' is protected, ...
+}
+```
+
+To fix it, load an instance of the context itself, or require it in the type of the definition around the call.
+
 # NYX0206: Invalid workflow
 
 A builder block, such as `opt { ... }`, is not one its builder can run: the context the builder runs it under lacks a
