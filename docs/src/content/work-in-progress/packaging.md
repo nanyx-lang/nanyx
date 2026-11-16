@@ -138,11 +138,14 @@ how a claim survives a GitHub rename (it is kept by account ID), how organisatio
 
 - Versions are semantic versions. In a manifest, `(package = "acme.core", version = "2.1")` means "2.1 or later, before 3.0", the
   caret range used by Cargo; an exact or wider range can be written explicitly.
-- A build has **one version of each package**. A program is compiled into a single WebAssembly module and types
+- A build has **one version of each package**, as Elm does (decided, [#860](https://github.com/nanyx-lang/nanyx/issues/860)).
+  A program is compiled into a single WebAssembly module and types
   from a dependency must unify wherever they are used, so two copies of `acme.core` would mean two incompatible
-  sets of types. If a program truly needs two major versions, the new major is published under a new name
+  sets of types. A conflict is a resolution error that names which packages want which versions. If a program truly
+  needs two major versions, the new major is published under a new name
   (`acme.core2`), which keeps the rule simple and the cost visible.
-- The resolver picks the newest version that satisfies every constraint, using
+- The resolver picks the newest version that satisfies every constraint (decided,
+  [#859](https://github.com/nanyx-lang/nanyx/issues/859)), using
   [PubGrub](https://github.com/dart-lang/pub/blob/master/doc/solver.md) (as Dart and uv do). Its main attraction is that when
   there is no solution it explains why in plain sentences, which matches the error-message principles.
 - `nanyx.lock` records the exact version and SHA-256 of every package in the build. It is written by `restore`,
@@ -151,13 +154,38 @@ how a claim survives a GitHub rename (it is kept by account ID), how organisatio
 
 ## Enforced semantic versioning
 
-Publishing compares the new version's public API with the previous version's: the exported definitions of every
-module in `publicModules`, with their types. Removing or changing a definition requires a major version;
-adding one requires at least a minor. `nanyx publish` proposes the version number and refuses a wrong one.
+Decided, Elm-style ([#1470](https://github.com/nanyx-lang/nanyx/issues/1470), part of #865's publishing). Publishing
+compares the new version's public API, written to `api.json`, with that of the newest published version below it:
+the exported definitions of every exported module, with their types.
+
+- **Major:** an export removed or renamed; a def's type changed other than made more general; a new context
+  requirement on an exported def; a field removed from an exported record type; a tag added to or removed from an
+  exported closed union (adding one breaks exhaustive matches, as in Elm); a type's parameters changed; an exported
+  type made protected or private.
+- **Minor:** new exports or modules, a type made more general, a requirement dropped.
+- **Patch:** no change to the public API.
+- **Before 1.0.0** a breaking change needs a minor bump (`0.3` to `0.4`), as in Cargo.
+
+`nanyx publish` refuses a version whose bump is too small, listing the changes that need a bigger one, and
+`nanyx bump` prints the changes and writes the right version into the manifest. The index refuses a release that
+skipped the check.
 
 This needs the type of every exported definition, which inference already has, and it is one more reason for the
 linter rule that asks for annotations on exported definitions
 ([#104](https://github.com/nanyx-lang/nanyx/issues/104)): an inferred type can change by accident.
+
+## What a package exports
+
+Decided ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457)); the manifest's `publicModules` field is what's built
+today, and this replaces it:
+
+- **`export module mypackage.main`** in a module's declaration makes it public. Any other module is internal to its
+  package: importing it from another package is an error.
+- **Re-exports** use the syntax that already works, `export mypackage.stuff (memberA, memberB)`, so an author
+  controls exactly what's visible.
+- **A library must export something.** A package with no `host` and no exported module is an error. An application
+  needn't export anything.
+- **No default module.** `import somepackage/main`; there's no `import somepackage`.
 
 ## What a package is
 
@@ -292,7 +320,10 @@ Local packages first (items 3a to 3c), then remote packages. Each produces somet
 6. **The index.** Done ([#209](https://github.com/nanyx-lang/nanyx/issues/209)): `nanyx-lang/packages` on GitHub
    Pages, with the registration check, the release sync and the `nanyx` namespace reserved. Not done: recording
    owners' account IDs, and mirroring artifacts.
-7. **Publishing.** `nanyx publish` and `yank`; `api.json`; the API comparison and version check.
+7. **Publishing.** `nanyx publish` and `yank`; `api.json`; the API comparison and version check
+   ([#865](https://github.com/nanyx-lang/nanyx/issues/865), [#1470](https://github.com/nanyx-lang/nanyx/issues/1470)).
+   Before it, `export module` replaces `publicModules` ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457)), since
+   it decides what the API is.
 8. **Editor support.** Resolve packages in the language server; restore from the extension.
 9. **First packages.** Publish at least one official package (`nanyx.json`, say) end to end before launch, to
    prove the whole path.
@@ -303,12 +334,6 @@ Local packages first (items 3a to 3c), then remote packages. Each produces somet
   release assets on packages' own repositories ([#209](https://github.com/nanyx-lang/nanyx/issues/209)). When
   should it move to `packages.nanyx.dev`, and who holds the domain? Should artifacts be mirrored (to object storage
   or a project-owned repository) so a deleted release can't break builds?
-- **Resolution.** PubGrub (newest compatible) or minimal version selection (Go: oldest that satisfies, no
-  solver, no lockfile strictly needed)? This page proposes PubGrub for its error messages.
-- **Major versions.** Is "a new major is a new package name" acceptable, or should a build allow two majors of a
-  package whose types never meet?
-- **Enforced semver strictness.** Does adding a case to an exported tag union count as breaking (it breaks
-  exhaustive matches in dependants)? Elm says yes.
 - **Hosts and capabilities.** Should a package declare the contexts it requires in its manifest, so the index can
   show "this package needs `FileSystem`" before anyone installs it?
 - **Private packages.** Should the client support more than one index (a company's own) from the start? The
