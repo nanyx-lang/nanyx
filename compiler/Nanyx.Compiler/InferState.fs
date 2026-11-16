@@ -67,7 +67,11 @@ type NumericLiteral =
       Value: Literal
       At: SourceSpan
       /// The expression the literal is, where it is not a pattern.
-      Node: NodeId option }
+      Node: NodeId option
+      /// For the operands of an arithmetic operator rather than a literal: the operator, and the expression it is at
+      /// `At`. Their type was still a variable when the operator was read, and they are `int`, as `Value` is, if
+      /// nothing settles them.
+      Operator: (string * NodeId) option }
 
 /// An import of a `module name =` block written in the same file (`import money`), rather than of another file.
 type BlockImport =

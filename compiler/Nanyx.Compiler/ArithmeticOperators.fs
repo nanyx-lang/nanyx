@@ -40,29 +40,6 @@ module internal ArithmeticOperators =
     /// operator, a comparison or `==` and `!=`.
     let private readsLiterals (op: string) = isOperator op || OrderingOperators.isOperator op || EqualityOperators.isOperator op
 
-    /// Whether `ty` is a type that is known not to be a number. A type variable, an open record and a nominal type
-    /// are left to unification, which reports them if they are not numbers; the error type is what failed to check.
-    let private isKnownNonNumber (ty: Ty) =
-        match Unifier.unalias ty with
-        | ty when Unifier.isError ty -> false
-        | TyPrimitive("int" | "float")
-        | SizedNumberType _
-        | TyVar _
-        | TyOpenRecord _
-        | TyNominal _ -> false
-        | _ -> true
-
-    /// The operator `op` as a diagnostic writes it: prefix `-` is written `-`.
-    let private written (op: string) = if op = NegateSyntax.builtIn then "-" else op
-
-    /// The error for using `op` on a value of the type `ty`, which is not a number.
-    let private notANumber (op: string) (ty: Ty) =
-        let advice =
-            match op, Unifier.unalias ty with
-            | "+", (TyPrimitive "string" | Lists.ListType _) -> ". Use ++ to join them"
-            | _ -> ""
-        $"'{Unifier.tyToDisplayString Ascii ty}' cannot be used with {written op}: it is not a number{advice}"
-
     /// The context member the operator `op` reads: the one of its name, or `negate` for prefix `-`.
     let memberOf (op: string) = if op = NegateSyntax.builtIn then negate else op
 
@@ -89,7 +66,7 @@ module internal ArithmeticOperators =
     /// type does not require it.
     let private undeclared (op: string) (context: string) (does: string) (v: TyVar) (defName: Identifier) =
         let tyText = Unifier.tyToDisplayString Ascii (TyVar v)
-        $"'{defName}' {does} values of type '{tyText}' with {written op}, so its type must require {context}({tyText}): add [{context}({tyText})] to the type of '{defName}'"
+        $"'{defName}' {does} values of type '{tyText}' with {NumericLiterals.written op}, so its type must require {context}({tyText}): add [{context}({tyText})] to the type of '{defName}'"
 
     /// Checks `expr`, the operator `op` on operands of the types `leftTy` and `rightTy`, which calls no definition. An
     /// operand whose type is already known not to be a number is an error that names the operator. So is one of a type
@@ -98,14 +75,15 @@ module internal ArithmeticOperators =
     /// carries on, so that the variable is not also reported as having to be a number. In a function that does not
     /// write its type, operands of a type still a variable are left until the function is inferred, which then requires
     /// the context of the variable if it is one of its own (see `ArithmeticInference`). Operands of a number literal's
-    /// own variable, as in `1.0 / 0.0`, are whatever number the code around them settles (see `NumericLiterals`).
+    /// own variable, as in `1.0 / 0.0`, are whatever number the code around them settles (see `NumericLiterals`), and so
+    /// are operands of a type still a variable elsewhere, which the rest of the def may settle (`awaitOperand`).
     /// Otherwise the operands are the number `numberTy`, `int` or `float`.
     let check (state: InferState) (expr: Expression) (op: string) (leftTy: Ty) (rightTy: Ty) (numberTy: Ty) : Result<InferState, Diagnostic list> =
         let tys = [ leftTy; rightTy ] |> List.map (resolveSoFar state)
         let declaredVar = tys |> List.tryPick (function TyVar({ Name = Some _ } as v) -> Some v | _ -> None)
         let areVariables = tys |> List.forall (function TyVar { Name = None } -> true | _ -> false)
-        match tys |> List.tryFind isKnownNonNumber, contextFor state op, declaredVar, state.ContextScope with
-        | Some ty, _, _, _ -> Error [ Diagnostics.at DiagnosticCodes.TypeMismatch expr.Span (notANumber op ty) ]
+        match tys |> List.tryFind NumericLiterals.isKnownNonNumber, contextFor state op, declaredVar, state.ContextScope with
+        | Some ty, _, _, _ -> Error [ Diagnostics.at DiagnosticCodes.TypeMismatch expr.Span (NumericLiterals.notANumber op ty) ]
         | None, Some (context, does), Some v, DefScope(defName, false) ->
             let required = $"{context}({Unifier.tyToDisplayString Ascii (TyVar v)})"
             let error =
@@ -116,6 +94,7 @@ module internal ArithmeticOperators =
             let pending = { InDef = defName; Operator = expr.Id; MemberName = memberOf op; OperandTy = leftTy; At = expr.Span }
             Ok { state with PendingArithmetic = pending :: state.PendingArithmetic }
         | _ when NumericLiterals.isOpen state leftTy -> Ok state
+        | _ when areVariables -> Ok (NumericLiterals.awaitOperand op expr leftTy state)
         | _ -> Ok (addConstraint leftTy numberTy state)
 
     /// What a literal operand of an arithmetic operator or a comparison is, where it is not the literal it would be
