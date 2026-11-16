@@ -6,36 +6,76 @@ module internal Transpiler.Wasm.CoreIrReuseSites
 open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.CoreIr
 
-/// The fields of the one object `pattern` takes apart, a value of type `ty`, when it takes apart exactly one and binds
-/// or ignores each of its fields: where each is, what binds it, and its type; and the size of the object's block (its
-/// header and its fields).
-let fieldsTakenApart (ty: IrType) (pattern: Pattern) : ((int * Var option * IrType) list * int) option =
-    let leaf (inner: Pattern) =
+/// An object a pattern takes apart.
+type TakenApart =
+    { /// Each field of the object: where it is, the name that binds it, if any, and its type.
+      Fields: (int * Var option * IrType) list
+      /// The size of the object's block: its header and its fields.
+      Size: int
+      /// Each object in a field that the pattern takes apart in turn, with the name that binds it.
+      Inner: (Var * TakenApart) list }
+
+module TakenApart =
+    /// The sizes of the blocks of the object and of each object inside it that is taken apart.
+    let rec sizes (taken: TakenApart) : int list =
+        taken.Size :: (taken.Inner |> List.collect (snd >> sizes))
+
+/// How `pattern` takes apart a value of type `ty`, when it takes apart exactly one object and each of its fields is
+/// bound, ignored, tested by a pattern that binds nothing (the field is then dropped with the object), or taken apart
+/// in turn, as in `[b, a, ...rest]` or `[#some(n), ...rest]`. With it, the pattern binds each object inside that it
+/// takes apart to a name `fresh` makes, so that the object can be released after the one it is in.
+let rec takenApart (fresh: IrType -> Var) (ty: IrType) (pattern: Pattern) : (Pattern * TakenApart) option =
+    let field (fieldTy: IrType) (inner: Pattern) =
         match inner with
-        | PBind var -> Some (Some var)
-        | PWildcard -> Some None
-        | _ -> None
+        | PBind var -> Some(inner, Some var, None)
+        | PWildcard -> Some(inner, None, None)
+        | _ ->
+            match takenApart fresh fieldTy inner with
+            | Some(rewritten, taken) ->
+                let var = fresh fieldTy
+                Some(PAll [ PBind var; rewritten ], Some var, Some(var, taken))
+            | None when List.isEmpty (Pattern.binds inner) -> Some(inner, None, None)
+            | None -> None
+    // Each field's offset, type and pattern, the size of the block, and how to rebuild the pattern from the fields'.
+    let build (fields: (int * IrType * Pattern) list) (size: int) (rebuild: Pattern list -> Pattern) =
+        let parts = fields |> List.map (fun (offset, fieldTy, inner) -> field fieldTy inner |> Option.map (fun (rewritten, bound, nested) -> rewritten, (offset, bound, fieldTy), nested))
+        if parts |> List.forall Option.isSome then
+            let parts = parts |> List.choose id
+            Some(
+                rebuild (parts |> List.map (fun (rewritten, _, _) -> rewritten)),
+                { Fields = parts |> List.map (fun (_, taken, _) -> taken)
+                  Size = size
+                  Inner = parts |> List.choose (fun (_, _, nested) -> nested) })
+        else None
     match IrType.unfold ty, pattern with
-    | IrList element, PList([ head ], Some rest) ->
-        match leaf head, leaf rest with
-        | Some headVar, Some restVar ->
-            Some([ 0, headVar, element; CoreIrLayout.tailOffset element, restVar, ty ], CoreIrLayout.headerSize ty + CoreIrLayout.listCellSize element)
-        | _ -> None
+    | IrList element, PList(head :: more, rest) ->
+        // `[a, b, ...rest]` is `[a, ...[b, ...rest]]`, and `[a]` is `[a, ...[]]`.
+        let restPattern =
+            match more, rest with
+            | [], Some rest -> rest
+            | [], None -> PList([], None)
+            | _ -> PList(more, rest)
+        build
+            [ 0, element, head; CoreIrLayout.tailOffset element, ty, restPattern ]
+            (CoreIrLayout.headerSize ty + CoreIrLayout.listCellSize element)
+            (fun parts ->
+                match more, rest with
+                | [], None -> PList([ parts[0] ], None)
+                | _ -> PList([ parts[0] ], Some parts[1]))
     | IrTags tags, PTag(name, Some inner) ->
-        match tags |> List.tryFind (fst >> (=) name), leaf inner with
-        | Some(_, Some payloadTy), Some payloadVar ->
-            Some([ CoreIrLayout.payloadOffset, payloadVar, payloadTy ], CoreIrLayout.headerSize ty + CoreIrLayout.tagCellSize payloadTy)
+        match tags |> List.tryFind (fst >> (=) name) with
+        | Some(_, Some payloadTy) ->
+            build
+                [ CoreIrLayout.payloadOffset, payloadTy, inner ]
+                (CoreIrLayout.headerSize ty + CoreIrLayout.tagCellSize payloadTy)
+                (fun parts -> PTag(name, Some parts[0]))
         | _ -> None
     | IrRecord fields, PFields matched ->
-        let leaves = matched |> List.map (fun (slot, inner) -> slot, leaf inner)
-        if leaves |> List.forall (snd >> Option.isSome) then
-            let taken =
-                fields
-                |> List.mapi (fun slot (_, fieldTy) ->
-                    let bound = leaves |> List.tryFind (fst >> (=) slot) |> Option.bind snd |> Option.flatten
-                    CoreIrLayout.fieldOffset fields slot, bound, fieldTy)
-            Some(taken, CoreIrLayout.headerSize ty + CoreIrLayout.recordSize fields)
-        else None
+        let patternOf slot = matched |> List.tryFind (fst >> (=) slot) |> Option.map snd |> Option.defaultValue PWildcard
+        build
+            (fields |> List.mapi (fun slot (_, fieldTy) -> CoreIrLayout.fieldOffset fields slot, fieldTy, patternOf slot))
+            (CoreIrLayout.headerSize ty + CoreIrLayout.recordSize fields)
+            (fun parts -> PFields(matched |> List.map (fun (slot, _) -> slot, parts[slot])))
     | _ -> None
 
 /// The size of the block `value` allocates, if it is an allocation that can write into a reused block.

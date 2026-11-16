@@ -432,12 +432,17 @@ nodes to the IR: `dup x1, ...; e`, `drop x1, ...; e`, and `e then drop x1, ...` 
 Steps 3 and 4 are `CoreIrReuse.fs`, run on the counted IR, which adds two more nodes: `release x; e` and an
 allocation `reusing` a token.
 
-- **Drop specialisation.** An arm that takes apart one object (a list's first cell, a tag's cell, a record) whose
-  fields its patterns bind or ignore, and that does not use the object itself, releases it instead of taking a
-  reference to each name and dropping it. The release checks the count: when it is one, the names keep the fields'
-  references, the fields no name the arm uses are dropped, and the block is freed; otherwise the names take
-  references of their own and the count goes down.
-- **Reuse.** When the arm then allocates a block of the same size (not in a loop or a guard), the release keeps the
+- **Drop specialisation.** An arm that takes apart one object (a list's first cell, a tag's cell, a record) and that
+  does not use the object itself releases it instead of taking a reference to each name and dropping it. The release
+  checks the count: when it is one, the names keep the fields' references, the fields no name the arm uses are
+  dropped, and the block is freed; otherwise the names take references of their own and the count goes down. Each
+  field's pattern binds or ignores it, tests it without binding anything (`[0, ...rest]`, `[a]`, whose rest must be
+  `[]`), or takes apart an object in turn (`[b, a, ...rest]`, `[#some(n), ...rest]`): `CoreIrReuseSites.takenApart`
+  binds that object to a name of its own (`__inner_1`), whose reference the outer release takes over, and the inner
+  object is released after it, as a nested `match` would ([#1547](https://github.com/nanyx-lang/nanyx/issues/1547)).
+- **Reuse.** Every object an arm releases, in each of its scrutinees and nested ones, outer before inner, goes to
+  the first allocation the arm then makes of a block of its size that an earlier one has not taken (not in a loop or
+  a guard): the release keeps the
   block in a token instead of freeing it, or sets the token to 0 when the object was shared, and the allocation
   writes into the block when the token holds one (`__nanyx_list_cons_at`, `__nanyx_tag_box_at`,
   `__nanyx_reuse_object`). Mapping over a list held once rewrites its cells in place. When the first such allocation
@@ -454,7 +459,8 @@ allocation `reusing` a token.
 
 The tests in `Features/Memory` check that a loop over lists, records, closures and tags runs in constant memory,
 that the examples that compile free every block they allocate, and, counting what the allocator hands out, that
-mapping over a list, a tuple or a tag's cell held once allocates nothing, and nor does `with` on a record held once.
+mapping over a list, a tuple or a tag's cell held once allocates nothing, nor does a nested pattern or an arm over
+several lists, and nor does `with` on a record held once.
 
 **Memory checks.** `nanyx run --check-memory` (`WasmOptions.CheckMemory`) compiles the program with an allocator
 and counts that check themselves (`checkedRuntimeHelpers` in `WasmRuntime.fs` and `MemoryChecks` in `WasmAllocator.fs`):
