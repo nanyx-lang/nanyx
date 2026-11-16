@@ -129,5 +129,5 @@ label.
 If you notice a code quality problem outside your change, file an issue. Give it the `code quality` label
 and the label for its area (`parser`, `type checker`, `wasm backend`, `formatting`, `lsp`). Include
 file:line evidence at a commit, and say what "done" looks like. Then add it to the
-[Nanyx workstreams project](https://github.com/orgs/nanyx-lang/projects/1), whose Priority field orders the
-backlog. A daily review files whatever is left over.
+[Nanyx workstreams project](https://github.com/orgs/nanyx-lang/projects/1), whose Stage field orders the
+backlog: Working set, then Ready; Planning is for issues that still have open questions or no "done when". A daily review files whatever is left over.
