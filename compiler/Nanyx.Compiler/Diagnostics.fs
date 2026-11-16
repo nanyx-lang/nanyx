@@ -86,6 +86,7 @@ module DiagnosticCodes =
     let VersionNotShipped = code 29 "Version not shipped" Severity.Error
     let DefinitionWithoutValue = code 30 "Definition without a value" Severity.Error
     let EntryInLibrary = code 31 "Entry point in a library" Severity.Error
+    let ContextsJoined = code 32 "Contexts joined with `&` or `+`" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -154,6 +155,9 @@ module DiagnosticCodes =
     let InstanceOutsideUse = code 248 "Context instance written outside a use" Severity.Error
     let UseOfNonInstance = code 249 "use of something other than a context instance" Severity.Error
     let OwnInstanceReplaced = code 250 "Use of an instance for a type that has its own" Severity.Error
+    let OperatorRequiredByMember = code 251 "Operator required by its member" Severity.Error
+    let InvalidTypeScope = code 252 "Type in the scope of something other than one scoped context" Severity.Error
+    let ContextsOnValueType = code 253 "Contexts written on a type that is not a function" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -167,7 +171,7 @@ module DiagnosticCodes =
           CodeInModuleBlock; UnexpectedAttributeArgument; PathImportWithoutAlias
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
-          ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped; DefinitionWithoutValue; EntryInLibrary
+          ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped; DefinitionWithoutValue; EntryInLibrary; ContextsJoined
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField
@@ -180,7 +184,7 @@ module DiagnosticCodes =
           LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotProtected; ScopedContextEscapes
           NotACellArgument; MisplacedCellType; UndeterminedContextType; EntryDoesNotFitHost; HostRuntimeOutsideHost; ScriptRunValue; ContextsWithoutType
           InvalidExtern; ExternWithoutHostRuntime; ConflictingExterns; PrivateContextMember; ContextNameAsValue; UnknownContextName
-          ContextAsType; InstanceOutsideUse; UseOfNonInstance; OwnInstanceReplaced
+          ContextAsType; InstanceOutsideUse; UseOfNonInstance; OwnInstanceReplaced; OperatorRequiredByMember; InvalidTypeScope; ContextsOnValueType
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

@@ -56,3 +56,23 @@ def shelf: Shelf = (left = Box(v = 2), right = Box(v = "two"))
 println("{get(shelf.left) + 1} {label(shelf.right)}")
 """
     assertRan "3 two\n" (runSource (normalized source))
+[<Fact>]
+let ``Run - a value of a type in a scoped context's scope is used inside the call that supplies the context`` () =
+    let source =
+        """
+scoped context Tx = private ()
+
+type Cursor = [Tx] protected (query: string, row: int)
+
+def transaction: [c] ([Tx, c] () -> a) -> a = { block -> block() }
+def open: [Tx] string -> Cursor = { query -> Cursor(query = query, row = 41) }
+def next: [Tx] Cursor -> int = { c -> c.row + 1 }
+
+def row = transaction {
+  def c = open("select")
+  next(c)
+}
+
+println(row)
+"""
+    assertRan "42\n" (runSource (normalized source))

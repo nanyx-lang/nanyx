@@ -92,6 +92,9 @@ type TypeDefModifier =
     /// `scoped context`: nothing that requires the context can leave the scope that supplies it. The span is the
     /// `scoped` keyword's.
     | Scoped of SourceSpan
+    /// `type Cursor = [Tx] protected (...)`: a value of the type belongs to the scope of the scoped context it was made
+    /// under. The contexts written, each where it is written.
+    | InScopeOf of (Identifier * SourceSpan) list
 
 module TypeDefModifier =
     let isScoped (modifier: TypeDefModifier) =
@@ -100,7 +103,13 @@ module TypeDefModifier =
         | Export
         | Context
         | Private
-        | Protected -> false
+        | Protected
+        | InScopeOf _ -> false
+
+    /// The contexts a type's declaration says its values belong to the scope of (see `InScopeOf`), each where it is
+    /// written; empty when it says none.
+    let scopeContexts (modifiers: TypeDefModifier list) =
+        modifiers |> List.collect (function InScopeOf contexts -> contexts | _ -> [])
 
     /// Whether a type declared with `modifiers` is nominal: protected or private, as opposed to an alias of its shape.
     let isNominal (modifiers: TypeDefModifier list) =

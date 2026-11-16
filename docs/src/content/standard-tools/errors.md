@@ -530,6 +530,17 @@ def main = { () }
 
 To fix it, name the host the program runs under in the manifest, `host = (package = "nanyx.console", version = "...")`
 at the compiler's version, which `nanyx new` writes, or remove the `@entry` if the package is a library.
+
+# NYX0032: Contexts joined with `&` or `+`
+
+The contexts a function requires are separated by `,`: `[Eq(a), Hash(a)]`. Earlier versions of the language joined
+them with `&`, and before that with `+`, and either between two contexts is an error.
+
+```nanyx
+def both: [Eq(a) & Hash(a)] a, a -> bool = { x, y -> x == y }  -- error NYX0032: Separate contexts with `,`, not `&`: `[Eq(a), Hash(a)]`
+```
+
+To fix it, write `,` in its place, which the error's fix does; `nanyx format` writes `,` too.
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which
@@ -847,7 +858,7 @@ context Opt = (
   try: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r
   return: a -> #some(a) | r
 )
-def opt: [c] ([Opt & c] () -> t) -> t = { block ->
+def opt: [c] ([Opt, c] () -> t) -> t = { block ->
   use Opt(
     try = {
       | #some(value), continue -> continue(value)
@@ -1209,7 +1220,7 @@ that type, so no call could say which type it is.
 ```nanyx
 context Log = (log: string -> ())
 
-def greet: [Log & ToString(a)] string -> () = { name -> log("hello {name}") }  -- error NYX0236: 'a' in 'ToString(a)' is not the type of any parameter of 'greet' or of its result, ...
+def greet: [Log, ToString(a)] string -> () = { name -> log("hello {name}") }  -- error NYX0236: 'a' in 'ToString(a)' is not the type of any parameter of 'greet' or of its result, ...
 ```
 
 To fix it, remove the context, or give a parameter the type it is on.
@@ -1377,7 +1388,7 @@ several and `l` doesn't say which, or `context l: C` names a context the lambda 
 context Log = (log: string -> ())
 context Tick = (tick: () -> ())
 
-def run: [Log & Tick] () -> () = { context l -> () }  -- error NYX0246: 'l' could name any of 'Log' and 'Tick', which this lambda is given: say which, as in `context l: Log`
+def run: [Log, Tick] () -> () = { context l -> () }  -- error NYX0246: 'l' could name any of 'Log' and 'Tick', which this lambda is given: say which, as in `context l: Log`
 ```
 
 To fix it, say which context the name is for, `context l: Log`, or name one the lambda's type requires.
@@ -1445,6 +1456,45 @@ def n = use Eq(int)(`==` = { x, y -> true }) in 1  -- error NYX0250: 'int' alrea
 To fix it, give the values a type that says how they behave, a protected type with its own `==`, `compare`, `hash` or
 `toString`, or pass what to do to a function, as `list.sortBy` takes a key and a hole can call a function. A `use` can
 still give an instance to a type that has none of its own, such as `Eq` for a record that holds a function.
+
+# NYX0251: Operator required by its member
+
+A context list holds contexts and context variables. An operator required by the member it reads, as in
+`` [`+`: a, a -> a] ``, is an error: it was only another way of writing the prelude's context that has the member,
+which the compiler finds for a function's operators anyway (see
+[Operators find their context](../advanced/contexts#operators-find-their-context)).
+
+```nanyx
+def add: [`+`: a, a -> a] a, a -> a = { x, y -> x + y }  -- error NYX0251: An operator is required by its context, not by its member: write 'Add(a)' for '`+`'
+```
+
+To fix it, write the context, which the error's fix does: `[Add(a)]` for `` `+` ``, and `[Num(a)]` for `` `+` `` and
+`` `*` `` together. Where a function's operators don't fit one context, list the contexts they need: `[Ord(a), Add(a)]`.
+
+# NYX0252: Type in the scope of something other than one scoped context
+
+A type declaration writes a context before its kind, `type Cursor = [Tx] protected (...)`, to say that each value of
+the type belongs to the scope of the `Tx` it was made under (see
+[Types in a scope](../advanced/contexts#types-in-a-scope)). That context must be a scoped context, and there can be
+only one.
+
+```nanyx
+type Cursor = [Console] protected (row: int)  -- error NYX0252: 'Console' isn't a scoped context: a type can only belong to a scoped context's scope
+```
+
+To fix it, name the scoped context whose scope the values belong to, or leave the contexts out.
+
+# NYX0253: Contexts written on a type that is not a function
+
+Only a function type carries contexts: `[Console] string -> ()` requires `Console` where it's called. Written on any
+other type, contexts would say nothing, so they're an error. A type whose values belong to a scoped context's scope
+says so on its declaration, not where it's used.
+
+```nanyx
+def count: [Console] int = 3  -- error NYX0253: Only a function type carries contexts, and 'int' isn't one: write them on the function that requires them
+```
+
+To fix it, write the contexts on the function that requires them, or leave them out.
 
 # NYX0301: Not supported by the WebAssembly backend
 

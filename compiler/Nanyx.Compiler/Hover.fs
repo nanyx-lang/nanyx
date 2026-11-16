@@ -284,15 +284,16 @@ let private instantiationOf (names: TypeNotation) (typed: TypedModule) (hovered:
                         | boundTo when contextVariables.ContainsKey var.Id ->
                             match FunctionContexts.flatten [ boundTo ] |> Unifier.writtenContexts with
                             | [] -> None
-                            | boundContexts -> Some (name, boundContexts)
-                        | boundTo -> Some (name, [ boundTo ]))
+                            | boundContexts -> Some (name, true, boundContexts)
+                        | boundTo -> Some (name, false, [ boundTo ]))
                 | Error _ -> []
-            let typeWritten, boundWritten = writtenAt names typed (Some symbol) ty (List.collect snd bound)
+            let typeWritten, boundWritten = writtenAt names typed (Some symbol) ty (bound |> List.collect (fun (_, _, tys) -> tys))
+            // A context variable stands for a list of contexts, written as a def's type writes one: `c = [Console, Log]`.
             let bindings =
                 bound
-                |> List.mapFold (fun written (name, tys) ->
+                |> List.mapFold (fun written (name, isContextVariable, tys) ->
                     let here, rest = List.splitAt tys.Length written
-                    (name, String.concat " & " here), rest) boundWritten
+                    (name, (if isContextVariable then $"""[{String.concat ", " here}]""" else List.exactlyOne here)), rest) boundWritten
                 |> fst
             if typeWritten = declaredWritten then None
             else Some { Declared = declaredWritten; Bindings = bindings; Definition = symbol.Declaration })

@@ -32,20 +32,8 @@ def main = {
     runSource source |> assertRan "3 3.75 3\n-4 -2.5 -7\n5.0 20\n14 2.5 11\n"
 
 [<Fact>]
-let ``Run - an operator required by its member is passed the instance of the prelude's context`` () =
-    let source =
-        normalized """def add: [`+`: a, a -> a] = { + }
-def scale: [(`+`: a, a -> a) & (`*`: a, a -> a)] a, a -> a = { x, k -> x * k + x }
-@entry
-def main = {
-  println("{add(1, 2)} {add(1.5, 2.25)} {scale(3, 2)} {scale(1.5, 2.0)}")
-}
-"""
-    runSource source |> assertRan "3 3.75 9 4.5\n"
-
-[<Fact>]
 let ``Run - a def that compares values of two type variables calls each one's instance`` () =
-    // #690: `same2` is `[Eq(a) & Eq(b)] a, a, b, b -> bool`, and each `==` calls the member of its own instance.
+    // #690: `same2` is `[Eq(a), Eq(b)] a, a, b, b -> bool`, and each `==` calls the member of its own instance.
     let source =
         """
 def same2 = { x, y, p, q -> x == y and p == q }
@@ -62,8 +50,8 @@ def main = {
 let ``Run - arithmetic on two type variables calls each one's instance`` () =
     let source =
         """
-def both: [Add(a) & Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p - q) }
-def same: [Eq(a) & Eq(b)] a, a, b, b -> bool = { x, y, p, q -> x == y and p != q }
+def both: [Add(a), Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p - q) }
+def same: [Eq(a), Eq(b)] a, a, b, b -> bool = { x, y, p, q -> x == y and p != q }
 def r = { x, y, p, q -> (x + y, p * q) }
 def negated = { x, p -> (-x, -p) }
 def withSum = { x, y, xs -> (x + y, xs \list.sum) }

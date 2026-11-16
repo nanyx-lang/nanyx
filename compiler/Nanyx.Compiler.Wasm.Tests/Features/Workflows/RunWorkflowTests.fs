@@ -35,7 +35,7 @@ let ``Run - a builder takes parameters before its block`` () =
   return: a -> #some(a) | #failed
 )
 
-def retrying: [c] int, ([Retry & c] () -> #some(b) | #failed) -> #some(b) | #failed = { times, block ->
+def retrying: [c] int, ([Retry, c] () -> #some(b) | #failed) -> #some(b) | #failed = { times, block ->
   use Retry(
     try = {
       | #some(value), continue -> continue(value)
@@ -82,7 +82,7 @@ context Steps = (
   return: int -> int
 )
 
-def logged: [c & Log & Console] ([Steps & c] () -> int) -> int = { block ->
+def logged: [c, Log, Console] ([Steps, c] () -> int) -> int = { block ->
   log("start")
   use Steps(
     step = { name, continue ->

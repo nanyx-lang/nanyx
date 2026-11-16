@@ -220,7 +220,7 @@ def run: [Memory] ([Memory] () -> b) -> b = { mk -> memory { mk() } }
 let ``Only a scoped context is kept in the call that supplies it`` () =
     compileClean """context Log = (log: string -> ())
 
-def withConsoleLog: [Console & c] ([Log & c] () -> a) -> a = { body ->
+def withConsoleLog: [Console, c] ([Log, c] () -> a) -> a = { body ->
   use Log(log = { m -> println(m) })
   body()
 }

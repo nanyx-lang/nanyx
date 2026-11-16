@@ -423,8 +423,21 @@ let format (options: Options) (parsed: SourceModule) : string =
         // `context Name = ...` and `context type Name = ...` both give `[Context]`; the modifiers' order is kept.
         // `scoped` only comes before `context`, and is written first.
         let scoped = if List.exists TypeDefModifier.isScoped modifiers then text "scoped " else Doc.empty
+        // `[Tx] protected (...)`: the contexts whose scope a value belongs to come before the kind.
+        let inScopeOf =
+            match TypeDefModifier.scopeContexts modifiers with
+            | [] -> Doc.empty
+            | contexts -> text $"""[{contexts |> List.map fst |> String.concat ", "}] """
+        let isHeadModifier m =
+            match m with
+            | Private
+            | Protected
+            | Scoped _
+            | InScopeOf _ -> false
+            | Export
+            | Context -> true
         let head =
-            match modifiers |> List.filter (fun m -> m <> Private && m <> Protected && not (TypeDefModifier.isScoped m)) with
+            match modifiers |> List.filter isHeadModifier with
             | [ Context ] -> cat [ scoped; text $"context {name}" ]
             | [ Context; Export ] -> cat [ scoped; text $"export context {name}" ]
             | others ->
@@ -434,7 +447,8 @@ let format (options: Options) (parsed: SourceModule) : string =
                     | Context -> text "context "
                     | Private
                     | Protected
-                    | Scoped _ -> Doc.empty
+                    | Scoped _
+                    | InScopeOf _ -> Doc.empty
                 cat [ cat (List.map modifier others); text $"type {name}" ]
         let parameter (p, typeOpt) =
             match typeOpt with
@@ -444,7 +458,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             match parameters with
             | [] -> Doc.empty
             | _ -> cat [ text "("; commaJoin (List.map parameter parameters); text ")" ]
-        cat [ head; parametersDoc; text " = "; kind; typeBody body ]
+        cat [ head; parametersDoc; text " = "; inScopeOf; kind; typeBody body ]
 
     /// The type a type or context definition stands for. A record of more than three fields, or with a comment among
     /// them, has one field per line, named fields separated by newlines and positional ones followed by commas (the

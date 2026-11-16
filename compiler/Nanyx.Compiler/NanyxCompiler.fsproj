@@ -66,6 +66,7 @@
     <Compile Include="DuplicateDefinitions.fs" />
     <Compile Include="SyntaxTree.fs" />
     <Compile Include="DuplicateFields.fs" />
+    <Compile Include="ContextSeparators.fs" />
     <Compile Include="LocalRecursion.fs" />
     <Compile Include="MatchArmFixes.fs" />
     <Compile Include="MatchExhaustiveness.fs" />
@@ -77,6 +78,7 @@
     <Compile Include="RecordSpread.fs" />
     <Compile Include="PipeLookups.fs" />
     <Compile Include="Contexts.fs" />
+    <Compile Include="ScopedTypes.fs" />
     <Compile Include="ContextInstances.fs" />
     <Compile Include="ContextNames.fs" />
     <Compile Include="WorkflowRests.fs" />

@@ -65,7 +65,7 @@ def main = {
 - **A reusable handler is a function,** as it is in Koka:
 
   ```nanyx
-  def withConsoleLog: [Console & c] ([Log & c] () -> a) -> a = { body ->
+  def withConsoleLog: [Console, c] ([Log, c] () -> a) -> a = { body ->
     use Log(log = { m -> println(m) })
     body()
   }
@@ -79,7 +79,7 @@ def main = {
   }
   ```
 
-  The lambda passed to it is checked against `[Log & c] () -> a`, so its body has `Log`: it can call `log` and what
+  The lambda passed to it is checked against `[Log, c] () -> a`, so its body has `Log`: it can call `log` and what
   requires `Log`, and its type requires `Log`, which `withConsoleLog` supplies. Contexts it uses besides bind `c`, so
   `main` requires `Console`; where the parameter has no context variable they are NYX0227. A `[Log] () -> ()` with
   `withLog(body)` works the same. `Contexts.extendEnvForLambdaArgument` binds the members of the plain contexts the
@@ -117,7 +117,7 @@ def tryToFool = {
 ```
 
 Requiring `Memory` isn't enough, because every `memory` block supplies one. The prelude declares
-`memory: [c] ([Memory & c] () -> a) -> a`, and nothing stops `a` being `[Memory] () -> int`:
+`memory: [c] ([Memory, c] () -> a) -> a`, and nothing stops `a` being `[Memory] () -> int`:
 
 ```nanyx
 def counter = memory { mut y = 0; { y := y + 1; y } }   -- [Memory] () -> int
@@ -139,6 +139,10 @@ scoped export context Memory = protected ()
   function that supplies it starts a fresh, rigid scope. Every requirement of the context inside belongs to that
   scope, and the call's result type must not mention it. This is Haskell's `runST`, Koka's `local<h>` and Flix's
   regions, with the scope variable implied by the marker rather than written, so users never see it.
+- **A value can belong to a scope.** A type declared `type Cursor = [Tx] protected (...)` carries the scope of the `Tx`
+  each value was made under, so a value of it, or anything holding one, can't leave the call that supplies that `Tx`
+  either ([Types in a scope](../advanced/contexts#types-in-a-scope),
+  [#1521](https://github.com/nanyx-lang/nanyx/issues/1521)).
 - **Only scoped contexts are restricted.** Every other context keeps "require, don't capture", so
   `withConsoleLog { { log("x") } }` above may return a lambda that requires `Log`.
 - **Instances come only from their supplier.** A scoped context must be either `protected` or `private`, so only its own module can
@@ -167,7 +171,7 @@ memory { context m1 ->
 }
 ```
 
-`memory`'s block takes nothing, `memory: [c] ([Memory & c] () -> a) -> a`.
+`memory`'s block takes nothing, `memory: [c] ([Memory, c] () -> a) -> a`.
 
 ## Options considered
 
@@ -204,7 +208,7 @@ under a declared context, whose members are the builder's keywords. `proc` in `p
 ```nanyx fragment
 export context Proc = (try: ..., return: ..., zero: ..., for: ...)
 
-export def proc: [c] ([Proc & c] () -> #some(b) | r) -> #some(b) | r = { block ->
+export def proc: [c] ([Proc, c] () -> #some(b) | r) -> #some(b) | r = { block ->
   use Proc(
     try = {
       | #some(value), continue -> continue(value)
@@ -223,7 +227,7 @@ export def proc: [c] ([Proc & c] () -> #some(b) | r) -> #some(b) | r = { block -
   those names, with continuations, as before. The block's lambda requires the context, so the members are in scope
   in it by name (`Contexts.extendEnvForLambdaArgument`), and the builder's `use` supplies it. A keyword the context
   in scope has no member for is reported at the keyword (`WorkflowMembers`), as a missing `zero` or `for` was.
-- **The builder writes its type.** The block's type in it, `[Proc & c] () -> ...`, is what gives the block the
+- **The builder writes its type.** The block's type in it, `[Proc, c] () -> ...`, is what gives the block the
   members: the checker can't infer that `f` in `{ f -> use Proc(...) in f() }` requires `Proc`. A member that takes a
   continuation takes one with a context variable (`[c] a -> ...`), since the continuation calls members too.
 - **`apply` and `@workflow` are gone.** The builder function is what `apply` did, and what `@workflow` would have
@@ -364,7 +368,7 @@ The design draws the line there, and makes every helper a function that takes th
   }
   ```
 
-  - **It isn't a parameter.** The lambda's arity and type don't change: `memory`'s block is `[Memory & c] () -> a`,
+  - **It isn't a parameter.** The lambda's arity and type don't change: `memory`'s block is `[Memory, c] () -> a`,
     not `Memory -> a`, and a caller passes nothing for it.
   - **Which context.** When the lambda's type requires one context, `context x` names it. When it requires several,
     the name says which, `context m: Memory`, and a lambda can name more than one (`{ context m: Memory, context l:
@@ -392,7 +396,7 @@ The design draws the line there, and makes every helper a function that takes th
   local at the top of the body and writes `use l` as a `use` of a record of those locals, which the backend
   compiles already, inner lambdas that capture them included.
 - ~~`memory { m -> ... }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)) becomes
-  `memory { context m -> ... }`, and `memory`'s signature becomes `[c] ([Memory & c] () -> a) -> a`~~
+  `memory { context m -> ... }`, and `memory`'s signature becomes `[c] ([Memory, c] () -> a) -> a`~~
   ([#1446](https://github.com/nanyx-lang/nanyx/issues/1446)). Done: `ContextNames.bind` binds a name to the `Memory`
   of the `memory` block it is in (`MemoryCells.blockScope`), keeping the block's scope, and `use m` makes that scope
   the one a `mut` takes (`MemoryCells.withBlockScope`). A `use` of a name for a context without members loads

@@ -197,7 +197,7 @@ def exitProcess: [HostRuntime] int -> undefined = { code ->
 --| Runs `entry`, the program's entry point, with a `Console` that reads and writes the standard
   streams and an `Env` that reads what the program was started with. What `entry` returns is
   ignored.
-export def run: [HostRuntime] ([Console & Env] () -> a) -> () = { entry ->
+export def run: [HostRuntime] ([Console, Env] () -> a) -> () = { entry ->
   use Console(
     write = { text -> writeTo(1, text) }
     writeError = { text -> writeTo(2, text) }

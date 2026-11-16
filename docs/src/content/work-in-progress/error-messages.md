@@ -68,7 +68,7 @@ type with content.
   `|` (a lambda's pattern parameters), gets no fix.
 - **A def that needs a context its type does not declare offers to add it** (`ContextFixes.fs`): every error that
   says "add [C] to the type of 'f'" (an operator, `++`, an interpolation hole, a call, an ambient context such as
-  `Console`) has a fix that writes `C` after the contexts the type writes, joined with `&`, or in front of the type
+  `Console`) has a fix that writes `C` after the contexts the type writes, separated by `,`, or in front of the type
   as `[C] ` when it writes none. It reads where the type is written from `InferState.WrittenTypes`. A context the
   def could load with `use` instead is only named in the message.
 

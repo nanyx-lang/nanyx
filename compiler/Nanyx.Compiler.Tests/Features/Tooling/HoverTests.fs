@@ -369,7 +369,7 @@ let ``A workflow bind is not given the type of the rest of the workflow`` () =
   await: [c] (string, ([c] string -> int)) -> int
   return: int -> int
 )
-def async: [c] ([AsyncWorkflow & c] () -> int) -> int = { block ->
+def async: [c] ([AsyncWorkflow, c] () -> int) -> int = { block ->
   use AsyncWorkflow(await = { x, f -> f(x) }, return = { x -> x }) in block()
 }
 def result = async {
@@ -512,7 +512,7 @@ let ``Hover on a use of a standard library def shows the contexts it requires`` 
 def main = { println("hello") }
 """
     let source = source.ReplaceLineEndings "\n"
-    Assert.Equal(Some "def println: [Console & ToString(string)] string -> ()", hoverType source (offsetOf source "println" 0 0))
+    Assert.Equal(Some "def println: [Console, ToString(string)] string -> ()", hoverType source (offsetOf source "println" 0 0))
 
 [<Fact>]
 let ``An imported def's contexts name their variables together with its type`` () =

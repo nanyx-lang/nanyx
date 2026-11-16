@@ -72,7 +72,7 @@ def toCsvLine: Verdict -> string = { v ->
 }
 
 @entry
-def main: [Console & Http & FileSystem & Clock] () -> () = {
+def main: [Console, Http, FileSystem, Clock] () -> () = {
   def verdicts = shas \map(lookup)
 
   for verdicts | verdict ->

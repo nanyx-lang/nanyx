@@ -52,7 +52,7 @@ let ``Run - a context on a type variable the type does not use is reported at th
         """
 context Log = (log: string -> ())
 
-def greet: [Log & ToString(a)] string -> () = { name -> log("hello {name}") }
+def greet: [Log, ToString(a)] string -> () = { name -> log("hello {name}") }
 
 def main = {
   use Log(log = { m -> println(m) })
@@ -63,7 +63,7 @@ main()
 """
     let outcome = runSource (source.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains(":4:19: error NYX0236: ", outcome.StandardError)
+    Assert.Contains(":4:18: error NYX0236: ", outcome.StandardError)
     Assert.DoesNotContain("NYX0301", outcome.StandardError)
     Assert.DoesNotContain("NYX0205", outcome.StandardError)
 

@@ -27,7 +27,7 @@ The style linter helps teams keep APIs predictable and readable by flagging patt
 export def add = { a, b -> a + b }
 ```
 
-The rule (`unannotatedExports`) reports an exported top-level def that does not write its type, including one a `module name =` block exports. Other modules use it by its type, so the type belongs where a reader finds it rather than left to inference. Its fix writes the type the def was inferred to have after its name, as hover shows it, with the contexts it requires joined with `&`: `export def add: [Add(a)] a, a -> a = { a, b -> a + b }`. A destructuring def, `export def (low, high) = ...`, has no one name to write a type after, and is not reported.
+The rule (`unannotatedExports`) reports an exported top-level def that does not write its type, including one a `module name =` block exports. Other modules use it by its type, so the type belongs where a reader finds it rather than left to inference. Its fix writes the type the def was inferred to have after its name, as hover shows it, with the contexts it requires separated by `,`: `export def add: [Add(a)] a, a -> a = { a, b -> a + b }`. A destructuring def, `export def (low, high) = ...`, has no one name to write a type after, and is not reported.
 
 ## Unused local value
 
@@ -119,14 +119,6 @@ def f = {
 ```
 
 The rule (`strayDocComments`) reports a [doc comment](../getting-started/basics#doc-comments) that isn't followed by something it can document: a definition, a type or context, a member of a context, a field, a tag, or the module itself at the top of the file. Its fix makes it an ordinary `--` comment.
-
-## Contexts joined with `+`
-
-```nanyx
-def both: [Eq(a) + Hash(a)] a, a -> bool = { x, y -> x == y and hash(x) == hash(y) } -- Linter warning: Join contexts with `&`
-```
-
-The rule (`plusBetweenContexts`) reports a `+` between the contexts a function requires. Contexts are joined with `&`, as in `[Eq(a) & Hash(a)]` (see [Contexts](../advanced/contexts)); `+` is what an earlier version of the language wrote, and the compiler still reads it. Its fix replaces the `+` with `&`, and the formatter writes `&` too. A member's type runs on past a `&`, so the fix also brackets a member before the `+`: `` [`+`: a, a -> a + Eq(a)] `` becomes `` [(`+`: a, a -> a) & Eq(a)] ``.
 
 ## Unreachable code path
 

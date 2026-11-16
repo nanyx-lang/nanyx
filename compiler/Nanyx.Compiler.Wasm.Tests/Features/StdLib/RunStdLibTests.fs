@@ -491,7 +491,7 @@ println("{a} {b} {c} {d} {e} {f} {g}")
 
 [<Fact>]
 let ``Run - nanyx/math abs takes an int or a float`` () =
-    // #610: `abs` is `[Num(a) & Ord(a)] a -> a`; it took an `int` only.
+    // #610: `abs` is `[Num(a), Ord(a)] a -> a`; it took an `int` only.
     let source =
         normalized """import nanyx/math as math
 
@@ -522,7 +522,7 @@ def a, b = math.minMax(7, 3)
 def c, d = math.minMax(3, 7)
 def e, f = math.minMax(2.5, -1.5)
 def g, h = math.minMax("pear", "apple")
-def spread: [Num(a) & Ord(a)] a, a -> a = { p, q ->
+def spread: [Num(a), Ord(a)] a, a -> a = { p, q ->
   def low, high = math.minMax(p, q)
   high - low
 }
@@ -551,7 +551,7 @@ let ``Run - nanyx/math abs, min and max are called from generic functions`` () =
         normalized """import nanyx/math as math
 
 def double: [Num(a)] a -> a = { x -> x * 2 }
-def distance: [Num(a) & Ord(a)] a, a -> a = { p, q -> math.abs(p - q) }
+def distance: [Num(a), Ord(a)] a, a -> a = { p, q -> math.abs(p - q) }
 def widest: [Ord(a)] a, a, a -> a = { p, q, r -> math.max(p, math.max(q, r)) }
 println("{double(21)} {double(1.5)}")
 println("{distance(3, 10)} {distance(1.5, 0.25)}")

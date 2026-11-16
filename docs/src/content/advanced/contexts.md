@@ -71,6 +71,32 @@ scoped export context Memory = protected ()
 
 A scoped context must be either `protected` or `private`, so that each of its instances comes from the function its module provides to supply it: `scoped context Tx = (...)` is an error. Any module may declare one. What requires a scoped context leaving its scope is NYX0233.
 
+## Types in a scope
+
+A protected or private type can belong to a scoped context's scope: its declaration writes the context before its kind. Each value of the type belongs to the scope of the context it was made under, so it can't leave the call that supplies that context, and neither can anything holding it:
+
+```nanyx fragment
+scoped export context Tx = private ()
+
+export type Cursor = [Tx] protected (query: string, row: int)
+
+export def transaction: [c] ([Tx, c] () -> a) -> a = { block -> block() }
+export def open: [Tx] string -> Cursor = { query -> Cursor(query = query, row = 0) }
+export def next: [Tx] Cursor -> int = { c -> c.row + 1 }
+
+def row = transaction {
+  def c = open("select")
+  next(c)          -- fine
+}
+
+def leaks = transaction {
+  def c = open("select")
+  c                -- error NYX0233: the result of this 'transaction' call requires its 'Tx' through 'c'
+}
+```
+
+The type is written and shown as plain `Cursor`: the scope is never written. Making one requires the context, as calling a function that requires it does, and so does using one through functions like `next`; holding or passing one requires nothing. The type can take parameters as usual, as `type MRef(a) = [Memory] protected (...)` does, and the scope isn't one of them. Only a scoped context can be written there, and only one (NYX0252). Contexts written on any other type that isn't a function, as in `x: [Console] int`, are an error (NYX0253).
+
 # Requiring a context
 
 A function can specify required contexts in its type signature. Here, `sayHello` can call `println` because it runs in `Console`. The real `Console`, which the console host provides to every program, has a few more members, and `println` is a function written on top of its `write`:
@@ -236,15 +262,15 @@ Each call to `twice` then finds a `Show` for the type it is called with, as a ca
 
 This is also how scoped mutation is enforced: values that still require `memory` cannot escape into code that does not provide that context. See [Memory: Values cannot escape memory scope](../advanced/memory#values-cannot-escape-memory-scope).
 
-Which types other than functions will carry contexts (a type declared generic in contexts, or belonging to a scoped context's scope) is planned in [Work in progress: Context-qualified types](../work-in-progress/context-qualified-types).
+A type can also belong to a scoped context's scope, as [Types in a scope](#types-in-a-scope) describes. A type declared generic in contexts is planned in [Work in progress: Context-qualified types](../work-in-progress/context-qualified-types).
 
 # Combining contexts
 
-You can require multiple contexts by joining them with `&`:
+You can require several contexts by listing them, separated by `,`:
 
 ```nanyx
 def readAndPrintFile
-  : [Console & FileSystem] string -> ()
+  : [Console, FileSystem] string -> ()
   = { path ->
     def contents = openFile(path).contents
     println(contents)
@@ -289,17 +315,7 @@ def inc = { x -> x + 1 }                    -- int -> int: `1` is an int
 
 Adding and multiplying values of one type needs `Num` alone, which has every member of `Add`. A function inside another function requires no contexts, so its arithmetic is on ints or floats. For now the same goes for a function with operators on two different type variables, and for one the module passes as a value, as `add` in `xs \list.fold(0, add)`: see [Operator contexts](../work-in-progress/operator-contexts#functions-that-do-not-write-their-type).
 
-A function's type can also require an operator by its member instead of by the context's name. It means the same as naming the prelude's context that has the member:
-
-```nanyx
-def add: [`+`: a, a -> a] = { + }                           -- [Add(a)] a, a -> a
-def scale: [(`+`: a, a -> a) & (`*`: a, a -> a)] a, a -> a  -- [Num(a)] a, a -> a
-  = { x, k -> x * k + x }
-```
-
-A member's type runs to the end of the brackets, a `&` in it being an intersection of types, so a member among other contexts goes in brackets of its own: `` [(`+`: a, a -> a) & Eq(a)] ``.
-
-Only an operator that is a member of one of the prelude's contexts can be required this way; any other member is required by naming its context, as `[ToString(a)]`.
+Where a function's operators don't fit one context, its type lists the contexts they need: `[Ord(a), Add(a)]`. A context list holds contexts and context variables only; requiring an operator by its member, as in `` [`+`: a, a -> a] ``, is an error (`NYX0251`) whose fix writes the context that has it, `Add(a)`.
 
 Contexts with associated types, members whose value is a type, are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
 
@@ -492,7 +508,7 @@ surround([0], [1, 2])    -- [0, 1, 2, 0]
 
 A function that writes its type and joins values of a type variable without `[Append(a)]` is an error that says to add it, and `def join = { x, y -> x ++ y }` is `[Append(a)] a, a -> a`. So `join(1, 2)` is an error at the call: an `int` has no `++`.
 
-These contexts compose naturally. For example, a generic algorithm can require both `Eq(a)` and `Default(a)` by declaring `[Eq(a) & Default(a)]`.
+These contexts compose naturally. For example, a generic algorithm can require both `Eq(a)` and `Default(a)` by declaring `[Eq(a), Default(a)]`.
 
 ## ToString(a)
 

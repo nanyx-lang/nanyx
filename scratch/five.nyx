@@ -12,7 +12,7 @@ context CAdd = (
     add: (int, int) -> int
 )
 
-def g: [Console + CAdd] = { s ->
+def g: [Console, CAdd] = { s ->
     def r = add(4, 5)
     println(s)
     println(r)

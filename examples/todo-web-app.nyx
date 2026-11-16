@@ -27,7 +27,7 @@ def exists: (#some(Todo) | #notFound) -> #some(Todo) | #error(#todoDoesNotExist)
   | #notFound -> #error(#todoDoesNotExist)
 }
 
-export def createProtocol: [TodoStore & Clock] () -> TodoProtocol = {
+export def createProtocol: [TodoStore, Clock] () -> TodoProtocol = {
   TodoProtocol(
     allTodos = { async { findAll() } }
 
@@ -88,7 +88,7 @@ export def withInMemoryStore: [Clock] ([TodoStore] () -> a) -> a = { action ->
   }
 }
 
-export def seedInitialData: [TodoStore & Clock] () -> () = {
+export def seedInitialData: [TodoStore, Clock] () -> () = {
   for ["Learn Nanyx", "Write a web app", "Ship it"] | description ->
     insert(newTodo(description))
 }

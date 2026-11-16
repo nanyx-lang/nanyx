@@ -14,7 +14,7 @@ let ``A context on a type variable used nowhere else in the type is an error at 
             """
 context Log = (log: string -> ())
 
-def greet: [Log & ToString(a)] string -> () = { name -> log("hello {name}") }
+def greet: [Log, ToString(a)] string -> () = { name -> log("hello {name}") }
 """
     Assert.Equal(DiagnosticCodes.UndeterminedContextType.Code, code)
     Assert.Equal("ToString(a)", text)
@@ -49,7 +49,7 @@ let ``A hole in a def whose type writes only ToString(a) says that a is not the 
             """
 context Log = (log: string -> ())
 
-def greet: [Log & ToString(a)] = { name -> log("hello {name}") }
+def greet: [Log, ToString(a)] = { name -> log("hello {name}") }
 """
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)

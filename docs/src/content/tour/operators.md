@@ -58,7 +58,7 @@ The operator is found by the type of its left operand, exactly as any other atta
 
 `x ** n` is `x` to the power `n`: it binds tighter than every other infix operator and groups to the right, so `2 * 3 ** 2` is `2 * 9` and `2 ** 3 ** 2` is `2 ** 9`, 512. As prefix `-` binds tighter still, `-x ** 2` is `(-x) ** 2`. It is not a member of a context: `x ** n` is the prelude's `pow(x, n)`, `[Num(a)] (a, int) -> a`, so it works on any number type, and the exponent is an `int`. A negative exponent is `1 / x ** -n`, which truncates on an `int`. For a fractional exponent, use `float.pow(x, y)`.
 
-Generic code that needs an operator on an unknown type declares a context requirement instead, such as `[Add(a)]`, and the compiler synthesises the instance from the type's attached definitions (see [Contexts](../advanced/contexts)). A function that does not write its type has the requirement inferred, so `def add = { x, y -> x + y }` is `[Add(a)] a, a -> a`, and a type can require an operator by its member, as `` [`+`: a, a -> a] `` (see [Operators find their context](../advanced/contexts#operators-find-their-context)). A `use` can give an `Add` to a type that has none of its own, but it can't replace one a type has: `use Add(int)(...)` is an error, so `1 + 2` is always `3` (see [A type's own instance wins](../advanced/contexts#a-types-own-instance-wins)).
+Generic code that needs an operator on an unknown type declares a context requirement instead, such as `[Add(a)]`, and the compiler synthesises the instance from the type's attached definitions (see [Contexts](../advanced/contexts)). A function that does not write its type has the requirement inferred, so `def add = { x, y -> x + y }` is `[Add(a)] a, a -> a` (see [Operators find their context](../advanced/contexts#operators-find-their-context)). A `use` can give an `Add` to a type that has none of its own, but it can't replace one a type has: `use Add(int)(...)` is an error, so `1 + 2` is always `3` (see [A type's own instance wins](../advanced/contexts#a-types-own-instance-wins)).
 
 Comparison is read through the standard library's contexts instead: `==` and `!=` through [`Eq(a)`](../advanced/contexts#eqa), and `<`, `<=`, `>` and `>=` through [`Ord(a)`](../advanced/contexts#orda), whose one member is `compare`. Numbers, strings, tuples and lists are ordered already; a nominal type is ordered by attaching a `compare`, and records and tags have no order. A function that orders values of one of its type variables requires `[Ord(a)]`. A `use` can't change what `<` or `==` means for a type that has its own order or equality; to order by something else, sort with `list.sortBy` and a key.
 
@@ -146,7 +146,7 @@ Some sequences built from operator characters are syntax, not operators, and can
 | `:=` | Assignment |
 | `=>` | Map entry |
 | `\|` | Match arm, or-pattern, union type |
-| `&` | And-pattern, intersection type, context combination |
+| `&` | And-pattern, intersection type |
 | `#` | Tag prefix |
 | `@` | Attribute prefix |
 | `$` | Before a type's name, as [nominal types](../advanced/nominal-and-protected-types#before-protected) were once written |

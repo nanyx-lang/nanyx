@@ -21,7 +21,7 @@ println(prices("pie"))
 
 A literal whose items are all `key => value` is a `map(k, v)`. A key written twice in a literal holds the value written last. `[]` is always the empty list; the empty map is `map.empty`. `for prices | name, price -> ...` walks a map's entries.
 
-A map's keys need an [`Eq`](../advanced/contexts#eqa) and a [`Hash`](../advanced/contexts#hasha) of their type, so every function that looks one up requires `[Eq(k) & Hash(k)]`. Numbers, strings, tags, records, tuples and lists can all be keys, and so can a nominal type that attaches its own `==` and `hash`; a type that holds a function cannot, and nor can a nominal type that attaches `==` without `hash`. When the keys are tags of different names, write the key type, as in `def lights: map(#red | #green, string) = ...`: inference does not yet join the tags of separate keys. Two maps are `==` when they hold the same keys, each with an equal value, whatever order the keys were added in; the values are compared by their own `Eq`. Maps cannot be ordered with `<`, or be keys themselves, yet.
+A map's keys need an [`Eq`](../advanced/contexts#eqa) and a [`Hash`](../advanced/contexts#hasha) of their type, so every function that looks one up requires `[Eq(k), Hash(k)]`. Numbers, strings, tags, records, tuples and lists can all be keys, and so can a nominal type that attaches its own `==` and `hash`; a type that holds a function cannot, and nor can a nominal type that attaches `==` without `hash`. When the keys are tags of different names, write the key type, as in `def lights: map(#red | #green, string) = ...`: inference does not yet join the tags of separate keys. Two maps are `==` when they hold the same keys, each with an equal value, whatever order the keys were added in; the values are compared by their own `Eq`. Maps cannot be ordered with `<`, or be keys themselves, yet.
 
 A map can be printed and interpolated when its keys and values can: it is written as its literal is, its entries in the order its keys were first added, each key and value by its own [`ToString`](prelude-contexts#tostring). The empty map is written `[=>]`.
 
@@ -42,7 +42,7 @@ println(set.count(seen))
 -- 3
 ```
 
-A set's elements need an `Eq` and a `Hash` of their type, as a map's keys do, so every function that looks one up requires `[Eq(a) & Hash(a)]`. Two sets are `==` when they hold the same elements, whatever order they were added in. Sets cannot be ordered with `<`, or be keys or elements of a set, yet. A set can be printed and interpolated when its elements can: it is written as `set.toList` of it would be, `"{set.fromList([3, 1, 3])}"` as `"[3, 1]"`.
+A set's elements need an `Eq` and a `Hash` of their type, as a map's keys do, so every function that looks one up requires `[Eq(a), Hash(a)]`. Two sets are `==` when they hold the same elements, whatever order they were added in. Sets cannot be ordered with `<`, or be keys or elements of a set, yet. A set can be printed and interpolated when its elements can: it is written as `set.toList` of it would be, `"{set.fromList([3, 1, 3])}"` as `"[3, 1]"`.
 
 # Reference
 
@@ -59,7 +59,7 @@ The map with no keys. A map literal has at least one entry, since [] is the empt
 ## `map.fromList`
 
 ```nanyx fragment
-def map.fromList: [Eq(k) & Hash(k)] list((k, v)) -> map(k, v)
+def map.fromList: [Eq(k), Hash(k)] list((k, v)) -> map(k, v)
 ```
 
 The map holding each of `entries`, in order: of two entries with the same key, the later wins.
@@ -75,7 +75,7 @@ The entries of `m`, each a key and its value, in the order the keys were first a
 ## `map.get`
 
 ```nanyx fragment
-def map.get: [Eq(k) & Hash(k)] map(k, v), k -> #some(v) | #notFound
+def map.get: [Eq(k), Hash(k)] map(k, v), k -> #some(v) | #notFound
 ```
 
 The value `m` holds for `key`, or `#notFound`. Calling the map, `m(key)`, is the same.
@@ -83,7 +83,7 @@ The value `m` holds for `key`, or `#notFound`. Calling the map, `m(key)`, is the
 ## `map.containsKey`
 
 ```nanyx fragment
-def map.containsKey: [Eq(k) & Hash(k)] map(k, v), k -> bool
+def map.containsKey: [Eq(k), Hash(k)] map(k, v), k -> bool
 ```
 
 Whether `m` holds a value for `key`.
@@ -91,7 +91,7 @@ Whether `m` holds a value for `key`.
 ## `map.insert`
 
 ```nanyx fragment
-def map.insert: [Eq(k) & Hash(k)] map(k, v), k, v -> map(k, v)
+def map.insert: [Eq(k), Hash(k)] map(k, v), k, v -> map(k, v)
 ```
 
 `m` with `key` holding `value`, in place of any value it held before.
@@ -99,7 +99,7 @@ def map.insert: [Eq(k) & Hash(k)] map(k, v), k, v -> map(k, v)
 ## `map.remove`
 
 ```nanyx fragment
-def map.remove: [Eq(k) & Hash(k)] map(k, v), k -> map(k, v)
+def map.remove: [Eq(k), Hash(k)] map(k, v), k -> map(k, v)
 ```
 
 `m` without `key` or its value. A map that has no `key` is given back as it is.
@@ -115,7 +115,7 @@ The number of keys.
 ## `list.groupBy`
 
 ```nanyx fragment
-def list.groupBy: [Eq(b) & Hash(b) & c] list(a), ([c] a -> b) -> map(b, list(a))
+def list.groupBy: [Eq(b), Hash(b), c] list(a), ([c] a -> b) -> map(b, list(a))
 ```
 
 The elements of `xs` grouped by `key`: a map from each key to the elements that have it, in
@@ -172,7 +172,7 @@ The entries of `m` whose key and value pass `keep`, in the same order.
 ## `map.update`
 
 ```nanyx fragment
-def map.update: [Eq(k) & Hash(k) & c] map(k, v), k, ([c] #some(v) | #notFound -> v) -> map(k, v)
+def map.update: [Eq(k), Hash(k), c] map(k, v), k, ([c] #some(v) | #notFound -> v) -> map(k, v)
 ```
 
 `m` with `key` holding `f` of what `m` holds for it, `#some(value)` or `#notFound`. A key `m`
@@ -181,7 +181,7 @@ does not have is added at the end.
 ## `map.union`
 
 ```nanyx fragment
-def map.union: [Eq(k) & Hash(k)] map(k, v), map(k, v) -> map(k, v)
+def map.union: [Eq(k), Hash(k)] map(k, v), map(k, v) -> map(k, v)
 ```
 
 The entries of `m`, then those of `other` whose keys `m` does not have. Where both have a key,
@@ -191,7 +191,7 @@ gives the overrides.
 ## `map.unionWith`
 
 ```nanyx fragment
-def map.unionWith: [Eq(k) & Hash(k) & c] map(k, v), map(k, v), ([c] (v, v) -> v) -> map(k, v)
+def map.unionWith: [Eq(k), Hash(k), c] map(k, v), map(k, v), ([c] (v, v) -> v) -> map(k, v)
 ```
 
 As `map.union`, but where both have a key the value is `combine` of `m`'s value and `other`'s.
@@ -207,7 +207,7 @@ The set with no elements.
 ## `set.fromList`
 
 ```nanyx fragment
-def set.fromList: [Eq(a) & Hash(a)] list(a) -> set(a)
+def set.fromList: [Eq(a), Hash(a)] list(a) -> set(a)
 ```
 
 The set of the elements of `xs`, each once, in the order they first appear.
@@ -223,7 +223,7 @@ The elements of `s`, in the order they were first added.
 ## `set.contains`
 
 ```nanyx fragment
-def set.contains: [Eq(a) & Hash(a)] set(a), a -> bool
+def set.contains: [Eq(a), Hash(a)] set(a), a -> bool
 ```
 
 Whether `s` holds `x`.
@@ -231,7 +231,7 @@ Whether `s` holds `x`.
 ## `set.insert`
 
 ```nanyx fragment
-def set.insert: [Eq(a) & Hash(a)] set(a), a -> set(a)
+def set.insert: [Eq(a), Hash(a)] set(a), a -> set(a)
 ```
 
 `s` with `x` added at the end. A set that holds `x` is given back as it is.
@@ -239,7 +239,7 @@ def set.insert: [Eq(a) & Hash(a)] set(a), a -> set(a)
 ## `set.remove`
 
 ```nanyx fragment
-def set.remove: [Eq(a) & Hash(a)] set(a), a -> set(a)
+def set.remove: [Eq(a), Hash(a)] set(a), a -> set(a)
 ```
 
 `s` without `x`. A set that does not hold `x` is given back as it is.
@@ -271,7 +271,7 @@ def set.fold: [c] set(a), b, ([c] (b, a) -> b) -> b
 ## `set.map`
 
 ```nanyx fragment
-def set.map: [Eq(b) & Hash(b) & c] set(a), ([c] a -> b) -> set(b)
+def set.map: [Eq(b), Hash(b), c] set(a), ([c] a -> b) -> set(b)
 ```
 
 The set of `f` of each element of `s`. Elements that `f` makes equal are kept once, where the
@@ -288,7 +288,7 @@ The elements of `s` that pass `keep`, in the same order.
 ## `set.isSubset`
 
 ```nanyx fragment
-def set.isSubset: [Eq(a) & Hash(a)] set(a), set(a) -> bool
+def set.isSubset: [Eq(a), Hash(a)] set(a), set(a) -> bool
 ```
 
 Whether `t` holds every element of `s`.
@@ -296,7 +296,7 @@ Whether `t` holds every element of `s`.
 ## `set.union`
 
 ```nanyx fragment
-def set.union: [Eq(a) & Hash(a)] set(a), set(a) -> set(a)
+def set.union: [Eq(a), Hash(a)] set(a), set(a) -> set(a)
 ```
 
 The elements of `s`, then those of `t` that `s` does not hold.
@@ -304,7 +304,7 @@ The elements of `s`, then those of `t` that `s` does not hold.
 ## `set.intersection`
 
 ```nanyx fragment
-def set.intersection: [Eq(a) & Hash(a)] set(a), set(a) -> set(a)
+def set.intersection: [Eq(a), Hash(a)] set(a), set(a) -> set(a)
 ```
 
 The elements of `s` that `t` holds too, in the order of `s`.
@@ -312,7 +312,7 @@ The elements of `s` that `t` holds too, in the order of `s`.
 ## `set.difference`
 
 ```nanyx fragment
-def set.difference: [Eq(a) & Hash(a)] set(a), set(a) -> set(a)
+def set.difference: [Eq(a), Hash(a)] set(a), set(a) -> set(a)
 ```
 
 The elements of `s` that `t` does not hold, in the order of `s`.

@@ -328,7 +328,7 @@ def busiest: int, int, int, list(int) -> int = { hour, bestHour, best, amounts -
 
 context Log = (log: [Console] string -> ())
 
-def heading: [Log & Console] string -> () = { title ->
+def heading: [Log, Console] string -> () = { title ->
   log("== " ++ string.uppercase(title) ++ " ==")
 }
 

@@ -133,9 +133,12 @@ module Unifier =
             match v.Name with
             | Some name -> name
             | None -> $"t{v.Id}"
-        | TyNominal(nominal, [], _, _) -> nominal.Name
-        | TyNominal(nominal, [ arg ], _, _) -> $"{nominal.Name}({soleArgument arg})"
-        | TyNominal(nominal, args, _, _) -> $"{nominal.Name}({items args})"
+        // A type in a scoped context's scope is written without the scope, as `mut T` is: `Cursor`, `MRef(int)`.
+        | TyNominal(nominal, args, _, _) ->
+            match args |> List.filter (function FunctionContexts.ScopedContext _ -> false | _ -> true) with
+            | [] -> nominal.Name
+            | [ arg ] -> $"{nominal.Name}({soleArgument arg})"
+            | args -> $"{nominal.Name}({items args})"
         // An alias is written by name, as the user wrote it: `Customer`, `Validator(int)`.
         | TyAlias(name, [], _) -> name
         | TyAlias(name, [ arg ], _) -> $"{name}({soleArgument arg})"
@@ -153,7 +156,7 @@ module Unifier =
             match writtenContexts contexts |> List.map FunctionContexts.withoutScope with
             | [] -> $"{argText} -> {retText}"
             | written ->
-                $"""[{written |> List.map (printTy spread false) |> String.concat " & "}] {argText} -> {retText}"""
+                $"""[{written |> List.map (printTy spread false) |> String.concat ", "}] {argText} -> {retText}"""
         | TyRecord fields ->
             match tryTupleLikeRecord fields with
             | Some tupleItems, namedFields ->

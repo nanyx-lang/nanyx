@@ -63,7 +63,7 @@ def retry: [Clock] (times: int, delay: int -> Duration, operation: () -> #some(a
 -- Refresh the attestation if it is missing or expired. Returns the new cache;
 -- the old one is unchanged.
 export def AttestationCache.refresh
-  : [Clock & Attester] AttestationCache -> #some(AttestationCache) | #error(#attestationFailed)
+  : [Clock, Attester] AttestationCache -> #some(AttestationCache) | #error(#attestationFailed)
   = { cache ->
     if not cache.needsRefresh then #some(cache)
     else proc {

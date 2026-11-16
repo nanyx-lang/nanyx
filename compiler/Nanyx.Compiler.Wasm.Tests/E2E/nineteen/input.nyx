@@ -1,7 +1,7 @@
 context Println = (println: string -> ())
 context Add = (add: (int, int) -> int)
 
-def f: [Println & Add] = {
+def f: [Println, Add] = {
   println("Hello")
   add(3, 4)
 }

@@ -46,7 +46,7 @@ let internal read
     (typeOpt: TypeExpr option)
     (expr: Expression)
     : Result<ReadAnnotation * InferState, Diagnostic list> =
-    let typeOpt, inlineContextsRead = readInlineContexts state typeOpt
+    let memberRequirements = checkMemberRequirements state typeOpt
     let span = declarationSpan state DefValue expr
     let contextsExist =
         match fst (extractContextFromTypeExpr typeOpt) with
@@ -76,7 +76,7 @@ let internal read
         match typeOpt with
         | Some context when name = UseInstanceSyntax.name -> ensureInstanceContextExists state context
         | _ -> ensureTypesExist state (Option.toList typeOpt))
-    |> Result.bind (fun () -> inlineContextsRead)
+    |> Result.bind (fun () -> memberRequirements)
     |> Result.bind (fun () -> contextsExist)
     |> Result.bind (fun () -> extraCheck)
     |> Result.bind (fun () -> typeOfsInferred)
@@ -106,9 +106,11 @@ let internal read
         state)
 
 /// The errors in the type definition `name`, checked once it is registered in `state`, so that it can name itself: a
-/// `typeof` or `_` in it, or else a scoped context that is not nominal, a type it names that does not exist, and a
-/// reference to itself that nothing guards.
+/// `typeof` or `_` in it, or else a scoped context that is not nominal, a scope it cannot belong to, a type it names
+/// that does not exist, and a reference to itself that nothing guards.
 let internal typeDefErrors (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
     match typeOfInTypeDef name body parameters @ TypeHoles.inTypeDef name body parameters with
-    | [] -> unnominalScopedContext name modifiers @ unknownTypesInTypeDef state body parameters @ unguardedSelfReferences name modifiers body
+    | [] ->
+        unnominalScopedContext name modifiers @ typeScopeErrors state name modifiers @ unknownTypesInTypeDef state body parameters
+        @ unguardedSelfReferences name modifiers body
     | errors -> errors

@@ -99,12 +99,12 @@ context Clock = (now: () -> int)
 """
     Assert.Equal(
         "'g' requires the contexts 'Log' and 'Clock', which are not available here",
-        message (contexts + (normalized """def g: [Log & Clock] () -> () = { log("hi") }
+        message (contexts + (normalized """def g: [Log, Clock] () -> () = { log("hi") }
 def h = { g() }""")))
     // A context the caller has is not listed.
     Assert.Equal(
         "'g' requires the context 'Clock', which is not available here",
-        message (contexts + (normalized """def g: [Log & Clock] () -> () = { log("hi") }
+        message (contexts + (normalized """def g: [Log, Clock] () -> () = { log("hi") }
 def h: [Log] () -> () = { g() }""")))
 
 [<Fact>]

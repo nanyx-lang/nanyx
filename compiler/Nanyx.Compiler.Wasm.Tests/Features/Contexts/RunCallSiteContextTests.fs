@@ -23,7 +23,7 @@ use Foo(bar = { s -> "outer " ++ s }) in println(main())
 let ``Run - a closure made under one use of a context and called under another uses the second`` () =
     let source = """context Foo = (bar: string -> string)
 
-def show: [Foo & Console] () -> () = {
+def show: [Foo, Console] () -> () = {
   def f = { bar("x") }
   println(f())
   use Foo(bar = { s -> "second " ++ s }) in println(f())
@@ -37,7 +37,7 @@ use Foo(bar = { s -> "first " ++ s }) in show()
 let ``Run - closures stored in a list use the instance where each is called`` () =
     let source = """context Foo = (bar: string -> string)
 
-def show: [Foo & Console] () -> () = {
+def show: [Foo, Console] () -> () = {
   def fs = [{ bar("a") }, { bar("b") }]
   for fs | f -> println(f())
   use Foo(bar = { s -> "second " ++ s })
@@ -58,7 +58,7 @@ def twice: [c] ([c] string -> string), string -> string = { f, s ->
   use Foo(bar = { t -> "inner " ++ t }) in f(f(s))
 }
 
-def main: [Foo & Console] () -> () = { println(twice(greet, "x")) }
+def main: [Foo, Console] () -> () = { println(twice(greet, "x")) }
 
 use Foo(bar = { s -> "outer " ++ s }) in main()
 """
@@ -70,7 +70,7 @@ let ``Run - a pure lambda given where a function that requires a context is expe
 
 def apply: [Foo] ([Foo] string -> string), string -> string = { f, s -> f(s) }
 
-def main: [Foo & Console] () -> () = { println(apply({ s -> s ++ "!" }, "x")) }
+def main: [Foo, Console] () -> () = { println(apply({ s -> s ++ "!" }, "x")) }
 
 use Foo(bar = { s -> s }) in main()
 """

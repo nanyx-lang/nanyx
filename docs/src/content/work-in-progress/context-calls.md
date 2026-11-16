@@ -21,7 +21,7 @@ fold small functions such as `println` into their callers.
 # What a call costs
 
 Since printing takes any value with a `ToString` ([ToString(a)](../advanced/contexts#tostringa)), `println` is an
-ordinary function, `[Console & ToString(a)] a -> ()` ([#726](https://github.com/nanyx-lang/nanyx/issues/726)), that
+ordinary function, `[Console, ToString(a)] a -> ()` ([#726](https://github.com/nanyx-lang/nanyx/issues/726)), that
 writes `toString(value)` through `Console`'s `write`. The printing functions are not members of `Console` because a
 context member can't be generic with a requirement of its own: a member is passed as a closure, and a closure has no
 `ToString` to take. Before specialising on known members

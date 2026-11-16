@@ -6,7 +6,7 @@ order: 9
 
 > **Status: implemented for the arithmetic operators and `++`.** `Nanyx.Compiler/OperatorContexts.fs` finds an
 > operator's context, `ArithmeticInference.fs` infers the requirement for a function that does not write its type, and
-> `InlineContexts.fs` reads a requirement written as a member. What is left is under [Not done yet](#not-done-yet).
+> `InlineContexts.fs` reports a requirement written as a member (`NYX0251`), which the language no longer has. What is left is under [Not done yet](#not-done-yet).
 
 # The idea
 
@@ -77,8 +77,8 @@ Operators on two of the function's type variables require the contexts of each, 
 of its own variable's instance:
 
 ```nanyx
-def r = { x, y, p, q -> (x + y, p * q) }          -- [Add(a) & Num(b)] a, a, b, b -> (a, b)
-def same2 = { x, y, p, q -> x == y and p == q }   -- [Eq(a) & Eq(b)] a, a, b, b -> bool
+def r = { x, y, p, q -> (x + y, p * q) }          -- [Add(a), Num(b)] a, a, b, b -> (a, b)
+def same2 = { x, y, p, q -> x == y and p == q }   -- [Eq(a), Eq(b)] a, a, b, b -> bool
 ```
 
 Two cases keep their operators on ints, as they were, because the requirement could not be used yet:
@@ -114,7 +114,7 @@ This replaces the numeric contexts page's "unannotated arithmetic is unchanged":
 A function can require two contexts with a member of the same name, of different type variables:
 
 ```nanyx
-def both: [Add(a) & Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p + q) }
+def both: [Add(a), Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p + q) }
 ```
 
 Both `` `+` ``s are bound to the name in the body, so the name alone does not say which an operator calls. An
@@ -126,39 +126,6 @@ key. An operator in a function whose requirement is inferred is recorded with th
 
 A call to a member by its name, `show(x)`, still finds whichever is bound last when two contexts have a member of
 that name.
-
-# Requiring an operator by its member
-
-**Going** ([#1531](https://github.com/nanyx-lang/nanyx/issues/1531)), decided by the maintainer: a context list will
-hold only contexts and context variables. This form was only ever another way of writing the prelude's context that
-has the member, which inference already finds, so writing one becomes an error whose fix writes the context's name.
-Where a body's operators don't fit one context, the contexts are written out, `[Ord(a), Add(a)]`. What follows is how
-it works until then.
-
-A function's type can require an operator by the member it reads, rather than by the context's name:
-
-```nanyx
-def add: [`+`: a, a -> a] = { + }
-def scale: [(`+`: a, a -> a) & (`*`: a, a -> a)] a, a -> a = { x, k -> x * k + x }
-```
-
-This is not a context of its own. Before the def is checked, each such requirement is read as the prelude's
-context that has the member, at the type the member's type is written for. So `add` is `[Add(a)] a, a -> a` and
-`scale` is `[Num(a)] a, a -> a`, exactly as if they said so: a call passes the whole instance, hovers show the
-context's name, and the body can use the context's other members.
-
-- The member's type is a list of types, as a def's is: `a, a -> a` and `(a, a) -> a` are the same.
-- It must be the member's type in the context: `` [`+`: a -> a] `` is `NYX0201`.
-- Only an operator can be required this way. `[toString: a -> string]` is `NYX0108`, which says to write
-  `[ToString(a)]`.
-- Only members of the prelude's contexts can. `` [`<`: a, a -> bool] `` is `NYX0108`, since `<` reads `Ord`'s
-  `compare`, and the message says to write `[Ord(a)]`.
-- Requirements written both ways are merged: ``[Add(a) & (`+`: a, a -> a)]`` is `[Add(a)]`.
-- A def that writes only its contexts, as `add` above does, is given the type it would have written, so a call can
-  read the context's argument from it. This also makes `def sub: [Add(a)] = { x, y -> x - y }` callable, which it
-  was not (`ContextInference.writtenType`).
-
-The formatter writes the member's type without brackets: `` [`+`: a, a -> a] ``.
 
 # The rule for the prelude
 

@@ -65,7 +65,7 @@ let ``Run - a map's values are compared by their own ==`` () =
 let ``Run - a function that requires Eq compares maps by their entries`` () =
     comparing
         [ """def same: [Eq(a)] a, a -> bool = { x, y -> x == y }"""
-          """def sameMaps: [Eq(k) & Eq(v)] map(k, v), map(k, v) -> bool = { m, n -> m == n }""" ]
+          """def sameMaps: [Eq(k), Eq(v)] map(k, v), map(k, v) -> bool = { m, n -> m == n }""" ]
         [ """same(["a" => 1, "b" => 2], ["b" => 2, "a" => 1])"""
           """sameMaps(["a" => 1, "b" => 2], ["b" => 2, "a" => 1])"""
           """sameMaps(["a" => 1], ["a" => 2])"""
