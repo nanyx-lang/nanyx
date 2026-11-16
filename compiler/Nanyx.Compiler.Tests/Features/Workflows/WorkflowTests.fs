@@ -182,7 +182,7 @@ let ``A builder is a function that runs its block under a context whose members 
   await: [c] (int, ([c] int -> int)) -> int
   return: int -> int
 )
-def async: [c] ([AsyncWorkflow & c] () -> int) -> int = { block ->
+def async: [c] ([AsyncWorkflow, c] () -> int) -> int = { block ->
   use AsyncWorkflow(await = { x, f -> f(x) }, return = { x -> x }) in block()
 }
 def result = async {
@@ -197,7 +197,7 @@ def result = async {
 let ``A keyword the builder's context has no member for is reported at the keyword`` () =
     let source =
         normalized """context AsyncWorkflow = (await: [c] (int, ([c] int -> int)) -> int)
-def async: [c] ([AsyncWorkflow & c] () -> int) -> int = { block ->
+def async: [c] ([AsyncWorkflow, c] () -> int) -> int = { block ->
   use AsyncWorkflow(await = { x, f -> f(x) }) in block()
 }
 def result = async {
@@ -219,7 +219,7 @@ let ``A builder takes parameters, and its block requires contexts of its own`` (
   try: [c] ((#some(a) | #failed), ([c] a -> #some(b) | #failed)) -> #some(b) | #failed
   return: a -> #some(a) | #failed
 )
-def retrying: [c] int, ([Retry & c] () -> #some(b) | #failed) -> #some(b) | #failed = { times, block ->
+def retrying: [c] int, ([Retry, c] () -> #some(b) | #failed) -> #some(b) | #failed = { times, block ->
   use Retry(
     try = {
       | #some(value), continue -> continue(value)
@@ -415,7 +415,7 @@ let private optBuilder (withZero: bool) =
   try: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r
   return: a -> #some(a) | r{zeroMember}
 )
-def opt: [c] ([Opt & c] () -> t) -> t = {{ block ->
+def opt: [c] ([Opt, c] () -> t) -> t = {{ block ->
   use Opt(
     try = {{
       | #some(value), continue -> continue(value)

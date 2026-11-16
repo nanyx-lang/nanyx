@@ -162,7 +162,7 @@ let typeDefCore: Parser<Definition, ParseState> =
             between
                 (pstring "[" >>. wsInline)
                 (wsInline >>. pstring "]")
-                (sepBy1 (withSpan typeNameIdentifier) (attempt (wsInline >>. (pstring "," <|> pstring "&")) >>. wsInline))
+                (sepBy1 (withSpan typeNameIdentifier) (attempt (wsInline >>. pstring ",") >>. wsInline))
         let kind = followedBy (attempt ((pstring "protected" <|> pstring "private") .>> keywordEnd))
         opt (attempt (contexts .>> ws .>> kind)) |>> Option.map InScopeOf
 

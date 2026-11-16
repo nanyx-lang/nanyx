@@ -46,7 +46,7 @@ let internal read
     (typeOpt: TypeExpr option)
     (expr: Expression)
     : Result<ReadAnnotation * InferState, Diagnostic list> =
-    let typeOpt, inlineContextsRead = readInlineContexts state typeOpt
+    let memberRequirements = checkMemberRequirements state typeOpt
     let span = declarationSpan state DefValue expr
     let contextsExist =
         match fst (extractContextFromTypeExpr typeOpt) with
@@ -76,7 +76,7 @@ let internal read
         match typeOpt with
         | Some context when name = UseInstanceSyntax.name -> ensureInstanceContextExists state context
         | _ -> ensureTypesExist state (Option.toList typeOpt))
-    |> Result.bind (fun () -> inlineContextsRead)
+    |> Result.bind (fun () -> memberRequirements)
     |> Result.bind (fun () -> contextsExist)
     |> Result.bind (fun () -> extraCheck)
     |> Result.bind (fun () -> typeOfsInferred)

@@ -36,7 +36,7 @@ let ``A function can require two contexts whose names and members differ only in
     let source = """context A(x) = (a_c: x -> string)
 context A_b(x) = (c: x -> string)
 
-def both: [A_b(a) & A(b)] (a, b) -> string = { v, w -> A_b(a).c(v) ++ " " ++ A(b).a_c(w) }
+def both: [A_b(a), A(b)] (a, b) -> string = { v, w -> A_b(a).c(v) ++ " " ++ A(b).a_c(w) }
 
 def main = {
   use A(int)(a_c = { n -> "A" })

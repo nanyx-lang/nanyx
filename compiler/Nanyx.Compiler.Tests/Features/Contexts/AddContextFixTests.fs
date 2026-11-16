@@ -33,7 +33,7 @@ let ``A context is joined with & to the contexts the type writes`` () =
 """
         DiagnosticCodes.MissingContextMembers
         "Add `Ord(a)` to the type of 'describe'"
-        """def describe: [ToString(a) & Ord(a)] a, a -> string = { x, y -> if x < y then "{x}" else "{y}" }
+        """def describe: [ToString(a), Ord(a)] a, a -> string = { x, y -> if x < y then "{x}" else "{y}" }
 """
 
 [<Fact>]

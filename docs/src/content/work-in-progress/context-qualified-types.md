@@ -46,8 +46,8 @@ contexts; writing contexts in front of any other type (`[Console] Point`, `x: [C
 ## A scoped context: the type belongs to its scope
 
 Done in [#1521](https://github.com/nanyx-lang/nanyx/issues/1521), and described in
-[Types in a scope](../advanced/contexts#types-in-a-scope): `type Cursor = [Tx] protected (...)`, with NYX0251 for a
-context that isn't one scoped context and NYX0252 for contexts on any other type that isn't a function.
+[Types in a scope](../advanced/contexts#types-in-a-scope): `type Cursor = [Tx] protected (...)`, with NYX0252 for a
+context that isn't one scoped context and NYX0253 for contexts on any other type that isn't a function.
 
 How it works:
 
@@ -94,7 +94,7 @@ user's reach. Only intrinsics stay private to it.
 
 # Open questions
 
-- **Both forms on one declaration,** such as `[Memory & k]`, or two scoped contexts: an error to start with, unless
+- **Both forms on one declaration,** such as `[Memory, k]`, or two scoped contexts: an error to start with, unless
   the implementation finds it falls out.
-- **Separators.** Several contexts are joined with `,`, not `&`, in these declarations as in every context list
+- **Separators.** Several contexts are separated by `,` in these declarations, as in every context list
   ([#1531](https://github.com/nanyx-lang/nanyx/issues/1531)).

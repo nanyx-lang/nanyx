@@ -111,8 +111,8 @@ contexts into the type of its result, where an eager function requires them at t
 
 ```nanyx
 list.map: [c] list(a), ([c] a -> b) -> list(b)          -- runs f now: needs c now
-Seq.map:  ([c] seq(a)), ([d] a -> b) -> [c & d] seq(b)   -- runs f when pulled: the result needs c and d
-Seq.fold: [c & d] ([c] seq(a)), b, ([d] b, a -> b) -> b  -- runs now again
+Seq.map:  ([c] seq(a)), ([d] a -> b) -> [c, d] seq(b)   -- runs f when pulled: the result needs c and d
+Seq.fold: [c, d] ([c] seq(a)), b, ([d] b, a -> b) -> b  -- runs now again
 ```
 
 A sequence whose steps read a `mut` cell requires `Memory`, so it can't leave its `memory` block
@@ -142,7 +142,7 @@ def Seq.toSeq: seq(a) -> seq(a) = { s -> s }
 - **Functions that consume a sequence take any iterable; functions that make one return `seq(b)`**:
 
   ```nanyx
-  Seq.fold: [Iterable(c, a) & d] c, b, ([d] b, a -> b) -> b
+  Seq.fold: [Iterable(c, a), d] c, b, ([d] b, a -> b) -> b
   Seq.map: [Iterable(c, a)] c, ([d] a -> b) -> [d] seq(b)
   ```
 

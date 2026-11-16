@@ -41,7 +41,7 @@ greet("loud")
 let private myConsolePrelude =
     normalized """context MyConsole = (p: [Console] string -> ())
 
-def greet: [MyConsole & Console] string -> () = { name -> p(name) }
+def greet: [MyConsole, Console] string -> () = { name -> p(name) }
 
 """
 
@@ -98,7 +98,7 @@ let ``Run - use bindings of parameterised and plain contexts`` () =
         normalized """context Show(a) = (show: a -> string)
 context Ask = (ask: () -> int)
 
-def describe: [Show(a) & Show(b)] (a, b) -> string = { x, y -> Show(a).show(x) ++ " & " ++ Show(b).show(y) }
+def describe: [Show(a), Show(b)] (a, b) -> string = { x, y -> Show(a).show(x) ++ " & " ++ Show(b).show(y) }
 def twice: [Ask] () -> int = { ask() + ask() }
 
 @entry
@@ -192,7 +192,7 @@ def Money.show: Money -> string = { m ->
 }
 
 def describe: [Show(a)] a -> string = { value -> "<" ++ Show(a).show(value) ++ ">" }
-def both: [Show(a) & Show(b)] (a, b) -> string = { x, y -> Show(a).show(x) ++ " & " ++ Show(b).show(y) }
+def both: [Show(a), Show(b)] (a, b) -> string = { x, y -> Show(a).show(x) ++ " & " ++ Show(b).show(y) }
 def twice: [Show(a)] a -> string = { value -> describe(value) ++ describe(value) }
 def plain: [Show(a)] a -> string = { value -> show(value) }
 

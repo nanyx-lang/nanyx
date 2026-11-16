@@ -64,7 +64,7 @@ scoped context Tx = private ()
 
 type Cursor = [Tx] protected (query: string, row: int)
 
-def transaction: [c] ([Tx & c] () -> a) -> a = { block -> block() }
+def transaction: [c] ([Tx, c] () -> a) -> a = { block -> block() }
 def open: [Tx] string -> Cursor = { query -> Cursor(query = query, row = 41) }
 def next: [Tx] Cursor -> int = { c -> c.row + 1 }
 

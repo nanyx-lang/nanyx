@@ -139,7 +139,7 @@ let ``A def that writes contexts without Memory and takes a cell is an error tha
     let result = Compiler.compile source
     Assert.Equal<string list>([ DiagnosticCodes.UndeclaredContext.Code ], result.Diagnostics |> List.map _.Code)
     let diagnostic = result.Diagnostics.Head
-    Assert.Contains("'[Console & Memory]'", diagnostic.Message)
+    Assert.Contains("'[Console, Memory]'", diagnostic.Message)
     Assert.Equal("Console", source.Substring(diagnostic.Span.Value.Start, diagnostic.Span.Value.End - diagnostic.Span.Value.Start))
 /// The issue's example (#1473): `bump`'s `[Memory]` is inferred and it is called in `f`'s block, with `import`, and `f`
 /// annotated or not.

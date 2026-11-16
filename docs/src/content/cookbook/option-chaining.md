@@ -27,10 +27,10 @@ context OptionChain = (
 
 `try`'s continuation is the rest of the block, which calls the context's members too, so its type takes a context variable, `[c]`, that stands for whatever the block requires.
 
-Then we write the builder: a function that loads an instance of the context with `use` and runs the block under it. The block's type, `[OptionChain & c] () -> ...`, is what gives the block the keywords:
+Then we write the builder: a function that loads an instance of the context with `use` and runs the block under it. The block's type, `[OptionChain, c] () -> ...`, is what gives the block the keywords:
 
 ```nanyx fragment
-def maybe: [c] ([OptionChain & c] () -> #some(a) | #none) -> #some(a) | #none = { block ->
+def maybe: [c] ([OptionChain, c] () -> #some(a) | #none) -> #some(a) | #none = { block ->
   use OptionChain(
     -- This is how we get the short-circuiting behavior for options.
     -- Notice how we don't use the continuation for the `#none` case, so

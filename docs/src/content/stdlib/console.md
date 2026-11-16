@@ -96,7 +96,7 @@ The terminal: standard output, standard error and standard input. Code that need
 ## `print`
 
 ```nanyx fragment
-def print: [Console & ToString(a)] a -> ()
+def print: [Console, ToString(a)] a -> ()
 ```
 
 Writes `value` to standard output as its `toString` writes it: a string as it is, `print(42)`
@@ -106,7 +106,7 @@ at the call.
 ## `println`
 
 ```nanyx fragment
-def println: [Console & ToString(a)] a -> ()
+def println: [Console, ToString(a)] a -> ()
 ```
 
 Writes `value` followed by a line break to standard output, as `print` writes it.
@@ -114,7 +114,7 @@ Writes `value` followed by a line break to standard output, as `print` writes it
 ## `eprint`
 
 ```nanyx fragment
-def eprint: [Console & ToString(a)] a -> ()
+def eprint: [Console, ToString(a)] a -> ()
 ```
 
 Writes `value` to standard error, as `print` writes it.
@@ -122,7 +122,7 @@ Writes `value` to standard error, as `print` writes it.
 ## `eprintln`
 
 ```nanyx fragment
-def eprintln: [Console & ToString(a)] a -> ()
+def eprintln: [Console, ToString(a)] a -> ()
 ```
 
 Writes `value` followed by a line break to standard error, as `print` writes it.

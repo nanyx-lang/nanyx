@@ -16,7 +16,7 @@ scoped export context Tx = private ()
 
 export type Cursor = [Tx] protected (query: string, row: int)
 
-export def transaction: [c] ([Tx & c] () -> a) -> a = { block -> block() }
+export def transaction: [c] ([Tx, c] () -> a) -> a = { block -> block() }
 export def open: [Tx] string -> Cursor = { query -> Cursor(query = query, row = 0) }
 export def next: [Tx] Cursor -> int = { c -> c.row + 1 }
 """

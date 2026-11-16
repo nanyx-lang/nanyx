@@ -112,7 +112,7 @@ what the compiler keeps: exact spans, resolved names and types.
   inlay hint after its name (`: int`). The types are the declarations' `SymbolTypes`, less those inference
   records as writing their own (`AnnotatedSymbols`), and the types in one top-level def are named together, so a parameter's `α` is
   the `α` in its def's lens (see `NyxCompiler.TypeHints`). The lens shows every context the def was
-  inferred to require before its type, parameterised and plain (`[Show(α) & Console] α -> ()`, from
+  inferred to require before its type, parameterised and plain (`[Show(α), Console] α -> ()`, from
   `TypedModule.ContextTypes`), written by `Hover.typesWithContexts` as hover on the def's name and `nanyx check` write
   it. A def that writes only its contexts
   (`def greet: [Log] = ...`) has the rest of its annotation inferred, so its inlay hint goes after the contexts,
@@ -196,6 +196,10 @@ what the compiler keeps: exact spans, resolved names and types.
   level, so they are put back by where the block is written. Names and their spans come from the declared names the parser records (`DefValue`, `TypeDefBody`,
   `RecordTypeFields`). It needs a parse, not a type-check, so a type error leaves the outline as it was; a text
   that does not parse shows the last good text's outline, less the items edited since.
+- **Selection ranges** ([#1535](https://github.com/nanyx-lang/nanyx/issues/1535)), for Expand and Shrink Selection.
+  `NyxCompiler.Refactorings.SelectionRanges.at` parses the text and gives the chain of syntax around a position,
+  smallest first (see [Refactorings](./refactorings)). A text that does not parse has none, and the editor falls back
+  on its own.
 - **Quick fixes** ([#284](https://github.com/nanyx-lang/nanyx/issues/284)). Each fix of a diagnostic in the
   requested range is a `quickfix` code action: its edits applied to the document, carrying the diagnostic as
   published, with a diagnostic's first fix preferred. Linters offer fixes (`default/unusedBindings` removes an
@@ -330,7 +334,9 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    ([#269](https://github.com/nanyx-lang/nanyx/issues/269)).
 6. **Code actions.** Done for diagnostic fixes ([#284](https://github.com/nanyx-lang/nanyx/issues/284)). The first
    compiler error with fixes is an unknown name the standard library exports, which offers its import
-   ([#497](https://github.com/nanyx-lang/nanyx/issues/497)); other compiler errors have none yet.
+   ([#497](https://github.com/nanyx-lang/nanyx/issues/497)); other compiler errors have none yet. Refactorings are
+   offered as code actions of their own kinds ([Refactorings](./refactorings)): writing the inferred type, as
+   `refactor.rewrite`, is the first ([#1539](https://github.com/nanyx-lang/nanyx/issues/1539)).
 7. **Diagnostics in imported files.** Done ([#794](https://github.com/nanyx-lang/nanyx/issues/794)): each is
    published on the file it belongs to, with one at the import that brings that file in.
 8. **A library browser, search by type and an info view.** Planned on

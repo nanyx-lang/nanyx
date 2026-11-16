@@ -32,21 +32,21 @@ export context Console = (
 --| Writes `value` to standard output as its `toString` writes it: a string as it is, `print(42)`
   as `42`, `print([1, 2])` as `[1, 2]`. A value with no `ToString`, such as a function, is an error
   at the call.
-export def print: [Console & ToString(a)] a -> () = { value ->
+export def print: [Console, ToString(a)] a -> () = { value ->
   write(toString(value))
 }
 
 --| Writes `value` followed by a line break to standard output, as `print` writes it.
-export def println: [Console & ToString(a)] a -> () = { value ->
+export def println: [Console, ToString(a)] a -> () = { value ->
   write(toString(value) ++ "\n")
 }
 
 --| Writes `value` to standard error, as `print` writes it.
-export def eprint: [Console & ToString(a)] a -> () = { value ->
+export def eprint: [Console, ToString(a)] a -> () = { value ->
   writeError(toString(value))
 }
 
 --| Writes `value` followed by a line break to standard error, as `print` writes it.
-export def eprintln: [Console & ToString(a)] a -> () = { value ->
+export def eprintln: [Console, ToString(a)] a -> () = { value ->
   writeError(toString(value) ++ "\n")
 }

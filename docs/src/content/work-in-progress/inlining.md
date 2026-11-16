@@ -48,7 +48,7 @@ type variables ([#1160](https://github.com/nanyx-lang/nanyx/issues/1160)) boxes 
 `proc` is a handler, a function that runs its block under a `use`:
 
 ```nanyx fragment
-export def proc: [c] ([Proc & c] () -> #some(b) | r) -> #some(b) | r = { block ->
+export def proc: [c] ([Proc, c] () -> #some(b) | r) -> #some(b) | r = { block ->
   use Proc(
     try = {
       | #some(value), continue -> continue(value)

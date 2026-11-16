@@ -1,5 +1,5 @@
 /// The fix for a def that needs a context its type does not declare: it adds the context to the def's type, after
-/// the contexts it writes, joined with `&` (`[Num(a)]` becomes `[Num(a) & Ord(a)]`), or in front of its type when it
+/// the contexts it writes, separated by `,` (`[Num(a)]` becomes `[Num(a), Ord(a)]`), or in front of its type when it
 /// writes none (`a -> a` becomes `[Ord(a)] a -> a`).
 module NyxCompiler.ContextFixes
 
@@ -13,7 +13,7 @@ let addToType (state: InferState) (defName: Identifier) (context: string) : Fix 
         match state.WrittenTypes |> Map.tryFind defName with
         | Some { Kind = TypeWithContext(contexts, _) } ->
             match List.tryLast contexts with
-            | Some last when not (SourceSpan.isNone last.Span) -> Some { Span = { last.Span with Start = last.Span.End }; NewText = $" & {context}" }
+            | Some last when not (SourceSpan.isNone last.Span) -> Some { Span = { last.Span with Start = last.Span.End }; NewText = $", {context}" }
             | _ -> None
         | Some written when not (SourceSpan.isNone written.Span) ->
             Some { Span = { written.Span with End = written.Span.Start }; NewText = $"[{context}] " }

@@ -43,7 +43,7 @@ let ``Run - two contexts whose keys were once the same text are both passed`` ()
     let source = """context A(x) = (a_c: x -> string)
 context A_b(x) = (c: x -> string)
 
-def both: [A_b(a) & A(b)] (a, b) -> string = { v, w -> A_b(a).c(v) ++ " " ++ A(b).a_c(w) }
+def both: [A_b(a), A(b)] (a, b) -> string = { v, w -> A_b(a).c(v) ++ " " ++ A(b).a_c(w) }
 
 def main = {
   use A(int)(a_c = { n -> "A" })
@@ -60,7 +60,7 @@ let ``Run - contexts whose names share what comes before a _ are kept apart`` ()
 context A_C(x) = (d: x -> string)
 
 def one: [A_B(a)] a -> string = { v -> A_B(a).d(v) }
-def two: [A_C(a) & A_B(a)] a -> string = { v -> A_C(a).d(v) ++ " " ++ one(v) }
+def two: [A_C(a), A_B(a)] a -> string = { v -> A_C(a).d(v) ++ " " ++ one(v) }
 
 def main = {
   use A_C(int)(d = { n -> "C" })

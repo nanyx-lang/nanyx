@@ -74,7 +74,7 @@ The context of the result workflow, which `proc` runs its block under: a `try`, 
 ## `proc`
 
 ```nanyx fragment
-def proc: [c] ([Proc & c] () -> #some(b) | r) -> #some(b) | r
+def proc: [c] ([Proc, c] () -> #some(b) | r) -> #some(b) | r
 ```
 
 The result workflow: inside `proc { ... }`, `try x` continues with the payload of `#some`, and

@@ -24,7 +24,7 @@ let ``A context name loaded with use checks, and its lambda's type doesn't chang
   inner()
   use l in inner()
 }
-def twice: [Log & Tick] int -> int = { context l: Log, context t: Tick, n ->
+def twice: [Log, Tick] int -> int = { context l: Log, context t: Tick, n ->
   use l
   use t
   tick()
@@ -50,7 +50,7 @@ let ``An inner lambda may capture a context name to use it`` () =
 
 [<Fact>]
 let ``A context name must name a context the lambda is given, and only one`` () =
-    let code, at = errorIn "def run: [Log & Tick] () -> () = { context l -> () }\n"
+    let code, at = errorIn "def run: [Log, Tick] () -> () = { context l -> () }\n"
     Assert.Equal(DiagnosticCodes.UnknownContextName.Code, code)
     Assert.Equal("l", at)
     let code, at = errorIn "def run: [Log] () -> () = { context l: Tick -> () }\n"
@@ -58,7 +58,7 @@ let ``A context name must name a context the lambda is given, and only one`` () 
     Assert.Equal("l", at)
     let code, _ = errorIn "def run: () -> () = { context l -> () }\n"
     Assert.Equal(DiagnosticCodes.UnknownContextName.Code, code)
-    let result = Compiler.compile ((contexts + "def run: [Log & Tick] () -> () = { context l -> () }\n").ReplaceLineEndings "\n")
+    let result = Compiler.compile ((contexts + "def run: [Log, Tick] () -> () = { context l -> () }\n").ReplaceLineEndings "\n")
     Assert.Equal(
         "'l' could name any of 'Log' and 'Tick', which this lambda is given: say which, as in `context l: Log`",
         (Assert.Single result.Diagnostics).Message)
@@ -67,7 +67,7 @@ let ``A context name must name a context the lambda is given, and only one`` () 
 let ``A lambda passed to a handler names the contexts the handler gives it`` () =
     compileClean (
         (contexts
-         + """def withLog: [c] ([Log & c] () -> ()) -> () = { f -> use Log(log = { m -> () }) in f() }
+         + """def withLog: [c] ([Log, c] () -> ()) -> () = { f -> use Log(log = { m -> () }) in f() }
 def main = withLog { context l -> use l in inner() }
 """)
             .ReplaceLineEndings "\n")

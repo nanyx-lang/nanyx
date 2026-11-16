@@ -40,6 +40,6 @@ scoped export context Memory = protected ()
   gives back its result. Nothing that uses a cell can leave the block: only what the cells hold. The block can
   name its `Memory`, `memory { context m -> ... }`, and `use m` in an inner block makes the cells after it belong
   to this one.
-export def memory: [c] ([Memory & c] () -> a) -> a = { block ->
+export def memory: [c] ([Memory, c] () -> a) -> a = { block ->
   block()
 }

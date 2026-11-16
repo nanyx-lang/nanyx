@@ -296,7 +296,7 @@ by their structure, so this works for lists of anything but functions.
 ## `list.distinctBy`
 
 ```nanyx fragment
-def list.distinctBy: [Eq(b) & Hash(b) & c] list(a), ([c] a -> b) -> list(a)
+def list.distinctBy: [Eq(b), Hash(b), c] list(a), ([c] a -> b) -> list(a)
 ```
 
 The elements without two of the same `key`, each kept where the first with its key appears:
@@ -306,7 +306,7 @@ list of any length.
 ## `list.sortBy`
 
 ```nanyx fragment
-def list.sortBy: [Ord(b) & c] list(a), ([c] a -> b) -> list(a)
+def list.sortBy: [Ord(b), c] list(a), ([c] a -> b) -> list(a)
 ```
 
 The elements in ascending order of `key`. The sort is stable: elements with the same key keep
@@ -343,7 +343,7 @@ ordered by their `Ord`, so a list of records has none: use [`list.maxBy`](#listm
 ## `list.minBy`
 
 ```nanyx fragment
-def list.minBy: [Ord(b) & c] list(a), ([c] a -> b) -> #some(a) | #emptyList
+def list.minBy: [Ord(b), c] list(a), ([c] a -> b) -> #some(a) | #emptyList
 ```
 
 The element with the least `key`, or `#emptyList`. Of several elements with the least key, the
@@ -352,7 +352,7 @@ first. `key` is called once for each element.
 ## `list.maxBy`
 
 ```nanyx fragment
-def list.maxBy: [Ord(b) & c] list(a), ([c] a -> b) -> #some(a) | #emptyList
+def list.maxBy: [Ord(b), c] list(a), ([c] a -> b) -> #some(a) | #emptyList
 ```
 
 The element with the greatest `key`, or `#emptyList`. Of several elements with the greatest key,

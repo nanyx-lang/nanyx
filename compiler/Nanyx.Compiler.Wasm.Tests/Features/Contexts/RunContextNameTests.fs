@@ -58,7 +58,7 @@ let ``Run - a lambda passed to a handler names the contexts the handler gives it
         + """
 context Tick = (tick: () -> ())
 
-def withBoth: [Console & c] ([Log & Tick & c] int -> ()) -> () = { f ->
+def withBoth: [Console, c] ([Log, Tick, c] int -> ()) -> () = { f ->
   use Log(log = { m -> println("handler: {m}") })
   use Tick(tick = { println("tick") })
   f(1)

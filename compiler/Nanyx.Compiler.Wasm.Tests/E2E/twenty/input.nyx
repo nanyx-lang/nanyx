@@ -1,9 +1,9 @@
 -- Test 20: Parameterized context instances
--- Tests that [Describe(a) & Describe(b)] works with qualified access Describe(a).f
+-- Tests that [Describe(a), Describe(b)] works with qualified access Describe(a).f
 
 context Describe(a) = (describe: a -> String)
 
-def compareStrings: [Describe(a) & Describe(b)] a, b -> bool = { x, y ->
+def compareStrings: [Describe(a), Describe(b)] a, b -> bool = { x, y ->
   def xString = Describe(a).describe(x)
   def yString = Describe(b).describe(y)
   dbg("xString: " ++ xString ++ ", yString: " ++ yString)

@@ -37,7 +37,7 @@ def fromCsvLine: string -> #some(Stock) | #error(#malformed) | #invalidFloat = {
 def statusLabels = [-1 => "down", 0 => "unchanged", 1 => "up"]
 
 @entry
-def main: [Console & FileSystem] () -> () = {
+def main: [Console, FileSystem] () -> () = {
   def path = "stocks.csv"
 
   -- Write the stocks as comma-separated values
