@@ -64,7 +64,9 @@ context of their own, `type MRef(a) = [Memory] protected (...)`
 1. **`Array(a)`** ([#1490](https://github.com/nanyx-lang/nanyx/issues/1490)): done. An immutable, fixed-length
    sequence with constant-time indexing, in [`nanyx/array`](../stdlib/array). It needs no `Memory`. In the backend
    it's an `IrArray`, a block of its length and then its elements laid out flat (`CoreIrArrays`, and see
-   [Memory management](./memory-management#drop-functions)); four intrinsics make and read one.
+   [Memory management](./memory-management#drop-functions)); four intrinsics make and read one. An array is callable,
+   `xs(i)` being `array.at(xs, i)`, read as a map's call is (`Infer.inferLookup`,
+   [#1516](https://github.com/nanyx-lang/nanyx/issues/1516)); `array.at` is in the prelude for it.
 2. **`MRef(a)`, a cell as a value** ([#1491](https://github.com/nanyx-lang/nanyx/issues/1491)): done, in
    [`nanyx/mref`](../stdlib/mref), and described on [Memory](../advanced/memory#references). It is declared
    `type MRef(a) = [Memory] private box(a)`. `box(a)` is a built-in type (`Boxes.fs`) that only the standard library

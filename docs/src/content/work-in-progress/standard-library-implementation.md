@@ -49,7 +49,7 @@ The prelude is split by topic across `prelude.nyx` and the files beside it that 
 `prelude-contexts.nyx` (equality, ordering, hashing, joining and text), `prelude-numbers.nyx` (`int` and `float`,
 `Add`, `Num`, powers and bitwise functions on ints), `prelude-sized-numbers.nyx`, `prelude-conversions.nyx`, `prelude-results.nyx` (results,
 options and `proc`), `prelude-lists.nyx` and `prelude-maps.nyx` (maps and sets). `prelude.nyx` keeps the module's doc
-comment and what fits no topic: `panic`, `ignore`, booleans and memory blocks.
+comment and what fits no topic: `crash`, `ignore`, booleans and memory blocks.
 
 # What is written
 

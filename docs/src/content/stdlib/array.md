@@ -14,12 +14,16 @@ def xs = array.fromList([10, 20, 30])
 println(array.length(xs))
 println(array.at(xs, 1))
 println(array.at(xs, 5))
+println(xs(2))
 println(xs \map({ x -> x / 10 }))
 -- 3
 -- #some(20)
 -- #none
+-- #some(30)
 -- [1, 2, 3]
 ```
+
+An array is callable: `xs(i)` is `array.at(xs, i)`, so it gives `#some(a) | #none` and never traps. Use it as `xs(0) ?? fallback`. `array.at` is in the prelude, so a call of an array works in a module that doesn't import `nanyx/array`.
 
 `array.create(n)` fills each slot with the [`Default`](prelude-contexts#defaults) of the element type, so it needs to know that type: `def zeros: Array(int) = array.create(3)`. `==` compares two arrays element by element. An array has no order and no hash, so it can't be sorted against another, or put in a set or used as a map's key.
 
@@ -29,7 +33,7 @@ println(xs \map({ x -> x / 10 }))
 
 Arrays: immutable, fixed-length sequences with constant-time indexing.
 
-An `Array(a)` holds its elements in one block, so [`array.at`](#arrayat) reads any of them in the same time,
+An `Array(a)` holds its elements in one block, so [`array.at`](prelude-arrays#arrayat) reads any of them in the same time,
 where `at` on a list walks to it. Nothing about an array changes once it is made, so it needs no
 `Memory`. There is no literal for one: make it from a list with [`array.fromList`](#arrayfromlist), from its
 indices with [`array.init`](#arrayinit), or filled with each slot's default with [`array.create`](#arraycreate).
@@ -61,15 +65,6 @@ def array.length: array(a) -> int
 ```
 
 How many elements `xs` holds.
-
-## `array.at`
-
-```nanyx fragment
-def array.at: array(a), int -> #some(a) | #none
-```
-
-The element of `xs` at `index`, counting from 0, or `#none` when `index` is negative or past the
-end.
 
 ## `array.init`
 

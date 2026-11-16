@@ -92,7 +92,7 @@ import nanyx/mstack
 
 def force = {{
   | #some(v), _ -> v
-  | _, msg -> panic("Expected a value: {{msg}}")
+  | _, msg -> crash("Expected a value: {{msg}}")
 }}
 
 def calculate: string -> float = {{ input ->

@@ -578,10 +578,10 @@ module DestructuringSyntax =
 module MadeUpNames =
     let isMadeUp (name: Identifier) = name.StartsWith "__"
 
-/// An error deferred to run time (see the deferred errors page): a call to the built-in "__panic" with the message it
+/// An error deferred to run time (see the deferred errors page): a call to the built-in "__crash" with the message it
 /// writes before it stops the program. The compiler makes it in place of code that failed to check; no code can write it.
-module PanicSyntax =
-    let builtIn = "__panic"
+module CrashSyntax =
+    let builtIn = "__crash"
 
     /// The message a deferred error writes.
     let (|Call|_|) (kind: ExpressionKind) =

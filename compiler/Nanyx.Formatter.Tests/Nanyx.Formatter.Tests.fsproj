@@ -24,6 +24,7 @@
     <Compile Include="Features\Lambdas\LambdaTests.fs" />
     <Compile Include="Features\Layout\BlankLineTests.fs" />
     <Compile Include="Features\Layout\LineWidthTests.fs" />
+    <Compile Include="Features\Layout\StyleExampleTests.fs" />
     <Compile Include="Features\Lexical\LexicalTests.fs" />
     <Compile Include="Features\Loops\LoopTests.fs" />
     <Compile Include="Features\Matches\MatchTests.fs" />

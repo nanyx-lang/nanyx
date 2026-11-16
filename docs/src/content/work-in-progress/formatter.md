@@ -4,9 +4,9 @@ description: "How nanyx format is built, and the style it enforces"
 order: 31
 ---
 
-> **Status: proposal, partly decided.** This page frames the formatter workstream and proposes how `nanyx format` is
-> built. The user's side is already described in the docs. Configuration, blank lines, import sorting and
-> unparseable files were decided on 2026-11-07 (see [Decided](#decided)); the style rules are still open. Work is
+> **Status: built, with the repository's own code still to format.** This page describes how `nanyx format` is built
+> and the style it enforces. The user's side is described in the docs. Configuration, blank lines, import sorting and
+> unparseable files were decided on 2026-11-07, and the style on 2026-11-16 (see [Decided](#decided)). Work is
 > tracked under the `formatting` label.
 
 # Summary
@@ -105,22 +105,33 @@ file in the repository and every Nanyx code block in the docs.
 
 The docs' examples are the starting point. Decided by the maintainer as written here
 ([#855](https://github.com/nanyx-lang/nanyx/issues/855), [#856](https://github.com/nanyx-lang/nanyx/issues/856)), and
-built in [#220](https://github.com/nanyx-lang/nanyx/issues/220):
+built in [#220](https://github.com/nanyx-lang/nanyx/issues/220). The examples on the
+[Formatter](../standard-tools/formatter#examples) page are tested (`StyleExampleTests`):
 
 - Two spaces of indent and a line width of 100, unless [configured](#configuration). Indent is measured from the
   start of the line, never from a keyword's column.
 - One space around binary operators and `->`, after commas, and inside a lambda's braces: `{ a, b -> a + b }`.
-- A definition that fits on one line stays on one line. One that does not breaks before its `:` and its `=`, each
-  indented once:
+- A definition whose signature fits on the def's line stays on it, even when its value spans lines. One whose
+  signature does not fit breaks before its `:` and its `=`, each indented once:
 
   ```nanyx
-  def mapSome
-    : (#some(a) | r), (a -> b) -> (#some(b) | r)
-    = { | #some(a), f -> #some(f(a))
-        | other, _ -> other }
+  def priceLine
+    : list(Product), OrderLine -> #some(Priced) | #unknownSku(string) | #outOfStock(string)
+    = { products, line ->
+      find(products, line)
+    }
   ```
 
-- A lambda with match cases puts each case on its own line, the `|`s aligned under the first.
+- A lambda with match cases puts each case on its own line, the `|`s one under another, indented once from the
+  lambda's line, and the `}` on a line of its own. A single case that fits stays on the lambda's line, `{ | 0 -> 1 }`:
+
+  ```nanyx
+  def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = {
+    | #some(a), f -> #some(f(a))
+    | other, _ -> other
+  }
+  ```
+
 - A `for` loop or an `except` with one arm (perhaps with alternatives, `| a | b -> ...`) keeps it on the head's line,
   `for xs | x -> body`, with a block body on the lines after the `->`. With several arms, each goes on a line of its
   own after the head, indented once.
@@ -164,8 +175,6 @@ built in [#220](https://github.com/nanyx-lang/nanyx/issues/220):
   an operator and the lines after the first indented once. The parser takes a line break after an operator but not
   before one, and not at all in a statement, an arm's body or a top-level expression, where a chain stays on one line
   unless it is inside brackets.
-- A signature that does not fit on the def's line goes on the next line after the name, as does the `=`, and the value
-  is indented under them (shown above).
 - A def with a type annotation whose value is a lambda puts the lambda's body on the line after the `->`, unless the
   body is only a name or a literal (decided 2026-11-07), or a statement could not take it without parentheses. A
   body on its own line is read as a statement, which takes every operator but `..`, so a range stays on the `->`'s
@@ -220,9 +229,9 @@ becomes one, and none is added.
 def zero = 0
 def one = 1
 
-def add
-  : int, int -> int
-  = { a, b -> a + b }
+def add: int, int -> int = { a, b ->
+  a + b
+}
 
 def two = 2
 ```
@@ -337,8 +346,8 @@ its own:
 3. **Print every construct** ([#219](https://github.com/nanyx-lang/nanyx/issues/219)). A printer for the whole
    syntax tree, with comments, parentheses and literals, checked by the round-trip and idempotence tests. Its layout
    can be crude.
-4. **The style** ([#220](https://github.com/nanyx-lang/nanyx/issues/220)). The layout rules above, construct by
-   construct, with tests taken from the docs' examples.
+4. **The style** ([#220](https://github.com/nanyx-lang/nanyx/issues/220)). Done: the layout rules above, construct
+   by construct, with the Formatter page's examples as tests.
 5. **`nanyx format`** ([#221](https://github.com/nanyx-lang/nanyx/issues/221)). The command, its modes and exit
    codes, and the safety check.
 6. **The editor** ([#222](https://github.com/nanyx-lang/nanyx/issues/222)). Document formatting in the language
@@ -367,6 +376,9 @@ On 2026-11-07, in [#215](https://github.com/nanyx-lang/nanyx/issues/215):
 On 2026-11-16:
 
 - **The style rules** in [The style](#the-style) are adopted as written ([#855](https://github.com/nanyx-lang/nanyx/issues/855)).
+  The `mapSome` example first showed its cases hung from the `{`'s column, `= { | ...`, with the `}` after the last
+  one; that measured indent from a column rather than the line's start and contradicted the typed-def lambda rule
+  decided on 2026-11-07, so it now shows the cases on the lines after the `{`, as the formatter writes them.
 - **Alignment.** None beyond the `|`s of a match's cases: aligning `=` or `->` across lines makes one edit change many
   lines in a diff ([#856](https://github.com/nanyx-lang/nanyx/issues/856)).
 - **Highlighting differences in the editor** as described under [The editor](#the-editor)

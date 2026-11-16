@@ -20,35 +20,35 @@ let private reported (source: string) =
     diagnostics source |> List.map (fun (diagnostic, text) -> diagnostic.Message, text)
 
 [<Fact>]
-let ``The statements after a call to panic are reported, through the end of the block`` () =
+let ``The statements after a call to crash are reported, through the end of the block`` () =
     let source =
         "def f: int -> int = { x ->\n"
-        + "  panic(\"bad input\")\n"
+        + "  crash(\"bad input\")\n"
         + "  def y = x + 1\n"
         + "  y * 2\n"
         + "}\n"
     Assert.Equal<(string * string) list>(
-        [ "This code never runs: `panic` never returns", "def y = x + 1\n  y * 2" ],
+        [ "This code never runs: `crash` never returns", "def y = x + 1\n  y * 2" ],
         reported source)
 
 [<Fact>]
 let ``The diverging statement is related, and the fix removes what follows it`` () =
     let source =
         "def f: int -> int = { x ->\n"
-        + "  panic(\"bad input\")\n"
+        + "  crash(\"bad input\")\n"
         + "  x + 1 -- never\n"
         + "}\n"
     match diagnostics source with
     | [ diagnostic, _ ] ->
         let related = diagnostic.Related |> List.map (fun (span, message) -> source.Substring(span.Start, span.End - span.Start), message)
-        Assert.Equal<(string * string) list>([ """panic("bad input")""", "never gives a value" ], related)
-        Assert.Equal("def f: int -> int = { x ->\n  panic(\"bad input\")\n}\n", applyFix source (List.exactlyOne diagnostic.Fixes))
+        Assert.Equal<(string * string) list>([ """crash("bad input")""", "never gives a value" ], related)
+        Assert.Equal("def f: int -> int = { x ->\n  crash(\"bad input\")\n}\n", applyFix source (List.exactlyOne diagnostic.Fixes))
     | other -> Assert.Fail($"Expected one report, got %A{other}")
 
 [<Fact>]
 let ``A call to any function whose result is undefined counts, as does a def bound to one`` () =
     let source =
-        (withFinalNewline """def fail: string -> undefined = { message -> panic("failed: {message}") }""")
+        (withFinalNewline """def fail: string -> undefined = { message -> crash("failed: {message}") }""")
         + "def f: int -> int = { x ->\n"
         + "  def v = fail(\"x\")\n"
         + "  x\n"
@@ -65,18 +65,18 @@ let ``A call to any function whose result is undefined counts, as does a def bou
 let ``An if whose every branch never returns is a statement that never returns`` () =
     let source =
         "def f: bool -> int = { b ->\n"
-        + "  if b then panic(\"a\") else panic(\"b\")\n"
+        + "  if b then crash(\"a\") else crash(\"b\")\n"
         + "  1\n"
         + "}\n"
     Assert.Equal<(string * string) list>([ "This code never runs: the statement before it never gives a value", "1" ], reported source)
 
 [<Fact>]
-let ``A panic as a block's last statement, or in only one branch, is not reported`` () =
+let ``A crash as a block's last statement, or in only one branch, is not reported`` () =
     Assert.Empty(reported (withFinalNewline """def f: int -> int = { x ->
   def y = x + 1
-  panic("no {y}")
+  crash("no {y}")
 }"""))
     Assert.Empty(reported (withFinalNewline """def f: int -> int = { x ->
-  def y = if x > 0 then x else panic("no")
+  def y = if x > 0 then x else crash("no")
   y + 1
 }"""))

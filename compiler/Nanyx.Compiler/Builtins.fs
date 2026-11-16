@@ -29,7 +29,7 @@ module Intrinsics =
     let private element = TyVar elementVar
     let private listOf = Lists.ofType
 
-    /// Writes a string to standard error, with nothing added: what `panic` writes.
+    /// Writes a string to standard error, with nothing added: what `crash` writes.
     let writeStderr = prefix + "write_stderr"
     /// The number of bytes in a string.
     let stringLength = prefix + "string_length"

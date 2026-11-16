@@ -2,10 +2,14 @@ namespace NyxCompiler
 
 /// The built-in `array(a)` type, written `Array(a)`: an immutable, fixed-length sequence with constant-time indexing,
 /// which the backend holds as one block of its elements (see "Mutation" in the docs' work in progress). `nanyx/array`
-/// makes and reads one through four intrinsics (see `Intrinsics`).
+/// makes and reads one through four intrinsics (see `Intrinsics`). Calling an array, `xs(i)`, is a call to the
+/// prelude's `array.at`, as calling a map is one to `map.get` (see `Maps`).
 module Arrays =
     /// The type's name, as a type writes it, `array(int)`, and as `nanyx/array`'s functions are attached to it.
     let typeName = "array"
+
+    /// The function a call of an array is: `xs(i)` is `array.at(xs, i)`.
+    let lookup = typeName + ".at"
 
     /// Whether `name` names the type.
     let isTypeName (name: string) = name = typeName

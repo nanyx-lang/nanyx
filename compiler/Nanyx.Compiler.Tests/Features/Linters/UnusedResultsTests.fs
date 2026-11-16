@@ -149,7 +149,7 @@ def f: [Console] int -> int = { n ->
 let ``A call that never returns is left to unreachableCode`` () =
     let source =
         """def f: int -> int = { n ->
-  panic("bad input")
+  crash("bad input")
   n + 1
 }
 """
