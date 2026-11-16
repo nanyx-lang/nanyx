@@ -46,7 +46,8 @@ let rec typeKeyOfType (ty: NyxCompiler.Ty) : TypeKey option =
     | NyxCompiler.TyOpenRecord _
     | NyxCompiler.TyRecursive _
     | NyxCompiler.TySelf _
-    | NyxCompiler.TyParam _ -> None
+    | NyxCompiler.TyParam _
+    | NyxCompiler.TyScope _ -> None
     | NyxCompiler.TyPrimitive "unit" -> Some (TypeKey("()", []))
     | NyxCompiler.TyPrimitive "?error" -> None
     | NyxCompiler.TyPrimitive name

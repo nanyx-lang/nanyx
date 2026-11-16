@@ -103,10 +103,18 @@ type OpenMatch =
 /// `memory` block it is. `use l` loads those members again, and makes the block's scope the one a `mut` takes.
 type ContextName = { Context: Identifier; Members: (Identifier * TypeScheme) list; Body: NodeId; Scope: Ty option }
 
+/// What the variable an annotation stands for is kept under while the annotation is read (see `InferState.TypeVars`).
+type TypeVarKey =
+    /// A type variable the annotation writes, by its name: `a`.
+    | WrittenVar of string
+    /// The scope of the scoped context of this name, shared by every one of that name the signature writes (see
+    /// `TyVarKind.SignatureScope`).
+    | ScopeOf of context: string
+
 type InferState =
         { NextId: int;
             Constraints: ConstraintSet;
-            TypeVars: Map<string, TyVar>;
+            TypeVars: Map<TypeVarKey, TyVar>;
             TypeDefs: Map<string, TypeDefInfo>;
             /// The names in `TypeDefs` that cannot be written: the types only an aliased import brings in, which are
             /// written with the alias (`m.Email`). They stay in `TypeDefs` for what the imported definitions' own
@@ -426,8 +434,17 @@ let emptyState =
             ContextNames = Map.empty }
 
 let internal freshVar (state: InferState) =
-    let var = { Id = state.NextId; Name = None }
+    let var = TyVar.ordinary state.NextId None
     TyVar var, { state with NextId = state.NextId + 1 }
+
+/// The scope of the scoped context `context` the signature being read writes, shared by every one of that name in it:
+/// the one it already has, or a new one (see `TyVarKind.SignatureScope`).
+let internal signatureScope (state: InferState) (context: string) : Ty * InferState =
+    match state.TypeVars |> Map.tryFind (ScopeOf context) with
+    | Some existing -> TyVar existing, state
+    | None ->
+        let var: TyVar = { Id = state.NextId; Name = Some context; Kind = SignatureScope context }
+        TyVar var, { state with NextId = state.NextId + 1; TypeVars = state.TypeVars |> Map.add (ScopeOf context) var }
 
 /// A fresh variable for each of `items`, in order.
 let internal freshVars (items: 'a list) (state: InferState) =
@@ -436,7 +453,7 @@ let internal freshVars (items: 'a list) (state: InferState) =
 /// A record with at least `fields`, its others a fresh row variable: what reading a field, or matching a pattern that
 /// names some fields, tells of a value. A closed record would say it has no others.
 let internal openRecordWith (fields: Map<string, Ty>) (state: InferState) =
-    let row = { Id = state.NextId; Name = None }
+    let row = TyVar.ordinary state.NextId None
     TyOpenRecord(fields, row), { state with NextId = state.NextId + 1 }
 
 /// The symbol for `name` as `holder` declares it, made the first time it is asked for. `None` when the parser
@@ -681,10 +698,11 @@ let internal resolveSoFar (state: InferState) (ty: Ty) : Ty =
 let internal envVarsUnder (subst: Subst) (env: TypeEnv) : System.Collections.Generic.HashSet<int> =
     let found = System.Collections.Generic.HashSet<int>()
     let add (id: int) =
-        if subst.ContainsKey id then found.UnionWith(TypeEnv.freeTyVars (Unifier.apply subst (TyVar { Id = id; Name = None })))
+        if subst.ContainsKey id then found.UnionWith(TypeEnv.freeTyVars (Unifier.apply subst (TyVar (TyVar.ordinary id None))))
         else found.Add id |> ignore
     for free in env.Unquantified.Values do
         Set.iter add free
     for instance in env.Instances do
         Set.iter add (TypeEnv.freeTyVars instance.Context)
+    env.BlockScope |> Option.iter (TypeEnv.freeTyVars >> Set.iter add)
     found

@@ -25,7 +25,7 @@ module Intrinsics =
     let private tuple (items: Ty list) =
         TyRecord(items |> List.mapi (fun index ty -> string index, ty) |> Map.ofList, FieldOrder.none)
 
-    let private elementVar = { Id = -1; Name = Some "a" }
+    let private elementVar = TyVar.ordinary (-1) (Some "a")
     let private element = TyVar elementVar
     let private listOf = Lists.ofType
 
@@ -163,8 +163,8 @@ module Intrinsics =
     /// The intrinsics that give back their argument as a value of another type, which the backend holds the same way.
     let reinterpretations : Set<string> = set [ mapOfEntries; mapEntries; setOfElements; setElements ]
 
-    let private keyVar = { Id = -2; Name = Some "k" }
-    let private valueVar = { Id = -3; Name = Some "v" }
+    let private keyVar = TyVar.ordinary (-2) (Some "k")
+    let private valueVar = TyVar.ordinary (-3) (Some "v")
     let private entries = listOf (tuple [ TyVar keyVar; TyVar valueVar ])
     let private map = Maps.ofTypes (TyVar keyVar) (TyVar valueVar)
     let private overEntries (ty: Ty) = { Quantified = set [ keyVar.Id; valueVar.Id ]; Type = ty; Symbol = None; ProvidedBy = None }

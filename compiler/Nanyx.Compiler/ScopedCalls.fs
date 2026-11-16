@@ -56,9 +56,9 @@ let enter (env: TypeEnv) (state: InferState) (call: Expression) (callee: Identif
     | _ ->
         let ownScopes, state =
             supplied
-            |> List.choose (fun (_, scope) -> match scope with TyVar v -> Some v.Id | _ -> None)
-            |> List.mapFold (fun (current: InferState) id ->
-                (id, TyVar { Id = current.NextId; Name = Some FunctionContexts.callScopeName }),
+            |> List.choose (fun (context, scope) -> match scope with TyVar v -> Some (context, v.Id) | _ -> None)
+            |> List.mapFold (fun (current: InferState) (context, id) ->
+                (id, TyVar { Id = current.NextId; Name = Some context; Kind = CallScope }),
                 { current with NextId = current.NextId + 1 }) state
         let ownScopes = Map.ofList ownScopes
         let calleeTy = Unifier.apply ownScopes calleeTy
@@ -68,7 +68,7 @@ let enter (env: TypeEnv) (state: InferState) (call: Expression) (callee: Identif
             | Some (_, scope) -> MemoryCells.aroundCall env state callee scope
             | None -> env
         // The scopes signatures write so far: a scope bound outside the call.
-        let written = state.TypeVars |> Map.toList |> List.filter (fun (name, _) -> name.StartsWith "@") |> List.map (snd >> TyVar)
+        let written = state.TypeVars |> Map.toList |> List.choose (function ScopeOf _, var -> Some (TyVar var) | _ -> None)
         env,
         calleeTy,
         { state with

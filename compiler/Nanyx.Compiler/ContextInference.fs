@@ -30,6 +30,7 @@ module internal ContextInference =
             | TyRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyOpenRecord(fields, row) -> (fields |> Map.toList |> List.collect (snd >> collect)) @ [ row ]
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
+            | TyScope scope -> collect scope
         collect ty |> List.distinctBy _.Id
 
     /// A name for each type variable of `ty`, by its id: `a`, `b`, `c`, ..., in the order they appear, then `a1`, `b1`.
@@ -96,6 +97,8 @@ module internal ContextInference =
             | TyRecursive _
             | TySelf _
             | TyParam _ -> None
+            // A scoped context's scope is never written.
+            | TyScope _ -> None
         kind |> Option.map TypeExpr.synthetic
 
     /// The annotation an unannotated def of the type `defTy` would write to require `contexts`, each a context's name
@@ -125,7 +128,8 @@ module internal ContextInference =
         let written =
             state.TypeVars
             |> Map.toList
-            |> List.choose (fun (name, v) ->
+            |> List.choose (fun (key, v) ->
+                let name = match key with WrittenVar name -> name | ScopeOf context -> context
                 match Unifier.apply subst (TyVar v) with
                 | TyVar solved when scheme.Quantified.Contains solved.Id -> Some (solved.Id, name)
                 | _ -> None)
@@ -155,6 +159,7 @@ module internal ContextInference =
             | TyRecord(fields, _)
             | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
+            | TyScope scope -> collect scope
         collect ty |> List.distinctBy _.Id
 
     /// Whether `pending` is passed nothing for its context when it is of a rest of a union in the def's type: a
@@ -220,7 +225,7 @@ module internal ContextInference =
                 |> Unifier.writtenContexts
                 |> List.choose (function TyVar v -> Some v | _ -> None)
                 |> List.distinctBy _.Id
-            let taken = (varsInOrder (Unifier.apply subst defTy) |> List.choose _.Name) @ List.ofSeq state.TypeVars.Keys |> Set.ofList
+            let taken = (varsInOrder (Unifier.apply subst defTy) |> List.choose _.Name) @ (state.TypeVars.Keys |> Seq.choose (function WrittenVar name -> Some name | ScopeOf _ -> None) |> List.ofSeq) |> Set.ofList
             let letters = [ for letter in "cdefghijklmnopqrstuvwxyzab" do if not (taken.Contains (string letter)) then string letter ]
             let names, _, named =
                 unbound
@@ -228,11 +233,11 @@ module internal ContextInference =
                     match var.Name, letters with
                     | Some name, _ -> names @ [ name ], letters, current
                     | None, letter :: rest ->
-                        let namedVar = { Id = current.NextId; Name = Some letter }
+                        let namedVar = TyVar.ordinary current.NextId (Some letter)
                         let next =
                             { current with
                                 NextId = current.NextId + 1
-                                TypeVars = current.TypeVars |> Map.add letter namedVar
+                                TypeVars = current.TypeVars |> Map.add (WrittenVar letter) namedVar
                                 Constraints = (TyVar var, TyVar namedVar, Equal, SourceSpan.none) :: current.Constraints }
                         names @ [ letter ], rest, next
                     | None, [] -> names, [], current) ([], letters, state)

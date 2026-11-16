@@ -150,12 +150,11 @@ let internal isNominal (info: TypeDefInfo) =
 /// The type variable an annotation names `name`: the one it already stands for in this annotation, or a new one. The
 /// variable keeps the annotation's name, so types are shown with the names the user wrote.
 let private namedTypeVar (state: InferState) (name: Identifier) : TyVar * InferState =
-    match state.TypeVars |> Map.tryFind name with
+    match state.TypeVars |> Map.tryFind (WrittenVar name) with
     | Some existing -> existing, state
     | None ->
-        let var = { Id = state.NextId; Name = Some name }
-        var, { state with NextId = state.NextId + 1; TypeVars = state.TypeVars |> Map.add name var }
-
+        let var = TyVar.ordinary state.NextId (Some name)
+        var, { state with NextId = state.NextId + 1; TypeVars = state.TypeVars |> Map.add (WrittenVar name) var }
 /// The nominal type `info` defines, applied to `argTys`: made from its definition's type with them for its parameters.
 /// A type in a scoped context's scope has the context, of its scope, as a last argument (see `TypeDefInfo.ScopedBy`).
 let internal nominalType (info: TypeDefInfo) (argTys: Ty list) : Ty =
@@ -189,8 +188,8 @@ let private writtenContexts (info: TypeDefInfo) (contexts: Ty list) : Ty list =
 let private writtenScope (state: InferState) (info: TypeDefInfo) : Ty list * InferState =
     match info.ScopedBy with
     | Some context ->
-        let scope, next = namedTypeVar state (FunctionContexts.scopeVariableName context)
-        [ FunctionContexts.scoped context (TyVar scope) ], next
+        let scope, next = signatureScope state context
+        [ FunctionContexts.scoped context scope ], next
     | None -> [], state
 
 /// The nominal type `info` defines, applied to a new variable for each of its parameters, and of a new scope if it
@@ -307,7 +306,7 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
         let rowVar, next =
             match row with
             | Some name -> namedTypeVar next name
-            | None -> { Id = next.NextId; Name = None }, { next with NextId = next.NextId + 1 }
+            | None -> (TyVar.ordinary next.NextId None), { next with NextId = next.NextId + 1 }
         TyOpenRecord(fieldMap, rowVar), next
     | TypeApply(name, args) ->
         let mutable current = state
@@ -342,7 +341,7 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
             let scope, current =
                 match Some typeExpr with
                 | CellPassingSyntax.CellParameter held when held |> Option.forall (fun held -> not (SourceSpan.isNone held.Span)) -> freshVar current
-                | _ -> typeExprToTy current (TypeExpr.synthetic (TypeVar (FunctionContexts.scopeVariableName FunctionContexts.cellContext)))
+                | _ -> signatureScope current FunctionContexts.cellContext
             FunctionContexts.cellType argTys.[0] scope, current
         else
             match tryFindTypeDef name current with
@@ -717,17 +716,18 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
             | _ -> failwith "Expected TyVar")
     let updatedTypeVars =
         paramEntries
-        |> List.fold (fun acc (paramName, var) -> acc |> Map.add paramName var) current.TypeVars
+        |> List.fold (fun acc (paramName, var) -> acc |> Map.add (WrittenVar paramName) var) current.TypeVars
     // A type in a scoped context's scope reads that context's scope in its body as its own (see `TypeDefInfo.Scope`).
     let scopedBy = TypeDefModifier.scopeContexts modifiers |> List.filter (fst >> Names.isTypeVariable >> not) |> List.tryExactlyOne |> Option.map fst
     let scope, updatedTypeVars =
         match scopedBy with
         | Some context ->
-            let name = FunctionContexts.scopeVariableName context
             let var, next = freshVar current
             current <- next
             match var with
-            | TyVar var -> Some { var with Name = Some name }, updatedTypeVars |> Map.add name { var with Name = Some name }
+            | TyVar var ->
+                let scope = { var with Name = Some context; Kind = SignatureScope context }
+                Some scope, updatedTypeVars |> Map.add (ScopeOf context) scope
             | _ -> failwith "Expected TyVar"
         | None -> None, updatedTypeVars
     // A type generic in contexts reads its context variable in its body as its own (see `TypeDefInfo.ContextVariable`).
@@ -737,7 +737,7 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
             let var, next = freshVar current
             current <- next
             match var with
-            | TyVar var -> Some { var with Name = Some name }, updatedTypeVars |> Map.add name { var with Name = Some name }
+            | TyVar var -> Some { var with Name = Some name }, updatedTypeVars |> Map.add (WrittenVar name) { var with Name = Some name }
             | _ -> failwith "Expected TyVar"
         | _ -> None, updatedTypeVars
     let stateWithParams = { current with TypeVars = updatedTypeVars }

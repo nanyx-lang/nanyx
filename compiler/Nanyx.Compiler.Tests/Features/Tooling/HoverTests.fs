@@ -209,7 +209,7 @@ let ``Types are shown in ASCII only when it is asked for`` () =
 
 [<Fact>]
 let ``Greek type variable names go through the alphabet, then start again with a subscript`` () =
-    let vars = [ for id in 1..26 -> TyVar { Id = id; Name = None } ]
+    let vars = [ for id in 1..26 -> TyVar (TyVar.ordinary id None) ]
     let shown = Unifier.tyToDisplayString Unicode (TyApply("f", vars))
     Assert.Equal("f(α, β, γ, δ, ε, ζ, η, θ, ι, κ, λ, μ, ν, ξ, ο, π, ρ, σ, τ, υ, φ, χ, ψ, ω, α₁, β₁)", shown)
 
@@ -329,7 +329,7 @@ let ``The empty union is the bottom type`` () =
 
 [<Fact>]
 let ``Where the two ends of the alphabet meet, each goes round its own part again`` () =
-    let var id = TyVar { Id = id; Name = None }
+    let var id = TyVar (TyVar.ordinary id None)
     // Each rest is given back as well as taken, so it is named.
     let open' id = TyFunc(TyUnion [ TyTag("x", None); var id ], TyUnion [ TyTag("x", None); var id ], [])
     // 20 variables and 4 rests take the whole alphabet the first time, so the front keeps α to υ and the back
@@ -412,9 +412,9 @@ def result = mapSome(#some(1), { n -> "Mapped: {n}" })"""
 
 [<Fact>]
 let ``Printed types have the fewest brackets the grammar allows`` () =
-    let a = TyVar { Id = 1; Name = Some "a" }
-    let b = TyVar { Id = 2; Name = Some "b" }
-    let c = TyVar { Id = 3; Name = Some "c" }
+    let a = TyVar (TyVar.ordinary 1 (Some "a"))
+    let b = TyVar (TyVar.ordinary 2 (Some "b"))
+    let c = TyVar (TyVar.ordinary 3 (Some "c"))
     let union = TyUnion [ TyTag("some", Some a); TyTag("none", None) ]
     let pair x y = TyRecord(Map.ofList [ "0", x; "1", y ], FieldOrder.none)
     // `->` groups to the right: a function input is bracketed, a function result is not.
@@ -441,7 +441,7 @@ let ``Printed types have the fewest brackets the grammar allows`` () =
     // as its items would read as more arguments.
     let named = Map.ofList [ "name", a ]
     Assert.Equal("list(name: a)", Unifier.tyToString (TyApply("list", [ TyRecord(named, FieldOrder.none) ])))
-    Assert.Equal("list(name: a, ...r)", Unifier.tyToString (TyApply("list", [ TyOpenRecord(named, { Id = 4; Name = Some "r" }) ])))
+    Assert.Equal("list(name: a, ...r)", Unifier.tyToString (TyApply("list", [ TyOpenRecord(named, (TyVar.ordinary 4 (Some "r"))) ])))
     Assert.Equal("list((a, b))", Unifier.tyToString (TyApply("list", [ pair a b ])))
     // The unit type is written `()`.
     Assert.Equal("() -> ()", Unifier.tyToString (TyFunc(TyPrimitive "unit", TyPrimitive "unit", [])))
