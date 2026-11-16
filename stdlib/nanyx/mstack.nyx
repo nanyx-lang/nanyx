@@ -5,7 +5,8 @@
   was made in: every operation requires that block's `Memory`, and the stack can't leave the block.
 
   Each function is attached to `MStack`, so with `import nanyx/mstack` it is called as
-  `MStack.push(stack, 5)`, or as `stack \push(5)`.
+  `MStack.push(stack, 5)`, or as `stack \push(5)`. For an immutable stack, which needs no `memory`
+  block, see [`Stack`](stack).
 module mstack
 
 import nanyx/mref

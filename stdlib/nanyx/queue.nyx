@@ -1,0 +1,93 @@
+--| Immutable queues: first in, first out.
+
+  A `Queue(a)` takes values in at the back with [`Queue.enqueue`] and gives them out at the front
+  with [`Queue.dequeue`]. It holds two lists, the front in order and the back reversed: `enqueue`
+  puts a value on the back list, and `dequeue` takes one off the front list, reversing the back list
+  into it when it runs out. Each value is moved once, so both take constant time averaged over all
+  the calls. Nothing about a queue changes once it is made: each gives back a new queue, and the old
+  one still holds what it held.
+
+  Two queues are `==` when they hold equal values in the same order, however each splits them
+  between its two lists, and [`Queue.hash`] agrees. [`Queue.toString`] writes one as
+  `Queue[1, 2, 3]`, the front first.
+
+  Each function is attached to `Queue`, so with `import nanyx/queue` it is called as
+  `Queue.enqueue(q, 5)`, or as `q \enqueue(5)`. A literal makes one, the first value at the front:
+  `Queue[1, 2, 3]`, or `[1, 2, 3]` where a queue is expected.
+module queue
+
+export type Queue(a) = protected (front: list(a), back: list(a), count: int)
+
+--| The queue with nothing in it.
+export def Queue.empty: Queue(a) = Queue(front = [], back = [], count = 0)
+
+--| A queue holding `xs`, the first of them at the front.
+export def Queue.fromList: list(a) -> Queue(a) = { xs ->
+  Queue(front = xs, back = [], count = list.length(xs))
+}
+
+--| A queue holding `xs`, the first of them at the front. What a literal builds a queue with,
+  `Queue[1, 2, 3]`, or `[1, 2, 3]` where a queue is expected.
+export def Queue.fromArray: Array(a) -> Queue(a) = { xs ->
+  Queue.fromList(list.fromArray(xs))
+}
+
+-- The front list is empty only when the queue is: `dequeue` reverses the back list into it as soon
+-- as it runs out.
+
+--| `queue` with `value` at the back of it.
+export def Queue.enqueue: Queue(a), a -> Queue(a) = { queue, value ->
+  match queue.front
+    | [] -> Queue(front = [value], back = [], count = 1)
+    | _ -> Queue(front = queue.front, back = [value, ...queue.back], count = queue.count + 1)
+}
+
+--| The value at the front of `queue` and the queue behind it, or `#none` when it is empty.
+export def Queue.dequeue: Queue(a) -> #some(a, Queue(a)) | #none = { queue ->
+  match queue.front
+    | [] -> #none
+    | [first, ...rest] ->
+      def count = queue.count - 1
+
+      match rest
+        | [] -> #some(first, Queue(front = list.reverse(queue.back), back = [], count = count))
+        | _ -> #some(first, Queue(front = rest, back = queue.back, count = count))
+}
+
+--| The value at the front of `queue`, or `#none` when it is empty.
+export def Queue.peek: Queue(a) -> #some(a) | #none = { queue ->
+  match queue.front
+    | [] -> #none
+    | [first, ..._] -> #some(first)
+}
+
+--| Whether `queue` has nothing in it.
+export def Queue.isEmpty: Queue(a) -> bool = { queue ->
+  queue.count == 0
+}
+
+--| How many values are in `queue`.
+export def Queue.count: Queue(a) -> int = { queue ->
+  queue.count
+}
+
+--| The values in `queue`, the front one first.
+export def Queue.toList: Queue(a) -> list(a) = { queue ->
+  queue.front ++ list.reverse(queue.back)
+}
+
+--| Whether `p` and `q` hold equal values in the same order.
+export def Queue.`==`: [Eq(a)] Queue(a), Queue(a) -> bool = { p, q ->
+  p.count == q.count and Queue.toList(p) == Queue.toList(q)
+}
+
+--| The hash of the values in `queue`, in order: the same for any two queues `==` finds equal.
+export def Queue.hash: [Hash(a)] Queue(a) -> int = { queue ->
+  __listHashBy(0, Queue.toList(queue), hash)
+}
+
+--| `queue` as its literal is written, the front first: `Queue[1, 2, 3]`, and `Queue[]` when it is
+  empty.
+export def Queue.toString: [ToString(a)] Queue(a) -> string = { queue ->
+  "Queue{Queue.toList(queue)}"
+}
