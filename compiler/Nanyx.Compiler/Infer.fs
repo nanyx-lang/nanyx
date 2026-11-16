@@ -172,12 +172,6 @@ let private isMap (state: InferState) (ty: Ty) =
     | Maps.MapType _ -> true
     | _ -> false
 
-/// Whether a value of the type `ty` is a function, as far as `state` knows yet.
-let private isFunctionValue (state: InferState) (ty: Ty) =
-    match Unifier.unalias (resolveSoFar state ty) with
-    | TyFunc _ -> true
-    | _ -> false
-
 let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression) : Result<TypedExpr * InferState, Diagnostic list> =
     let outer = state.Origin
     let origin = if SourceSpan.isNone expr.Span then outer else expr.Span
@@ -1193,11 +1187,8 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     let map = Expression.from expr (MemberAccess(Expression.from expr (IdentifierExpr receiver), field, spanOpt))
                     inferMapLookup env state expr map spanOpt args
                 // `statement.setInt(position, value)`, where the field holds a function, calls it (see `FieldCalls`).
-                | Some scheme when dot > 0 && not (receiver.Contains '.')
-                                   && recordFieldsOf (resolveSoFar state scheme.Type) |> Option.bind (Map.tryFind field) |> Option.exists (isFunctionValue state) ->
-                    let read = FieldCalls.readAs expr receiver field spanOpt args
-                    inferExpr env state read
-                    |> Result.map (fun (typed, next) -> { typed with Expr = expr }, { next with ReadAs = next.ReadAs |> Map.add expr.Id read })
+                | Some scheme when dot > 0 && not (receiver.Contains '.') && FieldCalls.holdsFunction state scheme.Type field ->
+                    FieldCalls.infer (inferExpr env) state expr receiver field spanOpt args
                 | Some scheme when dot > 0 && not (receiver.Contains '.') ->
                     let memberName = name.Substring(dot + 1)
                     let receiverTy = resolveSoFar state scheme.Type

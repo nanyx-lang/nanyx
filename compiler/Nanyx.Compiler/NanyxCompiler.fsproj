@@ -25,11 +25,11 @@
     <Compile Include="Unifier.fs" />
     <Compile Include="Lists.fs" />
     <Compile Include="Maps.fs" />
-    <Compile Include="FieldCalls.fs" />
     <Compile Include="Sets.fs" />
     <Compile Include="Arrays.fs" />
     <Compile Include="Boxes.fs" />
     <Compile Include="InferState.fs" />
+    <Compile Include="FieldCalls.fs" />
     <Compile Include="ContextFixes.fs" />
     <Compile Include="WrittenContexts.fs" />
     <Compile Include="ContextVariables.fs" />
