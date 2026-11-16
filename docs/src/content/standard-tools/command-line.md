@@ -233,6 +233,9 @@ against the SHA-256 the lockfile records, then checks that each dependency of a 
 lists them: `acme.util 0.3.0 (../util)`, `acme.web 1.2.0 (downloaded)`. A dependency named by its version that the
 lockfile doesn't lock can't be had yet, since choosing a version isn't supported yet, so `pull` fails for one.
 
+It fetches each dependency on GitHub, a package or a file, at the commit it is pinned to, into the cache too. Set
+`GITHUB_TOKEN` to a token of yours to have GitHub count its requests against your account.
+
 The cache is `.nanyx/packages` in your home directory, or the directory `NANYX_PACKAGES` names. Packages are
 downloaded from the [package index](https://nanyx-lang.github.io/packages/), or from the one `NANYX_INDEX` names: an
 address, or a directory on disk.

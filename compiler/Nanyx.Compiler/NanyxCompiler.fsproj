@@ -122,6 +122,7 @@
     <Compile Include="ModuleLinking.fs" />
     <Compile Include="OwnedDefinitions.fs" />
     <Compile Include="Library.fs" />
+    <Compile Include="Downloads.fs" />
     <Compile Include="GitHub.fs" />
     <Compile Include="SemanticVersions.fs" />
     <Compile Include="Lockfile.fs" />

@@ -366,8 +366,7 @@ To fix it, write the value the message asks for: `sources = ["*.nyx"]`.
 # NYX0024: Manifest field not supported yet
 
 The manifest uses a field the compiler knows, but does not support yet: a dependency named by its version that
-`nanyx.lock` doesn't lock, since choosing a version to lock isn't supported yet, a dependency on GitHub, which can't be
-downloaded yet, or `settings` for a host.
+`nanyx.lock` doesn't lock, since choosing a version to lock isn't supported yet, or `settings` for a host.
 
 ```nanyx
 -- file: demo.nyxp
@@ -693,7 +692,8 @@ the standard library, on the package it comes from.
 # NYX0041: Locked package not in the package cache
 
 A dependency named by its version is the version `nanyx.lock` locks, unpacked in the package cache, and that version
-isn't there: the lockfile is new, or the cache was cleared.
+isn't there: the lockfile is new, or the cache was cleared. The same goes for a dependency on GitHub, at the commit it
+is pinned to: a build reads it from the cache, and never downloads.
 
 ```nanyx
 -- file: demo.nyxp
@@ -714,7 +714,7 @@ export module demo
 export def one = 1
 ```
 
-To fix it, run `nanyx pull`, which downloads each package the lockfile locks into the cache.
+To fix it, run `nanyx pull`, which downloads each package the lockfile locks, and each GitHub reference, into the cache.
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which

@@ -1,5 +1,6 @@
 module Nanyx.Compiler.Tests.Features.Packages.GitHubReferences
 
+open System
 open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
@@ -190,13 +191,65 @@ let ``A file from GitHub imports only the standard library`` () =
     Assert.Contains(errors, fun error -> error.Code = DiagnosticCodes.InvalidReferencedFile.Code && error.Message.Contains "can import only the standard library, not helpers")
 
 [<Fact>]
-let ``Downloading from GitHub isn't supported yet`` () =
+let ``A build reads GitHub only from the cache, and says to pull what isn't there`` () =
     use package = new TempPackage([ app [ retry; web ]; mainImporting "retry" "ignore(twice(2))" ])
-    let errors = errorsOf (Package.ofManifest (package.Path "app/app.nyxp"))
+    let store = storeWith package (GitHub.cachedWith (fun _ _ -> failwith "a build doesn't download") (package.Path "cache"))
+    let errors = errorsOf (Package.ofManifestFrom store (package.Path "app/app.nyxp"))
     Assert.Equal(2, errors.Length)
     for error in errors do
-        Assert.Contains(DiagnosticCodes.UnsupportedManifestField.Code, error)
-        Assert.Contains("is on GitHub, but downloading from GitHub isn't supported yet", error)
+        Assert.Contains(DiagnosticCodes.PackageNotDownloaded.Code, error)
+        Assert.Contains("is on GitHub, but it isn't in the package cache: run nanyx pull to fetch it", error)
+
+/// GitHub's addresses as `GitHub.downloadingWith` asks for them, answered from `repositories`: a file from
+/// raw.githubusercontent.com, a repository's zip from codeload.github.com, in one folder as GitHub makes it, and the
+/// commit a tag points at from api.github.com. Each address asked for is added to `asked`.
+let private fakeGitHub (package: TempPackage) (asked: Collections.Generic.List<string>) : GitHub.Get =
+    fun _ address ->
+        asked.Add address
+        let raw = $"https://raw.githubusercontent.com/acme/snippets/{commit}/"
+        if address.StartsWith raw then
+            let file = package.Path $"github/acme/snippets/{commit}/{address.Substring raw.Length}"
+            Result.Ok(if System.IO.File.Exists file then Some(System.IO.File.ReadAllBytes file) else None)
+        elif address = $"https://codeload.github.com/acme/web/zip/{commit}" then
+            use stream = new System.IO.MemoryStream()
+            (
+                use zip = new System.IO.Compression.ZipArchive(stream, System.IO.Compression.ZipArchiveMode.Create, true)
+                for file in System.IO.Directory.GetFiles(package.Path $"github/acme/web/{commit}") do
+                    use writer = new System.IO.StreamWriter(zip.CreateEntry($"web-{commit}/{System.IO.Path.GetFileName file}").Open())
+                    writer.Write(System.IO.File.ReadAllText file)
+            )
+            Result.Ok(Some(stream.ToArray()))
+        elif address = "https://api.github.com/repos/acme/web/commits/v1.0" then
+            Result.Ok(Some(Text.Encoding.UTF8.GetBytes commit))
+        else
+            Result.Ok None
+
+[<Fact>]
+let ``Pull fetches a file and a package from GitHub into the cache, and the build uses them`` () =
+    use package = new TempPackage(repositories @ [ app [ retry; web ]; mainImporting "acme.web/http" "ignore(status)" ])
+    let asked = Collections.Generic.List<string>()
+    let cache = package.Path "cache"
+    let pulled = okOf (PackageDependencies.pull (storeWith package (GitHub.downloadingWith (fakeGitHub package asked) cache)) (package.Path "app/app.nyxp"))
+    Assert.Contains("acme.web 1.2.0 (", pulled |> String.concat "\n")
+    Assert.True(System.IO.File.Exists(GitHub.fileIn cache { Owner = "acme"; Name = "snippets" } commit "retry.nyx"))
+    Assert.True(System.IO.File.Exists(System.IO.Path.Combine(GitHub.treeIn cache { Owner = "acme"; Name = "web" } commit, "web.nyxp")))
+    let fetched = asked.Count
+    let store = storeWith package (GitHub.cachedWith (fakeGitHub package asked) cache)
+    Assert.Empty((Package.build (okOf (Package.ofManifestFrom store (package.Path "app/app.nyxp")))).Diagnostics)
+    // Pulling again finds both in the cache.
+    okOf (PackageDependencies.pull (storeWith package (GitHub.downloadingWith (fakeGitHub package asked) cache)) (package.Path "app/app.nyxp")) |> ignore
+    Assert.Equal(fetched, asked.Count)
+
+[<Fact>]
+let ``A tag is resolved through GitHub's API, once`` () =
+    use package = new TempPackage([])
+    let asked = Collections.Generic.List<string>()
+    let fetcher = GitHub.cachedWith (fakeGitHub package asked) (package.Path "cache")
+    let web = { Owner = "acme"; Name = "web" }
+    Assert.Equal<Result<string, FetchFailure>>(Result.Ok commit, fetcher.Resolve web "v1.0")
+    Assert.Equal<Result<string, FetchFailure>>(Result.Ok commit, fetcher.Resolve web "v1.0")
+    Assert.Equal<string list>([ "https://api.github.com/repos/acme/web/commits/v1.0" ], List.ofSeq asked)
+    Assert.Equal<Result<string, FetchFailure>>(Result.Error(FetchFailed "acme/web has no tag or branch 'v9'"), fetcher.Resolve web "v9")
 
 [<Fact>]
 let ``The editor offers to pin a tag to the commit it points at`` () =
@@ -222,7 +275,9 @@ let ``The editor offers to pin a reference with no rev to its default branch's c
 [<Fact>]
 let ``No pin is offered when the commit can't be found`` () =
     let text = manifestWith """(package = "acme.web", github = "acme/web", rev = "v1.0")"""
-    let diagnostic = (Package.compileManifest "app.nyxp" text).Diagnostics |> List.exactlyOne
+    use package = new TempPackage([])
+    let store = storeWith package GitHub.unsupported
+    let diagnostic = (Package.compileManifestFrom store (package.Path "app.nyxp") text).Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.GitHubReferenceNotPinned.Code, diagnostic.Code)
     Assert.Empty(diagnostic.Fixes)
 

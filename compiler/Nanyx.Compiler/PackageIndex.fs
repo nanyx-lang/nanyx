@@ -2,7 +2,6 @@ namespace NyxCompiler
 
 open System
 open System.IO
-open System.Net.Http
 open System.Text.Json
 
 /// A version of a package as the index lists it.
@@ -24,10 +23,7 @@ module PackageIndex =
     /// The format of the index this compiler reads.
     let format = 1
 
-    let private client = lazy (new HttpClient())
-
-    let private isAddress (location: string) =
-        location.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || location.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+    let private isAddress = Downloads.isAddress
 
     /// `relative`, an address or a path, read from the file at `from`: an address or a rooted path as it is, and
     /// anything else relative to the directory `from` is in.
@@ -38,20 +34,15 @@ module PackageIndex =
 
     /// The bytes at `location`, an address or a path, or why they can't be read.
     let private read (location: string) : Result<byte array, string> =
-        try
-            if isAddress location then
-                use response = client.Value.GetAsync(location).GetAwaiter().GetResult()
-                if response.IsSuccessStatusCode then Result.Ok(response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult())
-                elif response.StatusCode = Net.HttpStatusCode.NotFound then Result.Error $"there is no {location}"
-                else Result.Error $"{location} answered {int response.StatusCode} {response.ReasonPhrase}"
-            elif File.Exists location then
+        if isAddress location then
+            Downloads.get [] location |> Result.bind (function Some bytes -> Result.Ok bytes | None -> Result.Error $"there is no {location}")
+        elif File.Exists location then
+            try
                 Result.Ok(File.ReadAllBytes location)
-            else
-                Result.Error $"there is no {location}"
-        with
-        | :? HttpRequestException as error -> Result.Error $"{location} can't be reached: {error.Message}"
-        | :? IOException as error -> Result.Error $"{location} can't be read: {error.Message}"
-
+            with :? IOException as error ->
+                Result.Error $"{location} can't be read: {error.Message}"
+        else
+            Result.Error $"there is no {location}"
     /// The JSON at `location`, or why it can't be read.
     let private readJson (location: string) : Result<JsonElement, string> =
         read location

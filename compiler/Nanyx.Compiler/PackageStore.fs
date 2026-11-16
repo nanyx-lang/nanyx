@@ -25,16 +25,20 @@ module PackageStore =
         | "" -> Path.Combine(Environment.GetFolderPath Environment.SpecialFolder.UserProfile, ".nanyx", "packages")
         | directory -> Path.GetFullPath directory
 
-    /// The user's store: their cache, the index `NANYX_INDEX` names, if it is set, or else nanyx-lang's, and nothing
-    /// fetched from GitHub, which isn't supported yet.
+    /// The user's store, as a build reads it: their cache, the index `NANYX_INDEX` names, if it is set, or else
+    /// nanyx-lang's, and GitHub as far as `nanyx pull` has fetched from it into the cache (see `GitHub.cached`).
     let user () : PackageStore =
-        { Cache = defaultCache ()
+        let cache = defaultCache ()
+        { Cache = cache
           Index =
             match Environment.GetEnvironmentVariable "NANYX_INDEX" with
             | null
             | "" -> defaultIndex
             | index -> index
-          GitHub = GitHub.unsupported }
+          GitHub = GitHub.cached cache }
+
+    /// `store`, fetching from GitHub what isn't in its cache yet: as `nanyx pull` reads it.
+    let downloading (store: PackageStore) : PackageStore = { store with GitHub = GitHub.downloading store.Cache }
 
     /// The directory the package `name` at `version` is unpacked in, in the cache.
     let directoryOf (store: PackageStore) (name: string) (version: SemanticVersion) = Path.Combine(store.Cache, name, string version)

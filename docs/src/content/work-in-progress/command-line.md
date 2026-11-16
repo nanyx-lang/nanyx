@@ -72,9 +72,10 @@ and the live view is drawn inside the box.
   writing the lockfile come with [#864](https://github.com/nanyx-lang/nanyx/issues/864), and so do `--locked` and
   `--offline`.
 - A dependency on GitHub (`github =` in the manifest, `github:` in a script's `::dependency`) is read and checked, and
-  resolved through `GitHubFetcher` (`GitHub.fs`), whose real implementation is `GitHub.unsupported` for now: every
-  command that builds such a package reports that downloading from GitHub isn't supported yet, at the entry, and exits
-  with 1. Fetching from GitHub into the cache is still to do.
+  resolved through `GitHubFetcher` (`GitHub.fs`). A build's store fetches with `GitHub.cached`, which reads only the
+  cache and fails with `NotPulled` (`NYX0041`); `nanyx pull` wraps the shell's store in `PackageStore.downloading`,
+  which fetches with `GitHub.downloading` ([#1742](https://github.com/nanyx-lang/nanyx/issues/1742)). HTTP and
+  unzipping are `Downloads.fs`, shared with the index.
 - `nanyx manifest` has only `--json` so far.
 
 `nanyx test` is proposed on [Testing](./testing).
