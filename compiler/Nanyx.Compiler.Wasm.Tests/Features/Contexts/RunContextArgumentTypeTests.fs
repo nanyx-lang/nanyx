@@ -59,3 +59,21 @@ def main = {
 }
 """
     runSource source |> assertRan "#x(1) (1, true)\n"
+
+[<Fact>]
+let ``Run - a function that requires a context applied to a hole its body settles`` () =
+    // The `_` is the `a` that `bar` and `baz` are called with, so `useIt`'s instance is found at `int` (#1572).
+    let source = """context Foo(a) = (
+  bar: (a, a -> a)
+  baz: (a, a -> a)
+)
+
+def doFoo: [Foo(_)] a, a -> a = { a, b -> bar(a, baz(a, b)) }
+
+def useIt: int -> int = { n ->
+  use Foo(int)(bar = { x, y -> x + y }, baz = { x, y -> x * y }) in doFoo(n, 2)
+}
+
+println("{useIt(3)}")
+"""
+    runSource source |> assertRan "9\n"

@@ -303,6 +303,15 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         finalState
                         |> recordSymbolType symbol declaredTy
                         |> recordAnnotated symbol expectedDeclaredOpt.IsSome
+                    // Each `_` the def's contexts are applied to is the type its value made it.
+                    let settledType = TypeHoles.settleInContexts finalState name typeOpt
+                    let typeOpt, contextOpt =
+                        match settledType with
+                        | Ok settled when settled <> typeOpt ->
+                            let contextOpt = fst (extractDefContexts settled expr)
+                            state <- registerContextRequirement (recordWrittenType name settled state) name contextOpt.Value declaredTypeExprOpt
+                            settled, contextOpt
+                        | _ -> typeOpt, contextOpt
                     let rigidResult =
                         match declaredTypeExprOpt with
                         | Some declaredExpr -> checkAnnotationIsRigid finalState name (declarationSpan finalState DefValue expr) declaredExpr
@@ -310,7 +319,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     // A function named point-free finds its instances at the type the def writes.
                     let valueResolved =
                         if expectedDeclaredOpt.IsSome then resolveValueInstances envWithRec state expr else Ok state
-                    match rigidResult |> Result.bind (fun () -> valueResolved) |> Result.bind (fun state -> synthesizeSettledInstances env state name) with
+                    match rigidResult |> Result.bind (fun () -> Result.map ignore settledType) |> Result.bind (fun () -> valueResolved) |> Result.bind (fun state -> synthesizeSettledInstances env state name) with
                     | Error err -> abandon isExport name expr err
                     | Ok synthesizedState ->
                         state <- synthesizedState
