@@ -38,6 +38,16 @@ let ``Pattern parameters are printed as written`` () =
     Assert.Equal("def f = { (a, b) -> a }\n", format "def f = {(a,b)->a}")
 
 [<Fact>]
+let ``A typed def's lambda with a pattern parameter puts its body on its own line`` () =
+    // The body moves into the arm of the match that takes the pattern apart, which is the same with or without a
+    // block around it (#1595).
+    formatsTo
+        """def g: int, (int, int) -> int = { a, (b, c) ->
+  a + b * c
+}"""
+        "def g: int, (int, int) -> int = { a, (b, c) -> a + b * c }"
+
+[<Fact>]
 let ``A unit parameter is printed as written`` () =
     unchanged "def a = { () -> 5 }\n"
     unchanged "def b = { () -> -1 }\n"
