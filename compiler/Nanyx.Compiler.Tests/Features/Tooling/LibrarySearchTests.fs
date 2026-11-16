@@ -117,3 +117,25 @@ let ``A name and a type together find what has both`` () =
     let matches = search "trim: string -> string"
     Assert.Equal("string.trim", matches.Head.Name)
     Assert.All(matches, fun found -> Assert.Contains("trim", found.Name, StringComparison.OrdinalIgnoreCase))
+
+[<Fact>]
+let ``A match has its doc comment`` () =
+    let _, trim = find "trim" "string.trim"
+    Assert.True(trim.Doc |> Option.exists (fun doc -> doc.Length > 0), $"%A{trim.Doc}")
+
+[<Fact>]
+let ``A module's exports are read once per process`` () =
+    Assert.Same(LibraryCatalog.moduleExports "text", LibraryCatalog.moduleExports "text")
+
+[<Fact>]
+let ``A library module is compiled from the checked library, checking nothing`` () =
+    let started = Collections.Concurrent.ConcurrentBag<string>()
+    let listener =
+        { new CompileListener with
+            member _.FileStarted _ = ()
+            member _.ModuleStarted name = started.Add name
+            member _.ModuleFinished(_, _) = ()
+            member _.ModuleReused _ = () }
+    let result = Compiler.compileStandardLibraryModuleReporting listener "text"
+    Assert.True(result.TypeChecked)
+    Assert.Empty(started)

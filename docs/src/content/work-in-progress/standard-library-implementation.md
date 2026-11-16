@@ -98,7 +98,8 @@ examples, is written by hand.
 The reference lists what the file exports, in the order it declares it: each type, context and def, attached ones
 included, under a heading of its name, with its signature as hover writes it and its doc comment; a context's members
 with theirs; and, on the page of the file named for the module, the module's doc comment first. Names the library
-reserves, those that start with `__`, are left out. It is read from the compile of each module the compiler embeds,
+reserves, those that start with `__`, are left out. It is read from the compile of each module the compiler embeds, as an import of it reads it, so no module is checked
+again (`Compiler.compileStandardLibraryModuleReporting`),
 and of each public module of the packages it ships beside it (`ShippedPackages`), not from a parse of its own (`StandardLibraryDocs` in `Nanyx.Compiler/StandardLibraryDocs.fs`), and a link in a doc
 comment, `` [`name`] ``, leads to the name's entry, on its page or another.
 
