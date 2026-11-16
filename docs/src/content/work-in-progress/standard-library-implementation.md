@@ -34,7 +34,10 @@ share; `CheckedLibrary` holds the format). It writes the file after `CoreBuild`,
 it: in a parallel build, a project that asks for `Build` while the writer is building gets the result as soon as
 `Build` is done, before the targets that run after it, so the file has to be there by then
 ([#1648](https://github.com/nanyx-lang/nanyx/issues/1648)). `compiler/CheckedLibrary.targets`, which the CLI and the
-test projects import, copies the file beside them and into the published `nanyx`. Its syntax nodes and symbols have ids from
+test projects import, copies the file beside them and into the published `nanyx`. It builds the writer for the machine
+that builds, without the program's runtime or the publish properties that would pick one, and makes it a reference
+of the program while restoring, so that building or publishing one project alone restores it
+([#1656](https://github.com/nanyx-lang/nanyx/issues/1656)). Its syntax nodes and symbols have ids from
 `CheckedLibrary.firstId` (2⁵⁶) on, which no process reaches, so they never meet a process's own. A process reads the
 file the first time it imports a library module, about 0.2 s, and a module read from it is reported as reused,
 `nanyx/prelude (cached)` under `--timings`. The file is used only where it is what checking would give: by a compiler
