@@ -3,7 +3,7 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.ExpressionRewrites
 
-/// The names of the built-in types. `String`, `List`, `Unit`, `Seq`, `Map`, `Set`, `Array`, `I64`, `F64` and `Boolean` are the
+/// The names of the built-in types. `String`, `List`, `Unit`, `Map`, `Set`, `Array`, `I64`, `F64` and `Boolean` are the
 /// types, and `string`, `list` and the rest (`int`, `float` and `bool` for the last three) are keyword aliases that
 /// mean exactly them, before the dot of an attached definition (`def String.trim` is `def string.trim`) as in a type
 /// (`List(I64)` is `list(int)`). The compiler works with the alias, so it prints `list(string)`: this pass writes each
@@ -16,13 +16,16 @@ module internal BuiltinTypeNames =
             [ "String", "string"
               "Unit", "unit"
               "List", Lists.typeName
-              "Seq", Seqs.typeName
               "Map", Maps.typeName
               "Set", Sets.typeName
               "Array", Arrays.typeName
               "I64", "int"
               "F64", "float"
               "Boolean", "bool" ]
+
+    /// Each library type's alias and the type it is written as: `seq(int)` is the prelude's `Seq(int)`, and `seq.map`
+    /// is `Seq.map` (see `Seqs`). The type is declared as a user's is, so here the alias is the other way round.
+    let private libraryAliases = Map.ofList [ Seqs.alias, Seqs.typeName ]
 
     /// Each spelling that is not a type and the alias to write instead.
     let private notTypes = Map.ofList [ "Int", "int"; "Float", "float"; "Bool", "bool" ]
@@ -56,7 +59,7 @@ module internal BuiltinTypeNames =
             if own.Contains written then
                 None
             else
-                match aliases |> Map.tryFind written, notTypes |> Map.tryFind written with
+                match aliases |> Map.tryFind written |> Option.orElse (libraryAliases |> Map.tryFind written), notTypes |> Map.tryFind written with
                 | Some alias, _ -> Some alias
                 | None, Some alias ->
                     errors.Add(error span written alias)

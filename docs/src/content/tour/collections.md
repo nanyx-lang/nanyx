@@ -67,8 +67,7 @@ Most of the time, Nanyx programs don't care very much about the specific impleme
 | `Queue(a)` | - | First in, first out (`import nanyx/queue`) |
 | `Trie(k, v)`, `StringTrie(v)` | - | Lookup by a sequence of keys, and every key that starts with a prefix (`import nanyx/trie`) |
 | `Collection(a)` | - | Any in-memory collection |
-| `Sequence(a)` | `seq(a)` | Finite, deterministic sequences |
-| `Generator(a)` | `gen(a)` | Potentially infinite or non-deterministic sequences |
+| `Seq(a)` | `seq(a)` | Lazy sequences, which may never end, such as the range `0..` ([sequences](../stdlib/prelude-sequences)) |
 
 ```nanyx
 def lookup = ["a" => 1, "b" => 2]

@@ -55,7 +55,6 @@ let private lookupPrimitive (name: string) =
 let internal isBuiltInTypeName (name: string) =
     (lookupPrimitive name).IsSome
     || Lists.isTypeName name
-    || Seqs.isTypeName name
     || name = CellPassingSyntax.typeName
     || Maps.isTypeName name
     || Sets.isTypeName name
@@ -90,7 +89,6 @@ let rec attachedTypeNames (ty: Ty) : string list =
     | TyNominal(id, _, _, _) -> [ id.Name ]
     | TyPrimitive name -> [ name ]
     | Lists.ListType _ -> [ Lists.typeName ]
-    | Seqs.SeqType _ -> [ Seqs.typeName ]
     | Maps.MapType _ -> [ Maps.typeName ]
     | Sets.SetType _ -> [ Sets.typeName ]
     | Arrays.ArrayType _ -> [ Arrays.typeName ]
@@ -174,7 +172,10 @@ let internal nominalType (info: TypeDefInfo) (argTys: Ty list) : Ty =
         | _ -> []
     let parameters, arguments =
         (List.zip (List.truncate argTys.Length info.Parameters) (List.truncate info.Parameters.Length argTys)) @ scope @ contexts |> List.unzip
-    TyNominal(TypeDefInfo.nominalId info, argTys, Unifier.applyToParameters parameters arguments info.Underlying, info.IsPrivate)
+    let underlying =
+        RecursiveNominals.instantiate info.Underlying argTys
+        |> Option.defaultWith (fun () -> Unifier.applyToParameters parameters arguments info.Underlying)
+    TyNominal(TypeDefInfo.nominalId info, argTys, underlying, info.IsPrivate)
 
 /// The contexts a type generic in contexts is written with, as its last argument (see `FunctionContexts.carried`):
 /// none for a type written without them, the pure one.
@@ -210,9 +211,12 @@ let internal freshNominalType (state: InferState) (info: TypeDefInfo) : Ty * Ty 
             let variable, next = freshVar next
             [ FunctionContexts.carried [ variable ] ], [ variable ], next
         | None -> [], [], next
+    let args = argTys @ Option.toList scoped @ contexts
     let underlying =
-        Unifier.applyToParameters (info.Parameters @ Option.toList info.Scope @ Option.toList info.ContextVariable) (argTys @ scopeArgument @ contextArgument) info.Underlying
-    let nominal = TyNominal(TypeDefInfo.nominalId info, argTys @ Option.toList scoped @ contexts, underlying, info.IsPrivate)
+        RecursiveNominals.instantiate info.Underlying args
+        |> Option.defaultWith (fun () ->
+            Unifier.applyToParameters (info.Parameters @ Option.toList info.Scope @ Option.toList info.ContextVariable) (argTys @ scopeArgument @ contextArgument) info.Underlying)
+    let nominal = TyNominal(TypeDefInfo.nominalId info, args, underlying, info.IsPrivate)
     nominal, RecursiveNominals.underlying nominal, scoped, next
 
 /// The type the name `name`, defined by `info`, stands for written without arguments: the nominal type, or the alias.

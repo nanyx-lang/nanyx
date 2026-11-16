@@ -1115,14 +1115,14 @@ To fix it, write the type out.
 
 # NYX0217: Endless for loop
 
-A `for` loop walks only `gen`s, such as the open range `0..`, which never end, so the loop would never end either
+A `for` loop walks only ranges with no end, such as `0..`, which never end, so the loop would never end either
 ([Loops](../tour/loops)).
 
 ```nanyx
-def count = for 0.. | i -> i  -- error NYX0217: A `for` loop over a `gen` alone may never end: ...
+def count = for 0.. | i -> i  -- error NYX0217: A `for` loop over a range with no end alone never ends: ...
 ```
 
-To fix it, walk the `gen` in step with a list or a bounded range, as in `for xs, 0.. | x, i -> ...`.
+To fix it, walk the range in step with a list or a range with an end, as in `for xs, 0.. | x, i -> ...`.
 
 # NYX0218: Named parameter passed by position
 
