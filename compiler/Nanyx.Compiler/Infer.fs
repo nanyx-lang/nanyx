@@ -68,38 +68,38 @@ let private fieldTySoFar (state: InferState) (ty: Ty) (fieldName: string) : (Ty 
 /// rather than it, each of inference's own variables solved to a type with it is constrained to that type without it.
 /// So is every context variable no caller can choose (see `Unifier.outputOnlyContextVars`) solved to no contexts.
 let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeScheme * InferState =
-    match Unifier.unify state.Constraints with
-    | Error _ -> TypeEnv.generalize env ty, state
-    | Ok subst ->
-        let resolved = Unifier.apply subst ty
-        let envVars =
-            TypeEnv.freeEnvVars env
-            |> Seq.map (fun id -> TypeEnv.freeTyVars (Unifier.apply subst (TyVar { Id = id; Name = None })))
-            |> Set.unionMany
-        let closed =
-            Unifier.outputOnlyRestVars resolved @ Unifier.outputOnlyContextVars resolved
-            |> List.filter (fun v -> v.Name.IsNone && not (envVars.Contains v.Id))
-        let bottom = TyUnion []
-        let closing = closed |> List.map (fun v -> v.Id, bottom) |> Map.ofList
-        let closedTy = Unifier.apply closing resolved
-        let madeUp, own = closed |> List.partition Unifier.isMadeUpRest
-        let solvedWithMadeUp =
-            if madeUp.IsEmpty then []
-            else
-                let madeUpIds = madeUp |> List.map (fun v -> v.Id) |> Set.ofList
-                subst
-                |> Map.toList
-                |> List.choose (fun (id, _) ->
-                    let var = { Id = id; Name = None }
-                    let solved = Unifier.apply subst (TyVar var)
-                    if Unifier.isMadeUpRest var || Set.isEmpty (Set.intersect madeUpIds (TypeEnv.freeTyVars solved)) then None
-                    else Some (TyVar var, Unifier.apply closing solved))
-        { Quantified = Set.difference (TypeEnv.freeTyVars closedTy) envVars
-          Type = closedTy
-          Symbol = None
-          ProvidedBy = None },
-        (own |> List.map (fun v -> TyVar v, bottom)) @ solvedWithMadeUp
-        |> List.fold (fun st (var, closedTy) -> addConstraint var closedTy st) state
+    // A conflict among the constraints, in this def or an earlier one, is set aside, so a def after an error is
+    // generalised as it would be without it (#1441).
+    let subst = fst (Unifier.solve state.Constraints)
+    let resolved = Unifier.apply subst ty
+    let envVars =
+        TypeEnv.freeEnvVars env
+        |> Seq.map (fun id -> TypeEnv.freeTyVars (Unifier.apply subst (TyVar { Id = id; Name = None })))
+        |> Set.unionMany
+    let closed =
+        Unifier.outputOnlyRestVars resolved @ Unifier.outputOnlyContextVars resolved
+        |> List.filter (fun v -> v.Name.IsNone && not (envVars.Contains v.Id))
+    let bottom = TyUnion []
+    let closing = closed |> List.map (fun v -> v.Id, bottom) |> Map.ofList
+    let closedTy = Unifier.apply closing resolved
+    let madeUp, own = closed |> List.partition Unifier.isMadeUpRest
+    let solvedWithMadeUp =
+        if madeUp.IsEmpty then []
+        else
+            let madeUpIds = madeUp |> List.map (fun v -> v.Id) |> Set.ofList
+            subst
+            |> Map.toList
+            |> List.choose (fun (id, _) ->
+                let var = { Id = id; Name = None }
+                let solved = Unifier.apply subst (TyVar var)
+                if Unifier.isMadeUpRest var || Set.isEmpty (Set.intersect madeUpIds (TypeEnv.freeTyVars solved)) then None
+                else Some (TyVar var, Unifier.apply closing solved))
+    { Quantified = Set.difference (TypeEnv.freeTyVars closedTy) envVars
+      Type = closedTy
+      Symbol = None
+      ProvidedBy = None },
+    (own |> List.map (fun v -> TyVar v, bottom)) @ solvedWithMadeUp
+    |> List.fold (fun st (var, closedTy) -> addConstraint var closedTy st) state
 
 /// The built-in operators work on `int`, `float` and the sized numbers. An operation is on the type of whichever
 /// operand is already known to be one of the others, and defaults to `int` otherwise. (Ordering is
@@ -1253,8 +1253,10 @@ and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression)
     | _ ->
         inferExpr env state expr
         |> Result.map (fun (typed, next) ->
+            // An error earlier in the module is set aside (see `Unifier.agreeing`).
+            let agreeing = Unifier.agreeing next.Constraints
             let isOpen (input: Ty) =
-                match Unifier.unify next.Constraints with
+                match Unifier.unify agreeing with
                 | Ok subst ->
                     match Unifier.unalias (Unifier.apply subst input) with
                     | TyVar _
@@ -1263,7 +1265,7 @@ and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression)
                 | Error _ -> false
             match annotation.AttachedInput, Unifier.unalias typed.Type with
             | Some attached, TyFunc(input, _, _) when
-                isOpen input && Unifier.unify ((input, attached, Equal, expr.Span) :: next.Constraints) |> Result.isOk
+                isOpen input && Unifier.unify ((input, attached, Equal, expr.Span) :: agreeing) |> Result.isOk
                 ->
                 typed, addConstraintAt expr.Span input attached next
             | _ -> typed, next)

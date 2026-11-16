@@ -95,3 +95,13 @@ def h: Handler = { x -> x + 1 }
 def g: int -> int = { x -> x + 1 }
 def n = g(2)""")
     Assert.Equal(TyPrimitive "int", typed.Types.["n"])
+
+[<Fact>]
+let ``Typecheck rejects an annotation more general than its body after a type error`` () =
+    let source =
+        normalized """def wrong: int = "not a number"
+def rigid: a -> a = { x -> 1 }
+"""
+    let result = Compiler.compile source
+    assertReports DiagnosticCodes.TypeMismatch result
+    assertReports DiagnosticCodes.AnnotationTooGeneral result

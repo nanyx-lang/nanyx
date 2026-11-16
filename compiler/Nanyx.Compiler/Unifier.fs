@@ -1120,19 +1120,51 @@ module Unifier =
     let unify (constraints: ConstraintSet) : Result<Subst, string * SourceSpan> =
         unifyDetailed constraints |> Result.mapError (fun (message, span, _) -> message, span)
 
+    /// `remaining` solved past each failure (see `solveDetailed`), with the constraints that agree and the failures
+    /// after `failures`, which are newest first.
+    let rec private solveSettingAside (remaining: ConstraintSet) (failures: Mismatch list) : Subst * ConstraintSet * Mismatch list =
+        match unifyDetailed remaining with
+        | Ok subst -> subst, remaining, List.rev failures
+        | Error (_, span, _ as failure) ->
+            let kept = remaining |> List.filter (fun (_, _, _, origin) -> origin <> span)
+            // A failure from no constraint given (which `unify` does not make) cannot be set aside.
+            if kept.Length = remaining.Length then empty, [], List.rev (failure :: failures)
+            else solveSettingAside kept (failure :: failures)
+
     /// Solves `constraints` as `unify` does, carrying on past a failure: the constraints from where it failed are
     /// set aside and the rest solved again, until they agree. Gives the substitution the rest agree on, and each
     /// failure in the order it was found (see `Mismatch`). With no failure, the substitution is the one `unify` gives.
     let solveDetailed (constraints: ConstraintSet) : Subst * Mismatch list =
-        let rec attempt (remaining: ConstraintSet) (failures: Mismatch list) =
-            match unifyDetailed remaining with
-            | Ok subst -> subst, List.rev failures
-            | Error (_, span, _ as failure) ->
-                let kept = remaining |> List.filter (fun (_, _, _, origin) -> origin <> span)
-                // A failure from no constraint given (which `unify` does not make) cannot be set aside.
-                if kept.Length = remaining.Length then empty, List.rev (failure :: failures)
-                else attempt kept (failure :: failures)
-        attempt constraints []
+        let subst, _, failures = solveSettingAside constraints []
+        subst, failures
+
+    /// The lists of constraints `agreeing` was given lately, by reference, each with the constraints of it that agree.
+    let private agreeingLists =
+        new System.Threading.ThreadLocal<Dictionary<ConstraintSet, ConstraintSet>>(fun () ->
+            Dictionary<ConstraintSet, ConstraintSet>(HashIdentity.Reference))
+
+    /// The constraints of `constraints` that agree, as `solveDetailed` keeps them: those it sets aside are not among
+    /// them. The type checker asks whether a constraint fits with those it has so far by solving it with these, so that
+    /// an error earlier in the module, reported where it is, does not make every later constraint seem not to fit.
+    ///
+    /// The constraints in front of a list it gave lately are put in front of what that list gave, so that solving them
+    /// is on top of what that solved to (see `unifyDetailed`), rather than the whole list from the start each time.
+    let agreeing (constraints: ConstraintSet) : ConstraintSet =
+        let given = agreeingLists.Value
+        match given.TryGetValue constraints with
+        | true, kept -> kept
+        | false, _ ->
+            let rec walk (newer: ConstraintSet) (remaining: ConstraintSet) =
+                match given.TryGetValue remaining with
+                | true, kept -> List.rev newer @ kept
+                | false, _ ->
+                    match remaining with
+                    | [] -> constraints
+                    | constraint :: rest -> walk (constraint :: newer) rest
+            let _, kept, _ = solveSettingAside (walk [] constraints) []
+            if given.Count >= solvedListsKept then given.Clear()
+            given[constraints] <- kept
+            kept
 
     /// Solves `constraints` as `solveDetailed` does, giving each failure's message and where it is.
     let solve (constraints: ConstraintSet) : Subst * (string * SourceSpan) list =

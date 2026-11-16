@@ -24,8 +24,9 @@ let private checkAnnotationIsRigid (state: InferState) (name: Identifier) (span:
     if vars.IsEmpty then
         Ok ()
     else
-        match Unifier.unify state.Constraints with
-        // A conflict is reported when the module's constraints are solved.
+        // A conflict is reported when the module's constraints are solved, and set aside here, so that it does not hide
+        // this check of a def after it.
+        match Unifier.unify (Unifier.agreeing state.Constraints) with
         | Error _ -> Ok ()
         | Ok subst ->
             let resolved = vars |> List.map (fun (varName, var) -> varName, Unifier.apply subst (TyVar var))
