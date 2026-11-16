@@ -91,19 +91,19 @@ module internal BinaryData =
 
     let private writeCount (writer: BinaryWriter) (count: int) = writer.Write7BitEncodedInt count
 
-    /// Writes `value`, of type `ty`, to `writer`.
-    let write (writer: BinaryWriter) (ty: Type) (value: obj) =
+    /// Writes `value`, of type `ty`, to `writer`, each string as `text` gives it.
+    let write (writer: BinaryWriter) (text: string -> string) (ty: Type) (value: obj) =
         let objects = Dictionary<obj, int>(HashIdentity.Reference)
         let strings = Dictionary<string, int>(StringComparer.Ordinal)
         let rec item (ty: Type) (value: obj) =
             match value with
-            | :? string as text ->
-                match strings.TryGetValue text with
+            | :? string as written ->
+                match strings.TryGetValue written with
                 | true, index -> writeCount writer (index + 1)
                 | false, _ ->
                     writeCount writer 0
-                    writer.Write text
-                    strings[text] <- strings.Count
+                    writer.Write(text written)
+                    strings[written] <- strings.Count
             | null -> if shared ty then writeCount writer 0; content ty value
             | _ when shared ty ->
                 match objects.TryGetValue value with
@@ -144,17 +144,17 @@ module internal BinaryData =
                 items |> Array.iteri (fun i element -> item elementTypes[i % elementTypes.Length] element)
         item ty value
 
-    /// Reads a value of type `ty` that `write` wrote.
-    let read (reader: BinaryReader) (ty: Type) : obj =
+    /// Reads a value of type `ty` that `write` wrote, each string as `text` gives the one read.
+    let read (reader: BinaryReader) (text: string -> string) (ty: Type) : obj =
         let objects = ResizeArray<obj>()
         let strings = ResizeArray<string>()
         let rec item (ty: Type) : obj =
             if ty = typeof<string> then
                 match reader.Read7BitEncodedInt() with
                 | 0 ->
-                    let text = reader.ReadString()
-                    strings.Add text
-                    box text
+                    let read = text (reader.ReadString())
+                    strings.Add read
+                    box read
                 | index -> box strings[index - 1]
             elif shared ty then
                 match reader.Read7BitEncodedInt() with

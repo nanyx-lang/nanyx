@@ -504,6 +504,14 @@ module Compiler =
             else
                 merged
 
+    /// The build's host: the package's (see `PackageModules.Host`), none for a library, the one a script's `::host`
+    /// names, or the console host for a loose script or source; with its package's modules, where the import of the
+    /// host, and the host's own imports, resolve.
+    let private buildHostOf (checkedModules: CheckedModules) : Host option * PackageModules option =
+        match checkedModules.Package with
+        | Some package -> package.Host, package.HostPackage
+        | None -> Some HostPackages.console.Value, ShippedPackages.tryModules Hosts.consolePackage
+
     /// Parses, desugars and type-checks one module, resolving and checking the modules it imports first. An
     /// error says which phase it came from. The check is reported to the listener of `checkedModules` as it starts
     /// and ends, by the module's `originKey`, with the imports' checks inside it.
@@ -518,12 +526,7 @@ module Compiler =
     /// `typecheckModule`, unreported.
     and private checkModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
-        // The build's host: the package's (see `PackageModules.Host`), none for a library, the one a script's `::host`
-        // names, or the console host for a loose script or source. Its package's modules are where the import of the host, and the host's own imports, resolve.
-        let buildHost, hostModules =
-            match checkedModules.Package with
-            | Some package -> package.Host, package.HostPackage
-            | None -> Some HostPackages.console.Value, ShippedPackages.tryModules Hosts.consolePackage
+        let buildHost, hostModules = buildHostOf checkedModules
         // A file of the host's package, or of a package it depends on, such as the interface package it implements.
         let inHostPackage (path: string) = hostModules |> Option.exists (fun modules -> (PackageModules.ownerOf modules path).IsSome)
         let isHost (path: string) =
@@ -956,18 +959,33 @@ module Compiler =
             checkedModule
 
     /// The module of the source file at `path`, imported from `origin`: as this process last checked it, if every file
-    /// that check read reads the same now, and else checked again on its own, recording what it reads.
+    /// that check read reads the same now; else, for a file of the build's host package or a package it depends on, as
+    /// the checked library has it (see `CheckedLibrary`), under the same condition, which is how the writer checked it;
+    /// and else checked again on its own, recording what it reads.
     and private typecheckSourceFile (checkedModules: CheckedModules) (origin: ModuleOrigin) (path: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
         let readsTheSame (file: string, text: string) =
             try checkedModules.ReadFile file = text with _ -> false
-        match checkedSourceFiles.TryGetValue key with
-        | true, kept when kept.Package = checkedModules.Package && List.forall readsTheSame kept.Read ->
+        let shipped () =
+            match buildHostOf checkedModules with
+            | _, Some hostModules when (PackageModules.ownerOf hostModules path).IsSome ->
+                CheckedLibrary.tryFindShipped key checkedModules.ReadFile
+                |> Option.map (fun shipped ->
+                    let kept = { Package = checkedModules.Package; Read = shipped.Read; Module = shipped.Module; Imports = shipped.Imports }
+                    checkedSourceFiles.[key] <- kept
+                    kept)
+            | _ -> None
+        let kept =
+            match checkedSourceFiles.TryGetValue key with
+            | true, kept when kept.Package = checkedModules.Package && List.forall readsTheSame kept.Read -> Some kept
+            | _ -> shipped ()
+        match kept with
+        | Some kept ->
             checkedModules.Listener.ModuleReused key
             for importKey, imported in kept.Imports do
                 checkedModules.TryAdd(importKey, imported) |> ignore
             Ok kept.Module
-        | _ ->
+        | None ->
             let read = ResizeArray<string * string>()
             let reading (file: string) =
                 let text = checkedModules.ReadFile file
@@ -984,9 +1002,10 @@ module Compiler =
             | _ -> checkedSourceFiles.TryRemove key |> ignore
             checkedModule
 
-    /// Checks every module of the standard library, as an import of it does, and writes them to the file at `path` (see
-    /// `CheckedLibrary`). Only the build of the compiler does, in a process of its own, before it checks anything else:
-    /// the ids of what it checks start at `CheckedLibrary.firstId`.
+    /// Checks every module of the standard library, and of the console host's package and the packages it depends on,
+    /// as an import of it from a loose script does, and writes them to the file at `path` (see `CheckedLibrary`). Only the
+    /// build of the compiler does, in a process of its own, before it checks anything else: the ids of what it checks
+    /// start at `CheckedLibrary.firstId`.
     let writeCheckedLibrary (path: string) =
         CheckedLibrary.reading <- false
         NodeId.startAt CheckedLibrary.firstId
@@ -996,7 +1015,23 @@ module Compiler =
             for name in StandardLibrary.preludeModuleName :: StandardLibrary.moduleNames do
                 let source = StandardLibrary.tryLoadSource name |> Option.defaultValue ""
                 typecheckImport checkedModules (StandardLibraryModule name) (fun () -> source) Set.empty |> ignore
-            CheckedLibrary.write path [ for KeyValue((key, source), checking) in checkedStandardLibrary -> key, source, checking.Value ])
+            let rec packages (modules: PackageModules) = modules :: List.collect packages modules.Dependencies
+            let shippedFiles =
+                buildHostOf checkedModules
+                |> snd
+                |> Option.map packages
+                |> Option.defaultValue []
+                // A module in several files is checked from its first, which brings in the others.
+                |> List.collect (fun modules -> modules.Modules |> Map.values |> Seq.choose List.tryHead |> List.ofSeq)
+                |> List.distinct
+            for file in shippedFiles do
+                typecheckImport checkedModules (SourceFile file) (fun () -> checkedModules.ReadFile file) Set.empty |> ignore
+            let shipped =
+                [ for file in shippedFiles do
+                      match checkedSourceFiles.TryGetValue(originKey (SourceFile file)) with
+                      | true, kept -> { CheckedShippedModule.Key = originKey (SourceFile file); Read = kept.Read; Module = kept.Module; Imports = kept.Imports }
+                      | false, _ -> () ]
+            CheckedLibrary.write path [ for KeyValue((key, source), checking) in checkedStandardLibrary -> key, source, checking.Value ] shipped)
 
     let parse (source: string) : Result<Module, Diagnostic list> =
         match parseModuleFileWithNames "" source with
