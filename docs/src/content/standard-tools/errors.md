@@ -1496,6 +1496,7 @@ def count: [Console] int = 3  -- error NYX0253: Only a function type carries con
 ```
 
 To fix it, write the contexts on the function that requires them, or leave them out.
+
 # NYX0254: Attached definition already in scope for its type
 
 An attached definition has a name the type already has in scope: from an import, or, for a built-in type, from the
