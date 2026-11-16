@@ -4,10 +4,12 @@ description: "How local cells are built, and the rest of the plan for mutation u
 order: 2
 ---
 
-Local cells, cell parameters and `while` are built ([#756](https://github.com/nanyx-lang/nanyx/issues/756),
-[#1072](https://github.com/nanyx-lang/nanyx/issues/1072), [#957](https://github.com/nanyx-lang/nanyx/issues/957)).
-[Memory](../advanced/memory) and [Loops](../tour/loops) describe them. This page keeps how they are built and what
-is planned.
+Local cells, cell parameters, `while`, and the mutable values `MRef`, `MArray`, `MSlice`, `MStack` and `MList` are
+built ([#756](https://github.com/nanyx-lang/nanyx/issues/756), [#1072](https://github.com/nanyx-lang/nanyx/issues/1072),
+[#957](https://github.com/nanyx-lang/nanyx/issues/957), [#1491](https://github.com/nanyx-lang/nanyx/issues/1491) to
+[#1493](https://github.com/nanyx-lang/nanyx/issues/1493), [#1545](https://github.com/nanyx-lang/nanyx/issues/1545)).
+[Memory](../advanced/memory), [Loops](../tour/loops) and [Collections](../tour/collections#arrays-and-slices) describe
+them. This page keeps how they are built, and `mut` record fields, which are still planned.
 
 # How it works
 
@@ -52,7 +54,7 @@ is planned.
   outside a block. A top-level def that writes no type is inferred to require it, and its type carries it
   ([#1561](https://github.com/nanyx-lang/nanyx/issues/1561)).
 
-# Planned
+# Mutable values
 
 Decided by the maintainer: mutable values carry their `memory` block's scope in their types, as a cell parameter's
 `mut T` does. The scope is never written or shown, each operation requires `Memory` of it, and NYX0233 keeps the
@@ -115,6 +117,8 @@ context of their own, `type MRef(a) = [Memory] protected (...)`
    element past the end is `#none` or `#outOfRange`. `toArray` and `toString` copy. Still open: spreading a slice into
    a literal, `Array[...s]`, which waits for the `Iterable` context that spreading a set does
    ([Collection literals](./collection-literals)).
+
+# Planned
 
 - **`mut` record fields.** The parser reads `mut` before a field name in a record type; nothing checks or compiles it
   yet.

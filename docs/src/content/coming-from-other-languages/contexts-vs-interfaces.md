@@ -86,12 +86,32 @@ def greet: [Console] string -> () = { name ->
 }
 ```
 
-## 3) One pattern for many problems
+## 3) A context is not a type
+
+An interface is a type: you can declare a variable of type `ILogger`, return one from a factory, and keep one in a field. A context is not a type, and an instance of one is never a value. A context's name is written only in a context list, `[Log]`, and as the constructor in a `use`. So `def make: () -> Log` and `def inst = Log(log = ...)` are both errors.
+
+Where you would write a factory that returns an implementation, write a function that runs some code with one loaded instead:
+
+```nanyx
+context Log = (log: string -> ())
+
+def withConsoleLog: [Console] ([Log] () -> a) -> a = { f ->
+  use Log(log = { m -> println(m) }) in f()
+}
+
+def main = {
+  withConsoleLog { log("hello") }
+}
+```
+
+A record of functions is still a value, and is the thing to reach for when you want to pass behaviour around as data. See [Contexts](../advanced/contexts#declaring-a-context).
+
+## 4) One pattern for many problems
 
 The same mechanism (`[Context(...)]`) handles:
 
 - effect requirements (`Console`, `FileSystem`, `Memory`)
-- generic capabilities (`Add(a)`, `Iter(a)`, etc.)
+- generic capabilities (`Add(a)`, `Eq(a)`, `Hash(a)`, etc.)
 
 # Contexts vs interfaces: when to choose what
 
@@ -112,7 +132,7 @@ In practice, these are complementary: records model data, attached definitions p
 
 - Start by translating interface constraints to context constraints in generic functions.
 - Keep data models as records; avoid recreating deep inheritance trees.
-- Prefer small capability contexts (`Iter`, `Sized`, `Sum`) over large “god interfaces.”
+- Prefer small capability contexts (`Eq`, `Hash`, `Add`) over large “god interfaces.”
 - Treat context requirements as part of the API contract.
 
 For full details on contexts, see [Contexts](../advanced/contexts).

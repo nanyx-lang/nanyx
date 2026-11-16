@@ -35,8 +35,8 @@ Arrays: immutable, fixed-length sequences with constant-time indexing.
 
 An `Array(a)` holds its elements in one block, so [`array.at`](prelude-arrays#arrayat) reads any of them in the same time,
 where `at` on a list walks to it. Nothing about an array changes once it is made, so it needs no
-`Memory`. There is no literal for one: make it from a list with [`array.fromList`](#arrayfromlist), from its
-indices with [`array.init`](#arrayinit), or filled with each slot's default with [`array.create`](#arraycreate).
+`Memory`. Write one as a literal, `Array[1, 2, 3]`, or make it from a list with [`array.fromList`](#arrayfromlist),
+from its indices with [`array.init`](#arrayinit), or filled with each slot's default with [`array.create`](#arraycreate).
 
 Each function is attached to `array`, so it is in scope wherever arrays are, without an import, and is called as
 `array.length(xs)`, or as `xs \length` when `xs` is known to be an array. `==` compares two arrays
