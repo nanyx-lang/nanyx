@@ -184,18 +184,6 @@ module SyntaxTree =
             | _ -> None)
         |> Set.ofList
 
-    /// The names a module writes as values of their own rather than calls: `add` in `fold(0, add)`, not in
-    /// `add(1, 2)` or `1 \add(2)`.
-    let namedAsValues (items: Module) : Set<Identifier> =
-        items
-        |> List.collect ofItem
-        |> List.collect expressionsWithin
-        |> List.choose (fun expr ->
-            match expr.Kind with
-            | IdentifierExpr name -> Some name
-            | _ -> None)
-        |> Set.ofList
-
     /// The blocks of `expr` and of everything within it, each as its statements.
     let rec blocksWithin (expr: Expression) : Statement list list =
         let children, statements = childrenOf expr

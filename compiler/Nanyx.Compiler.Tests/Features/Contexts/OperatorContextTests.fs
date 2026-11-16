@@ -92,11 +92,18 @@ let ``A local function requires no contexts, so its arithmetic is on numbers`` (
     Assert.Equal("int -> int", Unifier.tyToString typed.Types.["r"])
 
 [<Fact>]
-let ``A def the module names as a value requires nothing, as a function that requires a context cannot be a value`` () =
-    // #599: `add` passed to `fold` would need a wrapper the backend cannot make.
-    let typed = compileClean "def add = { x, y -> x + y }\ndef total = [1, 2, 3] \\list.fold(0, add)\n"
-    Assert.True(typed.InferredContextTypes.IsEmpty)
-    Assert.Equal("int, int -> int", Unifier.tyToString typed.Types.["add"])
+let ``A def the module names as a value requires the context of its arithmetic all the same`` () =
+    // #1693: `add` passed to `fold` is passed with the instance found where it is named (#599).
+    let typed =
+        compileClean
+            """
+def add = { x, y -> x + y }
+def total = [1.5, 2.5] \list.fold(0.0, add)
+def sum = add(1.5, 2.0)
+"""
+    Assert.Equal<string list>([ "Add" ], inferredContexts typed |> List.map fst)
+    Assert.Equal("a, a -> a", Unifier.tyToDisplayString Ascii typed.Types.["add"])
+    Assert.Equal<string list>([ "float"; "float" ], [ "total"; "sum" ] |> List.map (fun name -> Unifier.tyToString typed.Types.[name]))
 
 [<Fact>]
 let ``A def inferred to require Add is called with ints, floats and a type that attaches the members`` () =
