@@ -825,7 +825,18 @@ module Unifier =
                 // holds the same arguments again (see `RecursiveNominals`).
                 | TyNominal(lNominal, lArgs, lUnderlying, lPrivate), TyNominal(rNominal, rArgs, rUnderlying, rPrivate) ->
                     if lNominal = rNominal && lArgs.Length = rArgs.Length then
-                        let argConstraints = List.map2 (fun lTy rTy -> (lTy, rTy, Equal, origin)) lArgs rArgs
+                        // A value whose contexts nothing has settled yet, as a constructor's, carries the other's, as
+                        // where it is given (see the nominal case of assignability): made the same as another such, the
+                        // two would otherwise share a made-up variable.
+                        let argConstraints =
+                            List.map2
+                                (fun lTy rTy ->
+                                    match lTy, rTy with
+                                    | FunctionContexts.Carried [ TyVar unsettled ], FunctionContexts.Carried other
+                                    | FunctionContexts.Carried other, FunctionContexts.Carried [ TyVar unsettled ] when isPlainVar unsettled ->
+                                        (TyVar unsettled, TyUnion other, Equal, origin)
+                                    | _ -> (lTy, rTy, Equal, origin))
+                                lArgs rArgs
                         match lUnderlying, rUnderlying with
                         | _ when lPrivate || rPrivate -> loop subst (argConstraints @ rest)
                         | TyRecursive _, _

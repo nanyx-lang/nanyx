@@ -7,18 +7,24 @@ namespace NyxCompiler
 /// recursive alias would not (see `RecursiveAliases`). It holds its definition closed instead: `TyRecursive(body,
 /// values)`. In `body` each variable of the definition (its parameters, then the scope of a type in a scoped context's
 /// scope, then the context variable of a type generic in contexts) is a `TyParam`, and each place the type names itself
-/// is a `TySelf` of the arguments it is written with there. `values` are what those variables are here. `underlying`
-/// unfolds it one level, where what a value is made from is looked at; a pass that walks a type finds the variables in
-/// `values` and ends.
+/// is a `TySelf` of the arguments it is written with there. `values` are what those variables are here: the contexts a
+/// type generic in contexts carries are held as its argument holds them, a function type's contexts, so that a pass
+/// that reads variables reads them as context variables. `underlying` unfolds it one level, where what a value is made
+/// from is looked at; a pass that walks a type finds the variables in `values` and ends.
 module RecursiveNominals =
     /// What the variable of a nominal type's definition that `argument`, one of the type's arguments, is for stands for:
-    /// the scope of a scoped context, the contexts carried as a union (as `TypeResolution.nominalType` gives them), or the
-    /// argument itself.
+    /// the scope of a scoped context, or the argument itself, the contexts carried included.
     let private valueOf (argument: Ty) : Ty =
         match argument with
         | FunctionContexts.ScopedContext(_, scope) -> scope
-        | FunctionContexts.Carried contexts -> TyUnion contexts
         | _ -> argument
+
+    /// What the nominal type whose definition is made from `underlying`, applied to `args`, is made from, when the type
+    /// names itself: its closed definition at those arguments.
+    let instantiate (underlying: Ty) (args: Ty list) : Ty option =
+        match underlying with
+        | TyRecursive(body, _) -> Some (TyRecursive(body, List.map valueOf args))
+        | _ -> None
 
     /// `ty` with each part `replace` gives a replacement for replaced, and the others walked in turn. The closed
     /// definition of a recursive type inside it is left as it is: its parameters are its own.
@@ -29,8 +35,13 @@ module RecursiveNominals =
         | None ->
             match ty with
             | TyRecursive(body, args) -> TyRecursive(body, List.map recur args)
-            // A context variable replaced by the contexts it stands for adds them.
-            | TyFunc(input, output, contexts) -> TyFunc(recur input, recur output, contexts |> List.map recur |> FunctionContexts.flatten)
+            // A context variable replaced by the contexts a type carries adds them.
+            | TyFunc(input, output, contexts) ->
+                let contexts =
+                    contexts
+                    |> List.map recur
+                    |> List.collect (function FunctionContexts.Carried carried -> carried | context -> [ context ])
+                TyFunc(recur input, recur output, FunctionContexts.flatten contexts)
             | _ -> Ty.map recur ty
 
     /// What the nominal type `ty` is made from: its underlying type, unfolded one level when the type names itself, so
