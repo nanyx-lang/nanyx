@@ -158,7 +158,7 @@ let adapter (tools: LiftedTools) (functionName: string) (givenTy: IrType) (expec
             let arguments = values |> List.map AVar
             let call arguments =
                 let called = Expr.make (CallClosure(adapted, arguments @ List.rev members, Borrowing)) givenOutput
-                if CoreIrLowerBoxes.needsConversion givenOutput result then
+                if CoreIrLowerBoxes.needsConversion givenOutput result || CoreIrLowerMembers.differInContexts givenOutput result then
                     tools.BindTemp called (fun value -> tools.Coerce scope value result (fun atom -> Expr.make (Atom atom) result))
                 else { called with Type = result }
             match givenValueTys, valueTys with

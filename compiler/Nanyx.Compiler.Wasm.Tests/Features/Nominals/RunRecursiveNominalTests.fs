@@ -30,6 +30,47 @@ println(first(v1({ n ->
     |> assertRan "got 1\n1\n"
 
 [<Fact>]
+let ``Run - the rest of a value generic in contexts made with a pure lambda is pulled with the contexts it carries`` () =
+    // #1725: the inner constructor's pure lambda takes the members of the `[d]` its value carries.
+    run """
+type Rq(a) = [k] protected (next: [k] () -> #next(a, Rq(a)) | #done)
+
+def v1: ([d] int -> b) -> [d] Rq(b) = { f -> Rq(next = { #next(f(1), Rq(next = { #done })) }) }
+
+def count: [Console] ([Console] Rq(string)) -> int = { r ->
+  match r.next()
+    | #next(x, rest) -> 1 + count(rest)
+    | #done -> 0
+}
+
+println(count(v1({ n -> "{n}" })))
+"""
+    |> assertRan "1\n"
+
+[<Fact>]
+let ``Run - pure values nested in a value generic in contexts are each pulled with the contexts it carries`` () =
+    // #1725: the adapter of the inner value adapts the values its function gives back, which are of its type again.
+    run """
+type Rq(a) = [k] protected (next: [k] () -> #next(a, Rq(a)) | #done)
+
+def v3: ([d] int -> b) -> [d] Rq(b) = { f ->
+  Rq(next = { #next(f(1), Rq(next = { #next(f(2), Rq(next = { #next(f(3), Rq(next = { #done })) })) })) })
+}
+
+def joined: [Console] ([Console] Rq(string)) -> string = { r ->
+  match r.next()
+    | #next(x, rest) -> x ++ joined(rest)
+    | #done -> "."
+}
+
+println(joined(v3({ n ->
+  println("got {n}")
+  "{n}"
+})))
+"""
+    |> assertRan "got 1\ngot 2\ngot 3\n123.\n"
+
+[<Fact>]
 let ``Run - a protected type that names itself in a field is built and recursed over`` () =
     run """
 type Node = protected (value: int, rest: #some(Node) | #none)
