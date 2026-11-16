@@ -184,7 +184,7 @@ The entrypoint runs under the package's host, which loads the contexts it may us
 )
 ```
 
-`nanyx.console` is the host for a command-line program. The compiler ships it beside itself, so it needs nothing installed, and it brings `println`, `Console` and `Env` into scope in every module of the program. A host the compiler doesn't ship is found by its path instead of a version, as a dependency is: `host = (package = "acme.host", path = "../acme.host")`. A package with no `host` is a library: it can't have an `@entry`, and running it is an error. `nanyx run`, `nanyx build` and `nanyx check` take `--host` with a host's name or directory to choose one for a single command instead, and a single `.nyx` file always runs under `nanyx.console`.
+`nanyx.console` is the host for a command-line program. The compiler ships it beside itself, so it needs nothing installed, and it brings `println`, `Console` and `Env` into scope in every module of the program. A host the compiler doesn't ship is found by its path instead of a version, as a dependency is: `host = (package = "acme.host", path = "../acme.host")`. A package with no `host` is a library: it can't have an `@entry`, and running it is an error. `nanyx run`, `nanyx build` and `nanyx check` take `--host` with a host's name or directory to choose one for a single command instead. A single `.nyx` file runs under `nanyx.console` unless it names another host with a `::host` directive (see [Script mode](#script-mode)).
 
 # Building and running a package
 
@@ -232,7 +232,16 @@ For script mode, Nanyx synthesizes a package description in memory rather than r
 import "./utils" as utils
 ```
 
-Each directive is a dotted key, with `= value` when it sets a value: `::linters.default.unusedBindings = "error"` says what `linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (unusedBindings = #error)))]` says in a manifest. `::dependencies.<name> = "<version>"` names a package to download, which isn't supported yet, so it is an error for now. The directives are listed in [Files and projects](../getting-started/files-and-projects). A file in a package cannot have directives: they go in the package's manifest instead.
+Each directive is a dotted key, with `= value` when it sets a value: `::linters.default.unusedBindings = "error"` says what `linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (unusedBindings = #error)))]` says in a manifest. `::host` and `::dependencies` name the script's host and the packages it imports from, as a manifest's `host` and `dependencies` do:
+
+```nanyx fragment
+::host.nanyx.console = "0.28.0"
+::dependencies.acme.util = { path = "../util" }
+
+import acme.util/strings
+```
+
+A package the compiler ships is named at the compiler's version, and any other is found by its `path`, relative to the script. Without `::host`, a script runs under `nanyx.console`. The directives are listed in [Files and projects](../getting-started/files-and-projects). A file in a package cannot have directives: they go in the package's manifest instead.
 
 Script modules and named package modules are distinct. A named module is imported through its package or module identity; an anonymous script module is imported by file path.
 

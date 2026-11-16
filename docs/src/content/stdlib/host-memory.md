@@ -8,7 +8,7 @@ Only a host imports `nanyx/host.memory`, to pass buffers to and from the foreign
 
 # Reference
 
-<!-- The reference below is generated from the doc comments in stdlib/ by `nanyx stdlib-docs`: edit those, not this. -->
+<!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->
 
 A host's access to the WebAssembly module's linear memory, where it passes buffers to and from the foreign
 functions it calls (those declared with `@extern`). An address is an `I32`, the place of a byte in memory.

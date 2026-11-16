@@ -93,9 +93,11 @@ level, so a field is never mistaken for a package's configuration:
     `nanyx run` and `nanyx build` alike, and running it is a fatal `no entry point` error. Done (see
     [What's built](#whats-built)).
   - `nanyx new` writes both entries, at the compiler's version.
-- **Scripts.** A loose script has no manifest. It runs under the console host, and runs the linters its `::linters`
-  directives name, if any. It will name another host with `::host`, as a manifest's `host` does, and the packages it
-  depends on with `::dependencies`.
+- **Scripts.** A loose script has no manifest. It runs the linters its `::linters` directives name, if any, names its
+  host with `::host`, as a manifest's `host` does, and the packages it imports from with `::dependencies`, as a
+  manifest's `dependencies` does: `::host.acme.server = { path = "../server" }`,
+  `::dependencies.nanyx.console.core = "0.28.0"`. Without `::host` it runs under the console host the compiler ships.
+  Done ([#1504](https://github.com/nanyx-lang/nanyx/issues/1504)).
 
 # What it needs
 
@@ -117,8 +119,8 @@ level, so a field is never mistaken for a package's configuration:
 2. **The console host as a package** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)), as the first shipped
    source directory. Its manifest declares it a host, with a prelude, and a host the compiler doesn't ship is found by
    its path, and `Console` and `Env` are in the interface package `nanyx.console.core`: done (see
-   [What's built](#whats-built)). A script's `::host` and `::dependencies` directives are
-   [#1504](https://github.com/nanyx-lang/nanyx/issues/1504).
+   [What's built](#whats-built)). A script's `::host` and `::dependencies` directives are done too
+   ([#1504](https://github.com/nanyx-lang/nanyx/issues/1504)).
 3. **The official linter as a package** ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)), once the linter
    contract is designed. The rules move one at a time, with the tests checking that each one reports what it did.
 
@@ -150,8 +152,9 @@ level, so a field is never mistaken for a package's configuration:
   package's public modules and the shipped packages it depends on. A file of the host's package, or of a package it
   depends on, sees no host, so the interface package doesn't import the prelude that re-exports it. A library lists
   `nanyx.console.core` in its `dependencies` and imports `nanyx.console.core/console`; an application may too, to
-  import it under an alias. The reference on the `console` and `env` pages of the docs site is kept by hand until the
-  generator covers shipped packages ([#1505](https://github.com/nanyx-lang/nanyx/issues/1505)).
+  import it under an alias. The reference on the `console` and `env` pages of the docs site is generated from its doc
+  comments, as the standard library's is ([#1505](https://github.com/nanyx-lang/nanyx/issues/1505), see
+  [Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)).
 - **No host means a library.** `Manifest.Host` and `PackageModules.Host` are options. A package file under no host gets
   no host import, an `@entry` there is `NYX0031` (`Attributes.applyAttributes`), and `nanyx run` on a library says it
   has no entry point. A loose script still runs under the console host.

@@ -1,7 +1,9 @@
 /// The standard library's reference, as the docs site shows it (docs/src/content/stdlib): a page for each file of the
 /// library, and on it the names the file exports, in the order it declares them, each with its signature and doc
-/// comment. It is read from the compile of each module that the compiler embeds. The reference sits on its page
-/// between `beginMarker` and `endMarker`, and the rest of the page is written by hand.
+/// comment. It is read from the compile of each module that the compiler embeds, and of each public module of the
+/// packages the compiler ships beside it, but for the hosts (see `ShippedPackages`), whose modules a program doesn't
+/// import. The reference sits on its page between `beginMarker` and `endMarker`, and the rest of the page is written by
+/// hand.
 module NyxCompiler.StandardLibraryDocs
 
 open System
@@ -9,14 +11,15 @@ open System.IO
 open System.Text.RegularExpressions
 open Parser.Program
 
-let beginMarker = "<!-- The reference below is generated from the doc comments in stdlib/ by `nanyx stdlib-docs`: edit those, not this. -->"
+let beginMarker = "<!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->"
 
 let endMarker = "<!-- End of the generated reference. -->"
 
-/// The page of the library's file `file` (its resource name, as `nanyx/prelude-lists.nyx`): its name without the
-/// package and the extension, with a `-` for each `.`, so `nanyx/host.runtime.nyx` is on `host-runtime`.
+/// The page of the library's file `file` (its resource name, as `nanyx/prelude-lists.nyx`, or the path of a file of a
+/// shipped package): its name without the package, the directory and the extension, with a `-` for each `.`, so
+/// `nanyx/host.runtime.nyx` is on `host-runtime`, and `packages/nanyx.console.core/src/env.nyx` on `env`.
 let pageOf (file: string) =
-    Path.GetFileNameWithoutExtension(file.Substring StandardLibrary.importPrefix.Length).Replace('.', '-')
+    Path.GetFileNameWithoutExtension(file).Replace('.', '-')
 
 /// What a page's reference lists: an exported def, type or context, its doc comment, and, for a context, its
 /// members, each with its doc comment.
@@ -79,8 +82,12 @@ let internal compile (moduleName: string) : CompileResult =
 
 /// The names the module `moduleName`, compiled as `typed`, exports, by the file of it that declares each, in the order
 /// the file declares them, with their doc comments as `docOf` writes them. The names it reserves are left out.
-let internal exportsOf (moduleName: string) (typed: TypedModule) (docOf: Symbol -> string option) : Map<string, Export list> =
-    let files = StandardLibrary.moduleFiles moduleName |> Set.ofList
+let rec internal exportsOf (moduleName: string) (typed: TypedModule) (docOf: Symbol -> string option) : Map<string, Export list> =
+    exportsIn (StandardLibrary.moduleFiles moduleName) typed docOf
+
+/// `exportsOf` a module whose files are `files`.
+and private exportsIn (files: string list) (typed: TypedModule) (docOf: Symbol -> string option) : Map<string, Export list> =
+    let files = Set.ofList files
     typed.Symbols
     |> Map.values
     |> Seq.filter (fun symbol ->
@@ -126,24 +133,55 @@ let private render (moduleDoc: string option) (exports: (Export * string) list) 
           if not members.IsEmpty then String.concat "\n" members ]
     Option.toList moduleDoc @ (exports |> List.collect entry) |> String.concat "\n\n"
 
-/// The reference of each page, by page: one for each file of the library that exports a name, as the compile of its
-/// module that the compiler embeds has them. A link in a doc comment, `` [`name`] ``,
-/// leads to the name's entry, on its own page or another.
+/// A module whose reference is written: its files, its compile, and the file it is compiled from, whose doc comment is
+/// the module's.
+type private Documented =
+    { Files: string list
+      Result: CompileResult
+      ModuleFile: string }
+
+/// The modules whose reference is written: each of the standard library's, and each public module of a package the
+/// compiler ships but for the hosts', compiled as a program that imports it checks it.
+let private documented () : Documented list =
+    let library =
+        StandardLibrary.preludeModuleName :: StandardLibrary.moduleNames
+        |> List.map (fun moduleName ->
+            { Files = StandardLibrary.moduleFiles moduleName
+              Result = compile moduleName
+              ModuleFile = StandardLibrary.resourceName moduleName })
+    let packages =
+        ShippedPackages.names ()
+        |> List.filter (fun name -> Result.isError (HostPackages.tryShipped name))
+        |> List.choose ShippedPackages.tryModules
+        |> List.collect (fun modules ->
+            modules.PublicModules
+            |> List.choose (fun moduleName -> modules.Modules |> Map.tryFind moduleName)
+            |> List.choose (function
+                | file :: _ as files ->
+                    Some
+                        { Files = files
+                          Result = Compiler.compileSourceIn modules Linters.none file (File.ReadAllText file)
+                          ModuleFile = file }
+                | [] -> None))
+    library @ packages
+
+/// The reference of each page, by page: one for each file of the library, or of a package the compiler ships, that
+/// exports a name, as `documented` compiles its module. A link in a doc comment, `` [`name`] ``, leads to the name's
+/// entry, on its own page or another.
 let references () : Map<string, string> =
-    let modules = StandardLibrary.preludeModuleName :: StandardLibrary.moduleNames
-    let compiled = modules |> List.map (fun moduleName -> moduleName, compile moduleName)
+    let compiled = documented ()
     // Every entry's page and heading, by where its name is declared, for the links.
     let targets =
         compiled
-        |> List.collect (fun (moduleName, result) ->
-            exportsOf moduleName result.Typed.Value (fun _ -> None)
+        |> List.collect (fun documented ->
+            exportsIn documented.Files documented.Result.Typed.Value (fun _ -> None)
             |> Map.toList
             |> List.collect (fun (file, exports) ->
                 anchors exports |> List.map (fun (export, id) -> export.Symbol.Declaration, (pageOf file, id))))
         |> Map.ofList
     compiled
-    |> List.collect (fun (moduleName, result) ->
-        StandardLibrary.moduleFiles moduleName
+    |> List.collect (fun documented ->
+        documented.Files
         |> List.choose (fun file ->
             let page = pageOf file
             let linkTo =
@@ -152,16 +190,16 @@ let references () : Map<string, string> =
                     | Some (target, id) when target = page -> $"#{id}"
                     | Some (target, id) -> $"{target}#{id}"
                     | None -> null)
-            let reader = Documentation.Reader(StandardLibrary.resourceName moduleName, result.DocComments.Value, result, 0, linkTo)
+            let result = documented.Result
+            let reader = Documentation.Reader(documented.ModuleFile, result.DocComments.Value, result, 0, linkTo)
             let exports =
-                exportsOf moduleName result.Typed.Value reader.ForSymbol
+                exportsIn documented.Files result.Typed.Value reader.ForSymbol
                 |> Map.tryFind file
                 |> Option.map anchors
                 |> Option.defaultValue []
-            let moduleDoc = if file = StandardLibrary.resourceName moduleName then reader.ForModule file else None
+            let moduleDoc = if file = documented.ModuleFile then reader.ForModule file else None
             if exports.IsEmpty then None else Some (page, render moduleDoc exports)))
     |> Map.ofList
-
 /// `page`, a page's text, with its reference between the markers replaced by `reference`. An error when it has no
 /// markers, or they are out of order.
 let withReference (reference: string) (page: string) : Result<string, string> =
@@ -178,7 +216,7 @@ type PageUpdate =
     /// The page's text with its reference as the library has it.
     | OutOfDate of string
     /// The page cannot be written: there is no page for a file that exports names, or the page has no markers, or it
-    /// has markers but no file of the library is its.
+    /// has markers but no file of the library, or of a shipped package, is its.
     | Unwritable of string
 
 /// What each page of the library's reference in `directory` (docs/src/content/stdlib) needs, by its path: its text with
@@ -195,7 +233,7 @@ let update (directory: string) : (string * PageUpdate) list =
         |> Map.toList
         |> List.map (fun (page, reference) ->
             match pages |> Map.tryFind page with
-            | None -> Path.Combine(directory, page + ".md"), Unwritable "is missing: a file of the standard library exports names it would list"
+            | None -> Path.Combine(directory, page + ".md"), Unwritable "is missing: a file of the standard library, or of a package the compiler ships, exports names it would list"
             | Some path ->
                 let text = File.ReadAllText path
                 match withReference reference text with
@@ -206,5 +244,5 @@ let update (directory: string) : (string * PageUpdate) list =
         pages
         |> Map.toList
         |> List.filter (fun (page, path) -> not (references.ContainsKey page) && File.ReadAllText(path).Contains beginMarker)
-        |> List.map (fun (_, path) -> path, Unwritable "has a reference, but no file of the standard library is its")
+        |> List.map (fun (_, path) -> path, Unwritable "has a reference, but no file of the standard library, or of a package the compiler ships, is its")
     ofLibrary @ stale

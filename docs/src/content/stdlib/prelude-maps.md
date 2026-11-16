@@ -46,7 +46,7 @@ A set's elements need an `Eq` and a `Hash` of their type, as a map's keys do, so
 
 # Reference
 
-<!-- The reference below is generated from the doc comments in stdlib/ by `nanyx stdlib-docs`: edit those, not this. -->
+<!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->
 
 ## `map.empty`
 
