@@ -20,8 +20,12 @@
     <ProjectReference Include="..\Nanyx.Compiler\NanyxCompiler.fsproj" />
   </ItemGroup>
 
-  <!-- Written again whenever this program or the compiler it runs changes, and the library is part of the compiler. -->
-  <Target Name="WriteCheckedLibrary" AfterTargets="Build" Inputs="$(TargetPath);@(ReferenceCopyLocalPaths)" Outputs="$(OutDir)checked-library.bin">
+  <!--
+    Written again whenever this program or the compiler it runs changes, and the library is part of the compiler. It
+    runs after CoreBuild, inside Build, not after Build: a project that asks for Build while this project is building
+    is given the result as soon as Build is done, before the targets that run after it, and would not find the file.
+  -->
+  <Target Name="WriteCheckedLibrary" AfterTargets="CoreBuild" Inputs="$(TargetPath);@(ReferenceCopyLocalPaths)" Outputs="$(OutDir)checked-library.bin">
     <Exec Command="dotnet &quot;$(TargetPath)&quot; &quot;$(OutDir)checked-library.bin&quot;" />
   </Target>
 

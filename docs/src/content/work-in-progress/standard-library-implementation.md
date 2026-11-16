@@ -30,8 +30,11 @@ The compiler's build checks every standard-library module once and writes the re
 compile checks none of them ([#837](https://github.com/nanyx-lang/nanyx/issues/837)). `Nanyx.Compiler.CheckedLibrary`,
 a small program, calls `Compiler.writeCheckedLibrary` when it is built, which checks each module as an import of it
 does and writes the checked modules to `checked-library.bin` (`BinaryData` writes the F# data, sharing what the modules
-share; `CheckedLibrary` holds the format). `compiler/CheckedLibrary.targets`, which the CLI and the test projects
-import, copies the file beside them and into the published `nanyx`. Its syntax nodes and symbols have ids from
+share; `CheckedLibrary` holds the format). It writes the file after `CoreBuild`, inside its `Build` target, not after
+it: in a parallel build, a project that asks for `Build` while the writer is building gets the result as soon as
+`Build` is done, before the targets that run after it, so the file has to be there by then
+([#1648](https://github.com/nanyx-lang/nanyx/issues/1648)). `compiler/CheckedLibrary.targets`, which the CLI and the
+test projects import, copies the file beside them and into the published `nanyx`. Its syntax nodes and symbols have ids from
 `CheckedLibrary.firstId` (2⁵⁶) on, which no process reaches, so they never meet a process's own. A process reads the
 file the first time it imports a library module, about 0.2 s, and a module read from it is reported as reused,
 `nanyx/prelude (cached)` under `--timings`. The file is used only where it is what checking would give: by a compiler
