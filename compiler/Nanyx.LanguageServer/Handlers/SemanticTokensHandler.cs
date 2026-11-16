@@ -1,20 +1,25 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
-using NominalNames = NyxCompiler.NominalNames;
+using SemanticTokens = NyxCompiler.SemanticTokens;
 
 namespace Nanyx.LanguageServer.Handlers;
 
 /// <summary>
-/// Marks the names of nominal types, so that the editor can show them apart from aliases of a shape, whose names look
-/// the same: each name of a protected or private type (its declaration, a type that names it, its constructor, a pattern
-/// that takes it apart, the type's part of an attached definition's name) is a <c>type</c> token with the
-/// <see cref="Nominal"/> modifier, and a private one has <see cref="Private"/> too. Every other token is left to the
-/// extension's TextMate grammar. The names come from the document's last compile that was typed (see
-/// <see cref="NominalNames.inModule"/>); none is marked in a top-level item edited since.
+/// Says what each name in the document is, so that themes colour it as they colour other languages' names: functions,
+/// parameters, variables, fields, tags, types, contexts (<c>interface</c>), modules (<c>namespace</c>), operators that
+/// call a definition and workflow keywords, with the standard <c>declaration</c>, <c>readonly</c> and
+/// <c>defaultLibrary</c> modifiers, and three of the server's own: <see cref="Mutable"/> for a cell, and
+/// <see cref="Nominal"/> and <see cref="Private"/> for the names of protected and private types, so that the editor can
+/// show them apart from aliases of a shape, whose names look the same. Everything else, and a name that did not
+/// resolve, is left to the extension's TextMate grammar. The tokens come from the document's last compile that was
+/// typed (see <c>NyxCompiler.SemanticTokens.inModule</c>); none is given in a top-level item edited since.
 /// </summary>
 public sealed class SemanticTokensHandler : SemanticTokensHandlerBase
 {
+    /// <summary>The modifier of a cell: a local made with <c>mut</c>, or a parameter that takes one.</summary>
+    public static readonly SemanticTokenModifier Mutable = new("mutable");
+
     /// <summary>The modifier of a nominal type's name, protected or private.</summary>
     public static readonly SemanticTokenModifier Nominal = new("nominal");
 
@@ -39,17 +44,43 @@ public sealed class SemanticTokensHandler : SemanticTokensHandlerBase
             return Task.CompletedTask;
         }
 
-        foreach (var name in NominalNames.inModule(lastGood.FileName, compiled))
+        foreach (var token in SemanticTokens.inModule(lastGood.FileName, lastGood.Text, compiled))
         {
-            if (document.FromLastGood(name.Span.Start, name.Span.End) is { } span)
+            if (document.FromLastGood(token.Span.Start, token.Span.End) is { } span)
             {
-                var modifiers = name.IsPrivate ? new[] { Nominal, Private } : [Nominal];
-                builder.Push(document.Positions.ToRange(span.Start, span.End), SemanticTokenType.Type, modifiers);
+                builder.Push(
+                    document.Positions.ToRange(span.Start, span.End),
+                    TypeOf(token.Type),
+                    token.Modifiers.Select(ModifierOf));
             }
         }
 
         return Task.CompletedTask;
     }
+
+    private static SemanticTokenType TypeOf(SemanticTokens.TokenType type) => type.Tag switch
+    {
+        SemanticTokens.TokenType.Tags.Function => SemanticTokenType.Function,
+        SemanticTokens.TokenType.Tags.Parameter => SemanticTokenType.Parameter,
+        SemanticTokens.TokenType.Tags.Variable => SemanticTokenType.Variable,
+        SemanticTokens.TokenType.Tags.Property => SemanticTokenType.Property,
+        SemanticTokens.TokenType.Tags.EnumMember => SemanticTokenType.EnumMember,
+        SemanticTokens.TokenType.Tags.Type => SemanticTokenType.Type,
+        SemanticTokens.TokenType.Tags.Interface => SemanticTokenType.Interface,
+        SemanticTokens.TokenType.Tags.Namespace => SemanticTokenType.Namespace,
+        SemanticTokens.TokenType.Tags.Operator => SemanticTokenType.Operator,
+        _ => SemanticTokenType.Keyword
+    };
+
+    private static SemanticTokenModifier ModifierOf(SemanticTokens.TokenModifier modifier) => modifier.Tag switch
+    {
+        SemanticTokens.TokenModifier.Tags.Declaration => SemanticTokenModifier.Declaration,
+        SemanticTokens.TokenModifier.Tags.Readonly => SemanticTokenModifier.Readonly,
+        SemanticTokens.TokenModifier.Tags.DefaultLibrary => SemanticTokenModifier.DefaultLibrary,
+        SemanticTokens.TokenModifier.Tags.Mutable => Mutable,
+        SemanticTokens.TokenModifier.Tags.Nominal => Nominal,
+        _ => Private
+    };
 
     protected override Task<SemanticTokensDocument> GetSemanticTokensDocument(
         ITextDocumentIdentifierParams @params,
@@ -64,8 +95,24 @@ public sealed class SemanticTokensHandler : SemanticTokensHandlerBase
             DocumentSelector = TextDocumentSyncHandler.Selector,
             Legend = new SemanticTokensLegend
             {
-                TokenTypes = new Container<SemanticTokenType>(SemanticTokenType.Type),
-                TokenModifiers = new Container<SemanticTokenModifier>(Nominal, Private)
+                TokenTypes = new Container<SemanticTokenType>(
+                    SemanticTokenType.Function,
+                    SemanticTokenType.Parameter,
+                    SemanticTokenType.Variable,
+                    SemanticTokenType.Property,
+                    SemanticTokenType.EnumMember,
+                    SemanticTokenType.Type,
+                    SemanticTokenType.Interface,
+                    SemanticTokenType.Namespace,
+                    SemanticTokenType.Operator,
+                    SemanticTokenType.Keyword),
+                TokenModifiers = new Container<SemanticTokenModifier>(
+                    SemanticTokenModifier.Declaration,
+                    SemanticTokenModifier.Readonly,
+                    SemanticTokenModifier.DefaultLibrary,
+                    Mutable,
+                    Nominal,
+                    Private)
             },
             Full = new SemanticTokensCapabilityRequestFull { Delta = false },
             Range = true

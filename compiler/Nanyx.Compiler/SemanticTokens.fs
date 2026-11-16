@@ -1,0 +1,280 @@
+/// What each name in a module is, for an editor to colour it by: a function, a parameter, a variable, a field, a tag, a
+/// type, a context, a module, an operator or a workflow keyword, as the type checker resolved it. Positions are
+/// character offsets into the source as the parser saw it, with line endings normalised to `\n`, as for `Hover`.
+module NyxCompiler.SemanticTokens
+
+open Parser.Program
+
+/// What a name is. Each is one of the protocol's standard token types, so that themes colour it with no setup.
+[<RequireQualifiedAccess>]
+type TokenType =
+    /// A def or local def whose value is a function, a context's member that is one, or an attached definition.
+    | Function
+    /// A lambda's parameter.
+    | Parameter
+    /// A def or local def whose value is not a function, a pattern variable, or a context's member that is not one.
+    | Variable
+    /// A record's field: in a record type, a record, a field read and a record pattern.
+    | Property
+    /// A tag, `#some`.
+    | EnumMember
+    | Type
+    /// A context.
+    | Interface
+    /// A module: in its `module` line, and an import's path and alias.
+    | Namespace
+    /// An operator that calls a definition: an attached one, or a context's member.
+    | Operator
+    /// A workflow keyword, `try` or `return`, which calls the builder's member of its name.
+    | Keyword
+
+[<RequireQualifiedAccess>]
+type TokenModifier =
+    /// Where the name is declared, rather than used.
+    | Declaration
+    /// A def, a local def or a pattern variable, which never changes.
+    | Readonly
+    /// A name the standard library declares.
+    | DefaultLibrary
+    /// A cell, made with `mut` or taken by a `mut` parameter: not one of the protocol's standard modifiers.
+    | Mutable
+    /// A protected or private type's name (see `NominalNames`).
+    | Nominal
+    /// A private type's name.
+    | Private
+
+/// A name, written at `Span`, with what it is.
+type Token = { Span: SourceSpan; Type: TokenType; Modifiers: TokenModifier list }
+
+/// The part of a name after its last dot: `show` in `Point.show`.
+let private ownName (name: string) = name.Substring(name.LastIndexOf '.' + 1)
+
+/// The last `length` characters of `span`, a name on one line: the name's own part in `m.origin`.
+let private lastChars (length: int) (span: SourceSpan) =
+    let start = max span.Start (span.End - length)
+    { span with Start = start; StartColumn = span.StartColumn + start - span.Start }
+
+/// The first `length` characters of `span`.
+let private firstChars (length: int) (span: SourceSpan) = { span with End = min span.End (span.Start + length) }
+
+let rec private isFunction (ty: Ty) =
+    match ty with
+    | TyFunc _ -> true
+    | TyAlias(_, _, ty) -> isFunction ty
+    | _ -> false
+
+/// The span from `start` to `end'` of `source`, at or after the start of `like`: its line and column are counted from
+/// `like`'s, not from the start of the text, which is slow over every name of a long module.
+let private spanFrom (source: string) (like: SourceSpan) (start: int) (end': int) =
+    let mutable lineBreaks = 0
+    for index in like.Start .. start - 1 do
+        if source.[index] = '\n' then lineBreaks <- lineBreaks + 1
+    let column = if lineBreaks = 0 then like.StartColumn + start - like.Start else start - (source.LastIndexOf('\n', start - 1) + 1)
+    { like with Start = start; End = end'; StartLine = like.StartLine + lineBreaks; StartColumn = column }
+
+/// The span of `name`, written in `source` before `separator` and the value that starts at `valueStart`, with only
+/// spaces between them: the field's name in `x = 1` or `x: int`, which the syntax tree keeps no span for.
+let private nameBefore (source: string) (like: SourceSpan) (name: string) (separator: char) (valueStart: int) =
+    let mutable index = valueStart - 1
+    while index >= 0 && System.Char.IsWhiteSpace source.[index] do index <- index - 1
+    if index < 0 || source.[index] <> separator then None
+    else
+        index <- index - 1
+        while index >= 0 && System.Char.IsWhiteSpace source.[index] do index <- index - 1
+        let start = index + 1 - name.Length
+        if start >= 0 && System.String.CompareOrdinal(source, start, name, 0, name.Length) = 0 then
+            Some (spanFrom source like start (index + 1))
+        else None
+
+/// Every name in the compiled root module, the file `file` whose text is `source`, that an editor colours by what it
+/// is, in the order they are written: each name that refers to a symbol, at its declaration and at each use, and each
+/// field, tag, module name, operator and workflow keyword. A qualified name gives its own part, and its alias part
+/// as a module. A name that did not resolve has none, and the module none at all when it did not type-check.
+let inModule (file: string) (source: string) (result: CompileResult) : Token list =
+    match result.Syntax, result.Typed with
+    | Some syntax, Some typed ->
+        let source = source.Replace("\r\n", "\n").Replace("\r", "\n")
+        let expressions = Hover.allExpressions syntax
+        let nominal =
+            NominalNames.inModule file result
+            |> List.map (fun name -> name.Span.Start, (if name.IsPrivate then [ TokenModifier.Nominal; TokenModifier.Private ] else [ TokenModifier.Nominal ]))
+            |> Map.ofList
+        let contexts =
+            typed.TypeDefs |> Map.values |> Seq.filter _.IsContext |> Seq.choose _.Symbol |> Set.ofSeq
+        let typeOf (id: SymbolId) = typed.SymbolTypes |> Map.tryFind id |> Option.orElse (typed.ImportedTypes |> Map.tryFind id)
+        // The cells: local defs made with `mut`, and parameters that take one, each by its name and where it is in scope.
+        let cells =
+            expressions
+            |> List.collect (fun expr ->
+                match expr.Kind with
+                | Block statements ->
+                    statements
+                    |> List.choose (fun statement ->
+                        match statement.Kind with
+                        | DefStatement(_, name, _, { Kind = MutSyntax.Call _ }) -> Some (name, statement.Span)
+                        | _ -> None)
+                | Lambda(parameters, _, _) ->
+                    parameters
+                    |> List.choose (fun (name, typeOpt) ->
+                        match typeOpt with
+                        | CellPassingSyntax.CellParameter _ -> Some (name, expr.Span)
+                        | _ -> None)
+                | _ -> [])
+        let isCell (symbol: Symbol) =
+            (symbol.Kind = LocalValue || symbol.Kind = Parameter)
+            && cells |> List.exists (fun (name, span) -> name = symbol.Name && SourceSpan.contains span symbol.Declaration)
+        let isLibrary (symbol: Symbol) =
+            symbol.Declaration.File <> file && symbol.Declaration.File <> "" && not (System.IO.Path.IsPathRooted symbol.Declaration.File)
+        let symbolToken (symbol: Symbol) (span: SourceSpan) (declaration: bool) =
+            let cell = isCell symbol
+            let typeAndModifiers =
+                match symbol.Kind with
+                | TopLevelValue
+                | LocalValue ->
+                    if typeOf symbol.Id |> Option.exists isFunction then Some (TokenType.Function, [])
+                    elif cell then Some (TokenType.Variable, [ TokenModifier.Mutable ])
+                    else Some (TokenType.Variable, [ TokenModifier.Readonly ])
+                | Parameter -> Some (TokenType.Parameter, if cell then [ TokenModifier.Mutable ] else [])
+                | PatternVariable -> Some (TokenType.Variable, [ TokenModifier.Readonly ])
+                | ImportedModule -> Some (TokenType.Namespace, [])
+                | TypeDefinition ->
+                    let tokenType = if contexts.Contains symbol.Id then TokenType.Interface else TokenType.Type
+                    Some (tokenType, nominal |> Map.tryFind span.Start |> Option.defaultValue [])
+                | ContextMember ->
+                    if typeOf symbol.Id |> Option.forall isFunction then Some (TokenType.Function, [])
+                    else Some (TokenType.Variable, [ TokenModifier.Readonly ])
+            typeAndModifiers
+            |> Option.map (fun (tokenType, modifiers) ->
+                { Span = span
+                  Type = tokenType
+                  Modifiers =
+                    (if declaration then [ TokenModifier.Declaration ] else [])
+                    @ modifiers
+                    @ (if isLibrary symbol then [ TokenModifier.DefaultLibrary ] else []) })
+        let textOf (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
+        // An attached definition's type part, `Point` in `Point.show` and `string` in `t.string.uppercase`, written just
+        // before its own name.
+        let attachedType (symbol: Symbol) (span: SourceSpan) =
+            let dot = symbol.Name.LastIndexOf '.'
+            let text = textOf span
+            if dot > 0 && text.EndsWith(symbol.Name, System.StringComparison.Ordinal) && (text.Length = symbol.Name.Length || text.[text.Length - symbol.Name.Length - 1] = '.') then
+                let start = span.End - symbol.Name.Length
+                let part = spanFrom source span start (start + dot)
+                Some { Span = part; Type = TokenType.Type; Modifiers = nominal |> Map.tryFind part.Start |> Option.defaultValue [] }
+            else None
+        let named (symbol: Symbol) (span: SourceSpan) (declaration: bool) =
+            let own = lastChars (Names.written (ownName symbol.Name)).Length span
+            Option.toList (symbolToken symbol own declaration) @ Option.toList (attachedType symbol span)
+        let declarations =
+            typed.Symbols
+            |> Map.values
+            |> Seq.filter (fun symbol ->
+                symbol.Declaration.File = file && not (SourceSpan.isNone symbol.Declaration) && not (ReservedNames.isHidden symbol))
+            |> Seq.toList
+            |> List.collect (fun symbol ->
+                match symbol.Kind with
+                | ImportedModule ->
+                    // The import's path, and its alias if it has one.
+                    let text = textOf symbol.Declaration
+                    let pathLength = text |> Seq.takeWhile (System.Char.IsWhiteSpace >> not) |> Seq.length
+                    let path = { Span = firstChars pathLength symbol.Declaration; Type = TokenType.Namespace; Modifiers = [ TokenModifier.Declaration ] }
+                    let alias =
+                        if pathLength < text.Length && text.EndsWith(" " + symbol.Name, System.StringComparison.Ordinal) then
+                            symbolToken symbol (lastChars symbol.Name.Length symbol.Declaration) true |> Option.toList
+                        else []
+                    path :: alias
+                | _ -> named symbol symbol.Declaration true)
+        let uses =
+            expressions
+            |> List.collect (fun expr ->
+                let referenced =
+                    match typed.References |> Map.tryFind expr.Id |> Option.bind typed.Symbols.TryFind, Definition.nameSpan expr with
+                    | Some symbol, Some span when not (ReservedNames.isHidden symbol) ->
+                        match expr.Kind with
+                        | BinaryOp _ -> [ { Span = span; Type = TokenType.Operator; Modifiers = (if isLibrary symbol then [ TokenModifier.DefaultLibrary ] else []) } ]
+                        | _ -> named symbol span false
+                    | _ -> []
+                // A name brought in by an import is written under its alias, `m` in `m.foo`.
+                let alias =
+                    match typed.ImportReferences |> Map.tryFind expr.Id |> Option.bind typed.Symbols.TryFind with
+                    | Some import when typed.References |> Map.tryFind expr.Id <> Some import.Id && (textOf expr.Span).StartsWith(import.Name + ".", System.StringComparison.Ordinal) ->
+                        [ { Span = firstChars import.Name.Length expr.Span; Type = TokenType.Namespace; Modifiers = [] } ]
+                    | _ -> []
+                let own =
+                    match expr.Kind with
+                    | MemberAccess(_, _, Some span) when referenced.IsEmpty -> [ { Span = span; Type = TokenType.Property; Modifiers = [] } ]
+                    | RecordExpr fields ->
+                        fields
+                        |> List.choose (function
+                            | NamedField(name, value) -> nameBefore source expr.Span name '=' value.Span.Start
+                            | PositionalField _ -> None)
+                        |> List.map (fun span -> { Span = span; Type = TokenType.Property; Modifiers = [] })
+                    | TagExpr(name, _) -> [ { Span = firstChars (name.Length + 1) expr.Span; Type = TokenType.EnumMember; Modifiers = [] } ]
+                    | WorkflowBindExpr(keyword, _) when (textOf expr.Span).StartsWith(keyword, System.StringComparison.Ordinal) ->
+                        [ { Span = firstChars keyword.Length expr.Span; Type = TokenType.Keyword; Modifiers = [] } ]
+                    | WorkflowReturnExpr _ when (textOf expr.Span).StartsWith(WorkflowSyntax.returnKeyword, System.StringComparison.Ordinal) ->
+                        [ { Span = firstChars WorkflowSyntax.returnKeyword.Length expr.Span; Type = TokenType.Keyword; Modifiers = [] } ]
+                    | _ -> []
+                referenced @ alias @ own)
+        let types =
+            (syntax |> List.collect SyntaxTree.topLevelTypes) @ (expressions |> List.collect SyntaxTree.expressionTypes)
+            |> List.collect TypeExpr.within
+            |> List.collect (fun typeExpr ->
+                match typeExpr.Kind with
+                | TypeTag(name, _) -> [ { Span = firstChars (name.Length + 1) typeExpr.Span; Type = TokenType.EnumMember; Modifiers = [] } ]
+                | TypeRecord fields
+                | TypeOpenRecord(fields, _) ->
+                    fields
+                    |> List.choose (function
+                        | TypeField(name, _, Some fieldType, _) -> nameBefore source typeExpr.Span name ':' fieldType.Span.Start
+                        | _ -> None)
+                    |> List.map (fun span -> { Span = span; Type = TokenType.Property; Modifiers = [ TokenModifier.Declaration ] })
+                | _ ->
+                    match typed.References |> Map.tryFind typeExpr.Id |> Option.bind typed.Symbols.TryFind, Definition.typeNameSpan typeExpr with
+                    | Some symbol, Some span -> named symbol span false
+                    | _ -> [])
+        let patterns =
+            expressions
+            |> List.collect (fun expr ->
+                match expr.Kind with
+                | Match(_, arms)
+                | Except(_, arms) -> arms |> List.collect (fst >> List.collect Pattern.within)
+                | _ -> [])
+            |> List.collect (fun pattern ->
+                match pattern.Kind with
+                | TagPattern(name, _) -> [ { Span = firstChars (name.Length + 1) pattern.Span; Type = TokenType.EnumMember; Modifiers = [] } ]
+                | RecordMemberPattern(members, _) ->
+                    members
+                    |> List.choose (fun (name, inner) -> nameBefore source pattern.Span name '=' inner.Span.Start)
+                    |> List.map (fun span -> { Span = span; Type = TokenType.Property; Modifiers = [] })
+                | RecordPattern(typeName, _) ->
+                    let span = firstChars (Names.written typeName).Length pattern.Span
+                    [ { Span = span; Type = TokenType.Type; Modifiers = nominal |> Map.tryFind span.Start |> Option.defaultValue [] } ]
+                | _ -> [])
+        let modules =
+            syntax
+            |> List.collect (fun item ->
+                match item.Kind with
+                | ModuleDecl(_, name)
+                | ModuleBlock(name, _) when not (SourceSpan.isNone item.Span) ->
+                    let text = textOf item.Span
+                    match text.IndexOf("module " + name, System.StringComparison.Ordinal) with
+                    | -1 -> []
+                    | at ->
+                        let start = item.Span.Start + at + "module ".Length
+                        [ { Span = spanFrom source item.Span start (start + name.Length); Type = TokenType.Namespace; Modifiers = [ TokenModifier.Declaration ] } ]
+                | _ -> [])
+        // A name found twice keeps what it was first found as: its declaration, then its use.
+        declarations @ uses @ types @ patterns @ modules
+        |> List.filter (fun token ->
+            token.Span.File = file && not (SourceSpan.isNone token.Span) && token.Span.Start < token.Span.End
+            && not ((textOf token.Span).Contains '\n'))
+        |> List.distinctBy (fun token -> token.Span.Start)
+        |> List.sortBy (fun token -> token.Span.Start)
+        // Tokens must not overlap: an inner one is dropped.
+        |> List.fold (fun (kept: Token list) token ->
+            match kept with
+            | last :: _ when token.Span.Start < last.Span.End -> kept
+            | _ -> token :: kept) []
+        |> List.rev
+    | _ -> []

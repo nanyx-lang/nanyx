@@ -13,8 +13,8 @@ namespace Nanyx.LanguageServer;
 /// The server publishes diagnostics, shows inferred types on hover, in lenses above unannotated top-level defs and
 /// in inlay hints after other unannotated names, goes to definitions, finds references, outlines documents,
 /// completes the names in scope, offers diagnostics' fixes as quick fixes, formats documents and selections, expands and
-/// shrinks selections along the syntax tree, renames names within a document, and marks the names of
-/// nominal types as semantic tokens. It also answers
+/// shrinks selections along the syntax tree, renames names across a package's files, and says what each name is as
+/// semantic tokens. It also answers
 /// <c>nanyx/infoView</c>, a request of its own for the extension's info view (see <see cref="InfoViewHandler"/>), and
 /// <c>nanyx/libraryModules</c> and <c>nanyx/libraryModule</c>, which list the standard library's modules and what each
 /// exports (see <see cref="LibraryModulesHandler"/>), <c>nanyx/librarySearch</c>, which searches it by name and type,

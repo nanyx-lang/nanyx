@@ -8,7 +8,7 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files and package m
 
 - errors and warnings as you type, each compiler error's code (such as `NYX0201`) a link to its section of
   [Compiler errors](./errors)
-- the names of [nominal types](#nominal-types) in italics
+- every name coloured by [what it is](#semantic-highlighting): a function, a parameter, a variable, a field, a tag, a type, a context or a module, as your theme colours other languages' names, and the names of [nominal types](#nominal-types) in italics
 - the inferred type of whatever is under the pointer, on hover, after the name on a name (`def name: [Console] string -> ()`, `n: int`), with the doc comment of the name there. On a type's name it shows the type's definition, and for a nominal type whether it is protected or private and which module declares it. On a module's name, in its `module` line, an import (its path or its alias) or an alias that qualifies a name (`m` in `m.foo`), hover shows the module's doc comment, the `--|` comment before its `module` line
 - inferred types in a lens above each top-level definition that does not write its type, and as inlay hints after locals, lambda parameters and pattern variables
 - go to definition (from a name, or from a `` [`name`] `` link in a doc comment), find references (in every file of the package, for a file in one) and the outline view
@@ -59,6 +59,30 @@ The other fields get a name, as `…ω` does in `keep`, only where the type uses
 | `nanyx.asciiTypes` | off | Write types in ASCII only: type variables are `a`, `b`, `c` and the other fields of a record are `...`, as you would write them in source. Needs compiler 0.20.0 or later. |
 
 `nanyx.greekTypeVariables` is the older name for this setting. It still works, but use `nanyx.asciiTypes` instead.
+
+# Semantic highlighting
+
+The language server tells the editor what each name is, from what the compiler resolved it to, as semantic tokens of
+the standard types, so your colour theme colours Nanyx's names as it colours other languages':
+
+| Token type | For | Modifiers |
+|---|---|---|
+| `function` | a def or local def whose value is a function, at its declaration and each use; an attached definition's own name (`parse` in `Email.parse`); a context's member that is a function | `declaration`, `defaultLibrary` |
+| `parameter` | a lambda's parameter | `declaration`, `mutable` for one that takes a cell (`mut cell`) |
+| `variable` | a def or local def that is not a function, a pattern variable | `declaration`, `readonly`, `defaultLibrary`, and `mutable` instead of `readonly` for a cell made with `mut` |
+| `property` | a record's field: in a record type, a record, a field read and a record pattern | `declaration` in a type |
+| `enumMember` | a tag, `#some` | |
+| `type` | a type's name; the type's part of an attached definition's name (`Email` in `Email.parse`) | `declaration`, `nominal`, `private` (see [Nominal types](#nominal-types)) |
+| `interface` | a context's name | `declaration` |
+| `namespace` | a module's name in its `module` line, an import's path and alias, and the alias before a name it qualifies | `declaration` |
+| `operator` | an operator that calls a definition: an attached one, or a context's member | `defaultLibrary` |
+| `keyword` | a workflow keyword, `try` or `return` | |
+
+`mutable`, `nominal` and `private` are the extension's own modifiers; the others are standard. A name that did not
+resolve, such as a misspelt one, gets no token, and keeps the colour the extension's grammar gives it. A file with type
+errors still has tokens for what did resolve; while a file does not parse, it keeps those of its last text that did,
+outside what you have edited since. To colour one kind of name your own way, write a rule for it under
+`editor.semanticTokenColorCustomizations` in `settings.json`, such as `"variable.mutable:nanyx": { "underline": true }`.
 
 # Nominal types
 
