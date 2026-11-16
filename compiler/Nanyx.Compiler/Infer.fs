@@ -73,11 +73,8 @@ let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSch
     // generalised as it would be without it (#1441).
     let subst = fst (Unifier.solve state.Constraints)
     let resolved = Unifier.apply subst ty
-    let envVars =
-        TypeEnv.freeEnvVars env
-        |> Seq.map (fun id -> TypeEnv.freeTyVars (Unifier.apply subst (TyVar { Id = id; Name = None })))
-        |> Seq.append [ LambdaContexts.usedVars (Unifier.apply subst) state ]
-        |> Set.unionMany
+    let envVars = envVarsUnder subst env
+    envVars.UnionWith(LambdaContexts.usedVars (Unifier.apply subst) state)
     let closed =
         Unifier.outputOnlyRestVars resolved @ Unifier.outputOnlyContextVars resolved
         |> List.filter (fun v -> v.Name.IsNone && not (envVars.Contains v.Id))
@@ -96,7 +93,8 @@ let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSch
                 let solved = Unifier.apply subst (TyVar var)
                 if Unifier.isMadeUpRest var || Set.isEmpty (Set.intersect madeUpIds (TypeEnv.freeTyVars solved)) then None
                 else Some (TyVar var, Unifier.apply closing solved))
-    { Quantified = Set.difference (TypeEnv.freeTyVars closedTy) (Set.union envVars (Boxes.heldVariables closedTy))
+    let held = Boxes.heldVariables closedTy
+    { Quantified = TypeEnv.freeTyVars closedTy |> Set.filter (fun id -> not (envVars.Contains id || held.Contains id))
       Type = closedTy
       Symbol = None
       ProvidedBy = None },
@@ -1230,11 +1228,8 @@ and private inferLookup (env: TypeEnv) (state: InferState) (expr: Expression) (l
 and private localFunctionArguments (env: TypeEnv) (state: InferState) (call: Expression) : Result<InferState, Diagnostic list> =
     let settled (current: InferState) (ty: Ty) =
         let subst = fst (Unifier.solve current.Constraints)
-        let envVars =
-            TypeEnv.freeEnvVars env
-            |> Seq.map (fun id -> TypeEnv.freeTyVars (Unifier.apply subst (TyVar { Id = id; Name = None })))
-            |> Set.unionMany
-        Set.isSubset (TypeEnv.freeTyVars (Unifier.apply subst ty)) envVars
+        let envVars = envVarsUnder subst env
+        TypeEnv.freeTyVars (Unifier.apply subst ty) |> Set.forall envVars.Contains
     match call.Kind with
     | FunctionCall(_, _, args) ->
         match args with

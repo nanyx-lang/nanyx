@@ -104,10 +104,11 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     let beginDef () = state <- { state with TypeVars = initialState.TypeVars }
     let mutable currentModule: string option = None
     let mutable types = Map.empty
-    // Each typed item with the index of the item it was checked from, which may be out of order (see `DefinitionOrder`).
+    // Each typed item with the index of the item it was checked from, which may be out of order (see `DefinitionOrder`),
+    // the last emitted first.
     let mutable items: (int * TypedTopLevelItem) list = []
     let mutable itemIndex = 0
-    let emit item = items <- items @ [ itemIndex, item ]
+    let emit item = items <- (itemIndex, item) :: items
     // A name defined again is reported, and only its first definition is inferred.
     let module', duplicateErrors = DuplicateDefinitions.check initialState.Declared module'
     let mutable errors: Diagnostic list =
@@ -356,6 +357,8 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                             env <- declareTopLevel name symbol scheme env
                             types <- types |> Map.add name declaredTy
                             emit (TypedDef (TypedValueDef(isExport, name, annotation, typedExpr)))
+                            // The next def's constraints are solved on top of this one's where they share nothing.
+                            Unifier.checkpoint state.Constraints
                 | Error err -> abandon isExport name expr err
         // A block is a module, not a program, so it has no top-level code.
         | Expr expr when (blockAround state.ModuleBlocks expr.Span).IsSome ->
@@ -501,4 +504,4 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         errors @ failedExprErrors
         |> List.distinct
         |> List.sortBy (fun diag -> diag.Span |> Option.map (fun span -> span.Start) |> Option.defaultValue System.Int32.MaxValue)
-    types, items |> List.sortBy fst |> List.map snd, state, allErrors
+    types, items |> List.rev |> List.sortBy fst |> List.map snd, state, allErrors
