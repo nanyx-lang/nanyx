@@ -91,7 +91,7 @@ type RunOutcome =
 /// Runs `command` in this process, in a shell (see `Shell`) whose directory is `workingDirectory` and whose program
 /// reads `standardInput` and sees the environment variables `variables`. What the command and the program write to
 /// stdout is captured, and so is what they write to stderr, in the order written.
-let private inProcess (workingDirectory: string) (standardInput: string) (variables: (string * string) list) (command: Shell -> int) : RunOutcome =
+let private inProcessWith (store: NyxCompiler.PackageStore option) (workingDirectory: string) (standardInput: string) (variables: (string * string) list) (command: Shell -> int) : RunOutcome =
     let inputFile = Path.Combine(Path.GetTempPath(), $"nanyx-stdin-{Guid.NewGuid():N}.txt")
     File.WriteAllText(inputFile, standardInput)
     try
@@ -100,12 +100,17 @@ let private inProcess (workingDirectory: string) (standardInput: string) (variab
         // Flushed at every write, so that the CLI's messages and the program's own output stay in the order written.
         use outputs = new StreamWriter(output, Text.UTF8Encoding(false), AutoFlush = true)
         use errors = new StreamWriter(error, Text.UTF8Encoding(false), AutoFlush = true)
-        let exitCode = command (Shell(workingDirectory, outputs, errors, Nanyx.Runtime.ProgramIo.Redirected(inputFile, output, error, variables)))
+        let shell = Shell(workingDirectory, outputs, errors, Nanyx.Runtime.ProgramIo.Redirected(inputFile, output, error, variables))
+        let exitCode = command (match store with Some store -> Shell(shell.Directory, shell.Out, shell.Error, shell.Io, Packages = store) | None -> shell)
         { ExitCode = exitCode
           StandardOutput = Text.Encoding.UTF8.GetString(output.ToArray())
           StandardError = Text.Encoding.UTF8.GetString(error.ToArray()) }
     finally
         File.Delete inputFile
+
+/// `inProcessWith` the user's package store.
+let private inProcess (workingDirectory: string) (standardInput: string) (variables: (string * string) list) (command: Shell -> int) : RunOutcome =
+    inProcessWith None workingDirectory standardInput variables command
 
 /// The `nanyx` command `arguments` names, with its options, as a call of what the CLI runs for it (see `CliCommands`).
 /// Only the commands and options the tests use are read. As in the CLI, `--` ends the options: what follows it
@@ -152,6 +157,9 @@ let private command (arguments: string list) : Shell -> int =
             | path -> null, path
         fun shell -> CliCommands.MigrateIn(shell, name, Array.ofList path)
     | "pull" :: path -> fun shell -> CliCommands.PullIn(shell, Array.ofList path)
+    | "pack" :: rest ->
+        let outputPath, _, _, _, path = options (null, false, false, null, []) rest
+        fun shell -> CliCommands.PackIn(shell, outputPath, path)
     | "install" :: package :: rest ->
         let rec installOptions (version: string, directory: string) (rest: string list) =
             match rest with
@@ -174,6 +182,10 @@ let nanyxWithVariables (variables: (string * string) list) (arguments: string li
 /// Does what `nanyx` does with `arguments` in `directory`, as a user does who has changed to it (see `nanyxWithInput`).
 let nanyxIn (directory: string) (arguments: string list) : RunOutcome =
     inProcess directory "" [] (command arguments)
+
+/// `nanyxIn`, with the package cache and index of `store` in place of the user's.
+let nanyxInStore (store: NyxCompiler.PackageStore) (directory: string) (arguments: string list) : RunOutcome =
+    inProcessWith (Some store) directory "" [] (command arguments)
 
 /// Does what `nanyx run <inputPath>` does, with `--check-memory` when `checkMemory` is set (see `nanyxWithInput`).
 /// `standardInput` is the program's stdin. Its stdout is captured, and so is its stderr, with the compiler's diagnostics

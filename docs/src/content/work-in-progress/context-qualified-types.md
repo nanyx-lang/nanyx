@@ -98,7 +98,13 @@ How it works:
   the backend too (`CoreIrLower.returnedVariables`).
 - In the backend a value is a record of closures that take the members their contexts require. One given where a value
   that carries more is expected is a new record of its fields, each adapted (`CoreIrLowerMembers.coerce`): passed as
-  an argument, as a def's result (read from its declared type), and named as a top-level value.
+  an argument, as a def's result (read from its declared type), and named as a top-level value. A constructor adapts
+  each value it is given to its field's type, so a pure lambda given where the value carries `[Console]` takes
+  `Console`'s members. A value whose functions need adapting deeper down, in a tag's payload or in what a function
+  gives back, is made again around its parts, each adapted; one of a recursive type is adapted by a function of its
+  own, which calls itself for the parts of that type, and a function's adapter adapts what it gives back, so the rest
+  of a `[d] Rq(b)` made with a pure lambda is adapted when it is pulled
+  ([#1725](https://github.com/nanyx-lang/nanyx/issues/1725)).
 - A type generic in contexts can name itself, as `seq(a)`'s `#next(a, seq(a))` does, and is then generic in the same
   contexts there: the rest of a `[k] seq(a)` is a `[k] seq(a)` (`RecursiveNominals.close`,
   [#1663](https://github.com/nanyx-lang/nanyx/issues/1663)).
@@ -107,9 +113,6 @@ Still open:
 
 - A generic def's result is still read from its value's type, so one whose value carries fewer contexts than it
   declares isn't adapted.
-- A lambda given to a constructor isn't adapted to the contexts the value carries, so a value made with a pure lambda
-  where its type carries `[Console]` traps when its function is called
-  ([#1725](https://github.com/nanyx-lang/nanyx/issues/1725)).
 
 # No special cases
 

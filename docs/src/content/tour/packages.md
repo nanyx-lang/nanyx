@@ -104,7 +104,9 @@ Dependencies on other packages are declared in the package manifest's `dependenc
 )
 ```
 
-The directory holds the package's own `.nyxp`, whose `name` must be the one the entry gives. Packages can't be downloaded yet, so an entry with a `version` instead of a `path` is an error (`NYX0024`), unless it names a package the compiler ships, such as `nanyx.console.core`, at the compiler's version: `(package = "nanyx.console.core", version = "0.28.0")`. Any other version of a shipped package is an error that names the one shipped (`NYX0029`). See [Packages the compiler ships](../advanced/hosts#packages-the-compiler-ships).
+The directory holds the package's own `.nyxp`, whose `name` must be the one the entry gives. A package the compiler ships, such as `nanyx.console.core`, is named at the compiler's version instead: `(package = "nanyx.console.core", version = "0.28.0")`. Any other version of a shipped package is an error that names the one shipped (`NYX0029`).
+
+Any other package named by its version, `(package = "acme.web", version = "1.2")`, comes from the [package index](https://nanyx-lang.github.io/packages/). `1.2` accepts `1.2.0` and every later `1.x` version; below `1.0.0`, `0.3` accepts only `0.3.x`. The version a build uses is the one `nanyx.lock`, beside the manifest, locks: `nanyx pull` downloads each package the lockfile locks into a cache in your home directory, checking it against the SHA-256 the lockfile records, and a build uses it from there. A locked package that isn't in the cache is an error that says to pull (`NYX0041`). Choosing the version to lock, and writing `nanyx.lock`, aren't supported yet, so a dependency the lockfile doesn't lock is an error (`NYX0024`). `nanyx pack` packs a package as the `.nyxpkg` a release carries. See [Packages the compiler ships](../advanced/hosts#packages-the-compiler-ships).
 
 Source code imports modules using the dependency's package name:
 

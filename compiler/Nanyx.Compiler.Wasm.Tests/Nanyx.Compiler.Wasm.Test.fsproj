@@ -37,6 +37,7 @@
     <Compile Include="Features\Commands\VersionCommandTests.fs" />
     <Compile Include="Features\Commands\MigrateCommandTests.fs" />
     <Compile Include="Features\Commands\PullCommandTests.fs" />
+    <Compile Include="Features\Commands\PackCommandTests.fs" />
     <Compile Include="Features\Commands\InstallCommandTests.fs" />
     <Compile Include="Features\Console\RunConsoleTests.fs" />
     <Compile Include="Features\Contexts\RunContextTests.fs" />

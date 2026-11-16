@@ -58,7 +58,7 @@ Local packages work: a package and the packages it depends on by path are built,
   `out/<name>.wat`. `nanyx new` makes a package (`NewPackage.fs`). The language server reads the manifest's linter
   configuration too. Path dependencies work (`Package.dependenciesIn`): each is read with its own, and a directory without a manifest, a
   name that doesn't match, a cycle (`NYX0027`) or a package reached by two paths (`NYX0028`) is an error; a
-  dependency's `version` is refused (`NYX0024`). There is no `.nyxproj`. `nanyx migrate` makes a package of scripts, `nanyx pull` checks and lists its dependencies, and `nanyx install` adds one; for a package named by its version, `pull` and `install` are stubs until downloading exists ([#1471](https://github.com/nanyx-lang/nanyx/issues/1471), [The nanyx command](./command-line#packages)). The formatter
+  dependency's `version` is the version `nanyx.lock` locks, unpacked in the cache, which `nanyx pull` downloads into ([#863](https://github.com/nanyx-lang/nanyx/issues/863)); one the lockfile doesn't lock is `NYX0024` until versions can be chosen ([#864](https://github.com/nanyx-lang/nanyx/issues/864)). There is no `.nyxproj`. `nanyx migrate` makes a package of scripts, `nanyx pull` downloads and lists its dependencies, `nanyx install` adds one, and `nanyx pack` packs it; for a package named by its version that the lockfile doesn't lock, `pull` and `install` are stubs ([#1471](https://github.com/nanyx-lang/nanyx/issues/1471), [The nanyx command](./command-line#packages)). The formatter
   reads the manifest's `formatter` field itself.
 - **The compiler ships packages as source directories** beside it (`ShippedPackages`): the console host,
   `packages/nanyx.console`, and its interface package, `packages/nanyx.console.core`, at the compiler's version, which
@@ -266,9 +266,23 @@ release cycle (`nanyx.http`, `nanyx.json`) are ordinary packages in the `nanyx` 
 ## The cache and offline builds
 
 Downloaded packages are verified against the lockfile and unpacked into a per-user cache
-(`~/.nanyx/packages/<name>/<version>/`), shared by every project. A package in the cache is never modified.
-`nanyx build --offline` uses only the cache, and a build with a complete lockfile and a warm cache never touches
+(`~/.nanyx/packages/<name>/<version>/`, or `NANYX_PACKAGES`), shared by every project. A package in the cache is never
+modified. `nanyx build --offline` uses only the cache, and a build with a complete lockfile and a warm cache never touches
 the network.
+
+Built ([#863](https://github.com/nanyx-lang/nanyx/issues/863)), but for `--offline`, which waits for resolution (#864):
+a build only ever reads the cache, and only `nanyx pull` downloads. `PackageIndex.download` reads the index's
+`config.json` and the package's index file, downloads the version's `.nyxpkg` (a path relative to the index file, or
+an address), refuses it unless its SHA-256 is the lockfile's, unpacks it beside its directory in the cache and moves it
+there, so a package is never seen half unpacked, and checks that its manifest names the package and version it was
+downloaded as. A yanked version still downloads, since a lockfile that names it must keep building. The index is
+`NANYX_INDEX`, if it is set: an address, or a directory on disk, which is how the tests use it.
+
+A `.nyxpkg` is a zip of the manifest, at its root, and the files its `sources` select, at their paths beside it, in
+order of their paths and all with the same time, so packing the same package twice makes the same bytes
+(`PackageArchive.pack`). One with a path dependency, or one on GitHub, can't be packed. Unpacking also takes the zip of
+a package's directory, with the manifest in its one top-level folder, which the index accepts for now, and refuses an
+entry that would land outside the package's directory.
 
 ## The editor
 
@@ -315,8 +329,10 @@ Local packages first (items 3a to 3c), then remote packages. Each produces somet
      package, or one file as a module, from a GitHub repository, pinned to a commit; see
      [Package ownership and locking](./package-ownership-and-locking#depending-on-a-single-file). Fetching waits for
      the cache (item 4).
-4. **The lockfile and the cache.** `nanyx.lock`, the `.nyxpkg` format, verification and the per-user cache, tested
-   against a local directory acting as an index.
+4. ~~**The lockfile and the cache.** `nanyx.lock`, the `.nyxpkg` format, verification and the per-user cache, tested
+   against a local directory acting as an index.~~ Done ([#863](https://github.com/nanyx-lang/nanyx/issues/863)):
+   `Lockfile.fs`, `PackageArchive.fs` (`nanyx pack`), `PackageIndex.fs` and `PackageStore.fs`; see
+   [The cache and offline builds](#the-cache-and-offline-builds). Nothing writes the lockfile until item 5.
 5. **Resolution.** PubGrub over the index protocol, with error messages for conflicts; `nanyx install` and `pull`.
 6. **The index.** Done ([#209](https://github.com/nanyx-lang/nanyx/issues/209)): `nanyx-lang/packages` on GitHub
    Pages, with the registration check, the release sync and the `nanyx` namespace reserved. Not done: recording

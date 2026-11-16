@@ -239,8 +239,8 @@ module Script =
 
     /// The build the `::host` and `::dependency` directives of `settings` make, if there are any, for the script at
     /// `filePath`, whose imports by path, and the directories its directives give, are relative to its directory, with
-    /// what is on GitHub fetched by `fetcher`; or what is wrong with them.
-    let private build (fetcher: GitHubFetcher) (filePath: string) (settings: (Directive * DirectiveSetting) list) : Result<PackageModules option, Diagnostic list> =
+    /// the packages they name found in `store`; or what is wrong with them.
+    let private build (store: PackageStore) (filePath: string) (settings: (Directive * DirectiveSetting) list) : Result<PackageModules option, Diagnostic list> =
         let root = if filePath = "" then Directory.GetCurrentDirectory() else Path.GetDirectoryName filePath
         let notShipped (package: DirectiveWord) place =
             match place with
@@ -272,13 +272,13 @@ module Script =
                 else
                     [], [], []
             match twice @ unshipped @ hostErrors @ dependencyErrors with
-            | [] -> Package.scriptModules fetcher filePath first.Span host dependencies files |> Result.map Some
+            | [] -> Package.scriptModules store filePath first.Span host dependencies files |> Result.map Some
             | errors -> Result.Error errors
 
-    /// The directives at the top of `source`, the text of the file at `filePath` (empty for one not on disk), with what
-    /// they name on GitHub fetched by `fetcher`. In a file of a package each is an error, since the package's manifest
-    /// says these things, and they give no linters.
-    let readFetching (fetcher: GitHubFetcher) (filePath: string) (source: string) : ScriptDirectives =
+    /// The directives at the top of `source`, the text of the file at `filePath` (empty for one not on disk), with the
+    /// packages they name found in `store`. In a file of a package each is an error, since the package's manifest says
+    /// these things, and they give no linters.
+    let readFrom (store: PackageStore) (filePath: string) (source: string) : ScriptDirectives =
         let filePath = if filePath = "" then "" else Path.GetFullPath filePath
         let directives = Directives.read filePath source
         let manifest =
@@ -294,16 +294,15 @@ module Script =
             let read = results |> List.choose (function directive, Result.Ok setting -> Some (directive, setting) | _, Result.Error _ -> None)
             let linters, linterErrors = linters read
             let build, buildErrors =
-                match build fetcher filePath read with
+                match build store filePath read with
                 | Result.Ok build -> build, []
                 | Result.Error errors -> None, errors
             { Linters = linters
               Build = build
               Diagnostics = (results |> List.choose (function _, Result.Error diagnostic -> Some diagnostic | _, Result.Ok _ -> None)) @ linterErrors @ buildErrors }
 
-    /// `readFetching`, with nothing to fetch with: a reference to GitHub is an error, since downloading from it isn't
-    /// supported yet.
-    let read (filePath: string) (source: string) : ScriptDirectives = readFetching GitHub.unsupported filePath source
+    /// `readFrom` the user's store.
+    let read (filePath: string) (source: string) : ScriptDirectives = readFrom (PackageStore.user ()) filePath source
 
     /// `result` with the problems with `directives` before its own diagnostics. An error in a directive is not
     /// deferred: it stops a debug run too.

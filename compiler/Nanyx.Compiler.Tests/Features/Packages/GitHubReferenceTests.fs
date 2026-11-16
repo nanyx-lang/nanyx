@@ -30,6 +30,12 @@ export def status = 200""" ]
 let private fetcherFor (package: TempPackage) =
     GitHub.inDirectory (package.Path "github") (Map.ofList [ "acme/snippets@v1.0", commit; "acme/web@v1.0", commit ])
 
+/// A store whose GitHub is `fetcher`, with an empty cache in `package`.
+let private storeWith (package: TempPackage) (fetcher: GitHubFetcher) =
+    { Cache = package.Path "cache"; Index = package.Path "index"; GitHub = fetcher }
+
+let private storeFor (package: TempPackage) = storeWith package (fetcherFor package)
+
 /// The app's manifest, depending on `dependencies`, each an entry as the manifest writes it, run by the console host.
 let private app (dependencies: string list) =
     let entries = String.concat ", " dependencies
@@ -152,7 +158,7 @@ let ``A package with a GitHub reference can't be packed or published`` () =
 [<Fact>]
 let ``A file from GitHub is a module of the package`` () =
     use package = new TempPackage(repositories @ [ app [ retry ]; mainImporting "retry" "ignore(twice(2))" ])
-    let found = okOf (Package.ofManifestFetching (fetcherFor package) (package.Path "app/app.nyxp"))
+    let found = okOf (Package.ofManifestFrom (storeFor package) (package.Path "app/app.nyxp"))
     Assert.Equal<string list>([ "retry" ], found.ReferencedFiles |> List.map fst)
     let build = Package.build found
     Assert.Empty(build.Diagnostics)
@@ -161,7 +167,7 @@ let ``A file from GitHub is a module of the package`` () =
 [<Fact>]
 let ``A package from GitHub is imported as a path dependency is`` () =
     use package = new TempPackage(repositories @ [ app [ web ]; mainImporting "acme.web/http" "ignore(status)" ])
-    let found = okOf (Package.ofManifestFetching (fetcherFor package) (package.Path "app/app.nyxp"))
+    let found = okOf (Package.ofManifestFrom (storeFor package) (package.Path "app/app.nyxp"))
     Assert.Equal<string list>([ "acme.web" ], found.Dependencies |> List.map _.Manifest.Name)
     Assert.Empty((Package.build found).Diagnostics)
 
@@ -169,7 +175,7 @@ let ``A package from GitHub is imported as a path dependency is`` () =
 let ``A file from GitHub must declare no module name`` () =
     let entry = $"""(module = "named", github = "acme/snippets/named.nyx", rev = "{commit}")"""
     use package = new TempPackage(repositories @ [ app [ entry ]; mainImporting "named" "ignore(three)" ])
-    let errors = errorsOf (Package.ofManifestFetching (fetcherFor package) (package.Path "app/app.nyxp"))
+    let errors = errorsOf (Package.ofManifestFrom (storeFor package) (package.Path "app/app.nyxp"))
     let error = errors |> List.exactlyOne
     Assert.Contains(DiagnosticCodes.InvalidReferencedFile.Code, error)
     Assert.Contains("declares the module name 'named', but a file from GitHub must declare none", error)
@@ -179,7 +185,7 @@ let ``A file from GitHub imports only the standard library`` () =
     let entry = $"""(module = "importing", github = "acme/snippets/importing.nyx", rev = "{commit}")"""
     let helpers = "app/helpers.nyx", withFinalNewline "module helpers\n\nexport def one = 1"
     use package = new TempPackage(repositories @ [ app [ entry ]; helpers; mainImporting "importing" "ignore(four)" ])
-    let found = okOf (Package.ofManifestFetching (fetcherFor package) (package.Path "app/app.nyxp"))
+    let found = okOf (Package.ofManifestFrom (storeFor package) (package.Path "app/app.nyxp"))
     let errors = (Package.build found).Diagnostics |> List.filter Diagnostics.isError
     Assert.Contains(errors, fun error -> error.Code = DiagnosticCodes.InvalidReferencedFile.Code && error.Message.Contains "can import only the standard library, not helpers")
 
@@ -197,7 +203,7 @@ let ``The editor offers to pin a tag to the commit it points at`` () =
     let text = manifestWith """(package = "acme.web", github = "acme/web", rev = "v1.0")"""
     use package = new TempPackage(repositories @ [ "app/app.nyxp", text; mainImporting "acme.web/http" "ignore(status)" ])
     let diagnostic =
-        (Package.compileManifestFetching (fetcherFor package) (package.Path "app/app.nyxp") text).Diagnostics
+        (Package.compileManifestFrom (storeFor package) (package.Path "app/app.nyxp") text).Diagnostics
         |> List.find (fun diagnostic -> diagnostic.Code = DiagnosticCodes.GitHubReferenceNotPinned.Code)
     let fix = diagnostic.Fixes |> List.exactlyOne
     Assert.Equal($"Pin to {commit}", fix.Title)
@@ -208,8 +214,9 @@ let ``The editor offers to pin a tag to the commit it points at`` () =
 [<Fact>]
 let ``The editor offers to pin a reference with no rev to its default branch's commit`` () =
     let text = manifestWith """(package = "acme.web", github = "acme/web")"""
-    let fetcher = GitHub.inDirectory "unused" (Map.ofList [ "acme/web@HEAD", commit ])
-    let diagnostic = (Package.compileManifestFetching fetcher "app.nyxp" text).Diagnostics |> List.exactlyOne
+    use package = new TempPackage([])
+    let store = storeWith package (GitHub.inDirectory "unused" (Map.ofList [ "acme/web@HEAD", commit ]))
+    let diagnostic = (Package.compileManifestFrom store (package.Path "app.nyxp") text).Diagnostics |> List.exactlyOne
     Assert.Contains($"""github = "acme/web", rev = "{commit}")""", applyFix text diagnostic.Fixes.Head)
 
 [<Fact>]
@@ -227,7 +234,7 @@ import retry
 
 println(twice(2))"""
     use package = new TempPackage(repositories @ [ "script.nyx", source ])
-    let directives = Script.readFetching (fetcherFor package) (package.Path "script.nyx") source
+    let directives = Script.readFrom (storeFor package) (package.Path "script.nyx") source
     Assert.Empty(directives.Diagnostics)
     let result =
         Script.compileSourceReading CompileListener.none System.IO.File.ReadAllText directives Linters.none (package.Path "script.nyx") source
@@ -241,7 +248,7 @@ import acme.web/http
 
 println(status)"""
     use package = new TempPackage(repositories @ [ "script.nyx", source ])
-    let directives = Script.readFetching (fetcherFor package) (package.Path "script.nyx") source
+    let directives = Script.readFrom (storeFor package) (package.Path "script.nyx") source
     Assert.Empty(directives.Diagnostics)
 
 [<Fact>]
