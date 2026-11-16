@@ -208,6 +208,10 @@ type TypeDefInfo =
       /// For a type in a scoped context's scope, the variable `Underlying` writes that scope as: what the type's
       /// representation holds of the scope is of the value's own (see `TypeResolution.undeclaredHeldScopes`).
       Scope: TyVar option
+      /// For a type generic in contexts, as `type Stream(a) = [k] protected (...)` declares it, the context variable
+      /// `Underlying` writes its contexts as. A value carries its contexts as a last argument its type is applied to (see
+      /// `FunctionContexts.carried`), after the scope of a type in a scoped context's scope, if any.
+      ContextVariable: TyVar option
       Symbol: SymbolId option
       Members: Map<string, SymbolId> }
 

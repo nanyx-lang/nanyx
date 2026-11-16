@@ -11,6 +11,10 @@
       from a trap into a fail-fast (bytecodealliance/wasmtime-dotnet#374), so the test host is kept off it.
     -->
     <CetCompat>false</CetCompat>
+    <!-- The tests compile in this process, on as many threads as there are processors, and each compile allocates a
+         great deal, so under the workstation collector they wait on one another's collections (#1461, as #706 for the
+         compiler's tests). -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup>
@@ -51,6 +55,7 @@
     <Compile Include="Features\Contexts\RunKnownMemberTests.fs" />
     <Compile Include="Features\Contexts\ContextDefinitionLoweringTests.fs" />
     <Compile Include="Features\Contexts\RunLambdaSuppliedContextTests.fs" />
+    <Compile Include="Features\Contexts\RunContextGenericTypeTests.fs" />
     <Compile Include="Features\Contexts\RunContextNameTests.fs" />
     <Compile Include="Features\Contexts\RunExpectedTypeInstanceTests.fs" />
     <Compile Include="Features\Contexts\RunLocalInstanceContextTests.fs" />

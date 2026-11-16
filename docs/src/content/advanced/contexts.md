@@ -100,10 +100,43 @@ def leaks = transaction {
 }
 ```
 
-The type is written and shown as plain `Cursor`: the scope is never written. Making one requires the context, as calling a function that requires it does, and so does using one through functions like `next`; holding or passing one requires nothing. The type can take parameters as usual, as `type MRef(a) = [Memory] protected (...)` does, and the scope isn't one of them. Only a scoped context can be written there, and only one (NYX0252). Contexts written on any other type that isn't a function, as in `x: [Console] int`, are an error (NYX0253).
+The type is written and shown as plain `Cursor`: the scope is never written. Making one requires the context, as calling a function that requires it does, and so does using one through functions like `next`; holding or passing one requires nothing. The type can take parameters as usual, as `type MRef(a) = [Memory] protected (...)` does, and the scope isn't one of them. Only a scoped context can be written there, and only one (NYX0252). Contexts written on any other type that isn't a function, or a type generic in contexts (below), as in `x: [Console] int`, are an error (NYX0253).
 
 A protected or private type whose representation, as its declaration writes it, holds a value of a type in a scope must declare that scope's context too, so that a reader can see where its values belong without looking inside: `type MStack(a) = [Memory] private MRef(list(a))`. Leaving it out is an error (NYX0256), and its fix writes the context. Everything a value holds of the scope is then of the value's own scope, so one value belongs to one block. A type argument given where the type is used doesn't count: `list(MRef(int))` and a `Holder(MRef(int))` of `type Holder(a) = protected (item: a)` need nothing, since the scope is visible where they're written, and nor does a function type that requires the context, which holds none of its values.
 
+## Types generic in contexts
+
+A protected or private type can be generic in contexts, as a function type with a context variable is: its declaration writes a context variable before its kind, and the function types in its body write it where they require the contexts. A use writes the contexts in front of the type, or none for the pure one:
+
+```nanyx
+type Thunk(a) = [k] protected (get: [k] () -> a)
+
+def pure: Thunk(int) = Thunk(get = { 1 })
+
+def loud: [Console] Thunk(int) = Thunk(
+  get = {
+    println("got")
+    2
+  }
+)
+
+def force: [c] ([c] Thunk(a)) -> a = { t ->
+  t.get()
+}
+
+def map: ([c] Thunk(a)), ([d] a -> b) -> [c, d] Thunk(b) = { t, f ->
+  Thunk(get = { f(t.get()) })
+}
+
+def main: [Console] () -> () = {
+  println(force(loud) + force(pure)) -- got, then 3
+  println(force(map(pure, { x -> x * 10 }))) -- 10
+}
+```
+
+A value carries the contexts of the functions it's made with, so `Thunk(get = { 1 })` is a pure `Thunk(int)`. Holding or passing a `[Console] Thunk(int)` requires nothing; calling its functions requires `Console` there, as calling any `[Console]` function does, so `force(loud)` in a function that doesn't declare `Console` is an error (NYX0211). A value with fewer contexts fits where one with more is expected, as a pure function does: `pure` can be given for a `[Console] Thunk(int)`, but `loud` can't be given for a `Thunk(int)` (NYX0227). A context variable binds as it does for a function type: `map`'s result carries both `c` and `d`, and since only its result writes them, a call to `map` doesn't require them.
+
+A type has one context variable, which stands for any number of contexts, and can't belong to a scoped context's scope as well (NYX0252).
 # Requiring a context
 
 A function can specify required contexts in its type signature. Here, `sayHello` can call `println` because it runs in `Console`. The real `Console`, which the console host provides to every program, has a few more members, and `println` is a function written on top of its `write`:

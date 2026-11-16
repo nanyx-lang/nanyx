@@ -17,11 +17,12 @@ let internal extractContextFromTypeExpr (typeExpr: TypeExpr option) : TypeExpr l
 /// `extractContextFromTypeExpr` for the annotation `typeExpr` of a def whose value is `value`. A lambda runs in the
 /// contexts the def writes. Any other value of a function type, such as a function named point-free (`def g: [Console]
 /// int -> () = println`), runs in none: it is a function that requires them, as its type says. The backend reads a
-/// def's contexts with this too.
+/// def's contexts with this too. So is a value of a type generic in contexts, `def lines: [FileSystem] Stream(string)`:
+/// the contexts are the type's.
 let extractDefContexts (typeExpr: TypeExpr option) (value: Expression) : TypeExpr list option * TypeExpr option =
     match typeExpr, value.Kind with
     | _, Lambda _ -> extractContextFromTypeExpr typeExpr
-    | Some (Kind (TypeWithContext(_, Kind (TypeFunc _)))), _ -> None, typeExpr
+    | Some (Kind (TypeWithContext(_, Kind (TypeFunc _ | TypeName _ | TypeApply _)))), _ -> None, typeExpr
     | _ -> extractContextFromTypeExpr typeExpr
 
 /// The errors for the operators `typeOpt`, a def's annotation, requires by their members rather than by the contexts

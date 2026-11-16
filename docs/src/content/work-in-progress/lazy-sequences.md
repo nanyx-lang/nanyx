@@ -19,7 +19,8 @@ order: 25
 - A sequence whose steps need contexts says so in its type, `[k] seq(a)`: `seq` is declared generic in contexts,
   `type seq(a) = [k] protected (...)`, as any user's type can be
   ([Context-qualified types](./context-qualified-types#a-context-variable-the-type-is-generic-in-contexts),
-  [#1525](https://github.com/nanyx-lang/nanyx/issues/1525)).
+  [#1525](https://github.com/nanyx-lang/nanyx/issues/1525), done). Its tail, `seq(a)` in its own body, waits on
+  protected types that refer to themselves ([#1663](https://github.com/nanyx-lang/nanyx/issues/1663)).
 - A function that takes "anything that can be iterated" requires a context, `Iterable(c, a)`, which a type gets by
   attaching a `toSeq`. A list is never a sequence by subtyping or by implicit conversion.
 - Sequences are built with `Seq.unfold` or with a `seq { ... }` workflow whose `yield` keyword produces the elements.
@@ -195,7 +196,7 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
 - ~~**How a value's contexts reach its members.**~~ Settled in
   [#1059](https://github.com/nanyx-lang/nanyx/issues/1059): `seq`'s declaration names `k`, and its pull function's type
   is `[k] () -> ...`, so the contexts are on the function, where calling it requires them
-  ([#1525](https://github.com/nanyx-lang/nanyx/issues/1525)).
+  ([#1525](https://github.com/nanyx-lang/nanyx/issues/1525), done).
 - **The context's name.** The compiler matches the member, `toSeq`, by name; the context's own name is free.
   `Iterable` reads well in signatures; `ToSeq` would sit beside `ToString` and `FromString`.
 - **An instance's second parameter.** Building an instance from attached definitions has only been used for contexts
