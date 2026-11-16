@@ -54,7 +54,7 @@ public sealed class CodeActionTests : LanguageServerTestBase
         Assert.Equal("::linters.default\nexport def f: () -> int = {\n  def unused = 1\n  2\n}\nexport def g: int -> int = { _ -> 1 }\n", Applied(text, Assert.Single(rename.Edit!.Changes![uri])));
 
         // Nothing where no diagnostic is.
-        Assert.Empty(await CodeActionsIn(uri, new Range(3, 2, 3, 3)));
+        Assert.DoesNotContain(await CodeActionsIn(uri, new Range(3, 2, 3, 3)), action => action.Kind == CodeActionKind.QuickFix);
     }
 
     [Fact]
@@ -94,15 +94,6 @@ public sealed class CodeActionTests : LanguageServerTestBase
         Assert.Empty(await CodeActionsIn(uri, new Range(2, 4, 2, 4)));
     }
 
-    /// <summary><paramref name="text"/> with <paramref name="edit"/> made to it.</summary>
-    private static string Applied(string text, TextEdit edit)
-    {
-        var positions = new SourcePositions(text);
-        var start = positions.ToOffset(edit.Range.Start);
-        var end = positions.ToOffset(edit.Range.End);
-        return text[..start] + edit.NewText + text[end..];
-    }
-
     [Fact]
     public void Server_advertises_rewrites()
     {
@@ -137,5 +128,21 @@ public sealed class CodeActionTests : LanguageServerTestBase
         var write = Assert.Single(await CodeActionsIn(uri, new Range(1, 10, 1, 10)), action => action.Kind == CodeActionKind.RefactorRewrite);
         Assert.Equal("A pattern variable's type can't be written", write.Disabled?.Reason);
         Assert.Null(write.Edit);
+    }
+
+    [Fact]
+    public async Task A_selected_expression_offers_to_introduce_a_local()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-introduce-local");
+        const string text = "def area = { (s: int) ->\n  def side = s * 2 + 1\n  side * side\n}\n";
+
+        Open(uri, text);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var extract = Assert.Single(await CodeActionsIn(uri, new Range(1, 13, 1, 18)), action => action.Kind == CodeActionKind.RefactorExtract);
+        Assert.Equal("Introduce local `result`", extract.Title);
+        Assert.Equal(
+            "def area = { (s: int) ->\n  def result = s * 2\n  def side = result + 1\n  side * side\n}\n",
+            Applied(text, Assert.Single(extract.Edit!.Changes![uri])));
     }
 }

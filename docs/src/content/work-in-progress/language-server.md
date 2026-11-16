@@ -200,6 +200,10 @@ what the compiler keeps: exact spans, resolved names and types.
   `NyxCompiler.Refactorings.SelectionRanges.at` parses the text and gives the chain of syntax around a position,
   smallest first (see [Refactorings](./refactorings)). A text that does not parse has none, and the editor falls back
   on its own.
+- **Rename** ([#1534](https://github.com/nanyx-lang/nanyx/issues/1534)). `prepareRename` and `rename` rename a
+  name declared in the document and every use of it there, refusing with a reason anything that would change what a
+  name refers to (see [Refactorings](./refactorings#rename)). Names other modules may use wait for search across the
+  workspace.
 - **Quick fixes** ([#284](https://github.com/nanyx-lang/nanyx/issues/284)). Each fix of a diagnostic in the
   requested range is a `quickfix` code action: its edits applied to the document, carrying the diagnostic as
   published, with a diagnostic's first fix preferred. Linters offer fixes (`default/unusedBindings` removes an
@@ -339,7 +343,8 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    compiler error with fixes is an unknown name the standard library exports, which offers its import
    ([#497](https://github.com/nanyx-lang/nanyx/issues/497)); other compiler errors have none yet. Refactorings are
    offered as code actions of their own kinds ([Refactorings](./refactorings)): writing the inferred type, as
-   `refactor.rewrite`, is the first ([#1539](https://github.com/nanyx-lang/nanyx/issues/1539)).
+   `refactor.rewrite` ([#1539](https://github.com/nanyx-lang/nanyx/issues/1539)), and introducing a local, as
+   `refactor.extract` ([#1536](https://github.com/nanyx-lang/nanyx/issues/1536)).
 7. **Diagnostics in imported files.** Done ([#794](https://github.com/nanyx-lang/nanyx/issues/794)): each is
    published on the file it belongs to, with one at the import that brings that file in.
 8. **A library browser, search by type and an info view.** Planned on

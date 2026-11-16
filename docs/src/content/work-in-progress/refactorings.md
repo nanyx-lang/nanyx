@@ -14,7 +14,7 @@ and inline, and the small rewrites that save typing. Its issues carry the
 
 The language server offers go to definition, find references within a document, hover, inlay hints, completion,
 semantic tokens, formatting, and quick fixes from diagnostics ([Language server and editor](./language-server)).
-Expand and shrink selection and writing the inferred type are done. There is no rename yet.
+Expand and shrink selection, writing the inferred type and introducing a local are done, and rename within a module.
 
 Refactorings live in the compiler's `Refactorings/` folder, one file each, after the editor features they build on
 (`Outline.fs`), in the namespace `NyxCompiler.Refactorings`. Their tests are in `Features/Refactorings/` of the
@@ -45,6 +45,49 @@ writes it (`Signatures.writable`): an alias keeps its name, and a type imported 
 (`s.Circle`). The official linter's `unannotatedExports` fix writes the same. It is refused on a pattern variable, a
 name a destructuring def binds, and a type with a part that failed to check. Its tests compile the result again.
 
+## Introduce local
+
+`IntroduceLocal.at` is offered where the selection, less the spaces around it, is exactly an expression. The def goes
+before the statement of the innermost block that holds it, above the comments just before that statement. Outside any
+block it is a top-level def before the item, above its attributes and doc comment. In a lambda whose body is one
+expression, such as `xs \map { x -> x * 2 + 1 }`, the body is made a block for it. The name is the field the
+expression reads or the function it calls, unless that is taken, and otherwise `result`, numbered to be unique: it
+is never a name in scope or one any expression of the top-level item uses, since a local named after the function it
+calls would hide it. A second offer replaces every later occurrence in the block that is written the same and whose
+names resolve to the same symbols; it is left out when the expression calls a function that requires a context, a
+context's member, or touches a cell, since each occurrence could give something different.
+
+It is refused where the expression runs only in some cases (a branch of an `if`, a match arm, the right of `and` or
+`or`, a lambda written around it by the parser, as the right of `??` is), where it uses `try` or `return`, and
+where it reads a cell assigned earlier in the statement.
+
+Its output is formatted: the compiler references the formatter, and `RangeFormatting.formatRange` lays out the
+top-level items the edit touches, with the document's formatter settings, and the refactoring is the one edit from
+the old text to that. Its tests check the result compiles and is formatted.
+
+Still to do: the new name should start a rename.
+
+## Rename
+
+`Rename.prepare` finds the name at a position (or just before it, where an editor's cursor often is) and its own part,
+`shout` in `string.shout`, or refuses it with a reason; `Rename.edits` renames its declaration and every use of it
+in the module (`Definition.referencesTo`). An attached definition keeps its type's part. A local, a parameter, a
+pattern variable, a top-level def and a type can be renamed. The new name must be a name, not a keyword, not one of
+the compiler's (`__`), and, for a type, not a one-letter lowercase name, which would be a type variable.
+
+It never changes what the program means: the renamed text is compiled (the server compiles it as it compiles the
+document), and the rename is refused if that has more errors, such as a name defined twice, or if any name in it refers
+to something other than it did before (`Definition.referenceSites`, compared with each offset moved by the edits).
+That covers a new name that would hide another at a use and one that another would hide, and names the use.
+
+The server answers `textDocument/prepareRename` and `textDocument/rename`; a refusal is a `RequestFailed` error
+whose message is the reason, which VS Code shows.
+
+Not yet: names declared in another module, exported names (other modules may use them, and the server can't find
+those uses until it can search the workspace, [#877](https://github.com/nanyx-lang/nanyx/issues/877)), an import's
+alias, a context's members, record fields, and modules. Renaming a type does not yet rename its attached definitions'
+prefixes.
+
 # How a refactoring is built
 
 - **In the compiler, not the server.** A refactoring is a function in the compiler from a checked module (or the
@@ -67,9 +110,9 @@ name a destructuring def binds, and a type with a part that failed to check. Its
 
 | Refactoring | Issue |
 |---|---|
-| Rename a symbol | [#1534](https://github.com/nanyx-lang/nanyx/issues/1534) |
+| Rename a symbol (within a module) | [#1534](https://github.com/nanyx-lang/nanyx/issues/1534) |
 | Expand and shrink selection (done) | [#1535](https://github.com/nanyx-lang/nanyx/issues/1535) |
-| Introduce local | [#1536](https://github.com/nanyx-lang/nanyx/issues/1536) |
+| Introduce local (done) | [#1536](https://github.com/nanyx-lang/nanyx/issues/1536) |
 | Introduce function | [#1537](https://github.com/nanyx-lang/nanyx/issues/1537) |
 | Inline a local or a function | [#1538](https://github.com/nanyx-lang/nanyx/issues/1538) |
 | Write the inferred type (done) | [#1539](https://github.com/nanyx-lang/nanyx/issues/1539) |
