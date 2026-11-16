@@ -328,7 +328,7 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    ([#276](https://github.com/nanyx-lang/nanyx/issues/276)), with a use of an operator at the operator
    ([#792](https://github.com/nanyx-lang/nanyx/issues/792)); across files it is not. Decided: it will read the
    package's files, as `nanyx build` checks them, once the server resolves packages
-   ([#1556](https://github.com/nanyx-lang/nanyx/issues/1556), after [#866](https://github.com/nanyx-lang/nanyx/issues/866)).
+   ([#1556](https://github.com/nanyx-lang/nanyx/issues/1556); the server already compiles a local package as `nanyx build` does).
 4. **Document symbols.** Done ([#278](https://github.com/nanyx-lang/nanyx/issues/278),
    [#793](https://github.com/nanyx-lang/nanyx/issues/793)). Workspace symbols (Go to Symbol in Workspace), decided
    ([#877](https://github.com/nanyx-lang/nanyx/issues/877)): from parsing every `.nyx` file under the workspace
