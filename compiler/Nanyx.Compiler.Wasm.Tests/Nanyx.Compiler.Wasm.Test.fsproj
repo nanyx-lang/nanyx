@@ -132,6 +132,7 @@
     <Compile Include="Features\StdLib\RunStringTakeSkipTests.fs" />
     <Compile Include="Features\StdLib\RunStringJoinTests.fs" />
     <Compile Include="Features\StdLib\RunListInitReplicateTests.fs" />
+    <Compile Include="Features\StdLib\RunListZipWithChunksTests.fs" />
     <Compile Include="Features\StdLib\RunStringCodePointTests.fs" />
     <Compile Include="Features\StdLib\RunBitwiseTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />
