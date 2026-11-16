@@ -113,9 +113,9 @@ assembled too.
 
 ## Tour examples
 
-Every ` ```nanyx ` block in the [language tour](../tour/variables), the
-[Standard Library](../stdlib/standard-library) pages and the [Custom patterns](../advanced/custom-patterns) page is a
-test case: `RunTourExampleTests.fs` in
+Every ` ```nanyx ` block in the [language tour](../tour/variables), the [Getting started](../getting-started/basics)
+pages, the [Standard Library](../stdlib/standard-library) pages and the [Custom patterns](../advanced/custom-patterns)
+page is a test case: `RunTourExampleTests.fs` in
 `Nanyx.Compiler.Wasm.Tests` reads their pages, and compiles and runs each block in the test process, as `nanyx run`
 would run it as a script. A standard-library page's generated reference is left out (see
 [Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)). The words after
@@ -140,7 +140,9 @@ A whole program is checked further by what its comments say:
   Comments that give a value, such as `def result = add5(10)  -- 15`, are not checked.
 
 The tour's examples print with the console host's prelude, which every program sees, and use strings without
-importing `nanyx/text`, so the test adds that import to every block that doesn't have it. Anything else a block uses, such as `nanyx/math`, it imports itself.
+importing `nanyx/text`, so the test adds that import to every block that doesn't have it, after its module's doc comment
+and declaration if it has them, but for a block that turns a linter on with `::linter`, which would report the import
+unused. Anything else a block uses, such as `nanyx/math`, it imports itself.
 
 # Goals
 
@@ -156,9 +158,10 @@ counting over a core IR ([Memory management](./memory-management)), a tail call 
 ([Deferred errors](./deferred-errors)), and record types are closed unless they say `...`
 ([Closed and open records](./closed-and-open-records)). Those pages say what is left of each.
 
-1. **Docs coverage beyond the tour.** Only the tour's, the Standard Library pages' and the Custom patterns page's examples
-   are compiled. The other docs sections, such as Getting started and the rest of Advanced, are not; Getting started comes first
-   ([#1256](https://github.com/nanyx-lang/nanyx/issues/1256)). Examples there drift: the Contexts page's comments are
+1. **Docs coverage beyond the tour.** The tour's, the Getting started pages', the Standard Library pages' and the Custom
+   patterns page's examples are compiled ([#1256](https://github.com/nanyx-lang/nanyx/issues/1256) added Getting
+   started). The other sections, `advanced` but for Custom patterns, `cookbook` and `coming-from-other-languages`, are
+   not, and can follow one at a time. Examples there drift: the Contexts page's comments are
    written with `//` ([#1476](https://github.com/nanyx-lang/nanyx/issues/1476)). The blocks marked `skip=` wait on
    the issues they name.
 2. **Parser error recovery.** Keep parsing after a syntax error so later errors (and later analysis) are not

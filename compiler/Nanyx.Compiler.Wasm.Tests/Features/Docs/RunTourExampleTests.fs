@@ -1,5 +1,5 @@
-/// Every ```nanyx block in the language tour (docs/src/content/tour), the standard library's pages
-/// (docs/src/content/stdlib) and the custom patterns page (docs/src/content/advanced/custom-patterns.md), compiled and run as `nanyx run` runs it, so that they keep describing what the compiler
+/// Every ```nanyx block in the language tour (docs/src/content/tour), the Getting started pages
+/// (docs/src/content/getting-started), the standard library's pages (docs/src/content/stdlib) and the custom patterns page (docs/src/content/advanced/custom-patterns.md), compiled and run as `nanyx run` runs it, so that they keep describing what the compiler
 /// does. The words after `nanyx` on a block's opening fence say what kind of example it is; the conventions are in
 /// docs/src/content/work-in-progress/compilation.md#tour-examples. A standard-library page's generated reference is
 /// left out: its blocks are signatures, and its doc comments' examples are checked where they are written.
@@ -12,7 +12,7 @@ open Xunit
 open NyxCompiler
 open TranspilerWasmTestHelpers
 
-/// The ```nanyx blocks of `page` in the section `section` (`tour`, `stdlib` or `advanced`), by the line of their opening fence,
+/// The ```nanyx blocks of `page` in the section `section` (`tour`, `getting-started`, `stdlib` or `advanced`), by the line of their opening fence,
 /// but for those in a standard-library page's generated reference.
 let private examplesOf (section: string) (page: string) =
     let path = Path.Combine(docsContentDirectory, section, page)
@@ -32,6 +32,8 @@ let private examplesIn (section: string) : obj array seq =
 
 let tourExamples () : obj array seq = examplesIn "tour"
 
+let gettingStartedExamples () : obj array seq = examplesIn "getting-started"
+
 let standardLibraryExamples () : obj array seq = examplesIn "stdlib"
 
 /// The custom patterns page's examples, which run as the tour's do while custom patterns are being built.
@@ -42,15 +44,23 @@ let customPatternExamples () : obj array seq =
 /// directives and its module declaration, if it has them, and before its first line of code. They print with the
 /// console host's prelude, which every program sees.
 let private withImports (code: string) =
+    // An example that turns a linter on gets no import it doesn't write, which the linter would report unused.
     let imports =
         [ "nanyx/text" ]
-        |> List.filter (fun name -> not (code.Contains $"import {name}"))
+        |> List.filter (fun name -> not (code.Contains $"import {name}") && not (code.Contains "::linter"))
         |> List.map (fun name -> $"import {name}")
     let lines = code.Split('\n') |> List.ofArray
     let isPreamble (line: string) =
         let line = line.Trim()
         line = "" || line.StartsWith "--" || line.StartsWith "::" || line.StartsWith "#!"
-    let preamble = lines |> List.takeWhile isPreamble
+    // A doc comment's other lines are indented under its `--|`, and a module's comes before its declaration.
+    let rec preambleOf (inDocComment: bool) (lines: string list) =
+        match lines with
+        | line :: rest when isPreamble line ->
+            line :: preambleOf (if line.Trim() = "" then inDocComment else line.TrimStart().StartsWith "--|") rest
+        | line :: rest when inDocComment && line.StartsWith " " -> line :: preambleOf true rest
+        | _ -> []
+    let preamble = preambleOf false lines
     let rest = lines |> List.skip preamble.Length
     let declaration, body =
         match rest with
@@ -102,6 +112,10 @@ let private check (section: string) (page: string) (line: int) =
 [<Theory>]
 [<MemberData(nameof tourExamples)>]
 let ``Tour example compiles and runs`` (page: string, line: int) = check "tour" page line
+
+[<Theory>]
+[<MemberData(nameof gettingStartedExamples)>]
+let ``Getting started example compiles and runs`` (page: string, line: int) = check "getting-started" page line
 
 [<Theory>]
 [<MemberData(nameof standardLibraryExamples)>]

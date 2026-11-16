@@ -10,10 +10,10 @@ You can run a single Nanyx file directly, or you can organize code as a multi-fi
 
 A single file can be executed on its own. It does not need module or members declarations; you can write imports and top-level statements directly.
 
-```nanyx
+```nanyx skip=#870
 import (
   nanyx/file
-  nanyx/string
+  nanyx/text
 )
 
 match file.read("input.txt")
@@ -62,12 +62,12 @@ As in a manifest, only the linters a script's `::linter` lines name run, so a sc
 
 Files can import each other by file path. An import by file path needs an alias, and the file it names must be a script: one without a `module name` declaration.
 
-```nanyx
+```nanyx fragment
 -- utils.nyx
 export def someHelper = { ... }
 ```
 
-```nanyx
+```nanyx fragment
 -- main.nyx
 import "./utils" as utils
 
