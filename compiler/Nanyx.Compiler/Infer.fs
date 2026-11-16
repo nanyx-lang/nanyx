@@ -552,7 +552,7 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
         let rec tryRecordFields ty =
             match ty with
             | TyRecord fields -> Some fields
-            | TyNominal(_, underlying, _)
+            | TyNominal(_, _, underlying, _)
             | TyAlias(_, _, underlying) -> tryRecordFields underlying
             | _ -> None
         // The variables a pattern binds are declared by the body of its arm, `armBody`, and are in scope until
@@ -684,8 +684,9 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                 elif info.IsPrivate && not (inNominalHome state' (TypeDefInfo.nominalId info) pattern.Span) then
                     Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule pattern.Span $"The private type '{typeName}' can only be taken apart in the module that defines it; use a function that module exports instead" ]
                 else
-                    let constrained = addConstraint scrutineeTy (namedType typeName info) state'
-                    match inferPattern armBody env' constrained info.Underlying payload with
+                    let nominalTy, underlying, instantiated = freshNominalType state' info
+                    let constrained = addConstraint scrutineeTy nominalTy instantiated
+                    match inferPattern armBody env' constrained underlying payload with
                     | Ok (nextEnv, nextState, _) -> Ok (nextEnv, nextState, mkTypedPattern pattern scrutineeTy)
                     | Error err -> Error err
             | RecordPattern(typeName, patterns) ->
@@ -1131,12 +1132,15 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     $"A context's instance can only be written in a `use`: to reuse one, write a function that runs a lambda under it, as in `{{ f -> use {name}(...) in f() }}`"
                 Error [ Diagnostics.at DiagnosticCodes.InstanceOutsideUse calleeSpan message ]
             | Some info ->
-                let mutable current = recordConstructorReference expr info state
+                // Each value a generic type's constructor makes is of the type at arguments of its own.
+                let madeTy, underlying, instantiated =
+                    if isNominal info then freshNominalType state info else namedType name info, info.Underlying, state
+                let mutable current = recordConstructorReference expr info instantiated
                 let argResults =
                     args
                     |> List.map (fun arg ->
                         let inferred =
-                            match LambdaArguments.namedFields arg info.Underlying with
+                            match LambdaArguments.namedFields arg underlying with
                             | Some (names, values, memberTys) ->
                                 let inferLambda state lambda lambdaArgs lambdaBody expectedInput _ =
                                     match expectedInput with
@@ -1156,12 +1160,12 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                 let errors = argResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
                 if errors.IsEmpty then
                     let typedArgs = argResults |> List.choose (function Ok typedExpr -> Some typedExpr | _ -> None)
-                    match NamedArguments.check current expr name info.Underlying args typedArgs with
+                    match NamedArguments.check current expr name underlying args typedArgs with
                     | Some diagnostic -> Error [ diagnostic ]
                     | None ->
                     let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
-                    let inputTy, fitted = UseDischarge.fit env current expr info.Underlying args (inputTypeFromArgs argTys)
-                    Ok (mkTypedExpr expr (namedType name info) None None None, addAssignableConstraint inputTy info.Underlying fitted)
+                    let inputTy, fitted = UseDischarge.fit env current expr underlying args (inputTypeFromArgs argTys)
+                    Ok (mkTypedExpr expr madeTy None None None, addAssignableConstraint inputTy underlying fitted)
                 else
                     Error errors
             | None ->

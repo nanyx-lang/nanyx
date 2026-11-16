@@ -79,7 +79,7 @@ let private headOf (ty: Ty) : (string * Ty list) option =
     let simple (name: string) = name.Substring(name.LastIndexOf '.' + 1)
     match ty with
     | TyPrimitive name -> Some (simple name, [])
-    | TyNominal(id, _, _) -> Some (simple id.Name, [])
+    | TyNominal(id, _, _, _) -> Some (simple id.Name, [])
     | TyApply(name, args)
     | TyAlias(name, args, _) -> Some (simple name, args)
     | _ -> None

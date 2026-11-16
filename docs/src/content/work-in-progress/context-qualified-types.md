@@ -60,6 +60,11 @@ inside that `Tx`. Its operations require `Tx` as usual, and holding one requires
 The standard library declares `MRef`, `MArray`, `MStack` and `MList` this way (`type MRef(a) = [Memory] protected (...)`,
 [Mutation](./mutation#planned)), with no special case for them.
 
+A nominal type's `TyNominal` holds the arguments it's applied to, and what it's made from with them for its parameters
+([#1530](https://github.com/nanyx-lang/nanyx/issues/1530)): a written `MRef(int)` is the type the constructor makes at
+`int`, and two are the same type only when their arguments are. The scope is the natural hidden last argument, as
+`mut T` is `TyApply("mut", [T; scope])`.
+
 ## A context variable: the type is generic in contexts
 
 ([#1525](https://github.com/nanyx-lang/nanyx/issues/1525))

@@ -85,7 +85,7 @@ let internal ensureAttachedTypeExists (state: InferState) (currentModuleOpt: str
 let rec attachedTypeNames (ty: Ty) : string list =
     match ty with
     | TyAlias(name, _, underlying) -> name :: attachedTypeNames underlying
-    | TyNominal(id, _, _) -> [ id.Name ]
+    | TyNominal(id, _, _, _) -> [ id.Name ]
     | TyPrimitive name -> [ name ]
     | Lists.ListType _ -> [ Lists.typeName ]
     | Seqs.SeqType _ -> [ Seqs.typeName ]
@@ -124,7 +124,7 @@ let internal unknownMember (env: TypeEnv) (span: SourceSpan) (receiver: string o
         match Unifier.unalias ty with
         | TyRecord _
         | TyOpenRecord _ -> true
-        | TyNominal(_, underlying, _) -> isRecord underlying
+        | TyNominal(_, _, underlying, _) -> isRecord underlying
         | _ -> false
     let missing =
         match receiver with
@@ -147,9 +147,21 @@ let private aliasType (name: string) (info: TypeDefInfo) : Ty =
 let internal isNominal (info: TypeDefInfo) =
     info.IsNominal
 
+/// The nominal type `info` defines, applied to `argTys`: made from its definition's type with them for its parameters.
+let internal nominalType (info: TypeDefInfo) (argTys: Ty list) : Ty =
+    TyNominal(TypeDefInfo.nominalId info, argTys, Unifier.applyToParameters info.Parameters argTys info.Underlying, info.IsPrivate)
+
+/// The nominal type `info` defines, applied to a new variable for each of its parameters: the type of a value its
+/// constructor makes, or a pattern takes apart. Also gives what that type is made from.
+let internal freshNominalType (state: InferState) (info: TypeDefInfo) : Ty * Ty * InferState =
+    let argTys, next = freshVars info.Parameters state
+    let underlying = Unifier.applyToParameters info.Parameters argTys info.Underlying
+    TyNominal(TypeDefInfo.nominalId info, argTys, underlying, info.IsPrivate), underlying, next
+
 /// The type the name `name`, defined by `info`, stands for written without arguments: the nominal type, or the alias.
+/// A generic one is applied to its own parameters.
 let internal namedType (name: string) (info: TypeDefInfo) : Ty =
-    if isNominal info then TyNominal(TypeDefInfo.nominalId info, info.Underlying, info.IsPrivate) else aliasType name info
+    if isNominal info then nominalType info (info.Parameters |> List.map TyVar) else aliasType name info
 
 /// The type definition a type name written in the module means: none for a name only an aliased import brings in,
 /// which has to be written with the alias.
@@ -272,6 +284,8 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
                     TyAlias(name, argTys, Unifier.applyToParameters info.Parameters argTys info.Underlying), current
                 else
                     TyApply(name, argTys), current
+            // A context required with its arguments stays applied to them (see `FunctionContexts`).
+            | Some info when not info.IsContext && info.Parameters.Length = argTys.Length -> nominalType info argTys, recordTypeReference typeExpr info current
             | Some info -> TyApply(name, argTys), recordTypeReference typeExpr info current
             | None -> TyApply(name, argTys), current
     | TypeFunc(arg, ret) ->

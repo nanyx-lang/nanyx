@@ -74,7 +74,7 @@ let rec private varsIn (keyOf: TyVar -> 'key option) (general: Ty) (specific: Ty
     | TyFunc(ga, gr, _), TyFunc(sa, sr, _) -> all [ ga, sa; gr, sr ]
     | TyApply(_, gs), TyApply(_, ss) when gs.Length = ss.Length -> all (List.zip gs ss)
     | TyAlias(_, gs, gu), TyAlias(_, ss, su) when gs.Length = ss.Length -> all ((gu, su) :: List.zip gs ss)
-    | TyNominal(_, gu, _), TyNominal(_, su, _) -> recur gu su
+    | TyNominal(_, _, gu, _), TyNominal(_, _, su, _) -> recur gu su
     | TyRecord gf, TyRecord sf -> all (fieldPairs gf sf)
     | TyOpenRecord(gf, _), TyOpenRecord(sf, _) -> all (fieldPairs gf sf)
     | TyTag(_, Some g), TyTag(_, Some s) -> recur g s

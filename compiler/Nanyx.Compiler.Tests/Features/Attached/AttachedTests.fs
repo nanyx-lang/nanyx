@@ -55,7 +55,7 @@ def Email.toString = { e -> "ok" }"""
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
     match typed.Types.["Email.toString"] with
-    | TyFunc(TyNominal({ Name = name }, _, _), TyPrimitive "string", _) when name = "Email" ->
+    | TyFunc(TyNominal({ Name = name }, _, _, _), TyPrimitive "string", _) when name = "Email" ->
         ()
     | other -> Assert.True(false, $"Unexpected inferred nominal attached def type: %A{other}")
 
@@ -68,7 +68,7 @@ def Email.toDisplay = { e -> e }"""
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
     match typed.Types.["Email.toDisplay"] with
-    | TyFunc(TyNominal({ Name = nameIn }, _, _), TyNominal({ Name = nameOut }, _, _), _) when nameIn = "Email" && nameOut = "Email" ->
+    | TyFunc(TyNominal({ Name = nameIn }, _, _, _), TyNominal({ Name = nameOut }, _, _, _), _) when nameIn = "Email" && nameOut = "Email" ->
         ()
     | other -> Assert.True(false, $"Unexpected inferred nominal identity attached def type: %A{other}")
 

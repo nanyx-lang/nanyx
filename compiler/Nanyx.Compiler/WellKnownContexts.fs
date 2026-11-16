@@ -53,7 +53,7 @@ module internal WellKnownContexts =
             | TyPrimitive _
             | TyParam _ -> None
             | TyAlias(_, _, underlying)
-            | TyNominal(_, underlying, _) -> offendingPart kindOf underlying
+            | TyNominal(_, _, underlying, _) -> offendingPart kindOf underlying
             | TyRecord fields
             | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.tryPick (fun (name, fieldTy) -> inPart $"its field '{name}'" false fieldTy)
             | TyTag(name, payload) -> payload |> Option.bind (inPart $"the payload of '#{name}'" false)
@@ -185,7 +185,7 @@ module internal WellKnownContexts =
                 else
                     match ty with
                     | TyAlias(_, _, underlying)
-                    | TyNominal(_, underlying, _) -> find underlying
+                    | TyNominal(_, _, underlying, _) -> find underlying
                     | TyRecord fields
                     | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.tryPick (snd >> find)
                     | TyTag(_, payload) -> payload |> Option.bind find
@@ -213,7 +213,7 @@ module internal WellKnownContexts =
             | TyParam _
             | TyFunc _ -> []
             | TyAlias(_, _, underlying)
-            | TyNominal(_, underlying, _) -> collect underlying
+            | TyNominal(_, _, underlying, _) -> collect underlying
             | TyRecord fields
             | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
