@@ -68,9 +68,6 @@ Still open:
   and [#1493](https://github.com/nanyx-lang/nanyx/issues/1493).
 - A type in a scope is matched to its context by the context's name where it's declared, so a module that imports both
   under an alias, `t.Cursor` and `[t.Tx]`, gets a `Cursor` whose written scope is not the signature's `t.Tx`.
-- Each call that requires a scoped context requires it of the callee's own scope, so two such calls in one block make
-  it require the context twice ([#1553](https://github.com/nanyx-lang/nanyx/issues/1553)), and a context with no members
-  is satisfied where nothing supplies it ([#1479](https://github.com/nanyx-lang/nanyx/issues/1479)).
 
 ## A context variable: the type is generic in contexts
 
