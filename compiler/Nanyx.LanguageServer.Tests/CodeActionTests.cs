@@ -42,13 +42,14 @@ public sealed class CodeActionTests : LanguageServerTestBase
         Assert.Equal(2, published.Count());
 
         // An unused local is removed, line and all.
-        var remove = Assert.Single(await CodeActionsIn(uri, new Range(2, 8, 2, 8)));
+        // The local has no type written, so writing it is offered too.
+        var remove = Assert.Single(await CodeActionsIn(uri, new Range(2, 8, 2, 8)), action => action.Kind == CodeActionKind.QuickFix);
         Assert.Equal(("Remove `unused`", CodeActionKind.QuickFix, true), (remove.Title, remove.Kind, remove.IsPreferred));
         Assert.Equal("default/unusedBindings", Assert.Single(remove.Diagnostics!).Code?.String);
         Assert.Equal("::linters.default\nexport def f: () -> int = {\n  2\n}\nexport def g: int -> int = { x -> 1 }\n", Applied(text, Assert.Single(remove.Edit!.Changes![uri])));
 
         // An unused parameter is renamed to `_`.
-        var rename = Assert.Single(await CodeActionsIn(uri, new Range(5, 29, 5, 30)));
+        var rename = Assert.Single(await CodeActionsIn(uri, new Range(5, 29, 5, 30)), action => action.Kind == CodeActionKind.QuickFix);
         Assert.Equal("Rename `x` to `_`", rename.Title);
         Assert.Equal("::linters.default\nexport def f: () -> int = {\n  def unused = 1\n  2\n}\nexport def g: int -> int = { _ -> 1 }\n", Applied(text, Assert.Single(rename.Edit!.Changes![uri])));
 
@@ -100,5 +101,41 @@ public sealed class CodeActionTests : LanguageServerTestBase
         var start = positions.ToOffset(edit.Range.Start);
         var end = positions.ToOffset(edit.Range.End);
         return text[..start] + edit.NewText + text[end..];
+    }
+
+    [Fact]
+    public void Server_advertises_rewrites()
+    {
+        Assert.Contains(
+            CodeActionKind.RefactorRewrite,
+            _client.ServerSettings.Capabilities.CodeActionProvider?.Value?.CodeActionKinds ?? []);
+    }
+
+    [Fact]
+    public async Task A_def_without_a_type_offers_to_write_the_inferred_one()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-write-type");
+        const string text = "def add = { x, y -> x + y }\n";
+
+        Open(uri, text);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var write = Assert.Single(await CodeActionsIn(uri, new Range(0, 5, 0, 5)), action => action.Kind == CodeActionKind.RefactorRewrite);
+        Assert.Equal("Write the inferred type of `add`", write.Title);
+        Assert.Equal("def add: [Add(a)] a, a -> a = { x, y -> x + y }\n", Applied(text, Assert.Single(write.Edit!.Changes![uri])));
+    }
+
+    [Fact]
+    public async Task A_pattern_variable_offers_writing_its_type_disabled_with_the_reason()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-write-type-refused");
+        const string text = "def first = { o -> match o\n  | #some(n) -> n\n  | #none -> 0 }\n";
+
+        Open(uri, text);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var write = Assert.Single(await CodeActionsIn(uri, new Range(1, 10, 1, 10)), action => action.Kind == CodeActionKind.RefactorRewrite);
+        Assert.Equal("A pattern variable's type can't be written", write.Disabled?.Reason);
+        Assert.Null(write.Edit);
     }
 }

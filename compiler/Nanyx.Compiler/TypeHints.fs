@@ -197,9 +197,11 @@ let private hints (names: TypeNotation) (file: string) (result: CompileResult) :
                       Kind = symbol.Kind
                       Context = contextOf annotations symbol.Declaration
                       Annotation = if canAnnotate defs lambdas symbol && not (mentionsError ty) then Some annotation else None }
-                // The types written for a reader in `names`, or as source writes them.
+                // The types written for a reader in `names`, or as source writes them, by the names the file writes.
                 let writtenIn notation =
-                    match def |> Option.bind (fun symbol -> typed.SymbolTypes |> Map.tryFind symbol.Id |> Option.map (fun ty -> symbol, ty)) with
+                    let named = if notation = Source then Signatures.writable typed.TypeDefs typed.Symbols else id
+                    let memberTypes = List.map named memberTypes
+                    match def |> Option.bind (fun symbol -> typed.SymbolTypes |> Map.tryFind symbol.Id |> Option.map (fun ty -> symbol, named ty)) with
                     | Some (symbol, defType) ->
                         // The def's type is written after the contexts it requires, as hover writes it, except that a
                         // def that writes its contexts has its type shown after them, so only the parameterised ones it
@@ -208,7 +210,7 @@ let private hints (names: TypeNotation) (file: string) (result: CompileResult) :
                             let required =
                                 if (contextOf annotations symbol.Declaration).IsSome then typed.InferredContextTypes
                                 else typed.ContextTypes
-                            required |> Map.tryFind symbol.Id |> Option.defaultValue []
+                            required |> Map.tryFind symbol.Id |> Option.defaultValue [] |> List.map named
                         let defWritten, membersWritten = Signatures.typesWithContexts notation defType contexts memberTypes
                         (if isInferred symbol then [ (symbol, defType), defWritten ] else []), membersWritten
                     | None -> [], Unifier.tysToDisplayStrings notation memberTypes
