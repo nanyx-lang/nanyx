@@ -10,8 +10,10 @@ order: 25
 
 # Summary
 
-- There is one lazy sequence type, `seq(a)`, attached to as `Seq`. There is no separate `gen(a)` for sequences that
-  may be infinite.
+- There is one lazy sequence type, `seq(a)`, attached to as `seq` or `Seq`, as lists are `list` or `List`; the
+  prelude writes `seq.map`, and the stdlib docs' `Sequence.map` is renamed to it
+  ([#192](https://github.com/nanyx-lang/nanyx/issues/192)). Its runtime form is the pull function below, decided in
+  #192. There is no separate `gen(a)` for sequences that may be infinite.
 - A sequence is a value that, when asked, gives back either `#done` or its first element and the rest of the sequence.
   Asking does not change anything, so a sequence is an ordinary immutable value.
 - A sequence whose steps need contexts says so in its type, `[k] seq(a)`: `seq` is declared generic in contexts,
