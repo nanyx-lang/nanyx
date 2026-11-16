@@ -480,7 +480,9 @@ The composite host runs each part under the right sub-host and coordinates start
   statements and an unannotated def can call `readLine()`, and the def infers `Console`. A member of a context a def
   declares, or a `use` loads, shadows an imported function of the same name, and takes none of its contexts
   (`Contexts.contextRequirementsOf`): a def's own `println` member is not the prelude's `println`. A function named as a value carries it in its
-  type (#1288). A def that writes `[c.Console]` for an aliased import is passed the members as `[Console]` is: the
+  type (#1288), and an unannotated one carries those it was inferred to require, its own and those of the functions it
+  calls (`Contexts.inferredAmbientContexts`), found once for each function it reaches however many paths reach it
+  ([#1458](https://github.com/nanyx-lang/nanyx/issues/1458)). A def that writes `[c.Console]` for an aliased import is passed the members as `[Console]` is: the
   backend reads the layout of the context's own name (`CodeGen.layoutOf`), and a member called under the alias,
   `c.write`, is written by its own name for the backend (`ModuleLinking.writeMemberAliases`).
 - **`Env`** is declared in `nanyx.console.core/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, so its

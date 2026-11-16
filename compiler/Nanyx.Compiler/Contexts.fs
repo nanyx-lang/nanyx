@@ -490,16 +490,46 @@ let internal contextSignatureOf (env: TypeEnv) (state: InferState) (name: Identi
 /// body has been inferred: those it uses itself, and those of the unannotated functions it calls, as far as they have
 /// been inferred too. Defs are inferred in the order they use each other (see `DefinitionOrder`), so only a function
 /// in a cycle with the one naming it is not yet. `None` where `name` is not such a function, or is not inferred yet.
+///
+/// A function's contexts are its own and those of each function it calls, less those available where it calls it. They
+/// are found once for each function `name` reaches, however many paths reach it, by going over the functions until
+/// none gains a context: a function in a cycle gains its callers' through it (#1458).
 let internal inferredAmbientContexts (env: TypeEnv) (state: InferState) (name: Identifier) : Set<Identifier> option =
-    let rec contextsOf (visited: Set<Identifier>) (defName: Identifier) =
-        state.DeferredContextUses
-        |> List.filter (fun used -> used.Caller = DefScope(defName, true) && not (visited.Contains used.Callee))
-        |> List.fold
-            (fun acc used -> Set.union acc (Set.difference (contextsOf (visited.Add used.Callee) used.Callee) used.Available))
-            (state.InferredContexts |> Map.tryFind defName |> Option.defaultValue Set.empty)
     match state.UnannotatedDefs |> Map.tryFind name, TypeEnv.tryFind name env with
     | Some symbol, Some scheme when scheme.Symbol = Some symbol && (match scheme.Type with TyVar _ -> false | _ -> true) ->
-        Some (contextsOf (Set.singleton name) name)
+        let usesBy =
+            state.DeferredContextUses
+            |> List.choose (fun used ->
+                match used.Caller with
+                | DefScope(caller, true) -> Some (caller, used)
+                | _ -> None)
+            |> List.groupBy fst
+            |> List.map (fun (caller, uses) -> caller, List.map snd uses)
+            |> Map.ofList
+        let usesOf (defName: Identifier) = usesBy |> Map.tryFind defName |> Option.defaultValue []
+        // The functions `name` reaches, each after those it calls, but in a cycle.
+        let reached = System.Collections.Generic.List<Identifier>()
+        let seen = System.Collections.Generic.HashSet<Identifier>()
+        let rec visit (defName: Identifier) =
+            if seen.Add defName then
+                for used in usesOf defName do
+                    visit used.Callee
+                reached.Add defName
+        visit name
+        let contexts = System.Collections.Generic.Dictionary<Identifier, Set<Identifier>>()
+        for defName in reached do
+            contexts[defName] <- state.InferredContexts |> Map.tryFind defName |> Option.defaultValue Set.empty
+        let mutable changed = true
+        while changed do
+            changed <- false
+            for defName in reached do
+                let found =
+                    usesOf defName
+                    |> List.fold (fun acc used -> Set.union acc (Set.difference contexts[used.Callee] used.Available)) contexts[defName]
+                if found <> contexts[defName] then
+                    contexts[defName] <- found
+                    changed <- true
+        Some contexts[name]
     | _ -> None
 
 /// Checks the context use of naming `name` at `span`: a member of the ambient instance needs its context, and a use
