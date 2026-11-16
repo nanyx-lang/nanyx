@@ -72,6 +72,11 @@ module internal ExpressionRewrites =
                 | FunctionCall(name, _, args), Some { Kind = FunctionCall(callee, _, readArgs) } when name = callee && args.Length = readArgs.Length -> kind
                 | FunctionCall(_, _, args), Some { Kind = FunctionCall(callee, span, receiver :: readArgs) } when readArgs.Length = args.Length ->
                     FunctionCall(callee, span, receiver :: args)
+                // A call of a record's function field is read as a block that calls it (see `FieldCalls`).
+                | FunctionCall(_, _, args), Some read ->
+                    match read with
+                    | FieldCalls.WithArguments args withArgs -> withArgs
+                    | _ -> read.Kind
                 | _, Some read -> read.Kind
                 | _, None -> kind)
 

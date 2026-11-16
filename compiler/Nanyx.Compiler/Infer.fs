@@ -1186,6 +1186,9 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                                    && recordFieldsOf (resolveSoFar state scheme.Type) |> Option.bind (Map.tryFind field) |> Option.exists (isMap state) ->
                     let map = Expression.from expr (MemberAccess(Expression.from expr (IdentifierExpr receiver), field, spanOpt))
                     inferMapLookup env state expr map spanOpt args
+                // `statement.setInt(position, value)`, where the field holds a function, calls it (see `FieldCalls`).
+                | Some scheme when dot > 0 && not (receiver.Contains '.') && FieldCalls.holdsFunction state scheme.Type field ->
+                    FieldCalls.infer (inferExpr env) state expr receiver field spanOpt args
                 | Some scheme when dot > 0 && not (receiver.Contains '.') ->
                     let memberName = name.Substring(dot + 1)
                     let receiverTy = resolveSoFar state scheme.Type
