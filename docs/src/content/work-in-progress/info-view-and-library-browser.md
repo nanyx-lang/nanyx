@@ -238,7 +238,9 @@ A query is a name, a type, or both, with a colon between them: `trim`, `bool -> 
 Text that is not a name is a type. A type is parsed with the parser's own type grammar (`Api.parseTypeSignature`), so
 the query is written as a signature is: `bool -> string`, `list(a), (a -> bool) -> list(a)`, `string -> list(string)`.
 It is read as an annotation is (`TypeResolution.typeExprToTy`), with no type definitions in scope, so a named type is
-matched by its name. A name finds the names that contain it, ignoring case: the one it names, or whose last part it
+matched by its name and the arguments it is written with: `a -> MRef(a)` finds `MRef.new`. A type in a scoped
+context's scope is matched without its scope, which a query doesn't write
+([#1566](https://github.com/nanyx-lang/nanyx/issues/1566)). A name finds the names that contain it, ignoring case: the one it names, or whose last part it
 is, first, then those that start with it.
 
 **What matches.** An export matches if its type can be made equal to the query's:
