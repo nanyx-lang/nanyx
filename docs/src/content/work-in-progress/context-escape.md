@@ -413,10 +413,14 @@ The design draws the line there, and makes every helper a function that takes th
   context's name anywhere in an annotation or a type definition outside a context list (NYX0247), except the context
   `use C(T)(members)` is desugared with (`ensureInstanceContextExists`), and a constructor call `UseDischarge.mark`
   didn't mark as a `use`'s instance is NYX0248. `examples/Nim.nyx` already gave its strategies as plain functions.
-  The monoid instances in `examples/traitsAndTypeclasses.nyx` are written at their `use`s rather than as handlers,
-  since a lambda passed to a function isn't given a parameterised context its type requires yet
-  (`Contexts.extendEnvForLambdaArgument`), and `examples/sql-utils.nyx`'s data source opens a `Session` record that
-  `withConnection` loads as the `Connection`.
+  `examples/sql-utils.nyx`'s data source opens a `Session` record that `withConnection` loads as the `Connection`.
+- ~~A lambda passed to a function is given a parameterised context its type requires~~
+  ([#1512](https://github.com/nanyx-lang/nanyx/issues/1512)). Done: `Contexts.extendEnvForLambdaArgument` puts the
+  instance at the types the parameter's type applies it to in scope for the lambda's body, with its members, and
+  `Contexts.instancesSuppliedToLambda` puts it in the lambda's type, so the function it is passed to passes its
+  members, as a def's are passed. A lambda inside it captures them as it captures a `use`'s (`LambdaLifting.lift`).
+  So `additive: ([Monoid(int)] () -> b) -> b` is a handler, and `examples/traitsAndTypeclasses.nyx`'s monoids are
+  written as handlers: `additive { reduce(xs) }`.
 - ~~A `use` loads only a context's constructor or a `context x` name~~
   ([#1448](https://github.com/nanyx-lang/nanyx/issues/1448)). Done: `UseDischarge.notLoadable` makes NYX0249 of a
   `use` of anything else, a record, a def's name, a call or a field, before its value is checked; a `context x`

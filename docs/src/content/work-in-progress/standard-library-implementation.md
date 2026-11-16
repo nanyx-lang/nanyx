@@ -30,8 +30,11 @@ The compiler's build checks every standard-library module once and writes the re
 compile checks none of them ([#837](https://github.com/nanyx-lang/nanyx/issues/837)). `Nanyx.Compiler.CheckedLibrary`,
 a small program, calls `Compiler.writeCheckedLibrary` when it is built, which checks each module as an import of it
 does and writes the checked modules to `checked-library.bin` (`BinaryData` writes the F# data, sharing what the modules
-share; `CheckedLibrary` holds the format). `compiler/CheckedLibrary.targets`, which the CLI and the test projects
-import, copies the file beside them and into the published `nanyx`. Its syntax nodes and symbols have ids from
+share; `CheckedLibrary` holds the format). It writes the file after `CoreBuild`, inside its `Build` target, not after
+it: in a parallel build, a project that asks for `Build` while the writer is building gets the result as soon as
+`Build` is done, before the targets that run after it, so the file has to be there by then
+([#1648](https://github.com/nanyx-lang/nanyx/issues/1648)). `compiler/CheckedLibrary.targets`, which the CLI and the
+test projects import, copies the file beside them and into the published `nanyx`. Its syntax nodes and symbols have ids from
 `CheckedLibrary.firstId` (2⁵⁶) on, which no process reaches, so they never meet a process's own. A process reads the
 file the first time it imports a library module, about 0.2 s, and a module read from it is reported as reused,
 `nanyx/prelude (cached)` under `--timings`. The file is used only where it is what checking would give: by a compiler
@@ -41,8 +44,21 @@ changed after the file was written, is checked as before.
 
 Each standard-library module the file does not have is checked once per process, the first time a compile imports
 it, and every later compile reuses the result (`checkedStandardLibrary` in `Nanyx.Compiler/Library.fs`, keyed by the
-module and its source). The shipped packages (`nanyx.console`, `nanyx.console.core`) are not in the file yet: a CLI
-process still checks those it imports, about 0.3 s of a one-line `nanyx check`. A user's own
+module and its source).
+
+The file has the modules of the shipped packages too: the console host's package, `nanyx.console`, and the packages it
+depends on, `nanyx.console.core` ([#1637](https://github.com/nanyx-lang/nanyx/issues/1637)). The writer checks each as
+a loose script's import of it does and writes what `checkedSourceFiles` keeps of it: the module, the modules it
+imports, and the text of every file its check read. Their files are beside the compiler (`ShippedPackages.directory`),
+so the file names a path there relative to that directory, and a path read back is in the reading compiler's
+(`BinaryData.write` and `read` take a function over each string). A compile takes such a module from the file when the
+file is in its build's host package or one that package depends on, so it resolves its imports as the writer's check
+did, and while every file the check read reads the same through the compile's reader; else it checks it as a user's
+module. Under `--timings`, `nanyx.console/src/console.prelude.nyx (cached)`. With them, a one-line `nanyx check` checks
+nothing but the file itself: 0.86 s against 1.00 s, and 0.91 s against 1.22 s for `dbg("hello")`, which imports the host
+too (Release build, medians of 9). The file grew from 1.8 MB to 2.2 MB.
+
+A user's own
 module that a compile imports is kept too, once it checks without errors (`checkedSourceFiles`), with the text of
 every file its check read: its own, its other fragments' and those of the modules it imports, all the way down. A
 later compile reuses it while each of those files reads the same, through the compile's own reader (the editor's

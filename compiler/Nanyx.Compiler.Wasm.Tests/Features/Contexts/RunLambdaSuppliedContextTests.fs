@@ -107,3 +107,32 @@ import db
 transaction { commit() }
 """
     runSource (normalized source) |> assertRan "committed\n"
+
+let private monoids = """context Monoid(a) = (empty: a, combine: (a, a) -> a)
+
+def reduce: [Monoid(a)] list(a) -> a = { xs -> xs \fold(empty) { acc, x -> combine(acc, x) } }
+def additive: ([Monoid(int)] () -> b) -> b = { f -> use Monoid(int)(empty = 0, combine = { x, y -> x + y }) in f() }
+def multiplicative: ([Monoid(int)] () -> b) -> b = { f -> use Monoid(int)(empty = 1, combine = { x, y -> x * y }) in f() }
+def joined: ([Monoid(string)] () -> b) -> b = { f -> use Monoid(string)(empty = "", combine = { x, y -> x ++ y }) in f() }
+"""
+
+[<Fact>]
+let ``Run - a handler gives its lambda a parameterised context's instance`` () =
+    let source =
+        monoids
+        + """
+println(additive { reduce([1, 2, 3, 4]) })
+println(multiplicative { reduce([1, 2, 3, 4]) })
+println(additive { combine(empty, 5) })
+println(joined { reduce(["a", "b"]) ++ additive { "{reduce([4, 5])}" } })
+"""
+    runSource (normalized source) |> assertRan "10\n24\n5\nab9\n"
+
+[<Fact>]
+let ``Run - a lambda inside a handler's lambda uses the instance it is given`` () =
+    let source =
+        monoids
+        + """
+println(additive { [1, 2, 3] \list.map { x -> combine(x, reduce([x, 10])) } \reduce })
+"""
+    runSource (normalized source) |> assertRan "42\n"

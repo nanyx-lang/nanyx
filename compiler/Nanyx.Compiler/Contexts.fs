@@ -214,33 +214,71 @@ let private extendEnvWithContextsFrom (provider: TypeExpr -> ContextProvider) (e
 let internal extendEnvWithContexts (env: TypeEnv) (state: InferState) (contexts: TypeExpr list) =
     extendEnvWithContextsFrom (fun ctx -> FromSignature ctx.Span) env state contexts
 
-/// `env` for the body of `lambda`, passed as a parameter of the type `paramTy`: with the members of each plain context
-/// that type requires, as far as `state` says, so the body can call them and what requires them. The function the
-/// lambda is passed to supplies them, as `withLog: [Console, c] ([Log, c] () -> ()) -> ()` supplies `Log` to its
-/// block, so the lambda's type requires them and the code around it does not (see `LambdaContexts`). Each is provided
-/// by the type the lambda is checked against, at the lambda. A script's statements (`InferState.ScriptEntry`) are not
-/// given them: they are the top level, whose names they see, as the module's own defs, and whose ambient contexts they
-/// run in. A context variable, a parameterised context and a scoped
-/// one are not bound: a scoped context is the call's (see `ScopedCalls`). The contexts are not written in the source,
-/// so nothing refers to them: `state` keeps only the variables reading their members made.
-let internal extendEnvForLambdaArgument (env: TypeEnv) (state: InferState) (lambda: Expression) (paramTy: Ty option) : TypeEnv * InferState =
-    let required =
-        match paramTy |> Option.map (resolveSoFar state >> Unifier.unalias) with
-        | Some (TyFunc(_, _, contexts)) ->
-            contexts
-            |> List.choose (function
-                | TyApply(name, []) ->
-                    match state.TypeDefs |> Map.tryFind name with
-                    | Some info when info.IsContext && info.Parameters.IsEmpty && not (WrittenContexts.isScoped state name) ->
-                        Some (TypeExpr.synthetic (TypeName name))
-                    | _ -> None
-                | _ -> None)
+/// `env` with the instance of the parameterised context `info` at `argTys` in scope, provided by `provider`, as
+/// `written`: its members, at those types, each by its name, and the instance, which a call of a function that
+/// requires the context finds (see `ContextInstances`). A member's own type variables, those `argTys` do not fix, are
+/// quantified, as in `extendEnvWithContextsFrom`.
+let private extendEnvWithInstance (provider: ContextProvider) (env: TypeEnv) (name: Identifier) (info: TypeDefInfo) (argTys: Ty list) (written: TypeExpr) : TypeEnv =
+    let fixedVars = argTys |> List.map TypeEnv.freeTyVars |> Set.unionMany
+    let members =
+        match Unifier.unalias info.Underlying with
+        | TyRecord fields -> fields |> Map.toList |> List.map (fun (name, ty) -> name, Unifier.applyToParameters info.Parameters argTys ty)
         | _ -> []
-    match required with
+    let env = TypeEnv.withInstance { Context = TyApply(name, argTys); Written = written; Provider = provider } env
+    members
+    |> List.fold (fun acc (memberName, ty) ->
+        let scheme = { TypeEnv.mono ty with Quantified = Set.difference (TypeEnv.freeTyVars ty) fixedVars; ProvidedBy = Some provider }
+        TypeEnv.declare memberName (info.Members |> Map.tryFind memberName) scheme acc) env
+
+/// The contexts a lambda passed as a parameter of the type `paramTy` is given, as far as `state` says: each context the
+/// type requires, by its name, with its definition and the types it is applied to, but for a context variable and a
+/// scoped context (see `extendEnvForLambdaArgument`).
+let private suppliedToLambda (state: InferState) (paramTy: Ty option) : (Identifier * TypeDefInfo * Ty list) list =
+    match paramTy |> Option.map (resolveSoFar state >> Unifier.unalias) with
+    | Some (TyFunc(_, _, contexts)) ->
+        contexts
+        |> List.choose (function
+            | TyApply(name, args) ->
+                match state.TypeDefs |> Map.tryFind name with
+                | Some info when info.IsContext && info.Parameters.Length = args.Length && not (WrittenContexts.isScoped state name) ->
+                    Some (name, info, args |> List.map (resolveSoFar state))
+                | _ -> None
+            | _ -> None)
+    | _ -> []
+
+/// The instances of parameterised contexts a lambda passed as a parameter of the type `paramTy` is given (see
+/// `extendEnvForLambdaArgument`). The lambda's type requires them, as a def's requires the contexts it declares, so the
+/// function it is passed to passes their members to it where it calls it.
+let internal instancesSuppliedToLambda (state: InferState) (lambda: Expression) (paramTy: Ty option) : Ty list =
+    if state.ScriptEntry = Some lambda.Id then []
+    else suppliedToLambda state paramTy |> List.filter (fun (_, _, args) -> not args.IsEmpty) |> List.map (fun (name, _, args) -> TyApply(name, args))
+
+/// `env` for the body of `lambda`, passed as a parameter of the type `paramTy`: with the members of each context that
+/// type requires, as far as `state` says, so the body can call them and what requires them. The function the lambda is
+/// passed to supplies them, as `withLog: [Console, c] ([Log, c] () -> ()) -> ()` supplies `Log` to its block, so the
+/// lambda's type requires them and the code around it does not (see `LambdaContexts`). A parameterised context is
+/// supplied at the types the parameter's type applies it to, as an instance a call in the body finds:
+/// `withM: ([Monoid(int)] () -> b) -> b` gives its block `Monoid(int)`, as a handler. Each is provided by the type the
+/// lambda is checked against, at the lambda. A script's statements (`InferState.ScriptEntry`) are not given them: they
+/// are the top level, whose names they see, as the module's own defs, and whose ambient contexts they run in. A context
+/// variable and a scoped context are not bound: a scoped context is the call's (see `ScopedCalls`). The contexts are
+/// not written in the source, so nothing refers to them: `state` keeps only the variables reading their members made.
+let internal extendEnvForLambdaArgument (env: TypeEnv) (state: InferState) (lambda: Expression) (paramTy: Ty option) : TypeEnv * InferState =
+    let contexts = suppliedToLambda state paramTy
+    match contexts with
     | [] -> env, state
     | _ when state.ScriptEntry = Some lambda.Id -> env, state
     | _ ->
-        let env, next = extendEnvWithContextsFrom (fun _ -> FromSignature lambda.Span) env state required
+        let provider = FromSignature lambda.Span
+        let plain = contexts |> List.filter (fun (_, _, args) -> args.IsEmpty) |> List.map (fun (name, _, _) -> TypeExpr.synthetic (TypeName name))
+        let env, next = extendEnvWithContextsFrom (fun _ -> provider) env state plain
+        let env =
+            contexts
+            |> List.fold (fun env (name, info, args) ->
+                let context = TyApply(name, args)
+                match args, ContextInference.typeExprOf (ContextInference.varNames context) context with
+                | _ :: _, Some written -> extendEnvWithInstance provider env name info args written
+                | _ -> env) env
         env, { state with NextId = next.NextId }
 
 /// The contexts `ctxExpr` names that do not exist, each with where its name is written, if the parser recorded it.

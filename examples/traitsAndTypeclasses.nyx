@@ -26,24 +26,41 @@ def reduce: [Monoid(a)] list(a) -> a = { xs ->
 }
 
 ---
-An instance is not a value: it is written where a `use` loads it, so each
-of int's monoids is chosen where it is needed.
+An instance is not a value: it is written where a `use` loads it. A handler
+loads one for the block it is passed, whose type says which instance it is
+given, so each of int's monoids is chosen where it is needed.
 ---
 
+def additive: ([Monoid(int)] () -> b) -> b = { f ->
+  use Monoid(int)(empty = 0, combine = { x, y -> x + y }) in f()
+}
+
+def multiplicative: ([Monoid(int)] () -> b) -> b = { f ->
+  use Monoid(int)(empty = 1, combine = { x, y -> x * y }) in f()
+}
+
+def bitwiseAnd: ([Monoid(int)] () -> b) -> b = { f ->
+  use Monoid(int)(empty = -1, combine = { x, y -> int.bitAnd(x, y) }) in f()
+}
+
+def bitwiseOr: ([Monoid(int)] () -> b) -> b = { f ->
+  use Monoid(int)(empty = 0, combine = { x, y -> int.bitOr(x, y) }) in f()
+}
+
 def product: list(int) -> int = { xs ->
-  use Monoid(int)(empty = 1, combine = { x, y -> x * y }) in reduce(xs)
+  multiplicative { reduce(xs) }
 }
 
 def total: list(int) -> int = { xs ->
-  use Monoid(int)(empty = 0, combine = { x, y -> x + y }) in reduce(xs)
+  additive { reduce(xs) }
 }
 
 def allBits: list(int) -> int = { xs ->
-  use Monoid(int)(empty = -1, combine = { x, y -> int.bitAnd(x, y) }) in reduce(xs)
+  bitwiseAnd { reduce(xs) }
 }
 
 def anyBits: list(int) -> int = { xs ->
-  use Monoid(int)(empty = 0, combine = { x, y -> int.bitOr(x, y) }) in reduce(xs)
+  bitwiseOr { reduce(xs) }
 }
 
 ---

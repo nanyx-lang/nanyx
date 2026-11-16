@@ -120,8 +120,9 @@ let private annotateFromMemberType (memberType: TypeExpr option) (args: (string 
 /// parameters of their own. A lambda lifted out of it captures those it may call, as it captures a local, so that it
 /// can call the members and pass them on to what it calls (see `withMembers`); `requiresContexts` says which functions
 /// are passed members. It captures the locals the members of each `use` in scope are evaluated into as well, those it
-/// may call, and loads them again with a `use` of its own. But it captures none of the members `passedMembers` gives
-/// for it, by key: those of the contexts its type requires, which each call passes it instead.
+/// may call, and loads them again with a `use` of its own, and so the members of the parameterised contexts a lambda
+/// around it is passed. But it captures none of the members `passedMembers` gives for it, by key: those of the
+/// contexts its type requires, which each call passes it instead.
 ///
 /// `useContexts` is the instance of a parameterised context each `use` loads, by the node of its value (see
 /// `TypedModule.UseContexts`): its members are keyed by it, and read from the value one by one. A `use` left behind
@@ -454,9 +455,21 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
     and liftLambda (scope: Set<string>) (local: LocalDefinition option) (lambda: Expression) (args: (string * TypeExpr option) list) (body: Expression) : Expression =
         let parameterNames = args |> List.map fst |> Set.ofList
         let innerScope = Set.union parameterNames (boundNames body |> Set.ofList)
+        // The members of the parameterised contexts this lambda is passed are found where a lambda inside it is made,
+        // so one captures them as it captures a `use`'s, from the parameters they come in: by key, and by name where no
+        // other has that name.
+        let instanceMembers =
+            let keys = passedMembers lambda |> Set.toList |> List.choose (function InstanceMember(_, memberName) as key -> Some (key, memberName) | NamedMember _ -> None)
+            keys
+            |> List.map (fun (key, memberName) ->
+                let unique = keys |> List.filter (snd >> (=) memberName) |> List.length = 1
+                contextMemberParameter key, (if unique then [ key; NamedMember memberName ] else [ key ]))
+        let outerUseMembers = useMembers
+        useMembers <- useMembers @ instanceMembers
         // A lambda nested inside may capture what this one binds and what encloses this one alike;
         // what it captures from outside is then referenced here, so this lambda captures it in turn.
         let liftedBody = liftExpr (Set.union scope innerScope) body
+        useMembers <- outerUseMembers
         let captured =
             Set.difference (ClosureSyntax.references liftedBody |> List.map fst |> Set.ofList) innerScope
             |> Set.intersect scope
