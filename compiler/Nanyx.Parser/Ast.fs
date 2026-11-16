@@ -99,6 +99,8 @@ type TypeDefModifier =
     /// `type Cursor = [Tx] protected (...)`: a value of the type belongs to the scope of the scoped context it was made
     /// under. The contexts written, each where it is written.
     | InScopeOf of (Identifier * SourceSpan) list
+    /// Where a type declaration's `private` or `protected` is written, so that a fix can write contexts before it.
+    | KindAt of SourceSpan
 
 module TypeDefModifier =
     let isScoped (modifier: TypeDefModifier) =
@@ -108,7 +110,12 @@ module TypeDefModifier =
         | Context
         | Private
         | Protected
-        | InScopeOf _ -> false
+        | InScopeOf _
+        | KindAt _ -> false
+
+    /// Where the declaration with `modifiers` writes `private` or `protected`, if it does.
+    let kindSpan (modifiers: TypeDefModifier list) =
+        modifiers |> List.tryPick (function KindAt span -> Some span | _ -> None)
 
     /// The contexts a type's declaration says its values belong to the scope of (see `InScopeOf`), each where it is
     /// written; empty when it says none.

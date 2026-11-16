@@ -1,3 +1,4 @@
+using Microsoft.FSharp.Collections;
 using NyxCompiler;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
@@ -7,8 +8,9 @@ namespace Nanyx.LanguageServer.Handlers;
 
 /// <summary>
 /// Finds the names that refer to what the name under the cursor declares or refers to, as go-to-definition finds
-/// it: a value, parameter, pattern variable, import, type or context member. Only the document's own compile is
-/// searched, not the files that import it. With <c>includeDeclaration</c>, the declaration comes first, wherever
+/// it: a value, parameter, pattern variable, import, type or context member. In a source file of a package, every file
+/// of the package is searched, compiled as <c>nanyx build</c> checks them (see <see cref="DocumentStore.CompilePackage"/>);
+/// elsewhere, only the document's own compile. With <c>includeDeclaration</c>, the declaration comes first, wherever
 /// it is (see <see cref="SourceLocations"/>). Nothing is found in a document that does not parse.
 /// </summary>
 public sealed class ReferencesHandler : ReferencesHandlerBase
@@ -47,9 +49,20 @@ public sealed class ReferencesHandler : ReferencesHandlerBase
             locations.Add(declaration);
         }
 
-        locations.AddRange(
-            Definition.referencesTo(compiled, symbol.Value)
-                .Select(span => new Location { Uri = uri, Range = document.Positions.ToRange(span.Start, span.End) }));
+        // In a package, the uses are searched for in all its files; elsewhere, in the document alone.
+        if (_documents.CompilePackage(document.FileName) is { } package)
+        {
+            locations.AddRange(
+                Definition.referencesAcross(ListModule.OfSeq(package), symbol.Value)
+                    .Select(span => SourceLocations.Of(span, _documents, _standardLibrary))
+                    .OfType<Location>());
+        }
+        else
+        {
+            locations.AddRange(
+                Definition.referencesTo(compiled, symbol.Value)
+                    .Select(span => new Location { Uri = uri, Range = document.Positions.ToRange(span.Start, span.End) }));
+        }
 
         return new LocationContainer(locations);
     }

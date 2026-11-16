@@ -35,6 +35,7 @@
     <Compile Include="Features\Contexts\ContextEscapeTests.fs" />
     <Compile Include="Features\Contexts\ScopedContextTests.fs" />
     <Compile Include="Features\Contexts\ScopedTypeTests.fs" />
+    <Compile Include="Features\Contexts\ScopedRepresentationTests.fs" />
     <Compile Include="Features\Contexts\MemberlessContextTests.fs" />
     <Compile Include="Features\Contexts\UnsuppliedScopedContextTests.fs" />
     <Compile Include="Features\Contexts\ProtectedContextMatchingTests.fs" />
@@ -166,6 +167,7 @@
     <Compile Include="Features\Tooling\InfoViewCallTests.fs" />
     <Compile Include="Features\Tooling\LibrarySearchTests.fs" />
     <Compile Include="Features\Tooling\OutlineTests.fs" />
+    <Compile Include="Features\Tooling\PackageReferencesTests.fs" />
     <Compile Include="Features\Tooling\SymbolsTests.fs" />
     <Compile Include="Features\Tooling\TypeHintsTests.fs" />
     <Compile Include="Features\Types\AnnotationsTests.fs" />

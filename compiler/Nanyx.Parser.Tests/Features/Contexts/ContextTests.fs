@@ -45,6 +45,31 @@ let ``a name that starts with use or in is not the use keyword`` () =
     | other -> failwith $"Unexpected statements: %A{other}"
 
 [<Fact>]
+let ``A use at the top level, or in a module block, is an error at the use that says it belongs in a block`` () =
+    let atTopLevel =
+        """
+context Log = (log: string -> ())
+
+use Log(log = { m -> println(m) })
+"""
+    let inModuleBlock =
+        """
+module logging =
+  use Log(log = { m -> println(m) })
+  def x = 1
+"""
+    for source in [ atTopLevel; inModuleBlock ] |> List.map _.ReplaceLineEndings("\n") do
+        let message, at = parseErrorOf source
+        Assert.Contains("A `use` belongs in a block", message)
+        Assert.StartsWith("use", at)
+
+[<Fact>]
+let ``A use ... in expression at the top level still parses`` () =
+    match parseModule "use ctx in index\n" with
+    | Result.Ok [ Kind (Expr _) ] -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Fact>]
 let ``use C(T) = expr does not parse, and the error says to write the call form where the context is named`` () =
     for line, head in [ """  use Show(int) = (show = { n -> "n" })""", "Show(int)"; "  use Console = (println = log)", "Console" ] do
         let source = $"def main = {{\n{line}\n  1\n}}"

@@ -156,3 +156,29 @@ let referencesTo (result: CompileResult) (symbol: Symbol) : SourceSpan list =
         |> List.distinct
         |> List.sortBy (fun span -> span.Start)
     | _ -> []
+
+/// Whether `a` and `b`, symbols of two compiles, are the same name: symbol ids are made afresh by each compile, so the
+/// same declaration, of a name of the same kind, is the same name.
+let sameSymbol (a: Symbol) (b: Symbol) =
+    a.Name = b.Name
+    && a.Kind = b.Kind
+    && a.Declaration.File = b.Declaration.File
+    && a.Declaration.Start = b.Declaration.Start
+    && not (SourceSpan.isNone a.Declaration)
+
+/// The span of every name in each of `results`, the compiles of a package's files, that refers to `symbol`, a symbol
+/// of any compile of one of them, as `referencesTo` finds them in each, in the order of `results` and then of the text.
+/// A declaration is not among them.
+let referencesAcross (results: CompileResult list) (symbol: Symbol) : SourceSpan list =
+    results
+    |> List.collect (fun result ->
+        match result.Typed with
+        | Some typed ->
+            typed.Symbols
+            |> Map.values
+            |> Seq.filter (sameSymbol symbol)
+            |> Seq.toList
+            |> List.collect (referencesTo result)
+            |> List.distinct
+            |> List.sortBy (fun span -> span.Start)
+        | None -> [])

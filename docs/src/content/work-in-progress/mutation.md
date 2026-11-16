@@ -91,8 +91,10 @@ context of their own, `type MRef(a) = [Memory] protected (...)`
    immutable. `set` and `swap` give `#ok | #outOfRange`, never a trap.
 4. **`MStack(a)` and `MList(a)`** ([#1493](https://github.com/nanyx-lang/nanyx/issues/1493)): done, in
    [`nanyx/mstack`](../stdlib/mstack) and [`nanyx/mlist`](../stdlib/mlist), written in Nanyx over `MRef` as private
-   types, so they needed nothing new in the compiler. Neither writes `[Memory]` in its declaration: each carries its
-   block's scope through the `MRef` it holds. `MStack` is an `MRef(list(a))`, the top first. `MList` is an `MRef` of its
+   types, so they needed nothing new in the compiler. Each declares `[Memory]`, as any type whose representation holds
+   a scoped value must (NYX0256, [#1604](https://github.com/nanyx-lang/nanyx/issues/1604)):
+   `type MStack(a) = [Memory] private MRef(list(a))`, so the `MRef` it holds is of the stack's own scope.
+   `MStack` is an `MRef(list(a))`, the top first. `MList` is an `MRef` of its
    elements last first, and their count, so `add` is constant-time and `at` and `set` walk to the element; `set` gives
    `#ok | #outOfRange`. It can move onto a growable `MArray` later without changing its interface. `+=` to append
    isn't on Nanyx's list of operators, so whether and how it joins it is

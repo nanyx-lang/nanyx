@@ -57,15 +57,18 @@ You can provide implementations with `use`, for a type that has none of its own:
 ```nanyx fragment
 type Celsius = (degrees: float)
 
-use Add(Celsius)(
-  zero = Celsius(degrees = 0.0)
-  `+` = { a, b -> Celsius(degrees = a.degrees + b.degrees) }
-  `-` = { a, b -> Celsius(degrees = a.degrees - b.degrees) }
-  negate = { a -> Celsius(degrees = -a.degrees) }
-)
-
-sum([Celsius(degrees = 1.5), Celsius(degrees = 2.0)])
+def total = {
+  use Add(Celsius)(
+    zero = Celsius(degrees = 0.0)
+    `+` = { a, b -> Celsius(degrees = a.degrees + b.degrees) }
+    `-` = { a, b -> Celsius(degrees = a.degrees - b.degrees) }
+    negate = { a -> Celsius(degrees = -a.degrees) }
+  )
+  sum([Celsius(degrees = 1.5), Celsius(degrees = 2.0)])
+}
 ```
+
+A `use` loads the instance for the rest of the block it is in, so it is always written in a block.
 
 A type that has its own, such as `int`, keeps it: `use Add(int)(...)` is an error, so `1 + 2` means the same everywhere.
 

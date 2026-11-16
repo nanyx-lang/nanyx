@@ -169,10 +169,21 @@ let private importLine: Parser<TopLevelItem, ParseState> =
 let private reExportLine: Parser<TopLevelItem, ParseState> =
     spannedItem (attempt (pstring "export" >>. keywordEnd >>. wsInline >>. reExportItem) |>> ReExport)
 
+// `use` at the top level, which is an error at the `use`: an instance is loaded for the rest of a block, so a `use`
+// belongs in one. `use` is reserved, so it is never read as a name and a call after it. A `use ... in` expression is
+// one, so it is left to `topLevelExpr`.
+let private topLevelUse: Parser<TopLevelItem, ParseState> =
+    attempt (
+        getPosition .>> pstring "use" .>> keywordEnd
+        .>> notFollowedBy (attempt (ws >>. useValue >>. ws >>. pstring "in" >>. keywordEnd)))
+    >>= fun position ->
+        reportFocused position "A `use` belongs in a block, where it loads an instance for the rest of the block: put it in the body of a def such as `def main = { ... }`"
+
 let private moduleBlockItem: Parser<TopLevelItem, ParseState> =
     choice [
         importLine
         attributeItem
+        topLevelUse
         attempt typeDef
         valueDef
         topLevelExpr
@@ -224,6 +235,7 @@ let topLevelItem: Parser<TopLevelItem, ParseState> =
         importLine
         reExportLine
         attributeItem
+        topLevelUse
         attempt typeDef
         valueDef
         topLevelExpr

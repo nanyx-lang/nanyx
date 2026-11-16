@@ -161,7 +161,12 @@ let private namedTypeVar (state: InferState) (name: Identifier) : TyVar * InferS
 /// The nominal type `info` defines, applied to `argTys`: made from its definition's type with them for its parameters.
 /// A type in a scoped context's scope has the context, of its scope, as a last argument (see `TypeDefInfo.ScopedBy`).
 let internal nominalType (info: TypeDefInfo) (argTys: Ty list) : Ty =
-    TyNominal(TypeDefInfo.nominalId info, argTys, Unifier.applyToParameters info.Parameters argTys info.Underlying, info.IsPrivate)
+    let parameters, arguments =
+        match info.Scope, List.tryLast argTys with
+        | Some scope, Some (FunctionContexts.ScopedContext(_, scopeTy)) when argTys.Length = info.Parameters.Length + 1 ->
+            info.Parameters @ [ scope ], List.truncate info.Parameters.Length argTys @ [ scopeTy ]
+        | _ -> info.Parameters, argTys
+    TyNominal(TypeDefInfo.nominalId info, argTys, Unifier.applyToParameters parameters arguments info.Underlying, info.IsPrivate)
 
 /// The scope a type in a scoped context's scope is of where it is written: the one the signature's context of that
 /// name has (see `WrittenContexts`), as the scoped context itself.
@@ -177,13 +182,13 @@ let private writtenScope (state: InferState) (info: TypeDefInfo) : Ty list * Inf
 /// from, and the scoped context of the value's scope, if it has one.
 let internal freshNominalType (state: InferState) (info: TypeDefInfo) : Ty * Ty * Ty option * InferState =
     let argTys, next = freshVars info.Parameters state
-    let scoped, next =
+    let scoped, scopeArgument, next =
         match info.ScopedBy with
         | Some context ->
             let scope, next = freshVar next
-            Some (FunctionContexts.scoped context scope), next
-        | None -> None, next
-    let underlying = Unifier.applyToParameters info.Parameters argTys info.Underlying
+            Some (FunctionContexts.scoped context scope), [ scope ], next
+        | None -> None, [], next
+    let underlying = Unifier.applyToParameters (info.Parameters @ Option.toList info.Scope) (argTys @ scopeArgument) info.Underlying
     TyNominal(TypeDefInfo.nominalId info, argTys @ Option.toList scoped, underlying, info.IsPrivate), underlying, scoped, next
 
 /// The type the name `name`, defined by `info`, stands for written without arguments: the nominal type, or the alias.
@@ -527,6 +532,7 @@ let private readTypeDefBody (state: InferState) (name: Identifier) (modifiers: T
               IsContext = false
               IsScoped = false
               ScopedBy = None
+              Scope = None
               Symbol = None
               Members = Map.empty }
         let ty, next = typeExprToTy { state with TypeDefs = state.TypeDefs |> Map.add name self } body
@@ -572,6 +578,42 @@ let internal typeScopeErrors (state: InferState) (name: Identifier) (modifiers: 
         | _ -> []
     notScoped @ several
 
+/// The values of a scoped context's scope `ty` holds as it is written, each as the scoped context and the name of the
+/// nominal type that belongs to its scope. A function type holds none for the contexts it requires, and a nominal type
+/// none in what it is made of: one that holds such a value declares the context itself.
+let rec private heldScopes (ty: Ty) : (string * string) list =
+    match ty with
+    | TyNominal(id, args, _, _) ->
+        let own =
+            match List.tryLast args with
+            | Some (FunctionContexts.ScopedContext(context, _)) -> [ context, id.Name ]
+            | _ -> []
+        own @ List.collect heldScopes args
+    | TyFunc(input, output, _) -> heldScopes input @ heldScopes output
+    | _ -> Ty.children ty |> List.collect heldScopes
+
+/// The error for each scoped context whose scope the representation of the nominal type `name` holds a value of,
+/// and that its declaration does not write before its kind: `type MStack(a) = [Memory] private MRef(list(a))`. Where the
+/// declaration writes no context, the fix writes the one it holds.
+let internal undeclaredHeldScopes (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (body: TypeExpr) : Diagnostic list =
+    match tryFindTypeDef name state with
+    | Some info when info.IsNominal && not info.IsContext ->
+        let declared = TypeDefModifier.scopeContexts modifiers |> List.map (fst >> WrittenContexts.canonical state)
+        heldScopes info.Underlying
+        |> List.distinctBy fst
+        |> List.filter (fun (context, _) -> not (List.contains context declared))
+        |> List.map (fun (context, held) ->
+            let kind = if modifiers |> List.contains Private then "private" else "protected"
+            let parameters = if info.Parameters.IsEmpty then "" else $"""({info.Parameters |> List.choose _.Name |> String.concat ", "})"""
+            let diagnostic =
+                Diagnostics.at DiagnosticCodes.UndeclaredTypeScope body.Span
+                    $"'{name}' holds a value of type '{held}', which belongs to a '{context}' scope: declare it `type {Names.written name}{parameters} = [{context}] {kind} ...`"
+            match TypeDefModifier.kindSpan modifiers with
+            | Some kindSpan when declared.IsEmpty ->
+                { diagnostic with Fixes = [ { Title = $"Declare `[{context}]`"; Edits = [ { Span = { kindSpan with End = kindSpan.Start }; NewText = $"[{context}] " } ] } ] }
+            | _ -> diagnostic)
+    | _ -> []
+
 let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
     let originalTypeVars = state.TypeVars
     let mutable current = state
@@ -587,6 +629,18 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
     let updatedTypeVars =
         paramEntries
         |> List.fold (fun acc (paramName, var) -> acc |> Map.add paramName var) current.TypeVars
+    // A type in a scoped context's scope reads that context's scope in its body as its own (see `TypeDefInfo.Scope`).
+    let scopedBy = TypeDefModifier.scopeContexts modifiers |> List.tryExactlyOne |> Option.map fst
+    let scope, updatedTypeVars =
+        match scopedBy with
+        | Some context ->
+            let name = FunctionContexts.scopeVariableName context
+            let var, next = freshVar current
+            current <- next
+            match var with
+            | TyVar var -> Some { var with Name = Some name }, updatedTypeVars |> Map.add name { var with Name = Some name }
+            | _ -> failwith "Expected TyVar"
+        | None -> None, updatedTypeVars
     let stateWithParams = { current with TypeVars = updatedTypeVars }
     let isPrivate = isPrivateType modifiers
     let paramVars = paramEntries |> List.map snd
@@ -629,7 +683,8 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
           IsPrivate = isPrivate
           IsContext = isContextDef modifiers
           IsScoped = List.exists TypeDefModifier.isScoped modifiers
-          ScopedBy = TypeDefModifier.scopeContexts modifiers |> List.tryExactlyOne |> Option.map fst
+          ScopedBy = scopedBy
+          Scope = scope
           Symbol = symbol
           Members = members }
     // A name of the type in its own definition refers to it, as any other does.

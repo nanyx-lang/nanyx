@@ -34,7 +34,7 @@ Each function is attached to `MStack`, so with `import nanyx/mstack` it is calle
 ## `MStack`
 
 ```nanyx fragment
-type MStack(a) = private MRef(list(a))
+type MStack(a) = [Memory] private MRef(list(a))
 ```
 
 ## `MStack.empty`

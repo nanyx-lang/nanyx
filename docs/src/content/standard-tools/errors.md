@@ -1604,6 +1604,22 @@ def `<+>` = { a, b, c -> a + b * c }  -- error NYX0255: '`<+>`' is an operator, 
 To fix it, take two parameters. To pass an operator more values, make one operand a tuple or a record, as in
 `1 <+> (2, 3)`, and take it apart in the operator's body; or define a named function instead.
 
+# NYX0256: Type holding a scoped value without declaring its context
+
+A protected or private type's representation, as its declaration writes it, holds a value of a type in a scoped
+context's scope, such as an `MRef`, an `MArray` or a user's `[Tx]` type, but the declaration doesn't write that
+context. Like a function type, a type never hides a context: the declaration says which scope its values belong to
+(see [Types in a scope](../advanced/contexts#types-in-a-scope)).
+
+```nanyx
+import nanyx/mref
+
+type Stack(a) = private MRef(list(a))  -- error NYX0256: 'Stack' holds a value of type 'MRef', which belongs to a 'Memory' scope: declare it `type Stack(a) = [Memory] private ...`
+```
+
+To fix it, write the context before `private` or `protected`, which the error's fix does:
+`type Stack(a) = [Memory] private MRef(list(a))`.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

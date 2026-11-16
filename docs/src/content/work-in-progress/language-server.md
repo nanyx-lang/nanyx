@@ -178,13 +178,18 @@ what the compiler keeps: exact spans, resolved names and types.
   compiler records which file each import brings in (`TypedModule.ImportedFiles`), so `Documentation.Reader.ForModule`
   can read that file's doc comments. Completion of an alias, and the info view's module scope, show an import with
   its module's doc comment too.
-- **Find-references in the open document** ([#276](https://github.com/nanyx-lang/nanyx/issues/276)). From the
-  name under the cursor it finds the symbol as go-to-definition does, then every name in the document's compile
-  whose node `References` maps to it (`NyxCompiler.Definition.referencesTo`): a call's or pipe's function name, an
-  identifier, a qualified context member's name, a type name. An import's references are the alias each name it
-  brought in is written with, from `ImportReferences`. The declaration comes first when the client asks for it,
-  in whichever file it is. The files that import the document are not searched: that needs an index of the
-  workspace.
+- **Find-references** ([#276](https://github.com/nanyx-lang/nanyx/issues/276),
+  [#1556](https://github.com/nanyx-lang/nanyx/issues/1556)). From the name under the cursor it finds the symbol as
+  go-to-definition does, then every name in a compile whose node `References` maps to it
+  (`NyxCompiler.Definition.referencesTo`): a call's or pipe's function name, an identifier, a qualified context
+  member's name, a type name. An import's references are the alias each name it brought in is written with, from
+  `ImportReferences`. In a source file of a package, every file of the package is searched: `DocumentStore.CompilePackage`
+  compiles them all as `nanyx build` checks them, each module checked once, with no linters, reading an open file's
+  editor text (`Package.compilePackageReading`), when the request comes. Symbol ids are made afresh by each compile,
+  so a name in another file's compile is the same symbol when it has the same name, kind and declaration
+  (`Definition.sameSymbol`, `Definition.referencesAcross`). A file in no package, such as a script, is searched alone.
+  The declaration comes first when the client asks for it, in whichever file it is. Other packages that depend on the
+  package are not searched.
 - **Document symbols** ([#278](https://github.com/nanyx-lang/nanyx/issues/278)), for the outline view, breadcrumbs
   and Go to Symbol in Editor. `NyxCompiler.Outline.ofSource` parses the text and lists its top-level defs (a
   function when the value is a lambda), types (a record, a union or another alias), contexts (a scoped one shows
@@ -326,9 +331,8 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    Go-to-definition is done for values (including those in the standard library), type names and context members
    ([#266](https://github.com/nanyx-lang/nanyx/issues/266)). Find-references is done in the open document
    ([#276](https://github.com/nanyx-lang/nanyx/issues/276)), with a use of an operator at the operator
-   ([#792](https://github.com/nanyx-lang/nanyx/issues/792)); across files it is not. Decided: it will read the
-   package's files, as `nanyx build` checks them, once the server resolves packages
-   ([#1556](https://github.com/nanyx-lang/nanyx/issues/1556); the server already compiles a local package as `nanyx build` does).
+   ([#792](https://github.com/nanyx-lang/nanyx/issues/792)), and across the files of the document's package, as
+   `nanyx build` checks them ([#1556](https://github.com/nanyx-lang/nanyx/issues/1556)).
 4. **Document symbols.** Done ([#278](https://github.com/nanyx-lang/nanyx/issues/278),
    [#793](https://github.com/nanyx-lang/nanyx/issues/793)). Workspace symbols (Go to Symbol in Workspace), decided
    ([#877](https://github.com/nanyx-lang/nanyx/issues/877)): from parsing every `.nyx` file under the workspace

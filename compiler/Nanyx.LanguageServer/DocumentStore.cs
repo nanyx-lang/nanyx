@@ -221,6 +221,48 @@ public sealed class DocumentStore
     public IReadOnlyList<DocumentUri> Importers(string file) =>
         _documents.Where(entry => entry.Value.Sources.Keys.Contains(file, FilePaths)).Select(entry => entry.Key).ToList();
 
+    /// <summary>
+    /// The open document of the file at the full path <paramref name="file"/>, with the URI the client opened it by,
+    /// or <c>null</c> if none is open.
+    /// </summary>
+    public (DocumentUri Uri, OpenDocument Document)? TryGetFile(string file) =>
+        file.Length != 0 && _documents.FirstOrDefault(entry => FilePaths.Equals(entry.Value.FileName, file)) is { Value: not null } entry
+            ? (entry.Key, entry.Value)
+            : null;
+
+    /// <summary>
+    /// Compiles every source file of the package the file at the full path <paramref name="file"/> is a source file
+    /// of, as <c>nanyx build</c> checks them, with the editor's text of each open one (see
+    /// <c>Package.compilePackageReading</c>): what find references and rename search. <c>null</c> for a file in no
+    /// package, and if the compiler throws.
+    /// </summary>
+    public IReadOnlyList<CompileResult>? CompilePackage(string file)
+    {
+        if (file.Length == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var read = new Dictionary<string, string>(FilePaths);
+            var stopwatch = Stopwatch.StartNew();
+            var results = PackageModule.compilePackageReading(Microsoft.FSharp.Core.FuncConvert.FromFunc((string other) => ReadFile(other, read)), file);
+            if (results is null)
+            {
+                return null;
+            }
+
+            _logger.LogInformation("Compiled the package of {File} ({Count} files) in {Seconds:0.000}s", file, results.Value.Length, stopwatch.Elapsed.TotalSeconds);
+            return results.Value.Select(result => result.Item2).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "The compiler failed on the package of {File}", file);
+            return null;
+        }
+    }
+
     /// <summary>The file the compiler's spans name for a document: its full path, or empty if it is not on disk.</summary>
     internal static string FileNameOf(DocumentUri uri) =>
         uri.Scheme == "file" ? Path.GetFullPath(uri.GetFileSystemPath()) : string.Empty;
@@ -231,8 +273,7 @@ public sealed class DocumentStore
     /// </summary>
     private string ReadFile(string file, Dictionary<string, string> read)
     {
-        var text = _documents.Values.FirstOrDefault(document => FilePaths.Equals(document.FileName, file))?.Text
-            ?? File.ReadAllText(file);
+        var text = TryGetFile(file)?.Document.Text ?? File.ReadAllText(file);
         read[file] = text;
         return text;
     }

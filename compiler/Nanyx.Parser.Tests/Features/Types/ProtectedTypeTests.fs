@@ -12,13 +12,13 @@ let private parsed (source: string) =
 [<Fact>]
 let ``protected after the = declares a protected type`` () =
     match parsed "type Email = protected string" with
-    | [ Def (TypeDef ("Email", [ Protected ], [], Kind (TypeName "string"))) ] -> ()
+    | [ Def (TypeDef ("Email", [ Protected; KindAt span ], [], Kind (TypeName "string"))) ] -> Assert.Equal(13, span.Start)
     | other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]
 let ``A protected record type keeps its fields`` () =
     match parsed "export type User = protected (\n  name: string\n  age: int\n)" with
-    | [ Def (TypeDef ("User", [ Protected; Export ], [], Kind (TypeRecord fields))) ] -> Assert.Equal(2, fields.Length)
+    | [ Def (TypeDef ("User", [ Protected; Export; KindAt _ ], [], Kind (TypeRecord fields))) ] -> Assert.Equal(2, fields.Length)
     | other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]
