@@ -363,11 +363,29 @@ let format (options: Options) (parsed: SourceModule) : string =
         //     = { products, line ->
         //       ...
         //     }
+        //
+        // A comment between the signature and the `=` keeps the `=` on a line of its own after it:
+        //
+        //   def scale: int, int -> int  -- times k, plus x
+        //     = { x, k -> x * k + x }
         let signatureGroup = nextGroupId ()
+        let commentsBeforeEquals (t: TypeExpr) =
+            if sourceText.Valid t.Span && sourceText.Valid value.Span then
+                placement.UnplacedIn(t.Span.End, value.Span.Start)
+                |> List.map (fun i ->
+                    let comment, span = placement.Place i
+                    if sourceText.LineOf span.Start = sourceText.LineOf (t.Span.End - 1) then Doc.trailingComment comment
+                    else cat [ hard; Doc.comment comment ])
+            else
+                []
         let head =
             match typeOpt with
             | Some t ->
-                NamedGroup(signatureGroup, cat [ name; nest (cat [ Doc.softLine; text ": "; signature t; Doc.line; text "=" ]) ])
+                match commentsBeforeEquals t with
+                | [] -> NamedGroup(signatureGroup, cat [ name; nest (cat [ Doc.softLine; text ": "; signature t; Doc.line; text "=" ]) ])
+                | comments ->
+                    let signatureLine = cat [ name; Doc.group (nest (cat [ Doc.softLine; text ": "; signature t ])) ]
+                    NamedGroup(signatureGroup, cat [ signatureLine; nest (cat [ cat comments; hard; text "=" ]) ])
             | None -> cat [ name; text " =" ]
         let underHead doc = IfGroupBroken(signatureGroup, nest doc, doc)
         // A def with a type annotation whose value is a lambda keeps the signature's line to itself: the body goes on

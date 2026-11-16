@@ -211,3 +211,29 @@ let ``Every comment in the test files is recorded once, where it is written`` ()
                     Assert.StartsWith("--|", text)
                     Assert.Equal(text, parsed.Source.Substring(span.Start, span.End - span.Start))
                 | BlankLines _ -> ()
+
+[<Theory>]
+[<InlineData("trailing")>]
+[<InlineData("own-line")>]
+let ``A comment between a def's signature and an = on the next line is kept as trivia`` (where: string) =
+    let source =
+        if where = "trailing" then
+            """
+def scale: int, int -> int  -- times k, plus x
+  = { x, k -> x * k + x }
+"""
+        else
+            """
+def scale: int, int -> int
+  -- times k, plus x
+  = { x, k -> x * k + x }
+"""
+    match parseModuleWithTrivia "" (source.ReplaceLineEndings("\n").TrimStart '\n') with
+    | Result.Ok parsed ->
+        match parsed.Items with
+        | [ { Kind = Def(ValueDef(_, "scale", Some _, { Kind = Lambda _ })) } ] -> ()
+        | other -> failwith $"Unexpected items: %A{other}"
+        let line = if where = "trailing" then 0 else 1
+        let column = if where = "trailing" then 28 else 2
+        Assert.Equal<_ list>([ where, "-- times k, plus x", line, column ], describe parsed.Trivia)
+    | Result.Error error -> failwith $"Parse failed: {error.Message}"
