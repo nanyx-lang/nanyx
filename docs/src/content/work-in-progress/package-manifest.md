@@ -49,15 +49,14 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
   lambda, an interpolated string, a definition, an import, a `::` directive. The manifest can always be read without
   running or type-checking a program, which `nanyx add` needs in order to edit it.
 - **Its shape is checked** (`Manifest.check`). The fields are the manifest's own: `package`, `dependencies`,
-  `linters`, `host` and `formatter` at the top, and `name`, `version`, `sources`, `publicModules` and `host` in
+  `linters`, `host` and `formatter` at the top, and `name`, `version`, `sources` and `host` in
   `package`. A linter entry has `package`, `version` and `settings`, and a host entry `package`, `version` or `path`,
   and `settings`. A host package's `package` declares it one with `host = (root = "<module>", prelude = "<module>")`
   ([A host package](./hosts#a-host-package)). An unknown field (`NYX0021`), a missing `name`
   (`NYX0022`), a string where a list is expected (`NYX0023`) or a field that isn't supported yet (`NYX0024`) is an
-  error at that field. A module listed twice in `publicModules`, or a package listed twice in `dependencies`, is
-  `NYX0023` at the repeat, and so is a `publicModules` entry that no source file of the package declares.
-  `publicModules` is going: a module will say it's exported with `export module` in its own declaration
-  ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457), [What a package exports](./packaging#what-a-package-exports)).
+  error at that field. A package listed twice in `dependencies` is `NYX0023` at the repeat. Which modules other
+  packages may import is no field of the manifest: a module says it's exported with `export module` in its own
+  declaration ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457), [What a package exports](./packaging#what-a-package-exports)).
 - **What works today.** A dependency gives a `path`, or names a package the compiler ships, such as
   `nanyx.console.core`, at the compiler's version exactly (`NYX0029` otherwise); any other with a `version` is
   `NYX0024` until packages can be downloaded, and one with both is an error. The only linter is `nanyx.lint`, whose

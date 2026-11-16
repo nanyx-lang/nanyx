@@ -87,6 +87,7 @@ module DiagnosticCodes =
     let DefinitionWithoutValue = code 30 "Definition without a value" Severity.Error
     let EntryInLibrary = code 31 "Entry point in a library" Severity.Error
     let ContextsJoined = code 32 "Contexts joined with `&` or `+`" Severity.Error
+    let LibraryExportsNothing = code 33 "Library that exports no module" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -173,7 +174,7 @@ module DiagnosticCodes =
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
           ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped; DefinitionWithoutValue; EntryInLibrary; ContextsJoined
-          UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
+          LibraryExportsNothing; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers

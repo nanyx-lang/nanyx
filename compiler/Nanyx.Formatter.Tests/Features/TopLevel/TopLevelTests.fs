@@ -9,6 +9,11 @@ let ``A dotted module declaration is printed as written`` () =
     unchanged "module collections.list\n\nexport def one = 1\n"
 
 [<Fact>]
+let ``An exported module declaration keeps its export`` () =
+    unchanged "export module acme.web.http\n\nexport def one = 1\n"
+    unchanged "@partial export module utils\n\nexport def one = 1\n"
+
+[<Fact>]
 let ``An attribute stays on the line before its item`` () =
     Assert.Equal(
         lines [ "def a = 1"; ""; "@entry"; "def main = {"; "  a"; "}" ],

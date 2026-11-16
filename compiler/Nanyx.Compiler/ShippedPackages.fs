@@ -23,34 +23,24 @@ module ShippedPackages =
 
     let private modules = ConcurrentDictionary<string, PackageModules option>()
 
-    /// The public modules of the shipped package `name`, and the packages it depends on, as its manifest lists them: a
-    /// shipped package depends only on others the compiler ships, by name. The manifest is checked as any other is
-    /// (see `Manifest`) by the tests of the packages the compiler ships.
-    let private manifestOf (name: string) : string list * string list =
+    /// The packages the shipped package `name` depends on, as its manifest lists them: a shipped package depends only on
+    /// others the compiler ships, by name. The manifest is checked as any other is (see `Manifest`) by the tests of the
+    /// packages the compiler ships.
+    let private dependenciesOf (name: string) : string list =
         let path = Path.Combine(directoryOf name, name + ".nyxp")
-        let texts (value: DataValue option) =
-            match value with
-            | Some { Data = DataList entries } -> entries |> List.choose (function { Data = DataString text } -> Some text | _ -> None)
-            | _ -> []
         match DataValue.read path (File.ReadAllText path) with
         | Ok { Data = DataRecord top } ->
-            let packageFields =
-                match DataValue.field "package" top with
-                | Some { DataField.Value = { Data = DataRecord fields } } -> fields
-                | _ -> []
-            let dependencies =
-                match DataValue.field "dependencies" top with
-                | Some { DataField.Value = { Data = DataList entries } } ->
-                    entries
-                    |> List.choose (function
-                        | { Data = DataRecord fields } ->
-                            match DataValue.field "package" fields with
-                            | Some { DataField.Value = { Data = DataString dependency } } -> Some dependency
-                            | _ -> None
-                        | _ -> None)
-                | _ -> []
-            texts (DataValue.field "publicModules" packageFields |> Option.map _.Value), dependencies
-        | _ -> [], []
+            match DataValue.field "dependencies" top with
+            | Some { DataField.Value = { Data = DataList entries } } ->
+                entries
+                |> List.choose (function
+                    | { Data = DataRecord fields } ->
+                        match DataValue.field "package" fields with
+                        | Some { DataField.Value = { Data = DataString dependency } } -> Some dependency
+                        | _ -> None
+                    | _ -> None)
+            | _ -> []
+        | _ -> []
 
     /// The modules of the shipped package `name`, by the names its source files declare, with its public modules and the
     /// shipped packages it depends on, if the compiler ships it. They never change while the process runs, so they are
@@ -60,11 +50,7 @@ module ShippedPackages =
             let sources = Path.Combine(directoryOf name, "src")
             if Directory.Exists sources then
                 let files = Directory.GetFiles(sources, "*.nyx", SearchOption.AllDirectories) |> Array.sort |> List.ofArray
-                let publicModules, dependencies = manifestOf name
-                Some
-                    { PackageModules.ofFiles name (directoryOf name) None files with
-                        PublicModules = publicModules
-                        Dependencies = dependencies |> List.choose tryModules }
+                Some { PackageModules.ofFiles name (directoryOf name) None files with Dependencies = dependenciesOf name |> List.choose tryModules }
             else
                 None)
 

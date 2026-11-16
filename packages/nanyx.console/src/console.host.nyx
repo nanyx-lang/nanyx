@@ -4,7 +4,7 @@
   [`Console`], which reads and writes the standard streams, and [`Env`]. Both are written on WASI's
   functions, which the host declares with `@extern` and calls with the [`HostRuntime`] the toolchain
   provides to it, passing their buffers in memory with `nanyx/host.memory`.
-module console.host
+export module console.host
 
 import (
   nanyx/host.memory

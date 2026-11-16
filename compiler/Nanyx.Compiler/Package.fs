@@ -79,10 +79,19 @@ module Package =
         | [] -> Result.Ok(results |> List.choose (function Result.Ok value -> Some value | Result.Error _ -> None))
         | errors -> Result.Error(List.distinct errors)
 
-    /// An error at each entry of the manifest's `publicModules` that names none of the modules `files`, the package's
-    /// source files, declare.
-    let private publicModuleErrors (manifest: Manifest) (files: string list) : Diagnostic list =
-        Manifest.unknownPublicModules manifest (PackageModules.ofFiles manifest.Name manifest.Root None files).Modules.Keys
+    /// An error at the manifest's `package` if it is a library, with no `host` and no `@entry`, none of whose source
+    /// files `files` exports its module with `export module`: another package could import nothing of it. An
+    /// application needn't export anything, nor need a package with an `@entry` run with `--host`; one with an
+    /// `@entry` and no host at all is an error of its own (`EntryInLibrary`).
+    let private exportErrors (manifest: Manifest) (files: string list) : Diagnostic list =
+        let isLibrary = manifest.Host.IsNone && not (files |> List.exists declaresEntry)
+        if not isLibrary || not (PackageModules.ofFiles manifest.Name manifest.Root None files).PublicModules.IsEmpty then
+            []
+        else
+            [ Diagnostics.at
+                  DiagnosticCodes.LibraryExportsNothing
+                  manifest.PackageSpan
+                  $"{manifest.Name} is a library, since its manifest names no host, but it exports no module: a library must export at least one, by declaring it with export module" ]
 
     /// The package `manifest` describes, with the packages it depends on. `chain` is the manifests of the packages
     /// that led to it, nearest first, each with its package's name, and `reached` every package the build has read so far.
@@ -98,9 +107,9 @@ module Package =
                 | [ entry ] -> Result.Ok(Some entry)
                 | several ->
                     Result.Error [ AboutPackage $"""{manifest.Path}: a package can have one @entry, but these files each declare one: {several |> List.map display |> String.concat ", "}""" ]
-        let publicModules = publicModuleErrors manifest files |> List.map AtManifest
+        let exports = exportErrors manifest files |> List.map AtManifest
         match entry, dependenciesIn reached ((manifest.Path, manifest.Name) :: chain) manifest.Dependencies, hostIn reached manifest.Host with
-        | Result.Ok entry, Result.Ok dependencies, Result.Ok host when publicModules.IsEmpty ->
+        | Result.Ok entry, Result.Ok dependencies, Result.Ok host when exports.IsEmpty ->
             Result.Ok
                 { Manifest = manifest
                   Sources = files
@@ -110,7 +119,7 @@ module Package =
                   HostPackage = host |> Option.map snd }
         | entry, dependencies, host ->
             let errorsOf = function Result.Error errors -> errors | Result.Ok _ -> []
-            Result.Error(errorsOf entry @ publicModules @ errorsOf dependencies @ errorsOf host)
+            Result.Error(errorsOf entry @ exports @ errorsOf dependencies @ errorsOf host)
 
     /// The host `entry` names, if there is one, read from the manifest of its package, which must declare it a host (see
     /// `HostPackages`), with that package: one the compiler ships, or one in the directory the entry gives.
@@ -179,7 +188,7 @@ module Package =
         |> Result.bind (fun manifest -> ofManifestIn (reachedFrom manifest) [] manifest |> Result.mapError (List.map describe))
 
     /// The manifest at `path`, whose text is `text`, as the editor shows it: a compile whose diagnostics are the problems
-    /// with it (see `Manifest.check`), with the modules its `publicModules` names, and with the packages it depends on,
+    /// with it (see `Manifest.check`), with a library that exports no module, and with the packages it depends on,
     /// nothing compiled, since a manifest is data.
     let compileManifest (path: string) (text: string) : CompileResult =
         let diagnostics =
@@ -198,7 +207,7 @@ module Package =
                         |> List.map (function
                             | AtManifest diagnostic -> diagnostic
                             | AboutPackage message -> Diagnostics.at DiagnosticCodes.InvalidManifestValue manifest.Value.Location message)
-                publicModuleErrors manifest (sources manifest) @ dependencyErrors
+                exportErrors manifest (sources manifest) @ dependencyErrors
         { Phase = Parsed
           Diagnostics = diagnostics
           Typed = None
@@ -260,7 +269,6 @@ module Package =
     /// of its host's package.
     let rec modules (package: Package) : PackageModules =
         { PackageModules.ofFiles package.Manifest.Name package.Manifest.Root package.Host package.Sources with
-            PublicModules = package.Manifest.PublicModules |> List.map fst
             Dependencies = package.Dependencies |> List.map modules
             HostPackage = package.HostPackage |> Option.map modules }
 

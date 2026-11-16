@@ -174,7 +174,7 @@ let private onLibrary (files: (string * string) list) (command: string) =
 
 [<Fact>]
 let ``A library, a package with no host, checks and builds, but running it is an error: it has no entry point`` () =
-    let files = [ "strings.nyx", "module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n" ]
+    let files = [ "strings.nyx", "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n" ]
     assertSucceeded (onLibrary files "check")
     assertSucceeded (onLibrary files "build")
     let run = onLibrary files "run"

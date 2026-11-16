@@ -16,7 +16,7 @@ later (Python, early Go, C and C++) never fully recover from the years without i
 the first release, and built alongside the compiler.
 
 The [Packages and projects](../tour/packages) page already describes the user's side:
-`.nyxp` and `.nyxproj` manifests, imports of the form `acme.web/http`, `publicModules`, project
+`.nyxp` and `.nyxproj` manifests, imports of the form `acme.web/http`, `export module`, project
 references and script mode. This page is about what that page leaves out: who owns a package name, how versions
 are chosen, what a published package is, and where it lives.
 
@@ -25,7 +25,7 @@ are chosen, what a published package is, and where it lives.
 | Area | Where |
 |------|-------|
 | Manifests | Reading `.nyxp` and `.nyxproj`, checked against the docs |
-| Module resolution | Imports by package and module name, `publicModules`, direct-dependency-only imports |
+| Module resolution | Imports by package and module name, `export module`, direct-dependency-only imports |
 | Version resolution | Choosing one version of each package, the lockfile, error messages when no choice works |
 | Package cache | Downloading, verifying and storing packages on the user's machine |
 | CLI | `nanyx new`, `add`, `restore`, `build`, `run` (without a file), `publish`, `yank` |
@@ -48,10 +48,10 @@ Local packages work: a package and the packages it depends on by path are built,
 
 - **A package can be built and run** (`Package.fs`). The manifest is one Nanyx record written as data, read by
   `Manifest.check` ([The package manifest](./package-manifest)). Its `package` (`name`, `version`, `sources`,
-  `publicModules`), `dependencies`, `linters` and `host` are read, with an error at the field for anything
-  wrong or unknown (`NYX0020` to `NYX0024`), a repeated `publicModules` or `dependencies` entry among them. A
-  `publicModules` entry that names no module of the package's source files is `NYX0023` at the entry, when the
-  package is read for a build (`Package.publicModuleErrors`) and in the editor. `nanyx build`, `nanyx check` and `nanyx run` without a file (or with a
+  `host`), `dependencies`, `linters` and `host` are read, with an error at the field for anything wrong or
+  unknown (`NYX0020` to `NYX0024`), a repeated `dependencies` entry among them. A library (no `host`, no
+  `@entry`) whose files export no module is `NYX0033` at its `package`, when the package is read for a build
+  (`Package.exportErrors`) and in the editor. `nanyx build`, `nanyx check` and `nanyx run` without a file (or with a
   directory or manifest) check every source file, each module once however many files import it (`Package.build`,
   [#698](https://github.com/nanyx-lang/nanyx/issues/698)), and `run` runs the one `@entry`; `build` writes it to
   `out/<name>.wat`. `nanyx new` makes a package (`NewPackage.fs`). The language server reads the manifest's linter
@@ -71,7 +71,7 @@ Local packages work: a package and the packages it depends on by path are built,
   statements (`NYX0017`). Files that declare the same module are its fragments, each marked `@partial`, and are
   assembled into one module before it is checked (`PartialModules.assemble`); without `@partial` on each, it is
   `NYX0018`. `PackageModules` holds the packages it depends on too: `import acme.util/strings` reaches a module a direct
-  dependency lists in `publicModules` (`NYX0025` for one it doesn't, `NYX0026` for a package only a dependency
+  dependency declares with `export module` (`NYX0025` for one it doesn't, `NYX0026` for a package only a dependency
   depends on), and a dependency's own files resolve within that package (`PackageModules.ownerOf`). Dependencies'
   modules are checked once per build, into the same program. `Package.build`, a single file of a package compiled
   with `nanyx run`/`check`, and the language server (`Package.compileSourceWith`) all resolve this way; the language
@@ -176,15 +176,16 @@ linter rule that asks for annotations on exported definitions
 
 ## What a package exports
 
-Decided ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457)); the manifest's `publicModules` field is what's built
-today, and this replaces it:
+Built ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457)); it replaced the manifest's `publicModules` field:
 
-- **`export module mypackage.main`** in a module's declaration makes it public. Any other module is internal to its
-  package: importing it from another package is an error.
+- **`export module mypackage.main`** in a module's declaration makes it public (`ModuleDecl`'s `isExport`, read
+  into `PackageModules.PublicModules` by `PackageModules.ofFiles`; a module split across files is public when one
+  of them exports it). Any other module is internal to its package: importing it from another package is `NYX0025`.
 - **Re-exports** use the syntax that already works, `export mypackage.stuff (memberA, memberB)`, so an author
   controls exactly what's visible.
-- **A library must export something.** A package with no `host` and no exported module is an error. An application
-  needn't export anything.
+- **A library must export something.** A package with no `host`, no `@entry` and no exported module is `NYX0033`
+  at its manifest's `package`. An application needn't export anything, nor need a package with an `@entry` that
+  runs with `--host`.
 - **No default module.** `import somepackage/main`; there's no `import somepackage`.
 
 ## What a package is
@@ -304,10 +305,10 @@ Local packages first (items 3a to 3c), then remote packages. Each produces somet
 
 1. **Imports by module name within a package.** Done ([#287](https://github.com/nanyx-lang/nanyx/issues/287)).
 2. **The rest of the import syntax.** Done ([#289](https://github.com/nanyx-lang/nanyx/issues/289)): selections and
-   re-exports, which `publicModules` relies on.
+   re-exports, which `export module` relies on.
 3. **Local packages:**
    - ~~**3a. Path dependencies** ([#862](https://github.com/nanyx-lang/nanyx/issues/862)): a dependency on a package in
-     a directory, importing its `publicModules` as `acme.util/strings`, one version of each package per build, only
+     a directory, importing its public modules as `acme.util/strings`, one version of each package per build, only
      direct dependencies importable, with an error for each rule.~~ Done.
    - **3b. Packages shipped with the compiler** ([#1342](https://github.com/nanyx-lang/nanyx/issues/1342)): source
      directories in the distribution, named with an exact version.
@@ -322,8 +323,7 @@ Local packages first (items 3a to 3c), then remote packages. Each produces somet
    owners' account IDs, and mirroring artifacts.
 7. **Publishing.** `nanyx publish` and `yank`; `api.json`; the API comparison and version check
    ([#865](https://github.com/nanyx-lang/nanyx/issues/865), [#1470](https://github.com/nanyx-lang/nanyx/issues/1470)).
-   Before it, `export module` replaces `publicModules` ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457)), since
-   it decides what the API is.
+   `export module` ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457), done) decides what the API is.
 8. **Editor support.** Resolve packages in the language server; restore from the extension.
 9. **First packages.** Publish at least one official package (`nanyx.json`, say) end to end before launch, to
    prove the whole path.

@@ -145,7 +145,7 @@ A file has no manifest, so it cannot declare dependencies. It can import the sta
 
 A file is held to the same rules as any other code. Anything it does through a context, such as reading files or using the network, shows in the types of its definitions, and the caller provides the context. A downloaded file is not trusted more than a package, but it is not trusted less either.
 
-It is a module of the package that depends on it, but it cannot be listed in `publicModules`: a package's public API is code the package publishes, and a file is not published with it.
+It is a module of the package that depends on it, but it cannot be exported with `export module`: a package's public API is code the package publishes, and a file is not published with it.
 
 ## Files and publishing
 

@@ -21,7 +21,7 @@ let ``The console host is shipped beside the compiler, at the compiler's version
     Assert.Equal(Toolchain.version, manifest.Version)
     // `ShippedPackages` reads a shipped package's sources from its `src` directory.
     Assert.Equal<string list>([ "src/**/*.nyx" ], manifest.Sources)
-    Assert.Equal<string list>([ "console.host"; "console.prelude" ], manifest.PublicModules |> List.map fst)
+    Assert.Equal<string list>([ "console.host"; "console.prelude" ], (ShippedPackages.tryModules Hosts.consolePackage).Value.PublicModules)
     // It declares that it is a host, with its root module and its prelude.
     let host = manifest.Declares.Value
     Assert.Equal(("console.host", Some "console.prelude"), (host.Module, host.Prelude))
@@ -31,7 +31,7 @@ let ``The console host is shipped beside the compiler, at the compiler's version
 let ``The console's interface package is shipped beside the compiler, and the console host depends on it`` () =
     let core = manifestOf "nanyx.console.core"
     Assert.Equal(("nanyx.console.core", Toolchain.version), (core.Name, core.Version))
-    Assert.Equal<string list>([ "console"; "env" ], core.PublicModules |> List.map fst)
+    Assert.Equal<string list>([ "console"; "env" ], (ShippedPackages.tryModules "nanyx.console.core").Value.PublicModules)
     Assert.Equal(None, core.Declares)
     let host = manifestOf Hosts.consolePackage
     Assert.Equal<string list>([ "nanyx.console.core" ], host.Dependencies |> List.map _.Name)

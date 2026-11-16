@@ -65,3 +65,21 @@ let ``An exported definition is not a re-export`` () =
     match parseModule "export def double = { x: int -> x * 2 }\nexport type Point = (x: int, y: int)" with
     | Ok [ Kind (Def (ValueDef (true, "double", _, _))); Kind (Def (TypeDef ("Point", _, _, _))) ] -> ()
     | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Fact>]
+let ``export module declares a module another package can import`` () =
+    match parseModule "export module acme.web.http\n\nexport def get = 1" with
+    | Result.Ok [ Kind (ModuleDecl(true, "acme.web.http")); Kind (Def _) ] -> ()
+    | other -> failwith $"Unexpected parse result: %A{other}"
+
+[<Fact>]
+let ``A module declaration without export is internal to its package`` () =
+    match parseModule "module strings\n\n@partial export module more" with
+    | Result.Ok [ Kind (ModuleDecl(false, "strings")); Kind (Attribute("partial", None)); Kind (ModuleDecl(true, "more")) ] -> ()
+    | other -> failwith $"Unexpected parse result: %A{other}"
+
+[<Fact>]
+let ``export before a def is still a def, and before a module's name in brackets a re-export`` () =
+    match parseModule "export def x = 1\nexport nanyx/math (abs)" with
+    | Result.Ok [ Kind (Def (ValueDef(true, "x", None, _))); Kind (ReExport _) ] -> ()
+    | other -> failwith $"Unexpected parse result: %A{other}"

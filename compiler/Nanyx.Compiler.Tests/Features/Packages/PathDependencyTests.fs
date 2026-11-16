@@ -8,20 +8,19 @@ open Nanyx.Compiler.Tests.TestSupport
 // A package that depends on another in a directory on disk, `(package = "acme.util", path = "../util")`, and imports
 // its public modules as `acme.util/strings`.
 
-/// A manifest of the package `name`, whose `package` makes public the modules `publicModules`, and which depends on
-/// `dependencies`, each a package's name and the directory beside its own that it is in.
-let private manifest (name: string) (publicModules: string list) (dependencies: (string * string) list) =
-    let publicModules = publicModules |> List.map (sprintf "\"%s\"") |> String.concat ", "
+/// A manifest of the package `name`, which depends on `dependencies`, each a package's name and the directory beside
+/// its own that it is in.
+let private manifest (name: string) (dependencies: (string * string) list) =
     let dependencies =
         dependencies
         |> List.map (fun (name, directory) -> $"(package = \"{name}\", path = \"../{directory}\")")
         |> String.concat ", "
-    $"(\n  package = (name = \"{name}\", version = \"0.1.0\", publicModules = [{publicModules}])\n  dependencies = [{dependencies}]\n)\n"
+    $"(\n  package = (name = \"{name}\", version = \"0.1.0\")\n  dependencies = [{dependencies}]\n)\n"
 
 let private util =
-    [ "util/util.nyxp", manifest "acme.util" [ "strings" ] []
+    [ "util/util.nyxp", manifest "acme.util" []
       "util/strings.nyx",
-      withFinalNewline """module strings
+      withFinalNewline """export module strings
 
 import secrets
 
@@ -32,7 +31,7 @@ export def mark = "!" """ ]
 
 /// The app's manifest, depending on `dependencies`, run by the console host.
 let private app (dependencies: (string * string) list) =
-    "app/app.nyxp", (manifest "app" [] dependencies).Replace("\n)\n", $"\n  {consoleHostEntry}\n)\n")
+    "app/app.nyxp", (manifest "app" dependencies).Replace("\n)\n", $"\n  {consoleHostEntry}\n)\n")
 
 let private mainImporting (import: string) (body: string) =
     "app/main.nyx",
@@ -63,7 +62,7 @@ let ``A public module of a dependency is imported by the package's name and the 
         new TempPackage(util @ [ app [ "acme.util", "util" ]; mainImporting "acme.util/strings" "ignore(shout(\"hi\"))" ])
     let found = okOf (Package.find (package.Path "app"))
     Assert.Equal<string list>([ "acme.util" ], found.Dependencies |> List.map _.Manifest.Name)
-    Assert.Equal<string list>([ "strings" ], found.Dependencies.Head.Manifest.PublicModules |> List.map fst)
+    Assert.Equal<string list>([ "strings" ], (Package.modules found).Dependencies.Head.PublicModules)
     let build = Package.build found
     Assert.Empty(build.Diagnostics)
     Assert.True((Package.entryResult build).Value.Typed.IsSome)
@@ -118,23 +117,37 @@ let ``A module a dependency does not make public can't be imported`` () =
         error.Message)
 
 [<Fact>]
-let ``A public module that no source file declares is an error at its entry, naming the closest module`` () =
-    let misspelt = [ "util/util.nyxp", manifest "acme.util" [ "strngs" ] [] ] @ List.tail util
-    use package = new TempPackage(misspelt @ [ app [ "acme.util", "util" ]; mainImporting "acme.util/strings" "ignore(shout(\"hi\"))" ])
-    let message = "publicModules names the module 'strngs', but no source file of acme.util declares it: did you mean 'strings'?"
-    Assert.EndsWith($"util.nyxp:2:70: error NYX0023: {message}", Assert.Single(errorsOf (Package.find (package.Path "util"))))
-    Assert.EndsWith($"error NYX0023: {message}", Assert.Single(errorsOf (Package.find (package.Path "app"))))
+let ``A library that exports no module is an error at its package`` () =
+    let internalOnly = [ "util/strings.nyx", withFinalNewline "module strings\n\nexport def shout = { s: string -> s }" ]
+    use package =
+        new TempPackage([ "util/util.nyxp", manifest "acme.util" [] ] @ internalOnly @ [ app [ "acme.util", "util" ]; mainImporting "nanyx/math" "println(abs(1))" ])
+    let message =
+        "acme.util is a library, since its manifest names no host, but it exports no module: a library must export at least one, by declaring it with export module"
+    Assert.EndsWith($"util.nyxp:2:13: error NYX0033: {message}", Assert.Single(errorsOf (Package.find (package.Path "util"))))
+    Assert.EndsWith($"error NYX0033: {message}", Assert.Single(errorsOf (Package.find (package.Path "app"))))
     let manifestPath = package.Path "util/util.nyxp"
     let error = Assert.Single((Package.compileManifest manifestPath (File.ReadAllText manifestPath)).Diagnostics)
-    Assert.Equal(DiagnosticCodes.InvalidManifestValue.Code, error.Code)
+    Assert.Equal(DiagnosticCodes.LibraryExportsNothing.Code, error.Code)
     Assert.Equal(message, error.Message)
-    Assert.Equal("\"strings\"", (Assert.Single (Assert.Single error.Fixes).Edits).NewText)
+
+[<Fact>]
+let ``An application needn't export a module`` () =
+    use package = new TempPackage([ app []; mainImporting "nanyx/math" "println(abs(1))" ])
+    Assert.Empty(buildDiagnostics package)
+
+[<Fact>]
+let ``A module a file declares with export module is public`` () =
+    use package =
+        new TempPackage(util @ [ app [ "acme.util", "util" ]; mainImporting "acme.util/strings" "ignore(shout(\"hi\"))" ])
+    let util = (Package.modules (okOf (Package.find (package.Path "app")))).Dependencies.Head
+    Assert.Equal<string list>([ "strings" ], util.PublicModules)
+    Assert.Equal<string list>([ "secrets"; "strings" ], util.Modules.Keys |> List.ofSeq)
 
 [<Fact>]
 let ``A package a dependency depends on can't be imported without depending on it`` () =
     let middle =
-        [ "middle/middle.nyxp", manifest "acme.middle" [ "loud" ] [ "acme.util", "util" ]
-          "middle/loud.nyx", withFinalNewline """module loud
+        [ "middle/middle.nyxp", manifest "acme.middle" [ "acme.util", "util" ]
+          "middle/loud.nyx", withFinalNewline """export module loud
 
 import acme.util/strings
 
@@ -148,8 +161,8 @@ export def louder = { s: string -> shout(shout(s)) }""" ]
 [<Fact>]
 let ``A dependency's own dependencies are imported in its files`` () =
     let middle =
-        [ "middle/middle.nyxp", manifest "acme.middle" [ "loud" ] [ "acme.util", "util" ]
-          "middle/loud.nyx", withFinalNewline """module loud
+        [ "middle/middle.nyxp", manifest "acme.middle" [ "acme.util", "util" ]
+          "middle/loud.nyx", withFinalNewline """export module loud
 
 import acme.util/strings
 
@@ -169,8 +182,8 @@ let ``A package that is no dependency is not found`` () =
 let ``A build has one version of each package`` () =
     let copy = util |> List.map (fun (path, text) -> path.Replace("util/", "copy/"), text)
     let middle =
-        [ "middle/middle.nyxp", manifest "acme.middle" [ "loud" ] [ "acme.util", "copy" ]
-          "middle/loud.nyx", withFinalNewline """module loud
+        [ "middle/middle.nyxp", manifest "acme.middle" [ "acme.util", "copy" ]
+          "middle/loud.nyx", withFinalNewline """export module loud
 
 export def louder = { s: string -> s }""" ]
     use package =
@@ -186,8 +199,8 @@ export def louder = { s: string -> s }""" ]
 [<Fact>]
 let ``The same package reached through two dependants is one package`` () =
     let middle =
-        [ "middle/middle.nyxp", manifest "acme.middle" [ "loud" ] [ "acme.util", "util" ]
-          "middle/loud.nyx", withFinalNewline """module loud
+        [ "middle/middle.nyxp", manifest "acme.middle" [ "acme.util", "util" ]
+          "middle/loud.nyx", withFinalNewline """export module loud
 
 import acme.util/strings
 
@@ -210,10 +223,10 @@ def run = { () -> ignore(louder(shout("hi"))) }""" ])
 let ``Packages can't depend on each other in a cycle`` () =
     use package =
         new TempPackage(
-            [ "a/a.nyxp", manifest "acme.a" [] [ "acme.b", "b" ]
-              "a/main.nyx", withFinalNewline "module main\n\nexport def x = 1"
-              "b/b.nyxp", manifest "acme.b" [] [ "acme.a", "a" ]
-              "b/other.nyx", withFinalNewline "module other\n\nexport def y = 1" ])
+            [ "a/a.nyxp", manifest "acme.a" [ "acme.b", "b" ]
+              "a/main.nyx", withFinalNewline "export module main\n\nexport def x = 1"
+              "b/b.nyxp", manifest "acme.b" [ "acme.a", "a" ]
+              "b/other.nyx", withFinalNewline "export module other\n\nexport def y = 1" ])
     let error = Assert.Single(errorsOf (Package.find (package.Path "a")))
     Assert.EndsWith("error NYX0027: packages can't depend on each other in a cycle: acme.a -> acme.b -> acme.a", error)
 

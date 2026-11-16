@@ -28,8 +28,8 @@ type HostEntry =
       Span: SourceSpan }
 
 /// A package's `.nyxp` manifest, as far as it is read so far: what the package is called, which files are its
-/// sources, which of its modules other packages may import, what it depends on, which linters check it, and which host
-/// runs its `@entry`. Its `formatter` field is the formatter's, which reads it itself.
+/// sources, what it depends on, which linters check it, and which host runs its `@entry`. Which of its modules other
+/// packages may import its files say, with `export module` (see `PackageModules`). Its `formatter` field is the formatter's, which reads it itself.
 type Manifest =
     { /// The manifest's full path.
       Path: string
@@ -39,9 +39,8 @@ type Manifest =
       Version: string
       /// Globs relative to `Root`: `**/*.nyx` unless the manifest says otherwise.
       Sources: string list
-      /// The names of the modules a package that depends on this one may import, `package`'s `publicModules`, each
-      /// with where it is written.
-      PublicModules: (string * SourceSpan) list
+      /// Where its `package` is written, which an error about the package as a whole is reported at.
+      PackageSpan: SourceSpan
       /// The packages it depends on, in the order `dependencies` lists them.
       Dependencies: Dependency list
       /// The linters the manifest's `linters` turns on, and the severities their `settings` set.
@@ -61,7 +60,7 @@ module Manifest =
     /// The fields a manifest may have. `formatter` is the formatter's, which checks what is in it.
     let private fields = [ "package"; "dependencies"; "linters"; "host"; "formatter" ]
 
-    let private packageFields = [ "name"; "version"; "sources"; "publicModules"; HostPackages.field ]
+    let private packageFields = [ "name"; "version"; "sources"; HostPackages.field ]
 
     /// The fields of an entry of `linters`.
     let private entryFields = [ "package"; "version"; "settings" ]
@@ -378,17 +377,14 @@ module Manifest =
                     if manifest.Data.IsDataRecord then
                         problems.Add DiagnosticCodes.MissingManifestField manifest.Location "the manifest has no package, which needs at least a name and a version"
                     None
-            let name, version, sources, publicModules =
+            let name, version, sources =
                 match package with
                 | Some (fields, span) ->
                     let name = problems.RequiredText "package" span fields "name" namePattern nameRule
                     let version = problems.RequiredText "package" span fields "version" versionPattern "a semantic version: 1.2.0"
-                    let publicModules = problems.Strings "package" fields "publicModules"
-                    publicModules
-                    |> Option.iter (fun entries -> problems.Repeats entries (fun name -> $"the module '{name}' is listed twice in publicModules"))
                     DataValue.field HostPackages.field fields |> Option.iter (fun field -> checkHostDeclaration problems field.Value)
-                    name, version, problems.Strings "package" fields "sources" |> Option.map (List.map fst), publicModules
-                | None -> None, None, None, None
+                    name, version, problems.Strings "package" fields "sources" |> Option.map (List.map fst)
+                | None -> None, None, None
             let linters = field "linters" |> Option.map (fun field -> readLinters problems field.Value)
             let host = field "host" |> Option.bind (fun field -> readHost problems (Path.GetDirectoryName path) field.Value)
             match problems.All with
@@ -399,7 +395,7 @@ module Manifest =
                       Name = defaultArg name ""
                       Version = defaultArg version ""
                       Sources = defaultArg sources [ "**/*.nyx" ]
-                      PublicModules = defaultArg publicModules []
+                      PackageSpan = package |> Option.map snd |> Option.defaultValue manifest.Location
                       Dependencies = defaultArg dependencies []
                       // No `linters` means no linters: a package turns on the official one by naming nanyx.lint.
                       Linters = defaultArg linters Linters.none
@@ -408,19 +404,6 @@ module Manifest =
                       Declares = HostPackages.ofManifest (defaultArg name "") (Path.GetDirectoryName path) manifest
                       Value = manifest }
             | problems -> Result.Error problems
-
-    /// An error at each entry of the manifest's `publicModules` that names none of `declared`, the modules its
-    /// package's source files declare, with the closest of them as a suggestion.
-    let unknownPublicModules (manifest: Manifest) (declared: string seq) : Diagnostic list =
-        manifest.PublicModules
-        |> List.filter (fun (name, _) -> not (Seq.contains name declared))
-        |> List.map (fun (name, span) ->
-            let suggestions = NameSuggestions.closest declared name
-            { Diagnostics.at
-                  DiagnosticCodes.InvalidManifestValue
-                  span
-                  $"publicModules names the module '{name}', but no source file of {manifest.Name} declares it{NameSuggestions.question suggestions}" with
-                Fixes = suggestions |> List.map (fun suggestion -> { Title = $"Write `\"{suggestion}\"`"; Edits = [ { Span = span; NewText = $"\"{suggestion}\"" } ] }) })
 
     /// `diagnostic`, one of a manifest's, as one line: `path:line:column: error NYX0021: message`.
     let describe (diagnostic: Diagnostic) =

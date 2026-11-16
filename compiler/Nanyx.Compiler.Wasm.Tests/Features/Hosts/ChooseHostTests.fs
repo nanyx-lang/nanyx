@@ -124,8 +124,8 @@ let ``A script runs with the packages its ::dependencies list`` () =
     Directory.CreateDirectory(Path.Combine(directory.Path, "util")) |> ignore
     File.WriteAllText(
         Path.Combine(directory.Path, "util", "util.nyxp"),
-        """(package = (name = "acme.util", version = "0.1.0", publicModules = ["strings"]))""")
-    File.WriteAllText(Path.Combine(directory.Path, "util", "strings.nyx"), "module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n")
+        """(package = (name = "acme.util", version = "0.1.0"))""")
+    File.WriteAllText(Path.Combine(directory.Path, "util", "strings.nyx"), "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n")
     let path = Path.Combine(directory.Path, "script.nyx")
     File.WriteAllText(path, "::dependencies.acme.util = { path = \"util\" }\n\nimport acme.util/strings\n\nprintln(shout(\"hi\"))\n")
     let outcome = nanyxIn directory.Path [ "run"; path ]

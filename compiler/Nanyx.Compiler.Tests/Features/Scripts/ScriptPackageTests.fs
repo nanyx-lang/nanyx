@@ -10,9 +10,9 @@ open Nanyx.Compiler.Tests.TestSupport
 
 /// A library, `acme.util`, in `util/`, beside the script in `scripts/`.
 let private util =
-    [ "util/util.nyxp", withFinalNewline """(package = (name = "acme.util", version = "0.1.0", publicModules = ["strings"]))"""
+    [ "util/util.nyxp", withFinalNewline """(package = (name = "acme.util", version = "0.1.0"))"""
       "util/strings.nyx",
-      withFinalNewline """module strings
+      withFinalNewline """export module strings
 
 export def shout = { s: string -> s ++ "!" }""" ]
 
@@ -138,8 +138,8 @@ println("hi")"""
 [<Fact>]
 let ``A dependency's file is a library's, which doesn't see the host's prelude`` () =
     let files =
-        [ "util/util.nyxp", withFinalNewline """(package = (name = "acme.util", version = "0.1.0", publicModules = ["strings"]))"""
-          "util/strings.nyx", withFinalNewline """module strings
+        [ "util/util.nyxp", withFinalNewline """(package = (name = "acme.util", version = "0.1.0"))"""
+          "util/strings.nyx", withFinalNewline """export module strings
 
 export def greet: [Console] () -> () = { () -> println("hi") }""" ]
     let source = withFinalNewline """::dependencies.acme.util = { path = "../util" }

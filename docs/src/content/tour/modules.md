@@ -200,7 +200,7 @@ def transform: Data -> Data = { data ->
 }
 ```
 
-Modules themselves do not need to be exported; they are available for import by other modules within the same package as long as they contain at least one exported definition. Visibility to other packages is controlled separately, by the `publicModules` list in the package manifest (see [Public modules](./packages#public-modules)).
+A module need not be exported to be imported by the other modules of its own package; it is available to them as long as it contains at least one exported definition. To make it importable by other packages too, declare it with `export module`, as `export module http` (see [Public modules](./packages#public-modules)). Re-exports, below, then decide what it offers them.
 
 ## Re-exporting
 
