@@ -116,27 +116,35 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
         | TypeIntersection _
         | TypeWithContext _ -> parenType t
 
-    /// Type arguments are a list of types, so one function argument needs no brackets: `map(a -> b)`.
+    /// Type arguments are a list of types, so one function argument needs no brackets: `map(a -> b)`, and nor does one
+    /// record: `list(price: int)`.
     and typeArguments (args: TypeExpr list) : Doc =
         match args with
         | [ single ] ->
             match single.Kind with
             | TypeTuple _
             | TypeWithContext _ -> parenType single
-            | _ -> typeExpr single
+            | _ -> bareRecord single |> Option.defaultWith (fun () -> typeExpr single)
         | _ -> commaJoin (List.map listItem args)
 
-    and tagPayload (payload: TypeExpr) : Doc =
+    /// The fields of `t` without its brackets, where it is a record of named fields, each with a type and nothing else,
+    /// as a tag's payload or a type's only argument writes it: `#point(x: int, y: int)`, `list(price: int)`.
+    and bareRecord (t: TypeExpr) : Doc option =
         let isPosition (n: string) = n.Length > 0 && Seq.forall Char.IsDigit n
-        match payload.Kind with
+        match t.Kind with
         | TypeRecord fields when fields |> List.forall (function TypeField(n, false, Some _, None) -> not (isPosition n) | _ -> false) ->
             fields
             |> List.map (function
                 | TypeField(n, _, Some t, _) -> cat [ text (Names.written n); text ": "; typeExpr t ]
                 | _ -> Doc.empty)
             |> commaJoin
+            |> Some
+        | _ -> None
+
+    and tagPayload (payload: TypeExpr) : Doc =
+        match payload.Kind with
         | TypeWithContext _ -> parenType payload
-        | _ -> typeList payload
+        | _ -> bareRecord payload |> Option.defaultWith (fun () -> typeList payload)
 
     and recordTypeField (field: TypeRecordField) : Doc =
         match field with
