@@ -33,8 +33,7 @@ let ``A hole uses an instance loaded with use ahead of the compiler's own`` () =
     let typed =
         compileClean (
             withFinalNewline """def s = {
-  def hashInt: ToString(int) = ( toString = { n -> "#{n}" } )
-  use hashInt
+  use ToString(int)(toString = { n -> "#{n}" })
   "{1}"
 }""")
     let loaded =

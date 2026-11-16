@@ -32,8 +32,7 @@ def My_Point.to_text: My_Point -> string = { p -> "p{p.x}" }
 def My_Point.text_tag: My_Point -> string = { p -> "t" }
 
 println(twice(My_Point(x = 1, y = 2)))
-def show_point: To_Text(My_Point) = (to_text = { p -> "q" }, text_tag = { p -> "u" })
-use show_point in println(twice(My_Point(x = 1, y = 2)))
+use To_Text(My_Point)(to_text = { p -> "q" }, text_tag = { p -> "u" }) in println(twice(My_Point(x = 1, y = 2)))
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "p1/t p1/t\nq/u q/u\n"
 
@@ -45,11 +44,9 @@ context A_b(x) = (c: x -> string)
 
 def both: [A_b(a) & A(b)] (a, b) -> string = { v, w -> A_b(a).c(v) ++ " " ++ A(b).a_c(w) }
 
-def a_int: A(int) = (a_c = { n -> "A" })
-def ab_int: A_b(int) = (c = { n -> "A_b" })
 def main = {
-  use a_int
-  use ab_int
+  use A(int)(a_c = { n -> "A" })
+  use A_b(int)(c = { n -> "A_b" })
   both(1, 2)
 }
 println(main())
@@ -64,11 +61,9 @@ context A_C(x) = (d: x -> string)
 def one: [A_B(a)] a -> string = { v -> A_B(a).d(v) }
 def two: [A_C(a) & A_B(a)] a -> string = { v -> A_C(a).d(v) ++ " " ++ one(v) }
 
-def c_int: A_C(int) = (d = { n -> "C" })
-def b_int: A_B(int) = (d = { n -> "B" })
 def main = {
-  use c_int
-  use b_int
+  use A_C(int)(d = { n -> "C" })
+  use A_B(int)(d = { n -> "B" })
   two(1)
 }
 println(main())
@@ -95,8 +90,7 @@ type My_Point = (x: int, y: int)
 def describe: [To_Text(a)] a -> string = { value -> to_text(value) }
 
 def main = {
-  def show_point: To_Text(My_Point) = (to_text = { p -> "point {p.x}" })
-  use show_point
+  use To_Text(My_Point)(to_text = { p -> "point {p.x}" })
   def later = { describe(My_Point(x = 3, y = 4)) }
   later()
 }

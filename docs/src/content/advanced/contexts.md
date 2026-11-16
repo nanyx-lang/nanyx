@@ -32,6 +32,20 @@ def main = {
 }
 ```
 
+A context is not a type. Its name can be written only in a context list, as in `[Log]`, and as the constructor in a `use`, as in `use Log(log = ...)`. So a context can't be a parameter's, a result's or a field's type, or a type argument: `def take = { l: Log -> () }` and `() -> Log` are errors (`NYX0247`). An instance is never a value, so it is written only where a `use` loads it: `def inst = Log(log = ...)` is an error too (`NYX0248`). To reuse one, write a handler, a function that runs a lambda under the `use`:
+
+```nanyx
+context Log = (log: string -> ())
+
+def withConsoleLog: [Console] ([Log] () -> a) -> a = { f ->
+  use Log(log = { m -> println(m) }) in f()
+}
+
+def main = {
+  withConsoleLog { log("hello") }
+}
+```
+
 On a context, `protected` and `private` are about access. Any module can require either in a context list and call the functions that require it, but only the home module can construct an instance in a `use` (NYX0212). Any module can call a protected context's members. Only the home module can call a private context's members (NYX0244), so a private context is a capability: other code can require `[Tx]` and pass it on to the module's functions, but only the module uses what the instance holds.
 
 ```nanyx
@@ -106,7 +120,7 @@ def main = {
 
 A function given by its name works the same way, when an instance of each context it needs besides is in scope at the `use`: with `def shout: [Console] string -> ()`, `use Log(log = shout)` runs `shout` with the `Console` there. When one is not, it is an error (`NYX0227`), as it would be anywhere else a function that needs a context is given where one that doesn't is expected.
 
-This works only for an instance written at the `use`. One built as a value, `def inst = Log(log = { m -> println(m) })`, is an error (`NYX0227`): it has nowhere to say that it needs `Console`. To make such a value, say so on the member, `context Log = (log: [Console] string -> ())`; calling `log` then requires `Console` as well as `Log`.
+An instance is always written at its `use`, so that is where what its members need is required. A handler function, as in `withConsoleLog` above, requires it in turn.
 
 You can also load a context for a single expression with `use ... in`. The context is loaded for that expression only, which can start on the next line:
 
@@ -148,22 +162,18 @@ def run: [Log] () -> () = { context l ->
 
 The name isn't a parameter: the lambda's type and the number of arguments it takes are the same as without it. When the lambda is given several contexts, the name says which, as in `{ context m: Memory, context l: Log, x -> ... }`, and a name that matches none, or could match more than one, is an error (`NYX0246`). A lambda is given the contexts its def's type declares, or that the type it is checked against requires, as a handler's lambda is given the context the handler supplies. A `memory` block is given its `Memory`, so `memory { context m -> ... }` names it, and `use m` in an inner block makes the cells declared after it belong to `m`'s block ([Memory](../advanced/memory#values-cannot-escape-memory-scope)). An instance is never a value, so using the name any other way, passing it, returning it or storing it, is an error (`NYX0245`). An inner lambda may still capture the name, to `use` it.
 
-`use` loads the value of any expression. An instance of a parameterised context is a value whose type is the context applied to a type, so define it with `def` and load it by name:
+An instance of a parameterised context names the type it is for after the context's name, `use C(T)(members)`:
 
 ```nanyx
 context Show(a) = (show: a -> string)
 
 def describe: [Show(a)] a -> string = { v -> Show(a).show(v) }
 
-def numbered: Show(int) = (show = { n -> "#{n}" })
-
 def main = {
-  use numbered
+  use Show(int)(show = { n -> "#{n}" })
   describe(42)   // "#42"
 }
 ```
-
-A parameter of the context's type, or a call that returns an instance, can be loaded the same way: `use instance`, `use numberedFrom(100)`.
 
 # Contexts are part of the type
 
@@ -515,8 +525,7 @@ A `use` changes how its block writes a type, generic code called from the block 
 
 ```nanyx
 def receipt = {
-  def pounds: ToString(int) = (toString = { pence -> "£{pence / 100}.{pence % 100}" })
-  use pounds
+  use ToString(int)(toString = { pence -> "£{pence / 100}.{pence % 100}" })
   "Total: {250}"   // "Total: £2.50"
 }
 ```
@@ -608,7 +617,7 @@ Each call looks for its instance in this order, and takes the first it finds:
 
 An instance is for one type: an `Add(int)` loaded with `use` does not stand in for an `Add(Point)`.
 
-Since contexts are structural, a `use` of a record value loads it as an instance of each context it has the shape of, at the types its members settle. With `def addInt: Add(int) = (...)`, `use addInt` loads an `Add(int)`, as `use Add(int)(...)` would.
+Since contexts are structural, a `use` of a record value loads it as an instance of each context it has the shape of, at the types its members settle.
 
 ## Explicit loading takes priority
 

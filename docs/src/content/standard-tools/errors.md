@@ -1394,6 +1394,37 @@ def run: [Log & Tick] () -> () = { context l -> () }  -- error NYX0246: 'l' coul
 
 To fix it, say which context the name is for, `context l: Log`, or name one the lambda's type requires.
 
+# NYX0247: Context written as a type
+
+A context's name is written where a type goes: a parameter's, a result's or a field's type, an annotation, or a type
+argument. A context is not a type: its name can be written only in a context list, as in `[Log]`, and as the
+constructor in a `use` ([Contexts](../advanced/contexts)).
+
+```nanyx
+context Log = (log: string -> ())
+
+def take = { l: Log -> () }  -- error NYX0247: 'Log' is a context, not a type: it can only be required, as in `[Log]`, or loaded with `use`
+```
+
+To fix it, require the context, `def take: [Log] () -> () = { ... }`. To give code an instance to run with, write a
+handler, a function that runs a lambda under a `use`:
+`def withLog: ([Log] () -> a) -> a = { f -> use Log(log = { m -> () }) in f() }`.
+
+# NYX0248: Context instance written outside a use
+
+A context's constructor is called anywhere but as the instance a `use` loads. An instance is never a value, so it
+can't be held in a def, passed or returned ([Contexts](../advanced/contexts)).
+
+```nanyx
+context Log = (log: string -> ())
+
+def quiet = Log(log = { m -> () })  -- error NYX0248: A context's instance can only be written in a `use`: to reuse one, write a function that runs a lambda under it, as in `{ f -> use Log(...) in f() }`
+```
+
+To fix it, write the instance in the `use` that loads it, `use Log(log = { m -> () })`. To reuse one, write a handler,
+`def quietly: ([Log] () -> a) -> a = { f -> use Log(log = { m -> () }) in f() }`, and run code with
+`quietly { ... }`. A handler writes its type, so that the lambda it is given is given the context.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

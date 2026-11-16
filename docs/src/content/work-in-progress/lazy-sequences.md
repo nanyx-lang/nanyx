@@ -177,8 +177,9 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
   - Rust's `impl Trait` in argument position: a context named where a type is expected, with every parameter but its
     first, stands for a new type variable that the context constrains. `def walk: Iterable(a) -> ()` would mean
     `[Iterable(s, a)] s -> ()`. Each occurrence is its own variable, it is allowed only for parameters, and it works
-    for any context (`def describe: ToString -> string`). It needs a rule that keeps a context's name and a type's
-    name apart, since both are capitalised.
+    for any context (`def describe: ToString -> string`). A context's name where a type goes is NYX0247 today
+    ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)), so this would give that position a meaning rather
+    than need a rule to tell the names apart.
   - F#'s flexible types, `#seq<'a>`, which mark a parameter as taking the named type or anything that can stand in for
     it.
 

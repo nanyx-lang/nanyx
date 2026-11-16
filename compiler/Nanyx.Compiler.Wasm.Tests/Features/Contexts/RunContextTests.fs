@@ -98,10 +98,8 @@ def twice: [Ask] () -> int = { ask() + ask() }
 @entry
 def main = {
   def unit = "cm"
-  def showInt: Show(int) = ( show = { n -> "{n}{unit}" } )
-  use showInt
-  def showString: Show(string) = ( show = { s -> s } )
-  use showString
+  use Show(int)(show = { n -> "{n}{unit}" })
+  use Show(string)(show = { s -> s })
   println(describe(3, "three"))
   def answers = (ask = { 21 })
   use answers
@@ -119,7 +117,7 @@ let ``Run - a use of a record value of a parameterised context's shape loads it 
 def add: [Add(a)] a, a -> a = { x, y -> `+`(x, y) }
 
 def named = {
-  def addInt: Add(int) = ( `+` = { x, y -> x * 10 + y } )
+  def addInt = ( `+` = { x: int, y: int -> x * 10 + y } )
   use addInt
   add(1, 2)
 }
@@ -135,34 +133,7 @@ def main = { println("{named()} {written()}") }
     runSource source |> assertRan "12 304\n"
 
 [<Fact>]
-let ``Run - use loads a named instance of a parameterised context: a def, a local, a parameter or a call's result (#581)`` () =
-    let source =
-        normalized """context Combine(a) = (combine: (a, a) -> a)
-
-def double: [Combine(a)] a -> a = { x -> Combine(a).combine(x, x) }
-def timesInt: Combine(int) = (combine = { a, b -> a * b })
-def plusAnd: int -> Combine(int) = { k -> (combine = { a, b -> a + b + k }) }
-def viaParameter: (Combine(int), int) -> int = { instance, x ->
-  use instance
-  double(x)
-}
-
-@entry
-def main = {
-  def plusInt: Combine(int) = (combine = { a, b -> a + b })
-  use plusInt
-  println("{double(5)}")
-  use timesInt
-  println("{double(5)}")
-  println("{viaParameter(plusInt, 4)}")
-  use plusAnd(100)
-  println("{double(1)}")
-}
-"""
-    runSource source |> assertRan "10\n25\n8\n102\n"
-
-[<Fact>]
-let ``Run - use loads a top-level instance of a parameterised context (#587)`` () =
+let ``Run - use loads a top-level record of a parameterised context's shape (#587)`` () =
     let source =
         normalized """context Add(a) = (
   `+`: (a, a) -> a
@@ -170,8 +141,8 @@ let ``Run - use loads a top-level instance of a parameterised context (#587)`` (
 
 def add: [Add(a)] a, a -> a = { x, y -> `+`(x, y) }
 
-def addInt: Add(int) = (
-  `+` = { x, y -> x * 10 + y }
+def addInt = (
+  `+` = { x: int, y: int -> x * 10 + y }
 )
 
 @entry
@@ -183,15 +154,15 @@ def main = {
     runSource source |> assertRan "12\n"
 
 [<Fact>]
-let ``Run - use loads a top-level record of a plain context (#587)`` () =
+let ``Run - use loads a top-level record of a plain context's shape (#587)`` () =
     let source =
         normalized """context Greeter = (greet: string -> string)
 
 def hello: [Greeter] string -> string = { name -> greet(name) }
 
-def polite: Greeter = (greet = { name -> "Good day, {name}" })
+def polite = (greet = { name: string -> "Good day, {name}" })
 
-def casual: Greeter = (greet = { name -> "Hi {name}" })
+def casual = (greet = { name: string -> "Hi {name}" })
 
 @entry
 def main = {
@@ -210,17 +181,15 @@ context Combine(a) = (combine: (a, a) -> a)
 
 def counted: [Counter] int -> int = { n -> next(n) }
 def double: [Combine(a)] a -> a = { x -> Combine(a).combine(x, x) }
-def timesInt: Combine(int) = (combine = { a, b -> a * b })
-def plusInt: Combine(int) = (combine = { a, b -> a + b })
 
 @entry
 def main = {
   def total = use Counter(next = { n -> n - 1 }) in counted(3)
   println("{total}")
-  use plusInt
-  println("{use timesInt in double(5)}")
+  use Combine(int)(combine = { a, b -> a + b })
+  println("{use Combine(int)(combine = { a, b -> a * b }) in double(5)}")
   println("{double(5)}")
-  def onTheNextLine = use timesInt in
+  def onTheNextLine = use Combine(int)(combine = { a, b -> a * b }) in
     double(2)
   println("{onTheNextLine}")
 }
@@ -275,8 +244,7 @@ def main = {
   println(both(Money(5), p))
   println(twice(p))
   println(p \describe)
-  def nearer: Show(Point) = ( show = { q -> "nearer {q.y}" } )
-  use nearer
+  use Show(Point)(show = { q -> "nearer {q.y}" })
   println(describe(p))
   println(describe(Money(7)))
 }

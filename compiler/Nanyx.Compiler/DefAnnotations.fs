@@ -72,7 +72,10 @@ let internal read
         | None -> Ok state
     ensureAttachedTypeExists state moduleName name span
     |> Result.bind (fun () -> AttachedOperators.check state name span)
-    |> Result.bind (fun () -> ensureTypesExist state (Option.toList typeOpt))
+    |> Result.bind (fun () ->
+        match typeOpt with
+        | Some context when name = UseInstanceSyntax.name -> ensureInstanceContextExists state context
+        | _ -> ensureTypesExist state (Option.toList typeOpt))
     |> Result.bind (fun () -> inlineContextsRead)
     |> Result.bind (fun () -> contextsExist)
     |> Result.bind (fun () -> extraCheck)

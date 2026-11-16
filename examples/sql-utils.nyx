@@ -7,26 +7,24 @@ type SqlPrimitive = #sqlInt(int) | #sqlString(string)
 
 type SqlError = #duplicateKey | #sqlError(string)
 
-type PreparedStatement = (
-  setInt: (int, int) -> ()
-  setString: (int, string) -> ()
-  executeUpdate: () -> #some(int) | #error(SqlError)
-)
+type PreparedStatement = (setInt: (int, int) -> (), setString: (int, string) -> (), executeUpdate: () -> #some(int) | #error(SqlError))
 
-context Connection = (
-  prepare: string -> PreparedStatement
-)
+context Connection = (prepare: string -> PreparedStatement)
 
-context DataSource = (
-  getConnection: () -> Connection
-)
+-- What a data source opens: a session to prepare statements on. A context is not
+-- a type, so the data source gives back a plain record, and `withConnection` loads
+-- it as the `Connection` its action needs.
+type Session = (prepare: string -> PreparedStatement)
 
-def PreparedStatement.setArgument: (PreparedStatement, int, SqlPrimitive) -> () = {
+context DataSource = (open: () -> Session)
+
+def PreparedStatement.setArgument: PreparedStatement, int, SqlPrimitive -> () = {
   | statement, position, #sqlInt(value) -> statement.setInt(position, value)
   | statement, position, #sqlString(value) -> statement.setString(position, value)
 }
 
-export def executeUpdate: [Connection] (string, list(SqlPrimitive)) -> #some(int) | #error(SqlError)
+export def executeUpdate
+  : [Connection] string, list(SqlPrimitive) -> #some(int) | #error(SqlError)
   = { query, args ->
     def statement = prepare(query)
     for args, 1.. | arg, position -> statement \setArgument(position, arg)
@@ -35,19 +33,23 @@ export def executeUpdate: [Connection] (string, list(SqlPrimitive)) -> #some(int
 
 -- Callers that treat a duplicate key as "nothing to do" narrow the error with `except`
 export def insertIgnoringDuplicates
-  : [Connection] (string, list(SqlPrimitive)) -> #some(int) | #error(#sqlError(string))
+  : [Connection] string, list(SqlPrimitive) -> #some(int) | #error(#sqlError(string))
   = { query, args ->
     executeUpdate(query, args) except #error(#duplicateKey) -> #some(0)
   }
 
 export def withConnection: [DataSource] ([Connection] () -> a) -> a = { action ->
-  def connection = getConnection()
-  use connection in action()
+  def session = open()
+  use Connection(prepare = session.prepare) in action()
 }
 
-export def addUser: [DataSource] (id: int, name: string) -> #some(int) | #error(#sqlError(string))
+export def addUser
+  : [DataSource] (id: int, name: string) -> #some(int) | #error(#sqlError(string))
   = { id, name ->
     withConnection {
-      insertIgnoringDuplicates("insert into users (id, name) values (?, ?)", [#sqlInt(id), #sqlString(name)])
+      insertIgnoringDuplicates(
+        "insert into users (id, name) values (?, ?)"
+        [#sqlInt(id), #sqlString(name)]
+      )
     }
   }

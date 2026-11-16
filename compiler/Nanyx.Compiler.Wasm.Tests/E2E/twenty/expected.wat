@@ -630,7 +630,7 @@
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
   (type $ctx_fn_2_i32_i64_to_i32 (func (param i32 i64) (result i32)))
   (table $ctx_table 2 funcref)
-  (elem (i32.const 0) $__lambda_0 $__lambda_2)
+  (elem (i32.const 0) $__lambda_1 $__lambda_4)
 
   (data (i32.const 256) "\00\00\00\00\09\00\00\00xString: \00\00\00")
   (data (i32.const 276) "\00\00\00\00\0b\00\00\00, yString: \00")
@@ -683,7 +683,7 @@
     call $__nanyx_drop_string
   )
 
-  (func $main (result i32) (local $__use_ToString_int_toString_1 i32) (local $__use_ToString_string_toString_3 i32) (local $x__in1_i64 i64) (local $y__in1 i32) (local $xString__in1 i32) (local $yString__in1 i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32) (local $__owned_4 i32) (local $__owned_5 i32)
+  (func $main (result i32) (local $__use_ToString_int_toString_2 i32) (local $__use_ToString_string_toString_5 i32) (local $x__in1_i64 i64) (local $y__in1 i32) (local $xString__in1 i32) (local $yString__in1 i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32) (local $__owned_4 i32) (local $__owned_5 i32)
     i32.const 4
     i32.const 1
     call $__nanyx_new_object
@@ -695,7 +695,7 @@
     call $__nanyx_dup_fn_int_to_string
     local.get $__owned_0
     call $__nanyx_drop_rec_toString_fn_int_to_string
-    local.set $__use_ToString_int_toString_1
+    local.set $__use_ToString_int_toString_2
     i32.const 4
     i32.const 1
     call $__nanyx_new_object
@@ -707,20 +707,20 @@
     call $__nanyx_dup_fn_string_to_string
     local.get $__owned_1
     call $__nanyx_drop_rec_toString_fn_string_to_string
-    local.set $__use_ToString_string_toString_3
+    local.set $__use_ToString_string_toString_5
     i64.const 42
     local.set $x__in1_i64
     i32.const 304
     local.set $y__in1
-    local.get $__use_ToString_int_toString_1
+    local.get $__use_ToString_int_toString_2
     local.get $x__in1_i64
-    local.get $__use_ToString_int_toString_1
+    local.get $__use_ToString_int_toString_2
     i32.load
     call_indirect (type $ctx_fn_2_i32_i64_to_i32)
     local.set $xString__in1
-    local.get $__use_ToString_string_toString_3
+    local.get $__use_ToString_string_toString_5
     local.get $y__in1
-    local.get $__use_ToString_string_toString_3
+    local.get $__use_ToString_string_toString_5
     i32.load
     call_indirect (type $ctx_fn_2)
     local.set $yString__in1
@@ -757,19 +757,19 @@
   )
   (export "main" (func $main))
 
-  (func $__lambda_0 (param $__env i32) (param $i_i64 i64) (result i32)
+  (func $__lambda_1 (param $__env i32) (param $i_i64 i64) (result i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
     i32.const 304
   )
-  (export "__lambda_0" (func $__lambda_0))
+  (export "__lambda_1" (func $__lambda_1))
 
-  (func $__lambda_2 (param $__env i32) (param $s i32) (result i32)
+  (func $__lambda_4 (param $__env i32) (param $s i32) (result i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
     local.get $s
   )
-  (export "__lambda_2" (func $__lambda_2))
+  (export "__lambda_4" (func $__lambda_4))
 
   (func $__dbg_show_string (param $__dbg_value i32) (result i32)
     local.get $__dbg_value

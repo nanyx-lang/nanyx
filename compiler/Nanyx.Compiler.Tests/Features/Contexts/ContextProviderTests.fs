@@ -146,16 +146,14 @@ def twice: [Show(a)] a -> string = { x -> describe(x) }
 [<Fact>]
 let ``An instance of a parameterised context a use loads is provided by the use`` () =
     let source = showContext + """
-def showPoint: Show(Point) = (show = { p -> "p" })
-
 def main = {
-  use showPoint
+  use Show(Point)(show = { p -> "p" })
   describe(Point(x = 1, y = 2))
   use Show(show = { n: int -> "n" }) in describe(5)
 }
 """
     Assert.Equal<(string * string * string) list>(
-        [ "describe", "Show(Point)", "use showPoint"
+        [ "describe", "Show(Point)", """use Show(Point)(show = { p -> "p" })"""
           "describe", "Show(int)", """use Show(show = { n: int -> "n" })""" ],
         providersIn source)
 

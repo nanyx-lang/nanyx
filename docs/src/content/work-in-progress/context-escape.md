@@ -59,9 +59,9 @@ def main = {
   `message` takes `string` from it.
 - **The member runs with the instances in scope at the `use`.** `greet` has no `Console` to pass it. So
   `use Log(log = { m -> log("[app] {m}") })` calls the outer `Log`.
-- **Only an instance written at the `use` itself.** An instance built as a value has nowhere to say what it needs, so
-  `def inst = Log(log = { m -> println(m) })` stays NYX0227. Values that carry contexts (`[Console] Log`) are an open
-  question below.
+- **Only an instance written at the `use` itself.** An instance built as a value would have nowhere to say what it
+  needs, and since [contexts are not types](#contexts-are-not-types), `def inst = Log(log = { m -> println(m) })` is
+  NYX0248.
 - **A reusable handler is a function,** as it is in Koka:
 
   ```nanyx
@@ -312,12 +312,13 @@ five runs, minus a one-iteration run for compiling and start-up, and runs differ
 Decided by the maintainer in [#1141](https://github.com/nanyx-lang/nanyx/issues/1141). The work is in the issues under
 [What changes](#what-changes).
 
-A context instance can be built only where a `use` loads it, so it is never a value. Today the rule above (only an
-instance written at the `use` discharges) means a handler can't be moved into a function of its own:
+A context instance can be built only where a `use` loads it, so it is never a value. The rule above (only an
+instance written at the `use` discharges) meant a handler couldn't be moved into a function of its own, and now a
+function can't return an instance at all:
 
 ```nanyx fragment
-def consoleLogger: [Console] () -> Log = {
-  Log(log = { m -> println(m) })   -- NYX0227: 'log' is 'string -> ()'
+def consoleLogger: [Console] () -> Log = {   -- NYX0247: 'Log' is a context, not a type
+  Log(log = { m -> println(m) })              -- NYX0248: only a `use` writes an instance
 }
 
 def main = {
@@ -398,10 +399,15 @@ The design draws the line there, and makes every helper a function that takes th
   nothing, so `ExpressionRewrites.writeContextNames` drops it before the backend. `Memory` is never a value: its
   name in a type is the plain nominal type until [#1447](https://github.com/nanyx-lang/nanyx/issues/1447) makes it an
   error.
-- A context's name in a type is an error, and so is a constructor call that isn't a `use`'s instance
-  ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)). Named instances become handlers: `def perfect = Move(...)`
-  and `def cheating = Move(...)` in `examples/Nim.nyx`, `bobChooses` there, the monoid instances in
-  `examples/traitsAndTypeclasses.nyx`, and `connection` in `examples/sql-utils.nyx`.
+- ~~A context's name in a type is an error, and so is a constructor call that isn't a `use`'s instance~~
+  ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)). Done: `TypeResolution.unknownTypeErrors` reports a
+  context's name anywhere in an annotation or a type definition outside a context list (NYX0247), except the context
+  `use C(T)(members)` is desugared with (`ensureInstanceContextExists`), and a constructor call `UseDischarge.mark`
+  didn't mark as a `use`'s instance is NYX0248. `examples/Nim.nyx` already gave its strategies as plain functions.
+  The monoid instances in `examples/traitsAndTypeclasses.nyx` are written at their `use`s rather than as handlers,
+  since a lambda passed to a function isn't given a parameterised context its type requires yet
+  (`Contexts.extendEnvForLambdaArgument`), and `examples/sql-utils.nyx`'s data source opens a `Session` record that
+  `withConnection` loads as the `Connection`.
 - [#1137](https://github.com/nanyx-lang/nanyx/issues/1137) (the backend can't compile `use f()` or `use x`) is no
   longer needed: both become type errors, except `use x` of a name a lambda bound with `context x`
   ([#1448](https://github.com/nanyx-lang/nanyx/issues/1448), after #1445 and #1447).

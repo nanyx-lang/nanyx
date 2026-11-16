@@ -65,7 +65,7 @@ def main: [Log2] () -> () = {
     Assert.Equal("println", text)
 
 [<Fact>]
-let ``An instance built as a value cannot give a member a lambda that needs more contexts`` () =
+let ``An instance built as a value is reported, even one whose member needs more contexts`` () =
     let source =
         log
         + """
@@ -74,8 +74,8 @@ def inst = Log(log = { m -> println(m) })
 dbg(0)
 """
     let code, text = singleError (source.ReplaceLineEndings "\n")
-    Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)
-    Assert.Equal("Log(log = { m -> println(m) })", text)
+    Assert.Equal(DiagnosticCodes.InstanceOutsideUse.Code, code)
+    Assert.Equal("Log", text)
 
 [<Fact>]
 let ``A def's result cannot be a lambda that needs a context its type does not say`` () =

@@ -43,13 +43,11 @@ def note: [Log] string -> () = { s -> log(s) }
 
 def tick: [Clock] () -> int = { now() }
 
-def quiet: Log = (log = { s -> () })
-
 def main: [Log & Clock] () -> int = {
   note("a")
-  use quiet
-  note("b")
   use Log(log = { s -> () })
+  note("b")
+  use Log(log = { t -> () })
   tick()
 }
 """
@@ -62,8 +60,8 @@ let ``The flow view lists the signature's contexts and each use, with the calls 
             "main",
             [ "Log", "signature", "Log", [ "note" ]
               "Clock", "signature", "Clock", [ "tick" ]
-              "Log", "use", "quiet", [ "note" ]
-              "Log", "use", "Log(log = { s -> () })", [] ]
+              "Log", "use", "Log(log = { s -> () })", [ "note" ]
+              "Log", "use", "Log(log = { t -> () })", [] ]
         ),
         flowAt logAndClock "tick()" 0)
 
@@ -81,10 +79,10 @@ let ``There is no flow outside a def`` () =
 
 [<Fact>]
 let ``On a use, the calls it serves are highlighted`` () =
-    Assert.Equal<string list * string list>(([ "quiet" ], [ "note" ]), highlightsAt logAndClock "use quiet" 0)
-    Assert.Equal<string list * string list>(([ "Log(log = { s -> () })" ], []), highlightsAt logAndClock "use Log" 0)
+    Assert.Equal<string list * string list>(([ "Log(log = { s -> () })" ], [ "note" ]), highlightsAt logAndClock "use Log" 0)
+    Assert.Equal<string list * string list>(([ "Log(log = { t -> () })" ], []), highlightsAt logAndClock "use Log" 1)
 
 [<Fact>]
 let ``On a call, what provides its contexts is highlighted`` () =
     Assert.Equal<string list * string list>(([ "Log" ], [ "note" ]), highlightsAt logAndClock """note("a")""" 0)
-    Assert.Equal<string list * string list>(([ "quiet" ], [ "note" ]), highlightsAt logAndClock """note("b")""" 0)
+    Assert.Equal<string list * string list>(([ "Log(log = { s -> () })" ], [ "note" ]), highlightsAt logAndClock """note("b")""" 0)

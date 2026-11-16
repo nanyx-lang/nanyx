@@ -177,11 +177,11 @@ Contexts are implicit parameters ([docs: Contexts](../advanced/contexts)). Imple
 - **Declaring** a context as a record type: `context Show(a) = (show: a -> string)`.
 - **Requiring** one in a signature: `def describe: [Show(a)] a -> string`. A function that does not write its type
   has its requirements inferred.
-- **Loading** an instance: `use <expr>`, where the value's type is the context at a type, as
-  `def showPoint: Show(Point) = (show = ...)` then `use showPoint` (`useInstance` in `ContextInstances.fs`). The older
-  `use Show(Point) = (...)` is a parse error that says so. The call form, `use Show(Point)(show = ...)`, writes the
-  instance out where it is loaded: the parser reads it as a block that defines it under a made-up name, typed
-  `Show(Point)`, and gives it back (`UseInstanceSyntax`), so it is checked and loaded as the `def` is.
+- **Loading** an instance: `use Show(Point)(show = ...)` writes the instance out where it is loaded
+  (`useInstance` in `ContextInstances.fs`). The parser reads it as a block that defines it under a made-up name,
+  typed `Show(Point)`, and gives it back (`UseInstanceSyntax`); that is the one place a context is written as a type
+  ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)). The older `use Show(Point) = (...)` is a parse error
+  that says so.
 - **Resolving** an instance at each call (`resolveCallInstances` in `ContextInstances.fs`), first match wins:
   1. an instance for that exact type loaded with `use` around the call, nearest first (`instanceInScope`);
   2. the instance the enclosing function's own signature declares (a generic function passes its `[Show(a)]` on);
