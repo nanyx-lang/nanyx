@@ -17,6 +17,15 @@ let ``A call that does not fit has one argument per line`` () =
         formatWith 30 "def a = f(alpha = 1, beta = 2, gamma = 3)")
 
 [<Fact>]
+let ``A record or tuple that does not fit has one element per line, with no commas`` () =
+    Assert.Equal(
+        lines [ "def p = ("; "  name = \"Ada\""; "  born = 1815"; "  field = maths"; ")" ],
+        formatWith 30 "def p = (name = \"Ada\", born = 1815, field = maths)")
+    Assert.Equal(lines [ "def t = ("; "  alpha"; "  beta"; "  gamma"; ")" ], formatWith 15 "def t = (alpha, beta, gamma)")
+    unchanged "def p = (name = \"Ada\", born = 1815)\n"
+    unchanged "def t = (alpha, beta, gamma)\n"
+
+[<Fact>]
 let ``The outermost brackets break first`` () =
     Assert.Equal(
         lines [ "def a = f("; "  g(1, 2)"; "  h(3, 4)"; ")" ],
