@@ -1537,6 +1537,18 @@ def string.length: string -> int = { s -> 42 }  -- error NYX0254: 'string.length
 To fix it, give the definition a name of its own, or, to change how a value behaves, wrap it in a protected type
 with its own definitions.
 
+# NYX0255: Operator that does not take two arguments
+
+An operator is defined by a lambda that takes other than two parameters. An operator takes exactly two arguments, its
+left and right operands ([Defining operators](../tour/operators#defining-operators)).
+
+```nanyx
+def `<+>` = { a, b, c -> a + b * c }  -- error NYX0255: '`<+>`' is an operator, so it takes exactly two arguments, its left and right operands, but the lambda that defines it takes 3
+```
+
+To fix it, take two parameters. To pass an operator more values, make one operand a tuple or a record, as in
+`1 <+> (2, 3)`, and take it apart in the operator's body; or define a named function instead.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it
