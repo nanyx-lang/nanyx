@@ -46,6 +46,8 @@ def result = proc {
 
 If any step returns an error, the function immediately returns that error.
 
+The steps' errors are joined: one that fails with `#error(#notFound | #databaseError)` and one that fails with `#error(#noOrders)` make the block fail with all three, and a match on the result must handle each. `Result.bind` chains steps the same way. Errors that aren't tags, such as a `string` and an `int`, must be the same type: bring them to one with `Result.mapError`.
+
 A `proc` block that is only run for what it does doesn't need a `return`. A block that ends without one is `#some()`, the `proc` workflow's `zero`:
 
 ```nanyx fragment

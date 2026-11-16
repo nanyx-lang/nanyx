@@ -20,11 +20,12 @@ module internal ScrutineeRests =
     /// A rest that nothing can add a tag to is left out, as it is from the type of a def bound to the same value
     /// (`generalizeDef`): one in no function's input, not named in an annotation, and not shared with `env`. So the
     /// room a call leaves when it widens a union, as `find(1) \bindSome(parseDigit)` does to give
-    /// `#some(int) | #notFound | #invalidInt | r`, asks for no catch-all arm (#183).
+    /// `#some(int) | #notFound | #invalidInt | r`, asks for no catch-all arm (#183), and so does one in a payload.
     let resolve (env: TypeEnv) (state: InferState) (scrutineeTypes: Ty list) : Ty list =
         let subst = fst (Unifier.solve state.Constraints)
         let resolved = scrutineeTypes |> List.map (Unifier.apply subst >> Unifier.unalias)
-        if not (resolved |> List.exists hasRest) then
+        // A rest may be in a tag's payload too: `#error(#notFound | #invalidInt | r)` (#679).
+        if resolved |> List.forall (Unifier.outputOnlyRestVars >> List.isEmpty) then
             resolved
         else
             let envVars =

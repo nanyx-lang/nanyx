@@ -98,8 +98,8 @@ needs no `return`.
 
 Every tag other than `#some` is a failure, not only `#error`, and the block collects them: a
 `try` on a `#some(string) | #nil` and another on a `#some(int) | #notFound` make the block a
-`#some(...) | #nil | #notFound`. (Two failures with the same tag must agree on its payload:
-`#error(#a)` and `#error(#b)` do not combine into `#error(#a | #b)`.)
+`#some(...) | #nil | #notFound`. Two failures with the same tag whose payloads are tags combine
+too: `#error(#a)` and `#error(#b)` make `#error(#a | #b)`. Payloads of other types must agree.
 
 A `for` loop over a list whose body uses `try` or `return` is run by `for`, item by item. A
 `try` that fails in the body ends the whole block with that failure, and a `return` ends it
@@ -128,11 +128,10 @@ Applies `f` to an error, and leaves a success as it is.
 def Result.bind: [c] Result(a, e), ([c] a -> Result(b, e)) -> Result(b, e)
 ```
 
-Continues with `f` on a success. Both steps have the same error type: to chain a step whose
-errors differ, bring them to one type with [`Result.mapError`](#resultmaperror) first. That holds for errors that
-are tags too: the error is one type, so `#error(#notFound)` and `#error(#invalidInt)` do not
-chain, as the other tags of [`bindSome`](#bindsome) do
-([#679](https://github.com/nanyx-lang/nanyx/issues/679)).
+Continues with `f` on a success. Steps whose errors are tags chain with their errors joined: a
+step that fails with `#notFound` and one that fails with `#invalidInt` give a
+`Result(b, #notFound | #invalidInt)`, and a match on it handles both. Errors of other types
+must be the same type: bring them to one with [`Result.mapError`](#resultmaperror) first.
 
 ## `Result.defaultValue`
 
