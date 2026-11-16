@@ -102,7 +102,9 @@ passes the instance the type checker found for it there, as a call to a top-leve
 - A local function that requires a parameterised context, written, as in
   `def f: [Show(b)] b -> string = { x -> describe(x) }`, or inferred, as for `def f = { x -> describe(x) }`
   ([#550](https://github.com/nanyx-lang/nanyx/issues/550)), takes the context's members as a lambda takes those of a
-  context without parameters. The def may be in one that writes its type or not, and its value may run in a context
+  context without parameters. Its body calls a member by the key of the context as its type writes it, or by the
+  member's own name, as a top-level function's does, where no other context it requires has a member of that name
+  (`CoreIrLowerInstances.aliases`, [#1574](https://github.com/nanyx-lang/nanyx/issues/1574)). The def may be in one that writes its type or not, and its value may run in a context
   without parameters too, as `def f = { x -> println(x) }` runs in `Console`
   ([#807](https://github.com/nanyx-lang/nanyx/issues/807)). Passed as an argument, as in `xs \list.map(f)`, it is read
   as the lambda that calls it, `{ __p0 -> f(__p0) }`, once the call has settled its type, so that the lambda's call
