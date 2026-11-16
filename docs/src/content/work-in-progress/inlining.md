@@ -8,7 +8,8 @@ This page describes the inliner of the WebAssembly backend: its first four steps
 [#745](https://github.com/nanyx-lang/nanyx/issues/745), and `CoreIrSimplify.fs`,
 [#1339](https://github.com/nanyx-lang/nanyx/issues/1339), [#1340](https://github.com/nanyx-lang/nanyx/issues/1340) and
 [#1341](https://github.com/nanyx-lang/nanyx/issues/1341)), so the `proc` block below compiles to its nested match, and
-the rest is the plan below. It is part of the [compilation](./compilation) workstream, and builds on
+the rest is the plan below. What it means for users is described in
+[Inlining](../foundations/compiler-optimisations#inlining); this page keeps how it works and what is still open. It is part of the [compilation](./compilation) workstream, and builds on
 [context calls](./context-calls), where static closures ([#743](https://github.com/nanyx-lang/nanyx/issues/743)) and
 specialising on known members ([#744](https://github.com/nanyx-lang/nanyx/issues/744)) are done.
 
