@@ -153,6 +153,7 @@
     <Compile Include="Features\StdLib\PreludeTests.fs" />
     <Compile Include="Features\StdLib\BindTests.fs" />
     <Compile Include="Features\StdLib\StdLibTests.fs" />
+    <Compile Include="Features\StdLib\SequenceTests.fs" />
     <Compile Include="Features\StdLib\StackSafetyTests.fs" />
     <Compile Include="Features\StdLib\StandardLibraryCacheTests.fs" />
     <Compile Include="Features\Strings\InterpolationTests.fs" />

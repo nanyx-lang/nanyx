@@ -912,16 +912,10 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     else Error errors
         | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "`with` expects a record and the fields to update" ]
     elif name = RangeSyntax.builtIn then
-        // `a..b`: a bounded range of ints, a `seq(int)`; `a..` has no end, so it is a `gen(int)` (see the ranges page).
-        let mutable current = state
-        let mutable errors: Diagnostic list = []
-        for arg in args do
-            match inferExpr env current arg with
-            | Ok (typedArg, next) -> current <- addConstraint typedArg.Type (TyPrimitive "int") next
-            | Error err -> errors <- errors @ err
-        let sequence = if args.Length = 1 then "gen" else Seqs.typeName
-        if errors.IsEmpty then Ok (mkTypedExpr expr (TyApply(sequence, [ TyPrimitive "int" ])) None None None, current)
-        else Error errors
+        // `a..b` is the prelude's `seq.range(a, b)`, and `a..`, which has no end, its `seq.from(a)`: each a `seq(int)` (see
+        // `Seqs`).
+        let callee = if args.Length = 1 then Seqs.fromFunction else Seqs.rangeFunction
+        inferAsCall (inferExpr env) state expr callee args
     elif name = ExternSyntax.builtIn then
         // A foreign function's value (see `ExternSyntax`): the embedder provides it, so it is whatever the def's
         // written type says.

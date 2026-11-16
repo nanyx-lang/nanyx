@@ -140,6 +140,7 @@
     <Compile Include="Features\StdLib\RunOrCrashTests.fs" />
     <Compile Include="Features\StdLib\RunFloatFormatTests.fs" />
     <Compile Include="Features\StdLib\RunAllSomeTests.fs" />
+    <Compile Include="Features\StdLib\RunSequenceTests.fs" />
     <Compile Include="Features\StdLib\RunStdLibTests.fs" />
     <Compile Include="Features\StdLib\RunStackSafeTests.fs" />
     <Compile Include="Features\StdLib\RunMathExpTests.fs" />

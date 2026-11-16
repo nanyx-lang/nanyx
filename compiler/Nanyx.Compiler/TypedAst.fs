@@ -67,6 +67,10 @@ type ModuleOrigin =
     /// Source given directly (e.g. by tests): only standard-library imports can be resolved.
     | InMemory
 
+module ModuleOrigin =
+    /// The name of the standard library module every other module imports without saying so (`nanyx/prelude`).
+    let preludeName = "prelude"
+
 /// What makes a nominal type the type it is: the module that defines it, and the name it is defined under there
 /// (`Person`, or `money.Money` in a `module money =` block). Two modules that each define a `Person` define two
 /// types.

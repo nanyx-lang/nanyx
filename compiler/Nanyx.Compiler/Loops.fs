@@ -8,8 +8,8 @@ open NyxCompiler.InferState
 open NyxCompiler.TypeResolution
 
 /// `for xs, ys | arms`, at `expr`: the parser passes the iterables and a lambda of one element of each. Each iterable
-/// is a `list(a)`, a `seq(a)`, a `gen(a)`, a `map(k, v)` or a `set(a)`, and the loop is unit. It stops when the shortest iterable
-/// does, so a `gen`, which may never end, is only walked in step with one that does.
+/// is a `list(a)`, a `seq(a)`, a `map(k, v)` or a `set(a)`, and the loop is unit. It stops when the shortest iterable
+/// does, so a range with no end, `0..`, is only walked in step with one that ends.
 let inferFor
     (inferExpr: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>)
     (inferLambdaWithExpected: TypeEnv -> InferState -> Expression -> (Identifier * TypeExpr option) list -> Expression -> Ty option -> Ty option -> Result<TypedExpr * InferState, Diagnostic list>)
@@ -18,10 +18,14 @@ let inferFor
     let elementOf (current: InferState) (iterable: Expression) =
         inferExpr env current iterable
         |> Result.map (fun (typedIterable, afterIterable) ->
+            // A range the loop walks is counted through with its bounds, not read as the sequence it is (see `Seqs`).
+            let afterIterable =
+                match iterable.Kind with
+                | RangeSyntax.Call _ -> { afterIterable with ReadAs = afterIterable.ReadAs |> Map.remove iterable.Id }
+                | _ -> afterIterable
             match Unifier.unalias (resolveSoFar afterIterable typedIterable.Type) with
-            | Lists.ListType elementTy
-            | Seqs.SeqType elementTy -> (elementTy, false), afterIterable
-            | TyApply("gen", [ elementTy ]) -> (elementTy, true), afterIterable
+            | Lists.ListType elementTy -> (elementTy, false), afterIterable
+            | Seqs.SeqType elementTy -> (elementTy, (match iterable.Kind with RangeSyntax.Call(_, None) -> true | _ -> false)), afterIterable
             // A map's elements are its entries, each a key and its value, in the order of `map.toList`.
             | Maps.MapType(key, value) -> (tupleRecordType [ key; value ], false), afterIterable
             | Sets.SetType element -> (element, false), afterIterable
@@ -35,7 +39,7 @@ let inferFor
     match elements with
     | Error err -> Error err
     | Ok (elements, _) when elements |> List.forall snd ->
-        let message = "A `for` loop over a `gen` alone may never end: walk it in step with a list or a bounded range, as `for xs, 0.. | x, i` does"
+        let message = "A `for` loop over a range with no end alone never ends: walk it in step with a list or a range with an end, as `for xs, 0.. | x, i` does"
         Error [ Diagnostics.at DiagnosticCodes.EndlessForLoop (List.head iterables).Span message ]
     | Ok (elements, constrained) ->
         let expectedInput = inputTypeFromArgs (List.map fst elements)

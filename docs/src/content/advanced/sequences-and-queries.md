@@ -1,37 +1,54 @@
 ---
 title: "Sequences and queries"
-description: "Seq vs gen and querying patterns"
+description: "Lazy sequences, and walking them"
 order: 6
 ---
 
-> **Being redesigned.** [Lazy sequences](../work-in-progress/lazy-sequences) proposes one lazy type, `seq(a)`, in
-> place of the `seq`/`gen` split this page describes.
+> **Being built.** `seq(a)` and its functions are in the [prelude](../stdlib/prelude-sequences). Taking anything that
+> can be iterated, `Iterable`, and the `seq { }` builder are designed in
+> [Lazy sequences](../work-in-progress/lazy-sequences) but not built yet.
 
-Nanyx has two enumerable abstractions: `seq(a)` and `gen(a)`.
+Nanyx has one lazy sequence type, `seq(a)`. A sequence is worked out only as far as it is pulled, so it may never end:
+the range `0..` counts up forever. Pulling one changes nothing, so it can be passed around, stored and pulled again.
 
-- A `seq` is known to be finite and safe to iterate.
-- A `gen` (generator) can be infinite, lazy, or non-deterministic.
+```nanyx
+def squares = 1.. \seq.map { x -> x * x }
+
+println(squares \seq.take(4) \seq.toList) -- [1, 4, 9, 16]
+```
 
 # Iteration safety
 
+A `for` loop over a range with no end alone would never end, so it is an error:
+
 ```nanyx
-for 0.. | i -> println("Hello") -- Error: cannot iterate over a gen
+for 0.. | i -> println("Hello") -- error NYX0217
 
 for 1..10 | i -> println("Hello") -- OK
-
-for 1.. \take(10) | i -> println("Hello") -- OK: take turns a gen into a seq
 ```
 
 # Enumerating with indexes
 
-A `gen` may be zipped with a `seq` in a `for` loop, because the finite side bounds the iteration:
+A range with no end may be walked in step with something that ends, which bounds the loop:
 
 ```nanyx
-def items: seq(string) = ...
+def items = ["a", "b", "c"]
 
 for items, 0.. | item, i -> println("Item {i} is {item}")
 ```
 
-# Iterators
+# Pulling a sequence
 
-Both `seq` and `gen` provide `getIterator`. The main difference is that a `gen` iterator can be impure, while a `seq` iterator is pure, reflecting the finiteness guarantee.
+A sequence's `next` gives its first element and the rest of the sequence, `#next(x, rest)`, or `#done`. A function that
+walks one matches on it and recurses on the rest, as it would on a list:
+
+```nanyx
+def total: seq(int) -> int = { s ->
+  match s.next()
+    | #next(x, rest) -> x + total(rest)
+    | #done -> 0
+}
+```
+
+A sequence whose steps need contexts says so in its type: mapping with a function that prints gives a
+`[Console] seq(b)`, which can be pulled only where `Console` is.

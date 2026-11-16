@@ -55,7 +55,6 @@ let private lookupPrimitive (name: string) =
 let internal isBuiltInTypeName (name: string) =
     (lookupPrimitive name).IsSome
     || Lists.isTypeName name
-    || Seqs.isTypeName name
     || name = CellPassingSyntax.typeName
     || Maps.isTypeName name
     || Sets.isTypeName name
@@ -90,7 +89,6 @@ let rec attachedTypeNames (ty: Ty) : string list =
     | TyNominal(id, _, _, _) -> [ id.Name ]
     | TyPrimitive name -> [ name ]
     | Lists.ListType _ -> [ Lists.typeName ]
-    | Seqs.SeqType _ -> [ Seqs.typeName ]
     | Maps.MapType _ -> [ Maps.typeName ]
     | Sets.SetType _ -> [ Sets.typeName ]
     | Arrays.ArrayType _ -> [ Arrays.typeName ]
