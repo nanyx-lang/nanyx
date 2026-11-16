@@ -36,33 +36,57 @@
           }
         },
         {
-          "comment": "A script's directive, at the start of a line: a manifest's dotted key, and a TOML value to set one: `::linters.default.unusedBindings = \"error\"`",
+          "comment": "A script's directive, at the start of a line: its name, then words separated by spaces: `::dependency acme.util ../util`, `::lint unusedBindings #error`",
           "name": "meta.preprocessor.directive.nanyx",
-          "match": "^(::)([^=]*?)\\s*(?:(=)\\s*(.*?))?\\s*$",
-          "captures": {
+          "begin": "^(::)([A-Za-z]\\w*)?",
+          "beginCaptures": {
             "1": {
               "name": "punctuation.definition.directive.nanyx"
             },
             "2": {
               "name": "keyword.control.directive.nanyx"
-            },
-            "3": {
-              "name": "keyword.operator.assignment.directive.nanyx"
-            },
-            "4": {
-              "name": "meta.value.directive.nanyx",
-              "patterns": [
-                {
-                  "name": "string.quoted.double.directive.nanyx",
-                  "match": "\"[^\"]*\""
-                },
-                {
-                  "name": "constant.numeric.directive.nanyx",
-                  "match": "\\b\\d+\\b"
-                }
-              ]
             }
-          }
+          },
+          "end": "$",
+          "patterns": [
+            {
+              "comment": "A comment after the directive's words",
+              "name": "comment.line.double-dash.nanyx",
+              "match": "(?<=\\s)--.*$"
+            },
+            {
+              "name": "string.quoted.double.directive.nanyx",
+              "match": "\"(?:[^\"\\\\]|\\\\.)*\"?"
+            },
+            {
+              "name": "constant.other.tag.directive.nanyx",
+              "match": "(?<=\\s)#[A-Za-z_]\\w*"
+            },
+            {
+              "comment": "A version: digits with a dot, `0.28.0`",
+              "name": "constant.numeric.version.directive.nanyx",
+              "match": "(?<=\\s)\\d+\\.[\\w.+-]*"
+            },
+            {
+              "name": "constant.numeric.directive.nanyx",
+              "match": "(?<=\\s)-?\\d+(?=\\s|$)"
+            },
+            {
+              "comment": "A directory, relative to the script: `../util`",
+              "name": "string.unquoted.path.directive.nanyx",
+              "match": "(?<=\\s)[./\\\\]\\S*"
+            },
+            {
+              "comment": "A package's dotted name: `nanyx.lint`",
+              "name": "entity.name.package.directive.nanyx",
+              "match": "(?<=\\s)[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+(?=\\s|$)"
+            },
+            {
+              "comment": "A setting or a rule: `lineWidth`, `unusedBindings`",
+              "name": "variable.other.directive.nanyx",
+              "match": "(?<=\\s)[A-Za-z_]\\w*(?=\\s|$)"
+            }
+          ]
         }
       ]
     },

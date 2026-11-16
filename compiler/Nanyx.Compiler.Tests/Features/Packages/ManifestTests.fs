@@ -120,7 +120,7 @@ let ``An interpolated string in a manifest is code`` () =
 
 [<Fact>]
 let ``A definition, an import or a directive in a manifest is an error`` () =
-    let errors = errorsOf "::linters.default\nimport util\n\ndef x = 1\n"
+    let errors = errorsOf "::linter nanyx.lint\nimport util\n\ndef x = 1\n"
     Assert.Equal(3, errors.Length)
     Assert.All(errors, fun (code, _) -> Assert.Equal(DiagnosticCodes.CodeInManifest.Code, code))
 

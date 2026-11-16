@@ -76,11 +76,11 @@ public sealed class FormattingTests : LanguageServerTestBase
     public async Task Formatting_a_script_keeps_its_directives_and_uses_its_formatter_directives()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-format-directives");
-        Open(uri, "::formatter.indentSize = 4\ndef x =\n  def a = 1\n  a\n");
+        Open(uri, "::format indentSize 4\ndef x =\n  def a = 1\n  a\n");
         await NextPublished(uri);
 
         var edit = Assert.Single(await FormattingEdits(uri));
-        Assert.Equal("::formatter.indentSize = 4\ndef x =\n    def a = 1\n    a\n", edit.NewText);
+        Assert.Equal("::format indentSize 4\ndef x =\n    def a = 1\n    a\n", edit.NewText);
     }
 
     [Fact]

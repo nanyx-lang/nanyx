@@ -12,7 +12,7 @@ namespace Nanyx.LanguageServer.Handlers;
 /// Formats a document ("Format Document", and format-on-save) with the same formatter and safety check as
 /// <c>nanyx format</c>: one edit replacing the whole document, or none when it is already formatted, does not parse,
 /// or could not be formatted safely. The line width and indent come from the package's <c>.nyxp</c>, or a script's
-/// <c>::formatter</c> directives, as for <c>nanyx format</c>; the request's <c>tabSize</c> and <c>insertSpaces</c> are
+/// <c>::format</c> directives, as for <c>nanyx format</c>; the request's <c>tabSize</c> and <c>insertSpaces</c> are
 /// ignored.
 /// </summary>
 public sealed class FormattingHandler : DocumentFormattingHandlerBase
@@ -58,7 +58,7 @@ public sealed class FormattingHandler : DocumentFormattingHandlerBase
     /// <summary>
     /// The formatter's settings for <paramref name="document"/>, or null, logged, when they can't be read. They are read
     /// every time, rather than cached, so an edit to the manifest applies to the next format. A document not on disk
-    /// has no manifest. A script's <c>::formatter</c> directives apply on top.
+    /// has no manifest. A script's <c>::format</c> directives apply on top.
     /// </summary>
     internal static Formatter.Formatter.Options? SettingsFor(OpenDocument document, DocumentUri uri, ILogger logger)
     {

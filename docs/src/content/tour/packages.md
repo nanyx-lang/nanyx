@@ -232,22 +232,23 @@ import "./utils" as utils
 For script mode, Nanyx synthesizes a package description in memory rather than requiring a `.nyxp` file. A script can add to that description with `::` directives at the top of the file, each saying what one manifest entry would:
 
 ```nanyx fragment
-::linters.default.unusedBindings = "error"
-::formatter.indentSize = 4
+::linter nanyx.lint
+::lint unusedBindings #error
+::format indentSize 4
 
 import "./utils" as utils
 ```
 
-Each directive is a dotted key, with `= value` when it sets a value: `::linters.default.unusedBindings = "error"` says what `linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (unusedBindings = #error)))]` says in a manifest. `::host` and `::dependencies` name the script's host and the packages it imports from, as a manifest's `host` and `dependencies` do:
+Each directive is a name and the words it takes, separated by spaces: `::linter nanyx.lint` and the `::lint unusedBindings #error` under it say what `linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (unusedBindings = #error)))]` says in a manifest. A `::lint` line is for the linter of the nearest `::linter` above it. `::host` and `::dependency` name the script's host and each package it imports from, as a manifest's `host` and `dependencies` do:
 
 ```nanyx fragment
-::host.nanyx.console = "0.28.0"
-::dependencies.acme.util = { path = "../util" }
+::host nanyx.console
+::dependency acme.util ../util
 
 import acme.util/strings
 ```
 
-A package the compiler ships is named at the compiler's version, and any other is found by its `path`, relative to the script. Without `::host`, a script runs under `nanyx.console`. The directives are listed in [Files and projects](../getting-started/files-and-projects). A file in a package cannot have directives: they go in the package's manifest instead.
+A package's name is followed by where it is found: a directory, which starts with `.` or `/`, relative to the script, or a version, which starts with a digit. A package the compiler ships needs neither: it is at the compiler's version. Without `::host`, a script runs under `nanyx.console`. The directives are listed in [Files and projects](../getting-started/files-and-projects). A file in a package cannot have directives: they go in the package's manifest instead.
 
 Script modules and named package modules are distinct. A named module is imported through its package or module identity; an anonymous script module is imported by file path.
 

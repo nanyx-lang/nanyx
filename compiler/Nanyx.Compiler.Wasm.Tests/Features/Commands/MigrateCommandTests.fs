@@ -116,13 +116,13 @@ let ``A directory with several scripts that have statements is refused, naming e
 let ``Directives that disagree are an error naming both lines`` () =
     use directory = new TempDirectory()
     scripts directory "tools" [
-        "a.nyx", "::formatter.lineWidth = 80\n\nexport def a = 1\n"
-        "b.nyx", "::formatter.lineWidth = 100\n\nexport def b = 2\n" ]
+        "a.nyx", "::format lineWidth 80\n\nexport def a = 1\n"
+        "b.nyx", "::format lineWidth 100\n\nexport def b = 2\n" ]
     |> ignore
     let outcome = nanyxIn directory.Path [ "migrate"; "tools" ]
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal(
-        "error: a.nyx:1: ::formatter.lineWidth = 80 and b.nyx:1: ::formatter.lineWidth = 100 disagree: a package has one manifest, so make them say the same, then migrate again\n",
+        "error: a.nyx:1: ::format lineWidth 80 and b.nyx:1: ::format lineWidth 100 disagree: a package has one manifest, so make them say the same, then migrate again\n",
         outcome.StandardError.ReplaceLineEndings "\n")
 
 [<Fact>]
@@ -130,7 +130,7 @@ let ``Dependencies move into the manifest, a path made relative to it, and one n
     use directory = new TempDirectory()
     let root =
         scripts directory "app" [
-            "tools/fetch.nyx", "::dependencies.acme.util = { path = \"../../util\" }\n::dependencies.acme.json = \"1.2.0\"\n\nexport def fetch = 1\n" ]
+            "tools/fetch.nyx", "::dependency acme.util ../../util\n::dependency acme.json 1.2.0\n\nexport def fetch = 1\n" ]
     let outcome = nanyxIn directory.Path [ "migrate"; "app" ]
     Assert.Equal(0, outcome.ExitCode)
     Assert.Contains("""  dependencies = [(package = "acme.util", path = "../util"), (package = "acme.json", version = "1.2.0")]""", read root "app.nyxp")

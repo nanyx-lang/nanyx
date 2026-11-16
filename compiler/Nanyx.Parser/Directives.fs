@@ -5,21 +5,31 @@ module Parser.Program.Header
 open System
 open Parser.Program
 
-/// A `::` directive at the top of a script, which says what a package manifest would: `::linters.default` turns on the
-/// official linter, and `::formatter.lineWidth = 80` sets the formatter's `lineWidth`. A directive is a dotted key and
-/// a TOML value.
-type Directive =
-    { /// The parts of the dotted key after `::`: `[ "linters"; "default" ]`. Empty when the key is missing or is not
-      /// a dotted key of names.
-      Key: string list
-      /// What comes after `=`: the TOML value it is, such as `80L` or `"error"`, or why it is not one. None for a
-      /// table, which has no `=`.
-      Value: Result<obj, string> option
-      /// The line, from `::` to its end.
-      Span: SourceSpan }
+/// A word of a directive, and where it is written.
+type DirectiveWord = { Text: string; Span: SourceSpan }
 
-    /// The key as written, `linters.default`.
-    member this.Name = String.Join(".", this.Key)
+/// A `::` directive at the top of a script, which says what one entry of a package's manifest would: `::host
+/// nanyx.console`, `::dependency acme.util ../util`, `::lint unusedBindings #error`. It is a line of words separated by
+/// spaces: the directive's name, then what it takes.
+type Directive =
+    { /// The directive's name, then the words after it: `dependency`, `acme.util`, `../util`. Empty for a line with
+      /// nothing after `::`. A string in quotes, `"a b"`, is one word.
+      Words: DirectiveWord list
+      /// The line, from `::` to its end.
+      Span: SourceSpan
+      /// The line as it is written, from `::` to its end.
+      Text: string }
+
+    /// `dependency`, or empty for a line with nothing after `::`.
+    member this.Name = match this.Words with first :: _ -> first.Text | [] -> ""
+
+    /// The words after the directive's name.
+    member this.Arguments = match this.Words with _ :: rest -> rest | [] -> []
+
+    /// Whether it is written as directives were before they were lines of words: a manifest's dotted key, with `=`
+    /// and a TOML value to set one, `::host.nanyx.console = "0.28.0"`.
+    member this.IsOldForm =
+        this.Name.Contains '.' || this.Words |> List.exists (fun word -> not (word.Text.StartsWith "\"") && word.Text.Contains '=')
 
 /// The lines at the top of a file that are not code: an optional `#!` line, then `::` directives, among blank lines
 /// and `--` comments. They end at the first line of code, so they are read without parsing the file, and the parser
@@ -46,55 +56,33 @@ module Directives =
 
     let private normalize (source: string) = source.Replace("\r\n", "\n").Replace("\r", "\n")
 
-    /// The parts of a TOML dotted key, bare or quoted.
-    let private keyPath (key: Tomlyn.Syntax.KeySyntax) =
-        let part (syntax: Tomlyn.Syntax.BareKeyOrStringValueSyntax) =
-            match syntax with
-            | :? Tomlyn.Syntax.BareKeySyntax as bare when not (isNull bare.Key) -> Some bare.Key.Text
-            | :? Tomlyn.Syntax.StringValueSyntax as quoted -> Some quoted.Value
-            | _ -> None
-        if isNull key || isNull key.Key then
-            []
-        else
-            let parts = part key.Key :: [ for dotted in key.DotKeys -> if isNull dotted.Key then None else part dotted.Key ]
-            if List.forall Option.isSome parts then List.choose id parts else []
-
-    /// The value at `path` in `table`.
-    let rec private valueAt (path: string list) (table: Tomlyn.Model.TomlTable) : obj option =
-        match path with
-        | [] -> None
-        | [ last ] -> match table.TryGetValue last with | true, value -> Some value | false, _ -> None
-        | first :: rest ->
-            match table.TryGetValue first with
-            | true, (:? Tomlyn.Model.TomlTable as inner) -> valueAt rest inner
-            | _ -> None
-
-    /// The key and value of a directive, the text after its `::`: a table's dotted key, `linters.default`, or a TOML
-    /// key and value, `formatter.lineWidth = 80`. The key is empty when it is missing or is not a TOML key.
-    let private parse (body: string) : string list * Result<obj, string> option =
-        let table = Tomlyn.Parsing.SyntaxParser.Parse($"[{body}]", "", false)
-        match List.ofSeq table.Tables with
-        | [ header ] when not table.HasErrors && header.Items.ChildrenCount = 0 -> keyPath header.Name, None
-        | _ ->
-            let document = Tomlyn.Parsing.SyntaxParser.Parse(body, "", false)
-            match List.ofSeq document.KeyValues with
-            // The key is read even when what follows the value is not TOML, so the directive is still known by it.
-            | keyValue :: rest when not (isNull keyValue.EqualToken) ->
-                let path = keyPath keyValue.Key
-                let text = body.Substring(min body.Length (keyValue.EqualToken.Span.End.Offset + 1)).Trim()
-                let notAValue () = Result.Error $"'{text}' is not a TOML value; a string needs quotes, as in a manifest: \"{text}\""
-                let value =
-                    if document.HasErrors || path.IsEmpty || not rest.IsEmpty || not (Seq.isEmpty document.Tables) then
-                        notAValue ()
+    /// The words of `text`, a directive's line without its `::`, which starts at `start` in the file `filePath` on the
+    /// line `line`: runs of characters other than spaces, or a string in quotes, which may hold spaces. A `--` comment
+    /// ends them.
+    let private words (filePath: string) (line: int) (start: int) (text: string) : DirectiveWord list =
+        let isSpace (c: char) = c = ' ' || c = '\t'
+        let rec from (index: int) (found: DirectiveWord list) =
+            if index >= text.Length || String.CompareOrdinal(text, index, "--", 0, 2) = 0 then
+                List.rev found
+            elif isSpace text[index] then
+                from (index + 1) found
+            else
+                let finish =
+                    if text[index] = '"' then
+                        let rec closing (at: int) =
+                            if at >= text.Length then text.Length
+                            elif text[at] = '\\' then closing (at + 2)
+                            elif text[at] = '"' then at + 1
+                            else closing (at + 1)
+                        closing (index + 1) |> min text.Length
                     else
-                        try
-                            match valueAt path (Tomlyn.TomlSerializer.Deserialize<Tomlyn.Model.TomlTable>(body, Tomlyn.TomlSerializerOptions())) with
-                            | Some value -> Result.Ok value
-                            | None -> notAValue ()
-                        with :? Tomlyn.TomlException ->
-                            notAValue ()
-                path, Some value
-            | _ -> [], None
+                        let mutable at = index
+                        while at < text.Length && not (isSpace text[at]) do
+                            at <- at + 1
+                        at
+                let span = { File = filePath; Start = start + index; End = start + finish; StartLine = line; StartColumn = 2 + index }
+                from finish ({ Text = text.Substring(index, finish - index); Span = span } :: found)
+        from 0 []
 
     /// The directives at the top of the file at `filePath`, whose text is `source`.
     let read (filePath: string) (source: string) : Directive list =
@@ -103,10 +91,9 @@ module Directives =
         |> List.filter (fun (_, (start, _)) -> String.CompareOrdinal(source, start, "::", 0, 2) = 0)
         |> List.map (fun (line, (start, finish)) ->
             let text = source.Substring(start, finish - start).TrimEnd()
-            let key, value = parse (text.Substring 2)
-            { Key = key
-              Value = value
-              Span = { File = filePath; Start = start; End = start + text.Length; StartLine = line; StartColumn = 0 } })
+            { Words = words filePath line (start + 2) (text.Substring 2)
+              Span = { File = filePath; Start = start; End = start + text.Length; StartLine = line; StartColumn = 0 }
+              Text = text })
 
     /// Where the `#!` line and directives at the top of `source` (line breaks `\n`) end: the end of the last of them,
     /// without its line break, or 0 if it has none.

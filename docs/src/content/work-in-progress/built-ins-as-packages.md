@@ -93,11 +93,11 @@ level, so a field is never mistaken for a package's configuration:
     `nanyx run` and `nanyx build` alike, and running it is a fatal `no entry point` error. Done (see
     [What's built](#whats-built)).
   - `nanyx new` writes both entries, at the compiler's version.
-- **Scripts.** A loose script has no manifest. It runs the linters its `::linters` directives name, if any, names its
-  host with `::host`, as a manifest's `host` does, and the packages it imports from with `::dependencies`, as a
-  manifest's `dependencies` does: `::host.acme.server = { path = "../server" }`,
-  `::dependencies.nanyx.console.core = "0.28.0"`. Without `::host` it runs under the console host the compiler ships.
-  Done ([#1504](https://github.com/nanyx-lang/nanyx/issues/1504)).
+- **Scripts.** A loose script has no manifest. It runs the linters its `::linter` directives name, if any, names its
+  host with `::host`, as a manifest's `host` does, and each package it imports from with `::dependency`, as a
+  manifest's `dependencies` does: `::host acme.server ../server`, `::dependency nanyx.console.core`. A package the
+  compiler ships, named on its own, is at the compiler's version. Without `::host` it runs under the console host the
+  compiler ships. Done ([#1504](https://github.com/nanyx-lang/nanyx/issues/1504), [#1599](https://github.com/nanyx-lang/nanyx/issues/1599)).
 
 # What it needs
 
@@ -119,7 +119,7 @@ level, so a field is never mistaken for a package's configuration:
 2. **The console host as a package** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)), as the first shipped
    source directory. Its manifest declares it a host, with a prelude, and a host the compiler doesn't ship is found by
    its path, and `Console` and `Env` are in the interface package `nanyx.console.core`: done (see
-   [What's built](#whats-built)). A script's `::host` and `::dependencies` directives are done too
+   [What's built](#whats-built)). A script's `::host` and `::dependency` directives are done too
    ([#1504](https://github.com/nanyx-lang/nanyx/issues/1504)).
 3. **The official linter as a package** ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)), once the linter
    contract is designed. The rules move one at a time, with the tests checking that each one reports what it did.

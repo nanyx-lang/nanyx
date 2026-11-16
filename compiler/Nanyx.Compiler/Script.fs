@@ -1,128 +1,247 @@
 namespace NyxCompiler
 
+open System
 open System.IO
+open System.Text.RegularExpressions
 open Parser.Program
 open Parser.Program.DataValues
 
 /// What a script's `::` directives say: what a package's manifest would, for a file run on its own, which has none.
 type ScriptDirectives =
-    { /// The linters the `::linters` directives turn on and the severities they set, as a manifest's
-      /// `linters` would. None when there is no `::linters` directive: then no linter runs, as for a package whose
-      /// manifest has no `linters`.
+    { /// The linters the `::linter` directives turn on and the severities the `::lint` lines under them set, as a
+      /// manifest's `linters` would. None when there is no `::linter` directive: then no linter runs, as for a package
+      /// whose manifest has no `linters`.
       Linters: LinterOptions option
-      /// The build the `::host` and `::dependencies` directives make: the host the script runs under and the packages
-      /// it imports from (see `Package.scriptModules`). None when there are neither, or they are wrong: then the script
+      /// The build the `::host` and `::dependency` directives make: the host the script runs under and the packages it
+      /// imports from (see `Package.scriptModules`). None when there are neither, or they are wrong: then the script
       /// runs under the console host and imports only the standard library and files.
       Build: PackageModules option
-      /// What is wrong with the directives, each at its line.
+      /// What is wrong with the directives, each at its line, or at the word it is about.
       Diagnostics: Diagnostic list }
 
+/// Where the package a `::host`, `::dependency` or `::linter` directive names is found.
+type DirectivePlace =
+    /// At a version, a word that starts with a digit: `1.2.0`.
+    | AtVersion of DirectiveWord
+    /// In a directory, relative to the script, a word that starts with `.` or `/`: `../util`.
+    | AtPath of DirectiveWord
+    /// Neither: a package the compiler ships, at the compiler's version.
+    | Shipped
+
+/// What a directive says, read from its words. Each is one entry of a manifest.
+type DirectiveSetting =
+    /// `::host nanyx.console`: the host the script runs under.
+    | HostSetting of package: DirectiveWord * DirectivePlace
+    /// `::dependency acme.util ../util`: a package the script imports from.
+    | DependencySetting of package: DirectiveWord * DirectivePlace
+    /// `::linter nanyx.lint`: a linter to run.
+    | LinterSetting of package: DirectiveWord * DirectivePlace
+    /// `::lint unusedBindings #error`: a rule's severity, for the linter whose package `linter` names, the nearest
+    /// `::linter` above it.
+    | LintSetting of linter: DirectiveWord * rule: DirectiveWord * severity: DataValue
+    /// `::format indentSize 4`: a formatter setting, which the formatter reads itself.
+    | FormatSetting of key: DirectiveWord * value: DataValue
+
 module Script =
-    /// The manifest tables a directive can stand for. `::formatter` is the formatter's, which reads it itself.
-    let private tables = [ "linters"; "formatter"; "host"; "dependencies" ]
+    let private directiveList = "::host, ::dependency, ::linter, ::lint and ::format"
 
-    let private quoted (names: string seq) = names |> Seq.map (fun name -> $"'{name}'") |> String.concat ", "
+    let private invalid (span: SourceSpan) (message: string) = Diagnostics.at DiagnosticCodes.InvalidDirective span message
 
-    let private tableList = quoted (tables |> List.map ((+) "::"))
+    /// What `::<name>` takes, as the error for a directive written wrong shows it.
+    let private usage (name: string) =
+        match name with
+        | "host" -> $"::host takes a host and where it is found: ::host {Hosts.consolePackage}, or ::host acme.server ../server"
+        | "dependency" -> "::dependency takes a package and where it is found: ::dependency acme.util ../util, or ::dependency nanyx.console.core"
+        | "linter" -> "::linter takes a linter: ::linter nanyx.lint"
+        | "lint" -> "::lint takes a rule of the linter above it and a severity: ::lint unusedBindings #error"
+        | _ -> "::format takes a setting and its value: ::format lineWidth 100"
 
-    /// A directive's value, a TOML value, as an error message names it.
-    let private describe (value: obj) =
-        match value with
-        | :? int64 as n -> string n
-        | :? string as s -> $"the string \"{s}\""
-        | :? float -> "a float"
-        | :? bool -> "a boolean"
-        | :? Tomlyn.Model.TomlTable -> "a table"
-        | :? Tomlyn.Model.TomlArray -> "an array"
-        | _ -> "a date or time"
+    /// Where the word after a package's name says it is found: a version, which starts with a digit, or a directory,
+    /// which starts with `.` or `/` (or is rooted, `C:\util`).
+    let private placeOf (word: DirectiveWord) : Result<DirectivePlace, Diagnostic> =
+        if Char.IsDigit word.Text[0] then Result.Ok(AtVersion word)
+        elif word.Text[0] = '.' || word.Text[0] = '/' || word.Text[0] = '\\' || Path.IsPathRooted word.Text then Result.Ok(AtPath word)
+        else Result.Error(invalid word.Span $"'{word.Text}' is neither a version, which starts with a digit, 1.2.0, nor a directory, which starts with . or /, ../util")
 
+    /// The package a `::host`, `::dependency` or `::linter` directive names, and where it is found.
+    let private packageOf (directive: Directive) : Result<DirectiveWord * DirectivePlace, Diagnostic> =
+        match directive.Arguments with
+        | [] -> Result.Error(invalid directive.Span (usage directive.Name))
+        | [ package ] -> Result.Ok(package, Shipped)
+        | [ package; place ] -> placeOf place |> Result.map (fun place -> package, place)
+        | _ :: _ :: extra :: _ -> Result.Error(invalid extra.Span (usage directive.Name))
 
-    /// What a `::linters` directive says: a linter to run, and the severity it sets for one of its rules, if any.
-    let private linterSetting (directive: Directive) : Result<Linter * (string * Severity option) option, string> =
-        let linter (name: string) =
-            match Linters.all |> List.tryFind (fun linter -> linter.Name = name) with
-            | Some linter -> Result.Ok linter
-            | None -> Result.Error $"unknown linter '{name}'; the linters are {quoted (Linters.all |> List.map _.Name)}"
-        match directive.Key, directive.Value with
-        | [ _; name ], None -> linter name |> Result.map (fun linter -> linter, None)
-        | [ _; name ], Some _ ->
-            Result.Error $"::linters.{name} is a table, so it takes no value; set one of its rules with ::linters.{name}.<rule> = \"error\""
-        | [ _; name; ruleId ], Some value ->
-            linter name
-            |> Result.bind (fun linter ->
-                let known = linter.Rules @ [ Linters.failedRule ] |> List.map _.Id
-                if not (List.contains ruleId known) then
-                    Result.Error $"unknown rule '{ruleId}' of the linter '{linter.Name}'; the rules are {quoted known}"
-                else
-                    value
-                    |> Result.bind (fun severity ->
-                        match severity with
-                        | :? string as name when Manifest.severities |> List.exists (fst >> (=) name) ->
-                            Result.Ok(linter, Some(Linters.code linter ruleId, Manifest.severities |> List.find (fst >> (=) name) |> snd))
-                        | other ->
-                            Result.Error
-                                $"::{directive.Name} must be {quoted (List.map fst Manifest.severities)}, not {describe other}"))
-        | [ _; _; _ ], None ->
-            Result.Error $"::{directive.Name} needs a severity: ::{directive.Name} = \"error\""
-        | _ ->
-            Result.Error "::linters takes a linter, or one of its rules and a severity: ::linters.default, or ::linters.default.unusedBindings = \"error\""
+    /// A value a `::lint` or `::format` directive sets, written as a manifest writes one.
+    let private valueOf (directive: Directive) (word: DirectiveWord) : Result<DataValue, Diagnostic> =
+        match DataValue.ofWord word with
+        | Some value -> Result.Ok value
+        | None ->
+            Result.Error(invalid word.Span $"'{word.Text}' is not a value; a value is written as in a manifest: a tag, #error, a number, 4, or a string, \"text\". {usage directive.Name}")
 
-    /// A directive's TOML value as the manifest would write it, as data written at `span`: a table is a record.
-    let rec private dataOf (span: SourceSpan) (value: obj) : DataValue =
-        let data =
-            match value with
-            | :? string as s -> DataString s
-            | :? int64 as n -> DataInt(bigint n)
-            | :? float as n -> DataFloat n
-            | :? bool as b -> DataBool b
-            | :? Tomlyn.Model.TomlTable as table -> DataRecord [ for KeyValue(name, field) in table -> { Name = name; NameSpan = span; Value = dataOf span field } ]
-            | :? Tomlyn.Model.TomlArray as items -> DataList [ for item in items -> dataOf span item ]
-            | other -> DataString(string other)
-        { Data = data; Location = span }
+    /// Whether the compiler ships the package `name`.
+    let private isShipped (name: string) = Directory.Exists(ShippedPackages.directoryOf name)
 
-    /// The entry a `::host` or `::dependencies` directive stands for, as the manifest's `host`, or an entry of its
-    /// `dependencies`, would write it: `::dependencies.acme.json = { path = "../json" }` is
-    /// `(package = "acme.json", path = "../json")`, and `::host.nanyx.console = "0.28.0"` is
-    /// `(package = "nanyx.console", version = "0.28.0")`.
-    let private packageEntry (directive: Directive) (name: string list) (value: obj) : DataValue =
-        let field fieldName value = { Name = fieldName; NameSpan = directive.Span; Value = value }
-        let package = field "package" { Data = DataString(String.concat "." name); Location = directive.Span }
-        let fields =
-            match dataOf directive.Span value with
-            | { Data = DataRecord fields } -> fields
-            | version -> [ field "version" version ]
-        { Data = DataRecord(package :: fields); Location = directive.Span }
+    /// A string in a directive written the old way, `"error"`, without its quotes.
+    let private oldString = "\"([^\"\\\\]*)\""
 
-    /// What a directive says: a linter setting, the script's host, or a package it depends on.
-    type private Setting =
-        | LinterSetting of Linter * (string * Severity option) option
-        | HostSetting of DataValue
-        | DependencySetting of DataValue
+    /// The lines `text`, a directive written the old way, as a manifest's dotted key with a TOML value, is written as
+    /// now, if it can be read: `::host.nanyx.console = "0.28.0"` is `::host nanyx.console 0.28.0`. `linterAbove` says
+    /// whether a linter is turned on above it already, so a rule's severity needs no `::linter` of its own.
+    let private rewritten (linterAbove: bool) (text: string) : string option =
+        let matching (pattern: string) = Regex.Match(text, $@"^::{pattern}\s*$")
+        let linterPackage (name: string) = Linters.all |> List.tryFind (fun linter -> linter.Name = name) |> Option.map _.Package
+        let place (path: string) =
+            if path.StartsWith "." || path.StartsWith "/" || Path.IsPathRooted path then path else "./" + path
+        let linterOn = matching @"linters\.(\w+)"
+        let rule = matching $@"linters\.(\w+)\.(\w+)\s*=\s*{oldString}"
+        let format = matching @"formatter\.(\w+)\s*=\s*([0-9]+)"
+        let atVersion = matching $@"(host|dependencies)\.([\w.]+)\s*=\s*{oldString}"
+        let atPath = matching $@"(host|dependencies)\.([\w.]+)\s*=\s*\{{\s*path\s*=\s*{oldString}\s*\}}"
+        let named (table: string) = if table = "host" then "host" else "dependency"
+        if linterOn.Success then
+            linterPackage linterOn.Groups[1].Value |> Option.map (fun package -> $"::linter {package}")
+        elif rule.Success then
+            linterPackage rule.Groups[1].Value
+            |> Option.map (fun package ->
+                let lint = $"::lint {rule.Groups[2].Value} #{rule.Groups[3].Value}"
+                if linterAbove then lint else $"::linter {package}\n{lint}")
+        elif format.Success then
+            Some $"::format {format.Groups[1].Value} {format.Groups[2].Value}"
+        elif atVersion.Success then
+            Some $"::{named atVersion.Groups[1].Value} {atVersion.Groups[2].Value} {atVersion.Groups[3].Value}"
+        elif atPath.Success then
+            Some $"::{named atPath.Groups[1].Value} {atPath.Groups[2].Value} {place atPath.Groups[3].Value}"
+        else
+            None
 
-    /// The build `settings` make, if they name a host or dependencies, for the script at `filePath`, whose imports by
-    /// path, and the directories its directives give, are relative to its directory; or what is wrong with them.
-    let private build (filePath: string) (directives: (Directive * Setting) list) : Result<PackageModules option, Diagnostic list> =
+    /// The error for `directive`, written the old way, with a fix that writes it as it is written now, if it can be read.
+    /// A comment after it stays.
+    let private oldFormError (linterAbove: bool) (directive: Directive) : Diagnostic =
+        let written = match List.tryLast directive.Words with Some last -> last.Span.End | None -> directive.Span.End
+        match rewritten linterAbove (directive.Text.Substring(0, written - directive.Span.Start)) with
+        | Some now ->
+            { Diagnostics.at
+                  DiagnosticCodes.OldFormDirective
+                  directive.Span
+                  $"Directives are lines of words now, not a manifest's key and a TOML value: write {now.Replace('\n', ' ')}" with
+                Fixes = [ { Title = $"Write `{now.Replace('\n', ' ')}`"; Edits = [ { Span = { directive.Span with End = written }; NewText = now } ] } ] }
+        | None ->
+            Diagnostics.at
+                DiagnosticCodes.OldFormDirective
+                directive.Span
+                $"Directives are lines of words now, not a manifest's key and a TOML value: ::host {Hosts.consolePackage}, ::dependency acme.util ../util, ::linter nanyx.lint, ::lint unusedBindings #error, ::format lineWidth 100"
+
+    /// The error for a `::lint` with no `::linter` above it, with a fix that turns on the official linter above it.
+    let private lintWithoutLinter (directive: Directive) : Diagnostic =
+        let official = Linters.all |> List.map _.Package |> List.head
+        { Diagnostics.at
+              DiagnosticCodes.LintWithoutLinter
+              directive.Span
+              $"::lint sets a rule of the linter of the nearest ::linter above it, but there is none: turn one on above it, ::linter {official}" with
+            Fixes = [ { Title = $"Add `::linter {official}` above"; Edits = [ { Span = { directive.Span with End = directive.Span.Start }; NewText = $"::linter {official}\n" } ] } ] }
+
+    /// What each of `directives` says, in order, or what is wrong with it. A `::lint` is for the linter of the nearest
+    /// `::linter` above it.
+    let settings (directives: Directive list) : (Directive * Result<DirectiveSetting, Diagnostic>) list =
+        directives
+        |> List.mapFold
+            (fun (linter: DirectiveWord option, linterAbove: bool) (directive: Directive) ->
+                let setting, linter =
+                    match directive.Name with
+                    | _ when directive.IsOldForm -> Result.Error(oldFormError linterAbove directive), linter
+                    | "host" -> packageOf directive |> Result.map HostSetting, linter
+                    | "dependency" -> packageOf directive |> Result.map DependencySetting, linter
+                    | "linter" ->
+                        match packageOf directive with
+                        | Result.Ok (_, AtPath path) ->
+                            Result.Error(invalid path.Span "a linter can't be found by its directory yet: the linters are the ones the compiler ships, ::linter nanyx.lint"), linter
+                        | Result.Ok (package, place) -> Result.Ok(LinterSetting(package, place)), Some package
+                        | Result.Error error -> Result.Error error, linter
+                    | "lint" ->
+                        match directive.Arguments, linter with
+                        | [ rule; severity ], Some linter -> valueOf directive severity |> Result.map (fun severity -> LintSetting(linter, rule, severity)), Some linter
+                        | [ _; _ ], None -> Result.Error(lintWithoutLinter directive), linter
+                        | _ -> Result.Error(invalid directive.Span (usage "lint")), linter
+                    | "format" ->
+                        match directive.Arguments with
+                        | [ key; value ] -> valueOf directive value |> Result.map (fun value -> FormatSetting(key, value)), linter
+                        | _ -> Result.Error(invalid directive.Span (usage "format")), linter
+                    | "" -> Result.Error(invalid directive.Span $"a directive is a name and the words it takes after '::': the directives are {directiveList}"), linter
+                    | name -> Result.Error(invalid directive.Words.Head.Span $"unknown directive ::{name}; the directives are {directiveList}"), linter
+                let linterAbove = linterAbove || linter.IsSome || (directive.IsOldForm && directive.Name.StartsWith "linters.")
+                (directive, setting), (linter, linterAbove))
+            (None, false)
+        |> fst
+
+    /// The entry the package `package`, found at `place`, is in a manifest, written at `span`, with `fields` after it:
+    /// `::dependency acme.util ../util` is `(package = "acme.util", path = "../util")`. A package the compiler ships,
+    /// named with neither, is named at the compiler's version.
+    let private entryOf (span: SourceSpan) (package: DirectiveWord) (place: DirectivePlace) (fields: DataField list) : DataValue =
+        let field name (word: DirectiveWord) = { Name = name; NameSpan = word.Span; Value = { Data = DataString word.Text; Location = word.Span } }
+        let where =
+            match place with
+            | AtVersion version -> field "version" version
+            | AtPath path -> field "path" path
+            | Shipped -> field "version" { Text = Toolchain.version; Span = package.Span }
+        { Data = DataRecord([ field "package" package; where ] @ fields); Location = span }
+
+    /// The linter options the `::linter` and `::lint` directives of `settings` make, as the manifest's `linters` their
+    /// entries stand for would, with what is wrong with them; none when there is no `::linter`.
+    let private linters (settings: (Directive * DirectiveSetting) list) : LinterOptions option * Diagnostic list =
+        let linters = settings |> List.choose (function directive, LinterSetting(package, place) -> Some(directive, package, place) | _ -> None)
+        match linters with
+        | [] -> None, []
+        | (first, _, _) :: _ ->
+            let entry (directive: Directive, package: DirectiveWord, place) =
+                let rules =
+                    settings
+                    |> List.choose (function
+                        | _, LintSetting(linter, rule, severity) when linter.Span = package.Span -> Some { Name = rule.Text; NameSpan = rule.Span; Value = severity }
+                        | _ -> None)
+                let record (fields: DataField list) = { Data = DataRecord fields; Location = directive.Span }
+                let settingsField =
+                    match rules with
+                    | [] -> []
+                    | _ -> [ { Name = "settings"; NameSpan = directive.Span; Value = record [ { Name = "rules"; NameSpan = directive.Span; Value = record rules } ] } ]
+                entryOf directive.Span package place settingsField
+            let options, errors = Manifest.linterEntries { Data = DataList(linters |> List.map entry); Location = first.Span }
+            Some options, errors
+
+    /// The build the `::host` and `::dependency` directives of `settings` make, if there are any, for the script at
+    /// `filePath`, whose imports by path, and the directories its directives give, are relative to its directory; or
+    /// what is wrong with them.
+    let private build (filePath: string) (settings: (Directive * DirectiveSetting) list) : Result<PackageModules option, Diagnostic list> =
         let root = if filePath = "" then Directory.GetCurrentDirectory() else Path.GetDirectoryName filePath
-        let hosts = directives |> List.choose (function directive, HostSetting entry -> Some (directive, entry) | _ -> None)
-        let dependencies = directives |> List.choose (function directive, DependencySetting entry -> Some (directive, entry) | _ -> None)
+        let notShipped (package: DirectiveWord) place =
+            match place with
+            | Shipped when not (isShipped package.Text) ->
+                let last = package.Text.Substring(package.Text.LastIndexOf '.' + 1)
+                [ invalid package.Span $"the compiler ships no package '{package.Text}': give the directory it is in, ../{last}" ]
+            | _ -> []
+        let hosts = settings |> List.choose (function directive, HostSetting(package, place) -> Some (directive, package, place) | _ -> None)
+        let dependencies = settings |> List.choose (function directive, DependencySetting(package, place) -> Some (directive, package, place) | _ -> None)
         match hosts, dependencies with
         | [], [] -> Result.Ok None
-        | (first, _) :: _, _
-        | [], (first, _) :: _ ->
+        | (first, _, _) :: _, _
+        | [], (first, _, _) :: _ ->
             let twice =
                 hosts
                 |> List.skip (min 1 hosts.Length)
-                |> List.map (fun (directive, _) -> Diagnostics.at DiagnosticCodes.InvalidDirective directive.Span "a script runs under one host, which one ::host names")
+                |> List.map (fun (directive, _, _) -> invalid directive.Span "a script runs under one host, which one ::host names")
+            let unshipped = (hosts |> List.truncate 1) @ dependencies |> List.collect (fun (_, package, place) -> notShipped package place)
             let host, hostErrors =
                 match hosts with
-                | (_, entry) :: _ ->
-                    match Manifest.hostEntry root entry with
+                | (directive, package, place) :: _ when unshipped.IsEmpty ->
+                    match Manifest.hostEntry root (entryOf directive.Span package place []) with
                     | Result.Ok host -> Some host, []
                     | Result.Error errors -> None, errors
-                | [] -> None, []
+                | _ -> None, []
             let dependencies, dependencyErrors =
-                Manifest.dependencyEntries root { Data = DataList(dependencies |> List.map snd); Location = first.Span }
-            match twice @ hostErrors @ dependencyErrors with
+                if unshipped.IsEmpty then
+                    Manifest.dependencyEntries root { Data = DataList(dependencies |> List.map (fun (directive, package, place) -> entryOf directive.Span package place [])); Location = first.Span }
+                else
+                    [], []
+            match twice @ unshipped @ hostErrors @ dependencyErrors with
             | [] -> Package.scriptModules filePath first.Span host dependencies |> Result.map Some
             | errors -> Result.Error errors
 
@@ -140,51 +259,16 @@ module Script =
         | _ when directives.IsEmpty -> { Linters = None; Build = None; Diagnostics = [] }
         | Some manifest -> { Linters = None; Build = None; Diagnostics = Package.directiveErrors manifest filePath source }
         | None ->
-            let invalid (directive: Directive) message = Result.Error(Diagnostics.at DiagnosticCodes.InvalidDirective directive.Span message)
-            let packageSetting (directive: Directive) (setting: DataValue -> Setting) (usage: string) =
-                match directive.Key, directive.Value with
-                | _ :: (_ :: _ as name), Some (Result.Ok value) -> Result.Ok(Some(setting (packageEntry directive name value)))
-                | _ :: _ :: _, Some (Result.Error message) -> invalid directive message
-                | _ -> invalid directive usage
-            let read (directive: Directive) =
-                match directive.Key, directive.Value with
-                | "linters" :: _, _ ->
-                    linterSetting directive
-                    |> Result.map (LinterSetting >> Some)
-                    |> Result.mapError (Diagnostics.at DiagnosticCodes.InvalidDirective directive.Span)
-                | "formatter" :: _, _ -> Result.Ok None
-                | "host" :: _, _ ->
-                    packageSetting
-                        directive
-                        HostSetting
-                        $"::host takes a host and its version, as a manifest's host does: ::host.{Hosts.consolePackage} = \"{Toolchain.version}\", or ::host.acme.server = {{ path = \"../server\" }}"
-                | "dependencies" :: _, _ ->
-                    packageSetting
-                        directive
-                        DependencySetting
-                        $"::dependencies takes a package and where it is, as a manifest's dependencies does: ::dependencies.acme.json = {{ path = \"../json\" }}, or ::dependencies.nanyx.console.core = \"{Toolchain.version}\""
-                | [], _ ->
-                    invalid
-                        directive
-                        $"a directive is a manifest's dotted key after '::', with '= value' to set a value: ::linters.default, or ::formatter.lineWidth = 80; the tables are {tableList}"
-                | table :: _, _ -> invalid directive $"unknown directive ::{table}; the tables are {tableList}"
-            let results = directives |> List.map (fun directive -> directive, read directive)
-            let settings = results |> List.choose (function directive, Result.Ok (Some setting) -> Some (directive, setting) | _ -> None)
-            let linterSettings = settings |> List.choose (function _, LinterSetting (linter, severity) -> Some (linter, severity) | _ -> None)
+            let results = settings directives
+            let read = results |> List.choose (function directive, Result.Ok setting -> Some (directive, setting) | _, Result.Error _ -> None)
+            let linters, linterErrors = linters read
             let build, buildErrors =
-                match build filePath settings with
+                match build filePath read with
                 | Result.Ok build -> build, []
                 | Result.Error errors -> None, errors
-            { Linters =
-                if linterSettings.IsEmpty then
-                    None
-                else
-                    // In the order the compiler has them, as for a manifest.
-                    Some
-                        { Linters = Linters.all |> List.filter (fun linter -> linterSettings |> List.exists (fun (a, _) -> a.Name = linter.Name))
-                          Severities = linterSettings |> List.choose snd |> Map.ofList }
+            { Linters = linters
               Build = build
-              Diagnostics = (results |> List.choose (function _, Result.Error diagnostic -> Some diagnostic | _, Result.Ok _ -> None)) @ buildErrors }
+              Diagnostics = (results |> List.choose (function _, Result.Error diagnostic -> Some diagnostic | _, Result.Ok _ -> None)) @ linterErrors @ buildErrors }
 
     /// `result` with the problems with `directives` before its own diagnostics. An error in a directive is not
     /// deferred: it stops a debug run too.
@@ -194,7 +278,7 @@ module Script =
             ErrorsDeferred = result.ErrorsDeferred && not (directives.Diagnostics |> List.exists Diagnostics.isError) }
 
     /// Compiles `source` as the file at `filePath` with the linters `options` gives, in the build `directives` make, if
-    /// they make one: under the host its `::host` names, importing from the packages its `::dependencies` list. Otherwise
+    /// they make one: under the host its `::host` names, importing from the packages its `::dependency` lines name. Otherwise
     /// it is compiled as `Package.compileSourceReading` compiles it. Each module's check is reported to `listener`, and
     /// each other file it needs is read by `readFile`.
     let compileSourceReading

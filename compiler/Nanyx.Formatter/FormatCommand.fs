@@ -111,13 +111,13 @@ let private decode (bytes: byte array) =
     Encoding.UTF8.GetString(bytes, (if hasBom then 3 else 0), bytes.Length - (if hasBom then 3 else 0)), hasBom
 
 /// Formats `text`, the source of the file at `file`, with the options `settings` gives for it (see `Settings.cached`)
-/// and its `::formatter` directives give (see `Settings.withDirectives`).
+/// and its `::format` directives give (see `Settings.withDirectives`).
 let private formatWith (settings: string -> Result<Formatter.Options, string>) (file: string) (text: string) : Formatting =
     match settings file |> Result.bind (Settings.withDirectives file text) with
     | Result.Error message -> BadSettings message
     | Result.Ok options -> formatText options file text
 
-/// Formats each file with the options `settings` gives for it (see `Settings.cached`) and its `::formatter` directives
+/// Formats each file with the options `settings` gives for it (see `Settings.cached`) and its `::format` directives
 /// give (see `Settings.withDirectives`), rewriting the ones that change
 /// in write mode (keeping a byte order mark if there was one), and leaving alone any whose settings are not valid, that
 /// do not parse, or that the formatter cannot format safely.
@@ -137,7 +137,7 @@ let inputName = "<stdin>"
 
 /// `nanyx format -`, for an editor to format a buffer without writing it to a file: formats the text read from `input`
 /// (standard input) as a file named `inputName` in `directory` (the current one), with the settings of a file there, and
-/// its own `::formatter` directives. In write mode it writes the result to `output` (standard output): the text as it
+/// its own `::format` directives. In write mode it writes the result to `output` (standard output): the text as it
 /// was if it is formatted already, with the byte order mark it had, and nothing if it could not be formatted. Check
 /// mode writes nothing.
 let runInput (settings: string -> Result<Formatter.Options, string>) (mode: Mode) (directory: string) (input: Stream) (output: Stream) : string * FileResult =

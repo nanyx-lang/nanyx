@@ -61,18 +61,19 @@ A linter runs only if the manifest has an entry for it, so removing the `nanyx.l
 linters = [(package = "nanyx.lint", version = "0.28.0")]
 ```
 
-A single file run on its own (`nanyx run script.nyx`) has no manifest, so it turns its linters on with `::linters` directives at the top of the file; without any, it runs none. `::linters.default` turns the default linter on, as its entry without `settings` would, and `::linters.default.unusedBindings = "error"` sets one rule's severity. As in a manifest, only the linters the directives name run:
+A single file run on its own (`nanyx run script.nyx`) has no manifest, so it turns its linters on with `::linter` directives at the top of the file; without any, it runs none. `::linter nanyx.lint` turns the official linter on, as its entry without `settings` would, and each `::lint` line under it sets one of its rules' severity, `::lint unusedBindings #error`. A `::lint` line is for the linter of the nearest `::linter` above it. As in a manifest, only the linters the directives name run:
 
 ```nanyx
-::linters.default.unusedBindings = "error"
-::linters.default.nonTailRecursion = "off"
+::linter nanyx.lint
+::lint unusedBindings #error
+::lint nonTailRecursion #off
 
 println("Hello!")
 ```
 
 `nanyx run` shows only errors and warnings before it runs the program. Info and hint diagnostics are suggestions for code you are working on, so `nanyx check` and the editor show them.
 
-The severities are `#error`, `#warning`, `#info` and `#hint` in a manifest, and `"error"`, `"warning"`, `"info"` and `"hint"` in a directive. A linter or rule the compiler does not know is an error in the manifest, so a misspelt name never silently does nothing. You can suppress a specific rule by setting its severity to `#off` (`"off"` in a directive):
+The severities are `#error`, `#warning`, `#info` and `#hint`, in a manifest and in a directive alike. A linter or rule the compiler does not know is an error in the manifest, so a misspelt name never silently does nothing. You can suppress a specific rule by setting its severity to `#off`:
 
 ```nanyx fragment
 settings = (rules = (shadowedPreludeNames = #off))

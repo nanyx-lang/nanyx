@@ -43,9 +43,9 @@ let ``The import goes after the module line when there are no imports`` () =
 
 [<Fact>]
 let ``The import goes after the directives when there are no imports, since directives come before any code`` () =
-    let source = "#!/usr/bin/env nanyx\n::linters.default\n\ndef a = sqrt(4.0)\n"
+    let source = "#!/usr/bin/env nanyx\n::linter nanyx.lint\n\ndef a = sqrt(4.0)\n"
     Assert.Equal<(string * string) list>(
-        [ "Add `import nanyx/math`", "#!/usr/bin/env nanyx\n::linters.default\n\nimport nanyx/math\n\ndef a = sqrt(4.0)\n" ],
+        [ "Add `import nanyx/math`", "#!/usr/bin/env nanyx\n::linter nanyx.lint\n\nimport nanyx/math\n\ndef a = sqrt(4.0)\n" ],
         fixesFor source)
 
 [<Fact>]

@@ -1,5 +1,5 @@
 /// The formatter's settings for a file: the `formatter` field of the package's `.nyxp` manifest, the nearest one in
-/// the file's directory or above it, or for a script its `::formatter` directives. Only that field is read; the rest of
+/// the file's directory or above it, or for a script its `::format` directives. Only that field is read; the rest of
 /// the manifest is the compiler's.
 module Nanyx.Formatter.Settings
 
@@ -54,41 +54,30 @@ let forFile (path: string) : Result<Formatter.Options, string> =
         | Some manifest -> read manifest
         | None -> Result.Ok Formatter.Options.defaults)
 
-/// A directive's value, a TOML value, as an error message names it.
-let private describe (value: obj) =
-    match value with
-    | :? int64 as n -> string n
-    | :? string as s -> $"the string \"{s}\""
-    | :? float -> "a float"
-    | :? bool -> "a boolean"
-    | :? Tomlyn.Model.TomlTable -> "a table"
-    | :? Tomlyn.Model.TomlArray -> "an array"
-    | _ -> "a date or time"
-
-/// `options` with the `::formatter` directives at the top of `text`, the source of the file at `path`, applied:
-/// `::formatter.lineWidth = 100`. They are a script's `formatter` field, so a file in a package may not have any; the
+/// `options` with the `::format` directives at the top of `text`, the source of the file at `path`, applied:
+/// `::format lineWidth 100`. They are a script's `formatter` field, so a file in a package may not have any; the
 /// other directives are the compiler's. An error names the file, the line and the directive.
 let withDirectives (path: string) (text: string) (options: Formatter.Options) : Result<Formatter.Options, string> =
     let manifest =
         if path = "" then Result.Ok None else manifestIn (Path.GetDirectoryName(Path.GetFullPath path))
     let directives =
-        Parser.Program.Header.Directives.read path text |> List.filter (fun directive -> List.tryHead directive.Key = Some "formatter")
+        Parser.Program.Header.Directives.read path text |> List.filter (fun directive -> directive.Name = "format")
     (Result.Ok options, directives)
     ||> List.fold (fun options directive ->
         options
         |> Result.bind (fun options ->
             let error message = Result.Error $"{path}:{directive.Span.StartLine + 1}:1: {message}"
-            let positive (key: string) (value: Result<obj, string>) =
-                match value with
-                | Result.Ok (:? int64 as n) when n > 0L && n <= int64 Int32.MaxValue -> Result.Ok(int n)
-                | Result.Ok value -> error $"::formatter.{key} must be a positive integer, not {describe value}"
-                | Result.Error message -> error message
-            match manifest, directive.Key, directive.Value with
-            | Result.Ok (Some manifest), _, _ -> error $"::formatter is for a script; in a package, set it in the formatter field of {manifest}"
-            | _, [ _; "lineWidth" as key ], Some value -> positive key value |> Result.map (fun n -> { options with LineWidth = n })
-            | _, [ _; "indentSize" as key ], Some value -> positive key value |> Result.map (fun n -> { options with IndentSize = n })
-            | _, [ _; key ], Some _ -> error $"unknown setting ::formatter.{key}; the settings are lineWidth and indentSize"
-            | _ -> error "::formatter takes a setting and its value: ::formatter.lineWidth = 100"))
+            let positive (key: string) (word: Parser.Program.Header.DirectiveWord) =
+                match DataValue.ofWord word with
+                | Some { Data = DataInt n } when n > 0I && n <= bigint Int32.MaxValue -> Result.Ok(int n)
+                | Some value -> error $"::format {key} must be a positive integer, not {DataValue.describe value}"
+                | None -> error $"::format {key} must be a positive integer, not '{word.Text}'"
+            match manifest, directive.Arguments |> List.map (fun word -> word.Text, word) with
+            | Result.Ok (Some manifest), _ -> error $"::format is for a script; in a package, set it in the formatter field of {manifest}"
+            | _, [ "lineWidth" as key, _; _, value ] -> positive key value |> Result.map (fun n -> { options with LineWidth = n })
+            | _, [ "indentSize" as key, _; _, value ] -> positive key value |> Result.map (fun n -> { options with IndentSize = n })
+            | _, [ key, _; _ ] -> error $"unknown setting ::format {key}; the settings are lineWidth and indentSize"
+            | _ -> error "::format takes a setting and its value: ::format lineWidth 100"))
 
 /// `forFile`, reading each manifest once, for formatting many files.
 let cached () : string -> Result<Formatter.Options, string> =
