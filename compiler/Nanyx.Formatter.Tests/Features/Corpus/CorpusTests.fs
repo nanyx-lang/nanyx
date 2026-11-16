@@ -4,31 +4,16 @@ module Nanyx.Formatter.Tests.CorpusTests
 
 open System
 open System.IO
-open System.Text.RegularExpressions
 open Xunit
 open Parser.Program
 open Nanyx.Formatter
+open Nanyx.Parser
 
-let private repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", ".."))
-
-let private skipped = [ "bin"; "obj"; "node_modules"; ".git"; ".claude" ]
+let private repositoryRoot = Corpus.repositoryRoot
 
 /// Each `.nyx` file and each `nanyx` code block in the docs, with a name to report it by.
 let private corpus =
-    lazy
-        let isSkipped (path: string) =
-            path.Split([| '/'; '\\' |]) |> Array.exists (fun part -> List.contains part skipped)
-        let files =
-            Directory.EnumerateFiles(repositoryRoot, "*.nyx", SearchOption.AllDirectories)
-            |> Seq.filter (fun path -> not (isSkipped (Path.GetRelativePath(repositoryRoot, path))))
-            |> Seq.map (fun path -> Path.GetRelativePath(repositoryRoot, path), File.ReadAllText path)
-        let codeBlock = Regex(@"```nanyx[^\n]*\n(.*?)```", RegexOptions.Singleline)
-        let docs =
-            Directory.EnumerateFiles(Path.Combine(repositoryRoot, "docs", "src", "content"), "*.md", SearchOption.AllDirectories)
-            |> Seq.collect (fun path ->
-                let name = Path.GetRelativePath(repositoryRoot, path)
-                codeBlock.Matches(File.ReadAllText path) |> Seq.mapi (fun index m -> $"{name} (block {index + 1})", m.Groups[1].Value))
-        Seq.append files docs |> List.ofSeq
+    lazy ((Corpus.files.Value @ Corpus.docBlocks.Value) |> List.map (fun piece -> piece.Name, piece.Source))
 
 /// The pieces that parse, as their name, source and parse.
 let private parsed =
@@ -73,26 +58,12 @@ let ``Formatting keeps every comment, in order`` () =
 
 /// The docs' code blocks that are whole programs, as their name and source: those fenced ```nanyx alone, not
 /// ```nanyx fragment, ```nanyx skip=#<issue> or ```nanyx unformatted (the Formatter page's before-and-after examples),
-/// and with no `-- error` comment, which marks code that is wrong on purpose and is laid out to show where. A block
-/// indented in a list loses its fence's indent.
+/// and with no `-- error` comment, which marks code that is wrong on purpose and is laid out to show where.
 let private docsPrograms =
     lazy
-        let codeBlock = Regex(@"^([ \t]*)```nanyx([^\n]*)\n(.*?)^[ \t]*```", RegexOptions.Singleline ||| RegexOptions.Multiline)
-        Directory.EnumerateFiles(Path.Combine(repositoryRoot, "docs", "src", "content"), "*.md", SearchOption.AllDirectories)
-        |> Seq.collect (fun path ->
-            let text = (File.ReadAllText path).ReplaceLineEndings "\n"
-            codeBlock.Matches text
-            |> Seq.filter (fun m -> m.Groups[2].Value.Trim() = "")
-            |> Seq.map (fun m ->
-                let indent = m.Groups[1].Value.Length
-                let line = text.Substring(0, m.Index).Split('\n').Length
-                let source =
-                    m.Groups[3].Value.Split('\n')
-                    |> Array.map (fun l -> if l.Length >= indent && String.IsNullOrWhiteSpace(l.Substring(0, indent)) then l.Substring indent else l.TrimStart())
-                    |> String.concat "\n"
-                $"{Path.GetRelativePath(repositoryRoot, path)}:{line}", source))
-        |> Seq.filter (fun (_, source) -> not (source.Contains "-- error"))
-        |> List.ofSeq
+        Corpus.docBlocks.Value
+        |> List.filter (fun piece -> piece.Origin = Corpus.DocBlock "" && not (piece.Source.Contains "-- error"))
+        |> List.map (fun piece -> piece.Name, piece.Source)
 
 [<Fact>]
 let ``The examples and the docs' code blocks are formatted`` () =

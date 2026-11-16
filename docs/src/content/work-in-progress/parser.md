@@ -64,12 +64,19 @@ merge. Each stage below lands on its own, keeps every test passing, and is usefu
 never happens. The syntax tree (`Ast.fs`) does not change in stages 1 to 4, so the type checker, the backend, the
 formatter and the language server need no change until the parser underneath them is replaced.
 
-## Stage 0: prepare
+## Stage 0: prepare (done)
 
-- **A corpus.** Every `.nyx` file in `stdlib/` and `examples/`, the code blocks in `docs/`, and the sources in the
-  parser and formatter tests.
-- **A differential test.** It parses each corpus file with two parsers and asserts that the syntax trees are equal,
-  ignoring node ids. Every later stage is checked by it.
+- **A corpus** (done: `Corpus.fs` in `compiler/Nanyx.Parser.Corpus`, a library only the test projects reference).
+  Every `.nyx` file in the repository (the standard library, the packages, the examples, scratch files and test
+  inputs), every ` ```nanyx ` block in the docs, and every triple-quoted string in the test projects' sources: about
+  4,200 pieces, nine in ten of which parse. The formatter's corpus tests read the files and the docs' blocks from it
+  too.
+- **A differential test** (done: `Differential.fs`, with `CorpusTests.fs` in the parser's tests). It parses each
+  piece with two parsers, writes each result out with every span and without node ids (`SyntaxDump.fs`, which walks
+  the tree by reflection, so it needs no change when `Ast.fs` does), and reports the pieces whose trees, comments,
+  blank lines or errors differ, each at its first differing line. Until there is a second parser it runs today's
+  parser against itself, which checks that a parse depends on nothing but its source. Every later stage is checked
+  by it.
 - **The refactors already filed**, which shrink what has to be ported: name the desugared calls in one place
   (done: the `...Syntax` modules in `Ast.fs`, [#367](https://github.com/nanyx-lang/nanyx/issues/367)), keep one list of reserved words
   (done: `Keywords.reserved` in `Keywords.fs`, [#541](https://github.com/nanyx-lang/nanyx/issues/541)), build the parser's and formatter's operator tables from one
