@@ -326,7 +326,17 @@ Each call to `twice` then finds a `Show` for the type it is called with, as a ca
 
 This is also how scoped mutation is enforced: values that still require `memory` cannot escape into code that does not provide that context. See [Memory: Values cannot escape memory scope](../advanced/memory#values-cannot-escape-memory-scope).
 
-A type can also belong to a scoped context's scope, as [Types in a scope](#types-in-a-scope) describes. A type declared generic in contexts is planned in [Work in progress: Context-qualified types](../work-in-progress/context-qualified-types).
+A type can also belong to a scoped context's scope, as [Types in a scope](#types-in-a-scope) describes, or be generic in contexts, as [Types generic in contexts](#types-generic-in-contexts) does. No other type carries contexts: a record, a tuple, a list or a tag that holds a lambda doesn't take on the lambda's contexts. Each function inside it keeps its own, and calling it requires them where it's called:
+
+```nanyx
+def handlers = (log = { (m: string) -> println(m) }, count = { (n: int) -> n + 1 })
+
+def pureCaller: () -> int = {
+  handlers.count(1) -- fine: count requires nothing
+}
+```
+
+Holding or passing `handlers` requires nothing, and building it doesn't run its lambdas, so a top-level value like it needs no context to be computed. Calling `handlers.log` in a function that doesn't declare `Console` is an error (`NYX0211`).
 
 # Combining contexts
 
@@ -373,7 +383,19 @@ def lerp = { a, b, t -> a + (b - a) * t } -- [Num(a)] a, a, a -> a
 def inc = { x -> x + 1 } -- int -> int: `1` is an int
 ```
 
-Adding and multiplying values of one type needs `Num` alone, which has every member of `Add`. A function inside another function requires no contexts, so its arithmetic is on ints or floats. For now the same goes for a function with operators on two different type variables, and for one the module passes as a value, as `add` in `xs \list.fold(0, add)`: see [Operator contexts](../work-in-progress/operator-contexts#functions-that-do-not-write-their-type).
+Adding and multiplying values of one type needs `Num` alone, which has every member of `Add`. A function inside another function that doesn't write its type requires no contexts, so its arithmetic is on ints or floats. For now the same goes for a top-level function the module passes as a value, as `add` in `xs \list.fold(0, add)`, which stays `int, int -> int` ([#1693](https://github.com/nanyx-lang/nanyx/issues/1693)); write its type, `[Add(a)] a, a -> a`, to make it generic.
+
+Operators on two of a function's type variables need the contexts of each, and each operator calls the member of its own variable's instance, though both members have one name:
+
+```nanyx
+def both: [Add(a), Add(b)] a, a, b, b -> (a, b) = { x, y, p, q ->
+  (x + y, p + q)
+}
+
+def r = { x, y, p, q -> (x + y, p * q) } -- [Add(a), Num(b)] a, a, b, b -> (a, b)
+```
+
+`both(1, 2, 1.5, 2.5)` adds the ints with `Add(int)` and the floats with `Add(float)`.
 
 Where a function's operators don't fit one context, its type lists the contexts they need: `[Ord(a), Add(a)]`. A context list holds contexts and context variables only; requiring an operator by its member, as in `` [`+`: a, a -> a] ``, is an error (`NYX0251`) whose fix writes the context that has it, `Add(a)`.
 
@@ -402,6 +424,10 @@ def contains: [Eq(a)] list(a), a -> bool = { xs, target ->
 ```
 
 A function that does not write its type has the requirement inferred: `def same = { x, y -> x == y }` is `[Eq(a)] a, a -> bool`. Comparing a type built from a variable requires `Eq` of the variable, so `==` on two `list(a)` needs `Eq(a)`.
+
+Comparing with a tag doesn't make the other operand that tag: `def isNone = { o -> o == #none }` is `#none | r -> bool`, so `isNone(#some(3))` is `false`, as a `match` would join the two. A function whose type has an open union, as `isNone`'s does, needs no `Eq` written for its rest: each call checks that the tags it passes can be compared. The official linter [warns](../standard-tools/official-linter#comparison-that-is-always-false) when two closed types have no tag in common, as in `#red == #some(1)`, which is always false.
+
+Floats follow IEEE 754: `0.0 == -0.0` is `true`, and `NaN == NaN` is `false`.
 
 A nominal type can attach its own `==`, which `a == b` on it, and a function that requires `Eq`, then use for it:
 

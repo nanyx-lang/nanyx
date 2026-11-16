@@ -7,6 +7,9 @@ order: 9
 > **Status: implemented for the arithmetic operators and `++`.** `Nanyx.Compiler/OperatorContexts.fs` finds an
 > operator's context, `ArithmeticInference.fs` infers the requirement for a function that does not write its type, and
 > `InlineContexts.fs` reports a requirement written as a member (`NYX0251`), which the language no longer has. What is left is under [Not done yet](#not-done-yet).
+> The language docs describe the rule in [Operators find their context](../advanced/contexts#operators-find-their-context),
+> and the prelude rule in [AGENTS.md](https://github.com/nanyx-lang/nanyx/blob/main/AGENTS.md#nanyx-code); this page
+> keeps how it is built.
 
 # The idea
 
@@ -89,14 +92,11 @@ Two cases keep their operators on ints, as they were, because the requirement co
 - **A local function requires no contexts**, so an operator on a type a local function would be generic in is on
   ints: in `def twice = { v -> v + v }` inside another function, `v` is an `int`.
 
-- **A function the module names as a value**, as `add` is in `xs \list.fold(0, add)`. A function that requires a
-  parameterised context cannot be a value yet ([#599](https://github.com/nanyx-lang/nanyx/issues/599)), so `add`
-  stays `int, int -> int` there. Only the module's own text is looked at: an exported function another module
-  passes as a value has its requirement inferred, and that module fails in the backend, as #599 describes. An
-  exported function should write its type.
-
-This replaces the numeric contexts page's "unannotated arithmetic is unchanged": `{ x, y -> x + y }` was
-`int, int -> int`.
+- **A function the module names as a value**, as `add` is in `xs \list.fold(0, add)`, stays `int, int -> int`
+  there (`namedAsValue`). This was because a function that requires a parameterised context could not be a value
+  ([#599](https://github.com/nanyx-lang/nanyx/issues/599)); that is done, and the fallback is left to remove
+  ([#1693](https://github.com/nanyx-lang/nanyx/issues/1693)). Only the module's own text is looked at: an exported
+  function another module passes as a value has its requirement inferred.
 
 ## How it is inferred
 
@@ -164,8 +164,9 @@ prelude, or a member to one:
   parameterised context is inferred to require it ([#550](https://github.com/nanyx-lang/nanyx/issues/550)), but an
   operator in a local def that does not write its type is not inferred to need its context: the def is not generic in
   it.
-- **Functions named as values**: they wait on [#599](https://github.com/nanyx-lang/nanyx/issues/599). When that
-  lands, the fallback in `ArithmeticInference.generalize` (`namedAsValue`) goes.
+- **Functions named as values**: the fallback in `ArithmeticInference.generalize` (`namedAsValue`) is to go, now
+  that [#599](https://github.com/nanyx-lang/nanyx/issues/599) is done
+  ([#1693](https://github.com/nanyx-lang/nanyx/issues/1693)).
 - **Calling one of two members of one name by its name.** An operator on a type variable calls its variable's
   instance's member, but a call written with the member's name has only the name to go by. The plan is to write
   the instance, `Log(string).write(...)`.
