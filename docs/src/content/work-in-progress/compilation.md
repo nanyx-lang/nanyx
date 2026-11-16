@@ -22,7 +22,7 @@ of progress is simple: a program the documentation describes should parse, type-
 | WebAssembly backend | `Nanyx.Compiler.Wasm` |
 | Runtime | `Nanyx.Compiler.Runtime` |
 | CLI | `Nanyx.Compiler.Cli` |
-| Standard library | `stdlib/nanyx/`, and the intrinsics it needs |
+| Standard library | `stdlib/nanyx/`, and the intrinsics it needs; checked once at build time by `Nanyx.Compiler.CheckedLibrary` ([Standard library implementation](./standard-library-implementation)) |
 
 Out of scope here, with their own workstreams:
 

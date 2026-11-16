@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Checks the standard library once, when the compiler is built, and writes it to checked-library.bin beside this
+    program, for every project that uses the compiler to have beside it (see CheckedLibrary.targets and
+    CheckedLibrary.fs in Nanyx.Compiler).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Nanyx.Compiler\NanyxCompiler.fsproj" />
+  </ItemGroup>
+
+  <!-- Written again whenever this program or the compiler it runs changes, and the library is part of the compiler. -->
+  <Target Name="WriteCheckedLibrary" AfterTargets="Build" Inputs="$(TargetPath);@(ReferenceCopyLocalPaths)" Outputs="$(OutDir)checked-library.bin">
+    <Exec Command="dotnet &quot;$(TargetPath)&quot; &quot;$(OutDir)checked-library.bin&quot;" />
+  </Target>
+
+</Project>

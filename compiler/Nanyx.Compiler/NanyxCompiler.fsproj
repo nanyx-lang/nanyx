@@ -110,6 +110,8 @@
     <Compile Include="WorkflowDesugaring.fs" />
     <Compile Include="DeferredErrors.fs" />
     <Compile Include="CheckedModule.fs" />
+    <Compile Include="BinaryData.fs" />
+    <Compile Include="CheckedLibrary.fs" />
     <Compile Include="CompileListener.fs" />
     <Compile Include="ModuleLinking.fs" />
     <Compile Include="OwnedDefinitions.fs" />
@@ -161,6 +163,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The tests of the checked library read it as the compiler does (see CheckedLibrary.fs). -->
+    <InternalsVisibleTo Include="Nanyx.Compiler.Tests" />
   </ItemGroup>
 
   <ItemGroup>

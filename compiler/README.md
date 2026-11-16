@@ -18,6 +18,7 @@ compiler/
 ├── Nanyx.Parser.Tests/        # Parser unit and fixture tests
 ├── Nanyx.Compiler/            # Type checker (F#)
 ├── Nanyx.Compiler.Tests/      # Compiler-level unit/integration tests
+├── Nanyx.Compiler.CheckedLibrary/ # Checks the standard library at build time (CheckedLibrary.targets copies it)
 ├── Nanyx.Compiler.Wasm/       # WebAssembly text (.wat) backend (F#)
 ├── Nanyx.Compiler.Wasm.Tests/ # Backend fixture, end-to-end and execution tests
 ├── Nanyx.Compiler.Runtime/    # Runs emitted modules on an embedded Wasmtime engine (F#)

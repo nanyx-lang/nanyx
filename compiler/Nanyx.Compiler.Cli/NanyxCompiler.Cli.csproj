@@ -37,4 +37,6 @@
     <InternalsVisibleTo Include="Nanyx.Compiler.Wasm.Test" />
   </ItemGroup>
 
+  <Import Project="..\CheckedLibrary.targets" />
+
 </Project>

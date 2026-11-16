@@ -75,6 +75,10 @@ module NodeId =
     let private last = ref 0L
     let next () : NodeId = System.Threading.Interlocked.Increment(&last.contents)
 
+    /// Makes `first` the next id, if no id from it on has been given: for a process that writes nodes another process
+    /// reads, so that their ids never meet those the reading process gives its own.
+    let startAt (first: NodeId) = System.Threading.Interlocked.Exchange(&last.contents, max last.Value (first - 1L)) |> ignore
+
 type Literal =
     | StringLit of string
     | IntLit of bigint

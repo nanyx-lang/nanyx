@@ -10,6 +10,9 @@ module SymbolId =
     let private last = ref 0L
     let next () : SymbolId = System.Threading.Interlocked.Increment(&last.contents)
 
+    /// Makes `first` the next id, if no id from it on has been given (see `NodeId.startAt`).
+    let startAt (first: SymbolId) = System.Threading.Interlocked.Exchange(&last.contents, max last.Value (first - 1L)) |> ignore
+
 type SymbolKind =
     /// A def at the top level of a module.
     | TopLevelValue
