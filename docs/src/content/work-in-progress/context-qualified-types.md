@@ -83,4 +83,5 @@ user's reach. Only intrinsics stay private to it.
 
 - **Both forms on one declaration,** such as `[Memory & k]`, or two scoped contexts: an error to start with, unless
   the implementation finds it falls out.
-- **[Contexts as attributes](./context-attributes)** would write these as `@Tx` and `@k` before the body.
+- **Separators.** Several contexts are joined with `,`, not `&`, in these declarations as in every context list
+  ([#1531](https://github.com/nanyx-lang/nanyx/issues/1531)).
