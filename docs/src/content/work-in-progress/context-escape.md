@@ -85,6 +85,9 @@ def main = {
   `withLog(body)` works the same. `Contexts.extendEnvForLambdaArgument` binds the members of the plain contexts the
   parameter's type requires, at a call whose callee's type is known
   ([#1218](https://github.com/nanyx-lang/nanyx/issues/1218)). `RunLambdaSuppliedContextTests.fs` runs this example.
+  A context a function type carries is named as it is declared: a `module db =` block's `Tx`, which the module that
+  imports the block calls `Tx` too, is `db.Tx` in both function types (`WrittenContexts.canonical`), so the lambda's
+  requirement meets the parameter's ([#1486](https://github.com/nanyx-lang/nanyx/issues/1486)).
 
 - **The backend needs nothing new.** `CoreIrLowerMembers.coerce` already adapts a function value given where one that
   passes fewer members is expected, capturing the members it needs where it is given. A `use` binding goes through it.

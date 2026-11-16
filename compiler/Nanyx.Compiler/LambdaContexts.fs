@@ -195,3 +195,4 @@ let contextOfMember (env: TypeEnv) (state: InferState) (name: Identifier) : Iden
             |> Map.tryPick (fun ctxName info ->
                 if info.IsContext && info.Parameters.IsEmpty && info.Members |> Map.exists (fun _ id -> id = symbol) then Some ctxName
                 else None)
+            |> Option.map (WrittenContexts.canonical state)
