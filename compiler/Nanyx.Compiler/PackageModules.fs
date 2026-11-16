@@ -29,6 +29,10 @@ type PackageModules =
       PublicModules: string list
       /// The packages it depends on directly, each with its own dependencies.
       Dependencies: PackageModules list
+      /// The files from GitHub it depends on, each a module of the package, by the module name its manifest gives it,
+      /// with the full path of the file it is fetched to. They are among `Modules`, but not `Files`: they are not the
+      /// package's own source files, and they may import only the standard library.
+      Referenced: (string * string) list
       /// Whether this is a script's build, whose `::host` and `::dependency` directives say what a manifest would (see
       /// `Script`): it has no files of its own, and every file of the build that is in no package it depends on is the
       /// program's, its imports found by their paths.
@@ -53,7 +57,7 @@ module PackageModules =
         | Result.Error _ -> None
 
     /// The module name the file at `filePath` declares as it is on disk, and whether it exports it.
-    let private declaredModule (filePath: string) =
+    let internal declaredModule (filePath: string) =
         let info = FileInfo filePath
         match declaredNames.TryGetValue filePath with
         | true, (written, length, declared) when written = info.LastWriteTimeUtc && length = info.Length -> declared
@@ -68,15 +72,17 @@ module PackageModules =
     let private declaredName (filePath: string) = declaredModule filePath |> Option.map fst
 
     /// `modules` with the modules `declared` gives its files, each module name and whether it is exported with the file
-    /// that declares it. A module split across files is public when one of them exports it.
+    /// that declares it, and the modules of the files from GitHub it depends on. A module split across files is public
+    /// when one of them exports it.
     let private declaring (declared: ((string * bool) * string) list) (modules: PackageModules) =
+        let own =
+            declared
+            |> List.groupBy (fst >> fst)
+            |> List.map (fun (moduleName, declarations) -> moduleName, declarations |> List.map snd)
+            |> Map.ofList
         { modules with
             PublicModules = declared |> List.filter (fun ((_, exported), _) -> exported) |> List.map (fst >> fst) |> List.distinct
-            Modules =
-                declared
-                |> List.groupBy (fst >> fst)
-                |> List.map (fun (moduleName, declarations) -> moduleName, declarations |> List.map snd)
-                |> Map.ofList }
+            Modules = modules.Referenced |> List.fold (fun found (moduleName, file) -> Map.add moduleName [ file ] found) own }
 
     /// The modules of the package called `name`, whose manifest is in `root`, whose source files are `files` and whose
     /// `@entry` runs under `host`, with the modules it exports, without dependencies. A module split across files is
@@ -89,9 +95,16 @@ module PackageModules =
           Files = files
           PublicModules = []
           Dependencies = []
+          Referenced = []
           Script = false
           Modules = Map.empty }
         |> declaring (files |> List.choose (fun file -> declaredModule file |> Option.map (fun moduleName -> moduleName, file)))
+
+    /// `modules` with the files from GitHub `referenced` names, each a module name and the full path of its file.
+    let withReferenced (referenced: (string * string) list) (modules: PackageModules) : PackageModules =
+        { modules with
+            Referenced = referenced
+            Modules = referenced |> List.fold (fun found (moduleName, file) -> Map.add moduleName [ file ] found) modules.Modules }
 
     /// `modules` with the names its own files declare read from the texts `readFile` gives them rather than from disk:
     /// an editor's unsaved text, or a rename's.
@@ -112,10 +125,18 @@ module PackageModules =
     let rec ownerOf (modules: PackageModules) (filePath: string) : PackageModules option =
         if contains modules filePath then Some modules else modules.Dependencies |> List.tryPick (fun dependency -> ownerOf dependency filePath)
 
+    /// The module name of the file from GitHub at `filePath`, if it is one that a package of the build `modules`
+    /// depends on.
+    let rec referencedName (modules: PackageModules) (filePath: string) : string option =
+        modules.Referenced
+        |> List.tryPick (fun (moduleName, file) -> if samePath file filePath then Some moduleName else None)
+        |> Option.orElseWith (fun () -> modules.Dependencies |> List.tryPick (fun dependency -> referencedName dependency filePath))
+
     /// Whether `filePath` is a file of the program the build `modules` is of, rather than of a library it depends on: a
-    /// source file of the package, or, in a script's build, any file in no package it depends on.
+    /// source file of the package, or, in a script's build, any file in no package it depends on. A file from GitHub
+    /// is neither: it is a library's, though it is a module of the package.
     let isProgramFile (modules: PackageModules) (filePath: string) =
-        if modules.Script then (ownerOf modules filePath).IsNone else contains modules filePath
+        if modules.Script then (ownerOf modules filePath).IsNone && (referencedName modules filePath).IsNone else contains modules filePath
 
     /// The package named `name` among those of the build `modules`, the package itself or one it depends on.
     let rec private tryFindPackage (modules: PackageModules) (name: string) : PackageModules option =
@@ -196,12 +217,25 @@ module PackageModules =
     /// after that package's name; anywhere else, and for an import by file path, it names a file relative to the
     /// importer (see `FileImports.resolvePath`).
     let resolveImport (modules: PackageModules option) (importer: string) (item: ImportItem) : Result<string, Diagnostic> =
+        let shown = match item.Source with ModuleImport name -> name | PathImport path -> path
         match modules, item.Source with
+        // A file from GitHub has no manifest to say what it depends on, so it imports only the standard library, which
+        // is resolved before this.
+        | Some modules, _ when (referencedName modules importer).IsSome ->
+            Error(
+                Diagnostics.at
+                    DiagnosticCodes.InvalidReferencedFile
+                    item.Span
+                    $"'{(referencedName modules importer).Value}' is a file from GitHub, which has no manifest to say what it depends on, so it can import only the standard library, not {shown}"
+            )
         | Some modules, ModuleImport name ->
             match ownerOf modules importer with
             | Some owner -> resolveModule modules owner item name
             // A script's file imports a public module of a package its `::dependency` lines name after the package's name.
             | None when modules.Script && modules.Dependencies |> List.exists (fun dependency -> name.StartsWith(dependency.Package + "/")) ->
+                resolveModule modules modules item name
+            // And a file from GitHub its `::dependency` lines name by its module name.
+            | None when modules.Script && modules.Referenced |> List.exists (fst >> (=) name) ->
                 resolveModule modules modules item name
             | None -> FileImports.resolvePath (Path.GetDirectoryName importer) item
         | _ -> FileImports.resolvePath (Path.GetDirectoryName importer) item

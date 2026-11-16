@@ -311,6 +311,10 @@ Local packages first (items 3a to 3c), then remote packages. Each produces somet
    - **3c. The console host as a shipped package** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344), done), then the
      official linter once its contract exists ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)).
    - Projects (`.nyxproj`) later ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
+   - **3d. GitHub references** ([#1472](https://github.com/nanyx-lang/nanyx/issues/1472), done but for the download): a
+     package, or one file as a module, from a GitHub repository, pinned to a commit; see
+     [Package ownership and locking](./package-ownership-and-locking#depending-on-a-single-file). Fetching waits for
+     the cache (item 4).
 4. **The lockfile and the cache.** `nanyx.lock`, the `.nyxpkg` format, verification and the per-user cache, tested
    against a local directory acting as an index.
 5. **Resolution.** PubGrub over the index protocol, with error messages for conflicts; `nanyx install` and `pull`.

@@ -14,6 +14,9 @@ type Package =
       Entry: string option
       /// In the order its manifest lists them.
       Dependencies: Package list
+      /// The files from GitHub its manifest lists, each a module of the package: its module name, and the full path of
+      /// the file it is fetched to.
+      ReferencedFiles: (string * string) list
       /// The host its manifest's `host` names, read from the host's own manifest; none for a library.
       Host: Host option
       /// The host's package, whose modules the host's import resolves in.
@@ -93,9 +96,46 @@ module Package =
                   manifest.PackageSpan
                   $"{manifest.Name} is a library, since its manifest names no host, but it exports no module: a library must export at least one, by declaring it with export module" ]
 
-    /// The package `manifest` describes, with the packages it depends on. `chain` is the manifests of the packages
-    /// that led to it, nearest first, each with its package's name, and `reached` every package the build has read so far.
-    let rec private ofManifestIn (reached: Reached) (chain: (string * string) list) (manifest: Manifest) : Result<Package, Problem list> =
+    /// The problem with the GitHub reference `what`, written at `span`, that `failure` kept from being fetched.
+    let private notFetched (span: SourceSpan) (what: string) (failure: FetchFailure) : Problem =
+        match failure with
+        | FetchingNotSupported -> AtManifest(Diagnostics.at DiagnosticCodes.UnsupportedManifestField span $"{what} is on GitHub, but {GitHub.describe failure}")
+        | FetchFailed message -> AtManifest(Diagnostics.at DiagnosticCodes.InvalidManifestValue span $"{what} can't be fetched from GitHub: {message}")
+
+    /// The files from GitHub `references` lists, fetched by `fetcher`, each with the module name its entry gives it, or
+    /// what is wrong: one that can't be fetched, one that declares a module name of its own, which it can't (the entry
+    /// names it, and nothing can export it), and one named for a module of `own`, the package's own modules.
+    let private referencedFiles (fetcher: GitHubFetcher) (own: Map<string, string list>) (references: FileReference list) : Result<(string * string) list, Problem list> =
+        references
+        |> List.map (fun file ->
+            let reference = file.Reference
+            match fetcher.FetchFile reference.Repository reference.Commit (defaultArg reference.File "") with
+            | Result.Error failure -> Result.Error [ notFetched file.GitHubSpan $"the module {file.Module}" failure ]
+            | Result.Ok path ->
+                match PackageModules.declaredModule path with
+                | Some (declared, _) ->
+                    Result.Error
+                        [ AtManifest(
+                              Diagnostics.at
+                                  DiagnosticCodes.InvalidReferencedFile
+                                  file.Span
+                                  $"{reference} declares the module name '{declared}', but a file from GitHub must declare none: the manifest names it, {file.Module}, and no package can export it"
+                          ) ]
+                | None when own.ContainsKey file.Module ->
+                    Result.Error
+                        [ AtManifest(
+                              Diagnostics.at
+                                  DiagnosticCodes.DuplicateModule
+                                  file.Span
+                                  $"the package's own files declare the module {file.Module} already: give the file from GitHub another name"
+                          ) ]
+                | None -> Result.Ok(file.Module, path))
+        |> all
+
+    /// The package `manifest` describes, with the packages it depends on, fetching what is on GitHub with `fetcher`.
+    /// `chain` is the manifests of the packages that led to it, nearest first, each with its package's name, and
+    /// `reached` every package the build has read so far.
+    let rec private ofManifestIn (fetcher: GitHubFetcher) (reached: Reached) (chain: (string * string) list) (manifest: Manifest) : Result<Package, Problem list> =
         let files = sources manifest
         let display (file: string) = Path.GetRelativePath(manifest.Root, file)
         let entry =
@@ -108,22 +148,24 @@ module Package =
                 | several ->
                     Result.Error [ AboutPackage $"""{manifest.Path}: a package can have one @entry, but these files each declare one: {several |> List.map display |> String.concat ", "}""" ]
         let exports = exportErrors manifest files |> List.map AtManifest
-        match entry, dependenciesIn reached ((manifest.Path, manifest.Name) :: chain) manifest.Dependencies, hostIn reached manifest.Host with
-        | Result.Ok entry, Result.Ok dependencies, Result.Ok host when exports.IsEmpty ->
+        let referenced = referencedFiles fetcher (PackageModules.ofFiles manifest.Name manifest.Root None files).Modules manifest.Files
+        match entry, dependenciesIn fetcher reached ((manifest.Path, manifest.Name) :: chain) manifest.Dependencies, hostIn fetcher reached manifest.Host with
+        | Result.Ok entry, Result.Ok dependencies, Result.Ok host when exports.IsEmpty && referenced.IsOk ->
             Result.Ok
                 { Manifest = manifest
                   Sources = files
                   Entry = entry
                   Dependencies = dependencies
+                  ReferencedFiles = Result.defaultValue [] referenced
                   Host = host |> Option.map fst
                   HostPackage = host |> Option.map snd }
         | entry, dependencies, host ->
             let errorsOf = function Result.Error errors -> errors | Result.Ok _ -> []
-            Result.Error(errorsOf entry @ exports @ errorsOf dependencies @ errorsOf host)
+            Result.Error(errorsOf entry @ exports @ errorsOf referenced @ errorsOf dependencies @ errorsOf host)
 
     /// The host `entry` names, if there is one, read from the manifest of its package, which must declare it a host (see
     /// `HostPackages`), with that package: one the compiler ships, or one in the directory the entry gives.
-    and private hostIn (reached: Reached) (entry: HostEntry option) : Result<(Host * Package) option, Problem list> =
+    and private hostIn (fetcher: GitHubFetcher) (reached: Reached) (entry: HostEntry option) : Result<(Host * Package) option, Problem list> =
         match entry with
         | None -> Result.Ok None
         | Some entry ->
@@ -142,13 +184,21 @@ module Package =
                     | None -> error (HostPackages.notAHost entry.Package)
                     | Some host ->
                         reached.[found.Name] <- path
-                        ofManifestIn reached [] found |> Result.map (fun package -> Some (host, package))
+                        ofManifestIn fetcher reached [] found |> Result.map (fun package -> Some (host, package))
 
-    /// The packages `dependencies` lists, each read with its own dependencies, or what is wrong: a directory with no
-    /// manifest, a package named other than its dependant names it, one that depends on itself through others, or one
-    /// reached by two paths. `chain` holds the manifest that lists them first, if one does.
-    and private dependenciesIn (reached: Reached) (chain: (string * string) list) (dependencies: Dependency list) : Result<Package list, Problem list> =
+    /// The packages `dependencies` lists, each read with its own dependencies, those on GitHub fetched by `fetcher`
+    /// first, or what is wrong: a directory with no manifest, a package named other than its dependant names it, one
+    /// that depends on itself through others, or one reached by two paths. `chain` holds the manifest that lists them
+    /// first, if one does.
+    and private dependenciesIn (fetcher: GitHubFetcher) (reached: Reached) (chain: (string * string) list) (dependencies: Dependency list) : Result<Package list, Problem list> =
         let error code span message = Result.Error [ AtManifest(Diagnostics.at code span message) ]
+        let fetched (dependency: Dependency) =
+            match dependency.GitHub with
+            | Some reference ->
+                fetcher.FetchTree reference.Repository reference.Commit
+                |> Result.map (fun directory -> { dependency with Directory = directory })
+                |> Result.mapError (fun failure -> [ notFetched dependency.PathSpan $"the dependency {dependency.Name}" failure ])
+            | None -> Result.Ok dependency
         let read (dependency: Dependency) =
             match manifestIn dependency.Directory with
             | Result.Error message -> error DiagnosticCodes.InvalidManifestValue dependency.PathSpan $"the dependency {dependency.Name} can't be read: {message}"
@@ -172,8 +222,8 @@ module Package =
                             $"the build reaches the package {found.Name} by two paths, {Path.GetDirectoryName other} and {dependency.Directory}; a build has one of each package"
                     | _ ->
                         reached.[found.Name] <- path
-                        ofManifestIn reached chain found
-        dependencies |> List.map read |> all
+                        ofManifestIn fetcher reached chain found
+        dependencies |> List.map (fetched >> Result.bind read) |> all
 
     /// The packages of a build whose root is `manifest`: none read yet but the root.
     let private reachedFrom (manifest: Manifest) : Reached =
@@ -181,11 +231,16 @@ module Package =
         reached.[manifest.Name] <- manifest.Path
         reached
 
-    /// The package whose manifest is at `manifestPath`, with the packages it depends on, or what is wrong with them.
-    let ofManifest (manifestPath: string) : Result<Package, string list> =
+    /// The package whose manifest is at `manifestPath`, with the packages it depends on, those on GitHub fetched by
+    /// `fetcher`, or what is wrong with them.
+    let ofManifestFetching (fetcher: GitHubFetcher) (manifestPath: string) : Result<Package, string list> =
         Manifest.read manifestPath
         |> Result.mapError (List.map Manifest.describe)
-        |> Result.bind (fun manifest -> ofManifestIn (reachedFrom manifest) [] manifest |> Result.mapError (List.map describe))
+        |> Result.bind (fun manifest -> ofManifestIn fetcher (reachedFrom manifest) [] manifest |> Result.mapError (List.map describe))
+
+    /// The package whose manifest is at `manifestPath`, with the packages it depends on, or what is wrong with them.
+    /// Nothing can be downloaded from GitHub yet, so a reference to it is an error.
+    let ofManifest (manifestPath: string) : Result<Package, string list> = ofManifestFetching GitHub.unsupported manifestPath
 
     /// A compile of nothing, with no diagnostics: what the compile of a file that can't be compiled has, with its errors.
     let private notCompiled : CompileResult =
@@ -200,27 +255,32 @@ module Package =
           DocComments = lazy DocComments.none }
 
     /// The manifest at `path`, whose text is `text`, as the editor shows it: a compile whose diagnostics are the problems
-    /// with it (see `Manifest.check`), with a library that exports no module, and with the packages it depends on,
-    /// nothing compiled, since a manifest is data.
-    let compileManifest (path: string) (text: string) : CompileResult =
+    /// with it (see `Manifest.checkPinning`), with a library that exports no module, and with the packages and files it
+    /// depends on, those on GitHub fetched by `fetcher`; nothing compiled, since a manifest is data. A GitHub reference
+    /// that is not pinned to a commit has a fix that pins it to the one `fetcher` finds its tag or branch points at.
+    let compileManifestFetching (fetcher: GitHubFetcher) (path: string) (text: string) : CompileResult =
+        let pin repository rev = fetcher.Resolve repository rev |> Result.toOption
         let diagnostics =
-            match Manifest.check path text with
+            match Manifest.checkPinning pin path text with
             | Result.Error problems -> problems
             | Result.Ok manifest ->
                 let reached = reachedFrom manifest
+                let errorsOf = function Result.Error problems -> problems | Result.Ok _ -> []
+                let problems =
+                    errorsOf (referencedFiles fetcher (PackageModules.ofFiles manifest.Name manifest.Root None (sources manifest)).Modules manifest.Files)
+                    @ errorsOf (dependenciesIn fetcher reached [ manifest.Path, manifest.Name ] manifest.Dependencies)
+                    @ errorsOf (hostIn fetcher reached manifest.Host)
                 let dependencyErrors =
-                    let host = match hostIn reached manifest.Host with Result.Ok _ -> [] | Result.Error problems -> problems
-                    match dependenciesIn reached [ manifest.Path, manifest.Name ] manifest.Dependencies with
-                    | Result.Ok _ when host.IsEmpty -> []
-                    | Result.Ok _ -> host |> List.map (function AtManifest diagnostic -> diagnostic | AboutPackage message -> Diagnostics.at DiagnosticCodes.InvalidManifestValue manifest.Value.Location message)
-                    | Result.Error problems ->
-                        let problems = problems @ host
-                        problems
-                        |> List.map (function
-                            | AtManifest diagnostic -> diagnostic
-                            | AboutPackage message -> Diagnostics.at DiagnosticCodes.InvalidManifestValue manifest.Value.Location message)
+                    problems
+                    |> List.map (function
+                        | AtManifest diagnostic -> diagnostic
+                        | AboutPackage message -> Diagnostics.at DiagnosticCodes.InvalidManifestValue manifest.Value.Location message)
                 exportErrors manifest (sources manifest) @ dependencyErrors
         { notCompiled with Diagnostics = diagnostics }
+
+    /// `compileManifestFetching` with nothing to fetch with: a reference to GitHub is an error, since downloading from it
+    /// isn't supported yet.
+    let compileManifest (path: string) (text: string) : CompileResult = compileManifestFetching GitHub.unsupported path text
 
     /// `package` run under the host `name` names in place of its manifest's, as `--host` chooses: a directory, relative to
     /// `directory`, that holds a host's package, or the name of a host the compiler ships. An error says why it isn't one.
@@ -232,7 +292,7 @@ module Package =
                 { Package = packageName; Path = Some full; Span = SourceSpan.none }
             else
                 { Package = name; Path = None; Span = SourceSpan.none }
-        match hostIn (Reached()) (Some entry) with
+        match hostIn GitHub.unsupported (Reached()) (Some entry) with
         | Result.Ok host -> Result.Ok { package with Host = host |> Option.map fst; HostPackage = host |> Option.map snd }
         | Result.Error problems -> Result.Error(problems |> List.map describe |> String.concat "; ")
 
@@ -275,6 +335,7 @@ module Package =
         { PackageModules.ofFiles package.Manifest.Name package.Manifest.Root package.Host package.Sources with
             Dependencies = package.Dependencies |> List.map modules
             HostPackage = package.HostPackage |> Option.map modules }
+        |> PackageModules.withReferenced package.ReferencedFiles
 
     /// The modules of the package the file at `filePath` is a source file of, if it is one, with those of the packages
     /// it depends on, if they read; none for a file in no package. A file the manifest selects that is not on disk yet
@@ -289,17 +350,22 @@ module Package =
             | Result.Error problems -> Result.Error problems
             | Result.Ok manifest when selects manifest filePath ->
                 let reached = reachedFrom manifest
+                let fetcher = GitHub.unsupported
                 let dependencies =
-                    match dependenciesIn reached [ manifest.Path, manifest.Name ] manifest.Dependencies with
+                    match dependenciesIn fetcher reached [ manifest.Path, manifest.Name ] manifest.Dependencies with
                     | Result.Ok dependencies -> dependencies
                     | Result.Error _ -> []
-                let host = match hostIn reached manifest.Host with Result.Ok host -> host | Result.Error _ -> None
+                let host = match hostIn fetcher reached manifest.Host with Result.Ok host -> host | Result.Error _ -> None
+                let files = sources manifest
                 let modules =
                     modules
                         { Manifest = manifest
-                          Sources = sources manifest
+                          Sources = files
                           Entry = None
                           Dependencies = dependencies
+                          ReferencedFiles =
+                            referencedFiles fetcher (PackageModules.ofFiles manifest.Name manifest.Root None files).Modules manifest.Files
+                            |> Result.defaultValue []
                           Host = host |> Option.map fst
                           HostPackage = host |> Option.map snd }
                 Result.Ok(Some (if PackageModules.contains modules filePath then modules else { modules with Files = modules.Files @ [ filePath ] }))
@@ -307,24 +373,33 @@ module Package =
         | _ -> Result.Ok None
 
     /// The build of the script at `filePath`, which runs under the host `host` names, the console host the compiler ships
-    /// if it names none, and imports from the packages `dependencies` lists, as its `::host` and `::dependency`
-    /// directives say (see `Script`); or what is wrong with them, each at the directive it is about, or at `span` for
-    /// what is about a package as a whole.
-    let scriptModules (filePath: string) (span: SourceSpan) (host: HostEntry option) (dependencies: Dependency list) : Result<PackageModules, Diagnostic list> =
+    /// if it names none, and imports from the packages `dependencies` lists and the files from GitHub `files` lists, as
+    /// its `::host` and `::dependency` directives say (see `Script`), fetching what is on GitHub with `fetcher`; or what is
+    /// wrong with them, each at the directive it is about, or at `span` for what is about a package as a whole.
+    let scriptModules
+        (fetcher: GitHubFetcher)
+        (filePath: string)
+        (span: SourceSpan)
+        (host: HostEntry option)
+        (dependencies: Dependency list)
+        (files: FileReference list)
+        : Result<PackageModules, Diagnostic list> =
         let host = host |> Option.defaultValue { Package = Hosts.consolePackage; Path = None; Span = span }
         let reached = Reached()
         let diagnostics problems =
             problems |> List.map (function AtManifest diagnostic -> diagnostic | AboutPackage message -> Diagnostics.at DiagnosticCodes.InvalidManifestValue span message)
-        match hostIn reached (Some host), dependenciesIn reached [] dependencies with
-        | Result.Ok (Some (host, hostPackage)), Result.Ok dependencies ->
-            Result.Ok
+        match hostIn fetcher reached (Some host), dependenciesIn fetcher reached [] dependencies, referencedFiles fetcher Map.empty files with
+        | Result.Ok (Some (host, hostPackage)), Result.Ok dependencies, Result.Ok referenced ->
+            Result.Ok(
                 { PackageModules.ofFiles "" (Path.GetDirectoryName(Path.GetFullPath filePath)) (Some host) [] with
                     HostPackage = Some (modules hostPackage)
                     Dependencies = dependencies |> List.map modules
                     Script = true }
-        | host, dependencies ->
+                |> PackageModules.withReferenced referenced
+            )
+        | host, dependencies, referenced ->
             let errorsOf = function Result.Error errors -> errors | Result.Ok _ -> []
-            Result.Error(diagnostics (errorsOf host @ errorsOf dependencies) |> List.distinct)
+            Result.Error(diagnostics (errorsOf host @ errorsOf dependencies @ errorsOf referenced) |> List.distinct)
 
     /// `result`, the compile of the source file at `filePath` of the package `modules`, with the errors of a file that
     /// is not a named module of its own (see `PackageModules.fileErrors`).

@@ -142,6 +142,7 @@
     <Compile Include="Features\Matches\UnitPatternTests.fs" />
     <Compile Include="Features\Matches\PatternErrorTests.fs" />
     <Compile Include="Features\Ordering\OrderingTests.fs" />
+    <Compile Include="Features\Packages\GitHubReferenceTests.fs" />
     <Compile Include="Features\Packages\KeptModuleTests.fs" />
     <Compile Include="Features\Packages\ManifestTests.fs" />
     <Compile Include="Features\Packages\PackageTests.fs" />
