@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.FSharp.Core;
 using NyxCompiler.Refactorings;
 using OmniSharp.Extensions.LanguageServer.Protocol;
@@ -12,16 +13,20 @@ namespace Nanyx.LanguageServer.Handlers;
 /// document, with the diagnostic it resolves as published. A diagnostic's first fix is the preferred one. Linters
 /// offer fixes (removing an unused local, renaming an unused name to <c>_</c>), and the compiler offers the import
 /// an unknown name from the standard library needs (<c>NyxCompiler.ImportFixes</c>). A fix that would edit another
-/// file is not offered. It also offers the refactorings at the start of the range (see <c>NyxCompiler.Refactorings</c>),
-/// in a document whose text type-checked: one the compiler refuses there is offered disabled, with its reason.
+/// file is not offered. It also offers the refactorings at the range (see <c>NyxCompiler.Refactorings</c>), in a
+/// document whose text type-checked: writing the inferred type of the name at its start, and introducing a local for
+/// the expression it selects, laid out with the document's formatter settings. One the compiler refuses there is
+/// offered disabled, with its reason.
 /// </summary>
 public sealed class CodeActionHandler : CodeActionHandlerBase
 {
     private readonly DocumentStore _documents;
+    private readonly ILogger<CodeActionHandler> _logger;
 
-    public CodeActionHandler(DocumentStore documents)
+    public CodeActionHandler(DocumentStore documents, ILogger<CodeActionHandler> logger)
     {
         _documents = documents;
+        _logger = logger;
     }
 
     public override Task<CommandOrCodeActionContainer?> Handle(CodeActionParams request, CancellationToken cancellationToken) =>
@@ -49,23 +54,33 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             .Where(pair => pair.First.Span.Value.File == document.FileName && Overlaps(pair.First.Span.Value, start, end))
             .SelectMany(pair => pair.First.Fixes.Select((fix, index) => ToAction(uri, document, fix, pair.Second, isPreferred: index == 0)))
             .OfType<CodeAction>()
-            .Concat(Refactorings(uri, document, compiled, start))
+            .Concat(Refactorings(uri, document, compiled, start, end))
             .Select(action => new CommandOrCodeAction(action));
 
         return new CommandOrCodeActionContainer(actions);
     }
 
-    /// <summary>The refactorings at <paramref name="offset"/>, if the document's text type-checked.</summary>
-    private static IEnumerable<CodeAction> Refactorings(DocumentUri uri, OpenDocument document, NyxCompiler.CompileResult compiled, int offset)
+    /// <summary>The refactorings at the range from <paramref name="start"/> to <paramref name="end"/>, if the document's text type-checked.</summary>
+    private IEnumerable<CodeAction> Refactorings(DocumentUri uri, OpenDocument document, NyxCompiler.CompileResult compiled, int start, int end)
     {
         if (!document.Typed)
         {
             yield break;
         }
 
-        if (WriteInferredType.at(document.FileName, document.Text, compiled, offset)?.Value is { } offer)
+        if (WriteInferredType.at(document.FileName, document.Text, compiled, start)?.Value is { } offer)
         {
             yield return ToAction(uri, document, offer);
+        }
+
+        if (end > start)
+        {
+            var options = FormattingHandler.SettingsFor(document, uri, _logger) ?? Nanyx.Formatter.Formatter.OptionsModule.defaults;
+            var selection = new Parser.Program.SourceSpan(document.FileName, start, end, 0, 0);
+            foreach (var extract in IntroduceLocal.at(options, document.FileName, document.Text, compiled, selection))
+            {
+                yield return ToAction(uri, document, extract);
+            }
         }
     }
 
@@ -98,7 +113,12 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
         };
 
     private static CodeActionKind KindOf(RefactoringKind kind) =>
-        kind.Equals(RefactoringKind.Rewrite) ? CodeActionKind.RefactorRewrite : throw new ArgumentOutOfRangeException(nameof(kind));
+        kind.Tag switch
+        {
+            RefactoringKind.Tags.Extract => CodeActionKind.RefactorExtract,
+            RefactoringKind.Tags.Rewrite => CodeActionKind.RefactorRewrite,
+            _ => throw new ArgumentOutOfRangeException(nameof(kind))
+        };
 
     /// <summary>Whether a span touches the range from <paramref name="start"/> to <paramref name="end"/>.</summary>
     private static bool Overlaps(Parser.Program.SourceSpan span, int start, int end) =>
@@ -136,5 +156,5 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
     protected override CodeActionRegistrationOptions CreateRegistrationOptions(
         CodeActionCapability capability,
         ClientCapabilities clientCapabilities) =>
-        new() { DocumentSelector = TextDocumentSyncHandler.Selector, CodeActionKinds = new Container<CodeActionKind>(CodeActionKind.QuickFix, CodeActionKind.RefactorRewrite) };
+        new() { DocumentSelector = TextDocumentSyncHandler.Selector, CodeActionKinds = new Container<CodeActionKind>(CodeActionKind.QuickFix, CodeActionKind.RefactorExtract, CodeActionKind.RefactorRewrite) };
 }

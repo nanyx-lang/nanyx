@@ -336,7 +336,8 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    compiler error with fixes is an unknown name the standard library exports, which offers its import
    ([#497](https://github.com/nanyx-lang/nanyx/issues/497)); other compiler errors have none yet. Refactorings are
    offered as code actions of their own kinds ([Refactorings](./refactorings)): writing the inferred type, as
-   `refactor.rewrite`, is the first ([#1539](https://github.com/nanyx-lang/nanyx/issues/1539)).
+   `refactor.rewrite` ([#1539](https://github.com/nanyx-lang/nanyx/issues/1539)), and introducing a local, as
+   `refactor.extract` ([#1536](https://github.com/nanyx-lang/nanyx/issues/1536)).
 7. **Diagnostics in imported files.** Done ([#794](https://github.com/nanyx-lang/nanyx/issues/794)): each is
    published on the file it belongs to, with one at the import that brings that file in.
 8. **A library browser, search by type and an info view.** Planned on

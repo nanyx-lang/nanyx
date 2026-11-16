@@ -6,6 +6,8 @@ open NyxCompiler
 /// Language Server Protocol. Each refactoring adds the kind it needs.
 [<RequireQualifiedAccess>]
 type RefactoringKind =
+    /// `refactor.extract`: introduce a local.
+    | Extract
     /// `refactor.rewrite`: write the inferred type.
     | Rewrite
 

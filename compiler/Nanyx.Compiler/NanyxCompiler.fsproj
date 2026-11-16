@@ -124,6 +124,7 @@
     <Compile Include="Refactorings/Refactoring.fs" />
     <Compile Include="Refactorings/SelectionRanges.fs" />
     <Compile Include="Refactorings/WriteInferredType.fs" />
+    <Compile Include="Refactorings/IntroduceLocal.fs" />
     <Compile Include="Documentation.fs" />
     <Compile Include="StandardLibraryDocs.fs" />
     <Compile Include="LibraryCatalog.fs" />
@@ -153,6 +154,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Nanyx.Parser\Nanyx.Parser.fsproj" />
+    <ProjectReference Include="..\Nanyx.Formatter\Nanyx.Formatter.fsproj" />
   </ItemGroup>
 
 </Project>
