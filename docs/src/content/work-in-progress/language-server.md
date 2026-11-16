@@ -209,6 +209,14 @@ what the compiler keeps: exact spans, resolved names and types.
   level, so they are put back by where the block is written. Names and their spans come from the declared names the parser records (`DefValue`, `TypeDefBody`,
   `RecordTypeFields`). It needs a parse, not a type-check, so a type error leaves the outline as it was; a text
   that does not parse shows the last good text's outline, less the items edited since.
+- **Workspace symbols** ([#877](https://github.com/nanyx-lang/nanyx/issues/877)), for Go to Symbol in Workspace
+  (Ctrl+T). `WorkspaceIndex` scans the client's workspace folders (or its root) the first time it is asked, for every
+  `.nyx` file outside `bin`, `obj`, `node_modules` and hidden folders such as `.git`, and parses each, with no type
+  check, when first needed (`Outline.ofSource`). `WorkspaceSymbolsHandler` answers `workspace/symbol` with the
+  top-level items whose names have the query's characters in order, ignoring case, and the declarations in each
+  `module name =` block, with the block as their container; an open file's come from its editor text. A file the
+  watcher reports made or changed is parsed again when next needed, and a deleted one is dropped. A file that does
+  not parse has none until it does.
 - **Selection ranges** ([#1535](https://github.com/nanyx-lang/nanyx/issues/1535)), for Expand and Shrink Selection.
   `NyxCompiler.Refactorings.SelectionRanges.at` parses the text and gives the chain of syntax around a position,
   smallest first (see [Refactorings](./refactorings)). A text that does not parse has none, and the editor falls back
@@ -343,9 +351,8 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    ([#792](https://github.com/nanyx-lang/nanyx/issues/792)), and across the files of the document's package, as
    `nanyx build` checks them ([#1556](https://github.com/nanyx-lang/nanyx/issues/1556)).
 4. **Document symbols.** Done ([#278](https://github.com/nanyx-lang/nanyx/issues/278),
-   [#793](https://github.com/nanyx-lang/nanyx/issues/793)). Workspace symbols (Go to Symbol in Workspace), decided
-   ([#877](https://github.com/nanyx-lang/nanyx/issues/877)): from parsing every `.nyx` file under the workspace
-   folders, with no type check, re-parsing a file when the watcher reports a change.
+   [#793](https://github.com/nanyx-lang/nanyx/issues/793)), and so are workspace symbols
+   ([#877](https://github.com/nanyx-lang/nanyx/issues/877)).
 5. **Completion.** The last good compile, which completion needs because it is asked for while the text does not
    parse, is kept ([#210](https://github.com/nanyx-lang/nanyx/issues/210)); each symbol's scope is recorded
    ([#211](https://github.com/nanyx-lang/nanyx/issues/211)); the names in scope are offered

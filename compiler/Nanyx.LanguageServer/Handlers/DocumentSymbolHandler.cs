@@ -75,7 +75,8 @@ public sealed class DocumentSymbolHandler : DocumentSymbolHandlerBase
         };
     }
 
-    private static SymbolKind KindOf(Outline.OutlineKind kind) =>
+    /// <summary>The LSP kind of a symbol of <paramref name="kind"/>.</summary>
+    internal static SymbolKind KindOf(Outline.OutlineKind kind) =>
         kind.Tag switch
         {
             Outline.OutlineKind.Tags.Function => SymbolKind.Function,
