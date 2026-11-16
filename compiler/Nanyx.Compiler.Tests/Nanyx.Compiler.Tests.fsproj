@@ -141,6 +141,7 @@
     <Compile Include="Features\StdLib\StackSafetyTests.fs" />
     <Compile Include="Features\StdLib\StandardLibraryCacheTests.fs" />
     <Compile Include="Features\Strings\InterpolationTests.fs" />
+    <Compile Include="Features\Refactorings\IntroduceLocalTests.fs" />
     <Compile Include="Features\Refactorings\SelectionRangeTests.fs" />
     <Compile Include="Features\Refactorings\WriteInferredTypeTests.fs" />
     <Compile Include="Features\Tooling\CompletionTests.fs" />
