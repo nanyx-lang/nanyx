@@ -947,14 +947,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | _ -> adapt others vars
             let statement = adapt bindings scope.Vars
             statement, Some (hole, restScope.Value, rest)
-        // A `use` of a scoped context's instance, `use m` for a `memory` block's `m`, loads no members: it only says
-        // whose cells a `mut` after it makes, which the type checker has settled.
-        | UseStatement value :: rest when
-            (match input.ExprTypes |> Map.tryFind value.Id |> Option.map Unifier.unalias with
-             | Some (TyNominal(_, FunctionContexts.ScopeType _, _)) -> true
-             | _ -> false)
-            ->
-            hole, Some (hole, scope, rest)
         | UseStatement _ :: _ -> cannot "this kind of `use`"
         | _ -> cannot "this kind of statement"
 

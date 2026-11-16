@@ -76,11 +76,12 @@ can leave the `memory` block that supplies it.
 ## `memory`
 
 ```nanyx fragment
-def memory: [c] ([Memory & c] Memory -> a) -> a
+def memory: [c] ([Memory & c] () -> a) -> a
 ```
 
 Runs `block` with `Memory`, so that it can declare cells with `mut` and change them with `:=`, and
-gives back its result. Nothing that uses a cell can leave the block: only what the cells hold. The block is given
-its instance, `memory { m -> ... }`, and `use m` in an inner block makes the cells after it belong to this one.
+gives back its result. Nothing that uses a cell can leave the block: only what the cells hold. The block can
+name its `Memory`, `memory { context m -> ... }`, and `use m` in an inner block makes the cells after it belong
+to this one.
 
 <!-- End of the generated reference. -->

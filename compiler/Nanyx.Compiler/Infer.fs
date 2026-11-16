@@ -1151,8 +1151,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     | None ->
                     let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
                     let inputTy, fitted = UseDischarge.fit env current expr info.Underlying args (inputTypeFromArgs argTys)
-                    let made, constrained = constructedType (addAssignableConstraint inputTy info.Underlying fitted) name info
-                    Ok (mkTypedExpr expr made None None None, constrained)
+                    Ok (mkTypedExpr expr (namedType name info) None None None, addAssignableConstraint inputTy info.Underlying fitted)
                 else
                     Error errors
             | None ->
@@ -1462,7 +1461,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                     | Ok (typedExpr, next) ->
                         let withUse, next = useInstance (extendEnvWithRecordFields (FromUse value.Id) next env' typedExpr.Type) next value typedExpr.Type
                         current <- next
-                        env' <- MemoryCells.afterUse next withUse typedExpr.Type
+                        env' <- withUse
                         typedStatements <- typedStatements @ [ TypedUseStatement typedExpr ]
                     | Error err -> errors <- err
             | ExprStatement expr ->

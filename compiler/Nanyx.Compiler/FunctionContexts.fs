@@ -10,8 +10,8 @@ module FunctionContexts =
     /// What a scoped context's scope is wrapped in (see `scoped`). No name written in source can be it.
     let private scopeTag = "@scope"
 
-    /// The scope `scope`, a type variable, as a scoped context holds it: the argument of the context, and the type a
-    /// value of the context's type is made from (see `TypeResolution.scopedValueType`).
+    /// The scope `scope`, a type variable, as a scoped context holds it: the argument of the context, and of a cell's
+    /// type (see `cellType`).
     let scopeType (scope: Ty) : Ty = TyApply(scopeTag, [ scope ])
 
     /// The scope a scope type holds (see `scopeType`).

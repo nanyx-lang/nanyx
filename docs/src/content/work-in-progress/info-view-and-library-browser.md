@@ -311,9 +311,9 @@ In order. Each item is one PR:
 7. **Context flow view** ([#717](https://github.com/nanyx-lang/nanyx/issues/717)). Done: the info view's *Context
    flow* section, and the editor highlights between a provider and its calls.
 8. **Scopes** ([#1066](https://github.com/nanyx-lang/nanyx/issues/1066)). Done: the info view organised by scope,
-   from the cursor out to the module. A `memory` block is part of the scope it is in for now; once
-   `memory { m -> … }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)) lands, it may become a scope of its
-   own, since it is where a scoped context lives ([#1035](https://github.com/nanyx-lang/nanyx/issues/1035)).
+   from the cursor out to the module. A `memory` block is part of the scope it is in for now. Now that a block
+   can name its `Memory`, `memory { context m -> … }` ([#1446](https://github.com/nanyx-lang/nanyx/issues/1446)), it
+   may become a scope of its own, since it is where a scoped context lives ([#1035](https://github.com/nanyx-lang/nanyx/issues/1035)).
 
 # Open questions
 

@@ -1176,10 +1176,13 @@ To fix it, declare the context `protected` or `private` after its `=`, as in `sc
 # NYX0233: Scoped context escapes the call that supplies it
 
 Something that requires a scoped context, such as `Memory`, leaves the call that supplies the context: a memory
-block returns its instance, or a function over one of its cells.
+block returns a function over one of its cells.
 
 ```nanyx
-def leak = memory { m -> m }  -- error NYX0233: The result of this 'memory' call requires its 'Memory' through 'm', so it cannot leave the call: ...
+def leak = memory {
+  mut count = 0
+  { count }  -- error NYX0233: The result of this 'memory' call requires its 'Memory' through the cell 'count', so it cannot leave the call: ...
+}
 ```
 
 To fix it, give back what the cells hold, rather than the cells or a function over them.
