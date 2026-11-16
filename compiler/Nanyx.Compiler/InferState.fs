@@ -318,6 +318,12 @@ type InferState =
             LambdaContexts: Ty list list;
             /// The lambdas that are a def's own body: the def's contexts are its, not its type's (see `LambdaContexts`).
             BodyLambdas: Set<NodeId>;
+            /// How many lambdas were being inferred around the body of each def, by the def's name: a lambda inferred
+            /// within a def's body is one of more (see `LambdaContexts.withinLambda`).
+            BodyDepths: Map<Identifier, int>;
+            /// The scoped contexts each unannotated top-level def's body requires outside any lambda, by the def's
+            /// name, each once, which its type requires in turn (see `LambdaContexts.record`).
+            InferredScopedContexts: Map<Identifier, Ty list>;
             /// The instances a `use` loads that are written at it, by the node of each: their members' lambdas may
             /// need more contexts than the members' types declare (see `UseDischarge`).
             UseInstances: Set<NodeId>;
@@ -412,6 +418,8 @@ let emptyState =
             CellAssignments = Set.empty;
             LambdaContexts = [];
             BodyLambdas = Set.empty;
+            BodyDepths = Map.empty;
+            InferredScopedContexts = Map.empty;
             UseInstances = Set.empty;
             UseDepths = Map.empty;
             SelfTypes = Map.empty;

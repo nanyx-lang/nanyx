@@ -20,30 +20,85 @@ module internal NyxCompiler.LambdaContexts
 open Parser.Program
 open NyxCompiler.InferState
 
-/// `state` with `lambda` marked as a def's own body: its contexts are the def's, not its type's.
+/// `state` with `lambda` marked as the own body of the def `state.ContextScope` is in: its contexts are the def's, not
+/// its type's.
 let markBody (lambda: Expression) (state: InferState) : InferState =
-    match lambda.Kind with
-    | Lambda _ -> { state with BodyLambdas = state.BodyLambdas.Add lambda.Id }
+    match lambda.Kind, state.ContextScope with
+    | Lambda _, DefScope(defName, _) ->
+        { state with
+            BodyLambdas = state.BodyLambdas.Add lambda.Id
+            BodyDepths = state.BodyDepths |> Map.add defName state.LambdaContexts.Length }
+    | Lambda _, _ -> { state with BodyLambdas = state.BodyLambdas.Add lambda.Id }
     | _ -> state
+
+/// Whether a lambda within the body of the def `state.ContextScope` is in is being inferred, which requires what is used
+/// in it where it is called rather than the def.
+let withinLambda (state: InferState) : bool =
+    let depth =
+        match state.ContextScope with
+        | DefScope(defName, _) -> state.BodyDepths |> Map.tryFind defName |> Option.defaultValue 0
+        | _ -> 0
+    state.LambdaContexts.Length > depth
 
 /// `state` as the body of `lambda` starts to be inferred: what it uses is recorded for it, unless it is a def's body.
 let enter (lambda: Expression) (state: InferState) : InferState =
     if state.BodyLambdas.Contains lambda.Id then state
     else { state with LambdaContexts = [] :: state.LambdaContexts }
 
+/// The scoped contexts the body of the unannotated top-level def `defName`, `lambda`, requires outside any lambda (see
+/// `record`), but for the `Memory` of a cell it takes, which its type requires already (see
+/// `FunctionContexts.withCellMemory`).
+let private inferredScoped (defName: Identifier) (lambda: Expression) (state: InferState) : Ty list =
+    let cellScopes =
+        match lambda.Kind with
+        | Lambda(args, _, _) ->
+            args
+            |> List.choose (fun (name, _) -> state.DeclarationSymbols |> Map.tryFind (lambda.Id, LambdaParameters, name))
+            |> List.choose state.Cells.TryFind
+            |> List.map (resolveSoFar state)
+        | _ -> []
+    state.InferredScopedContexts
+    |> Map.tryFind defName
+    |> Option.defaultValue []
+    |> List.filter (function
+        | FunctionContexts.ScopedContext(_, scope) -> not (List.contains (resolveSoFar state scope) cellScopes)
+        | _ -> true)
+
 /// The contexts `lambda`'s body used, each once in the order first used, and `state` as it is once the body has been
-/// inferred.
+/// inferred. The body of an unannotated top-level def uses the scoped contexts it requires outside any lambda (see
+/// `inferredScoped`): its type requires them, so its callers must supply them.
 let leave (lambda: Expression) (state: InferState) : Ty list * InferState =
-    match state.LambdaContexts with
-    | used :: outer when not (state.BodyLambdas.Contains lambda.Id) ->
+    match state.LambdaContexts, state.ContextScope with
+    | used :: outer, _ when not (state.BodyLambdas.Contains lambda.Id) ->
         List.rev used |> List.distinct, { state with LambdaContexts = outer }
+    | _, DefScope(defName, true) -> inferredScoped defName lambda state, state
     | _ -> [], state
 
-/// `state` with `contexts` recorded as used by the innermost lambda being inferred, if any.
+/// `state` with the scoped contexts among `contexts` recorded as required by the body of the unannotated top-level def
+/// `defName`, each of one scope however often it is required: the scope its callers give it.
+let private recordInferredScoped (defName: Identifier) (contexts: Ty list) (state: InferState) : InferState =
+    contexts
+    |> List.fold (fun current context ->
+        match context with
+        | FunctionContexts.ScopedContext(name, scope) ->
+            let recorded = current.InferredScopedContexts |> Map.tryFind defName |> Option.defaultValue []
+            match recorded |> List.tryPick (function FunctionContexts.ScopedContext(other, earlier) when other = name -> Some earlier | _ -> None) with
+            | Some earlier -> addConstraint scope earlier current
+            | None -> { current with InferredScopedContexts = current.InferredScopedContexts |> Map.add defName (recorded @ [ context ]) }
+        | _ -> current) state
+
+/// `state` with `contexts` recorded as used by the innermost lambda being inferred, if any. Outside any lambda, in the
+/// body of an unannotated top-level def, a scoped context is the def's (see `recordInferredScoped`).
 let record (contexts: Ty list) (state: InferState) : InferState =
-    match state.LambdaContexts with
-    | used :: outer when not contexts.IsEmpty -> { state with LambdaContexts = (List.rev contexts @ used) :: outer }
+    match state.LambdaContexts, state.ContextScope with
+    | used :: outer, _ when not contexts.IsEmpty -> { state with LambdaContexts = (List.rev contexts @ used) :: outer }
+    | [], DefScope(defName, true) -> recordInferredScoped defName contexts state
     | _ -> state
+
+/// `after` without what the lambdas being inferred used since `before`: for an expression inferred again, as a pipe's
+/// value is as its call's first argument, whose second inference records it all again.
+let forgetSince (before: InferState) (after: InferState) : InferState =
+    { after with LambdaContexts = before.LambdaContexts; InferredScopedContexts = before.InferredScopedContexts }
 
 /// The variables of the contexts the lambdas being inferred use, as `resolve` resolves them. They are those lambdas',
 /// so a local def that holds a value of one's scope, as a value of a type in a scoped context's scope is, is of that

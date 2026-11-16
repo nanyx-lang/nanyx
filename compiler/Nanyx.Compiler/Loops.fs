@@ -41,7 +41,10 @@ let inferFor
         let expectedInput = inputTypeFromArgs (List.map fst elements)
         match inferLambdaWithExpected env constrained lambdaExpr lambdaArgs lambdaBody (Some expectedInput) None with
         // The loop runs its body where it is written: what the body uses is used here.
-        | Ok (typedLambda, next) -> Ok (mkTypedExpr expr (TyPrimitive "unit") None None None, LambdaContexts.recordRunHere typedLambda.Type next)
+        | Ok (typedLambda, next) ->
+            match ScopedCalls.unsuppliedToLoop next typedLambda.Type expr.Span with
+            | [] -> Ok (mkTypedExpr expr (TyPrimitive "unit") None None None, LambdaContexts.recordRunHere typedLambda.Type next)
+            | errors -> Error errors
         | Error err -> Error err
 
 /// `while condition -> body`, at `expr`: the condition is a `bool`, and the body's value is thrown away each time

@@ -503,11 +503,11 @@ and private inferPipe (env: TypeEnv) (state: InferState) (expr: Expression) (val
             let current = checkArgumentsOnly ()
             Ok (mkTypedExpr expr Unifier.errorType None None None, { current with FailedExprs = (expr.Id, [ misfit ]) :: current.FailedExprs })
         | None ->
-        match inferExpr env nextState { expr with Kind = FunctionCall(resolvedName, spanOpt, callArgs) } with
+        match inferExpr env (LambdaContexts.forgetSince state nextState) { expr with Kind = FunctionCall(resolvedName, spanOpt, callArgs) } with
         | Ok (typedCall, finalState) ->
-            // The call infers the value again, as its first argument. A call in the value that was left to find its
-            // instance later is left again at the types the call settles, so the one left the first time, at types
-            // nothing settles, goes.
+            // The call infers the value again, as its first argument, so what the value used the first time goes. A
+            // call in the value left to find its instance later is left again at the types the call settles, so the
+            // one left the first time, at types nothing settles, goes.
             let finalState = withoutRepeatedPending state.PendingContextInstances nextState.PendingContextInstances finalState
             // The call failed if it recorded itself as failed. Its error for a name it found nothing for, or more
             // than one of, is the pipe's, which says what the pipe looked for.
