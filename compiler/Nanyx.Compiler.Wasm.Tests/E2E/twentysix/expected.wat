@@ -2028,8 +2028,6 @@
       (then
         local.get $__match_tmp_0
     call $__nanyx_drop_list_int
-    local.get $__match_tmp_1
-    call $__nanyx_drop_fn_int_to_bool
     local.get $__match_tmp_2
       )
       (else
@@ -2067,9 +2065,6 @@
       i32.const 0
       local.set $__reuse_1
     end
-    local.get $__match_tmp_1
-    call $__nanyx_dup_fn_int_to_bool
-    drop
     local.get $__payload_rest
     local.get $__match_tmp_1
     local.get $__match_tmp_1
@@ -2077,8 +2072,6 @@
     local.get $__match_tmp_1
     i32.load
     call_indirect (type $ctx_fn_2_i32_i64_to_i32)
-    local.get $__match_tmp_1
-    call $__nanyx_drop_fn_int_to_bool
     (if (result i32)
       (then
         local.get $__reuse_1
@@ -2346,6 +2339,8 @@
     local.get $keep__in1__in1__in1
     i32.const 0
     call $prelude_filterReversed__int
+    local.get $keep__in1__in1__in1
+    call $__nanyx_drop_fn_int_to_bool
     i32.const 0
     call $prelude_reverseOnto__int
     local.set $__inlined14__in1__in1

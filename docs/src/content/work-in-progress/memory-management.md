@@ -379,13 +379,21 @@ nodes to the IR: `dup x1, ...; e`, `drop x1, ...; e`, and `e then drop x1, ...` 
 - **Drops happen before a store.** What dies in a `let`'s value is dropped as the value is computed, before it is
   stored, so a local the variable shares with another of the same name (see the IR's `VarKind`) still holds it.
 - **Matching.** An arm takes a reference to each name its patterns bind that it uses, then drops the scrutinee if
-  it does not use it either. Reading a field takes a reference to the value read.
+  it does not use it either; in a scrutinee the function borrows, it does neither (see below). Reading a field takes a reference to the value read.
 - **Ownership.** A function called through a closure (a lifted lambda, or the wrapper of a function passed as a
   value) borrows its environment and owns its other parameters: a call through a closure passes them on owned, or a
   new reference to one if it is used again, and keeps its own reference to the closure. Another function borrows a
   parameter on the heap it never takes over, and owns it otherwise; this is worked out over the whole module at
   once, until nothing changes. Calling a closure only borrows it, so a function that is given one and only calls it
   borrows that parameter too.
+- **What a function only reads in a match is borrowed** ([#1468](https://github.com/nanyx-lang/nanyx/issues/1468)),
+  inferred as Lean 4 does (`borrowedFrom` and `couldReuse` in `CoreIrCounting.fs`). Matching on a parameter does not
+  take it over: the scrutinee that copies it, and the names its patterns bind, are borrowed with it, and the function
+  borrows the parameter when none of them is taken over (a call that borrows them in turn, the function's own tail call
+  included, does not take them over) and no arm could reuse its block (none allocates a block of that size, see
+  `CoreIrReuseSites.fs`). So a sum or an evaluator over a shared list or tree counts nothing. The cost accepted: a fold
+  over a list held once no longer frees each cell as it passes it, which doesn't change peak memory, since the list was
+  built whole first.
 - **Closures have two entries** ([#1298](https://github.com/nanyx-lang/nanyx/issues/1298), `CoreIrClosureEntries.fs`).
   Each function a closure is over is in the closure's table slot, borrowing its environment, and a copy of it that
   owns its environment, its owning entry (`__lambda_9__owning`), is in the slot after it. A tail call of a closure
@@ -477,17 +485,6 @@ On the examples that compile (blocks allocated, and the heap's peak in bytes):
 - **Tail calls.** The language guarantees that a tail call uses no stack ([Tail calls](./tail-calls)), so a
   variable that dies at a tail call is dropped before the call, and an argument the caller owns is passed owned:
   if the callee only borrowed it, the caller would have to outlive the call.
-
-## Planned: more borrowing
-
-Decided by the maintainer; not built yet.
-
-- **A function that only reads what it matches borrows it** ([#1468](https://github.com/nanyx-lang/nanyx/issues/1468)),
-  inferred as Lean 4 does. A matched parameter is borrowed when no arm can reuse its cell (none allocates a block of
-  that size) and nothing bound from it is taken over except by a call that borrows it in turn, the function's own
-  tail call included; names bound out of a borrowed value are borrowed too. So a sum or an evaluator over a shared
-  list or tree counts nothing. The cost accepted: a fold over a list held once no longer frees each cell as it
-  passes it, which doesn't change peak memory, since the list was built whole first.
 
 # Open questions
 
