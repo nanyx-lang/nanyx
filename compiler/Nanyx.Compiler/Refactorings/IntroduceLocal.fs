@@ -11,7 +11,7 @@ open NyxCompiler.Refactorings.RefactoringText
 let private title = "Introduce local"
 
 /// Where the new def goes.
-type private Site =
+type internal Site =
     /// Before a statement of a block.
     | BeforeStatement of Statement
     /// Before a top-level item, an expression of which holds the selection outside any block.
@@ -20,14 +20,14 @@ type private Site =
     | LambdaBody of lambda: Expression * body: Expression
 
 /// How an expression is reached from the one around it.
-type private Reached =
+type internal Reached =
     /// Every time the expression around it is.
     | Always
     /// Only in some cases, which the reason says.
     | Sometimes of string
 
 /// The expressions directly within `expr`, each with how it is reached, and the statements of it if it is a block.
-let private partsOf (expr: Expression) : (Expression * Reached) list * Statement list =
+let internal partsOf (expr: Expression) : (Expression * Reached) list * Statement list =
     let always = List.map (fun part -> part, Always)
     let sometimes reason = List.map (fun part -> part, Sometimes reason)
     let inArms (arms: MatchArm list) =
@@ -44,12 +44,12 @@ let private partsOf (expr: Expression) : (Expression * Reached) list * Statement
 
 /// Whether `lambda` is written `{ ... }`, so that its body can be made a block, rather than made up by the parser
 /// around an expression, as the right of `??` is.
-let private isWritten (source: string) (lambda: Expression) =
+let internal isWritten (source: string) (lambda: Expression) =
     not (SourceSpan.isNone lambda.Span) && lambda.Span.Start < source.Length && source[lambda.Span.Start] = '{'
 
 /// The expression written exactly at `selection` within `expr`, the outermost if several are, with the site its def
 /// goes at and why it can't, if the way to it runs only in some cases.
-let rec private findIn (source: string) (selection: SourceSpan) (site: Site) (sometimes: string option) (expr: Expression) =
+let rec internal findIn (source: string) (selection: SourceSpan) (site: Site) (sometimes: string option) (expr: Expression) =
     if SourceSpan.isNone expr.Span |> not && not (SourceSpan.contains expr.Span selection) then None
     elif expr.Span.Start = selection.Start && expr.Span.End = selection.End then Some (expr, site, sometimes)
     else
@@ -119,17 +119,7 @@ let private movingRefusal (typed: TypedModule) (outer: Expression list) (siteSta
 /// each time, or reads a cell, which may change in between.
 let private sameAs (typed: TypedModule) (scope: Expression list) (expr: Expression) =
     let names = referencesIn typed expr
-    let effectful =
-        within expr
-        |> List.exists (fun part ->
-            match typed.CalleeTypes |> Map.tryFind part.Id with
-            | Some (TyFunc(_, _, contexts)) when not contexts.IsEmpty -> true
-            | _ ->
-                typed.References
-                |> Map.tryFind part.Id
-                |> Option.bind typed.Symbols.TryFind
-                |> Option.exists (fun symbol -> symbol.Kind = ContextMember))
-        || within expr |> List.exists (fun part -> match part.Kind with MutSyntax.Call _ | AssignSyntax.Call _ -> true | _ -> false)
+    let effectful = requiresAContext typed (within expr)
     let readsCell =
         scope
         |> List.collect within

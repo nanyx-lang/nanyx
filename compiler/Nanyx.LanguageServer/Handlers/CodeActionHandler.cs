@@ -14,8 +14,8 @@ namespace Nanyx.LanguageServer.Handlers;
 /// offer fixes (removing an unused local, renaming an unused name to <c>_</c>), and the compiler offers the import
 /// an unknown name from the standard library needs (<c>NyxCompiler.ImportFixes</c>). A fix that would edit another
 /// file is not offered. It also offers the refactorings at the range (see <c>NyxCompiler.Refactorings</c>), in a
-/// document whose text type-checked: writing the inferred type of the name at its start, and introducing a local or a
-/// function for what it selects, laid out with the document's formatter settings. One the compiler refuses there is
+/// document whose text type-checked: writing the inferred type of the name at its start, inlining the def it names,
+/// and introducing a local or a function for what it selects, laid out with the document's formatter settings. One the compiler refuses there is
 /// offered disabled, with its reason. One that makes up a name has the <see cref="RenameAtCommand"/> command, which
 /// starts renaming it once its edits are made.
 /// </summary>
@@ -74,17 +74,23 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             yield return ToAction(uri, document, offer);
         }
 
+        var options = FormattingHandler.SettingsFor(document, uri, _logger) ?? Nanyx.Formatter.Formatter.OptionsModule.defaults;
+        var recompile = Microsoft.FSharp.Core.FuncConvert.FromFunc((string text) =>
+            _documents.Compile(uri, text).Compiled ?? throw new InvalidOperationException("The compiler failed on the refactored text"));
+        foreach (var inline in Inline.at(options, document.FileName, document.Text, compiled, start, recompile))
+        {
+            yield return ToAction(uri, document, inline);
+        }
+
         if (end > start)
         {
-            var options = FormattingHandler.SettingsFor(document, uri, _logger) ?? Nanyx.Formatter.Formatter.OptionsModule.defaults;
             var selection = new Parser.Program.SourceSpan(document.FileName, start, end, 0, 0);
             foreach (var extract in IntroduceLocal.at(options, document.FileName, document.Text, compiled, selection))
             {
                 yield return ToAction(uri, document, extract);
             }
 
-            var recompile = Microsoft.FSharp.Core.FuncConvert.FromFunc((string text) =>
-                _documents.Compile(uri, text).Compiled ?? throw new InvalidOperationException("The compiler failed on the refactored text"));
+
             foreach (var extract in IntroduceFunction.at(options, document.FileName, document.Text, compiled, selection, recompile))
             {
                 yield return ToAction(uri, document, extract);
@@ -147,6 +153,7 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
         {
             RefactoringKind.Tags.Extract => CodeActionKind.RefactorExtract,
             RefactoringKind.Tags.Rewrite => CodeActionKind.RefactorRewrite,
+            RefactoringKind.Tags.Inline => CodeActionKind.RefactorInline,
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };
 
@@ -186,5 +193,5 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
     protected override CodeActionRegistrationOptions CreateRegistrationOptions(
         CodeActionCapability capability,
         ClientCapabilities clientCapabilities) =>
-        new() { DocumentSelector = TextDocumentSyncHandler.Selector, CodeActionKinds = new Container<CodeActionKind>(CodeActionKind.QuickFix, CodeActionKind.RefactorExtract, CodeActionKind.RefactorRewrite) };
+        new() { DocumentSelector = TextDocumentSyncHandler.Selector, CodeActionKinds = new Container<CodeActionKind>(CodeActionKind.QuickFix, CodeActionKind.RefactorExtract, CodeActionKind.RefactorInline, CodeActionKind.RefactorRewrite) };
 }
