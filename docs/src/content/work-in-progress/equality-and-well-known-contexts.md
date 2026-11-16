@@ -33,7 +33,8 @@ operators call, and `Hash(a)` and `__hash`.
 - **`!=` is not a member.** It is `not (a == b)`, and calls whatever `==` calls.
 - **Instances at a call.** A call that requires `Eq(T)` finds: an instance in scope (a `use`, or the enclosing
   signature); then the `==` attached to `T`; then the compiler's own, whose member is the prelude's `__equals`, a
-  generic function that compares by structure at the type it is specialised for.
+  generic function that compares by structure at the type it is specialised for. This order changes: a type's own
+  instance will come before a `use` (decision 2, [#1501](https://github.com/nanyx-lang/nanyx/issues/1501)).
 - **Only nominal types attach `==`** (decision 6). `` def Point.`==` `` on a structural type, or on a
   built-in type such as `string`, is `NYX0219`, and so is attaching `!=` to anything. `AttachedOperators.fs` holds
   the rule, with a list of the members it covers: `==`, `compare` and `hash`.
@@ -61,8 +62,9 @@ operators call, and `Hash(a)` and `__hash`.
   `Eq` of what each is there as a call to a local function does (`WellKnownContexts.checkLocalCall`). A function that
   writes its type with an open union, `#none | r -> bool`, needs no `[Eq(r)]`. As for local functions, the function
   named as a value is checked too, at the type it is passed as.
-- **A concrete `a == b` is a lookup too** (decision 2). Where `==` is bound to a definition that takes the operands,
-  as it is after `use ignoringCase` (an `Eq(string)`), `a == b` calls it, on a built-in type as on any other; else, on
+- **A concrete `a == b` is a lookup too.** Where `==` is bound to a definition that takes the operands,
+  as it is after `use ignoringCase` (an `Eq(string)`), `a == b` calls it, on a built-in type as on any other (this
+  goes with decision 2: such a `use` becomes an error, [#1501](https://github.com/nanyx-lang/nanyx/issues/1501)); else, on
   a type with a `==` attached, it calls that, as any operator on a type that attaches it does (`OperatorCalls.fs`,
   [#527](https://github.com/nanyx-lang/nanyx/issues/527)). Inside the attached `==` itself, `==` on its own type is
   the built-in comparison.
@@ -112,9 +114,9 @@ operators call, and `Hash(a)` and `__hash`.
   tag says to attach `compare` to a nominal type, or to sort by a key.
 - **Generic code says it orders**, as for `Eq`: `<` on a type variable needs `[Ord(a)]` in a written type, and has
   it inferred in a def that does not write one. `<` on a `list(a)` needs `Ord(a)`.
-- **Instances.** An operator, like a call, finds an instance in scope (a `use`, decision 2, or the enclosing
-  signature, which also covers a concrete `"a" < "b"`), then the `compare` attached to a type that is not a built-in
-  one, then the compiler's own. Any instance but the compiler's own is called: `x < y` calls the prelude's `__less`
+- **Instances.** An operator, like a call, finds an instance in scope (a `use`, or the enclosing signature, which also
+  covers a concrete `"a" < "b"`), then the `compare` attached to a type that is not a built-in one, then the
+  compiler's own. As for `Eq`, a type's own instance will come first (decision 2). Any instance but the compiler's own is called: `x < y` calls the prelude's `__less`
   (and `<=`, `>`, `>=` call `__lessOrEqual`, `__greater` and `__greaterOrEqual`), which is passed the instance.
 - **Only nominal types attach `compare`** (decision 6): attaching it to a structural type is `NYX0219`,
   as for `==`. A built-in type may attach one, as the prelude does, but it is not read.
@@ -297,9 +299,8 @@ exist. Numeric operators are discussed [separately below](#numeric-operators).
   the existing synthesis step, ahead of structural derivation. Only nominal types may do this. A
   structural type built from one uses it: a
   `list(Email)` compares its elements with `` Email.`==` ``. This needs [#527](https://github.com/nanyx-lang/nanyx/issues/527).
-- **A block overrides it with `use`.** Loading `def ignoringCase: Eq(string) = (`` `==` `` = caseInsensitive)` with
-  `use ignoringCase` changes what a plain
-  `a == b` in that block means, and what generic code called from it sees (`xs \list.contains(name)`).
+- ~~**A block overrides it with `use`.**~~ Reversed by decision 2: a `use` can't replace a type's own `==`. A
+  case-insensitive comparison is a protected type with its own `==`, or a function given the comparison.
 - **Nominal types** get the structural equality of their underlying type unless they attach `==`.
   Comparing two `UserId`s does not construct one, so it cannot break the type's invariants.
 
@@ -316,15 +317,38 @@ exist. Numeric operators are discussed [separately below](#numeric-operators).
 
 # How instances are found
 
-The lookup at each use of `==`, or call that requires `Eq(T)`, gains a last step:
+Decided in [#1501](https://github.com/nanyx-lang/nanyx/issues/1501), replacing the order this section first had (a
+`use` first): **a type's own instance always wins.** The lookup at each use of `==`, or call that requires `Eq(T)`, is:
 
-1. an instance loaded with `use` for `T`, nearest first;
-2. the instance the enclosing function's signature declares;
-3. an instance synthesized from definitions attached to `T` by name (`` T.`==` ``);
-4. **for a well-known context only**, an instance derived from `T`'s structure, each part found by this same lookup.
+1. `T`'s own instance, if it has one: synthesized from the definitions attached to `T` by name (`` T.`==` ``), or,
+   **for a well-known context only**, derived from `T`'s structure (each part found by this same lookup), or the
+   compiler's own for a built-in type;
+2. otherwise, the instance the enclosing function's signature declares (generic code, where `T` is a variable);
+3. otherwise, an instance loaded with `use` for `T`, nearest first.
 
-Because step 4 looks up each part afresh, overrides compose: a record containing an `Email` compares it with
-`` Email.`==` ``, and after `use ignoringCase` a `list(string)` compares its elements with the loaded instance.
+A `use` of an instance for a type that has its own is an error at the `use`, so `use Eq(int)(...)` can't make
+`1 == 2` true, and a set or map built in one place can't be read with a different `Eq` or `Hash` in another. A `use`
+still gives an instance to a type that has none of its own, such as `Eq` for a record holding functions. A different
+equality comes from a protected type with its own `==`, as `Email` has, or from a function given the comparison
+(`distinctBy`, `sortBy`). A record containing an `Email` compares it with `` Email.`==` ``, since each part is found
+by this same lookup.
+
+# Extending a type
+
+Decided in [#1501](https://github.com/nanyx-lang/nanyx/issues/1501), so that an attached definition can't get round
+the rule above:
+
+- **A type's owned definitions are always in scope.** "Owned" means attached in the type's own module, or in the
+  standard library for a built-in type. They're in scope wherever a value of the type is, whether or not their module
+  is imported: `string.length`, `list.map`, `string.hash`, `` int.`<` ``, a user's `` Point.`==` ``.
+- **New attached definitions are allowed anywhere,** on any type, owned or not, as extension methods are in C# and
+  Kotlin: `def string.shout = ...` in any module. There is no orphan rule.
+- **Nothing in scope can be redefined.** An attached definition whose name is already in scope for that type, owned or
+  imported, is an error at the new def, naming where the existing one comes from. Today only `==` on a built-in type
+  is caught (`NYX0219`); `def string.length`, `def list.map` and `def string.hash` are accepted and shadow the owned
+  ones, and `def int.toString` and `` def int.`<` `` are accepted and silently ignored.
+- **Extensions come into scope by import,** as any def does. If two imported modules extend a type with the same
+  name, using it is ambiguous, reported as other ambiguous imports are.
 
 In generic code a requirement on a structured type **reduces** to requirements on its variables: `==` on a
 `list(a)` needs `Eq(a)`, and on `(name: string, value: a)` needs `Eq(a)`. So a signature writes `[Eq(a)]`, not
@@ -384,8 +408,9 @@ design makes hashing the natural choice, since more types have it.
 
 As [ToString(a)](../advanced/contexts#tostringa) describes, `ToString(a)` is a
 well-known context for interpolation holes, synthesized from an attached `toString`, and derived part by part for
-tags with a payload, tuples, records and lists. As with `==`, a `ToString(T)` loaded with `use` changes concrete holes in its
-block.
+tags with a payload, tuples, records and lists. Today, as with `==`, a `ToString(T)` loaded with `use` changes concrete
+holes in its block. Under decision 2 it can't for a type with its own `toString`, which every built-in type has: a
+different rendering is a function called in the hole, `"{money(total)}"`.
 
 # Numeric operators
 
@@ -437,9 +462,11 @@ The language server's code action for the third adds the requirement to the sign
 
 1. **Generic code says it compares.** `==` on a type variable requires `[Eq(a)]`, inferred when the type is not
    written. (Rejected: every non-function type has equality implicitly, checked at instantiation.)
-2. **`use` changes a concrete `a == b` too.** `==` is always a lookup of `Eq(T)`, so an `Eq(string)` loaded with `use` changes plain
-   `==` in its block as well as generic code called from it. This reverses operators.md:53, which is updated when
-   the work lands, and agrees with how `ToString` works. (Rejected: `use` reaches only generic code.)
+2. **A `use` can't replace a type's own instance** ([#1501](https://github.com/nanyx-lang/nanyx/issues/1501), see
+   [How instances are found](#how-instances-are-found)). This reverses the first decision here, that a `use` changes a
+   concrete `a == b` too, which let `use Eq(int)(...)` make `1 == 2` true and let a set built under one `Hash` be read
+   under another. (Rejected: a `use` wins, visible in the editor and flagged by a linter; built-in types fixed but
+   user types replaceable.)
 3. **Derived orders** are for numbers, bool, string, tuples and lists only; records and tags attach `compare` or
    use `sortBy`. (Rejected: tags by name, records by field name.)
 4. **First round:** `Eq`, then `Ord`, then `Hash` with maps, each its own piece of work. Numeric operators get
@@ -452,6 +479,9 @@ The language server's code action for the third adds the requirement to the sign
    whether or not its alias is known. Attaching one of these to a structural type is an error. (Rejected: any named
    type.)
 7. **Mutable `MArray` and `MRef` have no `Eq`**; convert to a list first. (Rejected: identity, contents.)
+8. **Attached definitions extend a type but never redefine** what's in scope for it, and a type's owned ones are
+   always in scope ([Extending a type](#extending-a-type), [#1501](https://github.com/nanyx-lang/nanyx/issues/1501)).
+   (Rejected: an orphan rule, as Rust has.)
 
 # Still open
 

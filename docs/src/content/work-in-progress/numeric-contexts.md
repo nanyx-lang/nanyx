@@ -19,8 +19,8 @@ still open, the design for units, and the decisions.
   value of the type variable, such as the start of a `fold`, a function's result or an argument, is still an `int`;
   write `zero` there, as `math.abs` does for its result. Literals are typed before the type they are expected to
   have is known, so reading them by their expected type needs a pass after the def is inferred.
-- **`use` does not change concrete arithmetic** (decision 6): an `Add(int)` loaded with `use` reaches generic code
-  called from its block, but a concrete `1 + 2` there is still the built-in `+`.
+- **`use` does not change concrete arithmetic**: an `Add(int)` loaded with `use` reaches generic code called from its
+  block, but a concrete `1 + 2` there is still the built-in `+`. Under decision 6 such a `use` becomes an error.
 - **A user context can still give `+` another meaning**: an operator calls whatever its name is bound to on a type
   variable, so a user's `context Sum(a) = (`` `+` ``: ...)` still works. The design is that `+` always reads `Add`.
 - **Units.** The sized numbers, `I8` to `U64` and `F32`, have their instances
@@ -66,9 +66,11 @@ dimensions, all to describe something the compiler has to know about anyway to u
 5. **Literals are generic only where the signature is written**: `0` is `zero`, other integers `fromInt(n)`, and a
    decimal literal at a type variable is an error. (Rejected: literal polymorphism everywhere; no literals in
    generic code.)
-6. **`use` changes concrete arithmetic**, as it does `==`, so there is one rule across well-known contexts.
-   operators.md is updated when the work lands. (Rejected: `use` reaches only generic code, which makes arithmetic
-   the exception.)
+6. **A `use` can't replace a type's own arithmetic,** as it can't replace its `==`
+   ([#1501](https://github.com/nanyx-lang/nanyx/issues/1501)), so there is one rule across well-known contexts: an
+   `Add(int)` loaded with `use` is an error, and `1 + 2` is always the built-in `+`. This replaces the earlier decision
+   that a `use` changes concrete arithmetic. (Rejected: `use` reaches only generic code, which makes arithmetic the
+   exception; `use` changes concrete arithmetic too.)
 7. **`**` takes an `int` exponent** and is the prelude's `pow`, not a member. A negative exponent on an integer
    type stops the program; on a float it is `1.0 / (a ** -n)`.
 8. **Measured types have `Add` but not `Num`**, and `*` and `/` on them are typed by the dimension rules. (Rejected:
