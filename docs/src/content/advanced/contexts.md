@@ -211,6 +211,29 @@ def main = {
 }
 ```
 
+A handler can give its lambda an instance of a parameterised context too. The lambda is given it at the types its parameter's type writes, so a context with several instances for one type, such as a monoid, is chosen by the handler a block is passed to:
+
+```nanyx
+context Monoid(a) = (empty: a, combine: (a, a) -> a)
+
+def reduce: [Monoid(a)] list(a) -> a = { xs ->
+  xs \fold(empty) { acc, x -> combine(acc, x) }
+}
+
+def additive: ([Monoid(int)] () -> b) -> b = { f ->
+  use Monoid(int)(empty = 0, combine = { x, y -> x + y }) in f()
+}
+
+def multiplicative: ([Monoid(int)] () -> b) -> b = { f ->
+  use Monoid(int)(empty = 1, combine = { x, y -> x * y }) in f()
+}
+
+def main = {
+  println(additive { reduce([1, 2, 3, 4]) }) -- 10
+  println(multiplicative { reduce([1, 2, 3, 4]) }) -- 24
+}
+```
+
 # Contexts are part of the type
 
 A value's context requirement is part of its type. You can annotate just the contexts and let the rest infer:
