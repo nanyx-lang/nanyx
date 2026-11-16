@@ -13,7 +13,7 @@ namespace Nanyx.LanguageServer;
 /// The server publishes diagnostics, shows inferred types on hover, in lenses above unannotated top-level defs and
 /// in inlay hints after other unannotated names, goes to definitions, finds references, outlines documents,
 /// completes the names in scope, offers diagnostics' fixes as quick fixes, formats documents and selections, expands and
-/// shrinks selections along the syntax tree, and marks the names of
+/// shrinks selections along the syntax tree, renames names within a document, and marks the names of
 /// nominal types as semantic tokens. It also answers
 /// <c>nanyx/infoView</c>, a request of its own for the extension's info view (see <see cref="InfoViewHandler"/>), and
 /// <c>nanyx/libraryModules</c> and <c>nanyx/libraryModule</c>, which list the standard library's modules and what each
@@ -21,8 +21,7 @@ namespace Nanyx.LanguageServer;
 /// and <c>nanyx/addImport</c>, which imports one. Each editor
 /// feature is one handler class in <c>Handlers/</c>, registered in <see cref="Configure"/>, reading the document's
 /// last compile from <see cref="DocumentStore"/>. To add a feature, add a handler that derives from the matching
-/// OmniSharp base class and register it: <c>textDocument/rename</c>, for one, would be a <c>RenameHandlerBase</c>.
-/// It is not implemented yet (#113).
+/// OmniSharp base class and register it, as <see cref="RenameHandler"/> derives from <c>RenameHandlerBase</c>.
 /// </remarks>
 public static class NanyxLanguageServer
 {
@@ -80,6 +79,8 @@ public static class NanyxLanguageServer
             .WithHandler<FormattingHandler>()
             .WithHandler<RangeFormattingHandler>()
             .WithHandler<SelectionRangeHandler>()
+            .WithHandler<RenameHandler>()
+            .WithHandler<PrepareRenameHandler>()
             .WithHandler<SemanticTokensHandler>()
             .WithHandler<InfoViewHandler>()
             .WithHandler<LibraryModulesHandler>()

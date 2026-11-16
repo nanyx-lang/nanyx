@@ -14,7 +14,7 @@ and inline, and the small rewrites that save typing. Its issues carry the
 
 The language server offers go to definition, find references within a document, hover, inlay hints, completion,
 semantic tokens, formatting, and quick fixes from diagnostics ([Language server and editor](./language-server)).
-Expand and shrink selection, writing the inferred type and introducing a local are done. There is no rename yet.
+Expand and shrink selection, writing the inferred type and introducing a local are done, and rename within a module.
 
 Refactorings live in the compiler's `Refactorings/` folder, one file each, after the editor features they build on
 (`Outline.fs`), in the namespace `NyxCompiler.Refactorings`. Their tests are in `Features/Refactorings/` of the
@@ -65,7 +65,28 @@ Its output is formatted: the compiler references the formatter, and `RangeFormat
 top-level items the edit touches, with the document's formatter settings, and the refactoring is the one edit from
 the old text to that. Its tests check the result compiles and is formatted.
 
-Still to do: the new name should start a rename, which needs rename ([#1534](https://github.com/nanyx-lang/nanyx/issues/1534)).
+Still to do: the new name should start a rename.
+
+## Rename
+
+`Rename.prepare` finds the name at a position (or just before it, where an editor's cursor often is) and its own part,
+`shout` in `string.shout`, or refuses it with a reason; `Rename.edits` renames its declaration and every use of it
+in the module (`Definition.referencesTo`). An attached definition keeps its type's part. A local, a parameter, a
+pattern variable, a top-level def and a type can be renamed. The new name must be a name, not a keyword, not one of
+the compiler's (`__`), and, for a type, not a one-letter lowercase name, which would be a type variable.
+
+It never changes what the program means: the renamed text is compiled (the server compiles it as it compiles the
+document), and the rename is refused if that has more errors, such as a name defined twice, or if any name in it refers
+to something other than it did before (`Definition.referenceSites`, compared with each offset moved by the edits).
+That covers a new name that would hide another at a use and one that another would hide, and names the use.
+
+The server answers `textDocument/prepareRename` and `textDocument/rename`; a refusal is a `RequestFailed` error
+whose message is the reason, which VS Code shows.
+
+Not yet: names declared in another module, exported names (other modules may use them, and the server can't find
+those uses until it can search the workspace, [#877](https://github.com/nanyx-lang/nanyx/issues/877)), an import's
+alias, a context's members, record fields, and modules. Renaming a type does not yet rename its attached definitions'
+prefixes.
 
 # How a refactoring is built
 
@@ -89,7 +110,7 @@ Still to do: the new name should start a rename, which needs rename ([#1534](htt
 
 | Refactoring | Issue |
 |---|---|
-| Rename a symbol | [#1534](https://github.com/nanyx-lang/nanyx/issues/1534) |
+| Rename a symbol (within a module) | [#1534](https://github.com/nanyx-lang/nanyx/issues/1534) |
 | Expand and shrink selection (done) | [#1535](https://github.com/nanyx-lang/nanyx/issues/1535) |
 | Introduce local (done) | [#1536](https://github.com/nanyx-lang/nanyx/issues/1536) |
 | Introduce function | [#1537](https://github.com/nanyx-lang/nanyx/issues/1537) |

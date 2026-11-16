@@ -166,6 +166,19 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
         .Select(symbol => symbol.DocumentSymbol!)
         .ToList() ?? [];
 
+    /// <summary><paramref name="text"/> with <paramref name="edit"/> made to it.</summary>
+    protected static string Applied(string text, TextEdit edit) => Applied(text, [edit]);
+
+    /// <summary><paramref name="text"/> with <paramref name="edits"/>, which do not overlap, made to it.</summary>
+    protected static string Applied(string text, IEnumerable<TextEdit> edits)
+    {
+        var positions = new SourcePositions(text);
+        return edits
+            .Select(edit => (Start: positions.ToOffset(edit.Range.Start), End: positions.ToOffset(edit.Range.End), edit.NewText))
+            .OrderByDescending(edit => edit.Start)
+            .Aggregate(text, (applied, edit) => applied[..edit.Start] + edit.NewText + applied[edit.End..]);
+    }
+
     protected async Task<List<Location>> ReferencesAt(DocumentUri uri, int line, int character, bool includeDeclaration) =>
         (await _client.TextDocument.RequestReferences(
             new ReferenceParams
