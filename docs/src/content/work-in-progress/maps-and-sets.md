@@ -95,7 +95,8 @@ These are the choices the docs leave open. The code takes the marked default unt
    an attached `fromArray`, chosen by the expected type (`def unique: set(int) = [1, 2, 2, 3]`) or by the type's name
    before the brackets (`set[1, 2, 2, 3]`). The compiler passes an `Array` of the items, or of `(key, value)` tuples
    for `k => v` entries. With neither, a literal is a `list(a)` or a `map(k, v)` as now. This replaces the tour's
-   earlier `apply` and `ListBuilder` design.
+   earlier `apply` and `ListBuilder` design. Done: see [Collections](../tour/collections#syntax) and
+   [Collection literals](./collection-literals).
 
 Settled as the obvious choice:
 

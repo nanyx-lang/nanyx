@@ -27,3 +27,27 @@ export def __arrayEqualsBy: [c] array(a), array(a), ([c] a, a -> bool) -> bool =
 export def __arrayToString: [c] array(a), ([c] a -> string) -> string = { xs, show ->
   __listToString(__nanyx_array_to_list(xs), show)
 }
+
+--| `xs` itself. What a literal builds an array with, `Array[1, 2]`, or `[1, 2]` where an array is
+  expected.
+export def array.fromArray: array(a) -> array(a) = { xs -> xs }
+
+--| The elements of `xs`, in order. What a literal builds a list with where it is written
+  `List[...]`.
+export def list.fromArray: array(a) -> list(a) = { xs ->
+  __nanyx_array_to_list(xs)
+}
+
+--| The array of the elements of `xs`, in order: what a collection literal's items are passed to
+  its type's `fromArray` as (see `array.fromArray`).
+export def __arrayOf: list(a) -> array(a) = { xs ->
+  __nanyx_array_of_list(xs)
+}
+
+--| The elements of the array `xs`, which a collection literal spreads, `[...xs]`.
+export def __spreadArray: array(a) -> list(a) = { xs ->
+  __nanyx_array_to_list(xs)
+}
+
+--| The list `xs`, which a collection literal spreads, `[...xs]`.
+export def __spreadList: list(a) -> list(a) = { xs -> xs }

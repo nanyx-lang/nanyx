@@ -38,12 +38,12 @@ module internal LambdaArguments =
         | _ -> None
 
     /// Infers `items`, the arguments of a call written as one tuple, whose callee takes them as `paramTys`. Each is
-    /// inferred with `inferItem`, but a lambda with `inferLambda`, the input `expectedInput` gives it, as far as the
+    /// inferred with `inferItem`, given its parameter's type, but a lambda with `inferLambda`, the input `expectedInput` gives it, as far as the
     /// items before it say, and its parameter's type. Those say it only for that: their constraints against their
     /// parameters are added to a copy of the state, and the call still constrains the whole tuple to its input
     /// afterwards, as it does any.
     let inferTupleItems
-        (inferItem: InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>)
+        (inferItem: InferState -> Expression -> Ty -> Result<TypedExpr * InferState, Diagnostic list>)
         (inferLambda: InferState -> Expression -> (Identifier * TypeExpr option) list -> Expression -> Ty option -> Ty -> Result<TypedExpr * InferState, Diagnostic list>)
         (state: InferState)
         (items: Expression list)
@@ -57,7 +57,7 @@ module internal LambdaArguments =
                     |> List.rev
                     |> List.fold (fun scratch (typed: TypedExpr, earlierTy) -> addAssignableConstraintAt typed.Expr.Span typed.Type earlierTy scratch) current
                 inferLambda current item lambdaArgs body (expectedInput earlier (Some paramTy) item lambdaArgs) paramTy
-            | _ -> inferItem current item
+            | _ -> inferItem current item paramTy
         let inferred, next, errors =
             List.zip items paramTys
             |> List.fold (fun (inferred, current, errors) (item, paramTy) ->

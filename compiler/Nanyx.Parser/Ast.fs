@@ -554,6 +554,99 @@ module MapSyntax =
             |> fun pairs -> if pairs |> List.forall Option.isSome then Some (pairs |> List.choose id) else None
         | _ -> None
 
+/// A square-bracket literal of a type that says how to be built from one (see the collections page): `Array[1, 2]`,
+/// or `[1, 2]` where an `Array(int)` is expected. It is a call to the type's attached `fromArray` with an array of the
+/// items, `Array.fromArray(__arrayOf([1, 2]))`: the prelude's `__arrayOf` makes the array from a list of the items, in
+/// which each spread, `...xs`, is a call to the built-in "__spreadItems", which takes a list or an array.
+module CollectionSyntax =
+    /// The function a type attaches to build a value from an array of a literal's items.
+    let fromArray = "fromArray"
+    let arrayOf = "__arrayOf"
+    let spread = "__spreadItems"
+
+    /// The items of a literal as the parser writes it, each a run of elements or a spread: `[a, b]` is one run,
+    /// `[a, ...xs]` is `[a] ++ xs`, whose list runs span the whole literal, and `[k => v]` is a call to `__map` with a
+    /// list of the entries as tuples (see `MapSyntax`). None for any other expression.
+    let segments (literal: Expression) : Choice<Expression list, Expression> list option =
+        let segment (x: Expression) =
+            match x.Kind with
+            | ListExpr items when x.Span = literal.Span -> Choice1Of2 items
+            | _ -> Choice2Of2 x
+        let rec flatten (x: Expression) =
+            match x.Kind with
+            | BinaryOp("++", None, a, b) when x.Span = literal.Span -> segment a :: flatten b
+            | _ -> [ segment x ]
+        match literal.Kind with
+        | ListExpr items -> Some [ Choice1Of2 items ]
+        | BinaryOp("++", None, _, _) -> Some (flatten literal)
+        | FunctionCall(name, _, [ Kind (ListExpr entries) ]) when name = MapSyntax.builtIn -> Some [ Choice1Of2 entries ]
+        | _ -> None
+
+    /// The list of a literal's items, written at `span`: each run of elements a list, and each spread a call to
+    /// `__spreadItems`, joined with `++`.
+    let listOf (span: SourceSpan) (segments: Choice<Expression list, Expression> list) : Expression =
+        let part segment =
+            match segment with
+            | Choice1Of2 elements -> Expression.at span (ListExpr elements)
+            | Choice2Of2 spread' -> Expression.from spread' (FunctionCall(spread, None, [ spread' ]))
+        match segments with
+        | [] -> Expression.at span (ListExpr [])
+        | _ -> segments |> List.map part |> List.reduceBack (fun left right -> Expression.at span (BinaryOp("++", None, left, right)))
+
+    /// The call that builds a `typeName` from the items `segments`, written at `span`, whose name is written at
+    /// `nameSpan`.
+    let build (typeName: Identifier) (nameSpan: SourceSpan option) (span: SourceSpan) (segments: Choice<Expression list, Expression> list) =
+        let array = Expression.at span (FunctionCall(arrayOf, None, [ listOf span segments ]))
+        FunctionCall($"{typeName}.{fromArray}", nameSpan, [ array ])
+
+    /// `list`, the list of a literal's items `listOf` builds, with its runs and spreads replaced, in order, by
+    /// `segments`, keeping its nodes.
+    let withSegments (list: Expression) (segments: Choice<Expression list, Expression> list) : Expression =
+        let mutable remaining = segments
+        let next () =
+            match remaining with
+            | head :: rest ->
+                remaining <- rest
+                Some head
+            | [] -> None
+        let rec rebuild (x: Expression) =
+            match x.Kind with
+            | BinaryOp("++", None, a, b) ->
+                let a = rebuild a
+                { x with Kind = BinaryOp("++", None, a, rebuild b) }
+            | ListExpr _ ->
+                match next () with
+                | Some (Choice1Of2 elements) -> { x with Kind = ListExpr elements }
+                | _ -> x
+            | FunctionCall(name, span, [ _ ]) when name = spread ->
+                match next () with
+                | Some (Choice2Of2 operand) -> { x with Kind = FunctionCall(name, span, [ operand ]) }
+                | _ -> x
+            | _ -> x
+        rebuild list
+
+    /// The runs and spreads of `list`, a list of a literal's items as `listOf` builds it.
+    let rec listSegments (list: Expression) : Choice<Expression list, Expression> list =
+        match list.Kind with
+        | BinaryOp("++", None, a, b) -> listSegments a @ listSegments b
+        | ListExpr items -> [ Choice1Of2 items ]
+        | FunctionCall(name, _, [ operand ]) when name = spread -> [ Choice2Of2 operand ]
+        | _ -> [ Choice2Of2 list ]
+
+    /// Whether `item`, an item of a literal, is an entry, `k => v`, which the parser writes as a tuple spanning the key.
+    let isEntry (item: Expression) =
+        match item.Kind with
+        | TupleExpr [ key; _ ] -> item.Span = key.Span
+        | _ -> false
+
+    /// The type a literal written `T[...]` builds, where it is written, and the list of its items.
+    let (|Construct|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, nameSpan, [ Kind (FunctionCall(array, None, [ items ])) ]) when
+            array = arrayOf && name.EndsWith($".{fromArray}") ->
+            Some (name.Substring(0, name.Length - fromArray.Length - 1), nameSpan, items)
+        | _ -> None
+
 /// `not x`: a call to the built-in "not" with its operand.
 module NotSyntax =
     let builtIn = "not"

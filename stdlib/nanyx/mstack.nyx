@@ -22,6 +22,12 @@ export def MStack.fromList: [Memory] list(a) -> MStack(a) = { xs ->
   MStack(MRef.new(xs))
 }
 
+--| A new stack holding `xs`, the first of them on top. What a literal builds a stack with,
+  `MStack[1, 2, 3]`, or `[1, 2, 3]` where a stack is expected.
+export def MStack.fromArray: [Memory] Array(a) -> MStack(a) = { xs ->
+  MStack(MRef.new(list.fromArray(xs)))
+}
+
 --| Puts `value` on top of `stack`.
 export def MStack.push: [Memory] MStack(a), a -> () = { MStack(items), value ->
   MRef.set(items, [value, ...MRef.get(items)])
