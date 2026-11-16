@@ -430,7 +430,7 @@ and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) 
                 let resultTy, called = OperatorCalls.infer nextState expr callee scheme instance input
                 // A definition that requires a parameterised context finds its instance as a call to it does (#1594).
                 let opSpan = match expr.Kind with BinaryOp(_, opSpan, _, _) -> opSpan | _ -> None
-                match resolveCallInstances env called expr callee (nameSpan opSpan expr) with
+                match requireOperatorContexts env called expr callee (nameSpan opSpan expr) |> Result.bind (fun called -> resolveCallInstances env called expr callee (nameSpan opSpan expr)) with
                 | Error _ when snd (Unifier.solve called.Constraints) |> List.exists (snd >> SourceSpan.contains expr.Span) -> Ok called
                 | resolved -> resolved
                 |> Result.map (fun called -> mkTypedExpr expr resultTy None None None, called)
@@ -461,11 +461,9 @@ and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) 
                 let boolConstrained = constrained |> addConstraint leftExpr.Type (TyPrimitive "bool")
                 Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, boolConstrained)
             // A spare operator (`^`, `<>`, ...) means only what a definition of it gives it.
-            | BinaryOp(op, opSpan, _, _) ->
-                let operandTy = Unifier.tyToString (resolveSoFar nextState leftExpr.Type)
-                let message =
-                    $"`{op}` has no built-in meaning, and `{operandTy}` has no `{op}` attached. A type gets one by attaching it: def Money.`{op}` = ..."
-                Error [ Diagnostics.at DiagnosticCodes.UnknownFunction (opSpan |> Option.defaultValue expr.Span) message ]
+            | BinaryOp(op, opSpan, left, _) ->
+                let at = opSpan |> Option.defaultValue expr.Span
+                Error [ OperatorCalls.undefinedSpare (MemoryCells.isCell env constrained) op at left (resolveSoFar nextState leftExpr.Type) ]
             | _ -> Ok (mkTypedExpr expr leftExpr.Type None None None, constrained)
 
 /// `value` piped to the function `name`, its name at `spanOpt`, with `args`: a call of the function attached to

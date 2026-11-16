@@ -7,7 +7,7 @@
   `list.get` does.
 
   Each function is attached to `MList`, so with `import nanyx/mlist` it is called as
-  `MList.add(items, 5)`, or as `items \add(5)`.
+  `MList.add(items, 5)`, or as `items \add(5)`, and `items += 5` adds too.
 module mlist
 
 import nanyx/mref
@@ -36,6 +36,9 @@ export def MList.add: [Memory] MList(a), a -> () = { MList(state), value ->
   def held = MRef.get(state)
   MRef.set(state, (reversed = [value, ...held.reversed], count = held.count + 1))
 }
+
+--| Adds `value` at the end of `items`, as [`MList.add`] does: `items += 5`.
+export def MList.`+=`: [Memory] MList(a), a -> () = MList.add
 
 --| The element of `items` at `index`, counting from 0, or `#none` when `index` is negative or past
   the end.

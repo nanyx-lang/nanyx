@@ -37,44 +37,50 @@ let private shortCircuit text precedence associativity =
 /// `a ?? b`: the value inside `a`'s `#some`, or else `b`, which runs only when it is needed.
 let coalesceOperator = "??"
 
+/// `items += x`: a spare operator, which a collection that changes in place attaches to add `x` to itself.
+let addInPlaceOperator = "+="
+
 /// Every binary operator, tightest first. Both of the parser's tables take all of them: the full one and the one for a
 /// statement or a match arm's body, which does not cross lines. `..` is not among them: it is range syntax (see
 /// `rangePrecedence`). Prefix `-` and `not` bind tighter than all of them (see `prefixPrecedence`).
 let binaryOperators =
     [ // Powers group to the right: `2 ** 3 ** 2` is `2 ** (3 ** 2)`.
-      operator "**" 11 RightAssociative
-      operator "*" 10 LeftAssociative
-      operator "/" 10 LeftAssociative
-      operator "%" 10 LeftAssociative
-      spare "^" 10 LeftAssociative
-      spare "<*>" 10 LeftAssociative
-      operator "+" 9 LeftAssociative
-      operator "-" 9 LeftAssociative
-      spare "<+>" 9 LeftAssociative
+      operator "**" 12 RightAssociative
+      operator "*" 11 LeftAssociative
+      operator "/" 11 LeftAssociative
+      operator "%" 11 LeftAssociative
+      spare "^" 11 LeftAssociative
+      spare "<*>" 11 LeftAssociative
+      operator "+" 10 LeftAssociative
+      operator "-" 10 LeftAssociative
+      spare "<+>" 10 LeftAssociative
       // Concatenation, of strings and lists: looser than arithmetic, tighter than comparison.
-      operator "++" 8 RightAssociative
-      spare "<>" 8 RightAssociative
+      operator "++" 9 RightAssociative
+      spare "<>" 9 RightAssociative
       // Composition: `f >> g` is `f` and then `g`, `g << f` the same function.
-      operator ">>" 7 LeftAssociative
-      operator "<<" 7 RightAssociative
+      operator ">>" 8 LeftAssociative
+      operator "<<" 8 RightAssociative
       // Unwrapping an option-like value: tighter than comparison, so `a ?? b == c` is `(a ?? b) == c`, and grouping to
       // the right, so `a ?? b ?? c` tries each in turn.
-      shortCircuit coalesceOperator 6 RightAssociative
-      operator "<" 5 NonAssociative
-      operator ">" 5 NonAssociative
-      operator "<=" 5 NonAssociative
-      operator ">=" 5 NonAssociative
-      spare "~" 5 NonAssociative
-      operator "==" 4 NonAssociative
-      operator "!=" 4 NonAssociative
-      spare ">>=" 3 LeftAssociative
-      spare "=<<" 3 RightAssociative
-      // Boolean operations are the keywords `and` and `or`, the loosest operators.
-      shortCircuit "and" 2 LeftAssociative
-      shortCircuit "or" 1 LeftAssociative ]
+      shortCircuit coalesceOperator 7 RightAssociative
+      operator "<" 6 NonAssociative
+      operator ">" 6 NonAssociative
+      operator "<=" 6 NonAssociative
+      operator ">=" 6 NonAssociative
+      spare "~" 6 NonAssociative
+      operator "==" 5 NonAssociative
+      operator "!=" 5 NonAssociative
+      spare ">>=" 4 LeftAssociative
+      spare "=<<" 4 RightAssociative
+      // Boolean operations are the keywords `and` and `or`, the loosest operators but one.
+      shortCircuit "and" 3 LeftAssociative
+      shortCircuit "or" 2 LeftAssociative
+      // Adding to a collection in place, `items += 1`: the loosest, so `xs += a + b` adds `a + b`, and not grouping, so
+      // `a += b += c` is an error. It is not assignment: `x += 1` on a cell is an error that says to write `x := x + 1`.
+      spare addInPlaceOperator 1 NonAssociative ]
 
 /// The precedence of a range, `a..b`, which does not group either: `a..b..c` is an error.
-let rangePrecedence = 5
+let rangePrecedence = 6
 
 /// The precedence of prefix `-` and `not`, which bind tighter than every binary operator: `-x ** 2` is `(-x) ** 2`.
 let prefixPrecedence = (binaryOperators |> List.map _.Precedence |> List.max) + 1

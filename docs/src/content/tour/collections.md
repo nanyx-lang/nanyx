@@ -21,8 +21,8 @@ def numbers = [1, 2, 3]
 
 def addItems = memory {
   def items: MList(int) = MList.empty()
-  items \add(1)
-  items \add(2)
+  items += 1
+  items += 2
   MList.toList(items)
 }
 ```
