@@ -8,6 +8,7 @@
   <Folder Name="/Nanyx.Compiler/">
     <Project Path="Nanyx.Compiler/NanyxCompiler.fsproj" />
   </Folder>
+  <Project Path="Nanyx.Compiler.CheckedLibrary/Nanyx.Compiler.CheckedLibrary.fsproj" />
   <Project Path="Nanyx.Compiler.Runtime/Nanyx.Compiler.Runtime.fsproj" />
   <Project Path="Nanyx.Compiler.Tests/Nanyx.Compiler.Tests.fsproj" />
   <Project Path="Nanyx.Compiler.Wasm/Nanyx.Compiler.Wasm.fsproj" />

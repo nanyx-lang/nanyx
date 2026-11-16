@@ -1,0 +1,25 @@
+<Project>
+
+  <!--
+    Puts the checked standard library, checked-library.bin, beside a program that uses the compiler, and beside the
+    published program too, so that it does not check the library on every compile (see CheckedLibrary.fs in
+    Nanyx.Compiler). Nanyx.Compiler.CheckedLibrary writes it when it is built. It runs on the machine that builds, so it
+    is built for that machine, whatever runtime the program is built for; it is built with the program's other
+    properties, so that the compiler it references is the same build as the program's.
+  -->
+  <Target Name="IncludeCheckedLibrary" AfterTargets="ResolveProjectReferences" BeforeTargets="AssignTargetPaths">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)Nanyx.Compiler.CheckedLibrary\Nanyx.Compiler.CheckedLibrary.fsproj"
+             Targets="Build"
+             RemoveProperties="RuntimeIdentifier;SelfContained">
+      <Output TaskParameter="TargetOutputs" ItemName="_CheckedLibraryWriter" />
+    </MSBuild>
+    <ItemGroup>
+      <None Include="@(_CheckedLibraryWriter->'%(RootDir)%(Directory)checked-library.bin')"
+            Link="checked-library.bin"
+            CopyToOutputDirectory="PreserveNewest"
+            CopyToPublishDirectory="PreserveNewest"
+            ExcludeFromSingleFile="true" />
+    </ItemGroup>
+  </Target>
+
+</Project>
