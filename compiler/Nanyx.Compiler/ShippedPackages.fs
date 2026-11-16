@@ -19,14 +19,13 @@ module ShippedPackages =
     let private modules = ConcurrentDictionary<string, PackageModules option>()
 
     /// The modules of the shipped package `name`, by the names its source files declare, if the compiler ships it.
-    /// They never change while the process runs, so they are read once. A shipped package is a host, or a package a
-    /// program depends on, and has no `@entry` of its own: its `Host` is the console host's, unused.
+    /// They never change while the process runs, so they are read once. A shipped package has no `@entry` of its own.
     let tryModules (name: string) : PackageModules option =
         modules.GetOrAdd(name, fun name ->
             let sources = Path.Combine(directoryOf name, "src")
             if Directory.Exists sources then
                 let files = Directory.GetFiles(sources, "*.nyx", SearchOption.AllDirectories) |> Array.sort |> List.ofArray
-                Some (PackageModules.ofFiles name (directoryOf name) Hosts.console files)
+                Some (PackageModules.ofFiles name (directoryOf name) None files)
             else
                 None)
 

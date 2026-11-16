@@ -25,13 +25,13 @@ let private errorOf (text: string) =
     | Result.Ok _ -> failwith "Expected an error"
 
 [<Fact>]
-let ``A manifest's package is read, with the default sources, no linters and the console host`` () =
+let ``A manifest's package is read, with the default sources, no linters and no host: a library`` () =
     let manifest = okOf """(package = (name = "demo", version = "0.1.0"))"""
     Assert.Equal("demo", manifest.Name)
     Assert.Equal("0.1.0", manifest.Version)
     Assert.Equal<string list>([ "**/*.nyx" ], manifest.Sources)
     Assert.Empty(manifest.Linters.Linters)
-    Assert.Equal(Hosts.console, manifest.Host)
+    Assert.Equal(None, manifest.Host)
 
 [<Fact>]
 let ``A manifest is read with comments, its sources, public modules, formatter, empty dependencies and host`` () =
@@ -53,7 +53,7 @@ let ``A manifest is read with comments, its sources, public modules, formatter, 
 """
     Assert.Equal("acme.demo", manifest.Name)
     Assert.Equal<string list>([ "src/**/*.nyx" ], manifest.Sources)
-    Assert.Equal(Hosts.console, manifest.Host)
+    Assert.Equal(Some Hosts.console, manifest.Host)
 
 [<Fact>]
 let ``Linters turn on the linters they name, with the severities their settings set`` () =

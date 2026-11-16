@@ -476,13 +476,14 @@ module Compiler =
     /// `typecheckModule`, unreported.
     and private checkModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
-        // A package's files run under its host (see `PackageModules.Host`); a loose script, under the console host. The
-        // host is a module of a package the compiler ships, which the import of it and the host's own imports resolve in.
-        let host = checkedModules.Package |> Option.map _.Host |> Option.defaultValue Hosts.console
-        let hostModules = ShippedPackages.tryModules host.Package
+        // A package's files run under its host (see `PackageModules.Host`), and a library's under none; a loose script runs
+        // under the console host. The host is a module of a package the compiler ships, which the import of it and the
+        // host's own imports resolve in.
+        let host = match checkedModules.Package with Some package -> package.Host | None -> Some Hosts.console
+        let hostModules = host |> Option.bind (fun host -> ShippedPackages.tryModules host.Package)
         let isHost (path: string) =
-            hostModules
-            |> Option.bind (fun modules -> modules.Modules |> Map.tryFind host.Module)
+            Option.map2 (fun (host: Host) (modules: PackageModules) -> modules.Modules |> Map.tryFind host.Module) host hostModules
+            |> Option.flatten
             |> Option.exists (List.exists (PackageModules.samePath path))
         let resolved =
             parseWithDocs (checkedModules.FileName origin) source
@@ -506,7 +507,7 @@ module Compiler =
                         let desugared, script =
                             match origin, entries with
                             | SourceFile path, _ when isHost path -> desugared, None
-                            | (SourceFile _ | InMemory), _ -> Scripts.asEntry host (fun span -> (NyxCompiler.InferState.blockAround moduleBlocks span).IsSome) entries desugared
+                            | (SourceFile _ | InMemory), _ when host.IsSome -> Scripts.asEntry host.Value (fun span -> (NyxCompiler.InferState.blockAround moduleBlocks span).IsSome) entries desugared
                             | _ -> desugared, None
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
                         let nameErrors = TypeNames.definitionErrors declared @ nameErrors

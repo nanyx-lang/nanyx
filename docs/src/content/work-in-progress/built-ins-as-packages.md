@@ -86,8 +86,9 @@ level, so a field is never mistaken for a package's configuration:
 - **An entry without settings** is just `(package = "nanyx.lint", version = "0.28.0")`.
 - **Nothing implicit.**
   - With no `linters`, no linter runs.
-  - With no `host`, a package has no host. `nanyx run` and `nanyx build` refuse it with an error that says to add
-    one, while `nanyx check` and library packages need none.
+  - With no `host`, a package is a library. An `@entry` in it is an error at the `@entry` (`NYX0031`), from `nanyx check`,
+    `nanyx run` and `nanyx build` alike, and running it is a fatal `no entry point` error. Done (see
+    [What's built](#whats-built)).
   - `nanyx new` writes both entries, at the compiler's version.
 - **Scripts.** A loose script has no manifest. It runs under the console host, and runs the linters its `::linters`
   directives name, if any.
@@ -129,6 +130,9 @@ level, so a field is never mistaken for a package's configuration:
   `HostRuntime` goes to the host's file (`Hosts.mayRequireRuntime`, given the files that declare the host's module),
   and a statement in that file isn't a script's. A shipped package's file is named after its package in messages,
   `nanyx.console/src/console.host.nyx`, wherever the compiler is installed (`ShippedPackages.tryDisplay`).
+- **No host means a library.** `Manifest.Host` and `PackageModules.Host` are options. A package file under no host gets
+  no host import, an `@entry` there is `NYX0031` (`Attributes.applyAttributes`), and `nanyx run` on a library says it
+  has no entry point. A loose script still runs under the console host.
 # Open questions
 
 - **What else is built in.** The standard library itself is embedded, and stays the package `nanyx`, versioned with

@@ -64,10 +64,9 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
   then, the compiler checks the settings it knows itself.
 - **The formatter's settings** are the `formatter` field, `(lineWidth = 100, indentSize = 2)`, which the formatter
   reads itself. It is the simplest place for them; the formatter could become a configured tool like a linter later.
-- **Nothing implicit.** With no `linters`, no linter runs; with no `host`, the package can't be run or built. `nanyx
-  new` writes both, as [Built-ins as packages](./built-ins-as-packages#the-manifest) decided. Until the console host
-  is a package ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)), a package with no `host` still runs under
-  it.
+- **Nothing implicit.** With no `linters`, no linter runs; with no `host`, the package is a library: an `@entry` in it
+  is `NYX0031`, and running it is an error that says it has no entry point. `nanyx new` writes both, as
+  [Built-ins as packages](./built-ins-as-packages#the-manifest) decided.
 - **The file** keeps its name and extension, `<name>.nyxp`, so finding a package is unchanged. A `.nyxp` file is
   Nanyx source to the parser and the formatter. Scripts keep their `::` directives.
 
