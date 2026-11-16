@@ -124,6 +124,11 @@ operator is recorded with that instance (`InferState.OperatorInstances`), and wr
 through it, `` Add(a).`+`(x, y) `` (`ExpressionRewrites.callOperators`), which the backend finds by the instance's
 key. An operator in a function whose requirement is inferred is recorded with the instance it found in the same way.
 
+An operator that calls a definition which itself requires a parameterised context, as `` def `<+>` = { a, (b, c) -> a + b * c } ``
+requires `Num(a)`, finds the instance where it is used as a call to the definition does
+(`ContextInstances.resolveCallInstances`, from `Infer.inferOperator`;
+[#1594](https://github.com/nanyx-lang/nanyx/issues/1594)).
+
 A call to a member by its name, `show(x)`, still finds whichever is bound last when two contexts have a member of
 that name.
 
