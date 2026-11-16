@@ -35,6 +35,28 @@ let rec isHeapType (ty: IrType) =
 /// The name of the drop function of a type on the heap.
 let dropName (ty: IrType) = "__nanyx_drop_" + sanitizeIdentifier (IrType.mangle ty)
 
+/// Whether the drop function of `ty` puts an object whose last reference it gives up on a list to drop later, rather
+/// than dropping its fields at once: a recursive type's does, so that dropping a value nested deeply takes no stack.
+/// Every chain of drop functions that calls itself goes through a recursive type's.
+let private defers (ty: IrType) =
+    match ty with
+    | IrRecursive _ -> true
+    | _ -> false
+
+/// The name of the function that drops a value of a type that `defers` at once: the drop function another type's
+/// would be.
+let private dropNowName (ty: IrType) = "__nanyx_drop_now_" + sanitizeIdentifier (IrType.mangle ty)
+
+/// The global that holds the first of the objects of a type that `defers` waiting to be dropped. Each holds the next in
+/// its count, which it no longer needs.
+let private pendingName (ty: IrType) = "__nanyx_drop_pending_" + sanitizeIdentifier (IrType.mangle ty)
+
+/// The global that is 1 while `drainName` runs, so that a drop function called inside it leaves its object waiting.
+let private droppingName = "__nanyx_dropping"
+
+/// The function that drops the objects waiting, until there are none.
+let private drainName = "__nanyx_drop_pending"
+
 /// The name of the dup function of a type on the heap, which takes one more reference to its value and leaves it.
 let dupName (ty: IrType) = "__nanyx_dup_" + sanitizeIdentifier (IrType.mangle ty)
 
@@ -241,13 +263,73 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
     | IrRecursive _
     | IrSelf -> internalError $"a drop function for {IrType.show ty}, which is not on the heap"
 
+/// The code that leaves 1 when the value in `$p`, of type `ty`, is not an object on the heap (an empty list or a tag's
+/// code), and 0 when it is; nothing when every value of `ty` is one.
+let private notOnHeap (ty: IrType) =
+    match IrType.unfold ty with
+    | IrList _ -> [ "local.get $p"; "i32.eqz" ]
+    | IrTags _ -> [ "local.get $p"; "i32.const 1"; "i32.and" ]
+    | _ -> []
+
+/// The body of the drop function of a type that `defers`, which takes the value in `$p`. When it gives up the last
+/// reference, it puts the object on the type's list of those waiting, and unless the objects waiting are already being
+/// dropped, drops them.
+let private deferringDropBody (ty: IrType) : string list =
+    let count = [ "local.get $p"; $"i32.const {CoreIrLayout.headerSize ty}"; "i32.sub" ]
+    [ match notOnHeap ty with
+      | [] -> ()
+      | test -> yield! test @ [ "if"; "  return"; "end" ]
+      yield! count
+      $"call ${Helpers.release}"
+      "i32.eqz"
+      "if"
+      "  return"
+      "end"
+      yield! count
+      $"global.get ${pendingName ty}"
+      "i32.store"
+      "local.get $p"
+      $"global.set ${pendingName ty}"
+      $"global.get ${droppingName}"
+      "if"
+      "  return"
+      "end"
+      "i32.const 1"
+      $"global.set ${droppingName}"
+      $"call ${drainName}"
+      "i32.const 0"
+      $"global.set ${droppingName}" ]
+
+/// The function that drops the objects waiting of each of `deferred`, the types that `defers`, until there are none.
+/// Dropping one may leave more waiting, of its own type or another. Each object's count is set back to 1 for the type's
+/// drop function to give up.
+let private drainFunction (deferred: IrType list) : string list =
+    [ $"(func ${drainName}"
+      "  (local $p i32)"
+      "  loop $next"
+      yield!
+          deferred
+          |> List.collect (fun ty ->
+              let count = [ "local.get $p"; $"i32.const {CoreIrLayout.headerSize ty}"; "i32.sub" ]
+              [ $"global.get ${pendingName ty}"
+                "local.tee $p"
+                "if"
+                yield! count @ [ "i32.load"; $"global.set ${pendingName ty}" ] |> List.map (fun line -> "  " + line)
+                yield! count @ [ "i32.const 1"; "i32.store" ] |> List.map (fun line -> "  " + line)
+                "  local.get $p"
+                $"  call ${dropNowName ty}"
+                "  br $next"
+                "end" ])
+          |> List.map (fun line -> "    " + line)
+      "  end"
+      ")" ]
+
 /// The body of the dup function of `ty`, which takes the value in `$p` and leaves it.
 let private dupBody (ty: IrType) : string list =
     let notOnHeap =
-        match IrType.unfold ty with
-        | IrList _ -> [ "local.get $p"; "i32.eqz"; "br_if $shared" ]
-        | IrTags _ -> [ "local.get $p"; "i32.const 1"; "i32.and"; "br_if $shared" ]
-        | _ -> []
+        match notOnHeap ty with
+        | [] -> []
+        | test -> test @ [ "br_if $shared" ]
     [ "block $shared"
       yield! notOnHeap |> List.map (fun line -> "  " + line)
       "  local.get $p"
@@ -262,13 +344,21 @@ let private lines (items: string list) = items |> List.map (fun line -> "  " + l
 /// The functions of `drops`, as WebAssembly text: the drop and dup functions of each type, the function that drops
 /// each closure environment, and the `++` of each list. The function that drops a closure's captures is called through
 /// the function table, so it has the type of a closure of one parameter (`$ctx_fn_1`), and returns 0. `tagId` gives
-/// the number of each tag the module numbers; a tag it does not is never made, so has no cells to drop.
+/// the number of each tag the module numbers; a tag it does not is never made, so has no cells to drop. A recursive
+/// type has two drop functions, the one others call, which leaves its object waiting, and the one that drops it now,
+/// and the module then has the globals and the function that drop the objects waiting.
 let render (tagId: string -> int option) (drops: Drops) : string list =
     let typeDrops =
         drops.Types
         |> List.collect (fun ty ->
-            [ lines [
-                  $"(func ${dropName ty} (param $p i32)"
+            [ if defers ty then
+                  lines [
+                      $"(func ${dropName ty} (param $p i32)"
+                      $"  ;; {IrType.show ty}"
+                      yield! deferringDropBody ty |> List.map (fun line -> "  " + line)
+                      ")" ]
+              lines [
+                  $"""(func ${if defers ty then dropNowName ty else dropName ty} (param $p i32)"""
                   $"  ;; {IrType.show ty}"
                   yield! dropBody tagId ty |> List.map (fun line -> "  " + line)
                   ")" ]
@@ -292,4 +382,12 @@ let render (tagId: string -> int option) (drops: Drops) : string list =
                     |> List.map (fun line -> "  " + line)
                 "  i32.const 0"
                 ")" ])
-    typeDrops @ environmentDrops @ listConcats
+    let pending =
+        match drops.Types |> List.filter defers with
+        | [] -> []
+        | deferred ->
+            [ lines [
+                  $"(global ${droppingName} (mut i32) (i32.const 0))"
+                  yield! deferred |> List.map (fun ty -> $"(global ${pendingName ty} (mut i32) (i32.const 0))") ]
+              lines (drainFunction deferred) ]
+    typeDrops @ environmentDrops @ listConcats @ pending
