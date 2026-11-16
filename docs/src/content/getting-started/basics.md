@@ -39,7 +39,8 @@ def message =
 You can also continue an expression on the next line when the previous line is incomplete:
 
 ```nanyx
-def message = "Hello " + "World"
+def message = "Hello, and welcome to Nanyx. This sentence is long enough that the formatter " ++
+  "won't fit it on one line."
 ```
 
 A block returns the value of its last expression:
@@ -116,6 +117,7 @@ Double-quoted strings have backslash escapes:
 | `\u{...}` | the character with that code point, in hex: `\u{e9}` is `é` |
 
 ```nanyx
+def name = "Alex"
 def lines = "first\nsecond"
 def quoted = "say \"hi\""
 def template = "Hello, {name}! Braces look like \{this}."
@@ -149,7 +151,7 @@ def isAdult = 21 >= 18
 
 Boolean values are combined with the keywords `and`, `or` and `not`:
 
-```nanyx
+```nanyx fragment
 def canVote = isAdult and isRegistered
 def needsHelp = not isAdult or isNew
 ```
@@ -166,7 +168,7 @@ For immutable record updates, see [Copy and update (non-destructive mutation)](.
 
 You can use commas or newlines to separate items in lists and records:
 
-```nanyx
+```nanyx fragment
 def items = [1, 2, 3]
 
 def items = [1, 2, 3]
@@ -200,7 +202,7 @@ text after it, `--- like this`, is a single-line comment.
 A doc comment starts with `--|`. It documents what comes on the line after it, and goes on for every line indented
 further than the line the `--|` is on, so its other lines need no `--`:
 
-```nanyx
+```nanyx fragment
 --| The `length` bytes of `s` starting at byte `start`. Out-of-range values are clamped, so the result
   is never longer than what `s` actually holds.
 export def string.substring: (string, start: int, length: int) -> string = { s, start, length -> ... }
@@ -260,7 +262,7 @@ Nanyx also supports tags, ranges, and records as core value forms. See [Tags](..
 
 Table literals are a shorthand for lists of records with the same shape:
 
-```nanyx
+```nanyx skip=#1255
 def namesAndAges =
   [| name     | age |
    | "Alex"   | 22  |
@@ -273,7 +275,7 @@ def namesAndAges =
 
 `if` is an expression with a `then` branch and an `else` branch:
 
-```nanyx
+```nanyx fragment
 def label = if count == 0 then "empty" else "has items"
 
 if cond then
@@ -284,7 +286,7 @@ else
 
 When there are more than two cases, use the multi-branch form. This is sugar for a `match` where each arm is a boolean condition, tested in order, with `else` as the final catch-all:
 
-```nanyx
+```nanyx fragment
 if
   | cond1 ->
     someCode()
@@ -303,7 +305,7 @@ As with a single-branch `if`, the `else` arm may be left out when the branches a
 Use `???` as a placeholder to keep code compiling while you iterate:
 
 ```nanyx
-def myFunction = { () -> ??? }
+def myFunction = { () -> ??? } -- error NYX0111: Not implemented
 ```
 
 `???` fits wherever a value is expected, whatever its type, and its type is written `???` too: `myFunction` is a `() -> ???`. The compiler reports it as an error (`Not implemented`), but like a type error it does not stop a debug build ([Deferred errors](../tour/error-handling#deferred-errors)): `nanyx run` runs the program, and if it reaches the `???`, the program stops there and says so. A release build (`--release`) refuses it, so unfinished code is not shipped by accident.
