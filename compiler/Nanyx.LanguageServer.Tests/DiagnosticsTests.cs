@@ -336,14 +336,14 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     {
         var uri = DocumentUri.FromFileSystemPath(TempPath("directives.nyx"));
 
-        Open(uri, "::linters.default.unusedBindings = \"error\"\n::linters.nope\nexport def f: () -> int = {\n  def unused = 1\n  2\n}\n");
+        Open(uri, "::linter nanyx.lint\n::lint unusedBindings #error\n::colour red\nexport def f: () -> int = {\n  def unused = 1\n  2\n}\n");
 
         var diagnostics = (await NextPublished(uri)).Diagnostics!.ToList();
         Assert.Equal(["NYX0009", "default/unusedBindings"], diagnostics.Select(d => d.Code?.String));
         // Only the compiler's own codes link to the error reference.
         Assert.NotNull(diagnostics[0].CodeDescription);
         Assert.Null(diagnostics[1].CodeDescription);
-        Assert.Equal(new Range(1, 0, 1, 14), diagnostics[0].Range);
+        Assert.Equal(new Range(2, 2, 2, 8), diagnostics[0].Range);
         Assert.Equal(DiagnosticSeverity.Error, diagnostics[1].Severity);
     }
 }

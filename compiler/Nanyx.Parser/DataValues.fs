@@ -50,6 +50,18 @@ module DataValue =
     /// The field called `name` of a record's `fields`, if it has one.
     let field (name: string) (fields: DataField list) = fields |> List.tryFind (fun field -> field.Name = name)
 
+    /// A directive's word read as a value, as a manifest writes one: a tag, `#error`, a whole number, `4`, a string in
+    /// quotes, `"text"`, or `true` or `false`. None for a word that is none of them.
+    let ofWord (word: DirectiveWord) : DataValue option =
+        let value kind = Some { Data = kind; Location = word.Span }
+        let text = word.Text
+        if Regex.IsMatch(text, @"^#[A-Za-z_][A-Za-z0-9_]*$") then value (DataTag(text.Substring 1, None))
+        elif Regex.IsMatch(text, @"^-?[0-9]+$") then value (DataInt(bigint.Parse text))
+        elif text.Length >= 2 && text.StartsWith "\"" && text.EndsWith "\"" then
+            value (DataString(text.Substring(1, text.Length - 2).Replace("\\\"", "\"").Replace("\\\\", "\\")))
+        elif text = "true" || text = "false" then value (DataBool(text = "true"))
+        else None
+
     /// The span from `start` to `finish` of `source`, a file's normalised text.
     let private spanIn (file: string) (source: string) (start: int) (finish: int) =
         let lineStart = if start = 0 then 0 else source.LastIndexOf('\n', start - 1) + 1

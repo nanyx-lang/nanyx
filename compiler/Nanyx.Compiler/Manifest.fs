@@ -343,11 +343,18 @@ module Manifest =
         | _, problems -> Result.Error problems
 
     /// The packages `value` lists, written as a manifest's `dependencies` is, each `path` relative to `root`, with what is
-    /// wrong with them, as `check` reports it: how a script's `::dependencies` directives are read (see `Script`).
+    /// wrong with them, as `check` reports it: how a script's `::dependency` directives are read (see `Script`).
     let internal dependencyEntries (root: string) (value: DataValue) : Dependency list * Diagnostic list =
         let problems = Problems()
         let dependencies = readDependencies problems root value
         dependencies, problems.All
+
+    /// The linter options `value` sets, written as a manifest's `linters` is, with what is wrong with it, as `check`
+    /// reports it: how a script's `::linter` and `::lint` directives are read (see `Script`).
+    let internal linterEntries (value: DataValue) : LinterOptions * Diagnostic list =
+        let problems = Problems()
+        let options = readLinters problems value
+        options, problems.All
 
     /// What is wrong with a file that is not one data value, as diagnostics.
     let private dataErrors (errors: DataError list) =

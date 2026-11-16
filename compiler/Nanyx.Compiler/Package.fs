@@ -263,7 +263,7 @@ module Package =
     let directiveErrors (manifestPath: string) (filePath: string) (source: string) : Diagnostic list =
         Directives.read (Path.GetFullPath filePath) source
         |> List.map (fun directive ->
-            let name = if directive.Key.IsEmpty then "a :: line" else $"::{directive.Name}"
+            let name = if directive.Name = "" then "a :: line" else $"::{directive.Name}"
             Diagnostics.at
                 DiagnosticCodes.DirectiveInPackage
                 directive.Span
@@ -307,7 +307,7 @@ module Package =
         | _ -> Result.Ok None
 
     /// The build of the script at `filePath`, which runs under the host `host` names, the console host the compiler ships
-    /// if it names none, and imports from the packages `dependencies` lists, as its `::host` and `::dependencies`
+    /// if it names none, and imports from the packages `dependencies` lists, as its `::host` and `::dependency`
     /// directives say (see `Script`); or what is wrong with them, each at the directive it is about, or at `span` for
     /// what is about a package as a whole.
     let scriptModules (filePath: string) (span: SourceSpan) (host: HostEntry option) (dependencies: Dependency list) : Result<PackageModules, Diagnostic list> =

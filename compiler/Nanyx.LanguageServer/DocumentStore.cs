@@ -237,7 +237,7 @@ public sealed class DocumentStore
     {
         _settings.CompileStarted?.Invoke(uri);
         // A file on disk gets its imports resolved through its package's modules if it is a source file of one, or
-        // else relative to itself, and through the packages its ::dependencies name; anything else (an untitled
+        // else relative to itself, and through the packages its ::dependency lines name; anything else (an untitled
         // buffer, say) can still import the standard library. A file of the standard library is checked as the
         // library module it is, as a build of the library checks it. The compiler names a file by its full path.
         var path = uri.Scheme == "file" ? FileNameOf(uri) : null;

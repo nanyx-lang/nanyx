@@ -29,7 +29,7 @@ type PackageModules =
       PublicModules: string list
       /// The packages it depends on directly, each with its own dependencies.
       Dependencies: PackageModules list
-      /// Whether this is a script's build, whose `::host` and `::dependencies` directives say what a manifest would (see
+      /// Whether this is a script's build, whose `::host` and `::dependency` directives say what a manifest would (see
       /// `Script`): it has no files of its own, and every file of the build that is in no package it depends on is the
       /// program's, its imports found by their paths.
       Script: bool }
@@ -183,7 +183,7 @@ module PackageModules =
         | Some modules, ModuleImport name ->
             match ownerOf modules importer with
             | Some owner -> resolveModule modules owner item name
-            // A script's file imports a public module of a package its `::dependencies` name after the package's name.
+            // A script's file imports a public module of a package its `::dependency` lines name after the package's name.
             | None when modules.Script && modules.Dependencies |> List.exists (fun dependency -> name.StartsWith(dependency.Package + "/")) ->
                 resolveModule modules modules item name
             | None -> FileImports.resolvePath (Path.GetDirectoryName importer) item

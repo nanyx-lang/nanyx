@@ -4,6 +4,7 @@ open System
 open System.Globalization
 open System.IO
 open Parser.Program
+open Parser.Program.DataValues
 
 /// What `nanyx migrate` makes of a script, or a directory of scripts: the package's manifest and each file rewritten.
 type Migration =
@@ -41,31 +42,28 @@ module Migration =
         let text = script.Source.Substring(directive.Span.Start, directive.Span.End - directive.Span.Start)
         $"{relative root script.Path}:{directive.Span.StartLine + 1}: {text}"
 
-    /// A directive's TOML value written as Nanyx data: a table is a record. A table's `path`, a directory relative to the
-    /// script, is made relative to the package's `root`.
-    let rec private dataText (scriptDirectory: string) (root: string) (value: obj) : string =
-        match value with
-        | :? string as text -> "\"" + text.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""
-        | :? bool as flag -> if flag then "true" else "false"
-        | :? int64 as n -> string n
-        | :? float as n -> n.ToString("R", CultureInfo.InvariantCulture)
-        | :? Tomlyn.Model.TomlTable as table ->
-            let field (name: string) (field: obj) =
-                match name, field with
-                | "path", (:? string as path) -> $"path = {dataText scriptDirectory root (relative root (Path.GetFullPath(path, scriptDirectory)))}"
-                | _ -> $"{name} = {dataText scriptDirectory root field}"
-            "(" + (table |> Seq.map (fun (KeyValue(name, value)) -> field name value) |> String.concat ", ") + ")"
-        | :? Tomlyn.Model.TomlArray as items -> "[" + (items |> Seq.map (dataText scriptDirectory root) |> String.concat ", ") + "]"
-        | other -> dataText scriptDirectory root (string other)
+    let private quoted (text: string) = "\"" + text.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""
 
-    /// The entry a `::host.<name>` or `::dependencies.<name>` directive stands for: `(package = "<name>", ...)`.
-    let private packageEntry (scriptDirectory: string) (root: string) (name: string list) (value: obj) =
-        let package = $"""package = "{String.concat "." name}" """.TrimEnd()
-        match value with
-        | :? Tomlyn.Model.TomlTable ->
-            let fields = dataText scriptDirectory root value
-            $"({package}, {fields.Substring 1}"
-        | version -> $"({package}, version = {dataText scriptDirectory root version})"
+    /// A value a directive sets, written as the manifest writes it.
+    let private dataText (value: DataValue) : string =
+        match value.Data with
+        | DataString text -> quoted text
+        | DataInt n -> string n
+        | DataFloat n -> n.ToString("R", CultureInfo.InvariantCulture)
+        | DataBool flag -> if flag then "true" else "false"
+        | DataTag(name, _) -> "#" + name
+        | _ -> DataValue.describe value
+
+    /// The entry the package a `::host`, `::dependency` or `::linter` directive names is in the manifest:
+    /// `(package = "<name>", path = "<directory>")`, its directory, relative to the script, made relative to the package's
+    /// `root`. A package the compiler ships, named with neither, is at the compiler's version, `toolVersion`.
+    let private packageEntry (toolVersion: string) (scriptDirectory: string) (root: string) (package: DirectiveWord) (place: DirectivePlace) =
+        let where =
+            match place with
+            | AtVersion version -> $"version = {quoted version.Text}"
+            | AtPath path -> $"path = {quoted (relative root (Path.GetFullPath(path.Text, scriptDirectory)))}"
+            | Shipped -> $"version = {quoted toolVersion}"
+        $"(package = {quoted package.Text}, {where})"
 
     /// What a directive says, as the manifest writes it: the key it sets, which two files must agree on, and the value.
     type private Setting =
@@ -77,31 +75,32 @@ module Migration =
 
     let private settingKey (setting: Setting) =
         match setting with
-        | LinterOn linter -> $"linters.{linter}"
-        | RuleSeverity(linter, rule, _) -> $"linters.{linter}.{rule}"
-        | FormatterSetting(key, _) -> $"formatter.{key}"
+        | LinterOn linter -> $"linter {linter}"
+        | RuleSeverity(linter, rule, _) -> $"linter {linter}: lint {rule}"
+        | FormatterSetting(key, _) -> $"format {key}"
         | HostEntry _ -> "host"
-        | DependencyEntry(name, _) -> $"dependencies.{name}"
+        | DependencyEntry(name, _) -> $"dependency {name}"
 
-    /// What `directive`, one of `script`'s, says. `Script.read` has checked it.
-    let private settingOf (root: string) (script: Script) (directive: Directive) : Setting option =
+    /// What `setting`, one of `script`'s, says in the manifest. `Script.read` has checked it.
+    let private settingOf (toolVersion: string) (root: string) (script: Script) (setting: DirectiveSetting) : Setting =
         let scriptDirectory = Path.GetDirectoryName script.Path
-        match directive.Key, directive.Value with
-        | [ "linters"; linter ], None -> Some (LinterOn linter)
-        | [ "linters"; linter; rule ], Some (Result.Ok (:? string as severity)) -> Some (RuleSeverity(linter, rule, severity))
-        | "formatter" :: (_ :: _ as key), Some (Result.Ok value) -> Some (FormatterSetting(String.concat "." key, dataText scriptDirectory root value))
-        | "host" :: (_ :: _ as name), Some (Result.Ok value) -> Some (HostEntry(packageEntry scriptDirectory root name value))
-        | "dependencies" :: (_ :: _ as name), Some (Result.Ok value) ->
-            Some (DependencyEntry(String.concat "." name, packageEntry scriptDirectory root name value))
-        | _ -> None
+        match setting with
+        | LinterSetting(package, _) -> LinterOn package.Text
+        | LintSetting(linter, rule, severity) -> RuleSeverity(linter.Text, rule.Text, dataText severity)
+        | FormatSetting(key, value) -> FormatterSetting(key.Text, dataText value)
+        | HostSetting(package, place) -> HostEntry(packageEntry toolVersion scriptDirectory root package place)
+        | DependencySetting(package, place) -> DependencyEntry(package.Text, packageEntry toolVersion scriptDirectory root package place)
 
     /// Each setting the scripts' directives make, once, with the first directive that makes it; or an error for each key
     /// two directives set to different values, naming both, and for the second `::host` that names another host.
-    let private settings (root: string) (scripts: Script list) : Result<Setting list, string list> =
+    let private settings (toolVersion: string) (root: string) (scripts: Script list) : Result<Setting list, string list> =
         let made =
             scripts
             |> List.collect (fun script ->
-                script.Directives |> List.choose (fun directive -> settingOf root script directive |> Option.map (fun setting -> setting, located root script directive)))
+                Script.settings script.Directives
+                |> List.choose (function
+                    | directive, Result.Ok setting -> Some (settingOf toolVersion root script setting, located root script directive)
+                    | _, Result.Error _ -> None))
         let byKey = made |> List.groupBy (fst >> settingKey)
         let conflicts =
             byKey
@@ -121,11 +120,10 @@ module Migration =
             settings
             |> List.choose (function LinterOn linter -> Some linter | RuleSeverity(linter, _, _) -> Some linter | _ -> None)
             |> List.distinct
-            |> List.map (fun linterName ->
-                let package = Linters.all |> List.tryFind (fun linter -> linter.Name = linterName) |> Option.map _.Package |> Option.defaultValue linterName
+            |> List.map (fun package ->
                 let rules =
                     settings
-                    |> List.choose (function RuleSeverity(linter, rule, severity) when linter = linterName -> Some $"{rule} = #{severity}" | _ -> None)
+                    |> List.choose (function RuleSeverity(linter, rule, severity) when linter = package -> Some $"{rule} = {severity}" | _ -> None)
                 match rules with
                 | [] -> $"(package = \"{package}\", version = \"{toolVersion}\")"
                 | rules -> $"""(package = "{package}", version = "{toolVersion}", settings = (rules = ({String.concat ", " rules})))""")
@@ -271,7 +269,8 @@ module Migration =
     /// written to the manifest all the same, to be reported when the package is built.
     let private readScript (root: string) (path: string) : Result<Script, string list> =
         let source = normalize (File.ReadAllText path)
-        let wrong = (Script.read path source).Diagnostics |> List.filter (fun problem -> problem.Code = DiagnosticCodes.InvalidDirective.Code)
+        let refused = [ DiagnosticCodes.InvalidDirective; DiagnosticCodes.OldFormDirective; DiagnosticCodes.LintWithoutLinter ] |> List.map _.Code
+        let wrong = (Script.read path source).Diagnostics |> List.filter (fun problem -> List.contains problem.Code refused)
         match wrong, parseModuleFileWithNames path source with
         | [], Result.Ok (syntax, _, moduleBlocks) ->
             Result.Ok { Path = path; Source = source; Directives = Directives.read path source; Syntax = syntax; ModuleBlocks = moduleBlocks }
@@ -322,7 +321,7 @@ module Migration =
                         Result.Error
                             [ $"These scripts each have top-level statements, but a package runs from one @entry: {names}. Migrate them one at a time (nanyx migrate <file>), or make all but one of them modules first" ]
                     | entryScripts ->
-                        settings root scripts
+                        settings toolVersion root scripts
                         |> Result.bind (fun settings ->
                             let entryScript = List.tryHead entryScripts
                             let isEntry (script: Script) = entryScript |> Option.exists (fun entry -> entry.Path = script.Path)

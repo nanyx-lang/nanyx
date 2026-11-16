@@ -1078,7 +1078,7 @@ module Linters =
                 @ StrayDocComments.lint model @ UnannotatedExports.lint model
                 @ UnusedResults.lint model @ UselessExpressions.lint model @ ShadowedPreludeNames.lint model @ Semicolons.lint model }
 
-    /// The linters the compiler has, which a manifest's `linters` or a script's `::linters` directives can turn on.
+    /// The linters the compiler has, which a manifest's `linters` or a script's `::linter` directives can turn on.
     let all = [ official ]
 
     /// No linters: what runs where nothing turns any on. Linters are opt-in, like a package's dependencies.

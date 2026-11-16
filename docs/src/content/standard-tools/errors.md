@@ -120,17 +120,17 @@ To fix it, write the attribute on the line before the definition or context memb
 
 # NYX0009: Invalid directive
 
-A `::` directive at the top of a script is not one the compiler understands, or its value is not one the directive
-takes. Directives say for a script what a package's manifest would say
-([Packages](../tour/packages)).
+A `::` directive at the top of a script is not one the compiler understands, or a word after its name is not one the
+directive takes: a package's name missing, a word that is neither a version nor a directory, or a word too many.
+Directives say for a script what a package's manifest would say ([Packages](../tour/packages)).
 
 ```nanyx
-::linters.tidy  -- error NYX0009: unknown linter 'tidy'; the linters are 'default'
+::dependency acme.util latest  -- error NYX0009: 'latest' is neither a version, which starts with a digit, 1.2.0, nor a directory, which starts with . or /, ../util
 
 def total = 1
 ```
 
-To fix it, write the directive as the message describes.
+To fix it, write the directive as the message describes: here, the directory the package is in, `../util`.
 
 # NYX0010: Directive in a package
 
@@ -139,7 +139,7 @@ package, the manifest says these things.
 
 ```nanyx
 -- file: main.nyx
-::linters.default  -- error NYX0010: ::linters.default is a directive for a script, but this file is in a package: say it in the package's manifest, .../app.nyxp
+::linter nanyx.lint  -- error NYX0010: ::linter is a directive for a script, but this file is in a package: say it in the package's manifest, .../app.nyxp
 
 module main
 
@@ -586,6 +586,34 @@ To fix it, write the manifest as a record:
   host = (package = "nanyx.console", version = "...")
 )
 ```
+
+# NYX0035: Directive written in the old form
+
+A script's directives were once a manifest's dotted key with a TOML value, `::host.nanyx.console = "0.28.0"`. They
+are now a name and words: `::host nanyx.console`. A directive in the old form is an error.
+
+```nanyx
+::formatter.lineWidth = 80  -- error NYX0035: Directives are lines of words now, not a manifest's key and a TOML value: write ::format lineWidth 80
+
+def total = 1
+```
+
+To fix it, write it as the message says, which the error's fix does: `::linters.default` is `::linter nanyx.lint`,
+`::linters.default.unusedBindings = "error"` is `::lint unusedBindings #error` under it, `::dependencies.acme.util =
+{ path = "../util" }` is `::dependency acme.util ../util`, and `::formatter.lineWidth = 80` is
+`::format lineWidth 80`.
+
+# NYX0036: Lint setting with no linter above it
+
+A `::lint` line sets a rule of the linter the nearest `::linter` above it turns on, and there is none above it.
+
+```nanyx
+::lint unusedBindings #error  -- error NYX0036: ::lint sets a rule of the linter of the nearest ::linter above it, but there is none: turn one on above it, ::linter nanyx.lint
+
+def total = 1
+```
+
+To fix it, turn the linter on above it, which the error's fix does with the official linter: `::linter nanyx.lint`.
 
 # NYX0101: Unknown identifier
 

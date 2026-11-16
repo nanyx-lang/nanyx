@@ -144,8 +144,9 @@ The host is `Linters.fs` ([#100](https://github.com/nanyx-lang/nanyx/issues/100)
   entry in `linters` per linter to run, `(package = "nanyx.lint", version = "0.28.0", settings = (rules = (...)))`
   ([#279](https://github.com/nanyx-lang/nanyx/issues/279)), read by `Manifest.check` for `nanyx build`, `nanyx run`
   and the language server; without an entry, the linter does not run. A linter's `Package` is the name a manifest
-  gives it, and its `Name` (`default`) is the first part of its rules' codes and its `::linters` directives. A file
-  outside any package turns linters on with `::linters` directives in the same way, and without them runs
+  gives it, and its `Name` (`default`) is the first part of its rules' codes. A file
+  outside any package turns linters on with `::linter` directives in the same way, `::linter nanyx.lint`, with
+  `::lint <rule> <severity>` lines under each, and without them runs
   none. Linters are opt-in everywhere, including `Compiler.compile` and its variants.
 
 Before any public contract, linters are F# values compiled into the compiler:

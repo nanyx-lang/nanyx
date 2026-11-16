@@ -424,7 +424,7 @@ internal static partial class CliCommands
             return null;
         }
 
-        shell.Error.WriteLine($"--host chooses a package's host: a script names its own with a ::host directive, ::host.acme.server = {{ path = \"../server\" }}, and runs under {Hosts.consolePackage} without one.");
+        shell.Error.WriteLine($"--host chooses a package's host: a script names its own with a ::host directive, ::host acme.server ../server, and runs under {Hosts.consolePackage} without one.");
         return UsageError;
     }
 

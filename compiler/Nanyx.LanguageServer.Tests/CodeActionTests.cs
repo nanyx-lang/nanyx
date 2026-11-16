@@ -34,7 +34,7 @@ public sealed class CodeActionTests : LanguageServerTestBase
     public async Task Code_actions_are_the_fixes_of_the_diagnostics_in_the_range()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-8");
-        const string text = "::linters.default\nexport def f: () -> int = {\n  def unused = 1\n  2\n}\nexport def g: int -> int = { x -> 1 }\n";
+        const string text = "::linter nanyx.lint\nexport def f: () -> int = {\n  def unused = 1\n  2\n}\nexport def g: int -> int = { x -> 1 }\n";
 
         // The official linter runs only where something turns it on: here, a directive.
         Open(uri, text);
@@ -46,12 +46,12 @@ public sealed class CodeActionTests : LanguageServerTestBase
         var remove = Assert.Single(await CodeActionsIn(uri, new Range(2, 8, 2, 8)), action => action.Kind == CodeActionKind.QuickFix);
         Assert.Equal(("Remove `unused`", CodeActionKind.QuickFix, true), (remove.Title, remove.Kind, remove.IsPreferred));
         Assert.Equal("default/unusedBindings", Assert.Single(remove.Diagnostics!).Code?.String);
-        Assert.Equal("::linters.default\nexport def f: () -> int = {\n  2\n}\nexport def g: int -> int = { x -> 1 }\n", Applied(text, Assert.Single(remove.Edit!.Changes![uri])));
+        Assert.Equal("::linter nanyx.lint\nexport def f: () -> int = {\n  2\n}\nexport def g: int -> int = { x -> 1 }\n", Applied(text, Assert.Single(remove.Edit!.Changes![uri])));
 
         // An unused parameter is renamed to `_`.
         var rename = Assert.Single(await CodeActionsIn(uri, new Range(5, 29, 5, 30)), action => action.Kind == CodeActionKind.QuickFix);
         Assert.Equal("Rename `x` to `_`", rename.Title);
-        Assert.Equal("::linters.default\nexport def f: () -> int = {\n  def unused = 1\n  2\n}\nexport def g: int -> int = { _ -> 1 }\n", Applied(text, Assert.Single(rename.Edit!.Changes![uri])));
+        Assert.Equal("::linter nanyx.lint\nexport def f: () -> int = {\n  def unused = 1\n  2\n}\nexport def g: int -> int = { _ -> 1 }\n", Applied(text, Assert.Single(rename.Edit!.Changes![uri])));
 
         // Nothing where no diagnostic is.
         Assert.DoesNotContain(await CodeActionsIn(uri, new Range(3, 2, 3, 3)), action => action.Kind == CodeActionKind.QuickFix);
@@ -78,7 +78,7 @@ public sealed class CodeActionTests : LanguageServerTestBase
     public async Task An_unused_import_has_a_quick_fix_that_removes_it()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-13");
-        const string text = "::linters.default\nimport (\n  nanyx/math as m\n  nanyx/text as t\n)\nexport def x: int = m.abs(3)\n";
+        const string text = "::linter nanyx.lint\nimport (\n  nanyx/math as m\n  nanyx/text as t\n)\nexport def x: int = m.abs(3)\n";
 
         Open(uri, text);
         var published = Assert.Single((await NextPublished(uri)).Diagnostics!);
@@ -87,14 +87,14 @@ public sealed class CodeActionTests : LanguageServerTestBase
         var remove = Assert.Single(await CodeActionsIn(uri, new Range(3, 4, 3, 4)), action => action.Title.StartsWith("Remove"));
         Assert.Equal(("Remove the import of `t`", CodeActionKind.QuickFix), (remove.Title, remove.Kind));
         Assert.Equal(
-            "::linters.default\nimport (\n  nanyx/math as m\n)\nexport def x: int = m.abs(3)\n",
+            "::linter nanyx.lint\nimport (\n  nanyx/math as m\n)\nexport def x: int = m.abs(3)\n",
             Applied(text, Assert.Single(remove.Edit!.Changes![uri])));
 
         // Organising imports fixes it too.
         var organise = Assert.Single(await CodeActionsIn(uri, new Range(3, 4, 3, 4)), action => action.Title == "Organise imports" && action.Kind == CodeActionKind.QuickFix);
         Assert.Equal("default/unusedImports", Assert.Single(organise.Diagnostics!).Code?.String);
         Assert.Equal(
-            "::linters.default\nimport nanyx/math as m\nexport def x: int = m.abs(3)\n",
+            "::linter nanyx.lint\nimport nanyx/math as m\nexport def x: int = m.abs(3)\n",
             Applied(text, Assert.Single(organise.Edit!.Changes![uri])));
 
         // The import that is used has no fix, and organising the imports is a source action.

@@ -80,7 +80,18 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
   is `NYX0031`, and running it is an error that says it has no entry point. `nanyx new` writes both, as
   [Built-ins as packages](./built-ins-as-packages#the-manifest) decided.
 - **The file** keeps its name and extension, `<name>.nyxp`, so finding a package is unchanged. A `.nyxp` file is
-  Nanyx source to the parser and the formatter. Scripts keep their `::` directives.
+  Nanyx source to the parser and the formatter.
+- **A script's directives** say what a manifest would, one entry per line, as short lines of words rather than the
+  manifest's record syntax, which is too long for a directive ([#1599](https://github.com/nanyx-lang/nanyx/issues/1599)):
+  `::host nanyx.console`, `::dependency acme.util ../util`, `::linter nanyx.lint`, `::lint unusedBindings #error` (for
+  the linter of the nearest `::linter` above it) and `::format indentSize 4`. A package's name is followed by a
+  version, which starts with a digit, a directory, which starts with `.` or `/`, or neither for a package the compiler
+  ships. Values are written as in a manifest. `Script.read` turns them into the manifest entries they stand for and
+  checks them with the manifest's own readers (`Manifest.hostEntry`, `dependencyEntries`, `linterEntries`), so an
+  error is the manifest's, at the word it is about; `nanyx migrate` writes those entries into a manifest. A directive
+  in the form directives had before, a manifest's dotted key with a TOML value (`::linters.default`), is `NYX0035`,
+  with a fix that rewrites it, and a `::lint` with no `::linter` above it is `NYX0036`, whose fix adds
+  `::linter nanyx.lint` above it.
 
 # Tools
 

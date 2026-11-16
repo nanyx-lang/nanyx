@@ -104,7 +104,7 @@ let ``--host on a script is a usage error: a script names its host with ::host``
     let outcome = nanyxIn directory.Path [ "run"; "--host"; Hosts.consolePackage; path ]
     Assert.Equal(2, outcome.ExitCode)
     Assert.Equal(
-        """--host chooses a package's host: a script names its own with a ::host directive, ::host.acme.server = { path = "../server" }, and runs under nanyx.console without one.""",
+        """--host chooses a package's host: a script names its own with a ::host directive, ::host acme.server ../server, and runs under nanyx.console without one.""",
         outcome.StandardError.Trim())
 
 [<Fact>]
@@ -112,14 +112,14 @@ let ``A script runs under the host its ::host finds by path`` () =
     use directory = new TempDirectory()
     let path = Path.Combine(directory.Path, "script.nyx")
     let host = (ShippedPackages.directoryOf Hosts.consolePackage).Replace("\\", "/")
-    File.WriteAllText(path, $"::host.nanyx.console = {{ path = \"{host}\" }}\n\nprintln(\"hi\")\n")
+    File.WriteAllText(path, $"::host nanyx.console {host}\n\nprintln(\"hi\")\n")
     let outcome = nanyxIn directory.Path [ "run"; path ]
     Assert.Equal("", outcome.StandardError)
     Assert.Equal("hi\n", outcome.StandardOutput.ReplaceLineEndings "\n")
     Assert.Equal(0, outcome.ExitCode)
 
 [<Fact>]
-let ``A script runs with the packages its ::dependencies list`` () =
+let ``A script runs with the packages its ::dependency lines name`` () =
     use directory = new TempDirectory()
     Directory.CreateDirectory(Path.Combine(directory.Path, "util")) |> ignore
     File.WriteAllText(
@@ -127,7 +127,7 @@ let ``A script runs with the packages its ::dependencies list`` () =
         """(package = (name = "acme.util", version = "0.1.0"))""")
     File.WriteAllText(Path.Combine(directory.Path, "util", "strings.nyx"), "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n")
     let path = Path.Combine(directory.Path, "script.nyx")
-    File.WriteAllText(path, "::dependencies.acme.util = { path = \"util\" }\n\nimport acme.util/strings\n\nprintln(shout(\"hi\"))\n")
+    File.WriteAllText(path, "::dependency acme.util ./util\n\nimport acme.util/strings\n\nprintln(shout(\"hi\"))\n")
     let outcome = nanyxIn directory.Path [ "run"; path ]
     Assert.Equal("", outcome.StandardError)
     Assert.Equal("hi!\n", outcome.StandardOutput.ReplaceLineEndings "\n")

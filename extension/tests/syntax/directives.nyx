@@ -1,17 +1,31 @@
 -- SYNTAX TEST "source.nanyx" "a script's directives are coloured as directives, not as tags"
 
-::linters.default.unusedBindings = "error"
+::linter nanyx.lint
 -- <- meta.preprocessor.directive.nanyx punctuation.definition.directive.nanyx
--- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ keyword.control.directive.nanyx
---                               ^ keyword.operator.assignment.directive.nanyx
---                                 ^^^^^^^ string.quoted.double.directive.nanyx - constant.other.symbol.nanyx
+--^^^^^^ keyword.control.directive.nanyx
+--       ^^^^^^^^^^ entity.name.package.directive.nanyx
 
-::formatter.lineWidth = 100
--- ^^^^^^^^^^^^^^^^^^ keyword.control.directive.nanyx
---                      ^^^ constant.numeric.directive.nanyx
+::lint unusedBindings #error
+--^^^^ keyword.control.directive.nanyx
+--     ^^^^^^^^^^^^^^ variable.other.directive.nanyx
+--                    ^^^^^^ constant.other.tag.directive.nanyx - constant.other.symbol.nanyx
 
-::linters.default
--- ^^^^^^^^^^^^^^ keyword.control.directive.nanyx
+::dependency acme.util ../util
+--           ^^^^^^^^^ entity.name.package.directive.nanyx
+--                     ^^^^^^^ string.unquoted.path.directive.nanyx
+
+::host nanyx.console 0.28.0
+--                   ^^^^^^ constant.numeric.version.directive.nanyx
+
+::format lineWidth 100
+--       ^^^^^^^^^ variable.other.directive.nanyx
+--                 ^^^ constant.numeric.directive.nanyx
+
+::format name "a b"
+--            ^^^^^ string.quoted.double.directive.nanyx
+
+::linter nanyx.lint  -- the official linter
+--                   ^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-dash.nanyx
 
 def a = #some(1)
 --      ^ - meta.preprocessor.directive.nanyx

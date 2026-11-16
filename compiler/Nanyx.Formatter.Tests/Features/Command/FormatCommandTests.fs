@@ -222,27 +222,28 @@ let ``A script's #! line and directives are kept as written, with the comments a
     let header =
         """#!/usr/bin/env -S nanyx run
 -- Says hello.
-::linters.default.unusedBindings   =  "error"
+::linter nanyx.lint
+::lint unusedBindings   #error
 
-::formatter.lineWidth = 100""".ReplaceLineEndings "\n"
+::format lineWidth 100""".ReplaceLineEndings "\n"
     Assert.Equal(header + "\n\ndef add = { a, b -> a + b }\n", formattedWith Formatter.Options.defaults (header + "\n\n\ndef add={a,b->a +  b}"))
     Assert.Equal(header + "\ndef add = { a, b -> a + b }\n", formattedWith Formatter.Options.defaults (header + "\ndef add={a,b->a +  b}"))
     Assert.Equal(header + "\n", formattedWith Formatter.Options.defaults (header + "\n\n"))
 
 [<Fact>]
 let ``A script's formatter directives set its options`` () =
-    let directory = directoryWith [ "a.nyx", "::formatter.indentSize = 4\n::formatter.lineWidth = 20\n" + block ]
+    let directory = directoryWith [ "a.nyx", "::format indentSize 4\n::format lineWidth 20\n" + block ]
     let file = Path.Combine(directory, "a.nyx")
     Assert.Equal(Result.Ok { Formatter.Options.LineWidth = 20; Formatter.Options.IndentSize = 4 }, Settings.withDirectives file (File.ReadAllText file) Formatter.Options.defaults)
     run Write [ file ] |> ignore
-    Assert.Equal("::formatter.indentSize = 4\n::formatter.lineWidth = 20\ndef x =\n    def a = 1\n    a\n", File.ReadAllText file)
+    Assert.Equal("::format indentSize 4\n::format lineWidth 20\ndef x =\n    def a = 1\n    a\n", File.ReadAllText file)
 
 [<Theory>]
-[<InlineData("::formatter.tabs = 2", "unknown setting ::formatter.tabs; the settings are lineWidth and indentSize")>]
-[<InlineData("::formatter.lineWidth = 0", "::formatter.lineWidth must be a positive integer, not 0")>]
-[<InlineData("::formatter.lineWidth = \"80\"", "::formatter.lineWidth must be a positive integer, not the string \"80\"")>]
-[<InlineData("::formatter.lineWidth", "::formatter takes a setting and its value")>]
-[<InlineData("::formatter.lineWidth = wide", "'wide' is not a TOML value; a string needs quotes, as in a manifest: \"wide\"")>]
+[<InlineData("::format tabs 2", "unknown setting ::format tabs; the settings are lineWidth and indentSize")>]
+[<InlineData("::format lineWidth 0", "::format lineWidth must be a positive integer, not 0")>]
+[<InlineData("::format lineWidth \"80\"", "::format lineWidth must be a positive integer, not the string \"80\"")>]
+[<InlineData("::format lineWidth", "::format takes a setting and its value")>]
+[<InlineData("::format lineWidth wide", "::format lineWidth must be a positive integer, not 'wide'")>]
 let ``A formatter directive that is not valid is an error naming the file and line, and the file is left alone`` (directive: string, message: string) =
     let directory = directoryWith [ "a.nyx", "-- A script.\n" + directive + "\n" + unformatted ]
     let file = Path.Combine(directory, "a.nyx")
@@ -253,7 +254,7 @@ let ``A formatter directive that is not valid is an error naming the file and li
 
 [<Fact>]
 let ``A formatter directive in a file of a package is an error saying to use the manifest`` () =
-    let directory = directoryWith [ "app.nyxp", "(formatter = (indentSize = 4))"; "a.nyx", "::formatter.indentSize = 2\n" + block ]
+    let directory = directoryWith [ "app.nyxp", "(formatter = (indentSize = 4))"; "a.nyx", "::format indentSize 2\n" + block ]
     let file = Path.Combine(directory, "a.nyx")
     match run Write [ file ] with
     | [ _, Failed(BadSettings error) ] -> Assert.Contains("formatter field of " + Path.Combine(directory, "app.nyxp"), error)

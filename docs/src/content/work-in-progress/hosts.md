@@ -55,9 +55,8 @@ A program's host is a deployment concern. It decides which runtime gets linked, 
 
 There is no default host: a package whose manifest names no `host` is a library, an `@entry` in it is an error (`NYX0031`) from `nanyx check`, `nanyx run` and `nanyx build` alike, and running it is an error that says it has no entry point. `nanyx new` writes a `host` ([Built-ins as packages](./built-ins-as-packages#the-manifest)).
 Loose script files, which run top-level statements without a manifest, run under `nanyx.console` unless a `::host`
-directive at their top names another, found as a manifest's `host` is: `::host.nanyx.console = "0.28.0"`, or
-`::host.acme.host = { path = "../acme.host" }`. A script names the packages it imports from with `::dependencies` in the
-same way.
+directive at their top names another, found as a manifest's `host` is: `::host nanyx.console`, or
+`::host acme.host ../acme.host`. A script names each package it imports from with `::dependency` in the same way.
 
 ## A host package
 
@@ -360,9 +359,9 @@ The composite host runs each part under the right sub-host and coordinates start
   - `Console` and `Env` go in an interface package, `nanyx.console.core`, that the host `nanyx.console` depends on. The
     host's prelude brings them and `println` into scope in every module of the application and in scripts, so
     `import nanyx/console` goes from programs. A library depends on `nanyx.console.core` and imports from it.
-  - A script lists the packages it depends on with `::dependencies` directives, and runs under
-    `::host.nanyx.console = "<the compiler's version>"` unless it names another host. Each directive is a TOML key and
-    value, as `::linters`'s are: a version for a package the compiler ships, or a table with its `path`.
+  - A script lists the packages it depends on with `::dependency` directives, and runs under `::host nanyx.console`
+    unless it names another host. Each directive is a line of words, `::dependency acme.util ../util`: a package's name,
+    then its directory or version, or neither for a package the compiler ships ([#1599](https://github.com/nanyx-lang/nanyx/issues/1599)).
   - A package with a manifest but no `host` is a library: an `@entry` in it is an error from `check`, `run` and
     `build`, and running it is a fatal "no entry point" error.
 
@@ -389,7 +388,7 @@ The composite host runs each part under the right sub-host and coordinates start
 4b. **Any package can be a host** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)): a host's manifest declares
    it, a host is found by its `path`, the host's prelude brings what it provides into scope, and `Console` and `Env`
    are in the interface package `nanyx.console.core`. Done (see [What's built](#whats-built)), with the `::host` and
-   `::dependencies` directives for scripts ([#1504](https://github.com/nanyx-lang/nanyx/issues/1504)).
+   `::dependency` directives for scripts ([#1504](https://github.com/nanyx-lang/nanyx/issues/1504)).
 4c. **Build only the contexts a program uses** ([#1497](https://github.com/nanyx-lang/nanyx/issues/1497)): every program
    builds the members of the host's `Console` and `Env` and imports what they call, used or not, since `run` passes
    them all.
@@ -420,9 +419,9 @@ The composite host runs each part under the right sub-host and coordinates start
   package's file, the language server's included, passes `@entry` to that host's `run`, and the host's imports resolve
   in its own package. `--host` on `run`, `build` and `check` replaces it with a host the compiler ships or the
   directory of one (`Package.withHost`); on a script it is a usage error.
-- **A script chooses its host.** `Script.read` reads a script's `::host` and `::dependencies` directives into the
+- **A script chooses its host.** `Script.read` reads a script's `::host` and `::dependency` directives into the
   entries a manifest's `host` and `dependencies` would be (`Manifest.hostEntry`, `Manifest.dependencyEntries`), so they
-  are checked as a manifest's are, with the same errors, at the directive. `Package.scriptModules` reads the packages
+  are checked as a manifest's are, with the same errors, at the word each is about. `Package.scriptModules` reads the packages
   they name, the console host when there is no `::host`, into a module table for the script's build
   (`PackageModules.Script`): it has no files of its own, so every file of the build in no package it depends on is the
   program's (`PackageModules.isProgramFile`), and its imports are found by path, but for an import of a dependency's

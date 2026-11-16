@@ -224,8 +224,11 @@ must be new or empty.
 `nanyx migrate` turns a script, or every `.nyx` file under a directory (the current one by default), into a package
 (`Migration.fs`). It writes `<name>.nyxp` beside them, named by `--name` or the directory's name, at version
 `0.1.0`, whose `sources` select the files it migrated. Each `::` directive becomes the manifest entry it stands for
-(see [Files and projects](../getting-started/files-and-projects#directives)), a `path` made relative to the manifest,
-and is removed from its file, with the `#!` line. Two directives that set one thing differently are an error naming
+(see [Files and projects](../getting-started/files-and-projects#directives)): `::dependency acme.util ../util` is
+`(package = "acme.util", path = "../util")` in `dependencies`, its directory made relative to the manifest, a package
+the compiler ships named on its own is at the compiler's version, and each `::lint` goes into the `settings` of the
+linter above it. Each is removed from its file, with the `#!` line. A script with a directive written wrong, in the old
+form among them, is refused. Two directives that set one thing differently are an error naming
 both lines. A script with top-level statements becomes `module main`, and its statements, with the values that run
 with them because they need a context, move into an `@entry` def in the order written; the manifest gets the console
 host unless a `::host` names another. Any other file becomes a module named for the file, which a library, a package
@@ -251,6 +254,6 @@ the entry is written, then `install` says the package can't be downloaded yet an
 them, as `check` does, and no JSON. `--json` is needed: JSON is the only form so far.
 
 A package runs only the linters its manifest names (an entry with `package = "nanyx.lint"` for the official one), and
-a file run on its own only those its `::linters` directives name (`::linters.default`, or
-`::linters.default.unusedBindings = "error"` to set a rule's severity too). Without either, no linter runs. See
+a file run on its own only those its `::linter` directives name (`::linter nanyx.lint`, with
+`::lint unusedBindings #error` under it to set a rule's severity too). Without either, no linter runs. See
 `examples/greeter` for a working package, and `examples/directives.nyx` for a script with directives.
