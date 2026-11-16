@@ -134,6 +134,36 @@ def build: int -> list(string) = { n ->
     Assert.Equal(0, program.LiveBlocks)
 
 [<Fact>]
+let ``Run - a cell of a union wider than its first value's is matched on and changed in one arm`` () =
+    let source = """
+def pick: int -> #some(int) | #notFound = { y ->
+  memory {
+    mut found: #some(int) | #notFound = #notFound
+    found := #some(y)
+    if found is #notFound then (found := #some(y + 1))
+    found
+  }
+}
+
+def first: list(int) -> #some(int) | #notFound = { xs ->
+  memory {
+    mut found: #some(int) | #notFound = #notFound
+    def note = { x -> if found is #notFound then (found := #some(x)) }
+    for xs | x -> note(x)
+    found
+  }
+}
+
+@entry
+def main = {
+  println(pick(1))
+  println(first([4, 5, 6]))
+  println(first([]))
+}
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "#some(1)\n#some(4)\n#notFound\n"
+
+[<Fact>]
 let ``Counting - a local cell drops each value it is given`` () =
     let source = """
 def build: int -> string = { n ->

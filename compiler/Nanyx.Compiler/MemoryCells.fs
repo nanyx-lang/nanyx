@@ -61,6 +61,11 @@ let declareCell (env: TypeEnv) (symbol: SymbolId option) (state: InferState) =
         { next with Cells = next.Cells |> Map.add symbol scope }
     | None, _ -> state
 
+/// `state` with the declaration `expr`, `mut x = value`, of the cell's type `cellTy`, which can be wider than its first
+/// value's (`mut found: #some(int) | #none = #none`): the backend holds the cell as a value of the type its `mut` has.
+let typeMut (expr: Expression) (cellTy: Ty) (state: InferState) =
+    { state with ExprTypes = state.ExprTypes |> Map.add expr.Id cellTy }
+
 /// The value of a cell's declaration, `mut x = value`, at `expr`: a cell holding `value`, of its type. It needs `Memory`.
 let inferMut (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>) (env: TypeEnv) (state: InferState) (expr: Expression) (value: Expression) =
     if env.BlockScope.IsSome then

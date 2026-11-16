@@ -200,7 +200,8 @@ def list.selectOne: [c] list(a), ([Yield(b), c] a -> ()) -> #some(b) | #notFound
 ```
 
 The first value `f` yields, running it on the elements in turn as [`list.select`](#listselect) does, or `#notFound`
-when it yields none.
+when it yields none. It stops at the first yield: `f` runs on no element after the one it yields
+for, and a second value it yields for that element is left out.
 
 ## `list.all`
 

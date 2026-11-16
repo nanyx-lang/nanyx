@@ -25,7 +25,10 @@ them. This page keeps how they are built, and `mut` record fields, which are sti
   a cell becomes a call to a `CellSyntax` built-in, and a cell some lambda other than a `for` body captures becomes a
   box: a record of one field, made with `box`, read with `unbox` and written with `setBox`. The core IR has two nodes
   for writes, `Assign` for a local and `SetField` for a box, each dropping the value it replaces. A read copies the
-  value into a local of its own, so that a later `:=` cannot change what a read gave.
+  value into a local of its own, so that a later `:=` cannot change what a read gave. A cell's local or box has the
+  cell's type, which the checker records as the type of its `mut` (`MemoryCells.typeMut`): it can be a union wider
+  than the first value's, `mut found: #some(int) | #none = #none`, and a cell typed as its first value's `#none` was
+  not counted as a value on the heap, so a `match` on it freed what it held.
 - **Cell parameters** (`CellPassingSyntax`). The parser reads `mut cell` as a parameter annotated `mut _` with no source
   of its own, so the formatter writes it back, and `mut x` before a `,` or `)` as a call to `__mut_arg`. `mut T` is
   `TyApply("mut", [T; scope])` (`FunctionContexts.cellType`): the scope is the signature's `Memory`'s where an

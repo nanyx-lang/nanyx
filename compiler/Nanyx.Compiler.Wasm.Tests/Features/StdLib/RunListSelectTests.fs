@@ -46,6 +46,42 @@ def main = {
     runSource (source.ReplaceLineEndings "\n") |> assertRan "#some(1)\n#notFound\n"
 
 [<Fact>]
+let ``Run - list.selectOne stops at the first yield`` () =
+    let source =
+        """def firstOver: [Console] int, list(int) -> #some(string) | #notFound = { limit, xs ->
+  xs \list.selectOne { x ->
+    println("at {x}")
+    if x > limit then
+      yield("{x}")
+      yield("again")
+  }
+}
+
+@entry
+def main = {
+  println(firstOver(1, [1, 2, 3, 4]))
+  println(firstOver(0, [1, 2]))
+  println(firstOver(2, [1, 2, 3]))
+  println(firstOver(5, [1, 2]))
+}
+"""
+    let expected =
+        """at 1
+at 2
+#some(2)
+at 1
+#some(1)
+at 1
+at 2
+at 3
+#some(3)
+at 1
+at 2
+#notFound
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan (expected.ReplaceLineEndings "\n")
+
+[<Fact>]
 let ``Run - the function list.select runs can use the caller's contexts`` () =
     let source =
         """@entry
