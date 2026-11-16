@@ -26,13 +26,17 @@ chosen by the expected type (`def a: Array(int) = [1, 2]`) or by the type's name
 - **Spreads.** `__spreadItems(x)` is read as the prelude's `__spreadArray(x)` for an array and `__spreadList(x)` for a
   list (`CollectionLiterals.inferSpread`); anything else is NYX0258.
 - **The standard library.** `fromArray` is attached to `list`, `set`, `map` and `Array` in the prelude, and to `MStack`,
-  `MList`, `MArray`, `Stack`, `Queue`, `Trie` and `StringTrie` in their modules, written in Nanyx. `__arrayOf` makes the array from the list of the items.
+  `MList`, `MArray`, `Stack`, `Queue`, `Trie` and `StringTrie` in their modules, written in Nanyx. `__arrayOf` gives the
+  type of the array the items make, and the spreads' functions their types.
+- **One flat allocation** ([#1641](https://github.com/nanyx-lang/nanyx/issues/1641)). The backend never builds the
+  list: it lowers `__arrayOf` of the items in one block (`CoreIrLowerArrayLiterals`). It reads the items back into their
+  parts, each run's items and each spread, makes the array at the number of items plus each spread's length with
+  `__nanyx_array_new`, writes each item with `__nanyx_array_write`, and copies each spread array's elements in, each
+  with a reference of its own (`__nanyx_array_copy_into`, written out where it is used). A spread list is made an array
+  first, one block and no cells. So `Array[1, 2, 3]` is one block, and `Array[...xs, 4]` one beside `xs`.
 
 # Still open
 
-- **One flat allocation.** The items are built as a list and then copied into the array by `__arrayOf`, and a spread
-  array is copied to a list first. The design is for the backend to build the flat array directly, since it knows how
-  many items there are ([#1641](https://github.com/nanyx-lang/nanyx/issues/1641)).
 - **A `FromArray` context.** The issue suggested reading `fromArray` through a prelude context synthesised from it, as
   `ToString` is from `toString`, so that generic code could build literals of a type variable. Literals call the
   attached `fromArray` directly instead, and a literal expected as a type variable stays a list.

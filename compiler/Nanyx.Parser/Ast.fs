@@ -573,6 +573,10 @@ module CollectionSyntax =
     let fromArray = "fromArray"
     let arrayOf = "__arrayOf"
     let spread = "__spreadItems"
+    /// What a spread is read as, by its operand's type: the prelude's functions that make a list of an array's elements
+    /// and of a list's.
+    let spreadArray = "__spreadArray"
+    let spreadList = "__spreadList"
 
     /// The items of a literal as the parser writes it, each a run of elements or a spread: `[a, b]` is one run,
     /// `[a, ...xs]` is `[a] ++ xs`, whose list runs span the whole literal, and `[k => v]` is a call to `__map` with a

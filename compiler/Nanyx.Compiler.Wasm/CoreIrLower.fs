@@ -365,6 +365,16 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match atoms with
                 | [ AVar box; value ] -> k (Expr.make (SetField(box, 0, value)) IrUnit)
                 | _ -> internalError "a box set with something other than a box and a value")
+        // The array of a collection literal's items, built in one block (see `CoreIrLowerArrayLiterals`).
+        | FunctionCall(name, _, [ items ]) when name = CollectionSyntax.arrayOf && not (scope.Vars.ContainsKey name) ->
+            let isList (e: Expression) = match tyOf e with IrList _ -> true | _ -> false
+            CoreIrLowerArrayLiterals.arrayOf
+                (this.AtomsInLocals scope)
+                (CoreIrLowerMembers.coerceAll this.MemberTools scope)
+                (fun name ty -> newVar (uniqueName name) Local ty)
+                (tyOf expr)
+                (CoreIrLowerArrayLiterals.parts isList items)
+                k
         | FunctionCall(name, _, args) when Intrinsics.isIntrinsic name && not (scope.Vars.ContainsKey name) ->
             // A compiler intrinsic (only the standard library can call these, and a built-in property such as
             // `s.length` is one): the runtime helper of the same name. A mutable array is read as an array is.

@@ -631,6 +631,36 @@ type private FunctionEmitter(context: EmitContext) =
                 $"local.get ${length}"
                 touching $"i32.store offset={CoreIrLayout.arrayLengthOffset}"
                 $"local.get ${array}" ]
+        // A spread array's elements copied into a new one from an index, a loop over the two blocks in step, each element
+        // with a reference of its own.
+        | CallRuntime(name, [ target; at; source ], _) when name = Helpers.arrayCopyInto ->
+            let element = arrayElement (atomType source)
+            let size = CoreIrLayout.size element
+            let first = CoreIrLayout.arrayElementOffset element 0
+            let into = freshLocal "__into" "i32"
+            let from = freshLocal "__from" "i32"
+            let left = freshLocal "__left" "i32"
+            join "\n    " [
+                atoms [ target; at ]
+                $"i32.wrap_i64\n    i32.const {size}\n    i32.mul\n    i32.add"
+                $"local.set ${into}"
+                atoms [ source ]
+                $"local.tee ${from}"
+                touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"
+                $"local.set ${left}"
+                $"block ${into}_done"
+                $"loop ${into}_copy"
+                $"local.get ${left}\n    i32.eqz\n    br_if ${into}_done"
+                $"local.get ${into}\n    local.get ${from}\n    {load element first}"
+                (if CoreIrDrop.isHeapType element then $"call ${CoreIrDrop.dupName element}" else "")
+                store element first
+                $"local.get ${into}\n    i32.const {size}\n    i32.add\n    local.set ${into}"
+                $"local.get ${from}\n    i32.const {size}\n    i32.add\n    local.set ${from}"
+                $"local.get ${left}\n    i32.const 1\n    i32.sub\n    local.set ${left}"
+                $"br ${into}_copy"
+                "end"
+                "end"
+                "i32.const 0" ]
         // A list cell's tail is given up and the list, which the cell takes over, is stored in its place.
         | CallRuntime(name, [ cell; tail ], _) when name = Intrinsics.listSetTail ->
             let listTy = atomType cell
