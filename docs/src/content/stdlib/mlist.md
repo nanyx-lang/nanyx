@@ -54,6 +54,15 @@ def MList.fromList: [Memory] list(a) -> MList(a)
 
 A new list holding `xs`, in order.
 
+## `MList.fromArray`
+
+```nanyx fragment
+def MList.fromArray: [Memory] array(a) -> MList(a)
+```
+
+A new list holding `xs`, in order. What a literal builds a list with, `MList[1, 2, 3]`, or
+`[1, 2, 3]` where an `MList` is expected.
+
 ## `MList.add`
 
 ```nanyx fragment

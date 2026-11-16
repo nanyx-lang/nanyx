@@ -44,7 +44,7 @@ def insertAll: [Eq(k), Hash(k)] map(k, v), list((k, v)) -> map(k, v) = {
   | m, [(key, value), ...rest] -> insertAll(map.insert(m, key, value), rest)
 }
 
---| The map with no keys. A map literal has at least one entry, since [] is the empty list.
+--| The map with no keys. `[]` where a map is expected is this map.
 export def map.empty: map(k, v) = __nanyx_map_of_entries([])
 
 --| What the compiler makes a map literal call: `["a" => 1, "b" => 2]` is
@@ -56,6 +56,12 @@ export def __map: [Eq(k), Hash(k)] list((k, v)) -> map(k, v) = { entries ->
 --| The map holding each of `entries`, in order: of two entries with the same key, the later wins.
 export def map.fromList: [Eq(k), Hash(k)] list((k, v)) -> map(k, v) = { entries ->
   insertAll(map.empty, entries)
+}
+
+--| The map holding each of `entries`, in order: of two entries with the same key, the later wins.
+  What a literal builds a map with where a map is expected, as `[]` is, or written `map[...]`.
+export def map.fromArray: [Eq(k), Hash(k)] array((k, v)) -> map(k, v) = { entries ->
+  insertAll(map.empty, list.fromArray(entries))
 }
 
 --| The entries of `m`, each a key and its value, in the order the keys were first added.
@@ -222,6 +228,12 @@ export def set.empty: set(a) = __nanyx_set_of_elements([])
 --| The set of the elements of `xs`, each once, in the order they first appear.
 export def set.fromList: [Eq(a), Hash(a)] list(a) -> set(a) = { xs ->
   __nanyx_set_of_elements(list.distinct(xs))
+}
+
+--| The set of the elements of `xs`, each once, in the order they first appear. What a literal
+  builds a set with, `set[1, 2]`, or `[1, 2]` where a set is expected.
+export def set.fromArray: [Eq(a), Hash(a)] array(a) -> set(a) = { xs ->
+  set.fromList(list.fromArray(xs))
 }
 
 --| The elements of `s`, in the order they were first added.

@@ -78,3 +78,10 @@ let ``Fields go one per line when one of them spans lines`` () =
 [<Fact>]
 let ``Fields that each fit on one line stay on one line`` () =
     unchanged "def a = f(x = 1, y = { z -> z })\n"
+
+[<Fact>]
+let ``A literal written after a type's name keeps the name, its items, spreads and entries`` () =
+    unchanged (normalized """def a = Array[1, 2]
+def b = Array[...xs, 4, ...ys]
+def m = MyMap["a" => 1, "b" => 2]
+def e = set[]""")

@@ -48,43 +48,47 @@ Most of the time, Nanyx programs don't care very much about the specific impleme
 ```nanyx
 def lookup = ["a" => 1, "b" => 2]
 
-def unique = set.fromList([1, 2, 2, 3])
+def unique: set(int) = [1, 2, 2, 3]
 ```
 
 The functions on them are on the standard library's [lists](../stdlib/prelude-lists), [maps and sets](../stdlib/prelude-maps) and [array](../stdlib/array) pages.
 
 ## Literal types
 
-Today a square-bracket literal of plain items, `[1, 2, 3]`, is always a `list(a)`, and one of `key => value` entries, `["a" => 1]`, is always a `map(k, v)`. There is no set literal or array literal: a set is made from a list with `set.fromList`, and an array with `array.fromList`. Literals of any collection type, such as `def unique: set(int) = [1, 2, 2, 3]` or `Array[1, 2, 3]`, are planned, as described under [Syntax](#syntax).
+A square-bracket literal of plain items, `[1, 2, 3]`, is a `list(a)`, and one of `key => value` entries, `["a" => 1]`, is a `map(k, v)`, unless something says it's another type: the type expected where it's written, or the type's name written before the brackets. See [Syntax](#syntax).
 
 Associated types for constrained collection capabilities are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
 
 # Syntax
 
-> **Planned** ([#1543](https://github.com/nanyx-lang/nanyx/issues/1543)). Today a literal is a `list(a)` or a `map(k, v)`, as described above.
+The square-bracket literal works for any collection type that says how to be built from one. There are two ways to say which type a literal is:
 
-The square-bracket literal is to work for any collection type that says how to be built from one. There are two ways to say which type a literal is:
+```nanyx
+def a: Array(int) = [1, 2, 3] -- from the expected type
+def b = Array[1, 2, 3] -- from the type's name before the brackets
+def s = set[1, 2, 2, 3] -- a set of 1, 2 and 3
+def e: set(int) = [] -- an empty set
+def m: map(string, int) = [] -- an empty map
 
-```nanyx fragment
-def a: Array(int) = [1, 2, 3]     -- from the expected type
-def b = Array[1, 2, 3]            -- from the type's name before the brackets
-def s = set[1, 2, 2, 3]           -- a set of 1, 2 and 3
-def e: set(int) = []              -- an empty set
+println(set.count(s))
 ```
 
-Writing the type's name before the brackets is like writing a record's type before its fields, `Point(x = 1, y = 2)`. With neither, plain items make a `list(a)` and `key => value` entries a `map(k, v)`, as today.
+Writing the type's name before the brackets is like writing a record's type before its fields, `Point(x = 1, y = 2)`. The expected type can be a def's written type or the type a function takes: `total([1, 2])` passes an array to `total: Array(int) -> int`. With neither, plain items make a `list(a)` and `key => value` entries a `map(k, v)`; `[]` is the empty list.
 
 A type has literals when it has an attached `fromArray`. The compiler collects the items into an `Array`, which knows its length, and passes it in; a map-like type is given an `Array` of `(key, value)` tuples:
 
-```nanyx fragment
+```nanyx
 type Bag(a) = protected (items: list(a))
 
-def Bag.fromArray: Array(a) -> Bag(a) = { xs -> Bag(items = array.toList(xs)) }
+def Bag.fromArray: Array(a) -> Bag(a) = { xs ->
+  Bag(items = list.fromArray(xs))
+}
 
 def bag: Bag(int) = [1, 2, 2]
 def other = Bag[3, 4]
+
+println(list.length(bag.items))
 ```
 
-The standard library's `set`, `map`, `Array` and mutable collections get their literals the same way, with nothing special about them. A `fromArray` that requires a context makes the literal require it: `MStack[1, 2]` needs `Memory`, so it is written inside a `memory` block. A list or an array can be spread into a literal, `Array[...xs, 4]`.
-
+The standard library's `list`, `set`, `map`, `Array` and mutable collections get their literals the same way, with nothing special about them. A `fromArray` that requires a context makes the literal require it: `MStack[1, 2]` needs `Memory`, so it is written inside a `memory` block. A list or an array can be spread into a literal, `Array[...xs, 4]`; spreading anything else, such as a set, is an error (NYX0258). A literal of a type with no `fromArray` is an error too (NYX0257).
 For iteration constructs, see [Loops](./loops). For query-style collection programming, see [Sequences and queries](../advanced/sequences-and-queries).
