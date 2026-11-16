@@ -126,11 +126,16 @@ as short in Nanyx as in a dynamic language. See [Deferred errors](../work-in-pro
 
 # Error messages and tools
 
-**Elm**, **Rust**, and **Go**.
+**Elm**, **Rust**, **Prettier**, and the editor tooling of **Microsoft** and **JetBrains**.
 
 - From **Elm**: compiler errors that explain what was found and what to do about it, without blaming the reader.
 - From **Rust**: a stable code for every error, with a page explaining each ([Compiler errors](../standard-tools/errors));
   naming a look-alike Unicode character, such as `−` for `-`, instead of reporting a confusing parse error; and lint
   rules suppressed with an attribute, `@allow(...)`.
-- From **Go**: one official layout, applied by [the formatter](../standard-tools/formatter), so nobody argues about
-  style.
+- From **Prettier**: one official layout, applied by [the formatter](../standard-tools/formatter) with almost
+  nothing to configure, so nobody argues about style and formatting on save just works.
+- From **Microsoft** and **JetBrains**: the conviction that a language is only as pleasant as its editor. Visual
+  Studio, VS Code and TypeScript, IntelliJ and Rider showed what it's like when the tools understand the code: types on
+  hover, rename that's always right, refactorings you trust, errors as you type. Nanyx is designed to be that kind of
+  language from the start, with [the VS Code extension](../standard-tools/vs-code-extension) and the language server
+  built alongside the compiler, not after it.
