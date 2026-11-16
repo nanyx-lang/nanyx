@@ -281,7 +281,7 @@ module Compiler =
                 |> Map.toSeq
                 |> Seq.collect (fun (contextName, info) ->
                     match Unifier.unalias info.Underlying with
-                    | TyRecord members ->
+                    | TyRecord(members, _) ->
                         members
                         |> Map.toSeq
                         |> Seq.choose (fun (memberName, ty) ->

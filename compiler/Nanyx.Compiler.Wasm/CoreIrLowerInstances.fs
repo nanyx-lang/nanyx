@@ -77,7 +77,7 @@ let neverCalled (fnTy: Ty) : bool =
     | TyFunc(input, _, _) ->
         let parameters =
             match Unifier.unalias input with
-            | TyRecord fields when fields.Keys |> Seq.forall (fun name -> fst (System.Int32.TryParse name)) -> List.ofSeq fields.Values
+            | TyRecord(fields, _) when fields.Keys |> Seq.forall (fun name -> fst (System.Int32.TryParse name)) -> List.ofSeq fields.Values
             | single -> [ single ]
         parameters |> List.exists (function TyVar _ -> true | _ -> false)
     | _ -> false

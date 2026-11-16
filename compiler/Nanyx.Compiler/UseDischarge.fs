@@ -73,7 +73,7 @@ module internal UseDischarge =
                         else
                             fitted, extras
                     | _ -> fitted, extras) (given, [])
-            TyRecord fitted, LambdaContexts.record (List.distinct extras) state
+            TyRecord(fitted, FieldOrder(fields |> List.choose (function NamedField(name, _) -> Some name | PositionalField _ -> None))), LambdaContexts.record (List.distinct extras) state
         | _ -> inputTy, state
 
     /// The type of `members`, the members of `use C(T)(members)`, inferred as `valueTy`, as one that fits `declaredTy`,

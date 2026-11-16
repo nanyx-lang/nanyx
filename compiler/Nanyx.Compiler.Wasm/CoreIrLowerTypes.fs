@@ -24,12 +24,12 @@ let rec substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
     match ty with
     | TyVar v -> subst |> Map.tryFind v.Id |> Option.defaultValue ty
     | TyFunc(input, output, contexts) -> TyFunc(go input, go output, contexts |> List.map go |> FunctionContexts.flatten)
-    | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> go))
+    | TyRecord(fields, order) -> TyRecord(fields |> Map.map (fun _ -> go), order)
     | TyOpenRecord(fields, rest) ->
         let fields = fields |> Map.map (fun _ -> go)
         // A record whose other fields are now known is closed.
         match subst |> Map.tryFind rest.Id |> Option.map Unifier.unalias with
-        | Some (TyRecord others) -> TyRecord(Map.fold (fun acc name fieldTy -> acc |> Map.add name fieldTy) others fields)
+        | Some (TyRecord(others, order)) -> TyRecord(Map.fold (fun acc name fieldTy -> acc |> Map.add name fieldTy) others fields, order)
         | Some (TyOpenRecord(others, rest')) -> TyOpenRecord(Map.fold (fun acc name fieldTy -> acc |> Map.add name fieldTy) others fields, rest')
         | _ -> TyOpenRecord(fields, rest)
     | _ -> Ty.map go ty
@@ -56,7 +56,7 @@ let rec private recursiveReference (ty: Ty) : (Ty * Ty list) option =
 let rec private withoutContexts (ty: Ty) : Ty =
     match ty with
     | TyFunc(input, output, _) -> TyFunc(withoutContexts input, withoutContexts output, [])
-    | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> withoutContexts))
+    | TyRecord(fields, order) -> TyRecord(fields |> Map.map (fun _ -> withoutContexts), order)
     | TyApply(name, args) -> TyApply(name, args |> List.map withoutContexts)
     | TyUnion items -> TyUnion(items |> List.map withoutContexts)
     | _ -> ty
@@ -114,13 +114,13 @@ and private bindSchemeWith (rests: bool) (bindings: Map<int, Ty>) (scheme: Ty) (
             |> List.mapi (fun index v -> v, (if index = 0 then others else []))
             |> List.fold (fun acc (v, required) -> if acc |> Map.containsKey v.Id then acc else acc |> Map.add v.Id (TyUnion required)) bindings
         bindScheme (bindScheme bound input input') output output'
-    | TyRecord fields, TyRecord fields' when Set.ofSeq fields.Keys = Set.ofSeq fields'.Keys ->
+    | TyRecord(fields, _), TyRecord(fields', _) when Set.ofSeq fields.Keys = Set.ofSeq fields'.Keys ->
         fields |> Map.fold (fun acc key fieldTy -> bindScheme acc fieldTy fields'.[key]) bindings
     // A function that reads fields of any record that has them, used at a record: its other fields are the rest.
-    | TyOpenRecord(fields, rest), TyRecord fields' when fields.Keys |> Seq.forall fields'.ContainsKey ->
+    | TyOpenRecord(fields, rest), TyRecord(fields', order) when fields.Keys |> Seq.forall fields'.ContainsKey ->
         let bound = fields |> Map.fold (fun acc key fieldTy -> bindScheme acc fieldTy fields'.[key]) bindings
         let others = fields' |> Map.filter (fun key _ -> not (fields.ContainsKey key))
-        bindScheme bound (TyVar rest) (TyRecord others)
+        bindScheme bound (TyVar rest) (TyRecord(others, FieldOrder.within others order))
     | TyTag(name, payload), TyTag(name', payload') when name = name' ->
         match payload, payload' with
         | Some p, Some p' -> bindScheme bindings p p'
@@ -239,11 +239,11 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
             | _ -> cannot "a union of something other than tags"
         IrTags(members tags |> List.distinct |> List.sortBy fst)
     // A `Map`'s keys are in the order a record's fields are stored in.
-    | TyRecord fields -> IrRecord(fields |> Map.toList |> sortFields |> List.map (fun (name, fieldTy) -> name, toIrType fieldTy))
+    | TyRecord(fields, _) -> IrRecord(fields |> Map.toList |> sortFields |> List.map (fun (name, fieldTy) -> name, toIrType fieldTy))
     | TyNominal _ as nominal -> toIrType (RecursiveNominals.underlying nominal)
     | TyApply("list", [ element ]) -> IrList(toIrType element)
     // A map is the list of its entries, each a tuple of its key and its value (see `Maps`).
-    | Maps.MapType(key, value) -> toIrType (TyApply("list", [ TyRecord(Map.ofList [ "0", key; "1", value ]) ]))
+    | Maps.MapType(key, value) -> toIrType (TyApply("list", [ TyRecord(Map.ofList [ "0", key; "1", value ], FieldOrder.none) ]))
     // A set is the list of its elements (see `Sets`).
     | Sets.SetType element -> IrList(toIrType element)
     | Arrays.ArrayType element -> IrArray(toIrType element)
@@ -349,7 +349,7 @@ let parameterTypes (names: string list) (fnTy: Ty) (isLambda: bool) : Ty list * 
     | [ _ ], TyFunc(input, result, _) -> [ input ], result
     | several, TyFunc(input, result, _) ->
         match Unifier.unalias input with
-        | TyRecord fields when fields.Count = several.Length ->
+        | TyRecord(fields, _) when fields.Count = several.Length ->
             several
             |> List.mapi (fun index parameterName ->
                 match fields |> Map.tryFind (string index), fields |> Map.tryFind parameterName with
@@ -358,7 +358,7 @@ let parameterTypes (names: string list) (fnTy: Ty) (isLambda: bool) : Ty list * 
                 | None, None -> cannot $"a function whose parameter {parameterName} is not among its input's fields"), result
         // An open record of at least the parameters' fields, `(x: int, y: int, ...)`, or one its row is bound to a record
         // with more: each parameter takes the field of its name.
-        | TyRecord fields
+        | TyRecord(fields, _)
         | TyOpenRecord(fields, _) when several |> List.forall fields.ContainsKey -> several |> List.map (fun name -> fields.[name]), result
         | _ -> cannot "a function whose parameters are not a tuple"
     | _ -> cannot "a definition whose type is not a function"

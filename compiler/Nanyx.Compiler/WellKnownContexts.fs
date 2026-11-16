@@ -58,7 +58,7 @@ module internal WellKnownContexts =
             | TyParam _ -> None
             | TyAlias(_, _, underlying)
             | TyNominal(_, _, underlying, _) -> offendingPart kindOf underlying
-            | TyRecord fields
+            | TyRecord(fields, _)
             | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.tryPick (fun (name, fieldTy) -> inPart $"its field '{name}'" false fieldTy)
             | TyTag(name, payload) -> payload |> Option.bind (inPart $"the payload of '#{name}'" false)
             | Lists.ListType element -> inPart "its elements" true element
@@ -133,7 +133,7 @@ module internal WellKnownContexts =
                 | Arrays.ArrayType _ -> Some ("an array", "arrays")
                 | Boxes.BoxType _ -> mutableReference
                 | MutableArrays.MutableArrayType _ -> Some ("a mutable array", "mutable arrays")
-                | TyRecord fields when not (isTuple fields) -> Some ("a record", "records")
+                | TyRecord(fields, _) when not (isTuple fields) -> Some ("a record", "records")
                 | TyOpenRecord _ -> Some ("a record", "records")
                 | TyTag _
                 | TyUnion _ -> Some ("a tag", "tags")
@@ -203,7 +203,7 @@ module internal WellKnownContexts =
                     match ty with
                     | TyAlias(_, _, underlying)
                     | TyNominal(_, _, underlying, _) -> find underlying
-                    | TyRecord fields
+                    | TyRecord(fields, _)
                     | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.tryPick (snd >> find)
                     | TyTag(_, payload) -> payload |> Option.bind find
                     | TyApply _
@@ -231,7 +231,7 @@ module internal WellKnownContexts =
             | TyFunc _ -> []
             | TyAlias(_, _, underlying)
             | TyNominal(_, _, underlying, _) -> collect underlying
-            | TyRecord fields
+            | TyRecord(fields, _)
             | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
             | TyApply _

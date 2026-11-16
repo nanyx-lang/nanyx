@@ -61,7 +61,7 @@ let private others =
       TyTag("some", Some (TyPrimitive "int"))
       TyUnion [ TyTag("a", None); TyTag("b", None) ]
       TyApply("list", [ TyPrimitive "bool" ])
-      TyRecord (Map.ofList [ "x", TyPrimitive "int" ]) ]
+      TyRecord(Map.ofList [ "x", TyPrimitive "int" ], FieldOrder.none) ]
 
 [<Fact>]
 let ``undefined is assignable to every type, binding nothing`` () =

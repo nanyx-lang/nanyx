@@ -74,6 +74,33 @@ type NominalId =
     { Home: ModuleOrigin
       Name: string }
 
+/// The order a record type's named fields are written in, for showing it as written: `(string, start: int, length: int)`
+/// rather than in the order of the names. It is no part of the type: two records with the same fields are one type
+/// whatever the order of each, so an order equals every other. A record whose fields were never written in an order
+/// (one inference builds from fields read) has none, and is shown in the order of the names.
+[<CustomEquality; CustomComparison>]
+type FieldOrder =
+    | FieldOrder of string list
+
+    member this.Names = let (FieldOrder names) = this in names
+
+    override _.Equals(other) = other :? FieldOrder
+    override _.GetHashCode() = 0
+
+    interface System.IComparable with
+        member _.CompareTo(_) = 0
+
+module FieldOrder =
+    /// No order: the fields are shown in the order of their names.
+    let none = FieldOrder []
+
+    /// The fields of a record written in the order of `fields`.
+    let ofList (fields: (string * 'T) list) = FieldOrder(fields |> List.map fst)
+
+    /// `order` less the fields not in `fields`.
+    let within (fields: Map<string, 'T>) (FieldOrder names) = FieldOrder(names |> List.filter fields.ContainsKey)
+
+
 /// Internal types used during type inference.
 type TyVar =
     { Id: int
@@ -90,7 +117,9 @@ type Ty =
     /// Each context is one applied to its arguments, `TyApply("Console", [])` or `TyApply("Show", [a])`, or a context
     /// variable, `c` in `[c] a -> b`, which stands for any contexts. A function that requires none is pure.
     | TyFunc of Ty * Ty * Ty list
-    | TyRecord of Map<string, Ty>
+    /// A record: its fields, by name (a positional field's is its index, `0`), and the order its named ones are written
+    /// in, which only showing it reads (see `FieldOrder`).
+    | TyRecord of Map<string, Ty> * FieldOrder
     /// A record known to have at least these fields, its others standing for the row variable: what reading `p.name`
     /// tells inference about a `p` of no other known type. The variable is solved to a record (or another open one)
     /// with the remaining fields, as a union's rest variable is to its remaining tags.
@@ -128,7 +157,7 @@ module Ty =
         | TyNominal(_, args, underlying, _) -> args @ [ underlying ]
         | TyAlias(_, args, underlying) -> args @ [ underlying ]
         | TyFunc(input, output, contexts) -> input :: output :: contexts
-        | TyRecord fields -> fields |> Map.toList |> List.map snd
+        | TyRecord(fields, _) -> fields |> Map.toList |> List.map snd
         | TyOpenRecord(fields, row) -> (fields |> Map.toList |> List.map snd) @ [ TyVar row ]
         | TyTag(_, payload) -> Option.toList payload
         | TyApply(_, args)
@@ -146,7 +175,7 @@ module Ty =
         | TyNominal(id, args, underlying, isPrivate) -> TyNominal(id, List.map f args, f underlying, isPrivate)
         | TyAlias(name, args, underlying) -> TyAlias(name, List.map f args, f underlying)
         | TyFunc(input, output, contexts) -> TyFunc(f input, f output, List.map f contexts)
-        | TyRecord fields -> TyRecord(Map.map (fun _ field -> f field) fields)
+        | TyRecord(fields, order) -> TyRecord(Map.map (fun _ field -> f field) fields, order)
         | TyOpenRecord(fields, row) -> TyOpenRecord(Map.map (fun _ field -> f field) fields, row)
         | TyTag(name, payload) -> TyTag(name, Option.map f payload)
         | TyApply(name, args) -> TyApply(name, List.map f args)

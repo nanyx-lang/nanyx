@@ -92,7 +92,7 @@ module FunctionContexts =
     let withCellMemory (input: Ty) (contexts: Ty list) : Ty list =
         let parameters =
             match input with
-            | TyRecord fields -> List.ofSeq fields.Values
+            | TyRecord(fields, _) -> List.ofSeq fields.Values
             | single -> [ single ]
         let memory = parameters |> List.choose (function CellType(_, scope) -> Some (scoped cellContext scope) | _ -> None)
         if memory.IsEmpty then contexts else contexts @ memory |> List.distinct

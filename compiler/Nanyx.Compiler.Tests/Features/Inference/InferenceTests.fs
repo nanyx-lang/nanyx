@@ -89,7 +89,7 @@ def result = f(1, 2)"""
     let result = Compiler.compile source
     let typed = result.Typed.Value
     match typed.Types.["f"] with
-    | TyFunc(TyRecord fields, TyVar _, _) when fields.ContainsKey("0") && fields.ContainsKey("1") ->
+    | TyFunc(TyRecord(fields, _), TyVar _, _) when fields.ContainsKey("0") && fields.ContainsKey("1") ->
         ()
     | other -> Assert.True(false, $"Unexpected function type: %A{other}")
     Assert.Equal(TyPrimitive "int", typed.Types.["result"])

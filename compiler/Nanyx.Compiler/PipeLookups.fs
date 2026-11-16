@@ -90,7 +90,7 @@ let misfit (env: TypeEnv) (state: InferState) (lookup: Lookup) (hasArguments: bo
     | _, _, Some scheme ->
         let takes =
             match Unifier.unalias (fst (instantiate state scheme)) with
-            | TyFunc(TyRecord parameters, _, _) when hasArguments -> parameters |> Map.tryFind "0"
+            | TyFunc(TyRecord(parameters, _), _, _) when hasArguments -> parameters |> Map.tryFind "0"
             | TyFunc(input, _, _) when not hasArguments -> Some input
             | _ -> None
         takes

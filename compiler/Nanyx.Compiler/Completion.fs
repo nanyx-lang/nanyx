@@ -69,7 +69,7 @@ type Member = { Name: string; Kind: MemberKind; Type: string option; IsFunction:
 /// The fields of a record type, or of the record a named type stands for. An open record's are the ones it lists.
 let rec private recordFields (ty: Ty) : Map<string, Ty> option =
     match Unifier.unalias ty with
-    | TyRecord fields
+    | TyRecord(fields, _)
     | TyOpenRecord(fields, _) -> Some fields
     | RecursiveNominals.Nominal(_, _, underlying, _) -> recordFields underlying
     | _ -> None

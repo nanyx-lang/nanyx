@@ -16,7 +16,7 @@ def p = Person(firstName = "Joe", surname = "Bloggs")"""
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
     match typed.Types.["p"] with
-    | TyAlias("Person", [], TyRecord fields) ->
+    | TyAlias("Person", [], TyRecord(fields, _)) ->
         Assert.Equal(TyPrimitive "string", fields.["firstName"])
         Assert.Equal(TyPrimitive "string", fields.["surname"])
     | other -> Assert.True(false, $"Unexpected constructor type: %A{other}")
@@ -30,7 +30,7 @@ def n: int = count([(name = "Ada")])
 """
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    Assert.Equal(TyFunc(TyApply("list", [ TyRecord(Map.ofList [ "name", TyPrimitive "string" ]) ]), TyPrimitive "int", []), result.Typed.Value.Types.["count"])
+    Assert.Equal(TyFunc(TyApply("list", [ TyRecord(Map.ofList [ "name", TyPrimitive "string" ], FieldOrder.none) ]), TyPrimitive "int", []), result.Typed.Value.Types.["count"])
 
 [<Fact>]
 let ``Typecheck supports mixed positional and named records`` () =
@@ -38,7 +38,7 @@ let ``Typecheck supports mixed positional and named records`` () =
     let result = Compiler.compile source
     let typed = result.Typed.Value
     match typed.Types.["value"] with
-    | TyRecord fields when fields.ContainsKey("0") && fields.ContainsKey("1") && fields.ContainsKey("z") ->
+    | TyRecord(fields, _) when fields.ContainsKey("0") && fields.ContainsKey("1") && fields.ContainsKey("z") ->
         Assert.Equal(TyPrimitive "int", fields.["0"])
         Assert.Equal(TyPrimitive "int", fields.["1"])
         Assert.Equal(TyPrimitive "int", fields.["z"])

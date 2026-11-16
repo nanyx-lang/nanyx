@@ -37,8 +37,8 @@ let ``Unifier rejects occurs check`` () =
 
 [<Fact>]
 let ``Unifier rejects closed records with different fields, either way round`` () =
-    let narrow = TyRecord (Map.ofList [ ("a", TyPrimitive "int") ])
-    let wide = TyRecord (Map.ofList [ ("a", TyPrimitive "int"); ("b", TyPrimitive "string") ])
+    let narrow = TyRecord(Map.ofList [ ("a", TyPrimitive "int") ], FieldOrder.none)
+    let wide = TyRecord(Map.ofList [ ("a", TyPrimitive "int"); ("b", TyPrimitive "string") ], FieldOrder.none)
     for kind in [ Equal; Assignable ] do
         for given, expected in [ narrow, wide; wide, narrow ] do
             match Unifier.unify [ (given, expected, kind, SourceSpan.none) ] with
@@ -49,9 +49,9 @@ let ``Unifier rejects closed records with different fields, either way round`` (
 let ``Unifier gives an open record's row the other fields of a closed one`` () =
     let row = { Id = 9; Name = None }
     let opened = TyOpenRecord (Map.ofList [ ("a", TyPrimitive "int") ], row)
-    let wide = TyRecord (Map.ofList [ ("a", TyPrimitive "int"); ("b", TyPrimitive "string") ])
+    let wide = TyRecord(Map.ofList [ ("a", TyPrimitive "int"); ("b", TyPrimitive "string") ], FieldOrder.none)
     match Unifier.unify [ (wide, opened, Assignable, SourceSpan.none) ] with
-    | Ok subst -> Assert.Equal(Some (TyRecord (Map.ofList [ ("b", TyPrimitive "string") ])), subst |> Map.tryFind row.Id)
+    | Ok subst -> Assert.Equal(Some (TyRecord(Map.ofList [ ("b", TyPrimitive "string") ], FieldOrder.none)), subst |> Map.tryFind row.Id)
     | Error (message, _) -> Assert.Fail(message)
 
 [<Fact>]

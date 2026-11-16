@@ -144,7 +144,7 @@ let rec private unify (subst: Substitution) (left: Ty) (right: Ty) : Substitutio
             | _, TyAlias _ -> unify subst left (Unifier.unalias right)
             | TyFunc(leftInput, leftOutput, _), TyFunc(rightInput, rightOutput, _) ->
                 unify subst leftInput rightInput |> Option.bind (fun subst -> unify subst leftOutput rightOutput)
-            | TyRecord leftFields, TyRecord rightFields
+            | TyRecord(leftFields, _), TyRecord(rightFields, _)
             | TyOpenRecord(leftFields, _), TyOpenRecord(rightFields, _) when Set.ofSeq leftFields.Keys = Set.ofSeq rightFields.Keys ->
                 unifyAll subst (List.ofSeq leftFields.Values) (List.ofSeq rightFields.Values)
             | TyTag(leftName, leftPayload), TyTag(rightName, rightPayload) when leftName = rightName ->
@@ -160,7 +160,7 @@ let private canonical (ty: Ty) : Ty =
         match ty with
         | TyVar var -> TyVar { Id = numbers.[var.Id]; Name = None }
         | TyFunc(input, output, _) -> TyFunc(rewrite input, rewrite output, [])
-        | TyRecord fields -> TyRecord(Map.map (fun _ field -> rewrite field) fields)
+        | TyRecord(fields, order) -> TyRecord(Map.map (fun _ field -> rewrite field) fields, order)
         | TyOpenRecord(fields, row) -> TyOpenRecord(Map.map (fun _ field -> rewrite field) fields, { Id = numbers.[row.Id]; Name = None })
         | TyTag(name, payload) -> TyTag(name, Option.map rewrite payload)
         | TyUnion items -> TyUnion(byTagName items |> List.map rewrite)
@@ -173,7 +173,7 @@ let private canonical (ty: Ty) : Ty =
 /// A function's inputs, when it takes several: the fields of its input, `0`, `1`, ... in order.
 let private inputsOf (input: Ty) : Ty list option =
     match input with
-    | TyRecord fields when fields.Count > 1 && Seq.forall (fun (key: string) -> fst (Int32.TryParse key)) fields.Keys ->
+    | TyRecord(fields, _) when fields.Count > 1 && Seq.forall (fun (key: string) -> fst (Int32.TryParse key)) fields.Keys ->
         fields |> Seq.sortBy (fun field -> int field.Key) |> Seq.map _.Value |> List.ofSeq |> Some
     | _ -> None
 
@@ -254,7 +254,7 @@ let private candidatesOf (compiled: LibraryCatalog.CompiledExports) : Candidate 
                     let context = TyApply(info.Name, info.Parameters |> List.map TyVar)
                     let written = Unifier.tyToDisplayString Ascii context
                     match Unifier.unalias info.Underlying with
-                    | TyRecord fields ->
+                    | TyRecord(fields, _) ->
                         fields
                         |> Map.toList
                         |> List.map (fun (memberName, memberType) ->
@@ -321,7 +321,7 @@ let search (linkTo: Func<SourceSpan, string>) (query: Query) : SearchMatch list 
         |> Seq.map (fun info ->
             info.Name,
             match Unifier.unalias info.Underlying with
-            | TyRecord fields -> List.ofSeq fields.Keys
+            | TyRecord(fields, _) -> List.ofSeq fields.Keys
             | _ -> [])
         |> Map.ofSeq
     let needsOf (subst: Substitution) (contexts: Ty list) =

@@ -118,7 +118,7 @@ def mapped = mapOther(parsed, { _ -> #bad("y") })"""
     Assert.Empty(result.Diagnostics)
     let typed = result.Typed.Value
     match typed.Types.["mapOther"] with
-    | TyFunc(TyRecord fields, TyUnion [ TyTag("some", Some (TyVar a)); TyVar resultRest ], _) ->
+    | TyFunc(TyRecord(fields, _), TyUnion [ TyTag("some", Some (TyVar a)); TyVar resultRest ], _) ->
         match fields.["0"], fields.["1"] with
         | TyUnion [ TyTag("some", Some (TyVar a')); TyVar inputRest ],
           TyFunc(TyVar fInput, TyUnion [ TyTag("some", Some (TyVar a'')); TyVar fRest ], _) ->
@@ -180,7 +180,7 @@ def y = mapSome(x, { n -> "{n}" })"""
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typed = result.Typed.Value
     match typed.Types.["mapSome"] with
-    | TyFunc(TyRecord fields, TyUnion [ TyTag("some", Some (TyVar b)); TyVar resultRest ], _) ->
+    | TyFunc(TyRecord(fields, _), TyUnion [ TyTag("some", Some (TyVar b)); TyVar resultRest ], _) ->
         match fields.["0"], fields.["1"] with
         | TyUnion [ TyTag("some", Some (TyVar a)); TyVar inputRest ], TyFunc(TyVar fa, TyVar fb, _) ->
             Assert.NotEqual(a.Id, b.Id)

@@ -142,7 +142,7 @@ first.
 ## `clamp`
 
 ```nanyx fragment
-def clamp: [Ord(a)] (a, max: a, min: a) -> a
+def clamp: [Ord(a)] (a, min: a, max: a) -> a
 ```
 
 `n` moved into the range from `min` to `max`: `min` if it is below, `max` if it is above.

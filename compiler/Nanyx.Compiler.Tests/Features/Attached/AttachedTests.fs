@@ -16,7 +16,7 @@ def Person.fullName: Person -> string = { p -> p.firstName }"""
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
     match typed.Types.["Person.fullName"] with
-    | TyFunc(TyAlias("Person", [], TyRecord fields), TyPrimitive "string", _) when fields.ContainsKey("firstName") ->
+    | TyFunc(TyAlias("Person", [], TyRecord(fields, _)), TyPrimitive "string", _) when fields.ContainsKey("firstName") ->
         ()
     | other -> Assert.True(false, $"Unexpected dotted def type: %A{other}")
 
@@ -42,7 +42,7 @@ def Person.toString = { p -> "person" }"""
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
     match typed.Types.["Person.toString"] with
-    | TyFunc(TyAlias("Person", [], TyRecord fields), TyPrimitive "string", _) when fields.ContainsKey("firstName") ->
+    | TyFunc(TyAlias("Person", [], TyRecord(fields, _)), TyPrimitive "string", _) when fields.ContainsKey("firstName") ->
         ()
     | other -> Assert.True(false, $"Unexpected inferred attached def type: %A{other}")
 

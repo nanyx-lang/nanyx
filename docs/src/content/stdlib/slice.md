@@ -38,7 +38,7 @@ Each function is attached to `Slice`, so with `import nanyx/slice` it is called 
 ## `Slice`
 
 ```nanyx fragment
-type Slice(a) = private (items: array(a), length: int, start: int)
+type Slice(a) = private (items: array(a), start: int, length: int)
 ```
 
 ## `array.slice`
