@@ -1,64 +1,54 @@
 ---
 title: "Maps and sets"
-description: "The map(k, v) and set(a) types, map literals, and what maps and sets still need"
+description: "How map(k, v) and set(a) are built, and what maps and sets still need"
 order: 10
 ---
 
 > **Status: implemented, keyed by `Eq` and `Hash`, but not yet hash-based.** `map(k, v)`, map literals, lookups and
 > `list.groupBy` came with [#477](https://github.com/nanyx-lang/nanyx/issues/477); the `Hash` context, keys that
-> require it, and `set(a)` with [#533](https://github.com/nanyx-lang/nanyx/issues/533). Both still hold a list, so a
+> require it, and `set(a)` with [#533](https://github.com/nanyx-lang/nanyx/issues/533). What works is described on
+> [maps and sets](../stdlib/prelude-maps) and in [Collections](../tour/collections). Both still hold a list, so a
 > lookup takes time in proportion to the size. The [open questions](#open-questions) need the maintainer's answer; the
 > defaults the code takes until then are marked.
 
-# What is implemented
+# How it works
 
 - **The types.** `map(k, v)` and `set(a)` are types the compiler knows, as it knows `list(a)`; `Map(k, v)` and
   `Set(a)` are the same types, by their capitalised names (`Nanyx.Compiler/Maps.fs`, `Sets.fs` and
-  `BuiltinTypeNames.fs`). The functions on them are attached to `map` and
-  `set`, and documented on the [maps and sets](../stdlib/prelude-maps) page; `list.groupBy` gives a map.
-- **Literals.** `[k => v, ...]` is a map when every item is an entry. The parser makes it a call to the prelude's
+  `BuiltinTypeNames.fs`).
+- **Literals.** `[k => v, ...]` with no other expected type is a map: the parser makes it a call to the prelude's
   `__map` with the list of the entries as tuples, `__map([(k, v), ...])` (`MapSyntax` in `Nanyx.Parser/Ast.fs`), so the
-  type checker and the backend see an ordinary call. Entries and elements in one literal are a parse error. `[]` is
-  always the empty list; the empty map is `map.empty`. There is no set literal: `set.fromList([1, 2])`.
-- **Keys need `Eq` and `Hash`.** Every function that looks up a key or an element requires `[Eq(k), Hash(k)]`, as
-  [the equality design](./equality-and-well-known-contexts#hashing) agreed. So a key type that holds a function is an
-  error at the literal or the call, and so is a nominal type that attaches `==` without `hash`. The hash is not used
-  yet: lookups compare with `==`.
-- **Calling a map is a lookup.** `m(k)` is `map.get(m, k)`, which gives `#some(v) | #notFound`. So is a call of a
-  record's field that is a map, `machine.inventory(name)`. The type checker types the call as the call to `map.get`
-  (`inferMapLookup` in `Infer.fs`) and records it in `ReadAs`, and `ExpressionRewrites.writeAsRead` writes it as that
-  call for the backend. A call of a field that holds a function, `statement.setInt(position, value)`, is read the same
-  way, as a block that keeps the field's value in a local and calls it (`FieldCalls`,
-  [#1513](https://github.com/nanyx-lang/nanyx/issues/1513)).
-- **Loops.** `for m | key, value -> ...` walks a map's entries, each a tuple of its key and its value, and
-  `for s | x -> ...` a set's elements.
+  type checker and the backend see an ordinary call. A set literal, or a map literal of an expected type, goes through
+  `fromArray` ([Collection literals](./collection-literals)).
+- **Keys need `Eq` and `Hash`**, as [the equality design](./equality-and-well-known-contexts#hashing) agreed. The hash
+  is not used yet: lookups compare with `==`.
+- **Calling a map is a lookup.** The type checker types `m(k)` as the call to `map.get` (`inferMapLookup` in
+  `Infer.fs`) and records it in `ReadAs`, and `ExpressionRewrites.writeAsRead` writes it as that call for the backend.
+  A call of a field that holds a function, `statement.setInt(position, value)`, is read the same way, as a block that
+  keeps the field's value in a local and calls it (`FieldCalls`, [#1513](https://github.com/nanyx-lang/nanyx/issues/1513)).
 - **Representation.** A map holds the list of its entries, each key once, in the order the keys were first added, and
   a set the list of its elements. The prelude builds and reads them through four intrinsics,
   `__nanyx_map_of_entries`, `__nanyx_map_entries`, `__nanyx_set_of_elements` and `__nanyx_set_elements`, which the
   backend compiles to nothing: a `map(k, v)` is held as a `list((k, v))`, and a `set(a)` as a `list(a)`.
-- **`==` compares contents, in any order** ([#618](https://github.com/nanyx-lang/nanyx/issues/618)). Two maps are
-  equal when they have the same number of keys and each key of one is in the other, found with the key type's `==`,
-  holding an equal value by the value type's `Eq`. Two sets are equal when they have the same number of elements and
-  each element of one is in the other. The compiler's own comparison, which works by structure, would compare the
-  lists underneath in order, so a map or a set, and any structure that holds one, is always compared by an `==` the
-  compiler derives from its parts (`MapShape` and `SetShape` in `StructuralInstances.fs`, as for a list whose elements
-  have their own `==`). The derived `==` calls the prelude's `__mapEqualsBy` or `__setEqualsBy` with a function that
-  compares two values or elements. It takes time in proportion to the product of the sizes, as a lookup does; the
-  hash is not used yet.
+- **`==` compares contents, in any order** ([#618](https://github.com/nanyx-lang/nanyx/issues/618)). The compiler's
+  own comparison, which works by structure, would compare the lists underneath in order, so a map or a set, and any
+  structure that holds one, is always compared by an `==` the compiler derives from its parts (`MapShape` and
+  `SetShape` in `StructuralInstances.fs`, as for a list whose elements have their own `==`). The derived `==` calls
+  the prelude's `__mapEqualsBy` or `__setEqualsBy` with a function that compares two values or elements. It takes time
+  in proportion to the product of the sizes, as a lookup does.
 - **A call that needs `Eq` of a type with variables in it**, such as `list.distinct` on a `list(set(a))` inside a
   function that requires `[Eq(a)]`, is passed the derived `==` as a closure over the `Eq(a)` the function was given
   ([#630](https://github.com/nanyx-lang/nanyx/issues/630)).
-- **Not yet: comparing maps in a local function.** A local function that compares values generic in their type is
-  passed the compiler's own `==`, which cannot compare a map, so it is an error when the type holds a map or a set.
-- **No order or hash of maps and sets yet.** `<` on a map or a set, or on anything holding one, is an error, and so
-  is a map or a set as a key or a set's element: hashing the list underneath would give equal maps different
-  hashes.
 
-Known gaps:
+# Known gaps
 
-- An unannotated chain of inserts whose keys are tags of different names is a type error: the keys are not joined.
-  A literal, `[#red => 1, #green => 2]`, is a `map(#red | #green, int)`, as a list literal's items are joined, and
-  writing the key type, `map(#red | #green, int)` or a function typed with it, works.
+- **Comparing maps in a local function.** A local function that compares values generic in their type is passed the
+  compiler's own `==`, which cannot compare a map, so it is an error when the type holds a map or a set.
+- **No order or hash of maps and sets.** `<` on a map or a set, or on anything holding one, is an error, and so is a
+  map or a set as a key or a set's element: hashing the list underneath would give equal maps different hashes.
+- **Tag keys of different names.** An unannotated chain of inserts whose keys are tags of different names is a type
+  error: the keys are not joined. A literal, `[#red => 1, #green => 2]`, is a `map(#red | #green, int)`, as a list
+  literal's items are joined, and writing the key type works.
 
 # What is left: hash-based maps
 
@@ -66,6 +56,7 @@ The list of entries is to become a persistent hash trie written in the prelude, 
 nothing outside the prelude changes. A trie is a recursive type, `#leaf(...) | #node(Trie(k, v), Trie(k, v))`, which a
 type alias can now be ([#246](https://github.com/nanyx-lang/nanyx/issues/246)). This waits on
 [open question 2](#open-questions), which decides the order a hash-based map gives its entries in.
+
 # Open questions
 
 These are the choices the docs leave open. The code takes the marked default until they are answered.
@@ -83,25 +74,17 @@ These are the choices the docs leave open. The code takes the marked default unt
      index, and equal maps still differ in order.
    - **Recommended:** the order of the keys' hashes once maps are hash tries, documented as unspecified, with
      `map.toList \list.sortBy(...)` for a chosen order.
-3. **Is a map a function?** [Callable values](../tour/functions#callable-values) gives a map literal the type
-   `k -> #some(v) | #notFound`. Today a map can be *called*, but it is not a function value: it cannot be passed
-   where a function is expected, or annotated with a function type.
+3. **Is a map a function?** Today a map can be *called*, but it is not a function value: it cannot be passed where a
+   function is expected, or annotated with a function type.
    - *(Default)* Not a function: write `{ k -> m(k) }` where one is needed.
    - A map is assignable to its lookup's function type: the type checker accepts a `map(k, v)` where a
      `k -> #some(v) | #notFound` is wanted, and the backend wraps it in a closure there.
-   - **Recommended:** make a map assignable to its lookup's type, which keeps the tour's promise; until then the
-     tour's example is written with `map(string, string)`.
-4. ~~**Builders.**~~ Decided ([#1543](https://github.com/nanyx-lang/nanyx/issues/1543)): a literal builds any type with
-   an attached `fromArray`, chosen by the expected type (`def unique: set(int) = [1, 2, 2, 3]`) or by the type's name
-   before the brackets (`set[1, 2, 2, 3]`). The compiler passes an `Array` of the items, or of `(key, value)` tuples
-   for `k => v` entries. With neither, a literal is a `list(a)` or a `map(k, v)` as now. This replaces the tour's
-   earlier `apply` and `ListBuilder` design. Done: see [Collections](../tour/collections#syntax) and
-   [Collection literals](./collection-literals).
+   - **Recommended:** make a map assignable to its lookup's type.
 
-Settled as the obvious choice:
+Settled:
 
 - **Spelling.** The type is `map(k, v)`, and its functions are attached to it by that name, `map.get`, as `list.map`
   is to `list(a)` (#653).
-- **No empty literal.** `[]` stays the empty list; the empty map is `map.empty`. With
-  [#1543](https://github.com/nanyx-lang/nanyx/issues/1543), `[]` with an expected type is that type's empty value, so
-  `def m: map(string, int) = []` is an empty map.
+- **Builders.** A literal builds any type with an attached `fromArray`
+  ([#1543](https://github.com/nanyx-lang/nanyx/issues/1543), [Collection literals](./collection-literals)), so `[]`
+  with an expected map type is an empty map, and `set[1, 2]` is a set.
