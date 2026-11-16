@@ -61,7 +61,7 @@ Out of scope here, with their own workstreams:
 ## What the backend compiles
 
 The parser, type checker, WebAssembly backend and runtime are libraries; the `nanyx` CLI is the only executable
-(see [The `nanyx` command](./command-line)). The backend writes WebAssembly text from the core IR (see
+(see [The `nanyx` command](../standard-tools/command-line)). The backend writes WebAssembly text from the core IR (see
 [Memory management](./memory-management#core-ir)) and today covers:
 
 - top-level `def` values exported as wasm functions, except one that declares contexts (see [Context calls](./context-calls)); top-level expressions (and the `@entry` definition) run from a
@@ -109,7 +109,7 @@ would run it as a script. A standard-library page's generated reference is left 
 | ` ```nanyx skip=#123 ` | The block is a program the compiler gets wrong, until issue #123 is fixed. It is not compiled. When the issue is fixed, remove the tag. |
 
 A block fenced ` ```nanyx ` must also be formatted, here and on every other docs page: a formatter test checks each one
-that parses and has no `-- error` comment ([Formatter](./formatter#plan)). Outside the tour, ` ```nanyx unformatted `
+that parses and has no `-- error` comment ([Formatter](./formatter#the-repositorys-nanyx)). Outside the tour, ` ```nanyx unformatted `
 marks code shown as it was before formatting, which that test leaves alone.
 
 A whole program is checked further by what its comments say:

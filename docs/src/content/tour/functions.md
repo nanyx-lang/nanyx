@@ -298,7 +298,7 @@ A call is a tail call when it is in _tail position_:
 
 - The body of a function is in tail position.
 - When an `if` is in tail position, so are its branches.
-- When a `match` is in tail position, so is the body of each arm.
+- When a `match` is in tail position, so is the body of each arm, and the same goes for the replacement of each arm of an [`except`](./error-handling#the-except-keyword).
 - When a block is in tail position, so is its last expression.
 - When `use C(...) in body` is in tail position, so is `body`.
 

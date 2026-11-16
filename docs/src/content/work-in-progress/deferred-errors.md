@@ -4,20 +4,12 @@ description: "How a debug build keeps running in the face of name and type error
 order: 22
 ---
 
-Deferred errors are built: the type checker recovers from errors, they are compiled to traps, and `nanyx run`,
-`build` and `wasm` are debug builds, with `--release` to refuse errors, as
-[Building and running a package](../tour/packages#building-and-running-a-package) says. This page keeps how it is
-built, and the [wider deferral](#plan) and [questions](#open-questions) still open. It is part of the [compilation](./compilation) workstream, and its issues
-carry the `compilation` label with `type checker` or `wasm backend` as they apply.
+What deferred errors do, which errors are deferred, and debug and release builds are described in
+[Deferred errors](../tour/error-handling#deferred-errors) in the tour. This page keeps how they are built, and the
+[wider deferral](#plan) and [questions](#open-questions) still open. It is part of the [compilation](./compilation)
+workstream, and its issues carry the `compilation` label with `type checker` or `wasm backend` as they apply.
 
 # Summary
-
-A name or type error does not stop a debug build. The compiler reports it as usual, and compiles the expression
-where it was found to a trap that reports the same diagnostic if it is ever reached. Everything around the error
-compiles and runs normally, so the parts of a program that do type-check can be run and tested while the
-parts that don't are being fixed.
-
-A release build still refuses to compile a program with any error.
 
 The approach is the one GHC takes with `-fdefer-type-errors`, and a pragmatic cousin of Hazel's marked holes: the
 error becomes a node in the typed program, with a type that fits anywhere, and evaluating it fails.
@@ -120,18 +112,18 @@ How it is built:
   holds a deferred error and that the backend cannot lower traps with the errors in it, as soon as it runs.
 - **What cannot be deferred.** An error the pass places nowhere (one in a type definition, or a conflict found at a
   pattern) leaves `CompileResult.ErrorsDeferred` false, and the program is not run.
-- **The CLI** is described in [Debug and release](#debug-and-release). A package's errors are deferred
-  (`PackageBuild.ErrorsDeferred`) when each file's are: a file with a linter rule configured as an error, or an
-  error in a directive, is not.
+- **The CLI** behaves as [Debug and release builds](../tour/error-handling#debug-and-release-builds) describes. A
+  package's errors are deferred (`PackageBuild.ErrorsDeferred`) when each file's are: a file with a linter rule
+  configured as an error, or an error in a directive, is not. A debug `build` of a package with no `@entry` writes
+  nothing, so it is only a check, and errors fail it.
 
 ## Broken definitions
 
 The unit of deferral above is an expression. A definition that fails to check as a whole, for example because its
 annotation doesn't fit its body, is deferred whole (`abandon` in `InferModule.fs`):
 
-- **It is reported once, and bound at the error type from then on.** Uses of it are not errors of their own, so a
-  broken helper doesn't poison the types of the functions that call it. It loses its annotation, since that may be
-  what failed.
+- **It is bound at the error type from then on.** Uses of it are not errors of their own, so a broken helper doesn't
+  poison the types of the functions that call it. It loses its annotation, since that may be what failed.
 - **It stays in the module, failed as a whole.** Its body is recorded in `FailedExprs`, so a debug build replaces it
   with a trap (`deferErrors` in `DeferredErrors.fs`). A function's calls still compile and trap inside the function,
   writing the original error. A value traps where it is computed.
@@ -139,41 +131,7 @@ annotation doesn't fit its body, is deferred whole (`abandon` in `InferModule.fs
   that expression traps with "the value used here has no known type, because of an error deferred from compile
   time", which has no code of its own.
 
-A definition that checks compiles normally, with traps only where its body has errors.
-
-## What is deferred
-
-| Error | Deferred? |
-|-------|-----------|
-| Unknown name, type mismatch, wrong number of arguments, missing field | Yes, as an expression |
-| Unsatisfied context | Yes, as an expression (the call that needs the context traps) |
-| Non-exhaustive match | Yes: the match traps on a case no arm handles |
-| An error in a definition's type | Yes, as a definition |
-| Syntax error | No, as the principles say; see [parser error recovery](./compilation#plan) |
-| Error in a type definition, such as a field of an unknown type | No, at first. A later version could make the type `TyError` |
-| Import not found, import cycle, error inside an imported module | No, at first. A later version could defer the names the import brings in |
-
-## Debug and release
-
-| Command | Errors |
-|---------|--------|
-| `nanyx run` | Debug: diagnostics go to stderr, then the program runs, with deferred errors as traps |
-| `nanyx build`, `nanyx wasm` | Debug by default, like `run`, writing a program that traps where the errors were |
-| `nanyx build --release`, `nanyx wasm --release` | Refuses any error, and writes nothing |
-| `nanyx check` | Unchanged: reports diagnostics and runs nothing |
-
-Before running a program with deferred errors, `run` says so in one line after the diagnostics (for example
-"Running with 2 deferred errors"), so a run that happens to avoid them is not mistaken for a clean one. `build` and
-`wasm` say so in the line that names what they wrote ("Built app (2 files) with 2 deferred errors: ..."). A debug
-`build` of a package with no `@entry` writes nothing, so it is only a check, and errors fail it.
-
-Every one of these still refuses an error that is not deferred.
-
-**Exit status.** Deferred errors do not change it. A debug run exits with the program's own status: 0 if it never
-reaches a deferred error and ends normally, 1 if it reaches one. A debug `build` or `wasm` that writes a program
-exits with 0. The exit status says how the run or the build went, and the diagnostics say whether the program
-type-checks. A script or CI job that must not pass on a program with errors uses `--release`, or `nanyx check`,
-which exits with 1 on any error.
+## Tests
 
 When there is a test runner, it should run every test in a debug build: a test that reaches a deferred error fails
 with that error's message, and the others pass or fail on their own merits. This is what makes the feature useful
@@ -182,8 +140,14 @@ for red-green iteration. The proposed runner, `nanyx test`, does this; see
 
 # Plan
 
-Wider deferral, if it is wanted: type definitions and imports, then (with parser recovery) a top-level definition
-that does not parse.
+Wider deferral, if it is wanted:
+
+- **Type definitions.** An error in one, such as a field of an unknown type, is not deferred. A later version could
+  make the type the error type.
+- **Imports.** An import that is not found, an import cycle or an error inside an imported module is not deferred. A
+  later version could defer the names the import brings in.
+- **Syntax errors**, with parser recovery ([compilation](./compilation#plan)): a top-level definition that does not
+  parse. The [principles](../foundations/principles) say syntax errors stop a build.
 
 # Open questions
 

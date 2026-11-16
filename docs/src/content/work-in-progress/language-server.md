@@ -4,9 +4,10 @@ description: "The language server built into nanyx, and the VS Code extension"
 order: 30
 ---
 
-> **Status: outline.** This page frames the language server workstream: what it covers, where it is today and what
-> comes next. Sections marked _to do_ are placeholders to fill in as the work is designed. Work is tracked under the
-> `lsp` label.
+> What the language server does is described for users on
+> [VS Code extension](../standard-tools/vs-code-extension), and its options on
+> [The nanyx command](../standard-tools/command-line#editors). This page keeps how each feature is built, and what is
+> [still open](#still-open). Work is tracked under the `lsp` label.
 
 # Summary
 
@@ -325,61 +326,17 @@ library's logs are shown from warnings up.
 The tests in `Nanyx.LanguageServer.Tests` start the server in-process and talk to it through OmniSharp's LSP client
 over a pair of pipes, so they exercise the real wire protocol.
 
-# Goals
+# Still open
 
-- Errors appear as you type, at the right range, in the right file.
-- Hover shows the inferred type; go-to-definition and find-references work for every name.
-- Completion offers names in scope and the members of a record or imported module.
-- Fixes from structured diagnostics ([#97](https://github.com/nanyx-lang/nanyx/issues/97)) appear as code actions.
-
-# Plan
-
-_To do._ Candidate items, in rough dependency order; those not linked to an issue are not yet filed:
-
-1. **Exact ranges.** Done ([#97](https://github.com/nanyx-lang/nanyx/issues/97)): diagnostics carry spans, codes
-   and related locations, and are published as LSP ranges, `code` and `relatedInformation`. What is left waits on
-   [#96](https://github.com/nanyx-lang/nanyx/issues/96): a diagnostic about a field name, a type annotation or an
-   attribute is reported at the nearest node that has a span (the field's value, the definition's name, the item
-   after the attribute).
-2. **Hover.** Done: inferred types ([#120](https://github.com/nanyx-lang/nanyx/issues/120)), a name's declaration
-   with its contexts ([#765](https://github.com/nanyx-lang/nanyx/issues/765)) and doc comments
-   ([#719](https://github.com/nanyx-lang/nanyx/issues/719)). An operator records its own span, so hover on one
-   that calls a definition (an attached `` `+` ``, or the member of a context the function requires) shows that
-   definition, and on a built-in one its type there ([#792](https://github.com/nanyx-lang/nanyx/issues/792)).
-3. **Go-to-definition and find-references.** From the recorded symbols and references ([#98](https://github.com/nanyx-lang/nanyx/issues/98)).
-   Go-to-definition is done for values (including those in the standard library), type names and context members
-   ([#266](https://github.com/nanyx-lang/nanyx/issues/266)). Find-references is done in the open document
-   ([#276](https://github.com/nanyx-lang/nanyx/issues/276)), with a use of an operator at the operator
-   ([#792](https://github.com/nanyx-lang/nanyx/issues/792)), and across the files of the document's package, as
-   `nanyx build` checks them ([#1556](https://github.com/nanyx-lang/nanyx/issues/1556)).
-4. **Document symbols.** Done ([#278](https://github.com/nanyx-lang/nanyx/issues/278),
-   [#793](https://github.com/nanyx-lang/nanyx/issues/793)), and so are workspace symbols
-   ([#877](https://github.com/nanyx-lang/nanyx/issues/877)).
-5. **Completion.** The last good compile, which completion needs because it is asked for while the text does not
-   parse, is kept ([#210](https://github.com/nanyx-lang/nanyx/issues/210)); each symbol's scope is recorded
-   ([#211](https://github.com/nanyx-lang/nanyx/issues/211)); the names in scope are offered
-   ([#212](https://github.com/nanyx-lang/nanyx/issues/212)); record fields and module exports after a dot are
-   offered ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), and import paths
-   ([#214](https://github.com/nanyx-lang/nanyx/issues/214)), and a value's attached definitions after a pipe's `\`
-   ([#269](https://github.com/nanyx-lang/nanyx/issues/269)).
-6. **Code actions.** Done for diagnostic fixes ([#284](https://github.com/nanyx-lang/nanyx/issues/284)). The first
-   compiler error with fixes is an unknown name the standard library exports, which offers its import
-   ([#497](https://github.com/nanyx-lang/nanyx/issues/497)); other compiler errors have none yet. Refactorings are
-   offered as code actions of their own kinds ([Refactorings](./refactorings)): writing the inferred type, as
-   `refactor.rewrite` ([#1539](https://github.com/nanyx-lang/nanyx/issues/1539)), converting between a call and a pipe,
-   also `refactor.rewrite` ([#1540](https://github.com/nanyx-lang/nanyx/issues/1540)), and introducing a local or a
-   function, as `refactor.extract` ([#1536](https://github.com/nanyx-lang/nanyx/issues/1536),
-   [#1537](https://github.com/nanyx-lang/nanyx/issues/1537)), and inlining a def, as `refactor.inline`
-   ([#1538](https://github.com/nanyx-lang/nanyx/issues/1538)). One that makes up a name runs the extension's
-   `nanyx.renameAt` command after its edits, which starts renaming the name. Organising imports is
-   `source.organizeImports` ([#1541](https://github.com/nanyx-lang/nanyx/issues/1541)), and a quick fix of an unused
-   import too.
-7. **Diagnostics in imported files.** Done ([#794](https://github.com/nanyx-lang/nanyx/issues/794)): each is
-   published on the file it belongs to, with one at the import that brings that file in.
-8. **A library browser, search by type and an info view.** Planned on
-   [Info view and library browser](./info-view-and-library-browser). Doc comments, the first item there, are done
-   ([#719](https://github.com/nanyx-lang/nanyx/issues/719)), and so is a first cut of the info view
-   ([#715](https://github.com/nanyx-lang/nanyx/issues/715)).
+- **Exact ranges.** A diagnostic about a field name, a type annotation or an attribute is reported at the nearest node
+  that has a span (the field's value, the definition's name, the item after the attribute).
+- **Code actions.** Only one compiler error offers fixes so far: an unknown name the standard library exports offers
+  its import ([#497](https://github.com/nanyx-lang/nanyx/issues/497)). Linters' rules offer theirs.
+- **Parse errors.** The parser has no error recovery, so a parse error hides the rest of the file (see
+  [The parser](./parser)).
+- **Find references** does not search other packages that depend on the package.
+- **The library browser, search by type and the info view** have open questions of their own, on
+  [Info view and library browser](./info-view-and-library-browser#open-questions).
 
 # Open questions
 

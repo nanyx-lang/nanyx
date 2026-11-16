@@ -25,13 +25,43 @@ Freeing memory is not an optimisation either: a value is freed as soon as nothin
 Depending on code shape and target backend, the compiler may perform optimisations such as:
 
 - constant folding and simplification,
-- inlining of small expressions,
-- dead-code elimination,
+- [inlining](#inlining) of lambdas called once, handlers and small functions,
+- dead-code elimination: a function, closure or host member that nothing reaches is not in the program,
 - copy elision and reduced temporary allocations,
 - reuse in place: a value a `match` takes apart and holds the only reference to is rewritten into a new value of the same size, so mapping over a list nothing else refers to allocates nothing (see [Reference counting](../foundations/reference-counting#reuse-in-place)),
 - improved passing strategy for values (for example by-value vs by-reference decisions).
 
 For allocation-specific behavior, see [Stack vs heap allocation](../advanced/stack-vs-heap-allocation).
+
+# Inlining
+
+The compiler replaces a call with the body of the function it calls when that makes the program smaller or lets it simplify what is left: a lambda written where it is called and called once, a small function, and a handler, a function that runs a lambda it is given under a `use`. A function that calls itself, or calls a function that calls it back, is never inlined into that cycle, though its callers may be.
+
+Inlining is what makes a [workflow](../advanced/workflows) cost nothing. This `proc` block:
+
+```nanyx fragment
+proc {
+  def a = try getA()
+  def b = try getB()
+
+  return a + b
+}
+```
+
+is a call of `proc` with the block as a lambda, and each keyword is a call of a member of the `Proc` context with the rest of the block as another lambda. Once `proc`, the block, the members and the continuations are inlined, and the matches on what is now known are simplified, what is left is the same code as this `match`, written by hand:
+
+```nanyx fragment
+match getA()
+  | #some(a) ->
+    match getB()
+      | #some(b) -> #some(a + b)
+      | other -> other
+  | other -> other
+```
+
+It makes no closures and allocates nothing of its own. So use a workflow wherever it reads better: it is not slower than the code it stands for.
+
+Inlining changes no behaviour. A call in tail position is still one after inlining, and a crash reports the line the code was written on, not the line of the call it was inlined into. Debug and release builds inline alike, so what a debug run costs is what a release build costs.
 
 # Writing optimisation-friendly Nanyx
 

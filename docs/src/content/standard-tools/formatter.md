@@ -70,6 +70,122 @@ A file that does not parse is left as it is and its syntax error is reported. Th
 
 `nanyx format` exits with `0` when it has nothing to report, `1` when `--check` finds a file that is not formatted, and `2` when a file could not be formatted.
 
+# The style
+
+The formatter uses two spaces of indent and a line width of 100, unless the package [configures](#configuration)
+others. Indent is always measured from the start of the line, never from a keyword's column. It puts one space around
+binary operators and `->`, after commas, and inside a lambda's braces: `{ a, b -> a + b }`. It aligns nothing but the
+`|`s of a match's cases, so that one edit never changes the lines around it.
+
+It never renames anything or reorders anything but imports. It changes whitespace and where lines break, puts back
+the brackets precedence needs and drops those it doesn't, and adds or removes blank lines.
+
+## Definitions
+
+A definition whose signature fits on the def's line stays on it, even when its value spans lines. One whose signature
+doesn't fit breaks before its `:` and its `=`, each indented once:
+
+```nanyx
+def priceLine
+  : list(Product), OrderLine -> #some(Priced) | #unknownSku(string) | #outOfStock(string)
+  = { products, line ->
+    find(products, line)
+  }
+```
+
+A def with a type annotation whose value is a lambda puts the lambda's body on the line after the `->`, unless the
+body is only a name or a literal, or a statement couldn't hold it without brackets, as with a range:
+
+```nanyx
+def heading: [Log] string -> () = { title ->
+  log("== " ++ string.uppercase(title) ++ " ==")
+}
+
+def id: a -> a = { x -> x }
+
+def upTo: int -> list(int) = { n -> 1..n }
+```
+
+A type or context whose body is a record of more than three fields puts each field on its own line:
+
+```nanyx
+type Product = (
+  sku: string
+  name: string
+  price: int
+  stock: int
+)
+```
+
+## Lambdas and matches
+
+A lambda with match cases puts each case on its own line, the `|`s one under another, indented once from the lambda's
+line, and the `}` on a line of its own. A single case that fits stays on the lambda's line: `{ | 0 -> 1 }`. A `for`
+loop or an `except` with one arm keeps it on the head's line, `for xs | x -> body`; with several arms, each goes on a
+line of its own, indented once.
+
+A lambda whose body starts on the `->`'s line but spans lines indents the body once, and puts its `}` back at the
+indent of the line the lambda starts on, so two closing braces never line up:
+
+```nanyx
+def checkOrder = { products, lines -> proc {
+    match lines
+      | [] -> (return [])
+      | [first, ...rest] -> ...
+  }
+}
+```
+
+## Long lines
+
+A record, list, tuple or call's arguments that don't fit put each element on its own line, separated by line breaks
+rather than commas, with the closing bracket on a line of its own. The outermost brackets break first. A record,
+tuple or call's arguments with an element that spans lines, such as a lambda with a block, is laid out the same way:
+
+```nanyx fragment
+use Log(
+  log = { message ->
+    println(message)
+  }
+)
+```
+
+A pipeline written with a stage at the start of a line, or one of two or more stages that doesn't fit, puts each stage
+on its own line, indented once from the line the pipeline starts on. One written on one line that fits stays on it.
+
+An `if` whose branches are expressions, and that doesn't fit, puts `then` and `else` at the start of lines of their
+own, indented once:
+
+```nanyx fragment
+if line.qty > p.stock
+  then #outOfStock(p.name)
+  else #some(Priced(name = p.name, qty = line.qty, each = p.price, cost = p.price * line.qty))
+```
+
+A chain of operators of one precedence that doesn't fit puts as many operands on a line as fit, each line ending in an
+operator and the lines after the first indented once. A line can break after an operator only inside brackets, so in
+a statement, an arm's body or a top-level expression, a chain stays on one line.
+
+## Blank lines
+
+A construct that spans more than one line gets a blank line before and after it, at the top level, in a module block
+and among the statements of a block, except at the start and end of a body. Between constructs that each fit on one
+line, your choice is kept: a blank line stays, several become one, and none is added.
+
+```nanyx
+def zero = 0
+def one = 1
+
+def add: int, int -> int = { a, b ->
+  a + b
+}
+
+def two = 2
+```
+
+Blank lines inside an expression, between a lambda's match cases or a record's fields, are removed. Imports in a row
+stay together, and an attribute such as `@entry` stays on the line before its item.
+
 # Imports
 
 Imports in a row go in one bracketed `import (...)`, and their names are sorted: standard library modules (`nanyx/...`) first, then other packages' modules, then imports by path, each alphabetical. A blank line keeps groups of imports apart, and a comment on a line of its own (or a `---` block comment) starts a new group inside the brackets. A comment at the end of an import's line moves with it.
@@ -188,6 +304,12 @@ formatter = (
 ```
 
 Each file is formatted with the settings of the nearest `.nyxp` in its directory or a directory above it, so one run can format several packages, each in its own style. With no manifest, or no `formatter` field in it, the defaults apply. The field is a record that may hold only these two settings, each a positive integer: anything else, or a manifest that holds code, is an error naming the manifest and the setting, and no file under that manifest is formatted (`nanyx format` exits with 2). The language server reads the same settings for the document it formats, and leaves the document alone if they are not valid.
+
+A script outside any package sets them with a `::format` [directive](../getting-started/files-and-projects#directives) at its top, one per setting: `::format lineWidth 80`.
+
+# In the editor
+
+The VS Code extension formats a document as `nanyx format` does, formats a selection, and marks the lines formatting would change as you type (see [Formatting](./vs-code-extension#formatting)).
 
 # Related
 
