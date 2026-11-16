@@ -1120,6 +1120,11 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     else
                         $"The {kind} type '{name}' can only be constructed in the module that defines it; use a function that module exports instead"
                 Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan message ]
+            // A context's instance is never a value: it is written only as what a `use` loads.
+            | Some info when info.IsContext && not (state.UseInstances.Contains expr.Id) ->
+                let message =
+                    $"A context's instance can only be written in a `use`: to reuse one, write a function that runs a lambda under it, as in `{{ f -> use {name}(...) in f() }}`"
+                Error [ Diagnostics.at DiagnosticCodes.InstanceOutsideUse calleeSpan message ]
             | Some info ->
                 let mutable current = recordConstructorReference expr info state
                 let argResults =

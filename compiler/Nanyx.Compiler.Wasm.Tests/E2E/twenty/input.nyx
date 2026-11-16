@@ -11,10 +11,8 @@ def compareStrings: [ToString(a) & ToString(b)] a, b -> bool = { x, y ->
 }
 
 def main = {
-  def fakeInt: ToString(int) = (toString = { i -> "fake" })
-  use fakeInt
-  def plainString: ToString(string) = (toString = { s -> s })
-  use plainString
+  use ToString(int)(toString = { i -> "fake" })
+  use ToString(string)(toString = { s -> s })
 
   compareStrings(42, "fake")
 }

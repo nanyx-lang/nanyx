@@ -125,13 +125,12 @@ let ``Run - a function that orders its type variable orders each type it is call
 [<Fact>]
 let ``Run - an Ord loaded with use changes how its block orders`` () =
     comparing
-        [ "def backwards: Ord(string) = (compare = { a, b -> string.compare(b, a) })"
-          "def sortedBackwards: list(string) -> list(string) = { xs ->"
-          "  use backwards"
+        [ "def sortedBackwards: list(string) -> list(string) = { xs ->"
+          "  use Ord(string)(compare = { a, b -> string.compare(b, a) })"
           "  list.sort(xs)"
           "}"
           "def lessBackwards: string, string -> bool = { a, b ->"
-          "  use backwards"
+          "  use Ord(string)(compare = { x, y -> string.compare(y, x) })"
           "  a < b"
           "}" ]
         [ """sortedBackwards(["a", "c", "b"]) == ["c", "b", "a"]"""

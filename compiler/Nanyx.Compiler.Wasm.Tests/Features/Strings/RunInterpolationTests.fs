@@ -41,8 +41,7 @@ let ``Run - a use changes how a hole writes its type`` () =
         normalized """@entry
 def main = {
   println("before {1}")
-  def bracketed: ToString(int) = ( toString = { n -> "<{int.toString(n)}>" } )
-  use bracketed
+  use ToString(int)(toString = { n -> "<{int.toString(n)}>" })
   println("after {1}")
 }
 """

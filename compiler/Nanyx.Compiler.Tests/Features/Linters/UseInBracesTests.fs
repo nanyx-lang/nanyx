@@ -19,7 +19,6 @@ let private reported (source: string) =
 let private counter =
     """context Counter = (next: int -> int)
 def counted: [Counter] int -> int = { n -> next(n) }
-def down: Counter = (next = { n -> n - 1 })
 """
 
 [<Fact>]
@@ -27,7 +26,7 @@ let ``use ... in with a body in braces is reported (#673)`` () =
     Assert.Equal<(string * string) list>(
         [ "The braces make this a function of no arguments, not a block run with the context loaded: put the statements on the lines after `in`, indented",
           "{ 3 }" ],
-        reported (counter + "def f = use down in { 3 }"))
+        reported (counter + "def f = use Counter(next = { n -> n - 1 }) in { 3 }"))
 
 [<Fact>]
 let ``use ... in with an indented block, or a lambda written with its arguments, is not reported`` () =
@@ -35,12 +34,12 @@ let ``use ... in with an indented block, or a lambda written with its arguments,
         reported (
             counter
             + """def f = {
-  use down in
+  use Counter(next = { n -> n - 1 }) in
     def a = counted(3)
     a + 1
 }
 """
         )
     )
-    Assert.Empty(reported (counter + "def f = use down in { n -> n + 1 }"))
-    Assert.Empty(reported (counter + "def f = use down in { () -> 3 }"))
+    Assert.Empty(reported (counter + "def f = use Counter(next = { n -> n - 1 }) in { n -> n + 1 }"))
+    Assert.Empty(reported (counter + "def f = use Counter(next = { n -> n - 1 }) in { () -> 3 }"))

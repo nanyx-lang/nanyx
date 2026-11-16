@@ -46,19 +46,18 @@ public sealed class InfoViewTests : LanguageServerTestBase
         Open(uri, """
             context Logger = (log: string -> ())
             context Clock = (now: () -> int)
-            def quiet: Logger = (log = { s -> () })
             def stamp: [Clock] string -> () = { message ->
-              use quiet
+              use Logger(log = { s -> () })
               log(message)
             }
 
             """.ReplaceLineEndings("\n"));
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        var contexts = Section(await InfoViewAt(uri, 5, 4), "function", "contexts");
+        var contexts = Section(await InfoViewAt(uri, 4, 4), "function", "contexts");
 
         Assert.Equal(
-            [("Logger", "use", new Range(4, 2, 4, 11)), ("Clock", "signature", new Range(3, 11, 3, 31))],
+            [("Logger", "use", new Range(3, 2, 3, 31)), ("Clock", "signature", new Range(2, 11, 2, 31))],
             contexts.Select(item => (item.Text, item.Detail, item.Location?.Range)));
     }
 
@@ -274,12 +273,12 @@ public sealed class InfoViewTests : LanguageServerTestBase
             --| A logger that writes nothing.
 
               It drops every line.
-            def quiet: Logger = (log = { s -> () })
-            --| Stamps `message`, as [`quiet`] logs it.
+            def drop: string -> () = { s -> () }
+            --| Stamps `message`, as [`drop`] logs it.
             def stamp: [Clock] string -> () = { message ->
               --| The message, shouted.
               def loud = message
-              use quiet
+              use Logger(log = drop)
               log(loud)
             }
 
@@ -293,10 +292,10 @@ public sealed class InfoViewTests : LanguageServerTestBase
             [("loud: string", "The message, shouted."), ("message: string", null)],
             Section(view, "function", "names").Select(item => (item.Text, item.Documentation)));
         var stamp = Section(view, "module", "names").Single(item => item.Text.StartsWith("stamp"));
-        Assert.Equal($"Stamps `message`, as [`quiet`]({uri}#L8,5) logs it.", stamp.Documentation);
-        // A use shows the doc comment of the def it names, and a signature's context the context's own.
+        Assert.Equal($"Stamps `message`, as [`drop`]({uri}#L8,5) logs it.", stamp.Documentation);
+        // A use, and a signature's context, show the context's own doc comment.
         Assert.Equal(
-            [("Logger", "A logger that writes nothing.\n\nIt drops every line."), ("Clock", "Tells the time.")],
+            [("Logger", "Writes lines somewhere."), ("Clock", "Tells the time.")],
             Section(view, "function", "contexts").Select(item => (item.Text, item.Documentation)));
     }
 
@@ -445,11 +444,10 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         Open(uri, """
             context Log = (log: string -> ())
-            def quiet: Log = (log = { s -> () })
             def apply: [c] ([c] int -> ()), int -> () = { f, n -> f(n) }
             def total: [Log] int -> int = { n ->
               apply({ x ->
-                use quiet
+                use Log(log = { s -> () })
                 log("x")
               }, n)
               memory {
@@ -462,11 +460,11 @@ public sealed class InfoViewTests : LanguageServerTestBase
             """.ReplaceLineEndings("\n"));
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        var inLambda = await InfoViewAt(uri, 6, 5);
+        var inLambda = await InfoViewAt(uri, 5, 5);
         Assert.Equal(("Log", "use"), Assert.Single(Section(inLambda, "lambda", "uses")) is var use ? (use.Text, use.Detail) : default);
         Assert.Equal([("Log", "signature")], Section(inLambda, "function", "contexts").Select(item => (item.Text, item.Detail)));
 
-        var inMemory = await InfoViewAt(uri, 10, 5);
+        var inMemory = await InfoViewAt(uri, 9, 5);
         Assert.Equal(["cursor", "function", "module"], inMemory.Scopes.Select(scope => scope.Kind));
         Assert.Equal(["sum: int", "n: int"], Section(inMemory, "function", "names").Select(item => item.Text));
     }
@@ -481,20 +479,19 @@ public sealed class InfoViewTests : LanguageServerTestBase
             context Log = (log: string -> ())
             type Point = (x: int, y: int)
             def describe: [Log & Show(a)] a -> string = { x -> show(x) }
-            def showPoint: Show(Point) = (show = { p -> "p" })
             def main: [Log] () -> string = {
-              use showPoint
+              use Show(Point)(show = { p -> "p" })
               describe(Point(x = 1, y = 2))
             }
 
             """.ReplaceLineEndings("\n"));
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        var view = await InfoViewAt(uri, 7, 4);
+        var view = await InfoViewAt(uri, 6, 4);
 
         Assert.Equal("This call", view.Scopes[0].Sections.Single(section => section.Id == "call").Title);
         Assert.Equal(
-            [("Log", "signature", new Range(5, 11, 5, 14)), ("Show(Point)", "use", new Range(6, 6, 6, 15))],
+            [("Log", "signature", new Range(4, 11, 4, 14)), ("Show(Point)", "use", new Range(5, 6, 5, 38))],
             Section(view, "cursor", "call").Select(item => (item.Text, item.Detail, item.Location?.Range)));
         Assert.Empty(Section(await InfoViewAt(uri, 4, 5), "cursor", "call"));
     }
@@ -507,32 +504,31 @@ public sealed class InfoViewTests : LanguageServerTestBase
         Open(uri, """
             context Log = (log: string -> ())
             def note: [Log] string -> () = { s -> log(s) }
-            def quiet: Log = (log = { s -> () })
             def main: [Log] () -> () = {
               note("a")
-              use quiet
+              use Log(log = { s -> () })
               note("b")
-              use quiet
+              use Log(log = { s -> () })
               ()
             }
 
             """.ReplaceLineEndings("\n"));
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        var view = await InfoViewAt(uri, 5, 3);
+        var view = await InfoViewAt(uri, 4, 3);
         var flow = Section(view, "function", "flow");
 
         Assert.Equal("def main", view.Scopes[1].Heading);
         Assert.Equal(
-            [("Log", "signature · 1 call", new Range(3, 11, 3, 14)), ("Log", "use · 1 call", new Range(5, 6, 5, 11)), ("Log", "use · unused", new Range(7, 6, 7, 11))],
+            [("Log", "signature · 1 call", new Range(2, 11, 2, 14)), ("Log", "use · 1 call", new Range(4, 6, 4, 28)), ("Log", "use · unused", new Range(6, 6, 6, 28))],
             flow.Select(item => (item.Text, item.Detail, item.Location?.Range)));
         var served = Assert.Single(flow[1].Children!);
-        Assert.Equal(("note", new Range(6, 2, 6, 6)), (served.Text, served.Location?.Range));
+        Assert.Equal(("note", new Range(5, 2, 5, 6)), (served.Text, served.Location?.Range));
         Assert.Equal(
-            [("provider", new Range(5, 6, 5, 11)), ("call", new Range(6, 2, 6, 6))],
+            [("provider", new Range(4, 6, 4, 28)), ("call", new Range(5, 2, 5, 6))],
             view.Highlights.Select(highlight => (highlight.Kind, highlight.Range)));
         Assert.Equal(
-            [("provider", new Range(3, 11, 3, 14)), ("call", new Range(4, 2, 4, 6))],
-            (await InfoViewAt(uri, 4, 3)).Highlights.Select(highlight => (highlight.Kind, highlight.Range)));
+            [("provider", new Range(2, 11, 2, 14)), ("call", new Range(3, 2, 3, 6))],
+            (await InfoViewAt(uri, 3, 3)).Highlights.Select(highlight => (highlight.Kind, highlight.Range)));
     }
 }

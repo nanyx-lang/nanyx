@@ -36,17 +36,15 @@ def describe: [Show(a)] a -> string = { x -> show(x) }
 """
 
 [<Fact>]
-let ``A call's parameterised context from a use links to the value the use loads`` () =
+let ``A call's parameterised context from a use links to the instance the use loads`` () =
     let source = showContext + """
-def showPoint: Show(Point) = (show = { p -> "p" })
-
 def main = {
-  use showPoint
+  use Show(Point)(show = { p -> "p" })
   describe(Point(x = 1, y = 2))
 }
 """
     Assert.Equal<(string * string * string) list>(
-        [ "Show(Point)", "use", "showPoint" ],
+        [ "Show(Point)", "use", """Show(Point)(show = { p -> "p" })""" ],
         callAt source "describe(Point" 0)
 
 [<Fact>]

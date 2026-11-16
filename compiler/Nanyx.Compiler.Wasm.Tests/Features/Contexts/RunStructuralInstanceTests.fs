@@ -154,16 +154,14 @@ let ``Run - a generic call compares maps and sets through the Eq the function wa
 [<Fact>]
 let ``Run - a part of a structure is written and compared through an instance loaded with use in its block`` () =
     printing
-        [ """def pounds: ToString(int) = (toString = { p -> "£{p}" })"""
-          "def always: Eq(string) = (`==` = { a, b -> true })"
-          """def show: [ToString(a)] a -> string = { x -> "{x}" }"""
+        [ """def show: [ToString(a)] a -> string = { x -> "{x}" }"""
           "def same: [Eq(a)] a, a -> bool = { x, y -> x == y }"
           "def priced: int -> string = { n ->"
-          "  use pounds"
+          """  use ToString(int)(toString = { p -> "£{p}" })"""
           """  "{[n, n]} {#some(n)} " ++ show((n, 1))"""
           "}"
           "def loose: string, string -> string = { a, b ->"
-          "  use always"
+          "  use Eq(string)(`==` = { x, y -> true })"
           "  \"{#some(a) == #some(b)} {same((a, 1), (b, 1))}\""
           "}" ]
         [ "priced(5)"; """loose("a", "b")"""; "[5]"; """#some("a") == #some("b")""" ]

@@ -241,9 +241,8 @@ let ``Run - a concrete comparison uses the == attached to a nominal type`` () =
 [<Fact>]
 let ``Run - an Eq loaded with use changes a concrete comparison in its block`` () =
     comparing
-        [ "def always: Eq(string) = (`==` = { a, b -> true })"
-          "def loose = { a, b ->"
-          "  use always"
+        [ "def loose = { a, b ->"
+          "  use Eq(string)(`==` = { x, y -> true })"
           "  a == b"
           "}"
           "def literal = { a, b ->"
@@ -262,9 +261,8 @@ let ``Run - a list of a type with its own == is compared through it, element by 
     comparing
         [ "type Email = protected string"
           "def Email.`==`: Email, Email -> bool = { a, b -> true }"
-          "def always: Eq(string) = (`==` = { a, b -> true })"
           "def loose: list(string), list(string) -> bool = { xs, ys ->"
-          "  use always"
+          "  use Eq(string)(`==` = { x, y -> true })"
           "  xs == ys"
           "}"
           "def same: [Eq(a)] list(a), list(a) -> bool = { xs, ys -> xs == ys }" ]
