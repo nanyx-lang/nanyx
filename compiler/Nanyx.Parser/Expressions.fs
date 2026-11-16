@@ -462,26 +462,13 @@ let tupleOrParenExpr =
 //
 // When every item is an entry, `key => value`, the literal is a map: a call to the prelude's `__map` with the list of
 // the entries as tuples (see `MapSyntax`).
-let listExpr =
+//
+// Written straight after a type's name, `Array[1, 2]`, the literal builds that type through its `fromArray` (see
+// `CollectionSyntax`): the entries of a map literal are passed as tuples.
+let private bracketItems =
     let item =
         (pstring "..." >>. ws >>. expression |>> Choice2Of2)
         <|> (expression .>>. opt (attempt (wsInline >>. pstring "=>") >>. ws >>. expression) |>> Choice1Of2)
-    let list (items: Choice<Expression, Expression> list) (span: SourceSpan) =
-        // Each segment is a run of elements or a spread list.
-        let segments =
-            items
-            |> List.fold (fun segments item ->
-                match item, segments with
-                | Choice1Of2 element, Choice1Of2 elements :: rest -> Choice1Of2 (elements @ [ element ]) :: rest
-                | Choice1Of2 element, _ -> Choice1Of2 [ element ] :: segments
-                | Choice2Of2 spread, _ -> Choice2Of2 spread :: segments) []
-            |> List.rev
-            |> List.map (function
-                | Choice1Of2 elements -> Expression.at span (ListExpr elements)
-                | Choice2Of2 spread -> spread)
-        match segments with
-        | [] -> Expression.at span (ListExpr [])
-        | _ -> segments |> List.reduceBack (fun left right -> Expression.at span (BinaryOp("++", None, left, right)))
     withSpan (
         noteFailureInside (
             between
@@ -491,14 +478,46 @@ let listExpr =
     >>= fun (items, span) ->
         let entries = items |> List.choose (function Choice1Of2 (key, Some value) -> Some (key, value) | _ -> None)
         if entries.IsEmpty then
+            // Each segment is a run of elements or a spread.
             items
-            |> List.map (function Choice1Of2 (element, _) -> Choice1Of2 element | Choice2Of2 spread -> Choice2Of2 spread)
-            |> fun items -> preturn (list items span)
+            |> List.fold (fun segments item ->
+                match item, segments with
+                | Choice1Of2 (element, _), Choice1Of2 elements :: rest -> Choice1Of2 (elements @ [ element ]) :: rest
+                | Choice1Of2 (element, _), _ -> Choice1Of2 [ element ] :: segments
+                | Choice2Of2 spread, _ -> Choice2Of2 spread :: segments) []
+            |> List.rev
+            |> fun segments -> preturn (Choice1Of2 segments, span)
         elif entries.Length = items.Length then
             let tuples = entries |> List.map (fun (key, value) -> Expression.from key (TupleExpr [ key; value ]))
-            preturn (Expression.at span (FunctionCall(MapSyntax.builtIn, None, [ Expression.at span (ListExpr tuples) ])))
+            preturn (Choice2Of2 tuples, span)
         else
             fail "a map literal's items are all entries, written `key => value`"
+
+let listExpr =
+    bracketItems
+    |>> fun (items, span) ->
+        match items with
+        | Choice1Of2 segments ->
+            let segments =
+                segments
+                |> List.map (function
+                    | Choice1Of2 elements -> Expression.at span (ListExpr elements)
+                    | Choice2Of2 spread -> spread)
+            match segments with
+            | [] -> Expression.at span (ListExpr [])
+            | _ -> segments |> List.reduceBack (fun left right -> Expression.at span (BinaryOp("++", None, left, right)))
+        | Choice2Of2 tuples -> Expression.at span (FunctionCall(MapSyntax.builtIn, None, [ Expression.at span (ListExpr tuples) ]))
+
+/// `T[...]`, a literal written straight after a type's name, which builds a `T` (see `CollectionSyntax`). It spans the
+/// name and the brackets; the array of the items spans the brackets.
+let internal collectionConstruct (name: Identifier) (nameSpan: SourceSpan option) =
+    bracketItems
+    |>> fun (items, span) ->
+        let segments =
+            match items with
+            | Choice1Of2 segments -> segments
+            | Choice2Of2 tuples -> [ Choice1Of2 tuples ]
+        CollectionSyntax.build name nameSpan span segments
 
 // Tag expression parser: #tagName or #tagName(expr)
 // The payload is written like a call's arguments: several values make a tuple, named ones a record, and none at
@@ -1162,6 +1181,10 @@ do
                         FunctionCall(name, nameSpan, [lambdaExpr]))
         )
     
+    // `Array[1, 2]`: the brackets straight after the name.
+    let construct =
+        attempt (spanned (qualifiedIdentifierWithSpan .>> followedBy (pchar '[') >>= fun (name, nameSpan) -> collectionConstruct name nameSpan))
+
     functionCallRef :=
-        callWithOnlyTrailing <|> callWithParensAndTrailing
+        construct <|> callWithOnlyTrailing <|> callWithParensAndTrailing
         <?> "function call"

@@ -19,4 +19,22 @@ def array.at: array(a), int -> #some(a) | #none
 The element of `xs` at `index`, counting from 0, or `#none` when `index` is negative or past the
 end. Calling the array, `xs(index)`, is the same.
 
+## `array.fromArray`
+
+```nanyx fragment
+def array.fromArray: array(a) -> array(a)
+```
+
+`xs` itself. What a literal builds an array with, `Array[1, 2]`, or `[1, 2]` where an array is
+expected.
+
+## `list.fromArray`
+
+```nanyx fragment
+def list.fromArray: array(a) -> list(a)
+```
+
+The elements of `xs`, in order. What a literal builds a list with where it is written
+`List[...]`.
+
 <!-- End of the generated reference. -->

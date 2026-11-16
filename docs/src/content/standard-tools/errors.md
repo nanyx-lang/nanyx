@@ -1620,6 +1620,31 @@ type Stack(a) = private MRef(list(a))  -- error NYX0256: 'Stack' holds a value o
 To fix it, write the context before `private` or `protected`, which the error's fix does:
 `type Stack(a) = [Memory] private MRef(list(a))`.
 
+# NYX0257: Square-bracket literal of a type with no fromArray
+
+A square-bracket literal builds the type expected where it's written, or the type written before the brackets, as
+`Array[1, 2]` does, through the type's attached `fromArray`, and this type has none
+([Collections](../tour/collections#syntax)).
+
+```nanyx
+type Bag = protected (items: list(int))
+
+def bag: Bag = [1, 2]  -- error NYX0257: 'Bag' has no `fromArray`, so a square-bracket literal can't build one: attach one to it, as in `def Bag.fromArray: Array(a) -> Bag`
+```
+
+To fix it, attach a `fromArray` to the type, which takes an `Array` of the items, or build the value another way.
+
+# NYX0258: Spread of something other than a list or an array
+
+A spread in a literal that builds another type, `Array[...xs, 4]`, takes a list or an array, whose elements the literal
+copies. Spreading a set or anything else isn't supported.
+
+```nanyx
+def s = set[1, 2]
+def a = Array[...s, 3]  -- error NYX0258: A spread in a square-bracket literal takes a list or an array, and this is a 'set(int)'
+```
+
+To fix it, spread a list of the elements, such as `set.toList(s)`.
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

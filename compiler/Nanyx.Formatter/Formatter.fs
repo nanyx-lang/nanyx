@@ -112,6 +112,18 @@ let format (options: Options) (parsed: SourceModule) : string =
                 | FunctionCall(inner, _, [ _ ]) -> inner = NegateSyntax.builtIn
                 | _ -> false
             cat [ text "-"; (if joinsTheMinus then parens (exprBare full operand) else expr operandPosition operand) ]
+        // `Array[1, 2]` and `MyMap["a" => 1]`, the brackets straight after the type's name.
+        | CollectionSyntax.Construct(typeName, _, items) ->
+            let bracketsDoc =
+                match CollectionSyntax.listSegments items with
+                | [ Choice1Of2 entries ] when not entries.IsEmpty && List.forall CollectionSyntax.isEntry entries ->
+                    entries
+                    |> List.map (function
+                        | Kind (TupleExpr [ key; value ]) -> key, value
+                        | entry -> entry, entry)
+                    |> mapDoc items.Span
+                | segments -> listDoc items.Span segments
+            cat [ text typeName; bracketsDoc ]
         | RangeSyntax.Call(a, Some b) ->
             cat [ expr { position with Tail = false; Prec = rangePrecedence + 1 } a; text ".."; expr { position with Prec = rangePrecedence + 1 } b ]
         | RangeSyntax.Call(a, None) -> cat [ expr { position with Tail = false; Prec = rangePrecedence + 1 } a; text ".." ]

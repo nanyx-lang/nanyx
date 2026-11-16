@@ -54,7 +54,7 @@ A set's elements need an `Eq` and a `Hash` of their type, as a map's keys do, so
 def map.empty: map(k, v)
 ```
 
-The map with no keys. A map literal has at least one entry, since [] is the empty list.
+The map with no keys. `[]` where a map is expected is this map.
 
 ## `map.fromList`
 
@@ -63,6 +63,15 @@ def map.fromList: [Eq(k), Hash(k)] list((k, v)) -> map(k, v)
 ```
 
 The map holding each of `entries`, in order: of two entries with the same key, the later wins.
+
+## `map.fromArray`
+
+```nanyx fragment
+def map.fromArray: [Eq(k), Hash(k)] array((k, v)) -> map(k, v)
+```
+
+The map holding each of `entries`, in order: of two entries with the same key, the later wins.
+What a literal builds a map with where a map is expected, as `[]` is, or written `map[...]`.
 
 ## `map.toList`
 
@@ -211,6 +220,15 @@ def set.fromList: [Eq(a), Hash(a)] list(a) -> set(a)
 ```
 
 The set of the elements of `xs`, each once, in the order they first appear.
+
+## `set.fromArray`
+
+```nanyx fragment
+def set.fromArray: [Eq(a), Hash(a)] array(a) -> set(a)
+```
+
+The set of the elements of `xs`, each once, in the order they first appear. What a literal
+builds a set with, `set[1, 2]`, or `[1, 2]` where a set is expected.
 
 ## `set.toList`
 

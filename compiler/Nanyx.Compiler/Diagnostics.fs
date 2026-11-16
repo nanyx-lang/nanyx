@@ -165,6 +165,8 @@ module DiagnosticCodes =
     let AttachedDefinitionInScope = code 254 "Attached definition already in scope for its type" Severity.Error
     let OperatorArity = code 255 "Operator that does not take two arguments" Severity.Error
     let UndeclaredTypeScope = code 256 "Type holding a scoped value without declaring its context" Severity.Error
+    let NoFromArray = code 257 "Square-bracket literal of a type with no fromArray" Severity.Error
+    let InvalidCollectionSpread = code 258 "Spread of something other than a list or an array" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -192,7 +194,7 @@ module DiagnosticCodes =
           NotACellArgument; MisplacedCellType; UndeterminedContextType; EntryDoesNotFitHost; HostRuntimeOutsideHost; ScriptRunValue; ContextsWithoutType
           InvalidExtern; ExternWithoutHostRuntime; ConflictingExterns; PrivateContextMember; ContextNameAsValue; UnknownContextName
           ContextAsType; InstanceOutsideUse; UseOfNonInstance; OwnInstanceReplaced; OperatorRequiredByMember; InvalidTypeScope; ContextsOnValueType; AttachedDefinitionInScope; OperatorArity
-          UndeclaredTypeScope
+          UndeclaredTypeScope; NoFromArray; InvalidCollectionSpread
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

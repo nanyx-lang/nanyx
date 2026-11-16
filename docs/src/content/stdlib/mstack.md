@@ -53,6 +53,15 @@ def MStack.fromList: [Memory] list(a) -> MStack(a)
 
 A new stack holding `xs`, the first of them on top.
 
+## `MStack.fromArray`
+
+```nanyx fragment
+def MStack.fromArray: [Memory] array(a) -> MStack(a)
+```
+
+A new stack holding `xs`, the first of them on top. What a literal builds a stack with,
+`MStack[1, 2, 3]`, or `[1, 2, 3]` where a stack is expected.
+
 ## `MStack.push`
 
 ```nanyx fragment
