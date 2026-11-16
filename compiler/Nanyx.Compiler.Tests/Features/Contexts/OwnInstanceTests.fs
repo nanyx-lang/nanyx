@@ -37,7 +37,7 @@ let ``A use can't replace a type's attached ==`` () =
             """
 type Email = protected string
 def Email.`==`: Email, Email -> bool = { a, b -> a == b }
-def ignoringCase: Eq(Email) = (`==` = { a, b -> true })
+def ignoringCase = (`==` = { a: Email, b: Email -> true })
 def n = use ignoringCase in 1
 """
     Assert.Equal("ignoringCase", at)
@@ -56,9 +56,8 @@ let ``A use gives an instance to a type that has none of its own`` () =
     let source =
         """
 type Button = (label: string, onClick: () -> ())
-def sameLabel: Eq(Button) = (`==` = { p, q -> p.label == q.label })
 def same = {
-  use sameLabel
+  use Eq(Button)(`==` = { p, q -> p.label == q.label })
   Button(label = "a", onClick = { -> () }) == Button(label = "a", onClick = { -> () })
 }
 """
@@ -69,9 +68,8 @@ let ``A use can't replace a built-in type's toString`` () =
     let message, _ =
         replaced
             """
-def pounds: ToString(int) = (toString = { pence -> "£{pence / 100}" })
 def s = {
-  use pounds
+  use ToString(int)(toString = { pence -> "£{pence / 100}" })
   "{250}"
 }
 """

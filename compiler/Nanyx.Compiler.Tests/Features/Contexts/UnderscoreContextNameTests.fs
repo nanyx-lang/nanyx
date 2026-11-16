@@ -19,9 +19,8 @@ def My_Point.text_tag: My_Point -> string = { p -> "t" }
 
 def synthesized = describe(My_Point(x = 1, y = 2))
 type My_Size = (w: int, h: int)
-def show_size: To_Text(My_Size) = (to_text = { s -> "q" }, text_tag = { s -> "u" })
 def loaded = {
-  use show_size
+  use To_Text(My_Size)(to_text = { s -> "q" }, text_tag = { s -> "u" })
   describe(My_Size(w = 1, h = 2))
 }
 """
@@ -39,11 +38,9 @@ context A_b(x) = (c: x -> string)
 
 def both: [A_b(a) & A(b)] (a, b) -> string = { v, w -> A_b(a).c(v) ++ " " ++ A(b).a_c(w) }
 
-def a_int: A(int) = (a_c = { n -> "A" })
-def ab_int: A_b(int) = (c = { n -> "A_b" })
 def main = {
-  use a_int
-  use ab_int
+  use A(int)(a_c = { n -> "A" })
+  use A_b(int)(c = { n -> "A_b" })
   both(1, 2)
 }
 """

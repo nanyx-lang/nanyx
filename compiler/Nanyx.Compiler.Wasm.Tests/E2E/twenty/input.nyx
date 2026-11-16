@@ -11,10 +11,8 @@ def compareStrings: [Describe(a) & Describe(b)] a, b -> bool = { x, y ->
 }
 
 def main = {
-  def fakeInt: Describe(int) = (describe = { i -> "fake" })
-  use fakeInt
-  def plainString: Describe(string) = (describe = { s -> s })
-  use plainString
+  use Describe(int)(describe = { i -> "fake" })
+  use Describe(string)(describe = { s -> s })
 
   compareStrings(42, "fake")
 }

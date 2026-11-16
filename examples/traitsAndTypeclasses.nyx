@@ -21,21 +21,29 @@ multiplication, under bitwise and, and so on.
 
 context Monoid(a) = (empty: a, combine: (a, a) -> a)
 
-def additiveMonoid: Monoid(int) = (empty = 0, combine = { x, y -> x + y })
-def multiplicativeMonoid: Monoid(int) = (empty = 1, combine = { x, y -> x * y })
-def bitwiseAndMonoid: Monoid(int) = (empty = -1, combine = { x, y -> int.bitAnd(x, y) })
-def bitwiseOrMonoid: Monoid(int) = (empty = 0, combine = { x, y -> int.bitOr(x, y) })
-
 def reduce: [Monoid(a)] list(a) -> a = { xs ->
   xs \fold(empty) { acc, x -> combine(acc, x) }
 }
 
+---
+An instance is not a value: it is written where a `use` loads it, so each
+of int's monoids is chosen where it is needed.
+---
+
 def product: list(int) -> int = { xs ->
-  use multiplicativeMonoid in reduce(xs)
+  use Monoid(int)(empty = 1, combine = { x, y -> x * y }) in reduce(xs)
 }
 
 def total: list(int) -> int = { xs ->
-  use additiveMonoid in reduce(xs)
+  use Monoid(int)(empty = 0, combine = { x, y -> x + y }) in reduce(xs)
+}
+
+def allBits: list(int) -> int = { xs ->
+  use Monoid(int)(empty = -1, combine = { x, y -> int.bitAnd(x, y) }) in reduce(xs)
+}
+
+def anyBits: list(int) -> int = { xs ->
+  use Monoid(int)(empty = 0, combine = { x, y -> int.bitOr(x, y) }) in reduce(xs)
 }
 
 ---

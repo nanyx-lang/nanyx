@@ -406,11 +406,31 @@ let private unknownTypeErrors (state: InferState) (parameters: Set<Identifier>) 
         |> List.choose (fun (name, span) -> tryFindTypeDef name state |> Option.map (fun info -> name, info, span))
         |> List.collect (fun (name, info, span) -> blockIsolationAt state name info.Symbol span)
         |> List.distinctBy _.Message
-    unknown @ outside
+    // A context is not a type: its name is written only in a context list and as the constructor in a `use`.
+    let contexts =
+        named
+        |> List.choose (fun (name, span) ->
+            match tryFindTypeDef name state with
+            | Some info when info.IsContext ->
+                // The name only, not a context's arguments.
+                let span = { span with End = min span.End (span.Start + name.Length) }
+                Some (Diagnostics.at DiagnosticCodes.ContextAsType span
+                          $"'{name}' is a context, not a type: it can only be required, as in `[{name}]`, or loaded with `use`")
+            | _ -> None)
+    unknown @ outside @ contexts
 
-/// Whether every type an annotation, such as a def's or a lambda parameter's, names exists.
+/// Whether every type an annotation, such as a def's or a lambda parameter's, names exists, and is not a context.
 let internal ensureTypesExist (state: InferState) (typeExprs: TypeExpr list) : Result<unit, Diagnostic list> =
     match unknownTypeErrors state Set.empty typeExprs with
+    | [] -> Ok ()
+    | errors -> Error errors
+
+/// Whether every type `context`, the context of a `use C(T)(members)` (see `UseInstanceSyntax`), names exists: the
+/// context itself is the one place outside a context list its name is written.
+let internal ensureInstanceContextExists (state: InferState) (context: TypeExpr) : Result<unit, Diagnostic list> =
+    let isTheContext (diagnostic: Diagnostic) =
+        diagnostic.Code = DiagnosticCodes.ContextAsType.Code && diagnostic.Span |> Option.exists (fun span -> span.Start = context.Span.Start)
+    match unknownTypeErrors state Set.empty [ context ] |> List.filter (isTheContext >> not) with
     | [] -> Ok ()
     | errors -> Error errors
 

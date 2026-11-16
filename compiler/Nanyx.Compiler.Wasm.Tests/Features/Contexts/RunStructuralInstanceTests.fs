@@ -156,10 +156,9 @@ let ``Run - a part of a structure is written through an instance loaded with use
     printing
         // `Cents`, a protected type, has no `ToString` of its own for a `use` to replace.
         [ "type Cents = protected int"
-          """def pounds: ToString(Cents) = (toString = { p -> "£" })"""
           """def show: [ToString(a)] a -> string = { x -> "{x}" }"""
           "def priced: Cents -> string = { n ->"
-          "  use pounds"
+          """  use ToString(Cents)(toString = { p -> "£" })"""
           """  "{[n, n]} {#some(n)} " ++ show((n, 1))"""
           "}" ]
         [ "priced(Cents(5))"; "[5]" ]

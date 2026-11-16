@@ -29,9 +29,8 @@ let ``A context with two type parameters type checks where it is declared, requi
 
 def fill: [Store(c, i)] c, i, i -> c = { container, x, y -> Store(c, i).put(Store(c, i).put(container, x), y) }
 
-def listStore: Store(list(int), int) = (put = { xs, x -> [x, ...xs] }, size = { xs -> list.length(xs) })
 def filled = {
-  use listStore
+  use Store(list(int), int)(put = { xs, x -> [x, ...xs] }, size = { xs -> list.length(xs) })
   fill([0], 1, 2)
 }
 """

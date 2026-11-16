@@ -103,15 +103,14 @@ def b = list.sort([v(2), v(1)])""")
 let ``An Ord loaded with use can't replace a built-in type's order`` () =
     let source =
         """
-def backwards: Ord(string) = (compare = { a, b -> string.compare(b, a) })
 def a = {
-  use backwards
+  use Ord(string)(compare = { a, b -> string.compare(b, a) })
   "a" < "b"
 }
 """
     let code, at = singleError (normalized source)
     Assert.Equal(DiagnosticCodes.OwnInstanceReplaced.Code, code)
-    Assert.Equal("backwards", at)
+    Assert.Equal("Ord(string)(compare = { a, b -> string.compare(b, a) })", at)
 
 [<Fact>]
 let ``List.sortBy takes a key of any type with an order`` () =

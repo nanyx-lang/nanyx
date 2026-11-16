@@ -42,8 +42,7 @@ let ``Run - a use gives a hole an instance for a type with no ToString of its ow
 
 @entry
 def main = {
-  def bracketed: ToString(Cents) = ( toString = { c -> "<cents>" } )
-  use bracketed
+  use ToString(Cents)(toString = { c -> "<cents>" })
   println("after {Cents(1)}")
 }
 """

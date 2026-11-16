@@ -34,8 +34,7 @@ let ``A hole uses an instance loaded with use for a type with no ToString of its
         compileClean (
             withFinalNewline """type Cents = protected int
 def s = {
-  def hashCents: ToString(Cents) = ( toString = { n -> "#" } )
-  use hashCents
+  use ToString(Cents)(toString = { n -> "#" })
   "{Cents(1)}"
 }""")
     let loaded =

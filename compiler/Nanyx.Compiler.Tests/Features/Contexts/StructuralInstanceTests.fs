@@ -156,9 +156,8 @@ def b = listed(1, 2)
 let ``A hole of a structure writes a part through a ToString loaded with use in its block`` () =
     let typed =
         compileClean """type Cents = protected int
-def pounds: ToString(Cents) = (toString = { p -> "£" })
 def s = {
-  use pounds
+  use ToString(Cents)(toString = { p -> "£" })
   "{[Cents(1), Cents(2)]}"
 }
 """

@@ -169,8 +169,7 @@ let ``A loaded instance is found at a call, and a generic function passes its ow
         showContext +
         normalized """def twice: [Show(a)] a -> string = { v -> describe(v) ++ describe(v) }
 def main = {
-  def showPoint: Show(Point) = ( show = { p -> "p" } )
-  use showPoint
+  use Show(Point)(show = { p -> "p" })
   describe(Point(x = 1, y = 2))
 }
 """
@@ -181,23 +180,26 @@ def main = {
     | other -> failwith $"Unexpected instances: %A{other}"
 
 [<Fact>]
-let ``A call finds an instance loaded with use by name, from a def or a parameter (#581)`` () =
-    let source =
+let ``An instance cannot be named by a def or a parameter for a use to load (#1447)`` () =
+    // `Show(Point)` is a context, not a type: neither a def nor a parameter can have it as its type.
+    let viaDef =
         showContext +
         normalized """def showPoint: Show(Point) = ( show = { p -> "p" } )
-def viaParameter: (Show(Point), Point) -> string = { instance, p ->
-  use instance
-  describe(p)
-}
 def main = {
   use showPoint
   describe(Point(x = 1, y = 2))
 }
 """
-    match instancesIn source with
-    | [ [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])), _)) ]
-        [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])), _)) ] ] -> ()
-    | other -> failwith $"Unexpected instances: %A{other}"
+    let viaParameter =
+        showContext +
+        normalized """def viaParameter: (Show(Point), Point) -> string = { instance, p ->
+  use instance
+  describe(p)
+}
+"""
+    for source in [ viaDef; viaParameter ] do
+        let result = Compiler.compile source
+        assertReports DiagnosticCodes.ContextAsType result
 
 [<Fact>]
 let ``A loaded instance is only used for the type it is for`` () =
@@ -207,8 +209,7 @@ let ``A loaded instance is only used for the type it is for`` () =
         normalized """type Money = private int
 def Money.show: Money -> string = { m -> "money" }
 def main = {
-  def showPoint: Show(Point) = ( show = { p -> "p" } )
-  use showPoint
+  use Show(Point)(show = { p -> "p" })
   describe(Money(5))
 }
 """
@@ -216,17 +217,17 @@ def main = {
 
 [<Fact>]
 let ``An instance is checked against the context's members at the type it is for`` () =
-    let source = showContext + "def s = {\n  def showInt: Show(int) = ( show = { n -> n } )\n  use showInt\n  1\n}\n"
+    let source = showContext + "def s = {\n  use Show(int)(show = { n -> n })\n  1\n}\n"
     match (Compiler.compile source).Diagnostics with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
         Assert.Equal("Type mismatch: int vs string.", diagnostic.Message)
     | other -> failwith $"Expected one diagnostic, got %A{other}"
 
-/// `showContext` with a named instance of `Show(Point)`.
+/// `showContext` with a record of the shape of `Show(Point)`.
 let private namedShowInstance =
     showContext +
-    normalized """def showPoint: Show(Point) = ( show = { p -> "p" } )
+    normalized """def showPoint = ( show = { p: Point -> "p" } )
 """
 
 [<Fact>]
