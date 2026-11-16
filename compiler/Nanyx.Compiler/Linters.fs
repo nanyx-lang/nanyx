@@ -43,6 +43,12 @@ type SemanticModel =
       /// Where each call to a function that requires a parameterised context finds each instance, by the call's node
       /// (as `TypedModule.ContextInstances` has it): an instance built from attached definitions names them.
       ContextInstances: Map<NodeId, ContextInstance option list>
+      /// What provides each context a call requires, by the call's node (as `TypedModule.ContextProviders` has it).
+      ContextProviders: Map<NodeId, ProvidedContext list>
+      /// The callee's type at each call and pipe, by the call's node, with the contexts it requires there.
+      CalleeTypes: Map<NodeId, Ty>
+      /// The types of the defs the imports bring in, with the contexts they require, by their symbols.
+      ImportedContextTypes: Map<SymbolId, Ty * Ty list>
       /// The module's doc comments, each with what it documents, found from the parse only when a rule asks.
       DocComments: Lazy<DocComment list> }
 
@@ -63,6 +69,9 @@ module SemanticModel =
           References = typed.References
           ImportReferences = typed.ImportReferences
           ContextInstances = typed.ContextInstances
+          ContextProviders = typed.ContextProviders
+          CalleeTypes = typed.CalleeTypes
+          ImportedContextTypes = typed.ImportedContextTypes
           DocComments = lazy docComments.Value.Comments }
 
 /// Something one of a linter's rules found. The host turns it into a diagnostic with the rule's code and
@@ -744,12 +753,50 @@ module UnannotatedExports =
                         Edits = [ { Span = TextEdit.spanBetween model.Source symbol.Declaration afterName afterName; NewText = $": {written}" } ] } ] }))
         |> List.sortBy (fun report -> report.Span.Start)
 
+/// Whether an expression is pure: it can do nothing but give its value, because neither its type nor any call in it
+/// requires a context. A call requires one when something provides a context to it, when it finds an instance of one,
+/// or when the function it calls requires one, as the callee's type at the call or the def's own contexts say. A
+/// context variable counts, since it may stand for any context.
+module private Purity =
+    let private hasContexts (ty: Ty) =
+        match Unifier.unalias ty with
+        | TyFunc(_, _, contexts) -> not contexts.IsEmpty
+        | _ -> false
+
+    let rec private typeRequiresContext (ty: Ty) =
+        hasContexts ty || Ty.children (Unifier.unalias ty) |> List.exists typeRequiresContext
+
+    let private callRequiresContext (model: SemanticModel) (id: NodeId) =
+        let nonEmpty (found: Map<NodeId, 'a list>) = found |> Map.tryFind id |> Option.exists (List.isEmpty >> not)
+        let ofDef =
+            match model.References |> Map.tryFind id with
+            | Some symbol ->
+                match model.ContextTypes |> Map.tryFind symbol, model.ImportedContextTypes |> Map.tryFind symbol with
+                | Some contexts, _
+                | None, Some (_, contexts) -> not contexts.IsEmpty
+                | None, None -> false
+            | None -> false
+        nonEmpty model.ContextProviders
+        || nonEmpty model.ContextInstances
+        || model.CalleeTypes |> Map.tryFind id |> Option.exists hasContexts
+        || ofDef
+
+    let isPure (model: SemanticModel) (expr: Expression) =
+        SyntaxTree.expressionsWithin expr
+        |> List.forall (fun within ->
+            let nodes = within.Id :: (model.Lowered |> Map.tryFind within.Id |> Option.defaultValue [])
+            let typeIsPure = model.Types |> Map.tryFind within.Id |> Option.forall (typeRequiresContext >> not)
+            match within.Kind with
+            | ContextMemberCall _ -> false
+            | _ -> typeIsPure && not (nodes |> List.exists (callRequiresContext model)))
+
 /// The official linter's `unusedResults` rule: a statement of a block, other than its last, whose value is thrown away
 /// though it is not `()`: `readLine()` on a line of its own. Left alone: a statement whose type is `()`, a type variable
 /// (it may be `()`) or `undefined` (it never gives a value, which `unreachableCode` is about); a workflow keyword's
 /// statement, whose value the workflow takes; and a block's last statement, which is the block's value. A `for` loop
 /// is `()`, so what its body gives is not reported either. Nor is a call of the built-in `dbg`, written on a line of
-/// its own to print a value. Its fix passes the value to `ignore`.
+/// its own to print a value. Nor is a pure statement (see `Purity`), which `uselessExpressions` reports. Its fix passes
+/// the value to `ignore`.
 module UnusedResults =
     let rule =
         { Id = "unusedResults"
@@ -795,7 +842,9 @@ module UnusedResults =
         | ContextMemberCall(_, name, _) -> $"The result of `{name}`"
         | _ -> "This value"
 
-    let lint (model: SemanticModel) : Report list =
+    /// Each statement of a block, other than its last, whose value is thrown away, with the value, its type and what
+    /// a message calls it.
+    let internal discarded (model: SemanticModel) : (Statement * Expression * Ty * string) list =
         model.Syntax
         |> List.collect SyntaxTree.ofItem
         |> List.collect SyntaxTree.blocksWithin
@@ -804,17 +853,41 @@ module UnusedResults =
             |> List.take (statements.Length - 1)
             |> List.choose (fun statement ->
                 match statement.Kind with
-                | ExprStatement value ->
-                    discardedType model value
-                    |> Option.map (fun ty ->
-                        let written = model.Source.Substring(value.Span.Start, value.Span.End - value.Span.Start)
-                        { Rule = rule.Id
-                          Span = value.Span
-                          Message = $"{whatIsUnused value}, of type '{Unifier.tyToDisplayString Ascii ty}', is never used: bind it to a name, or pass it to `ignore`"
-                          Related = []
-                          Fixes = [ { Title = "Pass it to `ignore`"; Edits = [ { Span = value.Span; NewText = $"ignore({written})" } ] } ] })
+                | ExprStatement value -> discardedType model value |> Option.map (fun ty -> statement, value, ty, whatIsUnused value)
                 | _ -> None))
-        |> List.sortBy (fun report -> report.Span.Start)
+        |> List.sortBy (fun (statement, _, _, _) -> statement.Span.Start)
+
+    let lint (model: SemanticModel) : Report list =
+        discarded model
+        |> List.filter (fun (_, value, _, _) -> not (Purity.isPure model value))
+        |> List.map (fun (_, value, ty, what) ->
+            let written = model.Source.Substring(value.Span.Start, value.Span.End - value.Span.Start)
+            { Rule = rule.Id
+              Span = value.Span
+              Message = $"{what}, of type '{Unifier.tyToDisplayString Ascii ty}', is never used: bind it to a name, or pass it to `ignore`"
+              Related = []
+              Fixes = [ { Title = "Pass it to `ignore`"; Edits = [ { Span = value.Span; NewText = $"ignore({written})" } ] } ] })
+
+/// The official linter's `uselessExpressions` rule: a statement whose value is thrown away, as `unusedResults` finds
+/// them, and which is pure (see `Purity`): `n + 2` or `x == y` on a line of its own, which can never do anything. It is usually a mistake: a missing `def`, an `==` meant as a binding, or an operand split from
+/// the line above. Its fix removes the statement.
+module UselessExpressions =
+    let rule =
+        { Id = "uselessExpressions"
+          Title = "Useless expression"
+          DefaultSeverity = Severity.Error
+          Description =
+            "A statement of a block, other than its last, whose value is thrown away and which can do nothing else, because neither its type nor any call in it requires a context. Remove it, or use its value." }
+
+    let lint (model: SemanticModel) : Report list =
+        UnusedResults.discarded model
+        |> List.filter (fun (_, value, _, _) -> Purity.isPure model value)
+        |> List.map (fun (statement, value, ty, what) ->
+            { Rule = rule.Id
+              Span = value.Span
+              Message = $"{what}, of type '{Unifier.tyToDisplayString Ascii ty}', does nothing and is never used: remove it, or use its value"
+              Related = []
+              Fixes = [ { Title = "Remove the statement"; Edits = [ SourceEdits.removal model.Source statement.Span ] } ] })
 
 /// The official linter's `shadowedPreludeNames` rule: a top-level def, a local def, a lambda's argument or a variable a
 /// pattern binds whose name is one the prelude brings into scope, which it hides wherever it is in scope itself. Only
@@ -925,13 +998,13 @@ module Linters =
           Rules =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
               UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule
-              UnannotatedExports.rule; UnusedResults.rule; ShadowedPreludeNames.rule; Semicolons.rule ]
+              UnannotatedExports.rule; UnusedResults.rule; UselessExpressions.rule; ShadowedPreludeNames.rule; Semicolons.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
                 @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
                 @ StrayDocComments.lint model @ UnannotatedExports.lint model
-                @ UnusedResults.lint model @ ShadowedPreludeNames.lint model @ Semicolons.lint model }
+                @ UnusedResults.lint model @ UselessExpressions.lint model @ ShadowedPreludeNames.lint model @ Semicolons.lint model }
 
     /// The linters the compiler has, which a manifest's `linters` or a script's `::linters` directives can turn on.
     let all = [ official ]

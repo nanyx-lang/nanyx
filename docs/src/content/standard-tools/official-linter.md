@@ -157,9 +157,20 @@ def compute: [Console] int -> int = { n ->
 }
 ```
 
-The rule (`unusedResults`) reports a statement of a block, other than its last, whose value is thrown away though it is not `()`: a call made for a result nobody reads, or a value such as `n + 2` that does nothing on a line of its own. It is an error by default. Bind the value to a name, or pass it to [`ignore`](../stdlib/prelude#ignore) to say you don't need it, which is what its fix does: `ignore(readLine())`.
+The rule (`unusedResults`) reports a statement of a block, other than its last, whose value is thrown away though it is not `()`: a call made for its effects, whose result nobody reads. It is an error by default. Bind the value to a name, or pass it to [`ignore`](../stdlib/prelude#ignore) to say you don't need it, which is what its fix does: `ignore(readLine())`.
 
-It leaves alone a statement whose type is `()`, such as a call to `println`; the last statement of a block, which is the block's value; a `for` loop, whose value is `()` whatever its body gives; a workflow keyword's statement, such as `try check(args)` in a `proc` block, whose value the workflow takes; a call of the built-in `dbg`, `dbg(xs)` or `xs \dbg`, written on a line of its own to print a value; and a statement whose type is [`undefined`](../tour/types#top-and-bottom-types), which `unreachableCode` is about.
+It leaves alone a statement whose type is `()`, such as a call to `println`; the last statement of a block, which is the block's value; a `for` loop, whose value is `()` whatever its body gives; a workflow keyword's statement, such as `try check(args)` in a `proc` block, whose value the workflow takes; a call of the built-in `dbg`, `dbg(xs)` or `xs \dbg`, written on a line of its own to print a value; a statement whose type is [`undefined`](../tour/types#top-and-bottom-types), which `unreachableCode` is about; and a pure statement, which `uselessExpressions` reports.
+
+## Expression that does nothing
+
+```nanyx
+def next: int -> int = { n ->
+  n + 1 -- Linter error: This value, of type 'int', does nothing and is never used
+  n
+}
+```
+
+The rule (`uselessExpressions`) reports a statement that `unusedResults` would, but which is pure: neither its type nor any call in it requires a [context](../advanced/contexts), so it can do nothing but give its value, and that is thrown away. Usually it is a mistake: a `def` left out, an `==` meant as a binding, or an operand split from the line above. It is an error by default, and its fix removes the statement. A call of a function that requires no context is pure too. One of a function whose contexts are a variable, such as `list.map`'s `[c]`, is not, since the variable may stand for any context.
 
 ## Name that hides a prelude member
 
