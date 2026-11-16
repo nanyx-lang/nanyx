@@ -84,7 +84,7 @@ internal static partial class CliCommands
             return failed;
         }
 
-        var pulled = PackageDependencies.pull(shell.Packages, manifestPath);
+        var pulled = PackageDependencies.pull(PackageStoreModule.downloading(shell.Packages), manifestPath);
         if (pulled.IsError)
         {
             foreach (var error in pulled.ErrorValue)

@@ -64,54 +64,17 @@ module PackageArchive =
     /// `package`, packed with nothing but its manifest and its source files (see `packWith`).
     let pack (package: Package) : Result<byte array, Diagnostic list> = packWith [] package
 
-    /// The path of `entry`, a name in a packed package, under the prefix `prefix`, relative to where it is unpacked; or
-    /// none if it would land outside that directory.
-    let private relative (prefix: string) (entry: string) =
-        let name = entry.Replace('\\', '/')
-        if not (name.StartsWith prefix) then
-            None
-        else
-            let rest = name.Substring prefix.Length
-            let parts = rest.Split '/'
-            if rest = "" || Path.IsPathRooted rest || rest.StartsWith "/" || parts |> Array.exists (fun part -> part = ".." || part.Contains ':') then None
-            else Some rest
-
     /// Unpacks `bytes`, a packed package, into `directory`, which must not exist yet: its manifest is at the zip's root,
-    /// or in its one top-level folder, as a zip of a package's directory has it. It is unpacked beside `directory` first
-    /// and moved there, so a package is never seen half unpacked. Or what is wrong with it.
+    /// or in its one top-level folder, as a zip of a package's directory has it (see `Downloads.unzip`). Or what is
+    /// wrong with it.
     let unpack (bytes: byte array) (directory: string) : Result<unit, string> =
-        try
-            use zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read)
-            let files = zip.Entries |> Seq.filter (fun entry -> not (entry.FullName.EndsWith "/")) |> List.ofSeq
-            let isManifest (name: string) = name.EndsWith(Manifest.extension, StringComparison.OrdinalIgnoreCase)
-            let prefix =
-                match files |> List.filter (fun entry -> isManifest entry.FullName && not (entry.FullName.Contains '/')) with
-                | [ _ ] -> Some ""
-                | _ ->
-                    match files |> List.map (fun entry -> entry.FullName.Split('/')[0]) |> List.distinct with
-                    | [ folder ] when files |> List.exists (fun entry -> entry.FullName = $"{folder}/{Path.GetFileName entry.FullName}" && isManifest entry.FullName) ->
-                        Some(folder + "/")
-                    | _ -> None
-            match prefix with
-            | None -> Result.Error $"it has no {Manifest.extension} manifest at its root, or in its one folder"
-            | Some prefix ->
-                match files |> List.tryFind (fun entry -> (relative prefix entry.FullName).IsNone) with
-                | Some outside -> Result.Error $"its entry {outside.FullName} would be unpacked outside the package's directory"
-                | None ->
-                    let partial = $"{directory}.partial-{Guid.NewGuid():N}"
-                    try
-                        for entry in files do
-                            let target = Path.Combine(partial, (relative prefix entry.FullName).Value)
-                            Directory.CreateDirectory(Path.GetDirectoryName target) |> ignore
-                            entry.ExtractToFile target
-                        Directory.CreateDirectory(Path.GetDirectoryName directory) |> ignore
-                        // Another build may have unpacked the same version meanwhile; a package in the cache is never
-                        // changed, so its copy is as good as this one.
-                        if not (Directory.Exists directory) then
-                            Directory.Move(partial, directory)
-                        Result.Ok()
-                    finally
-                        if Directory.Exists partial then
-                            Directory.Delete(partial, true)
-        with :? InvalidDataException as error ->
-            Result.Error $"it is not a zip: {error.Message}"
+        let isManifest (name: string) = name.EndsWith(Manifest.extension, StringComparison.OrdinalIgnoreCase)
+        let prefixOf (names: string list) =
+            if names |> List.exists (fun name -> isManifest name && not (name.Contains '/')) then
+                Result.Ok ""
+            else
+                match Downloads.singleFolder names with
+                | Some folder when names |> List.exists (fun name -> name.StartsWith folder && isManifest name && not (name.Substring(folder.Length).Contains '/')) ->
+                    Result.Ok folder
+                | _ -> Result.Error $"it has no {Manifest.extension} manifest at its root, or in its one folder"
+        Downloads.unzip prefixOf bytes directory
