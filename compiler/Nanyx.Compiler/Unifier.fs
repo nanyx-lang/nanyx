@@ -146,7 +146,11 @@ module Unifier =
         let grouped ty =
             match ty with
             | TyFunc _ -> $"({printTy p false ty})"
-            | _ -> printTy p false ty
+            | _ ->
+                // A type generic in contexts written with them reads as a function type's would.
+                match printTy p false ty with
+                | text when text.StartsWith "[" -> $"({text})"
+                | text -> text
         // The items of a tuple, each bracketed where a comma list needs it.
         let items tys = tys |> List.map grouped |> String.concat ", "
         let bareTuple ty =
@@ -179,11 +183,19 @@ module Unifier =
             | Some name -> name
             | None -> $"t{v.Id}"
         // A type in a scoped context's scope is written without the scope, as `mut T` is: `Cursor`, `MRef(int)`.
+        // A type generic in contexts is written with them in front, as a function type is: `[FileSystem] Stream(string)`.
         | TyNominal(nominal, args, _, _) ->
-            match args |> List.filter (function FunctionContexts.ScopedContext _ -> false | _ -> true) with
-            | [] -> nominal.Name
-            | [ arg ] -> $"{nominal.Name}({soleArgument arg})"
-            | args -> $"{nominal.Name}({items args})"
+            let named =
+                match args |> List.filter (function FunctionContexts.ScopedContext _ | FunctionContexts.Carried _ -> false | _ -> true) with
+                | [] -> nominal.Name
+                | [ arg ] -> $"{nominal.Name}({soleArgument arg})"
+                | args -> $"{nominal.Name}({items args})"
+            match List.tryLast args with
+            | Some (FunctionContexts.Carried contexts) ->
+                match writtenContexts contexts |> List.map (contextAsPrinted p) |> List.distinct with
+                | [] -> named
+                | written -> $"""[{written |> List.map (printTy p false) |> String.concat ", "}] {named}"""
+            | _ -> named
         // An alias is written by name, as the user wrote it: `Customer`, `Validator(int)`.
         | TyAlias(name, [], _) -> name
         | TyAlias(name, [ arg ], _) -> $"{name}({soleArgument arg})"
@@ -327,6 +339,12 @@ module Unifier =
         let contexts = extra |> List.map (fun c -> $"'{tyToString c}'") |> String.concat ", "
         let what = if extra.Length = 1 then "the context" else "the contexts"
         $"A function that requires {what} {contexts} is given where '{tyToString expected}' is expected, which does not: '{tyToString given}'. Write the contexts it may require on the type expected, as a context's member does in `log: [Console] string -> ()`, or a context variable for any, as in `[c] a -> b`."
+
+    /// Says that a value of a type generic in contexts that carries `extra` is given where one that does not is expected.
+    let private carriedNotAllowedMessage (extra: Ty list) (given: Ty) (expected: Ty) =
+        let contexts = extra |> List.map (fun c -> $"'{tyToString c}'") |> String.concat ", "
+        let what = if extra.Length = 1 then "the context" else "the contexts"
+        $"A '{tyToString given}' is given where '{tyToString expected}' is expected, whose functions don't require {what} {contexts}. Write them in front of the type expected, or a context variable for any, as in `[c] {tyToString expected}`."
 
     /// Says which tags make two unions differ: `onlyLeft` are tags only the first has that the second cannot take,
     /// and `onlyRight` the reverse. `Tag union mismatch: only the first has #bad; only the second has #underflow.`
@@ -650,22 +668,25 @@ module Unifier =
     /// The context variables of `ty`'s function types that appear in no function's input, at any depth. No caller
     /// chooses the contexts such a variable stands for, so it stands for none. In `int -> ([c] int -> int)`, `c` is;
     /// in `[c] ([c] a -> b), a -> b` it is not, as the function given for the input chooses it. A nominal's variables
-    /// are taken to be in an input, as its underlying type is not shown.
+    /// are taken to be in an input, as its underlying type is not shown, but for the contexts a type generic in contexts
+    /// carries, which are where the type is: a value of `Stream(int)` made with pure functions carries none.
     let outputOnlyContextVars (ty: Ty) : TyVar list =
         // Each variable once for each time it appears, with whether it is a function's context there and whether that
         // is within a function's input.
         let rec collect (inInput: bool) ty : (TyVar * bool * bool) list =
+            let ofContext context =
+                match context with
+                | TyVar v -> [ v, true, inInput ]
+                | other -> collect inInput other
             match ty with
             | TyVar v -> [ v, false, inInput ]
             | TyPrimitive _ -> []
+            | TyNominal(_, args, _, _) when (match List.tryLast args with Some (FunctionContexts.Carried _) -> true | _ -> false) ->
+                let carried = match List.last args with FunctionContexts.Carried contexts -> contexts | _ -> []
+                List.collect (collect true) (List.truncate (args.Length - 1) args) @ List.collect ofContext carried
             | TyNominal(_, _, underlying, _) -> collect true underlying
             | TyAlias(_, args, underlying) -> List.collect (collect inInput) (underlying :: args)
-            | TyFunc(arg, ret, contexts) ->
-                let ofContext context =
-                    match context with
-                    | TyVar v -> [ v, true, inInput ]
-                    | other -> collect inInput other
-                collect true arg @ collect inInput ret @ List.collect ofContext contexts
+            | TyFunc(arg, ret, contexts) -> collect true arg @ collect inInput ret @ List.collect ofContext contexts
             | TyOpenRecord(fields, row) -> collect inInput (TyRecord fields) @ [ row, false, inInput ]
             | _ -> Ty.children ty |> List.collect (collect inInput)
         let occurrences = collect false ty
@@ -1065,9 +1086,24 @@ module Unifier =
                             | Error extra -> Error (contextsNotAllowedMessage extra l r, origin, ContextsNotAllowed)
                         | _ ->
                         match l, r with
-                        // A nominal type's arguments are its own, not only what it is made from, so they are the same.
+                        // A nominal type's arguments are its own, not only what it is made from, so they are the same. The
+                        // contexts a type generic in contexts carries are a function type's: one with fewer fits where one
+                        // with more is expected (see `FunctionContexts.carried`).
                         | TyNominal(lNominal, lArgs, _, _), TyNominal(rNominal, rArgs, _, _) when lNominal = rNominal && lArgs.Length = rArgs.Length ->
-                            loop subst ((List.map2 (fun lTy rTy -> (lTy, rTy, Equal, origin)) lArgs rArgs) @ rest)
+                            let arguments =
+                                List.zip lArgs rArgs
+                                |> List.filter (function FunctionContexts.Carried _, FunctionContexts.Carried _ -> false | _ -> true)
+                                |> List.map (fun (lTy, rTy) -> (lTy, rTy, Equal, origin))
+                            match List.last lArgs, List.last rArgs with
+                            // A value whose contexts nothing has settled yet, as a constructor's, carries those expected:
+                            // its functions were checked against them where it was made, and may require fewer.
+                            | FunctionContexts.Carried [ TyVar given ], FunctionContexts.Carried expected when isPlainVar given ->
+                                loop subst (arguments @ (TyVar given, TyUnion expected, Equal, origin) :: rest)
+                            | FunctionContexts.Carried given, FunctionContexts.Carried expected ->
+                                match FunctionContexts.fit freshRest origin given expected with
+                                | Ok contexts -> loop subst (arguments @ contexts @ rest)
+                                | Error extra -> Error (carriedNotAllowedMessage extra l r, origin, ContextsNotAllowed)
+                            | _ -> loop subst (arguments @ rest)
                         | TyNominal(_, _, _, true), _
                         | _, TyNominal(_, _, _, true) ->
                             Error (mismatchMessage l r, origin, TypesDiffer)

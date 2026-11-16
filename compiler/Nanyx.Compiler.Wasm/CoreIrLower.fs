@@ -84,11 +84,19 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     /// The context variables of the definition `name`'s type that only the function it returns requires (`[c]` in
     /// `([c] a -> b), ([c] b -> d) -> [c] a -> d`): that function takes their members when it is called, so a call to
-    /// the definition does not pass them, though it is specialised on them.
+    /// the definition does not pass them, though it is specialised on them. So do those the value it returns carries,
+    /// `[c, d] Stream(b)` (see `FunctionContexts.carried`).
     let returnedVariables (name: string) =
         let ofContexts (contexts: Ty list) = contexts |> List.choose (function TyVar v -> Some v.Id | _ -> None) |> Set.ofList
+        let returned (result: Ty) =
+            match Unifier.unalias result with
+            | TyNominal(_, args, _, _) ->
+                match List.tryLast args with
+                | Some (FunctionContexts.Carried contexts) -> contexts
+                | _ -> []
+            | result -> requiredContexts result
         match input.DefinitionTypes |> Map.tryFind name |> Option.map Unifier.unalias with
-        | Some (TyFunc(_, result, own)) -> Set.difference (ofContexts (requiredContexts result)) (ofContexts own)
+        | Some (TyFunc(_, result, own)) -> Set.difference (ofContexts (returned result)) (ofContexts own)
         | _ -> Set.empty
 
     /// The members of the contexts the context variables of the definition `name` stand for where `bindings` binds them,
@@ -231,9 +239,20 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 let memberVar = scope.Members.[NamedMember name]
                 k (Expr.make (Atom(AVar memberVar)) memberVar.Type)
             | None when definitions.ContainsKey name && not (isFunction name) ->
-                // A top-level value is compiled to a function of no parameters: evaluate it.
+                // A top-level value is compiled to a function of no parameters: evaluate it. One of a type generic in
+                // contexts named where one that carries more is expected is made at its own type, and adapted (see
+                // `CoreIrLowerMembers.coerce`).
                 let ty = tyOf expr
-                k (Expr.make (Call(callee name input.ExprTypes.[expr.Id], [])) ty)
+                let own =
+                    input.DefinitionTypes
+                    |> Map.tryFind name
+                    |> Option.filter (freeVars >> List.isEmpty)
+                    |> Option.map toIrType
+                match own with
+                | Some (IrRecord _ as own) when own <> ty ->
+                    bindTemp (Expr.make (Call(callee name input.ExprTypes.[expr.Id], [])) own) (fun atom ->
+                        CoreIrLowerMembers.coerce this.MemberTools scope atom ty (fun atom -> k (Expr.make (Atom atom) ty)))
+                | _ -> k (Expr.make (Call(callee name input.ExprTypes.[expr.Id], [])) ty)
             | None when definitions.ContainsKey name -> cannot $"the function '{name}' used as a value"
             | None -> cannot $"a reference to '{name}'"
         | TagExpr(name, None) -> k (Expr.make (Atom(ATag name)) (tyOf expr))
@@ -1121,11 +1140,18 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let parameterVars = members |> List.map (fun (_, var) -> var.Name, var)
             let scope = scopeOf parameters
             let scope = { scope with Members = memberScope; Vars = parameterVars |> List.fold (fun acc (name, var) -> acc |> Map.add name var) scope.Vars }
-            // A function value it results in is adapted to the type it declares (see `CoreIrLowerMembers.coerce`).
+            // A function value it results in is adapted to the type it declares (see `CoreIrLowerMembers.coerce`), and so
+            // is a value of a type generic in contexts, whose type its value may carry fewer of than it declares, which
+            // is what its callers read: `def lines: () -> [Console] Stream(string) = { pure }`.
+            let resultTy =
+                match input.DefinitionTypes |> Map.tryFind name |> Option.map (substitute subst) with
+                | Some declared when (freeVars declared).IsEmpty -> snd (parameterTypes parameterNames declared isLambda)
+                | _ -> resultTy
             let result = toIrType resultTy
             let adapted (value: Expr) =
                 match value.Type with
-                | IrFunction _ when value.Type <> result -> bindTemp value (fun atom -> CoreIrLowerMembers.coerce this.MemberTools scope atom result (fun atom -> Expr.make (Atom atom) result))
+                | IrFunction _
+                | IrRecord _ when value.Type <> result -> bindTemp value (fun atom -> CoreIrLowerMembers.coerce this.MemberTools scope atom result (fun atom -> Expr.make (Atom atom) result))
                 | _ -> value
             let parameters = parameters @ (members |> List.map snd |> List.filter (fun var -> var.Kind = Param))
             make parameters result (this.WithKnownValues (this.Complex scope body adapted))
