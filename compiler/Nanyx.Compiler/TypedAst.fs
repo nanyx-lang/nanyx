@@ -202,6 +202,9 @@ type TypeDefInfo =
       /// The scoped context whose scope each value of the type belongs to, as `type Cursor = [Tx] protected (...)`
       /// declares it: the value carries the scope as a last argument its type is applied to, which is never shown.
       ScopedBy: string option
+      /// For a type in a scoped context's scope, the variable `Underlying` writes that scope as: what the type's
+      /// representation holds of the scope is of the value's own (see `TypeResolution.undeclaredHeldScopes`).
+      Scope: TyVar option
       Symbol: SymbolId option
       Members: Map<string, SymbolId> }
 
