@@ -346,7 +346,7 @@ order above; and an `Eq` loaded for a type that holds a function isn't found ins
 Decided in [#1501](https://github.com/nanyx-lang/nanyx/issues/1501), so that an attached definition can't get round
 the rule above ([#1514](https://github.com/nanyx-lang/nanyx/issues/1514)). Extensions are allowed anywhere, come into
 scope by import, are ambiguous (`NYX0106`) when two imports extend a type with one name, and can't redefine a name
-in scope for their type (`NYX0252`, `AttachedOperators.redefinitions`), as
+in scope for their type (`NYX0254`, `AttachedOperators.redefinitions`), as
 [Extending a type](../advanced/attached-definitions#extending-a-type) describes. What is left:
 
 - **A type's owned definitions are always in scope.** "Owned" means attached in the type's own module, or in the

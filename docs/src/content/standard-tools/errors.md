@@ -1472,7 +1472,7 @@ def add: [`+`: a, a -> a] a, a -> a = { x, y -> x + y }  -- error NYX0251: An op
 To fix it, write the context, which the error's fix does: `[Add(a)]` for `` `+` ``, and `[Num(a)]` for `` `+` `` and
 `` `*` `` together. Where a function's operators don't fit one context, list the contexts they need: `[Ord(a), Add(a)]`.
 
-# NYX0252: Attached definition already in scope for its type
+# NYX0254: Attached definition already in scope for its type
 
 An attached definition has a name the type already has in scope: from an import, or, for a built-in type, from the
 standard library, whether or not its module is imported. An attached definition can extend a type with a new name,
@@ -1480,7 +1480,7 @@ but never redefine one it has, so `"abc" \length` is always the string's length
 ([Extending a type](../advanced/attached-definitions#extending-a-type)).
 
 ```nanyx
-def string.length: string -> int = { s -> 42 }  -- error NYX0252: 'string.length' is already in scope for 'string', from nanyx/text: an attached definition can extend a type, but not redefine what it has. Give it another name
+def string.length: string -> int = { s -> 42 }  -- error NYX0254: 'string.length' is already in scope for 'string', from nanyx/text: an attached definition can extend a type, but not redefine what it has. Give it another name
 ```
 
 To fix it, give the definition a name of its own, or, to change how a value behaves, wrap it in a protected type

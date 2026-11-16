@@ -97,10 +97,10 @@ A name that is not a type cannot have definitions attached to it: `def Option.ma
 
 Any module can attach a new definition to any type, its own or not, as extension methods do in C# and Kotlin: `def string.shout` above can be written anywhere. An extension comes into scope as any definition does, by importing its module, and a use is ambiguous (`NYX0106`) when two imported modules extend a type with the same name.
 
-An attached definition can extend a type, but never redefine what is already in scope for it. A name the type has from an import, or from the standard library for a built-in type, is the error `NYX0252` when attached again:
+An attached definition can extend a type, but never redefine what is already in scope for it. A name the type has from an import, or from the standard library for a built-in type, is the error `NYX0254` when attached again:
 
 ```nanyx fragment
-def string.length: string -> int = { s -> 42 }  -- error NYX0252: 'string.length' is already in scope for 'string', from nanyx/text
+def string.length: string -> int = { s -> 42 }  -- error NYX0254: 'string.length' is already in scope for 'string', from nanyx/text
 def string.shout: string -> string = { s -> s ++ "!" }  -- fine: strings have no `shout`
 ```
 

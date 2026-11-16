@@ -156,7 +156,7 @@ module DiagnosticCodes =
     let UseOfNonInstance = code 249 "use of something other than a context instance" Severity.Error
     let OwnInstanceReplaced = code 250 "Use of an instance for a type that has its own" Severity.Error
     let OperatorRequiredByMember = code 251 "Operator required by its member" Severity.Error
-    let AttachedDefinitionInScope = code 252 "Attached definition already in scope for its type" Severity.Error
+    let AttachedDefinitionInScope = code 254 "Attached definition already in scope for its type" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
