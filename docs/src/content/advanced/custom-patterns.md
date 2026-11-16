@@ -4,6 +4,8 @@ description: "Reusable pattern-matching logic with the pattern keyword"
 order: 13
 ---
 
+> **Planned.** Custom patterns aren't built yet: `pattern` is not a keyword today, and the open design questions are in [#1719](https://github.com/nanyx-lang/nanyx/issues/1719). This page describes the intended design, and its examples will change as that settles.
+
 The `pattern` keyword allows for the encapsulation of matching logic in reusable components.
 
 A custom pattern is ultimately a function with a signature but no name; instead the pattern is identified by the tag(s) it returns. Custom patterns return tags that use the type naming scheme (to distinguish them from standard tags), meaning they must start with a capital letter after the `#`.
