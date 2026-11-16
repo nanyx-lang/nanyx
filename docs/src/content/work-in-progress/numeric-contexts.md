@@ -74,3 +74,9 @@ dimensions, all to describe something the compiler has to know about anyway to u
 8. **Measured types have `Add` but not `Num`**, and `*` and `/` on them are typed by the dimension rules. (Rejected:
    contexts with output types.)
 9. **No structural derivation** of `Add` or `Num` for records and tuples.
+10. **An operator on operands of no known type yet waits for the rest of the def**, in a def that writes its type, as
+    a number literal does (`NumericLiterals.awaitOperand`): `pop(mut s) + pop(mut s)` before a `push(mut s, 1.5)` is a
+    float addition, and operands nothing settles are `int` when the def's literals are settled, after them. Operands
+    settled to a type that is not a number fail at the operator
+    ([#1485](https://github.com/nanyx-lang/nanyx/issues/1485)). In a def that writes no type, such an operator is left
+    for `ArithmeticInference`, which may require `Add` or `Num` instead.
