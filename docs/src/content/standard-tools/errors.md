@@ -1864,6 +1864,26 @@ def nothing = _  -- error NYX0263: `_` as a value means "no match", which only a
 
 To fix it, write the value meant, such as `()` for the unit value or `#none` for an absent one.
 
+# NYX0264: Custom pattern given arguments wrongly
+
+A [custom pattern](../advanced/custom-patterns#patterns-with-arguments)'s tag is used with arguments the pattern
+doesn't take, without the arguments it does take, or with a pattern, such as `_`, where an argument goes. The message
+says which.
+
+```nanyx
+pattern int -> int -> #DivisibleBy | _ = { divisor -> { n -> n % divisor == 0 } }
+
+def isFizz = { (n: int) ->
+  match n
+    | #DivisibleBy -> true  -- error NYX0264: `#DivisibleBy` is a pattern that takes arguments
+    | _ -> false
+}
+```
+
+To fix it, write the arguments in the first brackets after the tag, `#DivisibleBy(3)`, and the payload to take apart,
+if the pattern returns one, in a second pair: `#SplitOn(",")(first, second)`. A pattern that takes no arguments has
+only the payload's brackets.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

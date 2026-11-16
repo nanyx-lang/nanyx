@@ -179,6 +179,7 @@ module DiagnosticCodes =
     let PatternInsidePattern = code 261 "Custom pattern inside another pattern" Severity.Error
     let PatternRequiresContexts = code 262 "Custom pattern that requires a context" Severity.Error
     let NoMatchOutsidePattern = code 263 "`_` as a value outside a pattern's body" Severity.Error
+    let PatternArguments = code 264 "Custom pattern given arguments wrongly" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -206,7 +207,7 @@ module DiagnosticCodes =
           NotACellArgument; MisplacedCellType; UndeterminedContextType; EntryDoesNotFitHost; HostRuntimeOutsideHost; ScriptRunValue; ContextsWithoutType
           InvalidExtern; ExternWithoutHostRuntime; ConflictingExterns; PrivateContextMember; ContextNameAsValue; UnknownContextName
           ContextAsType; InstanceOutsideUse; UseOfNonInstance; OwnInstanceReplaced; OperatorRequiredByMember; InvalidTypeScope; ContextsOnValueType; AttachedDefinitionInScope; OperatorArity
-          UndeclaredTypeScope; NoFromArray; InvalidCollectionSpread; UnionWithTwoRests; ProtectedShape; PatternInsidePattern; PatternRequiresContexts; NoMatchOutsidePattern
+          UndeclaredTypeScope; NoFromArray; InvalidCollectionSpread; UnionWithTwoRests; ProtectedShape; PatternInsidePattern; PatternRequiresContexts; NoMatchOutsidePattern; PatternArguments
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

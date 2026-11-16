@@ -4,15 +4,12 @@ description: "Reusable pattern-matching logic with the pattern keyword"
 order: 13
 ---
 
-> **Being built.** The design below is decided ([#1719](https://github.com/nanyx-lang/nanyx/issues/1719)). Total
-> and partial patterns work, and the examples of them on this page run as tests. Patterns with arguments are still
-> to come ([#1723](https://github.com/nanyx-lang/nanyx/issues/1723)).
-
 The `pattern` keyword allows for the encapsulation of matching logic in reusable components.
 
 A custom pattern is a function with a signature but no name: it is identified by the tags it returns. Its tags are
 **capitalised** (`#Even`, `#Hsl`), which is what tells them apart from ordinary tags: a capitalised tag is always a
-custom pattern, and one that names no pattern in scope is an error.
+custom pattern, and one that names no pattern in scope is an error ([`NYX0118`](../standard-tools/errors#nyx0118)), with a
+fix that writes it in lower case.
 
 The function body contains the logic for matching and extracting values, and returns one of the tags in the pattern's
 signature. As with tags elsewhere in the language, they can carry payloads, which are then bound in the match arm.
@@ -21,7 +18,7 @@ signature. As with tags elsewhere in the language, they can carry payloads, whic
 
 A pattern is a top-level declaration, like a `def`. `export pattern ...` shares it, and importing its module brings
 it into scope. Two patterns in scope that return the same tag are an error, as two imports of the same name are,
-since a match couldn't tell which one to run.
+since a match couldn't tell which one to run ([`NYX0119`](../standard-tools/errors#nyx0119)).
 
 # Patterns are pure
 
@@ -155,50 +152,86 @@ Patterns can also take arguments: values passed in where the pattern is used. A 
 `<args> -> <input> -> <output>`, and its body is curried: given the arguments, it returns a function of the input.
 Work that depends only on the arguments can then be done once, outside the part that runs for each input.
 
-```nanyx fragment
+```nanyx
 pattern string -> string -> #StartsWith | _ = { prefix ->
   { s -> s \string.startsWith(prefix) }
 }
 
-match url
-  | #StartsWith("https://") -> "secure"
-  | _ -> "not secure"
+def security = { (url: string) ->
+  match url
+    | #StartsWith("https://") -> "secure"
+    | _ -> "not secure"
+}
+
+println(security("https://nanyx.dev"))
+-- secure
 ```
 
 At the use site, a pattern with arguments takes two parenthesised groups: the arguments first, then the payload to
 destructure. When the pattern's result tag carries no payload, the second group is left out, as in
 `#StartsWith(...)` above. The compiler knows which patterns take arguments from their declarations, so there is no
-ambiguity with an ordinary tag such as `#circle(r)`, whose single group is always a payload.
+ambiguity with an ordinary tag such as `#circle(r)`, whose single group is always a payload. A pattern used with
+arguments it doesn't take, or without those it does, is an error ([`NYX0264`](../standard-tools/errors#nyx0264)), and
+arguments of the wrong type are a type mismatch ([`NYX0201`](../standard-tools/errors#nyx0201)).
 
-```nanyx fragment
+```nanyx
 -- A pattern that splits a string in two on a separator
 pattern string -> string -> #SplitOn(string, string) | _ = { separator ->
   { s ->
-    match s \split(on = separator)
+    match s \string.split(on = separator)
       | [a, b] -> #SplitOn(a, b)
       | _ -> _
   }
 }
 
 match "hello,world"
-  | #SplitOn(",")(first, second) -> "First: {first}, Second: {second}"
-  | _ -> "Input string does not contain exactly one comma"
+  | #SplitOn(",")(first, second) -> println("First: {first}, Second: {second}")
+  | _ -> println("Input string does not contain exactly one comma")
+
+-- First: hello, Second: world
 ```
 
-Several arguments are a tuple: `pattern (int, int) -> int -> #Between | _`. A pattern with arguments runs once per
-argument list the compiler can see is the same (literals, or the same names), and otherwise once per arm that uses
-it; since patterns are pure, the difference can't be observed.
+Several arguments are a tuple, and an argument may be any expression:
+
+```nanyx
+pattern int, int -> int -> #Between | _ = { low, high ->
+  { n -> n >= low and n <= high }
+}
+
+def size = { (n: int), (limit: int) ->
+  match n
+    | #Between(0, limit / 2) -> "small"
+    | #Between(limit / 2 + 1, limit) -> "big"
+    | _ -> "out of range"
+}
+
+println(size(8, 10))
+-- big
+```
+
+A pattern with arguments runs once per argument list the compiler can see is the same (literals, or the same names),
+and otherwise once per arm that uses it; since patterns are pure, the difference can't be observed.
 
 Patterns compose with `&`, which matches only when both sides do:
 
-```nanyx fragment
+```nanyx
 pattern int -> int -> #DivisibleBy | _ = { divisor ->
   { n -> n % divisor == 0 }
 }
 
-match n
-  | #DivisibleBy(3) & #DivisibleBy(5) -> "fizzbuzz"
-  | #DivisibleBy(3) -> "fizz"
-  | #DivisibleBy(5) -> "buzz"
-  | _ -> n \toString
+def fizzbuzz = { (n: int) ->
+  match n
+    | #DivisibleBy(3) & #DivisibleBy(5) -> "fizzbuzz"
+    | #DivisibleBy(3) -> "fizz"
+    | #DivisibleBy(5) -> "buzz"
+    | _ -> "{n}"
+}
+
+for 1..5 | n -> println(fizzbuzz(n))
+
+-- 1
+-- 2
+-- fizz
+-- 4
+-- buzz
 ```
