@@ -456,6 +456,22 @@ On the examples that compile (blocks allocated, and the heap's peak in bytes):
   variable that dies at a tail call is dropped before the call, and an argument the caller owns is passed owned:
   if the callee only borrowed it, the caller would have to outlive the call.
 
+## Planned: more borrowing
+
+Decided by the maintainer; not built yet.
+
+- **A closure's environment is borrowed** ([#1298](https://github.com/nanyx-lang/nanyx/issues/1298)). Today a
+  function called through a closure owns all its parameters, the environment among them, so a closure called in a
+  loop is counted up and down at every call. Each lifted function gets a second, borrowing entry, used wherever the
+  caller holds the closure past the call; the owning entry stays for a tail call of a closure that dies there, so the
+  tail-call guarantee above holds. Dead-code removal drops the entry nothing calls.
+- **A function that only reads what it matches borrows it** ([#1468](https://github.com/nanyx-lang/nanyx/issues/1468)),
+  inferred as Lean 4 does. A matched parameter is borrowed when no arm can reuse its cell (none allocates a block of
+  that size) and nothing bound from it is taken over except by a call that borrows it in turn, the function's own
+  tail call included; names bound out of a borrowed value are borrowed too. So a sum or an evaluator over a shared
+  list or tree counts nothing. The cost accepted: a fold over a list held once no longer frees each cell as it
+  passes it, which doesn't change peak memory, since the list was built whole first.
+
 # Open questions
 
 - **Code size.** Monomorphisation multiplies generic functions; how much does that grow the examples, and when
