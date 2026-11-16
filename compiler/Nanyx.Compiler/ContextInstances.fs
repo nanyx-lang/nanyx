@@ -142,42 +142,6 @@ let private canSynthesize (ctxName: Identifier) (argTys: Ty list) =
     | forType :: _ -> not (List.isEmpty (attachedTypeNames forType)) || (NoneDefault.tryDefinitions ctxName argTys).IsSome
     | [] -> false
 
-/// The instance of `ctxName` applied to `argTys` built from the definitions attached to the type it is for, its first
-/// argument, as `Point.0` and `Point.+` make a `Sum(Point)`, or from the prelude's for the `Default` of
-/// `#some(a) | #none`: each member's name and the definition it is. The definitions' types must be the members' types,
-/// which settles any other argument still open. `calleeName` requires the context at `span`.
-let private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: Identifier) (ctxName: Identifier) (argTys: Ty list) (span: SourceSpan) : Result<(string * string) list * InferState, Diagnostic list> =
-    let ctxText = $"""{ctxName}({argTys |> List.map Unifier.tyToString |> String.concat ", "})"""
-    let requirer = InterpolationHoles.requirer calleeName argTys
-    let fail message = Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
-    match argTys, contextMemberTypes state ctxName argTys with
-    | forType :: _, Some members ->
-        // The name a definition for the type is attached under: `Point`, `Money`, `int`.
-        let attachTo = attachedTypeNames forType |> List.tryHead |> Option.defaultValue (Unifier.tyToString forType)
-        let definitionOf memberName =
-            match NoneDefault.tryDefinitions ctxName argTys with
-            | Some definitions -> definitions |> List.tryFind (fst >> (=) memberName) |> Option.map snd |> Option.filter (fun name -> (TypeEnv.tryFind name env).IsSome)
-            | None -> tryResolveAttachedFunction env forType memberName
-        let found = members |> List.map (fun (memberName, memberTy) -> memberName, memberTy, definitionOf memberName)
-        match found |> List.filter (fun (_, _, definition) -> definition.IsNone) |> List.map (fun (memberName, _, _) -> $"'{attachTo}.{memberName}'") with
-        | [] ->
-            found
-            |> List.fold (fun result (memberName, memberTy, definition) ->
-                result
-                |> Result.bind (fun (bound, current: InferState) ->
-                    let definition = definition.Value
-                    let definitionTy, next = instantiate current (TypeEnv.tryFind definition env).Value
-                    // An error earlier in the module is set aside (see `Unifier.agreeing`).
-                    match Unifier.unify ((memberTy, definitionTy, Equal, span) :: Unifier.agreeing next.Constraints) with
-                    | Ok _ -> Ok (bound @ [ memberName, definition ], addConstraintAt span memberTy definitionTy next)
-                    | Error _ ->
-                        fail $"{requirer} requires the context '{ctxText}', but '{definition}' has the type '{Unifier.tyToString (resolveSoFar next definitionTy)}', where '{memberName}' must be '{Unifier.tyToString (resolveSoFar next memberTy)}'")) (Ok ([], state))
-        | _ when InterpolationHoles.isHole calleeName -> fail (InterpolationHoles.noInstance forType)
-        | missing ->
-            let notDefined = if missing.Length = 1 then "is not defined: define it" else "are not defined: define them"
-            fail $"{requirer} requires the context '{ctxText}', which is not loaded here, and {Diagnostics.listed missing} {notDefined}, or load an instance with `use`"
-    | _ -> fail $"{requirer} requires the context '{ctxText}', which is not loaded here: load an instance with `use`"
-
 /// The type of each of `args`, the arguments of a parameterised context a function requires, at a call where the
 /// function has the type `calleeTy`. `signature` is the type the function declares, which `args` name its type
 /// variables from; it is read afresh, and is the callee's type at the call. Without one, the type variables are
@@ -366,72 +330,6 @@ let private derivedInstance
         | StructuralInstances.HoldsFunction held -> [ missingContext (InterpolationHoles.holdsFunction calleeName argTys held) ]
         | StructuralInstances.OpenToCaller -> [ missingContext (InterpolationHoles.openToCaller calleeName argTys.Head annotatedDef) ]))
 
-/// Whether the type an instance of `ctxName` at `argTys` is for, its first argument, has an instance of its own, which no
-/// `use` can replace: one built from its attached definitions, derived from its parts, or the compiler's own. A type
-/// with variables in it has none of its own, since what the variables are is not decided where the `use` is. `call`
-/// and `span` are the `use`'s, which nothing is recorded for: what finding the instance would add is dropped.
-let private hasOwnInstance (env: TypeEnv) (state: InferState) (call: NodeId) (span: SourceSpan) (ctxName: Identifier) (argTys: Ty list) : bool =
-    match argTys with
-    | forType :: _ when (TypeEnv.freeTyVars forType).IsEmpty ->
-        match wellKnownInstanceAtCall env ctxName argTys (fun _ -> false) with
-        | Some (_, (WellKnownContexts.Attached | WellKnownContexts.BuiltIn)) -> true
-        | Some _ -> false
-        | None ->
-            (ctxName = InterpolationHoles.context && InterpolationHoles.hasBuiltInInstance forType)
-            || InterpolationHoles.passesBuiltIn env ctxName argTys
-            || (derivedInstance env state Set.empty (fun _ -> None) None ctxName call span ctxName argTys |> Option.exists Result.isOk)
-            || (canSynthesize ctxName argTys && synthesizeInstance env state ctxName ctxName argTys span |> Result.isOk)
-    | _ -> false
-
-/// What a type's own instance of `ctxName` is called in the error for a `use` that would replace it: the member, for a
-/// context of one, and the context's name for any other.
-let private ownInstanceText (state: InferState) (ctxName: Identifier) (argTys: Ty list) =
-    match contextMemberTypes state ctxName argTys with
-    | Some [ memberName, _ ] -> $"`{memberName}`"
-    | _ -> $"its own {ctxName}"
-
-/// What else to do for a different instance of `ctxName` than a type's own, in the error for a `use` that would replace it.
-let private ownInstanceAdvice (ctxName: Identifier) =
-    if ctxName = EqualityOperators.context then
-        "For a different equality, wrap the value in a protected type with its own `==`, or pass the comparison to a `...By` function"
-    elif ctxName = WellKnownContexts.ordering.Context then
-        "For a different order, wrap the value in a protected type with its own `compare`, or pass the comparison to a `...By` function"
-    elif ctxName = WellKnownContexts.hashing.Context then
-        "For a different hash, wrap the value in a protected type with its own `==` and `hash`"
-    elif ctxName = InterpolationHoles.context then
-        "To write it differently, call a function in the hole, or wrap the value in a protected type with its own `toString`"
-    else
-        $"For a different {ctxName}, wrap the value in a protected type with its own definitions"
-
-/// The errors for `value`, loaded with `use` into `env` to give `withUse`, for each instance it loads for a type that has
-/// its own (see `hasOwnInstance`): a `use` can't replace a type's own instance, so `1 == 2` reads `int`'s `==`
-/// wherever it is written, and a set built in one place is read with the same `Hash` in another.
-let internal ownInstanceErrors (env: TypeEnv) (withUse: TypeEnv) (state: InferState) (value: Expression) : Diagnostic list =
-    withUse.Instances
-    |> List.filter (fun instance -> not (env.Instances |> List.contains instance))
-    |> List.choose (fun instance ->
-        match resolveSoFar state instance.Context with
-        | TyApply(ctxName, (forType :: _ as argTys)) when hasOwnInstance env state value.Id value.Span ctxName argTys ->
-            let message =
-                $"'{WellKnownContexts.display forType}' already has {ownInstanceText state ctxName argTys}: a `use` can't replace it. {ownInstanceAdvice ctxName}"
-            Some (Diagnostics.at DiagnosticCodes.OwnInstanceReplaced value.Span message)
-        | _ -> None)
-    |> List.distinctBy _.Message
-
-/// The instance of the well-known context `wellKnown` the operator `op` at `span` reads on values of a type, other than
-/// the compiler's own (see `WellKnownContexts.InstanceOf`): one in scope, or else one built from the member attached to
-/// a type that is not a built-in one (see `WellKnownContexts.isBuiltIn`).
-let internal wellKnownInstance (wellKnown: WellKnownContexts.WellKnownContext) (op: string) (span: SourceSpan) : WellKnownContexts.InstanceOf = fun env state ty ->
-    match instanceInScope env state wellKnown.Context [ ty ] with
-    | Some inScope -> Ok (Some (InstanceInScope inScope), state)
-    | None when not (WellKnownContexts.isBuiltIn ty) && (tryResolveAttachedFunction env ty wellKnown.Member).IsSome ->
-        synthesizeInstance env state op wellKnown.Context [ ty ] span
-        |> Result.map (fun (members, next) -> Some (InstanceSynthesized members), next)
-    | None -> Ok (None, state)
-
-/// The instance of `Ord` the ordering operator `op` at `span` reads (see `wellKnownInstance`).
-let internal orderingInstance (op: string) (span: SourceSpan) = wellKnownInstance WellKnownContexts.ordering op span
-
 /// The definition `qualifier.field` names, as `math.max` or `int.toString` do, with its scheme: none when it reads a
 /// field of the value `qualifier`. A value named as a built-in type, as `list` in `{ list -> list.length }`, is not
 /// the type.
@@ -454,12 +352,63 @@ let private unsettledBesideOther (name: Identifier) (ctxName: Identifier) (other
     Diagnostics.at DiagnosticCodes.MissingContextMembers span
         $"'{name}' requires the context '{ctxName}' at a type nothing here settles, and the instance in scope is a '{Unifier.tyToString other}': write the type the call gives, or load an instance of '{ctxName}' for it with `use`"
 
+/// The instance of `ctxName` applied to `argTys` built from the definitions attached to the type it is for, its first
+/// argument, as `Point.0` and `Point.+` make a `Sum(Point)`, or from the prelude's for the `Default` of
+/// `#some(a) | #none`: each member's name and the definition it is. The definitions' types must be the members' types,
+/// which settles any other argument still open. `calleeName` requires the context at `span`. A context of one member
+/// whose definition requires parameterised contexts of its own, as `Queue.==` requires `Eq(a)`, is that definition
+/// passed the instances a call to it at the member's type finds (`InstanceDerived`), as an instance derived from a
+/// type's parts is.
+let rec private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: Identifier) (ctxName: Identifier) (argTys: Ty list) (span: SourceSpan) : Result<ContextInstance * InferState, Diagnostic list> =
+    let ctxText = $"""{ctxName}({argTys |> List.map Unifier.tyToString |> String.concat ", "})"""
+    let requirer = InterpolationHoles.requirer calleeName argTys
+    let fail message = Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
+    match argTys, contextMemberTypes state ctxName argTys with
+    | forType :: _, Some members ->
+        // The name a definition for the type is attached under: `Point`, `Money`, `int`.
+        let attachTo = attachedTypeNames forType |> List.tryHead |> Option.defaultValue (Unifier.tyToString forType)
+        let definitionOf memberName =
+            match NoneDefault.tryDefinitions ctxName argTys with
+            | Some definitions -> definitions |> List.tryFind (fst >> (=) memberName) |> Option.map snd |> Option.filter (fun name -> (TypeEnv.tryFind name env).IsSome)
+            | None -> tryResolveAttachedFunction env forType memberName
+        let found = members |> List.map (fun (memberName, memberTy) -> memberName, memberTy, definitionOf memberName)
+        match found |> List.filter (fun (_, _, definition) -> definition.IsNone) |> List.map (fun (memberName, _, _) -> $"'{attachTo}.{memberName}'") with
+        | [] ->
+            found
+            |> List.fold (fun result (memberName, memberTy, definition) ->
+                result
+                |> Result.bind (fun (bound, current: InferState) ->
+                    let definition = definition.Value
+                    let definitionTy, next = instantiate current (TypeEnv.tryFind definition env).Value
+                    // An error earlier in the module is set aside (see `Unifier.agreeing`).
+                    match Unifier.unify ((memberTy, definitionTy, Equal, span) :: Unifier.agreeing next.Constraints) with
+                    | Ok _ -> Ok (bound @ [ memberName, definition, definitionTy ], addConstraintAt span memberTy definitionTy next)
+                    | Error _ ->
+                        fail $"{requirer} requires the context '{ctxText}', but '{definition}' has the type '{Unifier.tyToString (resolveSoFar next definitionTy)}', where '{memberName}' must be '{Unifier.tyToString (resolveSoFar next memberTy)}'")) (Ok ([], state))
+            |> Result.bind (fun (bound, next) ->
+                let synthesized = InstanceSynthesized (bound |> List.map (fun (memberName, definition, _) -> memberName, definition))
+                match bound with
+                | [ memberName, definition, definitionTy ] ->
+                    // The contexts the definition requires are found as for a call to it, at a node of their own.
+                    let at = Expression.at span (IdentifierExpr definition)
+                    resolveInstancesAt false env next at definition (Some definitionTy) span
+                    |> Result.map (fun next ->
+                        let foundLater = next.PendingContextInstances |> List.exists (fun pending -> pending.Call = at.Id)
+                        if next.ContextInstances.ContainsKey at.Id || foundLater then InstanceDerived(memberName, definition, at.Id), next
+                        else synthesized, next)
+                | _ -> Ok (synthesized, next))
+        | _ when InterpolationHoles.isHole calleeName -> fail (InterpolationHoles.noInstance forType)
+        | missing ->
+            let notDefined = if missing.Length = 1 then "is not defined: define it" else "are not defined: define them"
+            fail $"{requirer} requires the context '{ctxText}', which is not loaded here, and {Diagnostics.listed missing} {notDefined}, or load an instance with `use`"
+    | _ -> fail $"{requirer} requires the context '{ctxText}', which is not loaded here: load an instance with `use`"
+
 /// Finds where `call`, the node where `name` is called at the type `calleeTy` (or, when `reference`, named as a value
 /// of that type), finds each parameterised context the callee requires (see `TypedModule.ContextInstances`), once its
 /// arguments have settled what the context is for. A context for a type inference has not worked out yet is left to
 /// be found by its members' names, as one that is not parameterised is. A function named as a value whose type is not
 /// settled there finds no instance, and is not an error (see `resolveReferenceInstances`).
-let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeTy: Ty option) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
+and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeTy: Ty option) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
     let contexts = contextRequirementsOf env state name |> Option.defaultValue []
     match TypeEnv.tryFind name env, calleeTy with
     | Some scheme, Some calleeTy when contexts |> List.exists (isParameterizedContext state) ->
@@ -545,7 +494,7 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                         Ok (found @ [ Some (InstanceSynthesized InterpolationHoles.builtInMembers) ], current)
                     | None, None when canSynthesize ctxName argTys ->
                         synthesizeInstance env current name ctxName argTys calleeSpan
-                        |> Result.map (fun (members, next) -> found @ [ Some (InstanceSynthesized members) ], next)
+                        |> Result.map (fun (instance, next) -> found @ [ Some instance ], next)
                     | None, None when InterpolationHoles.isHole name ->
                         InterpolationHoles.resolveLater env current call ctxName argTys calleeSpan found contexts.Length
                     | None, None ->
@@ -590,6 +539,72 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
             if found |> List.forall Option.isNone then current
             else { current with ContextInstances = current.ContextInstances |> Map.add call.Id found })
     | _ -> Ok state
+
+/// Whether the type an instance of `ctxName` at `argTys` is for, its first argument, has an instance of its own, which no
+/// `use` can replace: one built from its attached definitions, derived from its parts, or the compiler's own. A type
+/// with variables in it has none of its own, since what the variables are is not decided where the `use` is. `call`
+/// and `span` are the `use`'s, which nothing is recorded for: what finding the instance would add is dropped.
+let private hasOwnInstance (env: TypeEnv) (state: InferState) (call: NodeId) (span: SourceSpan) (ctxName: Identifier) (argTys: Ty list) : bool =
+    match argTys with
+    | forType :: _ when (TypeEnv.freeTyVars forType).IsEmpty ->
+        match wellKnownInstanceAtCall env ctxName argTys (fun _ -> false) with
+        | Some (_, (WellKnownContexts.Attached | WellKnownContexts.BuiltIn)) -> true
+        | Some _ -> false
+        | None ->
+            (ctxName = InterpolationHoles.context && InterpolationHoles.hasBuiltInInstance forType)
+            || InterpolationHoles.passesBuiltIn env ctxName argTys
+            || (derivedInstance env state Set.empty (fun _ -> None) None ctxName call span ctxName argTys |> Option.exists Result.isOk)
+            || (canSynthesize ctxName argTys && synthesizeInstance env state ctxName ctxName argTys span |> Result.isOk)
+    | _ -> false
+
+/// What a type's own instance of `ctxName` is called in the error for a `use` that would replace it: the member, for a
+/// context of one, and the context's name for any other.
+let private ownInstanceText (state: InferState) (ctxName: Identifier) (argTys: Ty list) =
+    match contextMemberTypes state ctxName argTys with
+    | Some [ memberName, _ ] -> $"`{memberName}`"
+    | _ -> $"its own {ctxName}"
+
+/// What else to do for a different instance of `ctxName` than a type's own, in the error for a `use` that would replace it.
+let private ownInstanceAdvice (ctxName: Identifier) =
+    if ctxName = EqualityOperators.context then
+        "For a different equality, wrap the value in a protected type with its own `==`, or pass the comparison to a `...By` function"
+    elif ctxName = WellKnownContexts.ordering.Context then
+        "For a different order, wrap the value in a protected type with its own `compare`, or pass the comparison to a `...By` function"
+    elif ctxName = WellKnownContexts.hashing.Context then
+        "For a different hash, wrap the value in a protected type with its own `==` and `hash`"
+    elif ctxName = InterpolationHoles.context then
+        "To write it differently, call a function in the hole, or wrap the value in a protected type with its own `toString`"
+    else
+        $"For a different {ctxName}, wrap the value in a protected type with its own definitions"
+
+/// The errors for `value`, loaded with `use` into `env` to give `withUse`, for each instance it loads for a type that has
+/// its own (see `hasOwnInstance`): a `use` can't replace a type's own instance, so `1 == 2` reads `int`'s `==`
+/// wherever it is written, and a set built in one place is read with the same `Hash` in another.
+let internal ownInstanceErrors (env: TypeEnv) (withUse: TypeEnv) (state: InferState) (value: Expression) : Diagnostic list =
+    withUse.Instances
+    |> List.filter (fun instance -> not (env.Instances |> List.contains instance))
+    |> List.choose (fun instance ->
+        match resolveSoFar state instance.Context with
+        | TyApply(ctxName, (forType :: _ as argTys)) when hasOwnInstance env state value.Id value.Span ctxName argTys ->
+            let message =
+                $"'{WellKnownContexts.display forType}' already has {ownInstanceText state ctxName argTys}: a `use` can't replace it. {ownInstanceAdvice ctxName}"
+            Some (Diagnostics.at DiagnosticCodes.OwnInstanceReplaced value.Span message)
+        | _ -> None)
+    |> List.distinctBy _.Message
+
+/// The instance of the well-known context `wellKnown` the operator `op` at `span` reads on values of a type, other than
+/// the compiler's own (see `WellKnownContexts.InstanceOf`): one in scope, or else one built from the member attached to
+/// a type that is not a built-in one (see `WellKnownContexts.isBuiltIn`).
+let internal wellKnownInstance (wellKnown: WellKnownContexts.WellKnownContext) (op: string) (span: SourceSpan) : WellKnownContexts.InstanceOf = fun env state ty ->
+    match instanceInScope env state wellKnown.Context [ ty ] with
+    | Some inScope -> Ok (Some (InstanceInScope inScope), state)
+    | None when not (WellKnownContexts.isBuiltIn ty) && (tryResolveAttachedFunction env ty wellKnown.Member).IsSome ->
+        synthesizeInstance env state op wellKnown.Context [ ty ] span
+        |> Result.map (fun (instance, next) -> Some instance, next)
+    | None -> Ok (None, state)
+
+/// The instance of `Ord` the ordering operator `op` at `span` reads (see `wellKnownInstance`).
+let internal orderingInstance (op: string) (span: SourceSpan) = wellKnownInstance WellKnownContexts.ordering op span
 
 /// `state` without the calls left to find their instances later (see `PendingContextInstance`) that were left between
 /// `before` and `firstPass`, when an expression inferred again since has left the same ones again: a pipe's value, which
@@ -699,7 +714,7 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
                 Some (synthesizeInstance env current pending.Callee pending.Context argTys pending.Span)
             else None
         let synthesize env =
-            derived env |> Option.orElseWith (fun () -> attached env |> Option.map (Result.map (fun (members, next) -> InstanceSynthesized members, next)))
+            derived env |> Option.orElseWith (fun () -> attached env)
         if InterpolationHoles.isHole pending.Callee then
             Some (InterpolationHoles.resolvePending (fun env -> instanceInScope env current) synthesize defScheme current pending argTys)
         elif EqualityOperators.isPending pending then
@@ -814,6 +829,6 @@ let internal synthesizeSettledInstances (env: TypeEnv) (state: InferState) (name
             // one may be a union rest the unifier made up, which is numbered afresh each time the constraints are solved.
             let argTys = resolveSoFar current pending.ArgTys.Head :: pending.ArgTys.Tail
             synthesizeInstance env current pending.Callee pending.Context argTys pending.Span
-            |> Result.map (fun (members, next) ->
-                { next with ContextInstances = ContextInference.withInstance pending (InstanceSynthesized members) next.ContextInstances })))
+            |> Result.map (fun (instance, next) ->
+                { next with ContextInstances = ContextInference.withInstance pending instance next.ContextInstances })))
         (Ok { state with PendingContextInstances = others })

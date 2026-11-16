@@ -120,7 +120,10 @@ passes the instance the type checker found for it there, as a call to a top-leve
   type variables (`localContexts` in `CodeGen.fs`). A function generic in variables of its own has a closure for each
   type it is used at (`GenericLocal`), each taking the members of the instances at that type. A call to the function
   finds each context where the type checker found it at the call, by its place among those the type writes
-  (`CoreIrLowerInstances.foundAt`): an instance built from attached definitions, one derived from a type's parts, or
+  (`CoreIrLowerInstances.foundAt`): an instance built from attached definitions (one whose single member requires
+  contexts of its own, as `Queue.==` requires `Eq(a)`, is an `InstanceDerived` whose instances the type checker finds
+  as for a call to the definition, `ContextInstances.synthesizeInstance`,
+  [#1668](https://github.com/nanyx-lang/nanyx/issues/1668)), one derived from a type's parts, or
   one in scope, such as the def around the call's own or a `use`'s. In its body, the function has each member by the
   key the type writes too (`Show_b_show`), or that the type checker writes for one it inferred
   (`TypedModule.LocalContexts`), which the calls in it find it by. Inlining makes these members direct calls
