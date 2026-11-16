@@ -1,0 +1,59 @@
+---
+title: "Refactorings"
+description: "Editor tools for changing programs safely: rename, extract, inline, selection and more"
+order: 32
+---
+
+Nanyx should have the best editing experience we can manage, and that means the editor giving people the tools to
+change a program without breaking it. This workstream is those tools: rename, expand and shrink selection, extract
+and inline, and the small rewrites that save typing. Its issues carry the
+[`refactoring`](https://github.com/nanyx-lang/nanyx/labels/refactoring) label and the Refactoring stream on the
+[project](https://github.com/orgs/nanyx-lang/projects/1).
+
+# Where we are
+
+The language server offers go to definition, find references within a document, hover, inlay hints, completion,
+semantic tokens, formatting, and quick fixes from diagnostics ([Language server and editor](./language-server)). There
+are no refactorings yet: no rename, no selection ranges, and code actions are quick fixes only.
+
+# How a refactoring is built
+
+- **In the compiler, not the server.** A refactoring is a function in the compiler from a checked module (or the
+  parser's syntax tree, for one that needs no types) and a position or selection to a list of `TextEdit`s, as a
+  diagnostic's `Fix` already is (`Diagnostics.Fix`). The language server only lists what's available at the
+  selection and applies the edits. So every refactoring is tested in F#, without an editor, and could be offered
+  from the CLI too.
+- **It never changes what the program means.** Each refactoring states when it's refused, and refuses with a reason
+  rather than producing code that type-checks differently: a name that would be shadowed, a cell assigned in between,
+  a workflow keyword whose meaning depends on its block. Its tests include the refusals.
+- **Its output is formatted.** Edits are laid out as the formatter would lay out the result, so applying a
+  refactoring never leaves code `nanyx format` would change.
+- **Code action kinds** are the standard ones, so editors put them in the usual menus: `refactor.extract` (introduce
+  local, introduce function), `refactor.inline`, `refactor.rewrite` (write the inferred type, call and pipe), and
+  `source.organizeImports`. Rename and selection ranges have their own LSP requests.
+- **A new name starts a rename.** A refactoring that invents a name (introduce local, introduce function) leaves the
+  cursor on it, ready to rename.
+
+# Starter issues
+
+| Refactoring | Issue |
+|---|---|
+| Rename a symbol | [#1534](https://github.com/nanyx-lang/nanyx/issues/1534) |
+| Expand and shrink selection | [#1535](https://github.com/nanyx-lang/nanyx/issues/1535) |
+| Introduce local | [#1536](https://github.com/nanyx-lang/nanyx/issues/1536) |
+| Introduce function | [#1537](https://github.com/nanyx-lang/nanyx/issues/1537) |
+| Inline a local or a function | [#1538](https://github.com/nanyx-lang/nanyx/issues/1538) |
+| Write the inferred type | [#1539](https://github.com/nanyx-lang/nanyx/issues/1539) |
+| Convert between a call and a pipe | [#1540](https://github.com/nanyx-lang/nanyx/issues/1540) |
+| Organise imports | [#1541](https://github.com/nanyx-lang/nanyx/issues/1541) |
+
+Expand and shrink selection needs only the syntax tree, so it's the natural first one. Rename across files depends on
+finding uses across the workspace ([#877](https://github.com/nanyx-lang/nanyx/issues/877), which needs a decision).
+
+# Ideas for later
+
+- Change a def's signature: add, remove or reorder parameters, updating every call.
+- Move a def to another module, updating imports.
+- Convert a match to an `if` and back; add the missing arms of a match.
+- Extract a type alias from a written type; turn a structural type into a protected one.
+- Rename a module or file and update every import.

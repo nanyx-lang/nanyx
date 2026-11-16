@@ -22,6 +22,7 @@ the backlog: work is taken from Next first.
 | Language server and editor | [Language server and editor](./language-server) | [`lsp`](https://github.com/nanyx-lang/nanyx/labels/lsp) |
 | Packaging | [Packaging](./packaging) | [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packaging) |
 | Formatter | [Formatter](./formatter) | [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) |
+| Refactorings | [Refactorings](./refactorings) | [`refactoring`](https://github.com/nanyx-lang/nanyx/labels/refactoring) |
 | Code quality | [Code quality](./code-quality) | [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) |
 
 [The parser](./parser) proposes moving the parser to a lexer and a hand-written parser, in stages.
