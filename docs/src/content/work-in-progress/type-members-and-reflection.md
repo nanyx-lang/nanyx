@@ -194,7 +194,7 @@ This is the implicit counterpart of a type argument, as Haskell's `Typeable` is 
 
 - **It stays static.** The compiler builds the instance where `a` is concrete, so after monomorphisation `typeOf` is a constant, as an explicit `type Point` is.
 - **An explicit `use` can't make it lie.** An explicit `use` overrides a synthesised context as usual, but the only way to make a `Type(a)` is to write `type X` with `X` equal to `a`. An override can only supply the description the compiler would have built, so `Typed` needs no rule against overriding.
-- **It is a value, not a function.** Context members can be values, as `` `0`: a `` is in `Sum`. A function that takes `()` would add nothing, since its result can never change.
+- **It is a value, not a function.** Context members can be values, as `zero: a` is in `Sum`. A function that takes `()` would add nothing, since its result can never change.
 - **It doesn't replace type arguments.** In `[Typed(a)] string -> a`, nothing at the call site fixes `a`, so the ambiguity in [types only in output position](#types-only-in-output-position) remains. `Typed` helps only where a value of type `a` is passed in.
 - **The walker stays explicit.** When `encodeAt` recurses into a record's fields, each field's type is one the checker never learns, so there is no `Typed` instance for it; only `f.type`. A library therefore takes `Typed(a)` in its public function and passes the type explicitly in the code that walks it, as `encode` and `encodeAt` do above.
 
