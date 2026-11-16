@@ -14,11 +14,14 @@ and inline, and the small rewrites that save typing. Its issues carry the
 
 The language server offers go to definition, find references within a document, hover, inlay hints, completion,
 semantic tokens, formatting, and quick fixes from diagnostics ([Language server and editor](./language-server)).
-Expand and shrink selection is done. There is no rename yet, and code actions are quick fixes only.
+Expand and shrink selection and writing the inferred type are done. There is no rename yet.
 
 Refactorings live in the compiler's `Refactorings/` folder, one file each, after the editor features they build on
 (`Outline.fs`), in the namespace `NyxCompiler.Refactorings`. Their tests are in `Features/Refactorings/` of the
-compiler's tests, and the language server's handler for each in `Handlers/`.
+compiler's tests. `Refactoring.fs` holds what they share: a `Refactoring` is a title, a `RefactoringKind` (the code
+action kind) and its edits, and an `Offer` is one that is `Available` or `Refused` with its reason. The language
+server's `CodeActionHandler` lists the offers at the start of the requested range as code actions, a refused one
+disabled with its reason, so the editor shows why; selection ranges have a handler of their own.
 
 ## Expand and shrink selection
 
@@ -31,6 +34,16 @@ sorted by size and each is kept only if it holds the one before and is larger, s
 child spans is left out, and nodes the compiler made up, whose spans can overlap, never break the chain. Module
 blocks come from the parser's list of them, and the whole file ends the chain. Comments and whitespace belong to no
 node, so at one the chain starts at the smallest node around it.
+
+## Write the inferred type
+
+`WriteInferredType.at` is offered on the name of a def, top-level or local, or a lambda parameter that writes no
+type. It writes the annotation the type hints carry (`TypeHints`), so the code action and double-clicking an inlay hint
+write the same thing: `Source` notation, the contexts first (`def add: [Add(a)] a, a -> a`), a function parameter's
+type bracketed, and after the contexts where the def writes only those. Each type and context is named as the file
+writes it (`Signatures.writable`): an alias keeps its name, and a type imported under an alias is written through it
+(`s.Circle`). The official linter's `unannotatedExports` fix writes the same. It is refused on a pattern variable, a
+name a destructuring def binds, and a type with a part that failed to check. Its tests compile the result again.
 
 # How a refactoring is built
 
@@ -59,7 +72,7 @@ node, so at one the chain starts at the smallest node around it.
 | Introduce local | [#1536](https://github.com/nanyx-lang/nanyx/issues/1536) |
 | Introduce function | [#1537](https://github.com/nanyx-lang/nanyx/issues/1537) |
 | Inline a local or a function | [#1538](https://github.com/nanyx-lang/nanyx/issues/1538) |
-| Write the inferred type | [#1539](https://github.com/nanyx-lang/nanyx/issues/1539) |
+| Write the inferred type (done) | [#1539](https://github.com/nanyx-lang/nanyx/issues/1539) |
 | Convert between a call and a pipe | [#1540](https://github.com/nanyx-lang/nanyx/issues/1540) |
 | Organise imports | [#1541](https://github.com/nanyx-lang/nanyx/issues/1541) |
 

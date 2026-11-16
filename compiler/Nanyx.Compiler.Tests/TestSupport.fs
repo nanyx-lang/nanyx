@@ -131,11 +131,14 @@ let compileImportingAll (modules: (string * string) list) (mainSource: string) =
         result <- Compiler.compileFile mainPath)
     result
 
-/// `source` with the edits of `fix` applied.
-let applyFix (source: string) (fix: Fix) =
-    fix.Edits
+/// `source` with `edits` applied.
+let applyEdits (source: string) (edits: TextEdit list) =
+    edits
     |> List.sortByDescending (fun edit -> edit.Span.Start)
     |> List.fold (fun (text: string) edit -> text.Substring(0, edit.Span.Start) + edit.NewText + text.Substring(edit.Span.End)) source
+
+/// `source` with the edits of `fix` applied.
+let applyFix (source: string) (fix: Fix) = applyEdits source fix.Edits
 
 /// `source` with the edits of the only fix of the only diagnostic `compileWithOfficial` gives for it applied.
 let fixed' (source: string) =
