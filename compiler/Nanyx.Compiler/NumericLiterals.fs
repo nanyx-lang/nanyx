@@ -22,32 +22,70 @@ module internal NumericLiterals =
         | IntLit _
         | FloatLit _ ->
             let ty, next = freshVar state
-            let recorded = { Type = ty; Value = literal; At = span; Node = node }
+            let recorded = { Type = ty; Value = literal; At = span; Node = node; Operator = None }
             ty, { next with NumericLiterals = recorded :: next.NumericLiterals; UnsettledLiterals = recorded :: next.UnsettledLiterals }
         | StringLit _
         | BoolLit _ -> TypeResolution.literalType literal, state
+
+    /// Whether `ty` is a type that is known not to be a number. A type variable, an open record and a nominal type
+    /// are left to unification, which reports them if they are not numbers; the error type is what failed to check.
+    let isKnownNonNumber (ty: Ty) =
+        match Unifier.unalias ty with
+        | ty when Unifier.isError ty -> false
+        | TyPrimitive("int" | "float")
+        | SizedNumberType _
+        | TyVar _
+        | TyOpenRecord _
+        | TyNominal _ -> false
+        | _ -> true
+
+    /// The operator `op` as a diagnostic writes it: prefix `-` is written `-`.
+    let written (op: string) = if op = NegateSyntax.builtIn then "-" else op
+
+    /// The error for using `op` on a value of the type `ty`, which is not a number.
+    let notANumber (op: string) (ty: Ty) =
+        let advice =
+            match op, Unifier.unalias ty with
+            | "+", (TyPrimitive "string" | Lists.ListType _) -> ". Use ++ to join them"
+            | _ -> ""
+        $"'{Unifier.tyToDisplayString Ascii ty}' cannot be used with {written op}: it is not a number{advice}"
+
+    /// `settle` for the literals, or else for the operators' operands (`operands`).
+    let private settleOf (operands: bool) (isOwn: Ty -> bool) (state: InferState) : InferState =
+        let subst = fst (Unifier.solve state.Constraints)
+        let isSettling (literal: NumericLiteral) =
+            literal.Operator.IsSome = operands
+            && (match Unifier.apply subst literal.Type with
+                | TyVar { Name = None } as open' -> isOwn open'
+                | _ -> true)
+        let settling, unsettled = state.UnsettledLiterals |> List.partition isSettling
+        settling
+        |> List.fold (fun current literal ->
+            match Unifier.apply subst literal.Type, literal.Operator with
+            | TyVar _, _ -> addConstraint literal.Type (defaultType literal.Value) current
+            | ty, Some (op, node) when isKnownNonNumber ty ->
+                let error = Diagnostics.at DiagnosticCodes.TypeMismatch literal.At (notANumber op ty)
+                { current with FailedExprs = (node, [ error ]) :: current.FailedExprs }
+            | _ -> current) { state with UnsettledLiterals = unsettled }
 
     /// `state` with each literal not yet settled whose type is still a variable of its own, and one `isOwn` says the
     /// def being generalised has, made its default type. So is one of a variable a type annotation names, which a
     /// literal cannot be of, since it is not of every type: the def's annotation is then more general than its value.
     /// A literal of any other type is settled as it is.
+    ///
+    /// The operands of an operator left for the code around them to settle (see `awaitOperand`) are settled the same
+    /// way, once the literals are, so that `1.5` in the def makes them `float` rather than both defaulting. Those settled
+    /// to a type known not to be a number fail to check at the operator.
     let settle (isOwn: Ty -> bool) (state: InferState) : InferState =
         if state.UnsettledLiterals.IsEmpty then state
-        else
-            let subst = fst (Unifier.solve state.Constraints)
-            let isOpen (literal: NumericLiteral) =
-                match Unifier.apply subst literal.Type with
-                | TyVar { Name = None } -> true
-                | _ -> false
-            let isNamedVariable (literal: NumericLiteral) =
-                match Unifier.apply subst literal.Type with
-                | TyVar { Name = Some _ } -> true
-                | _ -> false
-            let settling, unsettled =
-                state.UnsettledLiterals |> List.partition (fun literal -> not (isOpen literal) || isOwn (Unifier.apply subst literal.Type))
-            settling
-            |> List.filter (fun literal -> isOpen literal || isNamedVariable literal)
-            |> List.fold (fun current literal -> addConstraint literal.Type (defaultType literal.Value) current) { state with UnsettledLiterals = unsettled }
+        else state |> settleOf false isOwn |> settleOf true isOwn
+
+    /// `state` with the operands of the arithmetic operator `op`, the expression `expr`, of the type `ty`, which is still
+    /// a variable, left for the code around them to settle, as a literal is: they are `int` if nothing in their def
+    /// does (#1485).
+    let awaitOperand (op: string) (expr: Expression) (ty: Ty) (state: InferState) : InferState =
+        let recorded = { Type = ty; Value = IntLit 0I; At = expr.Span; Node = None; Operator = Some (op, expr.Id) }
+        { state with UnsettledLiterals = recorded :: state.UnsettledLiterals }
 
     /// The literals not yet settled whose type is still a variable of their own, each with that variable, newest first.
     /// Each is resolved only as it is read, so a search for one stops at it: a long chain of `+` has many literals.
