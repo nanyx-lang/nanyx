@@ -72,7 +72,9 @@ context of their own, `type MRef(a) = [Memory] protected (...)`
    which gives up the value it replaces; its drop is the record's. The optimiser folds no record's field (only a
    closure's), so a box changed in place is safe there. A box has no `Eq`, `Ord` or `Hash`
    (`WellKnownContexts`, "mutable references have no equality"), and an `MRef` no `ToString`, since writing what it
-   holds would read it without `Memory`.
+   holds would read it without `Memory`. A def's type is not generalised over the variables in a box its value holds,
+   through the types its nominal types stand for, though it is over those of a box a function it holds makes
+   (`Boxes.heldVariables`, used by `Infer.generalizeDef`): this is the value restriction, for boxes only.
 3. **`MArray(a)`** ([#1492](https://github.com/nanyx-lang/nanyx/issues/1492)): fixed length, each slot changed in place.
    It behaves as an `Array(MRef(a))` whose cells are all distinct, but is laid out flat, as an `Array` is. Converting
    between `Array` and `MArray` copies, so an `Array` stays immutable.

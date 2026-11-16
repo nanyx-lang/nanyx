@@ -110,7 +110,7 @@ def total = memory {
 }
 ```
 
-A reference belongs to the `memory` block it was made in, as a cell does. `MRef` is declared `type MRef(a) = [Memory] private box(a)`, a type in `Memory`'s scope ([Types in a scope](./contexts#types-in-a-scope)), so making, reading or changing one requires the block's `Memory`, and neither it nor anything holding it can leave the block (NYX0233). A reference has no `==`, order or hash, since what it holds changes, and no `toString`, since writing what it holds would read it without `Memory`: compare or write what `MRef.get` gives instead.
+A reference belongs to the `memory` block it was made in, as a cell does. `MRef` is declared `type MRef(a) = [Memory] private box(a)`, a type in `Memory`'s scope ([Types in a scope](./contexts#types-in-a-scope)), so making, reading or changing one requires the block's `Memory`, and neither it nor anything holding it can leave the block (NYX0233). A reference holds values of one type, so a def of one isn't generic, as a def of a function is: after `def r = MRef.new([])`, `MRef.set(r, [5])` makes `r` an `MRef(list(int))`, and reading it as a list of strings is an error. A reference has no `==`, order or hash, since what it holds changes, and no `toString`, since writing what it holds would read it without `Memory`: compare or write what `MRef.get` gives instead.
 
 # Values cannot escape memory scope
 
