@@ -3,7 +3,9 @@
   [`abs`], [`sign`] and [`pow`] are generic over the `Num(a)` context, so they take an `int` or a
   `float`. `abs`, `sign`, [`min`], [`max`], [`minMax`] and [`clamp`] compare through `Ord(a)`, so the
   last four take a value of any type that has an order, a `string` among them. [`sqrt`], [`exp`],
-  [`ln`], [`floor`], [`ceil`], [`round`] and [`truncate`] take a `float`. [`pi`], [`e`],
+  [`ln`], [`log10`], [`log2`], [`floor`], [`ceil`], [`round`] and [`truncate`] take a `float`, and so
+  do the trigonometric functions, [`sin`], [`cos`], [`tan`], [`asin`], [`acos`], [`atan`] and
+  [`atan2`], whose angles are in radians. [`pi`], [`e`],
   [`infinity`] and [`nan`] are constants, and [`isNaN`], [`isInfinite`] and [`isFinite`] tell the
   special floats from the others.
 
@@ -102,6 +104,212 @@ export def exp: float -> float = { x ->
   as WebAssembly has neither, so a result can be one unit in the last place from the nearest `float`.
 export def ln: float -> float = { x ->
   __floatLn(x)
+}
+
+--| The base-10 logarithm of `x`, the power 10 is raised to to give `x`: exact at a power of ten,
+  so `log10(1000.0)` is `3.0`. It is minus infinity at zero, and NaN below it.
+export def log10: float -> float = { x ->
+  logExactAt(x, 10.0, __floatLn(x) * 0.4342944819032518)
+}
+
+--| The base-2 logarithm of `x`, the power 2 is raised to to give `x`: exact at a power of two, so
+  `log2(1024.0)` is `10.0`. It is minus infinity at zero, and NaN below it.
+export def log2: float -> float = { x ->
+  logExactAt(x, 2.0, __floatLn(x) * 1.4426950408889634)
+}
+
+--| `estimate`, the logarithm of `x` to the base `base`, or the whole number nearest it when `base`
+  to that power is `x` exactly.
+def logExactAt: float, float, float -> float = { x, base, estimate ->
+  if not isFinite(estimate) or estimate > 1000.0 or estimate < -1000.0
+    then estimate
+    else powerOrEstimate(x, base, estimate, __nanyx_float_floor(estimate + 0.5))
+}
+
+--| `nearest`, a whole number, if `base` to that power is `x`, or else `estimate`.
+def powerOrEstimate: float, float, float, float -> float = { x, base, estimate, nearest ->
+  if base ** __nanyx_float_to_int(nearest) == x then nearest else estimate
+}
+
+-- The trigonometric functions are fdlibm's, as C libraries have them: an angle is reduced to `r` in
+-- [-pi/4, pi/4] and the number `n` of quarter turns taken off, with pi/2 split into three parts of 33
+-- bits so that `n` times each is exact, then a polynomial gives the sine or cosine of `r`.
+
+--| The sine of `r`, for an `r` in [-pi/4, pi/4].
+def sinOfReduced: float -> float = { r ->
+  def z = r * r
+
+  def polynomial = -0.16666666666666632 +
+    z *
+      (0.008333333333322490 +
+        z *
+          (-0.00019841269829857949 +
+            z *
+              (0.0000027557313707070068 +
+                z * (-0.000000025050760253406863 + z * 0.00000000015896909952115501))))
+
+  r + r * z * polynomial
+}
+
+--| The cosine of `r`, for an `r` in [-pi/4, pi/4], with `1 - r ** 2 / 2` added up as musl does, so
+  the result keeps its last bit.
+def cosOfReduced: float -> float = { r ->
+  def z = r * r
+
+  def polynomial = 0.041666666666666602 +
+    z *
+      (-0.0013888888888874110 +
+        z *
+          (0.000024801587289476729 +
+            z *
+              (-0.00000027557314351390663 +
+                z * (0.0000000020875723212981748 + z * -0.000000000011359647557788195))))
+
+  def half = 0.5 * z
+  def w = 1.0 - half
+
+  w + (1.0 - w - half + z * z * polynomial)
+}
+
+--| The number of quarter turns nearest `x`, as a whole `float`.
+def quarterTurns: float -> float = { x ->
+  __nanyx_float_floor(x * 0.6366197723675814 + 0.5)
+}
+
+--| `x` less `n` quarter turns. `n` times each part of pi/2 is exact while `n` is below 2 ** 20, for an
+  `x` up to about 1.6e6; past that the reduction loses digits.
+def lessTurns: float, float -> float = { x, n ->
+  x - n * 1.5707963267341256 - n * 0.000000000060771005063039660 - n * 2.0222662487111665e-21
+}
+
+--| Which of the four quarters `n` quarter turns end in: 0, 1, 2 or 3.
+def quarterOf: float -> int = { n ->
+  __nanyx_float_to_int(n - 4.0 * __nanyx_float_floor(n / 4.0))
+}
+
+--| The sine of `x`, an angle in radians: `sin(pi / 6.0)` is `0.5`. NaN for an infinite `x`.
+export def sin: float -> float = { x ->
+  if isFinite(x) then sinIn(lessTurns(x, quarterTurns(x)), quarterOf(quarterTurns(x))) else nan
+}
+
+--| The sine of `r` plus `quarter` quarter turns, for an `r` in [-pi/4, pi/4].
+def sinIn: float, int -> float = { r, quarter ->
+  if quarter == 0
+    then sinOfReduced(r)
+    else if quarter == 1
+      then cosOfReduced(r)
+      else if quarter == 2 then -sinOfReduced(r) else -cosOfReduced(r)
+}
+
+--| The cosine of `x`, an angle in radians: `cos(pi)` is `-1.0`. NaN for an infinite `x`.
+export def cos: float -> float = { x ->
+  if isFinite(x) then cosIn(lessTurns(x, quarterTurns(x)), quarterOf(quarterTurns(x))) else nan
+}
+
+--| The cosine of `r` plus `quarter` quarter turns, for an `r` in [-pi/4, pi/4].
+def cosIn: float, int -> float = { r, quarter ->
+  if quarter == 0
+    then cosOfReduced(r)
+    else if quarter == 1
+      then -sinOfReduced(r)
+      else if quarter == 2 then -cosOfReduced(r) else sinOfReduced(r)
+}
+
+--| The tangent of `x`, an angle in radians, its sine over its cosine: `tan(pi / 4.0)` is `1.0`. NaN
+  for an infinite `x`.
+export def tan: float -> float = { x ->
+  if isFinite(x) then tanIn(lessTurns(x, quarterTurns(x)), quarterOf(quarterTurns(x))) else nan
+}
+
+--| The tangent of `r` plus `quarter` quarter turns, for an `r` in [-pi/4, pi/4].
+def tanIn: float, int -> float = { r, quarter ->
+  if quarter == 0 or quarter == 2
+    then sinOfReduced(r) / cosOfReduced(r)
+    else -cosOfReduced(r) / sinOfReduced(r)
+}
+
+--| The arctangent of `t`, for a `t` in [0, 7/16), as fdlibm's polynomial gives it.
+def atanSmall: float -> float = { t ->
+  def z = t * t
+  def w = z * z
+
+  def odd = z *
+    (0.33333333333332932 +
+      w *
+        (0.14285714272503466 +
+          w *
+            (0.090908871334365066 +
+              w * (0.066610731373875312 + w * (0.049768779946159324 + w * 0.016285820115365782)))))
+
+  def even = w *
+    (-0.19999999999876483 +
+      w *
+        (-0.11111110405462356 +
+          w * (-0.076918762050448300 + w * (-0.058335701337905735 + w * -0.036531572744216916))))
+
+  t * (odd + even)
+}
+
+--| The arctangent of `a`, a `float` not below zero: it is moved near one of 0, 1/2, 1, 3/2 or
+  infinity, whose arctangents are held as a high and a low part, and the polynomial gives the rest.
+def atanOfMagnitude: float -> float = { a ->
+  if a >= 73786976294838206464.0
+    then 1.5707963267948966 + 6.123233995736766e-17
+    else if a < 0.4375
+      then a - atanSmall(a)
+      else if a < 0.6875
+        then atanNear((2.0 * a - 1.0) / (2.0 + a), 0.46364760900080609, 2.2698777452961687e-17)
+        else if a < 1.1875
+          then atanNear((a - 1.0) / (a + 1.0), 0.78539816339744828, 3.0616169978683830e-17)
+          else if a < 2.4375
+            then atanNear((a - 1.5) / (1.0 + 1.5 * a), 0.98279372324732905, 1.3903311031230998e-17)
+            else atanNear(-1.0 / a, 1.5707963267948966, 6.1232339957367660e-17)
+}
+
+--| The arctangent of a point `t` from one whose arctangent is `hi + lo`.
+def atanNear: float, float, float -> float = { t, hi, lo ->
+  hi - (atanSmall(t) - lo - t)
+}
+
+--| The arctangent of `x`, the angle in (-pi/2, pi/2) whose tangent is `x`: `atan(1.0)` is `pi / 4.0`.
+export def atan: float -> float = { x ->
+  if isNaN(x) then x else if x < 0.0 then -atanOfMagnitude(-x) else atanOfMagnitude(x)
+}
+
+--| The arcsine of `x`, the angle in [-pi/2, pi/2] whose sine is `x`: NaN outside [-1, 1].
+export def asin: float -> float = { x ->
+  if isNaN(x) or x > 1.0 or x < -1.0 then nan else atan(x / sqrt((1.0 - x) * (1.0 + x)))
+}
+
+--| The arccosine of `x`, the angle in [0, pi] whose cosine is `x`: NaN outside [-1, 1].
+export def acos: float -> float = { x ->
+  if isNaN(x) or x > 1.0 or x < -1.0 then nan else 2.0 * atan(sqrt((1.0 - x) / (1.0 + x)))
+}
+
+--| The angle of the point (`x`, `y`) from the positive x axis, in (-pi, pi]. It takes `y` first, then
+  `x`, as C, .NET, Rust and Python do: `atan2(1.0, -1.0)` is `3.0 * pi / 4.0`. Unlike `atan(y / x)`,
+  it tells the four quarters apart, and is defined where `x` is zero.
+export def atan2: float, float -> float = { y, x ->
+  if isNaN(x) or isNaN(y) then nan else atan2Of(y, x, atan2Magnitude(y, x))
+}
+
+--| The angle of (`x`, `y`) from the axis nearest it on the x axis, from 0 to pi/2.
+def atan2Magnitude: float, float -> float = { y, x ->
+  if isInfinite(x) and isInfinite(y)
+    then 0.7853981633974483
+    else if x == 0.0 or isInfinite(y)
+      then (if y == 0.0 then 0.0 else 1.5707963267948966)
+      else if isInfinite(x) then 0.0 else atanOfMagnitude(abs(y / x))
+}
+
+--| The angle of (`x`, `y`) given `magnitude`, its angle from the x axis: moved into the left half for a
+  negative `x`, or minus zero, and below the axis for a negative `y`, or minus zero.
+def atan2Of: float, float, float -> float = { y, x, magnitude ->
+  def left = x < 0.0 or x == 0.0 and 1.0 / x < 0.0
+  def below = y < 0.0 or y == 0.0 and 1.0 / y < 0.0
+  def angle = if left then pi - (magnitude - 1.2246467991473532e-16) else magnitude
+
+  if below then -angle else angle
 }
 
 -- The functions below give an `int`. A float that is NaN, infinite or out of the range of `int` stops the
