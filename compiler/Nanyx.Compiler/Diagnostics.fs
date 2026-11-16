@@ -149,6 +149,8 @@ module DiagnosticCodes =
     let ExternWithoutHostRuntime = code 242 "Foreign function without HostRuntime" Severity.Error
     let ConflictingExterns = code 243 "Import declared with different types" Severity.Error
     let PrivateContextMember = code 244 "Private context's member called outside its module" Severity.Error
+    let ContextNameAsValue = code 245 "Context instance used as a value" Severity.Error
+    let UnknownContextName = code 246 "Context name that names no context the lambda is given" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -174,7 +176,7 @@ module DiagnosticCodes =
           UnboundContextVariable; ContextsNotAllowed; UnguardedRecursiveAlias
           LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotProtected; ScopedContextEscapes
           NotACellArgument; MisplacedCellType; UndeterminedContextType; EntryDoesNotFitHost; HostRuntimeOutsideHost; ScriptRunValue; ContextsWithoutType
-          InvalidExtern; ExternWithoutHostRuntime; ConflictingExterns; PrivateContextMember
+          InvalidExtern; ExternWithoutHostRuntime; ConflictingExterns; PrivateContextMember; ContextNameAsValue; UnknownContextName
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

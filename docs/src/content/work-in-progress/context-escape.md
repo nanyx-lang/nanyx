@@ -381,7 +381,15 @@ The design draws the line there, and makes every helper a function that takes th
 - ~~The prelude's builders (`proc` and any others) become a `context` and a function. The cookbook's `OptionChain` and
   the `@workflow` and `@customKeywordType` docs change with them, and `[typeof optionChain]` goes.~~ Done, see
   [Workflows](#workflows-a-context-and-a-function).
-- `context x` in a lambda, usable only by `use` ([#1445](https://github.com/nanyx-lang/nanyx/issues/1445)).
+- ~~`context x` in a lambda, usable only by `use` ([#1445](https://github.com/nanyx-lang/nanyx/issues/1445)).~~
+  Done. The parser puts the names on the lambda's body (`ContextNames`), and `ContextNames.bind` binds each, with the
+  lambda's parameters, to the plain context it names among those the lambda is given: each context whose members
+  are all bound in the body as its own by a signature (the def's, or the type the lambda is checked against). A
+  context without members or with parameters can't be named yet; `Memory` is #1446. Each name keeps its context's
+  members as the body has them, and `use l` binds them again (NYX0245 for any other use, NYX0246 for a name that
+  matches no context or several). Before the backend, `ExpressionRewrites.writeContextNames` keeps each member in a
+  local at the top of the body and writes `use l` as a `use` of a record of those locals, which the backend
+  compiles already, inner lambdas that capture them included.
 - `memory { m -> ... }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)) becomes
   `memory { context m -> ... }`, and `memory`'s signature becomes `[c] ([Memory & c] () -> a) -> a`. The Memory page
   and the tests change with it ([#1446](https://github.com/nanyx-lang/nanyx/issues/1446), after #1445).

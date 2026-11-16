@@ -94,6 +94,10 @@ type OpenMatch =
       /// Where the match's head is written, which an error about it is reported at.
       Head: SourceSpan }
 
+/// The instance a lambda names with `context l`: the context, each of its members as the lambda's body has it where
+/// the body starts, and the node of the body (the `ContextNames` the parser makes). `use l` loads those members again.
+type ContextName = { Context: Identifier; Members: (Identifier * TypeScheme) list; Body: NodeId }
+
 type InferState =
         { NextId: int;
             Constraints: ConstraintSet;
@@ -320,7 +324,10 @@ type InferState =
             SelfTypes: Map<int, SelfDef>;
             /// The context variables each unannotated top-level def uses so far, by the def's name: those of the
             /// functions it is given that it calls or passes on (see `ContextVariables`).
-            InferredContextVars: Map<Identifier, Ty list> }
+            InferredContextVars: Map<Identifier, Ty list>;
+            /// The names lambdas give the instances of contexts they are given, `context l`, by each name's symbol (see
+            /// `ContextNames`).
+            ContextNames: Map<SymbolId, ContextName> }
 
 let emptyState =
         { NextId = 0;
@@ -403,7 +410,8 @@ let emptyState =
             UseInstances = Set.empty;
             UseDepths = Map.empty;
             SelfTypes = Map.empty;
-            InferredContextVars = Map.empty }
+            InferredContextVars = Map.empty;
+            ContextNames = Map.empty }
 
 let internal freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }

@@ -142,9 +142,18 @@ let internal ambiguousReference (name: string) (expr: Expression) (scheme: TypeS
         [ Diagnostics.at DiagnosticCodes.AmbiguousName expr.Span $"'{name}' is ambiguous between {Diagnostics.listed quoted}; import all but one of them with 'as'" ]
     | _ -> []
 
+/// The error for `expr`, a reference to `name` bound to `scheme`, if `name` is what a lambda's `context name` binds:
+/// an instance is never a value, so `use name` is all it can do, which never infers it as a reference.
+let internal contextNameReference (name: string) (expr: Expression) (scheme: TypeScheme) (state: InferState) : Diagnostic list =
+    match scheme.Symbol with
+    | Some symbol when state.ContextNames.ContainsKey symbol ->
+        [ Diagnostics.at DiagnosticCodes.ContextNameAsValue expr.Span $"'{name}' names a context instance, which can only be loaded with `use {name}`" ]
+    | _ -> []
+
 /// The errors for a reference to `name`, bound to `scheme`, that the name alone does not show: a definition a module
-/// block keeps private, or a name more than one import brings in.
+/// block keeps private, a name more than one import brings in, or a context instance a lambda names.
 let internal referenceErrors (name: string) (expr: Expression) (scheme: TypeScheme) (state: InferState) : Diagnostic list =
-    match privateReference expr scheme state with
-    | [] -> blockIsolation name expr scheme state @ ambiguousReference name expr scheme state
-    | errors -> errors @ ambiguousReference name expr scheme state
+    match contextNameReference name expr scheme state, privateReference expr scheme state with
+    | (_ :: _ as errors), _ -> errors
+    | [], [] -> blockIsolation name expr scheme state @ ambiguousReference name expr scheme state
+    | [], errors -> errors @ ambiguousReference name expr scheme state

@@ -44,10 +44,21 @@ type LambdaPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
     /// A lambda. With `bodyOnOwnLine`, a body that is an expression goes on a line of its own after the `->`, as the
     /// one statement of a block (see `defDoc`).
     let rec lambdaDoc (e: Expression) (parameters: (Identifier * TypeExpr option) list) (body: Expression) (bodyOnOwnLine: bool) : Doc =
-        match shorthand e parameters body with
+        // The names `context l` gives the lambda's contexts are written before its parameters.
+        let contextNames, body =
+            match body.Kind with
+            | ContextNames(names, inner) -> names, inner
+            | _ -> [], body
+        match (if contextNames.IsEmpty then shorthand e parameters body else None) with
         | Some doc -> doc
         | None ->
             let parameters, body = writtenLambda e parameters body
+            let contextNameDocs =
+                contextNames
+                |> List.map (fun (n, t, _) ->
+                    match t with
+                    | Some t -> cat [ text $"context {Names.written n}: "; typeExpr t ]
+                    | None -> text $"context {Names.written n}")
             let takesUnit = match e.Kind with Lambda(_, _, takesUnit) -> takesUnit | _ -> false
             // A result annotation is written after the parameters (see `LambdaResultSyntax`).
             let resultDoc, body =
@@ -57,8 +68,8 @@ type LambdaPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
             let head =
                 match parameters with
                 | [] when takesUnit -> cat [ text "{ ()"; resultDoc; text " ->" ]
-                | [] -> text "{"
-                | _ -> cat [ text "{ "; commaJoin (List.map parameterDoc parameters); resultDoc; text " ->" ]
+                | [] when contextNames.IsEmpty -> text "{"
+                | _ -> cat [ text "{ "; commaJoin (contextNameDocs @ List.map parameterDoc parameters); resultDoc; text " ->" ]
             // A body on its own line is read as a statement, which can't take a range, so where the layout is ours to
             // choose, a body that would need parentheses there stays on the `->`'s line instead, as does a block of just
             // that body in parentheses.
@@ -84,7 +95,7 @@ type LambdaPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
                 // A body that starts like a shorthand lambda (`{ - 1 }`, `{ .name }`) needs the arrow.
                 let head =
                     let first = (Doc.render Int32.MaxValue bodyDoc).TrimStart()
-                    if List.isEmpty parameters && not takesUnit && first.Length > 0 && "*/+-<>=!.|".Contains first[0] then text "{ ->" else head
+                    if List.isEmpty parameters && contextNames.IsEmpty && not takesUnit && first.Length > 0 && "*/+-<>=!.|".Contains first[0] then text "{ ->" else head
                 // A body that spans lines is indented once, and the `}` goes back to the lambda's line's indent, so
                 // the braces of `{ x -> proc {` ... `}` do not end up one above the other.
                 Doc.group (cat [ head; text " "; nest bodyDoc; Doc.line; text "}" ])

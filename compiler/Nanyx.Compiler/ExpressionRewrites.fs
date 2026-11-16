@@ -180,6 +180,65 @@ module internal ExpressionRewrites =
             | Expr value -> { item with Kind = Expr (rewrite value) }
             | _ -> item)
 
+    /// `module'` with the names lambdas give their contexts written as the backend reads them (see `ContextNames`): a
+    /// lambda's body under `context l` starts by keeping each member of `l`'s context in a local, and `use l` loads
+    /// those locals as a `use` of a record written out does, `use (log = <the local>)`.
+    let writeContextNames (state: InferState.InferState) (module': Module) : Module =
+        if state.ContextNames.IsEmpty then
+            module'
+        else
+            let indexed = state.ContextNames |> Map.toList |> List.mapi (fun index (symbol, instance) -> symbol, (index, instance)) |> Map.ofList
+            let local index (memberName: Identifier) = $"__context_{index}_{memberName}"
+            // The instance `value` loads, where it is a name a lambda gives a context, with that name's members as a record.
+            let loaded (value: Expression) =
+                match value.Kind with
+                | IdentifierExpr _ ->
+                    state.References
+                    |> Map.tryFind value.Id
+                    |> Option.bind (fun symbol -> indexed |> Map.tryFind symbol)
+                    |> Option.map (fun (index, instance) ->
+                        // Nodes of their own: the name's node has the name's type.
+                        let fields = instance.Members |> List.map (fun (memberName, _) -> NamedField(memberName, Expression.synthetic (IdentifierExpr (local index memberName))))
+                        Expression.synthetic (RecordExpr fields))
+                | _ -> None
+            let rewrite =
+                mapExpressionKinds (fun current kind ->
+                    match kind with
+                    | ContextNames(_, body) ->
+                        let kept =
+                            indexed
+                            |> Map.values
+                            |> Seq.filter (fun (_, instance) -> instance.Body = current.Id)
+                            |> Seq.collect (fun (index, instance) ->
+                                instance.Members
+                                |> List.map (fun (memberName, _) ->
+                                    Statement.synthetic (DefStatement(false, local index memberName, None, Expression.synthetic (IdentifierExpr memberName)))))
+                            |> List.ofSeq
+                        match body.Kind with
+                        | Block statements -> Block(kept @ statements)
+                        | _ -> Block(kept @ [ Statement.from body (ExprStatement body) ])
+                    | Block statements ->
+                        statements
+                        |> List.map (fun statement ->
+                            match statement.Kind with
+                            | UseStatement value ->
+                                match loaded value with
+                                | Some record -> { statement with Kind = UseStatement record }
+                                | None -> statement
+                            | _ -> statement)
+                        |> Block
+                    | UseIn(value, body) ->
+                        match loaded value with
+                        | Some record -> UseIn(record, body)
+                        | None -> kind
+                    | other -> other)
+            module'
+            |> List.map (fun item ->
+                match item.Kind with
+                | Def (ValueDef(isExport, name, typeOpt, value)) -> { item with Kind = Def (ValueDef(isExport, name, typeOpt, rewrite value)) }
+                | Expr value -> { item with Kind = Expr (rewrite value) }
+                | _ -> item)
+
     /// `module'` with the cells of its definitions written as the backend reads them (see `writeCellsIn`).
     let writeCells (state: InferState.InferState) (module': Module) : Module =
         if state.Cells.IsEmpty then

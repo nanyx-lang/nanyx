@@ -41,6 +41,12 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
                     | Block [ { Kind = ExprStatement single } ] -> single
                     | _ -> body
                 Lambda(parameters |> List.map (fun (n, t) -> n, Option.map typeExpr t), expr body, takesUnit)
+            | ContextNames(names, body) ->
+                let body =
+                    match body.Kind with
+                    | Block [ { Kind = ExprStatement single } ] -> single
+                    | _ -> body
+                ContextNames(names |> List.map (fun (n, t, _) -> name n, Option.map typeExpr t, SourceSpan.none), expr body)
             | BinaryOp(op, opSpan, l, r) -> BinaryOp(op, opSpan, expr l, expr r)
             | Pipe(value, n, span, args) -> Pipe(expr value, n, span, List.map expr args)
             | Block statements -> Block(List.map statement statements)
