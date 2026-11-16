@@ -56,9 +56,10 @@ it, and NYX0233 keeps the value, and anything holding it, inside its block. This
 [Context-qualified types](./context-qualified-types), for `Memory` only; a context on any other type waits for a use
 that needs one, and for [#1059](https://github.com/nanyx-lang/nanyx/issues/1059).
 
-1. **`Array(a)`** ([#1490](https://github.com/nanyx-lang/nanyx/issues/1490)): an immutable, fixed-length sequence with
-   constant-time indexing, in `nanyx/array`. Lists are cons cells, so this is a new kind of heap block. It needs no
-   `Memory`.
+1. **`Array(a)`** ([#1490](https://github.com/nanyx-lang/nanyx/issues/1490)): done. An immutable, fixed-length
+   sequence with constant-time indexing, in [`nanyx/array`](../stdlib/array). It needs no `Memory`. In the backend
+   it's an `IrArray`, a block of its length and then its elements laid out flat (`CoreIrArrays`, and see
+   [Memory management](./memory-management#drop-functions)); four intrinsics make and read one.
 2. **`MRef(a)`, a cell as a value** ([#1491](https://github.com/nanyx-lang/nanyx/issues/1491)): held in a record, a list
    or another cell, passed without `mut`, or returned from a function, all inside its block. In the backend it's the
    box a captured cell already is. After [#1446](https://github.com/nanyx-lang/nanyx/issues/1446), which changes how a

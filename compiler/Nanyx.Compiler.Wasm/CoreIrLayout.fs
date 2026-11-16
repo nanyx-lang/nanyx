@@ -65,6 +65,12 @@ let tailOffset (element: IrType) = size element
 /// How many bytes a list cell of an element of `element` takes: its head, then its tail.
 let listCellSize (element: IrType) = size element + 4
 
+/// Where an array's length is: first in its block.
+let arrayLengthOffset = 0
+
+/// Where the element at `index` of an array of `element`s is, after its length and the elements before it.
+let arrayElementOffset (element: IrType) (index: int) = 4 + index * size element
+
 /// Where a tag cell's payload is, after its code.
 let payloadOffset = tagPayloadOffset
 

@@ -20,6 +20,7 @@ let rec isHeapType (ty: IrType) =
     | IrFloat
     | IrF32
     | IrList _
+    | IrArray _
     | IrRecord _
     | IrFunction _
     | IrBox -> true
@@ -67,7 +68,8 @@ let collect (functions: Function list) : Drops =
         if isHeapType ty && seen.Add ty then
             types.Add ty
             match IrType.unfold ty with
-            | IrList element -> add element
+            | IrList element
+            | IrArray element -> add element
             | IrRecord fields -> fields |> List.iter (snd >> add)
             | IrTags tags -> tags |> List.iter (snd >> Option.iter add)
             | _ -> ()
@@ -199,6 +201,37 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
           "    br $next"
           "  end"
           "end" ]
+    | IrArray element when not (isHeapType element) -> releaseThen ty []
+    | IrArray element ->
+        // Each element, from the first to the last, after the length.
+        let size = CoreIrLayout.size element
+        [ "(local $at i32)"
+          "(local $end i32)"
+          yield! releaseThen ty [
+            "local.get $p"
+            $"i32.const {CoreIrLayout.arrayElementOffset element 0}"
+            "i32.add"
+            "local.tee $at"
+            "local.get $p"
+            $"i32.load offset={CoreIrLayout.arrayLengthOffset}"
+            $"i32.const {size}"
+            "i32.mul"
+            "i32.add"
+            "local.set $end"
+            "block $done"
+            "  loop $next"
+            "    local.get $at"
+            "    local.get $end"
+            "    i32.ge_u"
+            "    br_if $done"
+            yield! dropField element [ "local.get $at"; CoreIrLayout.load element 0 ] |> List.map (fun line -> "    " + line)
+            "    local.get $at"
+            $"    i32.const {size}"
+            "    i32.add"
+            "    local.set $at"
+            "    br $next"
+            "  end"
+            "end" ] ]
     | IrInt
     | IrSized _
     | IrBool

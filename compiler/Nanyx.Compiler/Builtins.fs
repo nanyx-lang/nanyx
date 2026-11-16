@@ -94,6 +94,14 @@ module Intrinsics =
     let setOfElements = prefix + "set_of_elements"
     /// The elements a set holds, as the list it was made of.
     let setElements = prefix + "set_elements"
+    /// An array holding a list's elements, in order, each laid out flat in one block (see `Arrays`).
+    let arrayOfList = prefix + "array_of_list"
+    /// The elements an array holds, as a list, in order.
+    let arrayToList = prefix + "array_to_list"
+    /// How many elements an array holds.
+    let arrayLength = prefix + "array_length"
+    /// The element of an array at an index, which the standard library has checked is in range.
+    let arrayGet = prefix + "array_get"
 
     /// Ends the program with an exit code. It never returns, so its result is `undefined`.
     let exit = prefix + "exit"
@@ -174,6 +182,10 @@ module Intrinsics =
           mapEntries, overEntries (TyFunc(map, entries, []))
           setOfElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(listOf element, Sets.ofType element, []); Symbol = None; ProvidedBy = None }
           setElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Sets.ofType element, listOf element, []); Symbol = None; ProvidedBy = None }
+          arrayOfList, { Quantified = set [ elementVar.Id ]; Type = TyFunc(listOf element, Arrays.ofType element, []); Symbol = None; ProvidedBy = None }
+          arrayToList, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Arrays.ofType element, listOf element, []); Symbol = None; ProvidedBy = None }
+          arrayLength, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Arrays.ofType element, intTy, []); Symbol = None; ProvidedBy = None }
+          arrayGet, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ Arrays.ofType element; intTy ], element, []); Symbol = None; ProvidedBy = None }
           listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element, []); Symbol = None; ProvidedBy = None }
           compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy, []); Symbol = None; ProvidedBy = None }
           hash, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, intTy, []); Symbol = None; ProvidedBy = None } ]

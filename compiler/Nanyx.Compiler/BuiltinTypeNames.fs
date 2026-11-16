@@ -3,7 +3,7 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.ExpressionRewrites
 
-/// The names of the built-in types. `String`, `List`, `Unit`, `Seq`, `Map`, `Set`, `I64`, `F64` and `Boolean` are the
+/// The names of the built-in types. `String`, `List`, `Unit`, `Seq`, `Map`, `Set`, `Array`, `I64`, `F64` and `Boolean` are the
 /// types, and `string`, `list` and the rest (`int`, `float` and `bool` for the last three) are keyword aliases that
 /// mean exactly them, before the dot of an attached definition (`def String.trim` is `def string.trim`) as in a type
 /// (`List(I64)` is `list(int)`). The compiler works with the alias, so it prints `list(string)`: this pass writes each
@@ -19,6 +19,7 @@ module internal BuiltinTypeNames =
               "Seq", Seqs.typeName
               "Map", Maps.typeName
               "Set", Sets.typeName
+              "Array", Arrays.typeName
               "I64", "int"
               "F64", "float"
               "Boolean", "bool" ]

@@ -232,6 +232,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | Maps.MapType(key, value) -> toIrType (TyApply("list", [ TyRecord(Map.ofList [ "0", key; "1", value ]) ]))
     // A set is the list of its elements (see `Sets`).
     | Sets.SetType element -> IrList(toIrType element)
+    | Arrays.ArrayType element -> IrArray(toIrType element)
     | TyVar _ -> IrUnit
     | TyPrimitive other -> cannot $"a value of type {other}"
     | TyFunc(input, output, contexts) ->

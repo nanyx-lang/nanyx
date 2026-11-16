@@ -35,6 +35,9 @@ module internal EqualityOperators =
     /// The prelude function the derived `==` of a set calls, with the two sets and what compares two elements.
     let setFunction = "__setEqualsBy"
 
+    /// The prelude function the derived `==` of an array calls, with the two arrays and what compares two elements.
+    let arrayFunction = "__arrayEqualsBy"
+
     /// The error for a call to `calleeName` that requires `Eq` of the type `ty`, which has type variables in it and
     /// holds a map or a set: only the `==` derived for it compares a map, and none can be derived for it there.
     let collectionAtGenericCall (calleeName: Identifier) (ty: Ty) =

@@ -92,6 +92,12 @@ let private integerType (ty: IrType) =
     | IrInt -> None
     | other -> internalError $"a conversion of {IrType.show other}, which is not an integer"
 
+/// The type of the elements of an array of `ty`.
+let private arrayElement (ty: IrType) =
+    match ty with
+    | IrArray element -> element
+    | other -> internalError $"an array intrinsic on {IrType.show other}, which is not an array"
+
 /// The operators that give a number, where the others on numbers give a bool.
 let private arithmetic = set [ "+"; "-"; "*"; "/"; "%" ]
 
@@ -573,6 +579,24 @@ type private FunctionEmitter(context: EmitContext) =
         | CallRuntime(name, [ text ], _) when name = Intrinsics.keepAlive -> join "\n    " [ atoms [ text ]; "drop"; "i32.const 0" ]
         | CallRuntime(name, [ text ], _) when name = Intrinsics.stringByteLength ->
             join "\n    " [ atoms [ text ]; $"call ${helper Helpers.stringLength}" ]
+        // An array's length is the first word of its block, and its element at an index, which the standard library has
+        // checked is in range, is after it, with a reference of its own taken (see `CoreIrArrays`).
+        | CallRuntime(name, [ array ], _) when name = Intrinsics.arrayLength ->
+            join "\n    " [ atoms [ array ]; touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"; "i64.extend_i32_u" ]
+        | CallRuntime(name, [ array; index ], _) when name = Intrinsics.arrayGet ->
+            let element = arrayElement (atomType array)
+            join "\n    " [
+                atoms [ array; index ]
+                "i32.wrap_i64"
+                $"i32.const {CoreIrLayout.size element}"
+                "i32.mul"
+                "i32.add"
+                load element (CoreIrLayout.arrayElementOffset element 0)
+                (if CoreIrDrop.isHeapType element then $"call ${CoreIrDrop.dupName element}" else "") ]
+        | CallRuntime(name, [ list ], _) when name = Intrinsics.arrayOfList ->
+            join "\n    " [ atoms [ list ]; $"call ${CoreIrArrays.ofListName (arrayElement expr.Type)}" ]
+        | CallRuntime(name, [ array ], _) when name = Intrinsics.arrayToList ->
+            join "\n    " [ atoms [ array ]; $"call ${CoreIrArrays.toListName (arrayElement (atomType array))}" ]
         | CallImport(declared, args) ->
             // Each argument as the value type the import takes, a float out of its box; a float it returns is boxed, and
             // an import that returns nothing leaves unit, 0.

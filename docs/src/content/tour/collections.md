@@ -40,6 +40,7 @@ Most of the time, Nanyx programs don't care very much about the specific impleme
 | `list(a)` | - | Indexable collections |
 | `set(a)` | - | Membership checks |
 | `map(k, v)` | - | Key/value lookup (a map is callable: `m(k)` gives `#some(v) \| #notFound`) |
+| `Array(a)` | - | Fixed length, read by index in constant time (`import nanyx/array`) |
 | `Collection(a)` | - | Any in-memory collection |
 | `Sequence(a)` | `seq(a)` | Finite, deterministic sequences |
 | `Generator(a)` | `gen(a)` | Potentially infinite or non-deterministic sequences |
@@ -50,11 +51,11 @@ def lookup = ["a" => 1, "b" => 2]
 def unique = set.fromList([1, 2, 2, 3])
 ```
 
-The functions on them are on the standard library's [lists](../stdlib/prelude-lists) and [maps and sets](../stdlib/prelude-maps) pages.
+The functions on them are on the standard library's [lists](../stdlib/prelude-lists), [maps and sets](../stdlib/prelude-maps) and [array](../stdlib/array) pages.
 
 ## Literal types
 
-Today a square-bracket literal of plain items, `[1, 2, 3]`, is always a `list(a)`, and one of `key => value` entries, `["a" => 1]`, is always a `map(k, v)`. There is no set literal: a set is made from a list with `set.fromList`. Literals that take their type from an annotation, such as `def unique: set(int) = [1, 2, 2, 3]`, are planned, with the builders described under [Syntax](#syntax).
+Today a square-bracket literal of plain items, `[1, 2, 3]`, is always a `list(a)`, and one of `key => value` entries, `["a" => 1]`, is always a `map(k, v)`. There is no set literal or array literal: a set is made from a list with `set.fromList`, and an array with `array.fromList`. Literals that take their type from an annotation, such as `def unique: set(int) = [1, 2, 2, 3]`, are planned, with the builders described under [Syntax](#syntax).
 
 Associated types for constrained collection capabilities are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
 
