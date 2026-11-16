@@ -274,4 +274,56 @@ gives back `#some(int) | #invalidInt`. A type gets one by attaching a `fromStrin
 `float` and `bool` do, so a function can read a value of whichever type it is called at:
 `def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e)`.
 
+## `Default`
+
+```nanyx fragment
+context Default(a) = (
+  default: () -> a
+)
+```
+
+A value of type `a` to fall back on, or to fill with: `def valueOrDefault: [Default(a)] #some(a) |
+#none -> a`. A type gets one by attaching a `default`, `def Point.default = { -> Point(x = 0, y = 0) }`,
+as each built-in type does.
+
+## `int.default`
+
+```nanyx fragment
+def int.default: () -> int
+```
+
+`0`.
+
+## `float.default`
+
+```nanyx fragment
+def float.default: () -> float
+```
+
+`0.0`.
+
+## `string.default`
+
+```nanyx fragment
+def string.default: () -> string
+```
+
+`""`, the empty string.
+
+## `bool.default`
+
+```nanyx fragment
+def bool.default: () -> bool
+```
+
+`false`.
+
+## `list.default`
+
+```nanyx fragment
+def list.default: () -> list(a)
+```
+
+`[]`, the empty list.
+
 <!-- End of the generated reference. -->
