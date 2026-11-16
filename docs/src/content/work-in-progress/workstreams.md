@@ -11,8 +11,13 @@ it is going. Anyone who changes something one of them describes updates the page
 Work on the compiler and its tools is split into workstreams. Each has a page here and a label on its issues.
 There are no tracking issues. The
 [Nanyx workstreams project](https://github.com/orgs/nanyx-lang/projects/1) holds every open issue on one board.
-Its Stream field places an issue in the workstream it mostly serves. Its Priority field (Next, Soon, Any time), set on each issue, orders
-the backlog: work is taken from Next first.
+Its Stream field places an issue in the workstream it mostly serves. Its Stage field, set on each issue, orders
+the backlog:
+
+- **Working set:** being worked now, and taken first.
+- **Ready:** fully specified, with a "done when" and nothing left to decide, so anyone can pick it up.
+- **Planning:** still has open questions, or is a draft with no "done when". It isn't worked until its questions
+  are settled and it moves to Ready.
 
 | Workstream | Design | Label |
 |------------|--------|-------|

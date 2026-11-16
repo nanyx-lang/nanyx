@@ -9,7 +9,7 @@ code, dead code, and how the tests are laid out. It does not cover what the comp
 day-to-day changes are in [AGENTS.md](https://github.com/nanyx-lang/nanyx/blob/main/AGENTS.md); this document explains why they exist and records
 where the code stands. Issues carry the
 [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label and are on the
-[Nanyx workstreams project](https://github.com/orgs/nanyx-lang/projects/1), ordered by its Priority field.
+[Nanyx workstreams project](https://github.com/orgs/nanyx-lang/projects/1), ordered by its Stage field.
 
 # Why
 
