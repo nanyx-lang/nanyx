@@ -652,6 +652,40 @@ To fix it, write the character it looks like, which the error's fix does. A pair
 fix writes both. The characters it knows are the dashes and minus signs, curly quotes and primes, spaces other than the
 space and characters that can't be seen, `×`, `÷`, `≤`, `≥`, `≠` and `→`, and fullwidth brackets and punctuation.
 
+# NYX0038: GitHub reference not pinned to a commit
+
+A dependency on GitHub, a package or one file, names a tag or a branch, or nothing, without the commit it means. What a
+tag or a branch names can move, and two machines with the same manifest must build the same program, so a reference
+is pinned by a full commit SHA: its `rev`, or a `commit` beside a tag or a branch.
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "demo", version = "0.1.0")
+  dependencies = [(package = "acme.web", github = "acme/web", rev = "v1.2.0")]  -- error NYX0038: acme/web names "v1.2.0", which is not a full commit SHA, ...
+)
+```
+
+To fix it, add the commit the tag or branch points at, `commit = "1f8ae8b3…"`, or write the commit as the `rev`. In an
+editor, the error's fix looks the commit up and writes it in.
+
+# NYX0039: GitHub reference in a package to publish
+
+A package whose manifest has a dependency on GitHub, a package or one file, is packed or published. A published
+package must keep building for as long as anything depends on it, and what is in someone else's repository can
+disappear, so it may depend only on published packages. Building and running it is fine.
+
+To fix it, depend on a published version of the package, or copy the file into the package.
+
+# NYX0040: File referenced from GitHub that breaks a file's rules
+
+A file a manifest depends on from GitHub, `(module = "retry", github = "acme/snippets/retry.nyx", ...)`, breaks a rule
+for such a file. It declares a module name of its own, which it can't, since the manifest names it and no package can
+export it; or it imports something other than the standard library, which it can't, since it has no manifest to say
+what it depends on.
+
+To fix it, depend on a version of the file without its `module` line or its other imports, or, if it needs more than
+the standard library, on the package it comes from.
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which

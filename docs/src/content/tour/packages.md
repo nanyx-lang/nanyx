@@ -123,6 +123,21 @@ export module collections
 
 A package can only import modules from packages that it directly depends on (`NYX0026`). Dependencies of dependencies are not implicitly available to source code. A build has one copy of each package: two dependencies that reach the same package in different directories are an error (`NYX0028`), and so is a cycle of packages that depend on each other (`NYX0027`). The dependencies' modules are checked once each and compiled into the same program as the package's own.
 
+## Dependencies on GitHub
+
+A dependency can also be code in a GitHub repository, pinned to a commit: a whole package, whose repository has its `.nyxp` at its root, or a single file, which becomes a module of this package under the name the entry gives it:
+
+```nanyx fragment
+dependencies = [
+  (package = "acme.web", github = "acme/web", rev = "v1.2.0", commit = "1f8ae8b3c9d04e5f6a7b8c9d0e1f2a3b4c5d6e7f")
+  (module = "retry", github = "acme/snippets/retry.nyx", rev = "1f8ae8b3c9d04e5f6a7b8c9d0e1f2a3b4c5d6e7f")
+]
+```
+
+The package is imported as one on disk is, `import acme.web/http`, and the file by its module name, `import retry`. A reference must be pinned to a full commit SHA, as its `rev` or as a `commit` beside a tag or branch, because what a tag or branch names can move (`NYX0038`); an editor offers to look the commit up and write it in. A file from GitHub declares no `module` name of its own, can't be exported, and imports only the standard library (`NYX0040`). A package with a GitHub reference can be built and run, but not packed or published (`NYX0039`). In a script, `::dependency retry github:acme/snippets/retry.nyx@<commit>` does the same.
+
+Downloading from GitHub isn't supported yet, so for now a build with a GitHub reference reports that at the entry (`NYX0024`).
+
 ## Packages developed together
 
 Packages that are developed together depend on each other by path, as above. Any package can name another in a directory beside it; no project is needed. The package is imported by its own name, `acme.shared/models`, so the code that uses it stays the same when the dependency later comes from a downloaded package instead. [Projects](#projects) are planned as a way to group such packages and build them together.

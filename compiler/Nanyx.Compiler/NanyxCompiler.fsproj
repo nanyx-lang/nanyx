@@ -121,6 +121,7 @@
     <Compile Include="ModuleLinking.fs" />
     <Compile Include="OwnedDefinitions.fs" />
     <Compile Include="Library.fs" />
+    <Compile Include="GitHub.fs" />
     <Compile Include="Manifest.fs" />
     <Compile Include="Package.fs" />
     <Compile Include="NewPackage.fs" />

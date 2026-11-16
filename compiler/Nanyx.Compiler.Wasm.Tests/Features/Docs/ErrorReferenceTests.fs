@@ -41,9 +41,14 @@ let ``A code's reference link is its section of this page`` () =
     Assert.Equal(None, DiagnosticCodes.referenceUrl "default/unusedBindings")
 
 /// The codes whose sections have no example, because no program reports them: the file given to `nanyx` is missing, a
-/// standard library module is broken, or the backend has a bug.
+/// standard library module is broken, or the backend has a bug; or because an example can't show them: a package is
+/// packed or published, or a file is fetched from GitHub.
 let private withoutExamples =
-    [ DiagnosticCodes.FileNotFound; DiagnosticCodes.InvalidStandardLibraryModule; DiagnosticCodes.BackendInternalError ]
+    [ DiagnosticCodes.FileNotFound
+      DiagnosticCodes.InvalidStandardLibraryModule
+      DiagnosticCodes.GitHubReferenceNotPublishable
+      DiagnosticCodes.InvalidReferencedFile
+      DiagnosticCodes.BackendInternalError ]
     |> List.map _.Code
 
 [<Fact>]

@@ -6,16 +6,32 @@ open System.Text.RegularExpressions
 open Parser.Program
 open Parser.Program.DataValues
 
-/// A package another depends on, in a directory on disk: `(package = "acme.util", path = "../util")` in `dependencies`.
+/// A package another depends on, in a directory on disk, `(package = "acme.util", path = "../util")` in
+/// `dependencies`, or in a GitHub repository, `(package = "acme.web", github = "acme/web", rev = "...")`.
 type Dependency =
     { /// The package's name, which its own manifest must give it too.
       Name: string
-      /// The full path of the directory its manifest is in.
+      /// The full path of the directory its manifest is in; empty for one on GitHub, which is in the directory it is
+      /// fetched to.
       Directory: string
       /// Where its `package` is written.
       NameSpan: SourceSpan
-      /// Where its `path` is written.
-      PathSpan: SourceSpan }
+      /// Where its `path`, or its `github`, is written.
+      PathSpan: SourceSpan
+      /// The repository and commit of a package on GitHub; none for one on disk.
+      GitHub: GitHubReference option }
+
+/// A file in a GitHub repository that a package depends on, which is a module of the package, named by its manifest:
+/// `(module = "retry", github = "acme/snippets/retry.nyx", rev = "...")` in `dependencies`.
+type FileReference =
+    { /// The module name the file has in the package.
+      Module: string
+      /// The file, and the commit it is pinned to.
+      Reference: GitHubReference
+      /// Where the entry is written.
+      Span: SourceSpan
+      /// Where its `github` is written.
+      GitHubSpan: SourceSpan }
 
 /// The host an application's manifest names in its `host` field: a package the compiler ships, at its version, or one
 /// found by its path, `host = (package = "acme.server", path = "../server")`.
@@ -43,6 +59,8 @@ type Manifest =
       PackageSpan: SourceSpan
       /// The packages it depends on, in the order `dependencies` lists them.
       Dependencies: Dependency list
+      /// The files from GitHub it depends on, each a module of the package, in the order `dependencies` lists them.
+      Files: FileReference list
       /// The linters the manifest's `linters` turns on, and the severities their `settings` set.
       Linters: LinterOptions
       /// The host `host` names, if the manifest has one: a package with none is a library, which has no `@entry`.
@@ -102,6 +120,8 @@ module Manifest =
         let found = Collections.Generic.List<Diagnostic>()
         member _.All = List.ofSeq found
         member _.Add (code: DiagnosticCode) (span: SourceSpan) (message: string) = found.Add(Diagnostics.at code span message)
+        member _.AddWithFixes (code: DiagnosticCode) (span: SourceSpan) (message: string) (fixes: Fix list) =
+            found.Add { Diagnostics.at code span message with Fixes = fixes }
 
         /// The fields of `value`, `what` in messages, if it is a record; each one not in `known` is an error.
         member this.Record (what: string) (known: string list) (value: DataValue) : DataField list option =
@@ -264,75 +284,199 @@ module Manifest =
             problems.Text "the package's host" fields HostPackages.preludeField anyText "" |> ignore)
 
     /// The fields of an entry of `dependencies`.
-    let private dependencyFields = [ "package"; "path"; "version" ]
+    let private dependencyFields = [ "package"; "module"; "path"; "version"; "github"; "rev"; "commit" ]
 
-    /// The packages the manifest's `dependencies` lists, each in a directory relative to `root`, or one the compiler
-    /// ships, named at the compiler's version exactly. Any other version names a package to download, which isn't
-    /// supported yet.
-    let private readDependencies (problems: Problems) (root: string) (value: DataValue) : Dependency list =
+    /// What a module name must be, as the name a manifest gives a file from GitHub.
+    let private modulePattern = Regex(@"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)*$")
+
+    /// Finds the commit a tag or branch of a repository points at now, for the fix of an entry that is not pinned; none
+    /// when it can't be found.
+    type Pin = GitHubRepository -> string -> string option
+
+    /// The commit the GitHub reference `reference`, an entry `value` with `fields` whose `github` is `github`, is pinned to:
+    /// its `rev`, if that is a full commit SHA, or else its `commit`. One pinned to neither is an error, since what a tag or
+    /// a branch names can move, and two machines with the same manifest must build the same program. Its fix, where `pin`
+    /// finds the commit, writes that commit in.
+    let private pinned (problems: Problems) (pin: Pin) (repository: GitHubRepository) (reference: string) (github: DataField) (fields: DataField list) (value: DataValue) =
+        let written name =
+            match DataValue.field name fields with
+            | Some { DataField.Value = { DataValue.Data = DataString text } as value } -> Some(text, value.Location)
+            | Some field ->
+                problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"a GitHub reference's {name} must be a string, not {DataValue.describe field.Value}"
+                None
+            | None -> None
+        let notPinned (span: SourceSpan) (message: string) (rev: string) (after: SourceSpan) (field: string) =
+            let at = { after with Start = after.End; StartColumn = after.StartColumn + (after.End - after.Start) }
+            let fixes =
+                pin repository rev
+                |> Option.map (fun commit -> { Title = $"Pin to {commit}"; Edits = [ { Span = at; NewText = $", {field} = \"{commit}\"" } ] })
+                |> Option.toList
+            problems.AddWithFixes DiagnosticCodes.GitHubReferenceNotPinned span message fixes
+            None
+        match written "rev", written "commit" with
+        | _, Some (commit, span) when not (GitHub.isCommit commit) ->
+            problems.Add DiagnosticCodes.InvalidManifestValue span $"""the commit "{commit}" of {reference} must be a full commit SHA, 40 hexadecimal digits in lower case"""
+            None
+        | Some (rev, _), Some (commit, span) when GitHub.isCommit rev && rev <> commit ->
+            problems.Add DiagnosticCodes.InvalidManifestValue span $"the rev and the commit of {reference} are different commits: give one of them"
+            None
+        | _, Some (commit, _) -> Some commit
+        | Some (rev, _), None when GitHub.isCommit rev -> Some rev
+        | Some (rev, span), None ->
+            notPinned span ($"""{reference} names "{rev}", which is not a full commit SHA, so what it names can move: pin it to the commit it names, with commit = "<SHA>" """.TrimEnd()) rev span "commit"
+        | None, None -> notPinned value.Location $"{reference} has no rev, so nothing pins it to a commit: give the commit, with rev = \"<SHA>\"" "HEAD" github.Value.Location "rev"
+
+    /// The entry `value`, with `fields`, of a dependency on GitHub, whose `github` is `github`: a package, which is a
+    /// repository, or a module, which is a file of one, as the module `module` names; and in either case a commit.
+    let private readGitHub (problems: Problems) (pin: Pin) (fields: DataField list) (github: DataField) (value: DataValue) : Choice<Dependency, FileReference> option =
+        let named name = DataValue.field name fields
+        for name in [ "path"; "version" ] do
+            named name
+            |> Option.iter (fun field ->
+                problems.Add DiagnosticCodes.InvalidManifestValue field.NameSpan $"a dependency on GitHub is found by its github and pinned by its rev, so it has no {name}")
+        match github.Value.Data with
+        | DataString text ->
+            match GitHub.parse text with
+            | Result.Error rule ->
+                problems.Add DiagnosticCodes.InvalidManifestValue github.Value.Location $"""a dependency's github "{text}" must be {rule}"""
+                None
+            | Result.Ok (repository, file) ->
+                let commit = pinned problems pin repository text github fields value
+                let reference = { Repository = repository; File = file; Commit = defaultArg commit "" }
+                match named "package", named "module", file with
+                | Some _, Some moduleField, _ ->
+                    problems.Add
+                        DiagnosticCodes.InvalidManifestValue
+                        moduleField.NameSpan
+                        $"a dependency is a package or a module, not both: a package is a repository with a manifest, github = \"{repository}\", and a module is one file, github = \"{repository}/retry.nyx\""
+                    None
+                | None, None, _ ->
+                    problems.Add
+                        DiagnosticCodes.MissingManifestField
+                        value.Location
+                        ($"""a dependency on GitHub has no package or module: name the package the repository holds, package = "acme.web", or the module a file is in this package, module = "retry" """.TrimEnd())
+                    None
+                | Some _, None, Some _ ->
+                    problems.Add
+                        DiagnosticCodes.InvalidManifestValue
+                        github.Value.Location
+                        ($"""a package on GitHub is a whole repository, github = "{repository}": one file of a repository is a module, module = "retry" """.TrimEnd())
+                    None
+                | None, Some _, None ->
+                    problems.Add
+                        DiagnosticCodes.InvalidManifestValue
+                        github.Value.Location
+                        ($"""a module on GitHub is one file of a repository, with the file's path: github = "{repository}/retry.nyx" """.TrimEnd())
+                    None
+                | None, Some _, Some path when not (path.EndsWith ".nyx") ->
+                    problems.Add DiagnosticCodes.InvalidManifestValue github.Value.Location $"a module on GitHub is a Nanyx file, whose name ends .nyx, not {path}"
+                    None
+                | Some packageField, None, None ->
+                    match problems.Text "a dependency" fields "package" namePattern nameRule, commit with
+                    | Some name, Some _ ->
+                        Some(Choice1Of2 { Name = name; Directory = ""; NameSpan = packageField.Value.Location; PathSpan = github.Value.Location; GitHub = Some reference })
+                    | _ -> None
+                | None, Some _, Some _ ->
+                    match problems.Text "a dependency" fields "module" modulePattern "a module name: retry, or acme.retry", commit with
+                    | Some name, Some _ -> Some(Choice2Of2 { Module = name; Reference = reference; Span = value.Location; GitHubSpan = github.Value.Location })
+                    | _ -> None
+        | _ ->
+            problems.Add
+                DiagnosticCodes.InvalidManifestValue
+                github.Value.Location
+                $"a dependency's github must be a string, the repository, acme/web, or a file in it, acme/snippets/retry.nyx, not {DataValue.describe github.Value}"
+            None
+
+    /// The packages the manifest's `dependencies` lists, each in a directory relative to `root`, one the compiler ships,
+    /// named at the compiler's version exactly, or one on GitHub; and the files on GitHub it lists, each a module of the
+    /// package. Any other version names a package to download, which isn't supported yet. `pin` finds the commit for the
+    /// fix of a GitHub reference that is not pinned to one.
+    let private readDependencies (problems: Problems) (pin: Pin) (root: string) (value: DataValue) : Dependency list * FileReference list =
+        let readPackage (fields: DataField list) (value: DataValue) : Dependency option =
+            let name = problems.RequiredText "a dependency" value.Location fields "package" namePattern nameRule
+            let example = $"""path = "../{name |> Option.map (fun name -> name.Substring(name.LastIndexOf '.' + 1)) |> Option.defaultValue "util"}" """.TrimEnd()
+            let shipped = name |> Option.filter (fun name -> Directory.Exists(ShippedPackages.directoryOf name))
+            match DataValue.field "path" fields, DataValue.field "version" fields with
+            | Some _, Some version ->
+                let named = defaultArg name "here"
+                problems.Add
+                    DiagnosticCodes.InvalidManifestValue
+                    version.NameSpan
+                    $"the dependency {named} is found by its path, so it has no version: give one or the other"
+                None
+            | None, Some version when shipped.IsSome ->
+                match problems.Text "a dependency" fields "version" versionPattern "a semantic version: 1.2.0" with
+                | Some written when written <> Toolchain.version ->
+                    problems.Add
+                        DiagnosticCodes.VersionNotShipped
+                        version.Value.Location
+                        $"the compiler ships {shipped.Value} {Toolchain.version}, not {written}: a package the compiler ships is named at its version exactly"
+                    None
+                | Some _ ->
+                    Some
+                        { Name = shipped.Value
+                          Directory = ShippedPackages.directoryOf shipped.Value
+                          NameSpan = (DataValue.field "package" fields).Value.Value.Location
+                          PathSpan = version.Value.Location
+                          GitHub = None }
+                | None -> None
+            | _, Some version ->
+                problems.Add
+                    DiagnosticCodes.UnsupportedManifestField
+                    version.NameSpan
+                    $"a dependency's version names a package to download, but packages can't be downloaded yet: give the directory the package is in, {example}"
+                None
+            | None, None ->
+                problems.Add DiagnosticCodes.MissingManifestField value.Location $"a dependency has no path, the directory the package is in: {example}"
+                None
+            | Some path, None ->
+                match name, path.Value.Data with
+                | Some name, DataString directory ->
+                    Some
+                        { Name = name
+                          Directory = Path.GetFullPath(Path.Combine(root, directory))
+                          NameSpan = (DataValue.field "package" fields).Value.Value.Location
+                          PathSpan = path.Value.Location
+                          GitHub = None }
+                | _, DataString _ -> None
+                | _ ->
+                    problems.Add
+                        DiagnosticCodes.InvalidManifestValue
+                        path.Value.Location
+                        $"a dependency's path must be a string, the directory the package is in, not {DataValue.describe path.Value}"
+                    None
         let read (value: DataValue) =
             problems.Record "a dependency" dependencyFields value
             |> Option.bind (fun fields ->
-                let name = problems.RequiredText "a dependency" value.Location fields "package" namePattern nameRule
-                let example = $"""path = "../{name |> Option.map (fun name -> name.Substring(name.LastIndexOf '.' + 1)) |> Option.defaultValue "util"}" """.TrimEnd()
-                let shipped = name |> Option.filter (fun name -> Directory.Exists(ShippedPackages.directoryOf name))
-                match DataValue.field "path" fields, DataValue.field "version" fields with
-                | Some _, Some version ->
-                    let named = defaultArg name "here"
+                match DataValue.field "github" fields with
+                | Some github -> readGitHub problems pin fields github value
+                | None when (DataValue.field "module" fields).IsSome ->
                     problems.Add
-                        DiagnosticCodes.InvalidManifestValue
-                        version.NameSpan
-                        $"the dependency {named} is found by its path, so it has no version: give one or the other"
+                        DiagnosticCodes.MissingManifestField
+                        value.Location
+                        "a module dependency is a file on GitHub, but this one has no github: give the file, github = \"acme/snippets/retry.nyx\""
                     None
-                | None, Some version when shipped.IsSome ->
-                    match problems.Text "a dependency" fields "version" versionPattern "a semantic version: 1.2.0" with
-                    | Some written when written <> Toolchain.version ->
-                        problems.Add
-                            DiagnosticCodes.VersionNotShipped
-                            version.Value.Location
-                            $"the compiler ships {shipped.Value} {Toolchain.version}, not {written}: a package the compiler ships is named at its version exactly"
-                        None
-                    | Some _ ->
-                        Some
-                            { Name = shipped.Value
-                              Directory = ShippedPackages.directoryOf shipped.Value
-                              NameSpan = (DataValue.field "package" fields).Value.Value.Location
-                              PathSpan = version.Value.Location }
-                    | None -> None
-                | _, Some version ->
-                    problems.Add
-                        DiagnosticCodes.UnsupportedManifestField
-                        version.NameSpan
-                        $"a dependency's version names a package to download, but packages can't be downloaded yet: give the directory the package is in, {example}"
-                    None
-                | None, None ->
-                    problems.Add DiagnosticCodes.MissingManifestField value.Location $"a dependency has no path, the directory the package is in: {example}"
-                    None
-                | Some path, None ->
-                    match name, path.Value.Data with
-                    | Some name, DataString directory ->
-                        Some
-                            { Name = name
-                              Directory = Path.GetFullPath(Path.Combine(root, directory))
-                              NameSpan = (DataValue.field "package" fields).Value.Value.Location
-                              PathSpan = path.Value.Location }
-                    | _, DataString _ -> None
-                    | _ ->
-                        problems.Add
-                            DiagnosticCodes.InvalidManifestValue
-                            path.Value.Location
-                            $"a dependency's path must be a string, the directory the package is in, not {DataValue.describe path.Value}"
-                        None)
+                | None ->
+                    for name in [ "rev"; "commit" ] do
+                        DataValue.field name fields
+                        |> Option.iter (fun field ->
+                            problems.Add DiagnosticCodes.InvalidManifestValue field.NameSpan $"a dependency's {name} pins a reference to GitHub, but this one has no github")
+                    readPackage fields value |> Option.map Choice1Of2)
         match value.Data with
         | DataList entries ->
-            let dependencies = entries |> List.choose read
+            let read = entries |> List.choose read
+            let dependencies = read |> List.choose (function Choice1Of2 dependency -> Some dependency | Choice2Of2 _ -> None)
+            let files = read |> List.choose (function Choice2Of2 file -> Some file | Choice1Of2 _ -> None)
             problems.Repeats
                 (dependencies |> List.map (fun dependency -> dependency.Name, dependency.NameSpan))
                 (fun name -> $"the dependency {name} is listed twice: a package lists each package it depends on once")
-            dependencies
+            problems.Repeats
+                (files |> List.map (fun file -> file.Module, file.Span))
+                (fun name -> $"the module {name} is listed twice: a package gives each module name to one file")
+            dependencies, files
         | _ ->
             problems.Add DiagnosticCodes.InvalidManifestValue value.Location $"dependencies must be a list, [(package = ..., path = ...)], not {DataValue.describe value}"
-            []
+            [], []
 
     /// The host `value` names, written as a manifest's `host` is, with its `path` relative to `root`, or what is wrong
     /// with it, as `check` reports it: how a script's `::host` directive is read (see `Script`).
@@ -342,12 +486,13 @@ module Manifest =
         | Some entry, [] -> Result.Ok entry
         | _, problems -> Result.Error problems
 
-    /// The packages `value` lists, written as a manifest's `dependencies` is, each `path` relative to `root`, with what is
-    /// wrong with them, as `check` reports it: how a script's `::dependency` directives are read (see `Script`).
-    let internal dependencyEntries (root: string) (value: DataValue) : Dependency list * Diagnostic list =
+    /// The packages and the files from GitHub `value` lists, written as a manifest's `dependencies` is, each `path`
+    /// relative to `root`, with what is wrong with them, as `check` reports it: how a script's `::dependency` directives
+    /// are read (see `Script`).
+    let internal dependencyEntries (root: string) (value: DataValue) : Dependency list * FileReference list * Diagnostic list =
         let problems = Problems()
-        let dependencies = readDependencies problems root value
-        dependencies, problems.All
+        let dependencies, files = readDependencies problems (fun _ _ -> None) root value
+        dependencies, files, problems.All
 
     /// The linter options `value` sets, written as a manifest's `linters` is, with what is wrong with it, as `check`
     /// reports it: how a script's `::linter` and `::lint` directives are read (see `Script`).
@@ -382,8 +527,9 @@ module Manifest =
             Diagnostics.at DiagnosticCodes.TomlManifest span "The manifest is a Nanyx record, `( package = (...) ... )`, not TOML")
 
     /// The manifest at `path`, whose text is `text`, or every problem with it, each at the field it is about. One in
-    /// the old TOML form has the one error that says so.
-    let check (path: string) (text: string) : Result<Manifest, Diagnostic list> =
+    /// the old TOML form has the one error that says so. A GitHub reference that is not pinned to a commit has a fix
+    /// that pins it to the commit `pin` finds, if it finds one.
+    let checkPinning (pin: Pin) (path: string) (text: string) : Result<Manifest, Diagnostic list> =
         let path = Path.GetFullPath path
         match DataValue.read path text with
         | Result.Error errors ->
@@ -394,7 +540,7 @@ module Manifest =
             let problems = Problems()
             let top = problems.Record "the manifest" fields manifest |> Option.defaultValue []
             let field name = DataValue.field name top
-            let dependencies = field "dependencies" |> Option.map (fun field -> readDependencies problems (Path.GetDirectoryName path) field.Value)
+            let dependencies = field "dependencies" |> Option.map (fun field -> readDependencies problems pin (Path.GetDirectoryName path) field.Value)
             match field "formatter" with
             | Some { DataField.Value = { DataValue.Data = DataRecord _ } }
             | None -> ()
@@ -425,7 +571,8 @@ module Manifest =
                       Version = defaultArg version ""
                       Sources = defaultArg sources [ "**/*.nyx" ]
                       PackageSpan = package |> Option.map snd |> Option.defaultValue manifest.Location
-                      Dependencies = defaultArg dependencies []
+                      Dependencies = dependencies |> Option.map fst |> Option.defaultValue []
+                      Files = dependencies |> Option.map snd |> Option.defaultValue []
                       // No `linters` means no linters: a package turns on the official one by naming nanyx.lint.
                       Linters = defaultArg linters Linters.none
                       // No `host` means a library: an application names the host it runs under.
@@ -433,6 +580,22 @@ module Manifest =
                       Declares = HostPackages.ofManifest (defaultArg name "") (Path.GetDirectoryName path) manifest
                       Value = manifest }
             | problems -> Result.Error problems
+
+    /// The manifest at `path`, whose text is `text`, or every problem with it (see `checkPinning`).
+    let check (path: string) (text: string) : Result<Manifest, Diagnostic list> = checkPinning (fun _ _ -> None) path text
+
+    /// An error at each GitHub reference of `manifest`, since a package that has one can't be packed or published: a
+    /// published package must keep building for as long as anything depends on it, and what is in someone else's
+    /// repository can disappear. Building and running it is fine.
+    let publishErrors (manifest: Manifest) : Diagnostic list =
+        let error (span: SourceSpan) (what: string) =
+            Diagnostics.at
+                DiagnosticCodes.GitHubReferenceNotPublishable
+                span
+                $"{what} is on GitHub, so {manifest.Name} can't be packed or published: a published package must keep building for as long as anything depends on it, and what is in someone else's repository can disappear"
+        (manifest.Dependencies
+         |> List.choose (fun dependency -> dependency.GitHub |> Option.map (fun reference -> error dependency.PathSpan $"the dependency {dependency.Name}, {reference},")))
+        @ (manifest.Files |> List.map (fun file -> error file.GitHubSpan $"the module {file.Module}, {file.Reference},"))
 
     /// `diagnostic`, one of a manifest's, as one line: `path:line:column: error NYX0021: message`.
     let describe (diagnostic: Diagnostic) =

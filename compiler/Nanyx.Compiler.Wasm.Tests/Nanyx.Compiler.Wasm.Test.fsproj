@@ -110,6 +110,7 @@
     <Compile Include="Features\Memory\ClosureEntryTests.fs" />
     <Compile Include="Features\Memory\MatchBorrowingTests.fs" />
     <Compile Include="Features\Memory\HeapReuseTests.fs" />
+    <Compile Include="Features\Memory\OutOfMemoryTests.fs" />
     <Compile Include="Features\Names\RunNameTests.fs" />
     <Compile Include="Features\Nominals\RunNominalTests.fs" />
     <Compile Include="Features\Nominals\RunRecursiveNominalTests.fs" />
@@ -122,6 +123,7 @@
     <Compile Include="Features\Operators\RunCoalesceTests.fs" />
     <Compile Include="Features\Operators\RunComparisonLiteralTests.fs" />
     <Compile Include="Features\Ordering\RunOrderingTests.fs" />
+    <Compile Include="Features\Packages\GitHubReferenceRunTests.fs" />
     <Compile Include="Features\Packages\ManifestCommandTests.fs" />
     <Compile Include="Features\Packages\PackageCommandTests.fs" />
     <Compile Include="Features\Packages\PathDependencyRunTests.fs" />
