@@ -110,6 +110,7 @@
     <Compile Include="Features\Memory\ClosureEntryTests.fs" />
     <Compile Include="Features\Memory\MatchBorrowingTests.fs" />
     <Compile Include="Features\Memory\HeapReuseTests.fs" />
+    <Compile Include="Features\Memory\OutOfMemoryTests.fs" />
     <Compile Include="Features\Names\RunNameTests.fs" />
     <Compile Include="Features\Nominals\RunNominalTests.fs" />
     <Compile Include="Features\Nominals\RunRecursiveNominalTests.fs" />
