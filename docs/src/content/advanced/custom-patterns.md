@@ -5,9 +5,9 @@ order: 13
 ---
 
 > **Being built.** The design below is decided ([#1719](https://github.com/nanyx-lang/nanyx/issues/1719)). Total
-> patterns work, and the examples of them on this page run as tests. Partial patterns are still to come
-> ([#1722](https://github.com/nanyx-lang/nanyx/issues/1722)), as are patterns with arguments
-> ([#1723](https://github.com/nanyx-lang/nanyx/issues/1723)).
+> and partial patterns work, and the examples of them on this page run as tests. Patterns with arguments are still
+> to come ([#1723](https://github.com/nanyx-lang/nanyx/issues/1723)).
+
 The `pattern` keyword allows for the encapsulation of matching logic in reusable components.
 
 A custom pattern is a function with a signature but no name: it is identified by the tags it returns. Its tags are
@@ -96,39 +96,57 @@ println(parity(7))
 -- zero
 -- odd
 ```
+
 # Partial patterns
 
 Custom patterns can be partial (meaning they might not match all possible inputs). For a pattern to be partial, one of
-its return values must be a wildcard (`_`). A match using a partial pattern needs a `_` arm to be exhaustive.
+its return values must be a wildcard (`_`). A match using a partial pattern needs a `_` arm to be exhaustive: without
+one, it is an error ([`NYX0203`](../standard-tools/errors#nyx0203)) that says so.
 
 As a convenience, a partial pattern with exactly one choice and no payload may return a `bool` instead of an explicit
 tag:
 
-```nanyx skip=#1722
+```nanyx
 pattern int -> #Zero | _ = { n -> n == 0 }
 
-match num
+def num = 0
+
+def describe = match num
   | #Zero -> "zero"
   | _ -> "non-zero"
+
+println(describe)
 
 -- Alternatively, we can use if-matching style:
 if num is #Zero then
   println("It's zero!")
+
+-- zero
+-- It's zero!
 ```
 
-Otherwise, the body says "no match" by returning `_`, which is valid only in a pattern's body:
+Otherwise, the body says "no match" by returning `_`, which is valid only in a pattern's body: `_` as a value anywhere
+else is an error ([`NYX0263`](../standard-tools/errors#nyx0263)).
 
-```nanyx skip=#1722
+```nanyx
 pattern string -> #ParseInt(int) | #ParseBool(bool) | _ = { s ->
-  if | int.fromString(s) is #some(i) -> #ParseInt(i)
-     | bool.fromString(s) is #some(b) -> #ParseBool(b)
-     | else -> _
+  if
+    | int.fromString(s) is #some(i) -> #ParseInt(i)
+    | bool.fromString(s) is #some(b) -> #ParseBool(b)
+    | else -> _
 }
 
-match getUserInput()
-  | #ParseInt(i) -> println("Parsed an integer: {i}")
-  | #ParseBool(b) -> println("Parsed a boolean: {b}")
-  | _ -> println("Input is neither an integer nor a boolean.")
+def describe = { (input: string) ->
+  match input
+    | #ParseInt(i) -> println("Parsed an integer: {i}")
+    | #ParseBool(b) -> println("Parsed a boolean: {b}")
+    | _ -> println("Input is neither an integer nor a boolean.")
+}
+
+describe("42")
+describe("yes")
+-- Parsed an integer: 42
+-- Input is neither an integer nor a boolean.
 ```
 
 # Patterns with arguments

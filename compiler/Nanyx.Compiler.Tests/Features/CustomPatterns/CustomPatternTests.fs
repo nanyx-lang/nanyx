@@ -146,3 +146,47 @@ pattern int -> #Loud | #Quiet = { n ->
     Assert.Contains("a pattern is pure", message)
     Assert.Equal("println", text)
     Assert.Empty((single (Compiler.compile source)).Fixes)
+[<Fact>]
+let ``A match on a partial pattern without a _ arm is not exhaustive, and says so`` () =
+    let source =
+        """
+pattern int -> #Zero | _ = { n -> n == 0 }
+
+def describe = { (num: int) ->
+  match num
+    | #Zero -> "zero"
+}
+"""
+            .ReplaceLineEndings "\n"
+    let code, message, text = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, code)
+    Assert.Equal("match num", text)
+    Assert.Contains("missing a `_` arm for the values the pattern doesn't match", message)
+
+[<Fact>]
+let ``A partial pattern with several tags names the tags a match leaves out, and the _ arm`` () =
+    let source =
+        """
+pattern string -> #ParseInt(int) | #ParseBool(bool) | _ = { s ->
+  if
+    | int.fromString(s) is #some(i) -> #ParseInt(i)
+    | bool.fromString(s) is #some(b) -> #ParseBool(b)
+    | else -> _
+}
+
+def parse = { (s: string) ->
+  match s
+    | #ParseInt(i) -> i
+}
+"""
+            .ReplaceLineEndings "\n"
+    let code, message, _ = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, code)
+    Assert.Contains("missing `#ParseBool`, which the pattern returns too, and a `_` arm", message)
+
+[<Fact>]
+let ``_ as a value outside a pattern's body is an error of its own`` () =
+    let code, message, text = onlyDiagnostic "def nothing = _"
+    Assert.Equal(DiagnosticCodes.NoMatchOutsidePattern.Code, code)
+    Assert.Equal("_", text)
+    Assert.Contains("no match", message)

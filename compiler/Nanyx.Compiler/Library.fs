@@ -810,7 +810,7 @@ module Compiler =
                     match script, runtimeErrors with
                     | Some _, _ :: _ -> mismatchErrors |> List.filter (fun diagnostic -> not (diagnostic.Code = DiagnosticCodes.ContextsNotAllowed.Code && diagnostic.Span.IsNone))
                     | _ -> mismatchErrors
-                let moduleErrors = nameErrors @ patternErrors @ inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
+                let moduleErrors = nameErrors @ patternErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let defer =
                     if moduleErrors.IsEmpty then fun expr -> expr, []
