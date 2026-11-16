@@ -99,10 +99,26 @@ module SyntaxTree =
             |> InterpolatedString
             |> rebuild
 
-    /// `expr` and every expression within it.
-    let rec expressionsWithin (expr: Expression) : Expression list =
-        let children, statements = childrenOf expr
-        expr :: ((children @ (statements |> List.collect ofStatement)) |> List.collect expressionsWithin)
+    /// `expr` and every expression within it as `children` gives those directly within one, each before those within
+    /// it, and those within one before the next of its siblings. It takes time in proportion to their number, however
+    /// deeply they nest, and no stack (#1460).
+    let expressionsWithinBy (children: Expression -> Expression list) (expr: Expression) : Expression list =
+        let found = ResizeArray<Expression>()
+        let pending = System.Collections.Generic.Stack<Expression>()
+        pending.Push expr
+        while pending.Count > 0 do
+            let next = pending.Pop()
+            found.Add next
+            for child in List.rev (children next) do
+                pending.Push child
+        List.ofSeq found
+
+    /// `expr` and every expression within it, each before those within it (see `expressionsWithinBy`).
+    let expressionsWithin (expr: Expression) : Expression list =
+        expr
+        |> expressionsWithinBy (fun within ->
+            let children, statements = childrenOf within
+            children @ (statements |> List.collect ofStatement))
 
     /// The expressions a top-level item holds, and the items of a module block.
     let rec ofItem (item: TopLevelItem) : Expression list =

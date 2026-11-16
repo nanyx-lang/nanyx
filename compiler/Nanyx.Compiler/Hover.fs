@@ -72,8 +72,9 @@ let expressionsAt (offset: int) (module': Module) : Expression list =
         else found
     module' |> List.collect topLevelExpressions |> List.fold search []
 
-/// `expr` and every expression inside it, each before those inside it.
-let rec expressionsWithin (expr: Expression) : Expression list = expr :: (children expr |> List.collect expressionsWithin)
+/// `expr` and every expression inside it, each before those inside it, and each arm of a match with the expressions in
+/// its patterns before its body (see `SyntaxTree.expressionsWithinBy`).
+let expressionsWithin (expr: Expression) : Expression list = SyntaxTree.expressionsWithinBy children expr
 
 /// Every expression in `module'`, each before those inside it.
 let allExpressions (module': Module) : Expression list =
