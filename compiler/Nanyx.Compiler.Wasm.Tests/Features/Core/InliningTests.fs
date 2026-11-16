@@ -58,12 +58,36 @@ def answer: int -> int = { n -> if n == 0 then apply({ m -> m + 1 }, 41) else an
 
 println("{answer(2)}")
 """
-    // `apply` ends in a call of its lambda parameter, so it is inlined whatever its size, and then the lambda, which is
-    // called once: `answer` calls neither.
+    // `apply` ends in a call of its lambda parameter and is called once, so it is inlined whatever its size, and then
+    // the lambda, which is called once: `answer` calls neither.
     let answer = functionText "answer" (transpileWat source)
     Assert.DoesNotContain("call $apply", answer)
     Assert.DoesNotContain("call_indirect", answer)
     runSource source |> assertRan "42\n"
+
+/// A chain of `levels` functions after `g0`, each printing and calling the one before twice, and a call of the last.
+/// Each is a handler, since it ends in a call through the `Console` member it is given.
+let private doublingChain (levels: int) =
+    let level (index: int) =
+        $"""def g{index}: [Console] int -> () = {{ x ->
+  println("step")
+  g{index - 1}(x + 1)
+  g{index - 1}(x + 2)
+}}
+"""
+    let definitions = List.init levels (fun index -> level (index + 1)) |> String.concat "\n"
+    normalized $"""def g0: [Console] int -> () = {{ x -> println("step {{x}}") }}
+
+{definitions}
+g{levels}(0)
+"""
+
+[<Fact>]
+let ``A handler called twice at every level is not copied twice at every level`` () =
+    // Inlined wherever it was called whatever its size, each level's body held two copies of the level below's, up to
+    // the growth limit: 1.2 MB of WAT for twenty levels (#1664).
+    Assert.True((transpileWat (doublingChain 20)).Length < 150_000, "the module should grow with the chain, not double with each level")
+    runSource (doublingChain 2) |> assertRan "step\nstep\nstep 2\nstep 3\nstep\nstep 3\nstep 4\n"
 
 [<Fact>]
 let ``A tail call in inlined code stays a tail call`` () =
