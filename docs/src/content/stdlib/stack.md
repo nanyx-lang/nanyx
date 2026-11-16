@@ -96,10 +96,10 @@ def Stack.isEmpty: Stack(a) -> bool
 
 Whether `stack` has nothing on it.
 
-## `Stack.count`
+## `Stack.length`
 
 ```nanyx fragment
-def Stack.count: Stack(a) -> int
+def Stack.length: Stack(a) -> int
 ```
 
 How many values are on `stack`. It counts them, so it takes time in proportion to how many

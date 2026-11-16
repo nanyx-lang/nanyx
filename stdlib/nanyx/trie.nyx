@@ -193,7 +193,7 @@ export def Trie.containsKey: [Eq(k), Hash(k)] Trie(k, v), list(k) -> bool = { tr
 }
 
 --| How many keys `trie` holds.
-export def Trie.count: Trie(k, v) -> int = { Trie(root) ->
+export def Trie.length: Trie(k, v) -> int = { Trie(root) ->
   countOf(root)
 }
 
@@ -297,8 +297,8 @@ export def StringTrie.containsKey: StringTrie(v), string -> bool = { StringTrie(
 }
 
 --| How many keys `trie` holds.
-export def StringTrie.count: StringTrie(v) -> int = { StringTrie(trie) ->
-  Trie.count(trie)
+export def StringTrie.length: StringTrie(v) -> int = { StringTrie(trie) ->
+  Trie.length(trie)
 }
 
 --| Whether `trie` holds no keys.
