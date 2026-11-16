@@ -1,0 +1,59 @@
+--| Mutable stacks: last in, first out, changed in place.
+
+  An `MStack(a)` is a stack that [`MStack.push`] and [`MStack.pop`] change in place, each in
+  constant time. It holds its elements in an [`MRef`](mref), so it belongs to the `memory` block it
+  was made in: every operation requires that block's `Memory`, and the stack can't leave the block.
+
+  Each function is attached to `MStack`, so with `import nanyx/mstack` it is called as
+  `MStack.push(stack, 5)`, or as `stack \push(5)`.
+module mstack
+
+import nanyx/mref
+
+export type MStack(a) = private MRef(list(a))
+
+--| A new stack with nothing on it.
+export def MStack.empty: [Memory] () -> MStack(a) = {
+  MStack(MRef.new([]))
+}
+
+--| A new stack holding `xs`, the first of them on top.
+export def MStack.fromList: [Memory] list(a) -> MStack(a) = { xs ->
+  MStack(MRef.new(xs))
+}
+
+--| Puts `value` on top of `stack`.
+export def MStack.push: [Memory] MStack(a), a -> () = { MStack(items), value ->
+  MRef.set(items, [value, ...MRef.get(items)])
+}
+
+--| Takes the value on top of `stack` off it, or `#none` when it is empty.
+export def MStack.pop: [Memory] MStack(a) -> #some(a) | #none = { MStack(items) ->
+  match MRef.get(items)
+    | [] -> #none
+    | [top, ...rest] ->
+      MRef.set(items, rest)
+      #some(top)
+}
+
+--| The value on top of `stack`, left where it is, or `#none` when it is empty.
+export def MStack.peek: [Memory] MStack(a) -> #some(a) | #none = { MStack(items) ->
+  match MRef.get(items)
+    | [] -> #none
+    | [top, ..._] -> #some(top)
+}
+
+--| Whether `stack` has nothing on it.
+export def MStack.isEmpty: [Memory] MStack(a) -> bool = { MStack(items) ->
+  list.isEmpty(MRef.get(items))
+}
+
+--| How many values are on `stack`.
+export def MStack.count: [Memory] MStack(a) -> int = { MStack(items) ->
+  list.length(MRef.get(items))
+}
+
+--| The values on `stack`, the top one first.
+export def MStack.toList: [Memory] MStack(a) -> list(a) = { MStack(items) ->
+  MRef.get(items)
+}

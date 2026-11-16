@@ -4,26 +4,26 @@ description: Lists, maps, sets, and mutability
 order: 8
 ---
 
-Collections are typically immutable in Nanyx, although [it is possible to use and create mutable versions](../advanced/memory). Mutable versions live in `nanyx/collections.mutable` and, by convention, have an `M` prefix in their name (for example, `MList` vs `list`).
+Collections are typically immutable in Nanyx, although [it is possible to use and create mutable versions](../advanced/memory). Mutable versions have an `M` prefix in their name (for example, `MList` vs `list`), and each is a module of its own: [`nanyx/mlist`](../stdlib/mlist), [`nanyx/mstack`](../stdlib/mstack) and [`nanyx/mref`](../stdlib/mref).
 
 # Immutable vs mutable
 
 Immutable collections are persistent data structures, while mutable collections are optimized for in-place updates.
 
-```nanyx skip=#870
+```nanyx
+import nanyx/mlist
+
 -- Immutable list
 
 def numbers = [1, 2, 3]
 
 -- Mutable list (requires Memory context)
 
-def addItems = {
-  memory {
-    mut items: MList(int) = []
-    items += 1
-    items += 2
-    MList.toList(items)
-  }
+def addItems = memory {
+  def items: MList(int) = MList.empty()
+  items \add(1)
+  items \add(2)
+  MList.toList(items)
 }
 ```
 

@@ -179,15 +179,24 @@ Because `memory` is scoped, global mutable state is effectively impossible. Top-
 
 A cell that no lambda captures is a WebAssembly local, and `:=` sets it. A cell a lambda captures, or one passed with `mut`, is a box on the heap, shared by the block, every lambda that captures it and every function it is passed to, and reference counted like any other value, so it is freed when the last of them is done with it. A reference is the same box: `MRef.set` gives up the value it held, and the box gives up the value it holds when it is freed.
 
-# Planned
+# Mutable collections
 
-Mutable collections and `mut` record fields are planned; see [Work in progress: Mutation](../work-in-progress/mutation). For example, a mutable list will be an ordinary value with attached operators that update it in place, where `+=` is an attached definition on `MList`, not a second kind of assignment:
+A stack or a list that changes in place is a value, as a reference is, and belongs to its block in the same way. To keep a stack in a block, use an `MStack` from [`nanyx/mstack`](../stdlib/mstack): `push` and `pop` change it in place, each in constant time.
 
 ```nanyx
-memory {
-  def items: MList(int) = []
-  items += 1
-  items += 2
-  MList.toList(items) -- [1, 2]
+import nanyx/mstack
+
+def top = memory {
+  def stack = MStack.empty()
+  stack \push(5.0)
+  stack \push(6.0)
+  def popped = stack \pop -- #some(6.0)
+  stack \peek -- #some(5.0)
 }
 ```
+
+An `MList` from [`nanyx/mlist`](../stdlib/mlist) grows at the end with `add`, and reads and sets its elements by index. Both are written in Nanyx over `MRef`, so every operation requires the block's `Memory`, and neither can leave the block.
+
+# Planned
+
+A fixed-length mutable array, `+=` on an `MList` ([#1564](https://github.com/nanyx-lang/nanyx/issues/1564)) and `mut` record fields are planned; see [Work in progress: Mutation](../work-in-progress/mutation).
