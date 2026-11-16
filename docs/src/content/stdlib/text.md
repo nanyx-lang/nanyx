@@ -320,4 +320,76 @@ The character whose Unicode code point is `codePoint`, as a string: `string.from
 `#some("é")`. A negative number, a surrogate (55296 to 57343, `0xD800` to `0xDFFF`) or a number past
 the last code point (1114111, `0x10FFFF`) gives `#invalidCodePoint`.
 
+## `StringSlice`
+
+```nanyx fragment
+type StringSlice = private (length: int, start: int, text: string)
+```
+
+A view of a run of a string's bytes, which shares the string instead of copying it: the string,
+the byte the run starts at and how many bytes it is. [`string.slice`](#stringslice-1) makes one, and a slice of a
+slice is one too, each without copying, so a parser or a lexer can walk a text and look at its
+tokens without making a substring of each. [`StringSlice.toString`](#stringslicetostring) copies the run into a string
+of its own, which lets go of the larger one. Bytes are counted as [`string.substring`](#stringsubstring) counts them.
+
+## `string.slice`
+
+```nanyx fragment
+def string.slice: string, int, int -> StringSlice
+```
+
+The bytes of `s` from `from` up to but not including `to`, as a slice that shares `s`: each bound
+is moved into `0` to the length of `s`, and the slice is empty when `to` is before `from`.
+
+## `StringSlice.length`
+
+```nanyx fragment
+def StringSlice.length: StringSlice -> int
+```
+
+The number of bytes `s` views.
+
+## `StringSlice.isEmpty`
+
+```nanyx fragment
+def StringSlice.isEmpty: StringSlice -> bool
+```
+
+Whether `s` views no bytes.
+
+## `StringSlice.byteAt`
+
+```nanyx fragment
+def StringSlice.byteAt: StringSlice, int -> #some(int) | #none
+```
+
+The byte of `s` at `index`, counting from 0 at the start of `s`, or `#none` when `index` is
+negative or past its end.
+
+## `StringSlice.slice`
+
+```nanyx fragment
+def StringSlice.slice: StringSlice, int, int -> StringSlice
+```
+
+The bytes of `s` from `from` up to but not including `to`, counting from the start of `s`,
+sharing the same string. The bounds clamp into `s`, as [`string.slice`](#stringslice-1)'s do.
+
+## `StringSlice.startsWith`
+
+```nanyx fragment
+def StringSlice.startsWith: StringSlice, string -> bool
+```
+
+Whether the bytes `s` views begin with `prefix`, compared without copying them.
+
+## `StringSlice.toString`
+
+```nanyx fragment
+def StringSlice.toString: StringSlice -> string
+```
+
+A copy of the bytes `s` views, as a string of its own, which doesn't keep the string `s` views
+alive.
+
 <!-- End of the generated reference. -->

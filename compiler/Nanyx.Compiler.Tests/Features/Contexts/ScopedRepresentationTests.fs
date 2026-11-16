@@ -122,3 +122,23 @@ def counted = memory {
 def leaks = memory { Counter.new() }
 """
     Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes source)
+
+[<Fact>]
+let ``A mutable slice belongs to the memory block of the array it views, so it can't leave it`` () =
+    let source =
+        """
+import nanyx/marray
+import nanyx/mslice
+
+def sorted = memory {
+  def ys = MArray.fromArray(Array[3, 1, 2])
+  MSlice.sort(ys \slice(0, 3))
+  MArray.toArray(ys)
+}
+
+def leaks = memory {
+  def ys = MArray.fromArray(Array[3, 1, 2])
+  ys \slice(0, 2)
+}
+"""
+    Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes source)

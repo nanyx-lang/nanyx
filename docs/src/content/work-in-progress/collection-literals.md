@@ -39,4 +39,4 @@ chosen by the expected type (`def a: Array(int) = [1, 2]`) or by the type's name
 - **Where the expected type comes from.** Only a def's written type and a call's parameter: a lambda's result, a
   record field's type and a pattern's don't make a literal another type yet. A literal that is only a spread, `[...xs]`,
   is parsed as `xs`, so it is never read as another type.
-- **Spreading a set or a `seq`** waits for an `Iterable` context ([Lazy sequences](./lazy-sequences)).
+- **Spreading a set, a `seq` or a slice** waits for an `Iterable` context ([Lazy sequences](./lazy-sequences)).
