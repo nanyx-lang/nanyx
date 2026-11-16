@@ -56,7 +56,7 @@ type Point = (x: int, y: int)
 def Point.`0` = Point(x = 0, y = 0)
 def Point.`+` = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }
 
-context Sum(a) = (`0`: a, `+`: (a, a) -> a)
+context Sum(a) = (a, `+`: (a, a) -> a)
 
 def sum: [Sum(a)] list(a) -> a = { items ->
   items \fold(`0`) { + }
@@ -67,17 +67,19 @@ def points = [Point(x = 1, y = 2), Point(x = 3, y = 4), Point(x = 5, y = 6)]
 -- Sum(Point) is synthesized from Point.`0` and Point.`+`
 def pointTotal = sum(points) -- Point(x = 9, y = 12)
 
--- An explicitly loaded instance takes priority over synthesis
-def reverseTotal =
-  use Sum(Point)(
-    `0` = Point(x = 0, y = 0)
-    `+` = { a, b -> Point(x = a.x - b.x, y = a.y - b.y) }
-  ) in sum(points)
+-- A type with no instance of its own is given one with use. Point has its own,
+-- built from Point.`0` and Point.`+`, and a use can't replace it.
+type Size = (w: int)
+
+def widest =
+  use Sum(Size)(`0` = Size(w = 0), `+` = { a, b -> if a.w > b.w then a else b }) in sum(
+    [Size(w = 1), Size(w = 3), Size(w = 2)]
+  )
 
 @entry
 def main = {
   println("{product([1, 2, 3, 4])}") -- 24
   println("{total([1, 2, 3, 4])}") -- 10
   println("{pointTotal}") -- (x = 9, y = 12)
-  println("{reverseTotal}") -- (x = -9, y = -12)
+  println("{widest}") -- (w = 3)
 }

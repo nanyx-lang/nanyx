@@ -33,8 +33,9 @@ operators call, and `Hash(a)` and `__hash`.
 - **`!=` is not a member.** It is `not (a == b)`, and calls whatever `==` calls.
 - **Instances at a call.** A call that requires `Eq(T)` finds: an instance in scope (a `use`, or the enclosing
   signature); then the `==` attached to `T`; then the compiler's own, whose member is the prelude's `__equals`, a
-  generic function that compares by structure at the type it is specialised for. This order changes: a type's own
-  instance will come before a `use` (decision 2, [#1501](https://github.com/nanyx-lang/nanyx/issues/1501)).
+  generic function that compares by structure at the type it is specialised for. A `use` of an instance for a type that
+  has its own is NYX0249 (decision 2, `ContextInstances.ownInstanceErrors`), so an instance in scope is only ever one
+  for a type with none of its own, or for a type variable, and a type's own always wins.
 - **Only nominal types attach `==`** (decision 6). `` def Point.`==` `` on a structural type, or on a
   built-in type such as `string`, is `NYX0219`, and so is attaching `!=` to anything. `AttachedOperators.fs` holds
   the rule, with a list of the members it covers: `==`, `compare` and `hash`.
@@ -63,8 +64,7 @@ operators call, and `Hash(a)` and `__hash`.
   writes its type with an open union, `#none | r -> bool`, needs no `[Eq(r)]`. As for local functions, the function
   named as a value is checked too, at the type it is passed as.
 - **A concrete `a == b` is a lookup too.** Where `==` is bound to a definition that takes the operands,
-  as it is after `use ignoringCase` (an `Eq(string)`), `a == b` calls it, on a built-in type as on any other (this
-  goes with decision 2: such a `use` becomes an error, [#1501](https://github.com/nanyx-lang/nanyx/issues/1501)); else, on
+  as it is after a `use` of an `Eq` for a type with none of its own, `a == b` calls it (a `use` for a type with its own `==` is NYX0249, decision 2); else, on
   a type with a `==` attached, it calls that, as any operator on a type that attaches it does (`OperatorCalls.fs`,
   [#527](https://github.com/nanyx-lang/nanyx/issues/527)). Inside the attached `==` itself, `==` on its own type is
   the built-in comparison.
@@ -116,7 +116,7 @@ operators call, and `Hash(a)` and `__hash`.
   it inferred in a def that does not write one. `<` on a `list(a)` needs `Ord(a)`.
 - **Instances.** An operator, like a call, finds an instance in scope (a `use`, or the enclosing signature, which also
   covers a concrete `"a" < "b"`), then the `compare` attached to a type that is not a built-in one, then the
-  compiler's own. As for `Eq`, a type's own instance will come first (decision 2). Any instance but the compiler's own is called: `x < y` calls the prelude's `__less`
+  compiler's own. As for `Eq`, a `use` for a type with its own order is NYX0249 (decision 2). Any instance but the compiler's own is called: `x < y` calls the prelude's `__less`
   (and `<=`, `>`, `>=` call `__lessOrEqual`, `__greater` and `__greaterOrEqual`), which is passed the instance.
 - **Only nominal types attach `compare`** (decision 6): attaching it to a structural type is `NYX0219`,
   as for `==`. A built-in type may attach one, as the prelude does, but it is not read.
@@ -183,7 +183,8 @@ Contexts are implicit parameters ([docs: Contexts](../advanced/contexts)). Imple
   ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)). The older `use Show(Point) = (...)` is a parse error
   that says so.
 - **Resolving** an instance at each call (`resolveCallInstances` in `ContextInstances.fs`), first match wins:
-  1. an instance for that exact type loaded with `use` around the call, nearest first (`instanceInScope`);
+  1. an instance for that exact type loaded with `use` around the call, nearest first (`instanceInScope`), which is
+     never one for a type that has its own: such a `use` is NYX0249 (`ownInstanceErrors`, decision 2);
   2. the instance the enclosing function's own signature declares (a generic function passes its `[Show(a)]` on);
   3. an instance **synthesized** from the type's attached definitions, matched by member name: `Point.show` makes
      a `Show(Point)` (`synthesizeInstance`, [#328](https://github.com/nanyx-lang/nanyx/issues/328)). A missing or
@@ -333,10 +334,17 @@ equality comes from a protected type with its own `==`, as `Email` has, or from 
 (`distinctBy`, `sortBy`). A record containing an `Email` compares it with `` Email.`==` ``, since each part is found
 by this same lookup.
 
+**Built** for every context, well-known or not: the error is NYX0249, reported by `ContextInstances.ownInstanceErrors`,
+which asks whether the type has an instance of its own as a call would find one (attached, derived, built in, or
+`NoneDefault`'s). The lookup order in the code is unchanged, since with the error no `use` in scope is ever for a type
+with its own. Still open: for a type variable, a `use` is nearer than the signature's instance, the opposite of the
+order above; and an `Eq` loaded for a type that holds a function isn't found inside a tag or a tuple that holds it
+([#1520](https://github.com/nanyx-lang/nanyx/issues/1520)).
+
 # Extending a type
 
 Decided in [#1501](https://github.com/nanyx-lang/nanyx/issues/1501), so that an attached definition can't get round
-the rule above:
+the rule above, and not built yet ([#1514](https://github.com/nanyx-lang/nanyx/issues/1514)):
 
 - **A type's owned definitions are always in scope.** "Owned" means attached in the type's own module, or in the
   standard library for a built-in type. They're in scope wherever a value of the type is, whether or not their module

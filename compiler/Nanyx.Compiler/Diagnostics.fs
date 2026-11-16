@@ -179,7 +179,7 @@ module DiagnosticCodes =
           LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotProtected; ScopedContextEscapes
           NotACellArgument; MisplacedCellType; UndeterminedContextType; EntryDoesNotFitHost; HostRuntimeOutsideHost; ScriptRunValue; ContextsWithoutType
           InvalidExtern; ExternWithoutHostRuntime; ConflictingExterns; PrivateContextMember; ContextNameAsValue; UnknownContextName
-          ContextAsType; InstanceOutsideUse
+          ContextAsType; InstanceOutsideUse; OwnInstanceReplaced
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

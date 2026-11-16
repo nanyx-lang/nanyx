@@ -521,16 +521,26 @@ def angled = { value -> "<{value}>" }   // [ToString(α)] α -> string
 
 Such a function can be called with any type that has a `ToString`, the compiler's own included: `angled(3)` is `"<3>"`, and `angled(#red)` is `"<#red>"`. A tag with a payload has one the compiler derives from its parts, so `angled(#some(1))` is `"<#some(1)>"`.
 
-A `use` changes how its block writes a type, generic code called from the block included:
+A type's own `ToString`, the compiler's own, a derived one or one built from an attached `toString`, can't be replaced with a `use` (see [A type's own instance wins](#a-types-own-instance-wins)), so `"{250}"` is `"250"` wherever it is written. To write a value differently, call a function in the hole:
 
 ```nanyx
+def pounds: int -> string = { pence -> "£{pence / 100}.{pence % 100}" }
+
+def receipt = "Total: {pounds(250)}"   // "Total: £2.50"
+```
+
+A `use` gives a `ToString` to a type that has none of its own, such as a [protected type](./nominal-and-protected-types) without a `toString`, and it reaches generic code called from its block:
+
+```nanyx
+type Cents = protected int
+
 def receipt = {
-  use ToString(int)(toString = { pence -> "£{pence / 100}.{pence % 100}" })
-  "Total: {250}"   // "Total: £2.50"
+  use ToString(Cents)(toString = { c -> "some cents" })
+  "Total: {Cents(250)}"   // "Total: some cents"
 }
 ```
 
-The holes in the instance itself are checked before it is loaded, so they write their ints as usual.
+The holes in the instance itself are checked before it is loaded, so they write their values as usual.
 
 A tag with a payload, a tuple, a record, a list, a map and a set have a `ToString` when their parts do. The compiler derives it, writing each part with the `ToString` of its type:
 
@@ -545,7 +555,7 @@ def wrapped: [ToString(a)] a -> string = { value -> "{#some(value)}" }
 def passed: [ToString(a)] a -> string = { value -> angled([value]) }
 ```
 
-Each part is written with the `ToString` found where the value is written: in generic code, the one the function was given for its type variable, and in a block with a `use`, the one it loads, so in `receipt` above `"{[250]}"` would be `"[£2.50]"`.
+Each part is written with the `ToString` found where the value is written: in generic code, the one the function was given for its type variable, and in a block with a `use`, the one it loads, so in the second `receipt` above `"{[Cents(250)]}"` would be `"[some cents]"`.
 
 A record's fields are written in alphabetical order. A string is written without quotes wherever it is; [`dbg`](../stdlib/console#dbg) prints a value as you would write it in code, and ignores any `ToString`. The compiler does not look inside an alias or a nominal type that is a part: such a part is written with its own `ToString`. An empty list, `"{[]}"`, writes `[]`. A map's entries and a set's elements are written in the order they were first added, and the empty map writes `[=>]`.
 
@@ -611,32 +621,34 @@ A context with more than one parameter is synthesized from the definitions attac
 
 Each call looks for its instance in this order, and takes the first it finds:
 
-1. An instance for that type loaded with `use` around the call, the nearest first.
-2. An instance the type of the function around the call declares: a generic `def total: [Add(a)] list(a) -> a` passes its own `Add(a)` on to the functions it calls.
-3. An instance synthesized from the type's attached definitions.
+1. The type's own instance: synthesized from its attached definitions, or, for `Eq`, `Ord`, `Hash` and `ToString`, derived from its parts or the compiler's own.
+2. An instance in scope: one loaded with `use` around the call, the nearest first, or one the type of the function around the call declares. A generic `def total: [Add(a)] list(a) -> a` passes its own `Add(a)` on to the functions it calls.
 
-An instance is for one type: an `Add(int)` loaded with `use` does not stand in for an `Add(Point)`.
+An instance is for one type: an `Add(Size)` loaded with `use` does not stand in for an `Add(Point)`.
 
 Since contexts are structural, a `use` of a record value loads it as an instance of each context it has the shape of, at the types its members settle.
 
-## Explicit loading takes priority
+## A type's own instance wins
 
-If you manually load a context with `use`, that instance is always used, even if attached definitions exist. This lets you override the default behavior when needed:
+A `use` can't replace a type's own instance. Loading one for a type that has its own is an error at the `use` (NYX0249), so `1 == 2` is false, `"{42}"` is `"42"` and `1 + 2` is `3` wherever they are written, and a set built in one place can't be read with another `Hash` somewhere else:
 
-```nanyx
-def reverseSum = {
-  use Add(Point)(
-    zero = Point(x = 0, y = 0)
-    `+` = { a, b -> Point(x = a.x - b.x, y = a.y - b.y) }
-    `-` = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }
-    negate = { a -> a }
-  )
+```nanyx fragment
+def same: [Eq(a)] a, a -> bool = { x, y -> x == y }
 
-  points \list.sum
+def main = {
+  use Eq(int)(`==` = { x, y -> true })
+  -- error NYX0249: 'int' already has `==`: a `use` can't replace it. For a different equality, wrap
+  -- the value in a protected type with its own `==`, or pass the comparison to a `...By` function
+  same(1, 2)
 }
 ```
 
-A `use` of an `Add` reaches generic code called from its block, such as `list.sum`; it does not change a concrete `p + q` there yet ([numeric contexts](../work-in-progress/numeric-contexts#what-is-still-open)).
+A different behaviour comes from a type that says so, or from a function given it:
+
+- **A protected type with its own definitions**, such as the `Email` above with its own `==`. Its type says which equality it has wherever it goes, so a set of them is always consistent.
+- **A function given what to do**, for a one-off: `list.sortBy` with a key to order by, or a function called in a hole for text.
+
+A `use` still gives an instance to a type that has none of its own, such as `Eq` for a record that holds a function, or `Add` for a type that attaches no `+`, and it still loads contexts that aren't for a type, such as `Console` and `Log`.
 
 # Why contexts matter
 

@@ -52,18 +52,22 @@ This allows capabilities to be "bolted on" to types without modifying their defi
 
 ## 1) Implicit provisioning
 
-You can provide implementations with `use`:
+You can provide implementations with `use`, for a type that has none of its own:
 
 ```nanyx
-use Add(int)(
-  zero = 0
-  `+` = { a, b -> a + b }
-  `-` = { a, b -> a - b }
-  negate = { a -> -a }
+type Celsius = (degrees: float)
+
+use Add(Celsius)(
+  zero = Celsius(degrees = 0.0)
+  `+` = { a, b -> Celsius(degrees = a.degrees + b.degrees) }
+  `-` = { a, b -> Celsius(degrees = a.degrees - b.degrees) }
+  negate = { a -> Celsius(degrees = -a.degrees) }
 )
 
-sum([1, 2, 3])
+sum([Celsius(degrees = 1.5), Celsius(degrees = 2.0)])
 ```
+
+A type that has its own, such as `int`, keeps it: `use Add(int)(...)` is an error, so `1 + 2` means the same everywhere.
 
 This is closer to passing a capability dictionary than calling methods on an instance.
 

@@ -1413,6 +1413,21 @@ To fix it, write the instance in the `use` that loads it, `use Log(log = { m -> 
 `def quietly: ([Log] () -> a) -> a = { f -> use Log(log = { m -> () }) in f() }`, and run code with
 `quietly { ... }`. A handler writes its type, so that the lambda it is given is given the context.
 
+# NYX0249: Use of an instance for a type that has its own
+
+A `use` loads an instance of a context for a type that already has its own: one built from its attached definitions,
+derived from its parts, or the compiler's own. A type's own instance always wins, so `1 == 2` is false and a set is
+read with the `Hash` it was built with wherever they are written
+([A type's own instance wins](../advanced/contexts#a-types-own-instance-wins)).
+
+```nanyx
+def n = use Eq(int)(`==` = { x, y -> true }) in 1  -- error NYX0249: 'int' already has `==`: a `use` can't replace it. For a different equality, wrap the value in a protected type with its own `==`, or pass the comparison to a `...By` function
+```
+
+To fix it, give the values a type that says how they behave, a protected type with its own `==`, `compare`, `hash` or
+`toString`, or pass what to do to a function, as `list.sortBy` takes a key and a hole can call a function. A `use` can
+still give an instance to a type that has none of its own, such as `Eq` for a record that holds a function.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it
