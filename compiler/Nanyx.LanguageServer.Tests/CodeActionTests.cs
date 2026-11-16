@@ -84,14 +84,23 @@ public sealed class CodeActionTests : LanguageServerTestBase
         var published = Assert.Single((await NextPublished(uri)).Diagnostics!);
         Assert.Equal(("default/unusedImports", new Range(3, 2, 3, 17)), (published.Code?.String, published.Range));
 
-        var remove = Assert.Single(await CodeActionsIn(uri, new Range(3, 4, 3, 4)));
+        var remove = Assert.Single(await CodeActionsIn(uri, new Range(3, 4, 3, 4)), action => action.Title.StartsWith("Remove"));
         Assert.Equal(("Remove the import of `t`", CodeActionKind.QuickFix), (remove.Title, remove.Kind));
         Assert.Equal(
             "::linters.default\nimport (\n  nanyx/math as m\n)\nexport def x: int = m.abs(3)\n",
             Applied(text, Assert.Single(remove.Edit!.Changes![uri])));
 
-        // The import that is used has none.
-        Assert.Empty(await CodeActionsIn(uri, new Range(2, 4, 2, 4)));
+        // Organising imports fixes it too.
+        var organise = Assert.Single(await CodeActionsIn(uri, new Range(3, 4, 3, 4)), action => action.Title == "Organise imports" && action.Kind == CodeActionKind.QuickFix);
+        Assert.Equal("default/unusedImports", Assert.Single(organise.Diagnostics!).Code?.String);
+        Assert.Equal(
+            "::linters.default\nimport nanyx/math as m\nexport def x: int = m.abs(3)\n",
+            Applied(text, Assert.Single(organise.Edit!.Changes![uri])));
+
+        // The import that is used has no fix, and organising the imports is a source action.
+        Assert.Equal(
+            [("Organise imports", CodeActionKind.SourceOrganizeImports)],
+            (await CodeActionsIn(uri, new Range(2, 4, 2, 4))).Select(action => (action.Title, action.Kind)));
     }
 
     [Fact]
