@@ -196,6 +196,10 @@ what the compiler keeps: exact spans, resolved names and types.
   level, so they are put back by where the block is written. Names and their spans come from the declared names the parser records (`DefValue`, `TypeDefBody`,
   `RecordTypeFields`). It needs a parse, not a type-check, so a type error leaves the outline as it was; a text
   that does not parse shows the last good text's outline, less the items edited since.
+- **Selection ranges** ([#1535](https://github.com/nanyx-lang/nanyx/issues/1535)), for Expand and Shrink Selection.
+  `NyxCompiler.Refactorings.SelectionRanges.at` parses the text and gives the chain of syntax around a position,
+  smallest first (see [Refactorings](./refactorings)). A text that does not parse has none, and the editor falls back
+  on its own.
 - **Quick fixes** ([#284](https://github.com/nanyx-lang/nanyx/issues/284)). Each fix of a diagnostic in the
   requested range is a `quickfix` code action: its edits applied to the document, carrying the diagnostic as
   published, with a diagnostic's first fix preferred. Linters offer fixes (`default/unusedBindings` removes an
