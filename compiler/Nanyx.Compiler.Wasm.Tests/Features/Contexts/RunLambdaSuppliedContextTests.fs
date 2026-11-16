@@ -94,3 +94,16 @@ def step: [Tx] int -> int = { n -> n + 1 }
 println(transaction { step(step(1)) })
 """
     runSource (normalized source) |> assertRan "3\n"
+
+[<Fact>]
+let ``Run - a module block's function supplies its context to a lambda in the module that imports the block`` () =
+    let source =
+        """module db =
+  export context Tx = (commit: () -> ())
+  export def transaction: [c, Console] ([Tx, c] () -> a) -> a = { body -> use Tx(commit = { println("committed") }) in body() }
+
+import db
+
+transaction { commit() }
+"""
+    runSource (normalized source) |> assertRan "committed\n"

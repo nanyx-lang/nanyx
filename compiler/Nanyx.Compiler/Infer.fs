@@ -428,7 +428,12 @@ and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) 
             match OperatorCalls.definition (memberOfInstanceInScope env nextState) attached env nextState expr leftExpr.Type input with
             | Some (callee, scheme, instance) ->
                 let resultTy, called = OperatorCalls.infer nextState expr callee scheme instance input
-                Ok (mkTypedExpr expr resultTy None None None, called)
+                // A definition that requires a parameterised context finds its instance as a call to it does (#1594).
+                let opSpan = match expr.Kind with BinaryOp(_, opSpan, _, _) -> opSpan | _ -> None
+                match resolveCallInstances env called expr callee (nameSpan opSpan expr) with
+                | Error _ when snd (Unifier.solve called.Constraints) |> List.exists (snd >> SourceSpan.contains expr.Span) -> Ok called
+                | resolved -> resolved
+                |> Result.map (fun called -> mkTypedExpr expr resultTy None None None, called)
             | None ->
             match expr.Kind with
             | BinaryOp(op, _, _, _) when op = AppendOperator.operator ->
@@ -1181,6 +1186,9 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                                    && recordFieldsOf (resolveSoFar state scheme.Type) |> Option.bind (Map.tryFind field) |> Option.exists (isMap state) ->
                     let map = Expression.from expr (MemberAccess(Expression.from expr (IdentifierExpr receiver), field, spanOpt))
                     inferMapLookup env state expr map spanOpt args
+                // `statement.setInt(position, value)`, where the field holds a function, calls it (see `FieldCalls`).
+                | Some scheme when dot > 0 && not (receiver.Contains '.') && FieldCalls.holdsFunction state scheme.Type field ->
+                    FieldCalls.infer (inferExpr env) state expr receiver field spanOpt args
                 | Some scheme when dot > 0 && not (receiver.Contains '.') ->
                     let memberName = name.Substring(dot + 1)
                     let receiverTy = resolveSoFar state scheme.Type

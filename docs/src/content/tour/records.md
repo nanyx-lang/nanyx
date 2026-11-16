@@ -201,6 +201,24 @@ The field is always there, so a record of this type is built with a value for it
 
 There is no `?` that marks a field or a type optional: `petsName?: string` is an error, which says to write the union instead.
 
+# Fields that hold functions
+
+A field can hold a function. Call it as you would call a function, through the record: `counter.add(1, 2)` calls the function in `counter`'s `add` field.
+
+```nanyx
+type Counter = (add: (int, int) -> int, describe: () -> string)
+
+def make = { start: int ->
+  Counter(add = { x, y -> start + x + y }, describe = { "starts at {start}" })
+}
+
+def counter = make(10)
+println(counter.add(1, 2)) -- 13
+println(counter.describe()) -- starts at 10
+```
+
+The record must be a name in scope, as `counter` is here. A function attached to the record's type is still called with a pipe, `counter \reset`, not with a dot.
+
 # Copy and update (non-destructive mutation)
 
 Records are typically treated immutably. To create a modified copy, use `with`.

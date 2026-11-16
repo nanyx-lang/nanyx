@@ -237,3 +237,9 @@ let private topLevelItems: Parser<TopLevelItem list, ParseState> =
 let moduleParser: Parser<Module, ParseState> =
     ws >>. many topLevelItems .>> ws .>> eof |>> List.concat
     <?> "module"
+
+/// A whole input that is a type as a def's annotation writes it. It is here, after every forwarded parser is filled,
+/// since a type can hold an expression (a default, a `where` clause): running it runs this file's initialisation, and
+/// so theirs, in any build, where reading a parser only to fill them can be optimised away.
+let typeSignatureParser: Parser<TypeExpr, ParseState> =
+    ws >>. typeSignature .>> ws .>> eof

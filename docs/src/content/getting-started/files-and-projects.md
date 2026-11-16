@@ -96,7 +96,7 @@ A package is described by a `.nyxp` file at the package root: one Nanyx record, 
 
 `nanyx new` creates this file for you. The full manifest format, and how packages are grouped into projects, is covered in [Packages and projects](../tour/packages).
 
-When a package manifest is present, modules are imported by name, and file-path imports are not used.
+When a package manifest is present, modules are imported by name, and file-path imports are not used. A file under a manifest that has errors is not checked on its own: checking or running it reports the manifest's errors.
 
 As a rule of thumb:
 

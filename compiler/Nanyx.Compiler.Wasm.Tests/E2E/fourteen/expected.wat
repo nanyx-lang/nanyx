@@ -2,7 +2,7 @@
   (memory 1)
   (export "memory" (memory 0))
 
-  (global $heap_ptr (mut i32) (i32.const 4132))
+  (global $heap_ptr (mut i32) (i32.const 4356))
 
   (func $__nanyx_free (param $ptr i32)
     (local $size i32)
@@ -16,18 +16,18 @@
     i32.load
     local.set $size
     local.get $size
-    i32.const 32
+    i32.const 256
     i32.le_u
     if (result i32)
       i32.const 4092
       local.get $size
       i32.add
     else
-      i32.const 4128
+      i32.const 4352
     end
     local.set $head
     local.get $size
-    i32.const 32
+    i32.const 256
     i32.le_u
     if
       local.get $ptr

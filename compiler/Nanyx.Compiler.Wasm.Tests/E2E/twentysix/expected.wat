@@ -56,7 +56,7 @@
     drop
   )
 
-  (global $heap_ptr (mut i32) (i32.const 4556))
+  (global $heap_ptr (mut i32) (i32.const 4780))
 
   (func $__nanyx_alloc (param $size i32) (result i32)
     (local $link i32)
@@ -75,18 +75,18 @@
       local.set $size
     end
     local.get $size
-    i32.const 32
+    i32.const 256
     i32.le_u
     if (result i32)
       i32.const 4516
       local.get $size
       i32.add
     else
-      i32.const 4552
+      i32.const 4776
     end
     local.set $link
     local.get $size
-    i32.const 32
+    i32.const 256
     i32.le_u
     if
       local.get $link
@@ -126,7 +126,7 @@
             local.get $found
             local.get $size
             i32.sub
-            i32.const 40
+            i32.const 264
             i32.ge_u
             if
               local.get $ptr
@@ -226,18 +226,18 @@
     i32.load
     local.set $size
     local.get $size
-    i32.const 32
+    i32.const 256
     i32.le_u
     if (result i32)
       i32.const 4516
       local.get $size
       i32.add
     else
-      i32.const 4552
+      i32.const 4776
     end
     local.set $head
     local.get $size
-    i32.const 32
+    i32.const 256
     i32.le_u
     if
       local.get $ptr

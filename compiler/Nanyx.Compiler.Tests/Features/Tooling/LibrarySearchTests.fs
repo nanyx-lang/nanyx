@@ -59,6 +59,15 @@ let ``A variable never stands for a generic nominal type that holds it`` () =
     Assert.False(isFound "a -> a" "MRef.new")
 
 [<Fact>]
+let ``A generic nominal type is matched by its arguments too`` () =
+    // `MRef(a)` is in `Memory`'s scope, which the query does not write.
+    let _, made = find "a -> MRef(a)" "MRef.new"
+    Assert.Equal(Equal, made.Rank)
+    let _, atInt = find "int -> MRef(int)" "MRef.new"
+    Assert.Equal(Instantiated, atInt.Rank)
+    Assert.False(isFound "MRef(int) -> string" "MRef.new")
+
+[<Fact>]
 let ``A function's inputs may come in any order`` () =
     let _, filter = find "(a -> bool), list(a) -> list(a)" "list.filter"
     Assert.Equal(Reordered, filter.Rank)

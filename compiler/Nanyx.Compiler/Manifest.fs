@@ -356,11 +356,33 @@ module Manifest =
             | NotParsed error -> Diagnostics.at DiagnosticCodes.SyntaxError error.Span error.Message
             | NotData (span, message) -> Diagnostics.at DiagnosticCodes.CodeInManifest span message)
 
-    /// The manifest at `path`, whose text is `text`, or every problem with it, each at the field it is about.
+    /// A TOML table header, `[package]`, or a TOML key at the top level, `name = "shop"`.
+    let private tomlLine = Regex(@"^(\[[^\]]*\]|[A-Za-z_][\w.\-""]*\s*=)")
+
+    /// An error at the first line of `text` if it is written as a TOML manifest was, before manifests were Nanyx records:
+    /// its first line that is not blank or a comment is a table header or a key, where a record starts with `(`.
+    let private tomlError (path: string) (text: string) : Diagnostic option =
+        // Each line keeps a `\r` before its `\n`, so the offsets are the text's own.
+        let lines = text.Split '\n'
+        let starts = lines |> Array.scan (fun start (line: string) -> start + line.Length + 1) 0
+        lines
+        |> Array.indexed
+        |> Array.tryFind (fun (_, line) -> let trimmed = line.Trim() in trimmed <> "" && not (trimmed.StartsWith "#") && not (trimmed.StartsWith "--"))
+        |> Option.filter (fun (_, line) -> tomlLine.IsMatch(line.TrimStart()))
+        |> Option.map (fun (index, line) ->
+            let column = line.Length - line.TrimStart().Length
+            let span = { File = path; Start = starts.[index] + column; End = starts.[index] + line.TrimEnd().Length; StartLine = index; StartColumn = column }
+            Diagnostics.at DiagnosticCodes.TomlManifest span "The manifest is a Nanyx record, `( package = (...) ... )`, not TOML")
+
+    /// The manifest at `path`, whose text is `text`, or every problem with it, each at the field it is about. One in
+    /// the old TOML form has the one error that says so.
     let check (path: string) (text: string) : Result<Manifest, Diagnostic list> =
         let path = Path.GetFullPath path
         match DataValue.read path text with
-        | Result.Error errors -> Result.Error(dataErrors errors)
+        | Result.Error errors ->
+            match tomlError path text with
+            | Some error -> Result.Error [ error ]
+            | None -> Result.Error(dataErrors errors)
         | Result.Ok manifest ->
             let problems = Problems()
             let top = problems.Record "the manifest" fields manifest |> Option.defaultValue []

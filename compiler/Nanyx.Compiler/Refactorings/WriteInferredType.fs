@@ -34,6 +34,11 @@ let at (file: string) (source: string) (result: CompileResult) (offset: int) : O
     |> List.tryFind (fun hint -> hint.Span.Start <= offset && offset <= hint.Span.End)
     |> Option.map (fun hint ->
         match hint.Annotation with
+        // A scoped context required at two scopes is numbered, `[Memory₁, Memory₂]`, which no source can write yet
+        // (#1591). In source notation nothing else is written in subscript digits.
+        | Some annotation when annotation |> Seq.exists (fun c -> c >= '₀' && c <= '₉') ->
+            Refused($"{title} of `{hint.Name}`", RefactoringKind.Rewrite,
+                    "Its type requires a scoped context at two scopes, which a type can't be written with yet")
         | Some annotation ->
             Available { Title = $"{title} of `{hint.Name}`"; Kind = RefactoringKind.Rewrite; Edits = [ edit source hint annotation ]; Rename = None }
         | None -> Refused($"{title} of `{hint.Name}`", RefactoringKind.Rewrite, refusal hint))

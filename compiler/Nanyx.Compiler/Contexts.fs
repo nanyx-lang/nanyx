@@ -31,6 +31,23 @@ let internal checkMemberRequirements (state: InferState) (typeOpt: TypeExpr opti
     | Some annotation -> InlineContexts.check typeExprToTy state annotation
     | None -> Ok ()
 
+/// Whether `info` is a protected or private context with no members: no member says whether an instance of it is
+/// there, so the environment binds a name for it where one is (see `withSupplied`). A scoped one is the call's that
+/// supplies it (see `ScopedCalls`), and `HostRuntime`, which the toolchain gives a host, is checked by `Hosts`.
+let private isMemberless (info: TypeDefInfo) =
+    info.IsContext && info.IsNominal && info.Members.IsEmpty && info.Parameters.IsEmpty && not info.IsScoped
+    && info.Home <> StandardLibraryModule "host.runtime"
+
+/// The name the environment binds where an instance of `info`, a context with no members, is supplied (#1479). No code
+/// can write it.
+let private suppliedKey (info: TypeDefInfo) =
+    let id = TypeDefInfo.nominalId info
+    $"@supplied {id.Home}/{id.Name}"
+
+/// `env` where an instance of `info` is supplied, if it is a context with no members.
+let private withSupplied (info: TypeDefInfo) (env: TypeEnv) : TypeEnv =
+    if isMemberless info then TypeEnv.extend (suppliedKey info) (TypeEnv.mono (TyPrimitive "unit")) env else env
+
 /// `env` with the members of the instance a `use` of a value of type `ty` loads, each bound by its name. When the
 /// type names a plain context, as `Foo(bar = ...)`'s does, each member has the symbol the context's definition
 /// declared, as in a def that declares the context, so a lambda that calls it requires the context (see
@@ -51,6 +68,7 @@ let internal extendEnvWithRecordFields (provider: ContextProvider) (state: Infer
             let symbol = context |> Option.bind (fun info -> info.Members |> Map.tryFind name)
             let quantified = if context.IsSome then TypeEnv.freeTyVars fieldTy else Set.empty
             TypeEnv.extend name { TypeEnv.mono fieldTy with Quantified = quantified; Symbol = symbol; ProvidedBy = Some provider } acc) env
+    let env = context |> Option.fold (fun acc info -> withSupplied info acc) env
     match Unifier.unalias ty with
     | TyRecord fields -> addFields fields
     | TyNominal(_, _, underlying, _) ->
@@ -179,13 +197,17 @@ let private extendEnvWithContextsFrom (provider: TypeExpr -> ContextProvider) (e
             | TypeName name
             | TypeApply(name, _) when name.Contains '.' -> Some (name.Substring(0, name.LastIndexOf '.'))
             | _ -> None
+        let supplied =
+            match ctx.Kind with
+            | TypeName name -> tryFindTypeDef name current |> Option.fold (fun acc info -> withSupplied info acc) env'
+            | _ -> env'
         env' <-
             members
             |> List.fold (fun acc (name, ty, symbol) ->
                 let acc = TypeEnv.declare name symbol (memberScheme ty) acc
                 match qualifier with
                 | Some qualifier -> TypeEnv.declare $"{qualifier}.{name}" symbol (memberScheme ty) acc
-                | None -> acc) env'
+                | None -> acc) supplied
     env', current
 
 /// `env` with the members of each of `contexts`, the contexts a def's type declares, each provided by the signature.
@@ -573,12 +595,20 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
                 | TypeName ctxName, Some provider -> recordProvider call ctxName provider current
                 | _ -> current) current
         | None -> current
-    // Each context with a member not in scope at all, with those members.
+    // Each context with a member not in scope at all, with those members, and each with no members that nothing
+    // supplies (see `withSupplied`).
     let missing =
         requiredMembers
         |> List.filter (fst >> isCarried >> not)
         |> List.choose (fun (ctx, members) ->
+            let unsupplied =
+                match ctx.Kind with
+                | TypeName ctxName ->
+                    tryFindTypeDef ctxName state
+                    |> Option.exists (fun info -> isMemberless info && (TypeEnv.tryFind (suppliedKey info) env).IsNone)
+                | _ -> false
             match members |> List.filter (fun memberName -> TypeEnv.tryFind memberName env |> Option.isNone) with
+            | [] when unsupplied -> Some (ctx, [])
             | [] -> None
             | absent -> Some (ctx, absent))
     // A protected or private context matches only itself: each of its members in scope must be its own, not another

@@ -85,3 +85,16 @@ def main = {
 }
 """
     runSource source |> assertRan "*hi*\n[0, 1, 2, 0] ab [1.5, 2.5]\n[a, b, c]\n"
+
+[<Fact>]
+let ``Run - an operator whose type is inferred finds the instance of its context where it is used, with a tuple for an operand (#1594)`` () =
+    let source =
+        normalized """def `<+>` = { a, (b, c) -> a + b * c }
+def `<*>` = { a, pair -> a - pair.0 }
+
+def p = (2, 3)
+(1 <+> (2, 3)) \dbg
+(1.5 <+> (2.0, 3.0)) \dbg
+(10 <*> p) \dbg
+"""
+    runSource source |> assertRan "dbg: 7\ndbg: 7.5\ndbg: 8\n"
