@@ -6,10 +6,10 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - a call finds its instance at the type its result is expected to have`` () =
     let source =
-        """context Default(a) = (default: string -> a)
-def int.default: string -> int = { s -> 7 }
-def string.default: string -> string = { s -> "<" ++ s ++ ">" }
-def get: [Default(a)] string -> a = { s -> default(s) }
+        """context Fallback(a) = (fallback: string -> a)
+def int.fallback: string -> int = { s -> 7 }
+def string.fallback: string -> string = { s -> "<" ++ s ++ ">" }
+def get: [Fallback(a)] string -> a = { s -> fallback(s) }
 
 def n: int = get("x")
 def m: string -> int = { s -> get(s) }

@@ -47,9 +47,59 @@ module internal AttachedOperators =
             if memberName = EqualityOperators.notEquals then
                 error $"'{name}' cannot be defined: '!=' is always 'not (a == b)'. Attach '==' instead"
             else
+                match kindOf state typeName with
+                | Some (BuiltIn builtIn) when OrderingOperators.isOperator memberName ->
+                    error $"'{name}' cannot be defined: '{builtIn}' is a built-in type, so its order is the compiler's own"
+                | _ ->
                 match nominalOnly |> List.tryFind (fun (attached, _, _, _) -> attached = memberName), kindOf state typeName with
                 | Some (_, decides, structural, _), Some Structural ->
                     error $"'{name}' cannot be defined: '{typeName}' is a structural type, so {structural}. Declare it `protected` to define its own {decides}"
                 | Some (_, decides, _, false), Some (BuiltIn builtIn) ->
                     error $"'{name}' cannot be defined: '{builtIn}' is a built-in type, so its {decides} is the compiler's own. Make a nominal type of it to define its own {decides}"
                 | _ -> Ok ()
+
+    /// The standard-library modules that own the attached definition `name` (`string.length`, owned by `nanyx/text`):
+    /// those that export it, where it is attached to a built-in type. A built-in type's owned definitions are in scope
+    /// wherever its values are, whether or not their module is imported (see "Extending a type" in the docs' work in
+    /// progress). None for the module being checked, which may define its own.
+    let private ownerModules (state: InferState) (name: Identifier) : string list =
+        let dot = name.LastIndexOf '.'
+        // The paths are import paths, `nanyx/text`, and a module of the library is named without its package: `text`.
+        let isHome (path: string) =
+            match state.Home with
+            | StandardLibraryModule moduleName -> path.EndsWith("/" + moduleName)
+            | _ -> false
+        match kindOf state (name.Substring(0, max 0 dot)) with
+        | Some (BuiltIn _) when dot > 0 ->
+            state.StandardLibraryExports.Value
+            |> Map.tryFind name
+            |> Option.defaultValue []
+            |> List.filter (isHome >> not)
+        | _ -> []
+
+    /// The error for each of the module's own top-level definitions in `module'` that is attached to a type and has a
+    /// name already in scope for it in `imported`, the environment its imports make, or owned by the standard library:
+    /// an attached definition extends a type, but never redefines what it already has. A `module name =` block's
+    /// definitions, lifted to the top level as `name.f`, are not attached to anything.
+    let redefinitions (imported: TypeEnv) (state: InferState) (module': Module) : Diagnostic list =
+        let blocks = state.ModuleBlocks |> List.map fst |> Set.ofList
+        let inBlock (name: Identifier) = blocks |> Set.exists (fun block -> name.StartsWith(block + "."))
+        module'
+        |> List.choose (fun item ->
+            match item.Kind with
+            | Def (ValueDef(_, name, _, value)) when name.LastIndexOf '.' > 0 && not (inBlock name) ->
+                let span =
+                    state.Declared |> Map.tryFind (value.Id, DefValue) |> Option.bind List.tryHead |> Option.map snd |> Option.defaultValue item.Span
+                let typeName = name.Substring(0, name.LastIndexOf '.')
+                let error (from: string) =
+                    Diagnostics.at DiagnosticCodes.AttachedDefinitionInScope span
+                        $"'{name}' is already in scope for '{typeName}'{from}: an attached definition can extend a type, but not redefine what it has. Give it another name"
+                match ownerModules state name, TypeEnv.tryFind name imported |> Option.bind _.Symbol |> Option.bind (fun symbol -> state.Symbols |> Map.tryFind symbol) with
+                | owner :: _, _ -> Some (error $", from {owner}")
+                // The prelude is in files of its own, `nanyx/prelude-lists.nyx`, which every module imports.
+                | [], Some symbol when symbol.Declaration.File.Replace('\\', '/').StartsWith "nanyx/prelude" -> Some (error ", from the prelude")
+                | [], Some symbol when not (SourceSpan.isNone symbol.Declaration) ->
+                    Some (error ", from an import" |> Diagnostics.withRelated symbol.Declaration $"'{name}' is defined here")
+                | [], _ when (TypeEnv.tryFind name imported).IsSome -> Some (error ", from an import")
+                | _ -> None
+            | _ -> None)
