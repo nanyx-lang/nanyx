@@ -55,7 +55,7 @@ Everything the bracketed list could hold has a form.
 | `` [`+`: a, a -> a] a, a -> a `` | `` @(`+`: a, a -> a) a, a -> a `` | A member requirement is a nameless attribute whose argument is the member. |
 | `` [(`+`: a, a -> a) & Eq(a)] a, a -> a `` | `` @(`+`: a, a -> a) @Eq(a) a, a -> a `` | Among other contexts it needs no extra brackets, since each attribute ends where the next `@` begins. |
 | `[] int -> int` | `@() int -> int` | A pure function, said on purpose. |
-| `type T = [C] (int, string)` | `type T = @C (int, string)` | A context-qualified value type ([Context-qualified types](./context-qualified-types)). |
+| `type seq(a) = [k] protected (...)` | `type seq(a) = @k protected (...)` | A type declared generic in contexts, or (with a scoped context) belonging to its scope ([Context-qualified types](./context-qualified-types)). |
 | `context Log = (log: [Console] string -> ())` | `context Log = (log: @Console string -> ())` | A member's own requirements. |
 
 The member requirement and the pure form follow from one reading: a context written inline is a record type of its

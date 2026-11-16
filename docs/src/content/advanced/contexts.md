@@ -236,7 +236,7 @@ Each call to `twice` then finds a `Show` for the type it is called with, as a ca
 
 This is also how scoped mutation is enforced: values that still require `memory` cannot escape into code that does not provide that context. See [Memory: Values cannot escape memory scope](../advanced/memory#values-cannot-escape-memory-scope).
 
-For a formal proposal of type-level context requirements, see [Work in progress: Context-qualified types](../work-in-progress/context-qualified-types).
+Which types other than functions will carry contexts (a type declared generic in contexts, or belonging to a scoped context's scope) is planned in [Work in progress: Context-qualified types](../work-in-progress/context-qualified-types).
 
 # Combining contexts
 

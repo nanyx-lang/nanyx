@@ -415,8 +415,8 @@ The design draws the line there, and makes every helper a function that takes th
   (the backend can't compile `use f()` or `use x`) is no longer needed, and is closed. The tour's collection builders
   and the Context-qualified types and Context calls pages write a context's constructor. The backend still compiles a
   `use` of a record, which is what `ExpressionRewrites.writeContextNames` makes of `use l`.
-- [#1059](https://github.com/nanyx-lang/nanyx/issues/1059) is settled for context instances, which never carry
-  contexts because they are never values. It stays open for records.
+- [#1059](https://github.com/nanyx-lang/nanyx/issues/1059) is settled: context instances are never values, and a
+  record holding a lambda doesn't take on its contexts ([Context-qualified types](./context-qualified-types)).
 - ~~A protected or private context matches only itself ([#1443](https://github.com/nanyx-lang/nanyx/issues/1443)),
   and a private one's members can be called only in its home module
   ([#1449](https://github.com/nanyx-lang/nanyx/issues/1449)).~~ Done, see
@@ -456,15 +456,6 @@ from leaving out `export`, which stops other modules naming it at all. A scoped 
 
 Hover hides a private context's members outside its file, as it hides a private type's shape. Within one file, a
 `module name =` block's private type or context still shows its shape everywhere in the file.
-
-# Open questions
-
-- **Whether a record holding a lambda takes on its contexts**
-  ([#1059](https://github.com/nanyx-lang/nanyx/issues/1059)). `(f = { m: string -> println(m) })` would be
-  `[Console] (f: string -> ())`, and `Log(log = { m -> println(m) })` would be `[Console] Log`, which `use` would
-  require. That is the general design in [Context-qualified types](./context-qualified-types), and it would let an
-  instance built as a value discharge a context, as one written at a `use` can. Since contexts are not types, context
-  instances are never values, and this is about records only.
 
 # Plan
 
