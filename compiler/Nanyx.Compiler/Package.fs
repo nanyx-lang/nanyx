@@ -382,11 +382,13 @@ module Package =
 
     /// Every source file of the package the file at `filePath` is a source file of, each compiled as `buildReporting`
     /// compiles it but with no linters, and each read by `readFile`, given its full path, as `compileSourceReading`
-    /// reads them; what an editor searches for the uses of a name. `None` for a file in no package, or under a manifest
-    /// that does not read.
+    /// reads them; what an editor searches for the uses of a name. The module each file declares is read from its text
+    /// too, so a renamed `module` line is the name its imports find. `None` for a file in no package, or under a
+    /// manifest that does not read.
     let compilePackageReading (readFile: string -> string) (filePath: string) : (string * CompileResult) list option =
         match modulesFor filePath with
         | Result.Ok (Some modules) ->
+            let modules = PackageModules.reading readFile modules
             let sources = modules.Files |> List.map (fun file -> file, readFile file)
             Some (compileAll CompileListener.none readFile modules Linters.none sources)
         | _ -> None

@@ -81,6 +81,53 @@ public sealed class RenameTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task Renaming_a_module_edits_its_module_line_and_imports_and_renames_its_file()
+    {
+        File.WriteAllText(TempPath("app.nyxp"), """
+            (package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]))
+            """.ReplaceLineEndings("\n"));
+        var shapesText = """
+            module shapes
+
+            export def origin: int = 0
+            """.ReplaceLineEndings("\n");
+        var shapes = TempPath("src", "shapes.nyx");
+        File.WriteAllText(shapes, shapesText);
+        var mainText = """
+            module main
+
+            import app/shapes
+
+            def here = origin + 1
+            """.ReplaceLineEndings("\n");
+        var main = DocumentUri.FromFileSystemPath(TempPath("src", "main.nyx"));
+        File.WriteAllText(TempPath("src", "main.nyx"), mainText);
+
+        Open(main, mainText);
+        Assert.Empty((await NextPublished(main)).Diagnostics!);
+
+        var prepared = await _client.TextDocument.PrepareRename(
+            new PrepareRenameParams { TextDocument = new TextDocumentIdentifier(main), Position = new Position(2, 13) },
+            _cancellation.Token);
+        Assert.Equal(("shapes", new Range(2, 11, 2, 17)), (prepared!.PlaceholderRange!.Placeholder, prepared.PlaceholderRange.Range));
+
+        var edit = await _client.TextDocument.RequestRename(
+            new RenameParams { TextDocument = new TextDocumentIdentifier(main), Position = new Position(2, 13), NewName = "geometry" },
+            _cancellation.Token);
+        var changes = edit!.DocumentChanges!.ToList();
+        var texts = changes
+            .Where(change => change.IsTextDocumentEdit)
+            .ToDictionary(change => change.TextDocumentEdit!.TextDocument.Uri, change => change.TextDocumentEdit!.Edits);
+        Assert.Equal(mainText.Replace("app/shapes", "app/geometry"), Applied(mainText, texts[main]));
+        Assert.Equal(shapesText.Replace("module shapes", "module geometry"), Applied(shapesText, texts[DocumentUri.FromFileSystemPath(shapes)]));
+        var renamed = Assert.Single(changes, change => change.IsRenameFile).RenameFile!;
+        Assert.Equal(
+            (DocumentUri.FromFileSystemPath(shapes), DocumentUri.FromFileSystemPath(TempPath("src", "geometry.nyx"))),
+            (renamed.OldUri, renamed.NewUri));
+        Assert.Equal(changes.Count - 1, changes.FindIndex(change => change.IsRenameFile));
+    }
+
+    [Fact]
     public async Task A_rename_that_would_change_what_a_name_refers_to_fails()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-rename-2");
