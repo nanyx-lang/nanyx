@@ -72,7 +72,7 @@ let internal extendEnvWithRecordFields (provider: ContextProvider) (state: Infer
     let env = context |> Option.fold (fun acc info -> withSupplied info acc) env
     match Unifier.unalias ty with
     | TyRecord fields -> addFields fields
-    | TyNominal(_, _, underlying, _) ->
+    | RecursiveNominals.Nominal(_, _, underlying, _) ->
         match Unifier.unalias underlying with
         | TyRecord fields -> addFields fields
         | _ -> env

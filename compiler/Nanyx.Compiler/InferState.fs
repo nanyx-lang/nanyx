@@ -652,7 +652,7 @@ let internal inferAsCall (infer: InferState -> Expression -> Result<'Typed * Inf
 let internal recordFieldsOf (ty: Ty) : Map<string, Ty> option =
     match Unifier.unalias ty with
     | TyRecord fields -> Some fields
-    | TyNominal(_, _, underlying, _) ->
+    | RecursiveNominals.Nominal(_, _, underlying, _) ->
         match Unifier.unalias underlying with
         | TyRecord fields -> Some fields
         | _ -> None

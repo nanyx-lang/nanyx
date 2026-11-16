@@ -884,7 +884,8 @@ module Compiler =
                           // Filled in for the root module only, by `compileChecked`.
                           InlinedExprTypes = Map.empty
                           InlinedCalleeTypes = Map.empty
-                          ScriptEntryValues = state.ScriptEntryValues }
+                          ScriptEntryValues = state.ScriptEntryValues
+                          Declared = state.Declared }
                      Errors = moduleErrors
                      Undeferred = undeferred
                      Own = own

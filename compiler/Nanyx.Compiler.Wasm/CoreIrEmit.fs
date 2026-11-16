@@ -405,7 +405,7 @@ type private FunctionEmitter(context: EmitContext) =
         // The fields of a new record, each at its offset.
         let fieldStores (values: Atom list) = stores (List.zip (CoreIrLayout.offsets (List.map atomType values)) values)
         let recordFields (record: IrType) =
-            match record with
+            match IrType.unfold record with
             | IrRecord fields -> fields
             | other -> internalError $"a field of {IrType.show other}, which is not a record"
         match expr.Kind with
@@ -859,7 +859,7 @@ type private FunctionEmitter(context: EmitContext) =
             | None -> internalError $"a pattern on the payload of #{name}, which {IrType.show ty} does not give one"
         // The field in `slot` of a record of `ty`, with its type.
         let fieldCode (ty: IrType) valueCode slot =
-            match ty with
+            match IrType.unfold ty with
             | IrRecord fields -> $"{valueCode}\n      {load (snd fields.[slot]) (CoreIrLayout.fieldOffset fields slot)}", snd fields.[slot]
             | other -> internalError $"a pattern on the fields of {IrType.show other}, which is not a record"
         let elementOf (ty: IrType) =

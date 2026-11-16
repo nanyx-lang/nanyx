@@ -557,7 +557,7 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
         let rec tryRecordFields ty =
             match ty with
             | TyRecord fields -> Some fields
-            | TyNominal(_, _, underlying, _)
+            | RecursiveNominals.Nominal(_, _, underlying, _)
             | TyAlias(_, _, underlying) -> tryRecordFields underlying
             | _ -> None
         // The variables a pattern binds are declared by the body of its arm, `armBody`, and are in scope until

@@ -82,7 +82,9 @@ Elm's formatter): each construct is turned into a document of text, possible lin
 printer lays out each group on one line if it fits in the line width and breaks it otherwise. The rules for each
 construct are written once, as documents, and the printer decides where to break.
 
-- Parentheses are printed where precedence needs them, and nowhere else.
+- Parentheses are printed where precedence needs them, and nowhere else. A record of plain named fields that is a type
+  application's only argument or a tag's payload shares its brackets: `list(price: int)`, not `list((price: int))`
+  ([#1628](https://github.com/nanyx-lang/nanyx/issues/1628)).
 - Literals are printed from their source text, through their spans, so `0xFF`, `1_000` and escapes survive. The text
   between the holes of an interpolated string has no span of its own: `writtenStringText` finds it in the source after
   the opening quote or the hole before it, and keeps it if `StringEscapes.decode` gives back the parsed text.

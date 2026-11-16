@@ -24,14 +24,14 @@ module RecursiveAliases =
         TyAlias(name, args, TyRecursive(body, args))
 
     /// `ty` with each part that `replace` gives a replacement for replaced, and the other parts walked in turn. The
-    /// closed definition of a recursive alias inside it is left as it is: its parameters are its own.
+    /// closed definition of a recursive alias or nominal type inside it is left as it is: its parameters are its own.
     let rec private mapTy (replace: Ty -> Ty option) (ty: Ty) : Ty =
         let recur = mapTy replace
         match replace ty with
         | Some replaced -> replaced
         | None ->
             match ty with
-            | TyAlias(name, _, TyRecursive(body, args)) -> reference name body (List.map recur args)
+            | TyRecursive(body, args) -> TyRecursive(body, List.map recur args)
             | _ -> Ty.map recur ty
 
     /// What the reference to the recursive alias `name`, defined by the closed `body`, at `args` stands for: `body`

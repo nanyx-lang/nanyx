@@ -14,6 +14,17 @@ let ``Type annotations read as the docs write them`` () =
     unchanged "export context Console(a) = (print: a -> ())\n"
 
 [<Fact>]
+let ``A record that is a type's only argument is written in the application's own brackets`` () =
+    Assert.Equal(
+        "def total = { (items: list(price: int)) -> items \\map { .price } \\sum }\n",
+        format "def total = { items: list((price: int)) -> items \\map { .price } \\sum }")
+    unchanged "type Orders = list(price: int, quantity: int)\n"
+    unchanged "type MList(a) = private MRef(reversed: list(a), count: int)\n"
+    // A record among several arguments keeps its brackets, and so does one that a field's default or `mut` sets apart.
+    unchanged "def prices: map(string, (price: int)) = map.empty\n"
+    unchanged "type Cells = list((mut count: int))\n"
+
+[<Fact>]
 let ``A hole in a type is printed as written`` () =
     unchanged "def xs: list(_) = [1, 2]\n"
     unchanged (lines [ "def f: int, _ -> _ = { a, b ->"; "  a + b"; "}" ])

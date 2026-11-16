@@ -5,6 +5,7 @@ using Nanyx.LanguageServer.Handlers;
 using OmniSharp.Extensions.LanguageServer.Client;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
@@ -110,7 +111,13 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
                 options.WithWorkspaceFolder(DocumentUri.FromFileSystemPath(workspaceFolder), "workspace");
             }
 
+            // As VS Code does, the client can rename files in a workspace edit.
             options
+                .WithCapability(new WorkspaceEditCapability
+                {
+                    DocumentChanges = true,
+                    ResourceOperations = new Container<ResourceOperationKind>(ResourceOperationKind.Rename)
+                })
                 .WithInput(serverToClient.Reader)
                 .WithOutput(clientToServer.Writer)
                 .OnPublishDiagnostics(diagnostics =>

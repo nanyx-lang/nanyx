@@ -126,7 +126,7 @@ let internal unknownMember (env: TypeEnv) (span: SourceSpan) (receiver: string o
         match Unifier.unalias ty with
         | TyRecord _
         | TyOpenRecord _ -> true
-        | TyNominal(_, _, underlying, _) -> isRecord underlying
+        | RecursiveNominals.Nominal(_, _, underlying, _) -> isRecord underlying
         | _ -> false
     let missing =
         match receiver with
@@ -212,7 +212,8 @@ let internal freshNominalType (state: InferState) (info: TypeDefInfo) : Ty * Ty 
         | None -> [], [], next
     let underlying =
         Unifier.applyToParameters (info.Parameters @ Option.toList info.Scope @ Option.toList info.ContextVariable) (argTys @ scopeArgument @ contextArgument) info.Underlying
-    TyNominal(TypeDefInfo.nominalId info, argTys @ Option.toList scoped @ contexts, underlying, info.IsPrivate), underlying, scoped, next
+    let nominal = TyNominal(TypeDefInfo.nominalId info, argTys @ Option.toList scoped @ contexts, underlying, info.IsPrivate)
+    nominal, RecursiveNominals.underlying nominal, scoped, next
 
 /// The type the name `name`, defined by `info`, stands for written without arguments: the nominal type, or the alias.
 /// A generic one is applied to its own parameters.
@@ -546,18 +547,35 @@ let internal ensureInstanceContextExists (state: InferState) (context: TypeExpr)
 let internal unknownTypesInTypeDef (state: InferState) (body: TypeExpr) (parameters: (Identifier * TypeExpr option) list) : Diagnostic list =
     unknownTypeErrors state (parameters |> List.map fst |> Set.ofList) (body :: (parameters |> List.choose snd))
 
-/// Whether the definition of the type `name` can name the type itself: an alias can, unless it is a context, or a
-/// type of that name is already in scope, which the name then means.
+/// Whether the definition of the type `name` can name the type itself: an alias or a nominal type can, unless it is a
+/// context, or a type of that name is already in scope, which the name then means.
 let private canReferToItself (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) =
-    not (TypeDefModifier.isNominal modifiers) && not (isContextDef modifiers) && (tryFindTypeDef name state).IsNone
+    not (isContextDef modifiers) && (tryFindTypeDef name state).IsNone
+
+/// What the nominal type `self` defines, whose `Underlying` is `RecursiveNominals.selfMarker`, is made from: the type
+/// its definition `body` stands for, closed over if it names the type (see `RecursiveNominals`).
+let private readNominalTypeDefBody (state: InferState) (self: TypeDefInfo) (body: TypeExpr) =
+    let ty, next = typeExprToTy { state with TypeDefs = state.TypeDefs |> Map.add self.Name self } body
+    let next = { next with TypeDefs = next.TypeDefs |> Map.remove self.Name }
+    let id = TypeDefInfo.nominalId self
+    match ty with
+    // A type made from just itself, `type T = protected T`, is made from nothing: the name means what it did before.
+    | TyNominal(nominal, _, _, _) when nominal = id -> typeExprToTy state body
+    | _ when RecursiveNominals.refersToItself id ty ->
+        let variables = self.Parameters @ Option.toList self.Scope @ Option.toList self.ContextVariable
+        RecursiveNominals.close id variables self.ContextVariable ty, next
+    | _ -> ty, next
 
 /// The type the definition of `name`, with the parameters `paramVars`, stands for. An alias that names itself inside
 /// the payload of one of its tags is recursive (see `RecursiveAliases`); one that names itself anywhere else reads the
-/// name as it did before the alias was defined, and `unguardedSelfReferences` reports it.
-let private readTypeDefBody (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (paramVars: TyVar list) (body: TypeExpr) =
+/// name as it did before the alias was defined, and `unguardedSelfReferences` reports it. A nominal type `self` can
+/// name itself anywhere (see `RecursiveNominals`).
+let private readTypeDefBody (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (paramVars: TyVar list) (self: TypeDefInfo) (body: TypeExpr) =
     let plain () = typeExprToTy state body
     if not (canReferToItself state name modifiers) then
         plain ()
+    elif self.IsNominal then
+        readNominalTypeDefBody state self body
     else
         let self =
             { Name = name
@@ -702,9 +720,24 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
     let stateWithParams = { current with TypeVars = updatedTypeVars }
     let isPrivate = isPrivateType modifiers
     let paramVars = paramEntries |> List.map snd
-    let underlyingTy, next = readTypeDefBody stateWithParams name modifiers paramVars body
-    let selfReferences = if canReferToItself stateWithParams name modifiers then RecursiveAliases.namesOfItself name body |> List.map fst else []
     let isNominal = TypeDefModifier.isNominal modifiers
+    // The type as its own definition names it, before what it is made from is known.
+    let self =
+        { Name = name
+          Home = stateWithParams.Home
+          Parameters = paramVars
+          Underlying = RecursiveNominals.selfMarker
+          IsNominal = isNominal
+          IsPrivate = isPrivate
+          IsContext = false
+          IsScoped = List.exists TypeDefModifier.isScoped modifiers
+          ScopedBy = scopedBy
+          Scope = scope
+          ContextVariable = contextVariable
+          Symbol = None
+          Members = Map.empty }
+    let underlyingTy, next = readTypeDefBody stateWithParams name modifiers paramVars self body
+    let selfReferences = if canReferToItself stateWithParams name modifiers then RecursiveAliases.namesOfItself name body |> List.map fst else []
     let nextNominals =
         if isNominal then next.LocalNominals |> Set.add name else next.LocalNominals
     let nextPrivate =
