@@ -160,7 +160,8 @@ and, when it was the last, drops the fields that are on the heap and frees the o
   a long list takes no stack;
 - an array's drops each of its elements, from the first to the last. An array is a block made by `__nanyx_new_cell`,
   so its count is at `p - 4`, then its length, an `i32`, at `p`, then its elements one after another, each stored as
-  a list cell's head is (`CoreIrLayout.arrayElementOffset`);
+  a list cell's head is (`CoreIrLayout.arrayElementOffset`). A mutable array (`MArray`) is laid out the same way, so
+  its drop is an array's; an `MRef` is a one-field record, so its drop is a record's;
 - a tag union's returns at once for a code (an odd value); for a cell, it reads the code to tell the payload's type,
   unless every tag with a payload has a payload of the same type;
 - a function value's calls the function whose table slot is in the closure's info word, which drops what the

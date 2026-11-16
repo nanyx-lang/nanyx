@@ -19,16 +19,17 @@ module Boxes =
         | TyApply(name, [ element ]) when name = typeName -> Some element
         | _ -> None
 
-    /// The type variables in what a value of `ty` holds in a box, through the types its nominal types stand for, as an
-    /// `MRef(list(a))` holds `a`: not those of a box a function it holds makes. A def's type is not generalised over
-    /// them, since the box holds values of one type, not one for each use: `def r = MRef.new([])`, generalised, could be
-    /// set to a list of ints and read as a list of strings.
+    /// The type variables in what a value of `ty` holds in a box or a mutable array (see `MutableArrays`), through the
+    /// types its nominal types stand for, as an `MRef(list(a))` holds `a`: not those of one a function it holds makes. A
+    /// def's type is not generalised over them, since the box holds values of one type, not one for each use:
+    /// `def r = MRef.new([])`, generalised, could be set to a list of ints and read as a list of strings.
     let rec heldVariables (ty: Ty) : Set<int> =
         let rec variables (ty: Ty) =
             match ty with
             | TyVar var -> Set.singleton var.Id
             | _ -> Ty.children ty |> List.map variables |> Set.unionMany
         match ty with
-        | BoxType element -> variables element
+        | BoxType element
+        | MutableArrays.MutableArrayType element -> variables element
         | TyFunc _ -> Set.empty
         | _ -> Ty.children ty |> List.map heldVariables |> Set.unionMany

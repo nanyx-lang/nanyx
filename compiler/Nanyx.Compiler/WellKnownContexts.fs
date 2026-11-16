@@ -103,6 +103,7 @@ module internal WellKnownContexts =
             lacking "equality" (function
                 | TyFunc _ -> Some ("a function", "functions")
                 | Boxes.BoxType _ -> mutableReference
+                | MutableArrays.MutableArrayType _ -> Some ("a mutable array", "mutable arrays")
                 | _ -> None)
           ListHelpers = Map.ofList [ "==", "__listEquals"; "!=", "__listEquals" ]
           AgreesWith = None
@@ -125,6 +126,7 @@ module internal WellKnownContexts =
                 | Sets.SetType _ -> Some ("a set", "sets")
                 | Arrays.ArrayType _ -> Some ("an array", "arrays")
                 | Boxes.BoxType _ -> mutableReference
+                | MutableArrays.MutableArrayType _ -> Some ("a mutable array", "mutable arrays")
                 | TyRecord fields when not (isTuple fields) -> Some ("a record", "records")
                 | TyOpenRecord _ -> Some ("a record", "records")
                 | TyTag _
@@ -153,6 +155,7 @@ module internal WellKnownContexts =
                 | Sets.SetType _ -> Some ("a set", "sets")
                 | Arrays.ArrayType _ -> Some ("an array", "arrays")
                 | Boxes.BoxType _ -> mutableReference
+                | MutableArrays.MutableArrayType _ -> Some ("a mutable array", "mutable arrays")
                 | _ -> None)
           ListHelpers = Map.empty
           AgreesWith = Some equality.Member

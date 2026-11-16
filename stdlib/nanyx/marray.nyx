@@ -1,0 +1,87 @@
+--| Mutable arrays: fixed-length arrays whose elements are changed in place.
+
+  An `MArray(a)` holds its elements in one block, as an `Array` does, so [`MArray.at`] reads any of
+  them in the same time, and [`MArray.set`] changes one in place. It has the length it was made
+  with for good. It belongs to the `memory` block it was made in: every operation requires that
+  block's `Memory`, and the array can't leave the block, so give back [`MArray.toArray`] of it.
+
+  [`MArray.fromArray`] and [`MArray.toArray`] copy, so an `Array` never changes, whatever happens
+  to the `MArray` it was copied into or from. An index out of range is `#none` or `#outOfRange`,
+  never a trap. A mutable array has no `==`, order, hash or `toString`: compare or write what
+  [`MArray.toArray`] gives instead.
+
+  Each function is attached to `MArray`, so with `import nanyx/marray` it is called as
+  `MArray.set(xs, 1, 99)`, or as `xs \set(1, 99)`.
+module marray
+
+export type MArray(a) = [Memory] private marray(a)
+
+--| A new array of `count` elements, the one at each index `f` of it: `MArray.init(3, { i -> i * i })`
+  holds `0`, `1` and `4`. A `count` of 0 or less makes an empty array.
+export def MArray.init: [Memory, c] int, ([c] int -> a) -> MArray(a) = { count, f ->
+  MArray(__nanyx_marray_of_list(list.init(count, f)))
+}
+
+--| A new array of `count` elements, each the [`Default`] of its type: `MArray.create(3)` of ints
+  holds three `0`s. A `count` of 0 or less makes an empty array.
+export def MArray.create: [Memory, Default(a)] int -> MArray(a) = { count ->
+  MArray(__nanyx_marray_of_list(list.init(count, { _ -> default() })))
+}
+
+--| A new array of the elements of `xs`, in order.
+export def MArray.fromList: [Memory] list(a) -> MArray(a) = { xs ->
+  MArray(__nanyx_marray_of_list(xs))
+}
+
+--| A new array of a copy of the elements of `xs`, in order: changing it leaves `xs` as it is.
+export def MArray.fromArray: [Memory] Array(a) -> MArray(a) = { xs ->
+  MArray(__nanyx_marray_of_list(__nanyx_array_to_list(xs)))
+}
+
+--| A copy of the elements of `xs` now, in order, as an `Array`, which later changes to `xs` leave
+  as it is.
+export def MArray.toArray: [Memory] MArray(a) -> Array(a) = { MArray(xs) ->
+  __nanyx_array_of_list(__nanyx_marray_to_list(xs))
+}
+
+--| The elements of `xs` now, in order, as a list.
+export def MArray.toList: [Memory] MArray(a) -> list(a) = { MArray(xs) ->
+  __nanyx_marray_to_list(xs)
+}
+
+--| How many elements `xs` holds.
+export def MArray.length: [Memory] MArray(a) -> int = { MArray(xs) ->
+  __nanyx_marray_length(xs)
+}
+
+--| The element of `xs` at `index`, counting from 0, or `#none` when `index` is negative or past the
+  end.
+export def MArray.at: [Memory] MArray(a), int -> #some(a) | #none = { MArray(xs), index ->
+  if index >= 0 and index < __nanyx_marray_length(xs)
+    then #some(__nanyx_marray_get(xs, index))
+    else #none
+}
+
+--| Changes the element of `xs` at `index`, counting from 0, to `value`: `#ok`, or `#outOfRange`
+  when `index` is negative or past the end, and `xs` is left as it was.
+export def MArray.set
+  : [Memory] MArray(a), int, a -> #ok | #outOfRange
+  = { MArray(xs), index, value ->
+    if index >= 0 and index < __nanyx_marray_length(xs) then
+      __nanyx_marray_set(xs, index, value)
+      #ok
+    else #outOfRange
+  }
+
+--| Swaps the elements of `xs` at `i` and `j`: `#ok`, or `#outOfRange` when either is negative or
+  past the end, and `xs` is left as it was.
+export def MArray.swap: [Memory] MArray(a), int, int -> #ok | #outOfRange = { MArray(xs), i, j ->
+  def length = __nanyx_marray_length(xs)
+
+  if i >= 0 and i < length and j >= 0 and j < length then
+    def first = __nanyx_marray_get(xs, i)
+    __nanyx_marray_set(xs, i, __nanyx_marray_get(xs, j))
+    __nanyx_marray_set(xs, j, first)
+    #ok
+  else #outOfRange
+}

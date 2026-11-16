@@ -415,10 +415,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | _ -> internalError "a box set with something other than a box and a value")
         | FunctionCall(name, _, args) when Intrinsics.isIntrinsic name && not (scope.Vars.ContainsKey name) ->
             // A compiler intrinsic (only the standard library can call these, and a built-in property such as
-            // `s.length` is one): the runtime helper of the same name.
+            // `s.length` is one): the runtime helper of the same name. A mutable array is read as an array is.
             let ty = tyOf expr
             this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
-                k (Expr.make (CallRuntime(name, atoms, not (Intrinsics.returnsUnit name))) ty))
+                k (Expr.make (CallRuntime(Intrinsics.asArrayIntrinsic name, atoms, not (Intrinsics.returnsUnit name))) ty))
         | FunctionCall(name, _, args) when input.Externs.ContainsKey name && not (scope.Vars.ContainsKey name) ->
             // A foreign function: a direct call to the module's import of it. It takes no context members: it requires
             // only `HostRuntime`, which marks who may call it.

@@ -583,6 +583,26 @@ type private FunctionEmitter(context: EmitContext) =
         // checked is in range, is after it, with a reference of its own taken (see `CoreIrArrays`).
         | CallRuntime(name, [ array ], _) when name = Intrinsics.arrayLength ->
             join "\n    " [ atoms [ array ]; touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"; "i64.extend_i32_u" ]
+        // A mutable array's element at an index, which the standard library has checked is in range, is given up and
+        // the value, which the array takes over, is stored in its place, as `SetField` does.
+        | CallRuntime(name, [ array; index; value ], _) when name = Intrinsics.marraySet ->
+            let element = arrayElement (atomType array)
+            let offset = CoreIrLayout.arrayElementOffset element 0
+            let slot = freshLocal "__slot" "i32"
+            let held = freshLocal "__set" (CoreIrLayout.valueType element)
+            let dropOld = if CoreIrDrop.isHeapType element then $"local.get ${slot}\n    {load element offset}\n    {dropValue element}" else ""
+            join "\n    " [
+                atoms [ array; index ]
+                "i32.wrap_i64"
+                $"i32.const {CoreIrLayout.size element}"
+                "i32.mul"
+                "i32.add"
+                $"local.set ${slot}"
+                atoms [ value ]
+                $"local.set ${held}"
+                dropOld
+                $"local.get ${slot}\n    local.get ${held}\n    {store element offset}"
+                "i32.const 0" ]
         | CallRuntime(name, [ array; index ], _) when name = Intrinsics.arrayGet ->
             let element = arrayElement (atomType array)
             join "\n    " [

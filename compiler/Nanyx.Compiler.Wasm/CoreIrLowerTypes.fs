@@ -235,6 +235,8 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     // A set is the list of its elements (see `Sets`).
     | Sets.SetType element -> IrList(toIrType element)
     | Arrays.ArrayType element -> IrArray(toIrType element)
+    // A mutable array is laid out as an array is (see `MutableArrays`).
+    | MutableArrays.MutableArrayType element -> IrArray(toIrType element)
     | TyVar _ -> IrUnit
     | TyPrimitive other -> cannot $"a value of type {other}"
     | TyFunc(input, output, contexts) ->
