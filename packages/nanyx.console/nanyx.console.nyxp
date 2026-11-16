@@ -3,7 +3,6 @@
     name = "nanyx.console"
     version = "0.28.0"
     sources = ["src/**/*.nyx"]
-    publicModules = ["console.host", "console.prelude"]
     host = (root = "console.host", prelude = "console.prelude")
   )
   dependencies = [(package = "nanyx.console.core", version = "0.28.0")]

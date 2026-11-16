@@ -239,7 +239,7 @@ let moduleAt (file: string) (result: CompileResult) (offset: int) : ModuleHover 
             syntax
             |> List.tryPick (fun item ->
                 match item.Kind with
-                | ModuleDecl name when contains offset item.Span -> Some { File = file; Name = name; Span = item.Span }
+                | ModuleDecl(_, name) when contains offset item.Span -> Some { File = file; Name = name; Span = item.Span }
                 | _ -> None)
         let import () =
             typed.ImportedFiles

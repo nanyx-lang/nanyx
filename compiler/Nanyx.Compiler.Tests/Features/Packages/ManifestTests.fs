@@ -44,7 +44,6 @@ let ``A manifest is read with comments, its sources, public modules, formatter, 
     name = "acme.demo"
     version = "1.2.0-beta.1"
     sources = ["src/**/*.nyx"]
-    publicModules = ["demo"]
   )
   dependencies = []
   formatter = (lineWidth = 100)
@@ -124,7 +123,7 @@ let ``An unknown field is an error at its name`` () =
     Assert.Equal<string list>([ DiagnosticCodes.UnknownManifestField.Code; DiagnosticCodes.UnknownManifestField.Code ], errors |> List.map _.Code)
     Assert.Equal<string list>(
         [ "the manifest has no field 'extras'; its fields are 'package', 'dependencies', 'linters', 'host', 'formatter'"
-          "package has no field 'colour'; its fields are 'name', 'version', 'sources', 'publicModules', 'host'" ],
+          "package has no field 'colour'; its fields are 'name', 'version', 'sources', 'host'" ],
         errors |> List.map _.Message
     )
     let extras = errors.[0].Span.Value
@@ -247,11 +246,11 @@ let ``A dependency the compiler ships is named at its version, and found beside 
     )
 
 [<Fact>]
-let ``A public module or a dependency listed twice is an error at the repeat`` () =
+let ``A dependency listed twice is an error at the repeat`` () =
     let text =
         """
 (
-  package = (name = "demo", version = "0.1.0", publicModules = ["strings", "lists", "strings"])
+  package = (name = "demo", version = "0.1.0")
   dependencies = [(package = "acme.web", path = "../web"), (package = "acme.web", path = "../web")]
 )
 """
@@ -260,11 +259,10 @@ let ``A public module or a dependency listed twice is an error at the repeat`` (
         | Result.Error errors -> errors
         | Result.Ok _ -> failwith "Expected errors"
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.InvalidManifestValue.Code, "the dependency acme.web is listed twice: a package lists each package it depends on once"
-          DiagnosticCodes.InvalidManifestValue.Code, "the module 'strings' is listed twice in publicModules" ],
+        [ DiagnosticCodes.InvalidManifestValue.Code, "the dependency acme.web is listed twice: a package lists each package it depends on once" ],
         errors |> List.map (fun error -> error.Code, error.Message)
     )
-    Assert.Equal<(int * int) list>([ 3, 70; 2, 84 ], errors |> List.map (fun error -> error.Span.Value.StartLine, error.Span.Value.StartColumn))
+    Assert.Equal<(int * int) list>([ 3, 70 ], errors |> List.map (fun error -> error.Span.Value.StartLine, error.Span.Value.StartColumn))
 
 [<Fact>]
 let ``The compiler's version is its release, with no commit`` () =

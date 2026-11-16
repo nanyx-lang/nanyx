@@ -25,7 +25,7 @@ let ``Parse module declaration`` () =
     | Result.Ok module' ->
         module' |> should haveLength 1
         match module'.[0] with
-        | Kind (ModuleDecl name) ->
+        | Kind (ModuleDecl(_, name)) ->
             name |> should equal "Test"
         | _ -> failwith "Expected ModuleDecl"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
@@ -41,7 +41,7 @@ export def one = 1
     | Result.Ok module' ->
         module' |> should haveLength 2
         match module'.[0] with
-        | Kind (ModuleDecl name) -> Assert.Equal("collections.list", name)
+        | Kind (ModuleDecl(_, name)) -> Assert.Equal("collections.list", name)
         | other -> failwith $"Expected ModuleDecl, got: {other}"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
 
@@ -77,10 +77,10 @@ module Inner =
     | Result.Ok module' ->
         module' |> should haveLength 5
         match module'.[0] with
-        | Kind (ModuleDecl "Root") -> ()
+        | Kind (ModuleDecl(_, "Root")) -> ()
         | _ -> failwith "Expected ModuleDecl Root"
         match module'.[1] with
-        | Kind (ModuleDecl "Root.Inner") -> ()
+        | Kind (ModuleDecl(_, "Root.Inner")) -> ()
         | _ -> failwith "Expected ModuleDecl Root.Inner"
         match module'.[2] with
         | Kind (Def (TypeDef(name, _, _, _))) -> name |> should equal "Root.Inner.Person"

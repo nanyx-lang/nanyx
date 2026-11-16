@@ -25,7 +25,7 @@ type PackageModules =
       /// The modules of the host's package, which the host's import, and the host's own imports, resolve in; none for a
       /// library.
       HostPackage: PackageModules option
-      /// The modules a package that depends on this one may import: its manifest's `publicModules`.
+      /// The modules a package that depends on this one may import: those its files declare with `export module`.
       PublicModules: string list
       /// The packages it depends on directly, each with its own dependencies.
       Dependencies: PackageModules list
@@ -40,42 +40,49 @@ module PackageModules =
     let internal samePath (a: string) (b: string) =
         String.Equals(a, b, if OperatingSystem.IsLinux() then StringComparison.Ordinal else StringComparison.OrdinalIgnoreCase)
 
-    /// The module name each file read so far declares, by full path, with the time it was written and its length
-    /// when it was read, so the language server, which builds the table on every change, reads only files that changed.
-    let private declaredNames = ConcurrentDictionary<string, DateTime * int64 * string option>()
+    /// The module name each file read so far declares, and whether it exports it, by full path, with the time it was
+    /// written and its length when it was read, so the language server, which builds the table on every change, reads
+    /// only files that changed.
+    let private declaredNames = ConcurrentDictionary<string, DateTime * int64 * (string * bool) option>()
 
-    /// The name the file at `filePath`, whose text is `source`, declares, with the span of its declaration, and the
-    /// file as parsed; None if it does not parse, which compiling it reports.
+    /// The name the file at `filePath`, whose text is `source`, declares, with the span of its declaration, whether
+    /// it exports it, and the file as parsed; None if it does not parse, which compiling it reports.
     let private parse (filePath: string) (source: string) =
         match parseModuleFileWithNames filePath source with
-        | Result.Ok (syntax, _, moduleBlocks) -> Some (FileImports.declaration moduleBlocks syntax, syntax)
+        | Result.Ok (syntax, _, moduleBlocks) -> Some (FileImports.declaration moduleBlocks syntax, FileImports.exportsModule moduleBlocks syntax, syntax)
         | Result.Error _ -> None
 
-    /// The module name the file at `filePath` declares as it is on disk.
-    let private declaredName (filePath: string) =
+    /// The module name the file at `filePath` declares as it is on disk, and whether it exports it.
+    let private declaredModule (filePath: string) =
         let info = FileInfo filePath
         match declaredNames.TryGetValue filePath with
-        | true, (written, length, name) when written = info.LastWriteTimeUtc && length = info.Length -> name
+        | true, (written, length, declared) when written = info.LastWriteTimeUtc && length = info.Length -> declared
         | _ ->
-            let name = parse filePath (File.ReadAllText filePath) |> Option.bind fst |> Option.map fst
-            declaredNames.[filePath] <- (info.LastWriteTimeUtc, info.Length, name)
-            name
+            let declared =
+                parse filePath (File.ReadAllText filePath)
+                |> Option.bind (fun (declaration, exported, _) -> declaration |> Option.map (fun (name, _) -> name, exported))
+            declaredNames.[filePath] <- (info.LastWriteTimeUtc, info.Length, declared)
+            declared
+
+    /// The module name the file at `filePath` declares as it is on disk.
+    let private declaredName (filePath: string) = declaredModule filePath |> Option.map fst
 
     /// The modules of the package called `name`, whose manifest is in `root`, whose source files are `files` and whose
-    /// `@entry` runs under `host`, without public modules or dependencies.
+    /// `@entry` runs under `host`, with the modules it exports, without dependencies. A module split across files is
+    /// public when one of them exports it.
     let ofFiles (name: string) (root: string) (host: Host option) (files: string list) : PackageModules =
+        let declared = files |> List.choose (fun file -> declaredModule file |> Option.map (fun moduleName -> moduleName, file))
         { Package = name
           Host = host
           HostPackage = None
           Root = root
           Files = files
-          PublicModules = []
+          PublicModules = declared |> List.filter (fun ((_, exported), _) -> exported) |> List.map (fst >> fst) |> List.distinct
           Dependencies = []
           Script = false
           Modules =
-            files
-            |> List.choose (fun file -> declaredName file |> Option.map (fun moduleName -> moduleName, file))
-            |> List.groupBy fst
+            declared
+            |> List.groupBy (fst >> fst)
             |> List.map (fun (moduleName, declarations) -> moduleName, declarations |> List.map snd)
             |> Map.ofList }
 
@@ -112,7 +119,7 @@ module PackageModules =
         | Some _ ->
             let publicOnes =
                 match dependency.PublicModules with
-                | [] -> "it has none: a package lists them in its manifest's package publicModules"
+                | [] -> "it has none: a module is public when its file declares it with export module"
                 | modules -> $"its public modules are {quoted modules}"
             Error (Diagnostics.at DiagnosticCodes.ModuleNotPublic item.Span $"The module '{moduleName}' of the package '{dependency.Package}' is not public, so another package can't import it: {publicOnes}")
         | None ->
@@ -189,7 +196,7 @@ module PackageModules =
     let fileErrors (modules: PackageModules) (filePath: string) (source: string) (compiled: (string option * Module) option) : Diagnostic list =
         let parsed =
             compiled
-            |> Option.orElseWith (fun () -> parse filePath source |> Option.map (fun (declaration, syntax) -> Option.map fst declaration, syntax))
+            |> Option.orElseWith (fun () -> parse filePath source |> Option.map (fun (declaration, _, syntax) -> Option.map fst declaration, syntax))
         match parsed with
         | None -> []
         | Some (declaration, syntax) ->

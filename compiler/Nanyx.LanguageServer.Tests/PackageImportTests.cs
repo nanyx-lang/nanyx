@@ -71,11 +71,11 @@ public sealed class PackageImportTests : LanguageServerTestBase
     public async Task A_package_file_imports_a_public_module_of_a_path_dependency_and_finds_its_definitions()
     {
         File.WriteAllText(TempPath("util", "util.nyxp"), """
-            (package = (name = "acme.util", version = "0.1.0", publicModules = ["strings"]))
+            (package = (name = "acme.util", version = "0.1.0"))
             """.ReplaceLineEndings("\n"));
         var strings = TempPath("util", "strings.nyx");
         File.WriteAllText(strings, """
-            module strings
+            export module strings
 
             export def shout: string -> string = { s -> s ++ "!" }
             """.ReplaceLineEndings("\n"));

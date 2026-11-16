@@ -551,7 +551,7 @@ let format (options: Options) (parsed: SourceModule) : string =
 
     and item (i: TopLevelItem) : Doc =
         match i.Kind with
-        | ModuleDecl n -> text $"module {n}"
+        | ModuleDecl(isExport, n) -> text $"""{if isExport then "export " else ""}module {n}"""
         | ModuleBlock(n, items) -> cat [ text $"module {n} ="; nest (cat [ hard; topLevel true i.Span.Start i.Span.End items ]) ]
         | Def(ValueDef(isExport, n, t, Kind ExternSyntax.Bodiless)) -> declarationDoc isExport n t
         | Def(ValueDef(isExport, n, t, value)) -> defDoc isExport "def" n t value

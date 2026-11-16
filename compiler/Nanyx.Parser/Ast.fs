@@ -287,7 +287,8 @@ and [<CustomEquality; CustomComparison; StructuredFormatDisplay("{Kind}")>] TopL
             | _ -> invalidArg "other" "a TopLevelItem can only be compared with another TopLevelItem"
 
 and TopLevelItemKind =
-    | ModuleDecl of ModuleName
+    /// `module name`, or `export module name`, which makes the module public: another package can import it.
+    | ModuleDecl of isExport: bool * ModuleName
     | ModuleBlock of ModuleName * TopLevelItem list
     | Def of Definition
     | Import of ImportItem list

@@ -369,7 +369,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             | Error err -> errors <- errors @ err
         | Import itemsList -> emit (TypedImport itemsList)
         | ReExport item -> emit (TypedImport [ item ])
-        | ModuleDecl name ->
+        | ModuleDecl(_, name) ->
             currentModule <- Some name
             emit (TypedModuleDecl name)
         | ModuleBlock _ -> ()
@@ -388,7 +388,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         module'
         |> List.scan (fun current (item: TopLevelItem) ->
             match item.Kind with
-            | ModuleDecl name -> Some name
+            | ModuleDecl(_, name) -> Some name
             | _ -> current) currentModule
         |> Array.ofList
     let mutable checkedItems = Set.empty

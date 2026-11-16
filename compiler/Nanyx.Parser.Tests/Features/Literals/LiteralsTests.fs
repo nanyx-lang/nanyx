@@ -78,7 +78,7 @@ let ``Parse literals.nyx file`` () =
     | Result.Ok module' ->
         module' |> should haveLength 6  // 1 module + 5 defs
         match module'.[0] with
-        | Kind (ModuleDecl name) -> name |> should equal "Literals"
+        | Kind (ModuleDecl(_, name)) -> name |> should equal "Literals"
         | _ -> failwith "Expected ModuleDecl"
 
         let defs = module' |> List.tail

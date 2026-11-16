@@ -70,7 +70,6 @@ and the module that is the host's prelude, if it has one.
     name = "nanyx.console"
     version = "0.28.0"
     sources = ["src/**/*.nyx"]
-    publicModules = ["console.host", "console.prelude"]
     host = (root = "console.host", prelude = "console.prelude")
   )
 )

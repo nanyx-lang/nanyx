@@ -62,7 +62,7 @@ The manifest describes the package and the source files and dependencies that ma
 
 ```nanyx fragment
 (
-  package = (name = "acme.web", version = "1.2.0", sources = ["**/*.nyx"], publicModules = ["http", "json"])
+  package = (name = "acme.web", version = "1.2.0", sources = ["**/*.nyx"])
   dependencies = [(package = "acme.core", path = "../core")]
 )
 ```
@@ -111,10 +111,10 @@ import (
 )
 ```
 
-Only the modules a package lists in its `publicModules` can be imported from another package (`NYX0025`):
+Only the modules a package declares with `export module` can be imported from another package (`NYX0025`):
 
 ```nanyx fragment
-(package = (name = "acme.core", version = "2.1.0", publicModules = ["collections"]))
+export module collections
 ```
 
 A package can only import modules from packages that it directly depends on (`NYX0026`). Dependencies of dependencies are not implicitly available to source code. A build has one copy of each package: two dependencies that reach the same package in different directories are an error (`NYX0028`), and so is a cycle of packages that depend on each other (`NYX0027`). The dependencies' modules are checked once each and compiled into the same program as the package's own.
@@ -136,12 +136,14 @@ def validateConnection = ...
 
 Here, `createConnection` is available to other modules in the same package, while `validateConnection` remains private to `http.internal`.
 
-External package visibility is controlled separately, at the module level, by the package manifest:
+External package visibility is controlled separately, at the module level, by the module's own declaration. A module declared with `export module` is public, and any other is internal to its package:
 
 ```nanyx fragment
-(
-  package = (name = "acme.web", version = "1.2.0", publicModules = ["http", "json"])
-)
+export module http
+
+import http.internal
+
+export def get = { url: string -> createConnection(url) }
 ```
 
 A consuming package can import the public modules:
@@ -152,7 +154,9 @@ import acme.web/http
 
 but cannot directly import other modules in the package.
 
-This allows a package to contain internal modules whose exported definitions are shared between its own modules without making those modules part of its external API.
+This allows a package to contain internal modules whose exported definitions are shared between its own modules without making those modules part of its external API. A public module can make some of them part of its API all the same, by re-exporting them: `export http.internal (createConnection)`.
+
+A library, a package whose manifest names no `host` and which has no `@entry`, must export at least one module, since another package could use nothing of it otherwise (`NYX0033`). An application needn't export any. There is no default module: a package's modules are always imported by name, as `acme.web/http`.
 
 Re-exporting can be used to build a public module from definitions implemented across several internal modules.
 

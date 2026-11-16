@@ -98,10 +98,12 @@ do
 let private spannedItem (p: Parser<TopLevelItemKind, ParseState>) : Parser<TopLevelItem, ParseState> =
     withSpan p |>> fun (kind, span) -> TopLevelItem.at span kind
 
-/// A module declaration, `module collections.list`. A dotted name is kept whole, as a module block's qualified name is.
+/// A module declaration, `module collections.list`, or `export module acme.web.http` for a module another package can
+/// import. A dotted name is kept whole, as a module block's qualified name is.
 let moduleDecl: Parser<TopLevelItem, ParseState> =
     let moduleName = (sepBy1 identifierNoWs (pchar '.') |>> String.concat ".") .>> wsInline
-    spannedItem (pstring "module" >>. ws >>. moduleName |>> ModuleDecl)
+    let export = attempt (pstring "export" >>. keywordEnd >>. ws .>> followedBy (pstring "module" >>. keywordEnd))
+    spannedItem (opt export .>> pstring "module" .>> ws .>>. moduleName |>> fun (export, name) -> ModuleDecl(export.IsSome, name))
     <?> "module declaration"
 
 let private valueDefExprParser =

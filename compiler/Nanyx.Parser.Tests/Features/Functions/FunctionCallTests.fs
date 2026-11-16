@@ -14,7 +14,7 @@ let ``Parse function-calls.nyx file`` () =
     | Result.Ok module' ->
         module' |> should haveLength 7  // 1 module + 6 function call defs
         match module'.[0] with
-        | Kind (ModuleDecl name) -> name |> should equal "FunctionCalls"
+        | Kind (ModuleDecl(_, name)) -> name |> should equal "FunctionCalls"
         | _ -> failwith "Expected ModuleDecl"
 
         let defs = module' |> List.tail

@@ -14,7 +14,7 @@ let ``Parse lambdas.nyx file`` () =
     | Result.Ok module' ->
         module' |> should haveLength 7  // 1 module + 6 lambda defs
         match module'.[0] with
-        | Kind (ModuleDecl name) -> name |> should equal "Lambdas"
+        | Kind (ModuleDecl(_, name)) -> name |> should equal "Lambdas"
         | _ -> failwith "Expected ModuleDecl"
 
         let defs = module' |> List.tail
@@ -33,7 +33,7 @@ let ``Parse shorthand-lambdas.nyx file`` () =
     | Result.Ok module' ->
         module' |> should haveLength 15  // 1 module + 14 shorthand lambda defs
         match module'.[0] with
-        | Kind (ModuleDecl name) -> name |> should equal "ShorthandLambdas"
+        | Kind (ModuleDecl(_, name)) -> name |> should equal "ShorthandLambdas"
         | _ -> failwith "Expected ModuleDecl"
 
         let defs = module' |> List.tail

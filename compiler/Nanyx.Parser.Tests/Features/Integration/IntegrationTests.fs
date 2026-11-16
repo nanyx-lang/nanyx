@@ -14,7 +14,7 @@ let ``Parse comprehensive.nyx file`` () =
     | Result.Ok module' ->
         module' |> List.length |> should be (greaterThan 5)
         match module'.[0] with
-        | Kind (ModuleDecl name) -> name |> should equal "Comprehensive"
+        | Kind (ModuleDecl(_, name)) -> name |> should equal "Comprehensive"
         | _ -> failwith "Expected ModuleDecl"
 
         let hasLiteral =

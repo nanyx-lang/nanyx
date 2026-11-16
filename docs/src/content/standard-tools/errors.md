@@ -305,7 +305,7 @@ linter's `settings`, or its `rules`. The message lists the fields it takes.
 ```nanyx
 -- file: demo.nyxp
 (
-  package = (name = "demo", version = "0.1.0", src = ["*.nyx"])  -- error NYX0021: package has no field 'src'; its fields are 'name', 'version', 'sources', 'publicModules'
+  package = (name = "demo", version = "0.1.0", src = ["*.nyx"])  -- error NYX0021: package has no field 'src'; its fields are 'name', 'version', 'sources', 'host'
 )
 ```
 
@@ -330,9 +330,7 @@ To fix it, add the field: `version = "0.1.0"`.
 A field of the manifest has a value of the wrong kind, such as a string where a list is expected, or a value its rule
 does not allow: a package name that isn't lower case with words separated by dots, a version that isn't a semantic
 version, a severity that isn't `#error`, `#warning`, `#info`, `#hint` or `#off`, or a linter or host package the
-compiler doesn't have. A `publicModules` entry that names no module the package's source files declare is one too,
-with the closest module as a suggestion, and so is a module listed twice in `publicModules` or a package listed twice in
-`dependencies`, at the repeat.
+compiler doesn't have. A package listed twice in `dependencies` is one too, at the repeat.
 
 ```nanyx
 -- file: demo.nyxp
@@ -361,7 +359,7 @@ To fix it, give the directory the package is in instead, `path = "../util"`. Pac
 # NYX0025: Module not public
 
 A module imports a module of a package it depends on that the package does not make public. Another package can import
-only the modules a package lists in its manifest's `publicModules`.
+only the modules a package declares with `export module`.
 
 ```nanyx
 -- file: main.nyx
@@ -376,9 +374,9 @@ def run = { () -> ignore(mark) }
   dependencies = [(package = "acme.util", path = "util")]
 )
 -- file: util/util.nyxp
-(package = (name = "acme.util", version = "0.1.0", publicModules = ["strings"]))
+(package = (name = "acme.util", version = "0.1.0"))
 -- file: util/strings.nyx
-module strings
+export module strings
 
 export def shout = { s: string -> s ++ "!" }
 -- file: util/secrets.nyx
@@ -387,8 +385,8 @@ module secrets
 export def mark = "!"
 ```
 
-To fix it, import one of the package's public modules, or, if you maintain the package, add the module to its
-`publicModules`.
+To fix it, import one of the package's public modules, or, if you maintain the package, declare the module with
+`export module`.
 
 # NYX0026: Package is not a direct dependency
 
@@ -409,19 +407,19 @@ def run = { () -> ignore(shout("hi")) }
 )
 -- file: loud/loud.nyxp
 (
-  package = (name = "acme.loud", version = "0.1.0", publicModules = ["louder"])
+  package = (name = "acme.loud", version = "0.1.0")
   dependencies = [(package = "acme.util", path = "../util")]
 )
 -- file: loud/louder.nyx
-module louder
+export module louder
 
 import acme.util/strings
 
 export def louder = { s: string -> shout(shout(s)) }
 -- file: util/util.nyxp
-(package = (name = "acme.util", version = "0.1.0", publicModules = ["strings"]))
+(package = (name = "acme.util", version = "0.1.0"))
 -- file: util/strings.nyx
-module strings
+export module strings
 
 export def shout = { s: string -> s ++ "!" }
 ```
@@ -440,14 +438,14 @@ so there can't be a cycle.
   dependencies = [(package = "acme.b", path = "../b")]  -- error NYX0027: packages can't depend on each other in a cycle: acme.a -> acme.b -> acme.a
 )
 -- file: a/main.nyx
-module main
+export module main
 -- file: b/b.nyxp
 (
   package = (name = "acme.b", version = "0.1.0")
   dependencies = [(package = "acme.a", path = "../a")]
 )
 -- file: b/other.nyx
-module other
+export module other
 ```
 
 To fix it, move what both packages need into a third package that both depend on.
@@ -467,22 +465,22 @@ and another in another. A build has one version of each package.
   ]
 )
 -- file: app/main.nyx
-module main
+export module main
 -- file: loud/loud.nyxp
 (
   package = (name = "acme.loud", version = "0.1.0")
   dependencies = [(package = "acme.util", path = "../copy")]  -- error NYX0028: the build reaches the package acme.util by two paths, ...
 )
 -- file: loud/louder.nyx
-module louder
+export module louder
 -- file: util/util.nyxp
 (package = (name = "acme.util", version = "0.1.0"))
 -- file: util/strings.nyx
-module strings
+export module strings
 -- file: copy/util.nyxp
 (package = (name = "acme.util", version = "0.1.0"))
 -- file: copy/strings.nyx
-module strings
+export module strings
 ```
 
 To fix it, make every package that depends on it give the same directory.
@@ -542,6 +540,26 @@ def both: [Eq(a) & Hash(a)] a, a -> bool = { x, y -> x == y }  -- error NYX0032:
 ```
 
 To fix it, write `,` in its place, which the error's fix does; `nanyx format` writes `,` too.
+
+# NYX0033: Library that exports no module
+
+A package whose manifest names no `host`, and which has no `@entry`, is a library: other packages use it by importing
+its public modules. One that declares none with `export module` can't be used at all.
+
+```nanyx
+-- file: util.nyxp
+(
+  package = (name = "acme.util", version = "0.1.0", sources = ["*.nyx"])  -- error NYX0033: acme.util is a library, since its manifest names no host, but it exports no module: ...
+)
+-- file: strings.nyx
+module strings
+
+export def shout = { s: string -> s ++ "!" }
+```
+
+To fix it, declare the modules other packages may import with `export module`: `export module strings`. An
+application, which names its host, needn't export anything.
+
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which

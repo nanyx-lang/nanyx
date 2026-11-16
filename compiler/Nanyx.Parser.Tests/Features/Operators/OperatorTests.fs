@@ -14,7 +14,7 @@ let ``Parse binary-operators.nyx file`` () =
     | Result.Ok module' ->
         module' |> List.length |> should be (greaterThan 10)
         match module'.[0] with
-        | Kind (ModuleDecl name) -> name |> should equal "BinaryOperators"
+        | Kind (ModuleDecl(_, name)) -> name |> should equal "BinaryOperators"
         | _ -> failwith "Expected ModuleDecl"
 
         let hasBinaryOp op (module': Module) =

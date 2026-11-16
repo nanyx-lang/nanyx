@@ -13,8 +13,8 @@ let ``A package runs with the public module of its path dependency`` () =
         let full = Path.Combine(directory.Path, path)
         Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
         File.WriteAllText(full, text.ReplaceLineEndings "\n")
-    write "util/util.nyxp" """(package = (name = "acme.util", version = "0.1.0", publicModules = ["strings"]))"""
-    write "util/strings.nyx" "module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
+    write "util/util.nyxp" """(package = (name = "acme.util", version = "0.1.0"))"""
+    write "util/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
     write
         "app/app.nyxp"
         $"""(
