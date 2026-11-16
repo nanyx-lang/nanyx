@@ -104,7 +104,7 @@ println(args())
 exit(0)
 println("after")
 """
-    let path = Path.GetTempFileName() + ".nyx"
+    let path = Path.Combine(Path.GetTempPath(), $"nanyx-env-{System.Guid.NewGuid():N}.nyx")
     File.WriteAllText(path, source)
     try
         let outcome = runFile path
