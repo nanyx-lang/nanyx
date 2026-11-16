@@ -50,6 +50,9 @@ Out of scope here, with their own workstreams:
   have free variables (`TypeEnv.Unquantified`, `envVarsUnder`). So 400 defs that pass a lambda to `list.map` check
   in about 1 s, and 800 in 1.6 s ([#1266](https://github.com/nanyx-lang/nanyx/issues/1266)). Defs that share a
   variable (mutual recursion, a use before the def is checked) and a module with a type error still solve afresh.
+  The passes that look at every expression in a module list them with `SyntaxTree.expressionsWithin`, in time linear
+  in their number however deeply they nest, so a chain of 10,000 `+` checks in about 2 s
+  ([#1460](https://github.com/nanyx-lang/nanyx/issues/1460)).
 - **A parse error stops everything.** There is no error recovery, so one syntax error hides every problem after
   it. The language server needs recovery too.
 - **Most of the standard library is designed but not written.** The docs describe it; `stdlib/nanyx/` holds a
