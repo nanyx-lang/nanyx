@@ -14,8 +14,8 @@ and inline, and the small rewrites that save typing. Its issues carry the
 
 The language server offers go to definition, find references within a document, hover, inlay hints, completion,
 semantic tokens, formatting, and quick fixes from diagnostics ([Language server and editor](./language-server)).
-Expand and shrink selection, writing the inferred type, introducing a local or a function are done, and rename within a
-module.
+Expand and shrink selection, writing the inferred type, introducing a local or a function and inlining are done, and
+rename within a module.
 
 Refactorings live in the compiler's `Refactorings/` folder, one file each, after the editor features they build on
 (`Outline.fs`), in the namespace `NyxCompiler.Refactorings`. Their tests are in `Features/Refactorings/` of the
@@ -97,6 +97,30 @@ introduce local's is, and starts a rename.
 Its tests compile the result and check it is formatted. Each code action request with such a selection compiles the
 document two or three times more; if that is slow on large files, the work can move to `codeAction/resolve`.
 
+## Inline
+
+`Inline.at` is offered on the name of a top-level or local def of the module, or a use of it: "Inline `x`" replaces
+every use and removes the def, with its doc comment and attributes and the blank lines after it, and on a use "Inline
+this use of `x`" replaces only that one. A def that is exported is inlined at a use only, never removed.
+
+- **A value** that is not a lambda is put in for each use; where it may need brackets (an operator, a pipe, a branch,
+  a lambda) it is written in them, and the formatter drops those it doesn't need. A use that calls it is inlined only
+  when the value is a name.
+- **A function**, a def whose value is a lambda written `{ ... }`: a call becomes its body. An argument that is a name
+  or a literal, or whose parameter the body uses once and not as a function, is put in for the parameter; any other is
+  bound by a def first, so nothing is evaluated more or fewer times than before. Those defs, and the statements of a
+  body that is a block, go before the statement that holds the call. A use that does not call it becomes the lambda.
+- **Refused** where the def is recursive, is a cell or reads one, or (a value only) calls a function that requires a
+  context, which inlining would run at another time; where a name its value or body uses would refer to something else
+  at a use (the innermost symbol of that name whose scope holds the use, `typed.Scopes`); where an argument put in would
+  be taken by a name the body declares, or a def it puts before the statement would hide or clash with a name of the
+  item; where the call is in a branch or a lambda and statements would have to go first; for a call with named
+  arguments, the wrong number of arguments, or a cell parameter; and where the body uses `try` or `return`. Finally the
+  inlined text is compiled (`at` takes the function that compiles a text, as `IntroduceFunction.at` does), and refused
+  with its first new error if it would not compile.
+
+Like introduce function, it compiles the document again for each offer, here whenever the cursor is on a def's name.
+
 ## Rename
 
 `Rename.prepare` finds the name at a position (or just before it, where an editor's cursor often is) and its own part,
@@ -144,7 +168,7 @@ prefixes.
 | Expand and shrink selection (done) | [#1535](https://github.com/nanyx-lang/nanyx/issues/1535) |
 | Introduce local (done) | [#1536](https://github.com/nanyx-lang/nanyx/issues/1536) |
 | Introduce function (done) | [#1537](https://github.com/nanyx-lang/nanyx/issues/1537) |
-| Inline a local or a function | [#1538](https://github.com/nanyx-lang/nanyx/issues/1538) |
+| Inline a local or a function (done) | [#1538](https://github.com/nanyx-lang/nanyx/issues/1538) |
 | Write the inferred type (done) | [#1539](https://github.com/nanyx-lang/nanyx/issues/1539) |
 | Convert between a call and a pipe | [#1540](https://github.com/nanyx-lang/nanyx/issues/1540) |
 | Organise imports | [#1541](https://github.com/nanyx-lang/nanyx/issues/1541) |

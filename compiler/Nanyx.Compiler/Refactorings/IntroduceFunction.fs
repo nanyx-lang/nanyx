@@ -58,27 +58,6 @@ let private statementRefusal (run: Statement list) =
         | DefStatement _
         | ExprStatement _ -> None)
 
-/// The cells `values` declare, each by its name and the span of what declares it: a `mut` def, or a lambda that takes a
-/// cell as a parameter.
-let private cellsIn (values: Expression list) =
-    values
-    |> List.collect within
-    |> List.collect (fun expr ->
-        match expr.Kind with
-        | Block statements ->
-            statements
-            |> List.choose (fun statement ->
-                match statement.Kind with
-                | DefStatement(_, name, _, { Kind = MutSyntax.Call _ }) -> Some (name, statement.Span)
-                | _ -> None)
-        | Lambda(parameters, _, _) ->
-            parameters
-            |> List.choose (fun (name, annotation) ->
-                match annotation with
-                | CellPassingSyntax.CellParameter _ -> Some (name, expr.Span)
-                | _ -> None)
-        | _ -> [])
-
 /// `text`, which starts at `offset` in `source`, with each line after its first moved left by the indent of the line
 /// it starts on, and every line then indented by `indent`.
 let private reindented (source: string) (offset: int) (indent: string) (text: string) =
@@ -164,7 +143,7 @@ let at
                 |> List.distinctBy (fun symbol -> symbol.Id)
                 |> List.sortBy (fun symbol -> symbol.Declaration.Start)
             let cells = cellsIn values
-            let isCell (symbol: Symbol) = cells |> List.exists (fun (name, span) -> name = symbol.Name && SourceSpan.contains span symbol.Declaration)
+            let isCell = isCell cells
             let usesKeyword =
                 expressions |> List.exists (fun part -> match part.Kind with WorkflowBindExpr _ | WorkflowReturnExpr _ -> true | _ -> false)
             let refusal =

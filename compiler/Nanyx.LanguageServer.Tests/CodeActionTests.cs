@@ -151,6 +151,20 @@ public sealed class CodeActionTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task A_def_s_name_offers_to_inline_it()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-inline");
+        const string text = "def area = { (s: int) ->\n  def side = s * 2\n  side + 1\n}\n";
+
+        Open(uri, text);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var inline = Assert.Single(await CodeActionsIn(uri, new Range(1, 7, 1, 7)), action => action.Kind == CodeActionKind.RefactorInline);
+        Assert.Equal("Inline `side`", inline.Title);
+        Assert.Equal("def area = { (s: int) ->\n  s * 2 + 1\n}\n", Applied(text, Assert.Single(inline.Edit!.Changes![uri])));
+    }
+
+    [Fact]
     public async Task A_selected_expression_offers_to_introduce_a_function()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-introduce-function");

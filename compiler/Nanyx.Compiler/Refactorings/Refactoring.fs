@@ -12,6 +12,8 @@ type RefactoringKind =
     | Extract
     /// `refactor.rewrite`: write the inferred type.
     | Rewrite
+    /// `refactor.inline`: inline a local or a function.
+    | Inline
 
 /// A refactoring that can be made at a selection: its title, as an editor's menu shows it, and the edits that make it.
 /// `Rename` is where, in the text the edits make, a name the refactoring made up starts, for an editor to start
@@ -123,6 +125,45 @@ module internal RefactoringText =
         let growth = after.Length - source.Length
         let changedEnd = (edits |> List.map (fun (_, finish, _) -> finish) |> List.max) + growth
         formatted options file after changedStart changedEnd
+
+    /// Whether any of `exprs` calls a function that requires a context or a context's member, or makes or changes a
+    /// cell: something that may do something different each time it runs.
+    let requiresAContext (typed: TypedModule) (exprs: Expression list) =
+        exprs
+        |> List.exists (fun part ->
+            match typed.CalleeTypes |> Map.tryFind part.Id with
+            | Some (TyFunc(_, _, contexts)) when not contexts.IsEmpty -> true
+            | _ ->
+                typed.References
+                |> Map.tryFind part.Id
+                |> Option.bind typed.Symbols.TryFind
+                |> Option.exists (fun symbol -> symbol.Kind = ContextMember))
+        || exprs |> List.exists (fun part -> match part.Kind with MutSyntax.Call _ | AssignSyntax.Call _ -> true | _ -> false)
+
+    /// The cells `values` declare, each by its name and the span of what declares it: a `mut` def, or a lambda that
+    /// takes a cell as a parameter.
+    let cellsIn (values: Expression list) =
+        values
+        |> List.collect within
+        |> List.collect (fun expr ->
+            match expr.Kind with
+            | Block statements ->
+                statements
+                |> List.choose (fun statement ->
+                    match statement.Kind with
+                    | DefStatement(_, name, _, { Kind = MutSyntax.Call _ }) -> Some (name, statement.Span)
+                    | _ -> None)
+            | Lambda(parameters, _, _) ->
+                parameters
+                |> List.choose (fun (name, annotation) ->
+                    match annotation with
+                    | CellPassingSyntax.CellParameter _ -> Some (name, expr.Span)
+                    | _ -> None)
+            | _ -> [])
+
+    /// Whether `symbol` is one of `cells`, as `cellsIn` finds them.
+    let isCell (cells: (string * SourceSpan) list) (symbol: Symbol) =
+        cells |> List.exists (fun (name, span) -> name = symbol.Name && SourceSpan.contains span symbol.Declaration)
 
     /// The number of errors compiling a module reported.
     let errorCount (result: CompileResult) =

@@ -345,7 +345,8 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    offered as code actions of their own kinds ([Refactorings](./refactorings)): writing the inferred type, as
    `refactor.rewrite` ([#1539](https://github.com/nanyx-lang/nanyx/issues/1539)), and introducing a local or a
    function, as `refactor.extract` ([#1536](https://github.com/nanyx-lang/nanyx/issues/1536),
-   [#1537](https://github.com/nanyx-lang/nanyx/issues/1537)). One that makes up a name runs the extension's
+   [#1537](https://github.com/nanyx-lang/nanyx/issues/1537)), and inlining a def, as `refactor.inline`
+   ([#1538](https://github.com/nanyx-lang/nanyx/issues/1538)). One that makes up a name runs the extension's
    `nanyx.renameAt` command after its edits, which starts renaming the name.
 7. **Diagnostics in imported files.** Done ([#794](https://github.com/nanyx-lang/nanyx/issues/794)): each is
    published on the file it belongs to, with one at the import that brings that file in.
