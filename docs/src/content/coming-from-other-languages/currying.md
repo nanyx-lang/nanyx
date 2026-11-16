@@ -8,7 +8,6 @@ Nanyx has first-class functions, so you can always curry manually. If you want a
 
 ```nanyx
 def add3 = { x -> { y -> { z -> x + y + z } } }
-
 ```
 
 When people say Nanyx is not a curried language, they mean functions are not curried by default. This section uses "currying" as shorthand for "functions that are curried by default."
@@ -51,11 +50,7 @@ Nanyx also benefits from `\` with higher-order functions. Consider:
 
 ```nanyx
 def answer = numbers \list.map { num ->
-    someFunction(
-        "some argument"
-        num
-        anotherArg
-    )
+  someFunction("some argument", num, anotherArg)
 }
 
 numbers \list.map(Num.abs)
@@ -77,14 +72,12 @@ Currying makes pointfree composition effortless, but pointfree code is often har
 
 ```nanyx
 def reverseSort = compose(list.reverse, list.sort)
-
 ```
 
 with:
 
 ```nanyx
 def reverseSort = { xs -> list.reverse(list.sort(xs)) }
-
 ```
 
 The second version is slightly longer, but it is clearer about what happens to `list`. In more complex examples, pointfree code makes readers do extra mental translation, which increases the chance of misunderstanding.

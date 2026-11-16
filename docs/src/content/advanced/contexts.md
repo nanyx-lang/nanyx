@@ -11,10 +11,7 @@ Contexts are implicit parameters in Nanyx. A function can declare the contexts i
 A context definition looks like a record type, but uses the `context` keyword:
 
 ```nanyx
-context Console = (
-  write: string -> ()
-  writeError: string -> ()
-)
+context Console = (write: string -> (), writeError: string -> ())
 ```
 
 A plain context serves for any other whose members it has: a function that requires `Add(a)` is given the `Num(a)` in scope. Declaring it `protected` after its `=`, as the prelude declares `Memory`, makes the context nominal, so that only its home module can create instances; see [Nominal types](./nominal-and-protected-types). A `protected` or `private` context is then supplied only by an instance of itself: a `use` of another context with the same members doesn't serve for it (NYX0205), or any module could forge one. It may still serve for a plain context whose members it has.
@@ -23,8 +20,13 @@ A plain context serves for any other whose members it has: a function that requi
 context Tx = protected (commit: () -> ())
 context Plain = (commit: () -> ())
 
-def needsPlain: [Plain] () -> () = { commit() }
-def viaTx: [Tx] () -> () = { needsPlain() }   -- a Tx serves for a Plain
+def needsPlain: [Plain] () -> () = {
+  commit()
+}
+
+def viaTx: [Tx] () -> () = {
+  needsPlain()
+} -- a Tx serves for a Plain
 
 def main = {
   use Tx(commit = { println("committed") })
@@ -51,12 +53,15 @@ On a context, `protected` and `private` are about access. Any module can require
 ```nanyx
 module db =
   export context Tx = private (commit: () -> ())
-  export def query: [Tx] string -> () = { sql -> commit() }
+
+  export def query: [Tx] string -> () = { sql ->
+    commit()
+  }
 
 import db
 
 def report: [Tx] () -> () = {
-  query("select 1")   -- fine: query is db's
+  query("select 1") -- fine: query is db's
   -- commit()         -- NYX0244: only db can call commit
 }
 ```
@@ -110,7 +115,9 @@ def sayHello: [Console] () -> () = {
 A function whose type lists no contexts requires none, so calling `println` in its body is an error (`NYX0211`). To say on purpose that a function must stay pure, write an empty list, `[]`. It means the same as leaving the list out, and the formatter keeps it:
 
 ```nanyx
-def double: [] int -> int = { x -> x * 2 }
+def double: [] int -> int = { x ->
+  x * 2
+}
 ```
 
 # Loading a context
@@ -119,9 +126,7 @@ Use the `use` keyword to load an instance of a context into scope. Once loaded, 
 
 ```nanyx
 def main = {
-  use Console(
-    write = { text -> hostPrint(text) }
-  )
+  use Console(write = { text -> hostPrint(text) })
 
   sayHello()
 }
@@ -153,8 +158,7 @@ An instance is always written at its `use`, so that is where what its members ne
 You can also load a context for a single expression with `use ... in`. The context is loaded for that expression only, which can start on the next line:
 
 ```nanyx
-def result = use Console(write = hostPrint) in
-  println("Hello from a scoped context")
+def result = use Console(write = hostPrint) in println("Hello from a scoped context")
 ```
 
 After `in` there can also be a block of statements, on the lines after it and indented more than the line `use` is on. The block's value is the value of `use ... in`, and the context is loaded for the block only:
@@ -178,13 +182,15 @@ A lambda can name the instance of a context it is given by writing `context` and
 ```nanyx
 context Log = (log: string -> ())
 
-def inner: [Log] () -> () = { log("from inner") }
+def inner: [Log] () -> () = {
+  log("from inner")
+}
 
 def run: [Log] () -> () = { context l ->
   use Log(log = { m -> log("[shadowed] {m}") })
-  inner()   -- [shadowed] from inner
+  inner() -- [shadowed] from inner
   use l
-  inner()   -- from inner, through run's own Log
+  inner() -- from inner, through run's own Log
 }
 ```
 
@@ -269,12 +275,10 @@ A type can also belong to a scoped context's scope, as [Types in a scope](#types
 You can require several contexts by listing them, separated by `,`:
 
 ```nanyx
-def readAndPrintFile
-  : [Console, FileSystem] string -> ()
-  = { path ->
-    def contents = openFile(path).contents
-    println(contents)
-  }
+def readAndPrintFile: [Console, FileSystem] string -> () = { path ->
+  def contents = openFile(path).contents
+  println(contents)
+}
 ```
 
 # Console by default
@@ -286,13 +290,11 @@ The entry function (the one marked `@entry`, see [Attributes](../tour/attributes
 Contexts can also express typeclass-style constraints. Define a context with the required operations and use it as a constraint:
 
 ```nanyx
-context Combine(a) = (
-  empty: a
-  combine: (a, a) -> a
-)
+context Combine(a) = (empty: a, combine: (a, a) -> a)
 
-export def combineAll: [Combine(a)] list(a) -> a
-  = { items -> items \fold(empty, combine) }
+export def combineAll: [Combine(a)] list(a) -> a = { items ->
+  items \fold(empty, combine)
+}
 ```
 
 Inside `combineAll`, `empty` and `combine` are the members of the instance it is given, so it combines whatever type it is called with, as long as that type has a `Combine`.
@@ -308,9 +310,9 @@ An operator reads the context member of its name (prefix `-` reads `negate`), an
 A function that does not write its type requires the contexts its operators need, of each of its own type variables they are used on:
 
 ```nanyx
-def add = { x, y -> x + y }                 -- [Add(a)] a, a -> a
-def lerp = { a, b, t -> a + (b - a) * t }   -- [Num(a)] a, a, a -> a
-def inc = { x -> x + 1 }                    -- int -> int: `1` is an int
+def add = { x, y -> x + y } -- [Add(a)] a, a -> a
+def lerp = { a, b, t -> a + (b - a) * t } -- [Num(a)] a, a, a -> a
+def inc = { x -> x + 1 } -- int -> int: `1` is an int
 ```
 
 Adding and multiplying values of one type needs `Num` alone, which has every member of `Add`. A function inside another function requires no contexts, so its arithmetic is on ints or floats. For now the same goes for a function with operators on two different type variables, and for one the module passes as a value, as `add` in `xs \list.fold(0, add)`: see [Operator contexts](../work-in-progress/operator-contexts#functions-that-do-not-write-their-type).
@@ -328,9 +330,7 @@ In practice, a small set of capability contexts appears frequently in generic AP
 `Eq(a)` is the standard library's context for equality. `x == y` is read through it, and `x != y` is `not (x == y)`.
 
 ```nanyx
-context Eq(a) = (
-  `==`: (a, a) -> bool
-)
+context Eq(a) = (`==`: (a, a) -> bool)
 ```
 
 Every type that holds no function has an `Eq`: the compiler compares records field by field, lists element by element, and tags by name and then payload. Functions have no equality, so comparing two functions, or two values that hold one, is a type error.
@@ -338,7 +338,7 @@ Every type that holds no function has an `Eq`: the compiler compares records fie
 A function that compares values of one of its type variables requires `Eq` of it:
 
 ```nanyx
-def contains: [Eq(a)] (list(a), a) -> bool = { xs, target ->
+def contains: [Eq(a)] list(a), a -> bool = { xs, target ->
   xs \any { == target }
 }
 ```
@@ -348,7 +348,9 @@ A function that does not write its type has the requirement inferred: `def same 
 A nominal type can attach its own `==`, which `a == b` on it, and a function that requires `Eq`, then use for it:
 
 ```nanyx
-def Email.`==`: Email, Email -> bool = { a, b -> lower(a) == lower(b) }
+def Email.`==`: Email, Email -> bool = { a, b ->
+  lower(a) == lower(b)
+}
 ```
 
 Only a nominal type, protected or private, can: a structural type, such as `type Point = (x: int, y: int)`, and a built-in type always compare by their structure, so attaching `==` to one is an error. `!=` cannot be attached to any type, because it is always `not (a == b)`.
@@ -367,9 +369,7 @@ def bothSome: [Eq(a)] (a, a) -> bool = { x, y -> #some(x) == #some(y) }   // com
 `Ord(a)` is the standard library's context for ordering. `x < y`, `x <= y`, `x > y` and `x >= y` are all read through its one member, so they cannot disagree with each other.
 
 ```nanyx
-context Ord(a) = (
-  compare: (a, a) -> #less | #equal | #greater
-)
+context Ord(a) = (compare: (a, a) -> #less | #equal | #greater)
 ```
 
 The compiler has an `Ord` for numbers, `bool` (`false` first), strings (by their bytes, which is the order of their code points), and tuples and lists of them, compared position by position, with a list that is a prefix of another first. On floats the operators follow IEEE 754, so every comparison with `NaN` is false, while `float.compare` is a total order with `NaN` after every other float; that is what `list.sort` uses.
@@ -393,9 +393,7 @@ A function that orders values of one of its type variables requires `Ord` of it,
 `Hash(a)` is the standard library's context for hashing: an `int` for each value, the same for any two values `==` finds equal, so that a map or a set can find a key by its hash. It has no operator; a function that needs it requires it and calls `hash`.
 
 ```nanyx
-context Hash(a) = (
-  hash: a -> int
-)
+context Hash(a) = (hash: a -> int)
 ```
 
 The compiler has a `Hash` for every type it has an `Eq` for, which hashes by structure: a value's hash is made from its parts' hashes. Functions have no hash. A nominal type that attaches its own `==` must attach a `hash` that agrees with it, since the compiler's own would not; without one, asking for `Hash` of it is a type error that says so:
@@ -403,9 +401,13 @@ The compiler has a `Hash` for every type it has an `Eq` for, which hashes by str
 ```nanyx
 type Email = protected string
 
-def Email.`==`: Email, Email -> bool = { a, b -> lower(a) == lower(b) }
+def Email.`==`: Email, Email -> bool = { a, b ->
+  lower(a) == lower(b)
+}
 
-def Email.hash: Email -> int = { e -> string.hash(lower(e)) }
+def Email.hash: Email -> int = { e ->
+  string.hash(lower(e))
+}
 ```
 
 As with `==`, only a nominal type can attach `hash`. The built-in types have theirs attached as functions, `int.hash` and `string.hash` among them, for building a type's own `hash`. A type that holds a part with its own `hash`, such as a list of `Email`s, is hashed through it: each part is hashed with its own `Hash` and the hashes are folded together, so two lists that `==` finds equal have the same hash.
@@ -415,13 +417,11 @@ As with `==`, only a nominal type can attach `hash`. The built-in types have the
 `Default(a)` is the prelude's context for a fallback value of a type: a function that needs one requires it.
 
 ```nanyx
-context Default(a) = (
-  default: () -> a
-)
+context Default(a) = (default: () -> a)
 ```
 
 ```nanyx
-def valueOrDefault: [Default(a)] #some(a) | #none -> a = {
+def valueOrDefault: [Default(a)] (#some(a) | #none) -> a = {
   | #some(v) -> v
   | #none -> default()
 }
@@ -432,7 +432,7 @@ Each built-in type has one: `int`'s default is `0`, `float`'s `0.0`, `string`'s 
 ```nanyx
 type Point = (x: int, y: int)
 
-def Point.default = { -> Point(x = 0, y = 0) }
+def Point.default = { Point(x = 0, y = 0) }
 ```
 
 A call that requires `Default` of a type with no `default`, such as a function, is an error.
@@ -453,9 +453,13 @@ context Add(a) = (
 The compiler has its own for `int` and `float`. A function that adds values of one of its type variables requires `Add` of it, and in such a function a `0` added to one of those values is `zero`:
 
 ```nanyx
-def total: [Add(a)] list(a) -> a = { items -> items \fold(zero) { + } }
+def total: [Add(a)] list(a) -> a = { items ->
+  items \fold(zero) { + }
+}
 
-def orZero: [Add(a)] a -> a = { x -> x + 0 }
+def orZero: [Add(a)] a -> a = { x ->
+  x + 0
+}
 ```
 
 `list.sum` is `total`. A function that writes its type and adds without `[Add(a)]` is an error that says to add it. One that does not write its type has the requirement [inferred](#operators-find-their-context): `def add = { x, y -> x + y }` is `[Add(a)] a, a -> a`, while `def inc = { x -> x + 1 }` is still `int -> int`. Any other type gets an `Add` by attaching the four members (see [Context synthesis](#context-synthesis)).
@@ -480,9 +484,13 @@ context Num(a) = (
 In a function that requires `Num(a)`, an integer literal beside a value of type `a` is `fromInt` of it, so `2` in `x * 2` is an `a`. A decimal literal there is an error, since `a` may be an integer type.
 
 ```nanyx
-def square: [Num(a)] a -> a = { x -> x * x }
+def square: [Num(a)] a -> a = { x ->
+  x * x
+}
 
-def mean: [Num(a)] list(a) -> a = { xs -> list.sum(xs) / fromInt(list.length(xs)) }
+def mean: [Num(a)] list(a) -> a = { xs ->
+  list.sum(xs) / fromInt(list.length(xs))
+}
 ```
 
 `mean` calls `list.sum`, which requires `Add(a)`: contexts are structural, and a `Num` has every member an `Add` has, so the `Num` it is given serves. On `int`, `/` truncates and `%` takes the sign of the left operand, so `mean([1, 2, 4])` is `2`; on `float` they follow IEEE 754. A measured type, such as a length, is to have an `Add` but no `Num`, because multiplying two lengths gives an area ([units and dimensions](../work-in-progress/units-and-dimensions)).
@@ -492,18 +500,18 @@ def mean: [Num(a)] list(a) -> a = { xs -> list.sum(xs) / fromInt(list.length(xs)
 `Append(a)` is the context for values that join end to end. `x ++ y` on values of a type variable is read through it.
 
 ```nanyx
-context Append(a) = (
-  `++`: (a, a) -> a
-)
+context Append(a) = (`++`: (a, a) -> a)
 ```
 
 The compiler has its own for `string` and `list(a)`, where `++` is the built-in operator. Any other type gets one by attaching `` `++` ``:
 
 ```nanyx
-def surround: [Append(a)] a, a -> a = { edge, x -> edge ++ x ++ edge }
+def surround: [Append(a)] a, a -> a = { edge, x ->
+  edge ++ x ++ edge
+}
 
-surround("*", "hi")      -- "*hi*"
-surround([0], [1, 2])    -- [0, 1, 2, 0]
+surround("*", "hi") -- "*hi*"
+surround([0], [1, 2]) -- [0, 1, 2, 0]
 ```
 
 A function that writes its type and joins values of a type variable without `[Append(a)]` is an error that says to add it, and `def join = { x, y -> x ++ y }` is `[Append(a)] a, a -> a`. So `join(1, 2)` is an error at the call: an `int` has no `++`.
@@ -515,9 +523,7 @@ These contexts compose naturally. For example, a generic algorithm can require b
 `ToString(a)` says how a value of type `a` is written as text. Unlike the contexts above, you don't declare it: the prelude does, and the compiler knows it, because every [interpolation hole](../getting-started/basics#strings) goes through it. `"Total: {total}"` writes `total` with the `ToString` of its type.
 
 ```nanyx
-context ToString(a) = (
-  toString: a -> string
-)
+context ToString(a) = (toString: a -> string)
 ```
 
 The compiler has its own `ToString` for `int`, `float`, `bool`, `string` and tags without a payload. A type of your own gets one by attaching a `toString`, which is [synthesized](#context-synthesis) into the context:

@@ -28,8 +28,8 @@ A lambda returned from a function keeps its contexts in its type, as in
 [#774](https://github.com/nanyx-lang/nanyx/issues/774):
 
 ```nanyx
-def mk: [Console] () -> (string -> ()) = {
-  { m -> println(m) }   -- NYX0227: write `[Console] string -> ()`
+def mk: [Console] () -> string -> () = {
+  { m -> println(m) } -- NYX0227: write `[Console] string -> ()`
 }
 ```
 
@@ -50,7 +50,7 @@ def greet: [Log] string -> () = { name ->
 
 @entry
 def main = {
-  use Log(log = { message -> println(message) })   -- main requires Console here
+  use Log(log = { message -> println(message) }) -- main requires Console here
   greet("world")
 }
 ```
@@ -125,10 +125,10 @@ Requiring `Memory` isn't enough, because every `memory` block supplies one. The 
 `memory: [c] ([Memory, c] () -> a) -> a`, and nothing stops `a` being `[Memory] () -> int`:
 
 ```nanyx
-def counter = memory { mut y = 0; { y := y + 1; y } }   -- [Memory] () -> int
+def counter = memory { mut y = 0; { y := y + 1; y } } -- [Memory] () -> int
 
-def a = memory { counter() }   -- 1
-def b = memory { counter() }   -- 2: two pure expressions now differ
+def a = memory { counter() } -- 1
+def b = memory { counter() } -- 2: two pure expressions now differ
 ```
 
 ## Scoped contexts

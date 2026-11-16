@@ -152,7 +152,9 @@ A function that returns a function can leave a context variable to the function 
 A higher-order function that doesn't write its type gets a context variable for each function it calls or passes on, so `def apply = { f, x -> f(x) }` is `[c] ([c] a -> b), a -> b`. One that writes its type without one only takes pure functions:
 
 ```nanyx
-def runPure: (int -> int) -> int = { g -> g(5) }
+def runPure: (int -> int) -> int = { g ->
+  g(5)
+}
 
 def main: [Console] () -> int = {
   -- Error NYX0227: this lambda requires [Console], and `runPure` only takes a pure function

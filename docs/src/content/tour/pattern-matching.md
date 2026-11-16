@@ -128,10 +128,7 @@ As with tuples, records patterns must be of the correct shape to match the type 
 Tags can also be destructured in patterns, using the same syntax that is used to construct them. For example, if you have a sum type representing shapes:
 
 ```nanyx
-type Shape =
-  | #point
-  | #circle(float)
-  | #rectangle(float, float)
+type Shape = #point | #circle(float) | #rectangle(float, float)
 
 def area: Shape -> float = { shape ->
   match shape
@@ -157,19 +154,13 @@ def describe: (#some() | #error(string)) -> string = {
 Where pattern matching really shines is in its ability to nest patterns inside each other, allowing you to make complex data structure comparisons and extract values in a single expression. Below is an artificial complex example that demonstrates this:
 
 ```nanyx
-type Result =
-  | #some(int)
-  | #error(string)
+type Result = #some(int) | #error(string)
 
-type Request = (
-  id: int
-  status: Result
-  tags: list(string)
-)
+type Request = (id: int, status: Result, tags: list(string))
 
 def processRequests: list(Request) -> string = { requests ->
   match requests
-    | [] -> 
+    | [] ->
       "No requests"
     | [(id = 1, status = #some(value), tags = ["urgent", ...rest]), ...more] ->
       "Urgent request 1 with value {value}"
@@ -177,7 +168,7 @@ def processRequests: list(Request) -> string = { requests ->
       "Error in request {id}: {msg}, followed by success"
     | [(status = #some(n), ...), ...rest] & requests & { .length > 5 } ->
       "Multiple requests with first one ok, total: {requests.length}"
-    | _ -> 
+    | _ ->
       "Other pattern"
 }
 ```
@@ -199,7 +190,7 @@ def describeNumber: int -> string = { n ->
 A guard is any lambda that takes the value being matched and returns a `bool`; the arm matches when it returns `true`. Most often it is a [shorthand lambda](./lambdas-and-higher-order-functions) that leaves out the value, but it can name it too, and it can be nested inside other patterns:
 
 ```nanyx
-def describe: (int, string) -> string = {
+def describe: int, string -> string = {
   | ({ % 2 == 0 }, _) -> "an even number"
   | (_, { .length > 5 }) -> "a long name"
   | ({ x -> x > 0 and x < 10 }, _) -> "a small number"
@@ -225,8 +216,8 @@ def sumList: list(int) -> int = {
 This is purely syntactic sugar, but it can also aid in readability by joining together the code paths of a function with the function's parameters, for example:
 
 ```nanyx
-def map: (list(a), (a -> b)) -> list(b) = {
-  | []             , _ -> []
+def map: list(a), (a -> b) -> list(b) = {
+  | [], _ -> []
   | [head, ...tail], f -> [f(head), ...map(tail, f)]
 }
 ```

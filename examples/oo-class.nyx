@@ -13,21 +13,11 @@ expires, and models it the Nanyx way:
   - its dependencies become contexts
 ---
 
-type Attestation = (
-  certificateChain: list(string)
-  generatedAt: Instant
-)
+type Attestation = (certificateChain: list(string), generatedAt: Instant)
 
-type Settings = (
-  tokenExpiry: Duration
-  maxRetryAttempts: int
-  retryDelay: Duration
-)
+type Settings = (tokenExpiry: Duration, maxRetryAttempts: int, retryDelay: Duration)
 
-export type AttestationCache = (
-  settings: Settings
-  current: #some(Attestation) | #none
-)
+export type AttestationCache = (settings: Settings, current: #some(Attestation) | #none)
 
 export def AttestationCache.new: Settings -> AttestationCache = { settings ->
   AttestationCache(settings = settings, current = #none)
@@ -40,23 +30,21 @@ def AttestationCache.needsRefresh: [Clock] AttestationCache -> bool = { cache ->
 }
 
 -- The service that produces attestations is a dependency, so it is a context
-context Attester = (
-  getChallenge: () -> string
-  generateCertificateChain: string -> #some(list(string)) | #error(#attestationFailed)
-)
+context Attester = (getChallenge: () -> string, generateCertificateChain: string -> #some(list(string)) | #error(#attestationFailed))
 
 -- Retry an operation, waiting between attempts
-def retry: [Clock] (times: int, delay: int -> Duration, operation: () -> #some(a) | #error(e)) -> #some(a) | #error(e)
+def retry
+  : [Clock] (times: int, delay: int -> Duration, operation: () -> #some(a) | #error(e)) -> #some(a) | #error(e)
   = { times, delay, operation ->
     rec attempt = { n ->
       match operation()
         | #some(value) -> #some(value)
         | #error(e) ->
-          if n >= times then #error(e)
-          else
+          if n >= times then #error(e) else
             Clock.sleep(delay(n))
             attempt(n + 1)
     }
+
     attempt(1)
   }
 
@@ -65,18 +53,23 @@ def retry: [Clock] (times: int, delay: int -> Duration, operation: () -> #some(a
 export def AttestationCache.refresh
   : [Clock, Attester] AttestationCache -> #some(AttestationCache) | #error(#attestationFailed)
   = { cache ->
-    if not cache.needsRefresh then #some(cache)
-    else proc {
-      def chain = try retry(
-        times = cache.settings.maxRetryAttempts
-        delay = { n -> cache.settings.retryDelay * n }
-        operation = { generateCertificateChain(getChallenge()) }
-      )
+    if not cache.needsRefresh
+      then #some(cache)
+      else proc {
+        def chain = try retry(
+          times = cache.settings.maxRetryAttempts
+          delay = { n -> cache.settings.retryDelay * n }
+          operation = { generateCertificateChain(getChallenge()) }
+        )
 
-      return cache with current = #some(Attestation(certificateChain = chain, generatedAt = Clock.now))
-    }
+        return cache with current = #some(
+          Attestation(certificateChain = chain, generatedAt = Clock.now)
+        )
+      }
   }
 
-export def AttestationCache.certificateChain: AttestationCache -> #some(list(string)) | #none = { cache ->
-  cache.current \mapSome { .certificateChain }
-}
+export def AttestationCache.certificateChain
+  : AttestationCache -> #some(list(string)) | #none
+  = { cache ->
+    cache.current \mapSome { .certificateChain }
+  }

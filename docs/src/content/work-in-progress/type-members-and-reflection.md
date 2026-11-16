@@ -15,10 +15,9 @@ Serialization, equality, hashing, printing and mapping to storage all follow a t
 ```nanyx
 def decodeUser: string -> Result(User, DecodeError) = { data ->
   data
-    \json.decode(json.record(
-      name = json.field("name", json.string)
-      age = json.field("age", json.int)
-    ))
+    \json.decode(
+      json.record(name = json.field("name", json.string), age = json.field("age", json.int))
+    )
 }
 ```
 
@@ -57,10 +56,7 @@ These points follow from the decisions above. They have been proposed but not ag
 A context can declare a member whose value is a type. Other members refer to it by name:
 
 ```nanyx
-context Iter(c) = (
-  elem: type
-  next: c -> #some(elem, c) | #done
-)
+context Iter(c) = (elem: type, next: c -> #some(elem, c) | #done)
 ```
 
 A function then constrains only the container type, and can fix the associated type in the constraint:
@@ -84,10 +80,7 @@ def headOr: [Iter(c)] (c, Iter(c).elem) -> Iter(c).elem = { items, fallback ->
 Each associated type lives on the context that owns the operation, so a function asks only for the capabilities it uses:
 
 ```nanyx
-context Indexed(c) = (
-  elem: type
-  get: (c, int) -> elem
-)
+context Indexed(c) = (elem: type, get: (c, int) -> elem)
 ```
 
 The prelude's `FromString` is the case that motivates this today. As an ordinary context, the tag `fromString` gives back for text it cannot read has to be a second parameter, so every generic signature carries it, `[FromString(a, e)] list(string) -> list(#some(a) | e)`, even though `e` is always determined by `a`. With an associated type it would be:
@@ -181,11 +174,11 @@ Precedents: Jane Street's `typerep` for OCaml, GHC's `Type.Reflection`, and the 
 When a function already takes a value of type `a`, the caller shouldn't have to pass `type a` as well. A context that the compiler [synthesises](../advanced/contexts#context-synthesis) for every type supplies it instead:
 
 ```nanyx
-context Typed(a) = (
-  typeOf: Type(a)
-)
+context Typed(a) = (typeOf: Type(a))
 
-def encode: [Typed(a)] a -> Json = { value -> encodeAt(value, typeOf) }
+def encode: [Typed(a)] a -> Json = { value ->
+  encodeAt(value, typeOf)
+}
 
 def body = encode(point)
 ```

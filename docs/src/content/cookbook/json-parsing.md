@@ -23,10 +23,9 @@ type User = (name: string, age: int)
 
 def decodeUser: string -> Result(User, DecodeError) = { data ->
   data
-    \json.decode(json.record(
-      name = json.field("name", json.string)
-      age = json.field("age", json.int)
-    ))
+    \json.decode(
+      json.record(name = json.field("name", json.string), age = json.field("age", json.int))
+    )
 }
 
 @entry
@@ -66,5 +65,4 @@ def usersJson =
   }
   \json.array
   \json.toString
-
 ```

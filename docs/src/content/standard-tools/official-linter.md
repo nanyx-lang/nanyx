@@ -41,7 +41,7 @@ def total =
 
 ```nanyx
 -- Linter warning: argument `title` is never used
-def greet: (string, string) -> string = { name, title ->
+def greet: string, string -> string = { name, title ->
   "Hello, {name}!"
 }
 ```
@@ -51,7 +51,7 @@ def greet: (string, string) -> string = { name, title ->
 ```nanyx
 match response
   | #some(value) -> "Success" -- Linter warning: `value` is introduced by pattern but never used
-  | #error(msg) -> "Error"  -- Linter warning: `msg` is introduced by pattern but never used
+  | #error(msg) -> "Error" -- Linter warning: `msg` is introduced by pattern but never used
 ```
 
 ## Unused import
@@ -72,8 +72,8 @@ The rule (`unusedImports`) reports an import that nothing in the module uses. A 
 ```nanyx
 module shapes
 
-def scale = 2              -- Linter warning: `scale` is never used
-type Corner = (x: int)     -- Linter warning: type `Corner` is never used
+def scale = 2 -- Linter warning: `scale` is never used
+type Corner = (x: int) -- Linter warning: type `Corner` is never used
 export def area = { w, h -> w * h }
 ```
 
@@ -94,7 +94,7 @@ The rule (`unreachableArms`) reports an arm that the arms before it already matc
 ## Comparison that is always false
 
 ```nanyx
-def isRed: #red | #green -> bool = { c ->
+def isRed: (#red | #green) -> bool = { c ->
   c == #blue -- Linter warning: '#red | #green' and '#blue' have no tag in common, so this is always false
 }
 ```
@@ -175,7 +175,7 @@ The rule (`uselessExpressions`) reports a statement that `unusedResults` would, 
 ## Name that hides a prelude member
 
 ```nanyx
-def pow = { x: int -> x * x } -- Linter warning: `pow` hides the prelude's `pow`, which can't be named where it is in scope
+def pow = { (x: int) -> x * x } -- Linter warning: `pow` hides the prelude's `pow`, which can't be named where it is in scope
 
 def total: list(int) -> int = { xs ->
   def ignore = 0 -- Linter warning: `ignore` hides the prelude's `ignore`, which can't be named where it is in scope
@@ -204,8 +204,9 @@ linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (sem
 ## `@allow` that suppresses nothing
 
 ```nanyx
-@allow(default/unusedBindings) -- Linter warning: `default/unusedBindings` reports nothing in this definition
-def total: () -> int = { -> 100 }
+-- Linter warning: `default/unusedBindings` reports nothing in this definition
+@allow(default/unusedBindings)
+def total: () -> int = { 100 }
 ```
 
 The rule (`unusedAllows`) reports each rule an [`@allow`](../tour/attributes#allow) names that suppresses nothing in the def after it, so that an `@allow` doesn't outlive the code it was written for. It also reports a rule or linter there is none of. It is a warning by default. When the `@allow` names only that rule, its fix removes the `@allow`.

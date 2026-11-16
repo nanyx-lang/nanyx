@@ -11,7 +11,9 @@ Operators are ordinary functions with special names. Nanyx has a fixed list of t
 You define an operator by naming a function after it, encased in backticks:
 
 ```nanyx
-def `<>`: string, string -> string = { a, b -> a ++ " " ++ b }
+def `<>`: string, string -> string = { a, b ->
+  a ++ " " ++ b
+}
 
 def r = "one" <> "two"
 ```
@@ -29,7 +31,9 @@ def r = 1 <+> (2, 3)
 Since operators are just specially-named functions, you can also use them in a non-operator way:
 
 ```nanyx
-def `<>`: string, string -> string = { a, b -> a ++ " " ++ b }
+def `<>`: string, string -> string = { a, b ->
+  a ++ " " ++ b
+}
 
 def r1 = "one" <> "two"
 def r2 = `<>`("one", "two")
@@ -77,6 +81,7 @@ def result = [" Ada ", "BOB"]
 def main = {
   println(result \string.join(" "))
 }
+
 -- ada! bob!
 ```
 
@@ -91,6 +96,7 @@ def both = ([1] ++ [2, 3]) \list.length
 def main = {
   println("{total} {both}")
 }
+
 -- 12 3
 ```
 

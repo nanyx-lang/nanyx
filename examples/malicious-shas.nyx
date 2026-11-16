@@ -1,8 +1,8 @@
 module virusTotalChecker
 
 import (
-  nanyx/io
   nanyx/encoding
+  nanyx/io
   nanyx.web/http
   nanyx.web/json
 )
@@ -47,25 +47,29 @@ def checkOk: Response -> #some(Response) | #error(#httpError(int)) = { response 
   if response.ok then #some(response) else #error(#httpError(response.status))
 }
 
-def lookup: [Http] string -> #some(Verdict) | #error(LookupError) = { sha -> proc {
-  def hex = toHex(sha)
+def lookup: [Http] string -> #some(Verdict) | #error(LookupError) = { sha ->
+  proc {
+    def hex = toHex(sha)
 
-  def response = try Http.get(
-    url = "https://www.virustotal.com/api/v3/files/{hex}"
-    headers = ["x-apikey" => apiKey]
-  ) \Result.bind(checkOk)
+    def response = try Http.get(
+      url = "https://www.virustotal.com/api/v3/files/{hex}"
+      headers = ["x-apikey" => apiKey]
+    ) \Result.bind(checkOk)
 
-  def report = try Json.decode(response.body, reportDecoder) \Result.mapError { _ -> #badResponse }
-  def #some(name) = report.names \head except #emptyList -> #some("<unknown>")
+    def report = try Json.decode(response.body, reportDecoder) \Result.mapError { _ -> #badResponse
+    }
 
-  return Verdict(
-    name = name
-    sha256base64 = sha
-    sha256hex = hex
-    status = if report.malicious == 0 then #ok else #malicious
-    maliciousVotes = report.malicious
-  )
-}}
+    def #some(name) = report.names \head except #emptyList -> #some("<unknown>")
+
+    return Verdict(
+      name = name
+      sha256base64 = sha
+      sha256hex = hex
+      status = (if report.malicious == 0 then #ok else #malicious)
+      maliciousVotes = report.malicious
+    )
+  }
+}
 
 def toCsvLine: Verdict -> string = { v ->
   [v.name, v.sha256base64, v.sha256hex, "{v.maliciousVotes}"] \string.join(",")

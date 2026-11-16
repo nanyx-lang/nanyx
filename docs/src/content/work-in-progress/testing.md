@@ -25,7 +25,7 @@ module geometry
 
 type Point = (x: int, y: int)
 
-def add: (Point, Point) -> Point = { a, b ->
+def add: Point, Point -> Point = { a, b ->
   Point(x = a.x + b.x, y = a.y + b.y)
 }
 

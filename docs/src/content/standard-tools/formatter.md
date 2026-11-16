@@ -74,7 +74,7 @@ A file that does not parse is left as it is and its syntax error is reported. Th
 
 Imports in a row go in one bracketed `import (...)`, and their names are sorted: standard library modules (`nanyx/...`) first, then other packages' modules, then imports by path, each alphabetical. A blank line keeps groups of imports apart, and a comment on a line of its own (or a `---` block comment) starts a new group inside the brackets. A comment at the end of an import's line moves with it.
 
-```nanyx
+```nanyx unformatted
 -- before
 import nanyx/text
 import "./tokens.nyx" as tokens
@@ -92,7 +92,7 @@ import (
 
 Statements written on one line, separated by `;` ([Variables](../tour/variables#several-statements-on-one-line)), stay on that line while it fits the line width, with one space after each `;`. A line that doesn't fit has its statements put on lines of their own, and a match arm's, a branch's or a lambda's body becomes a block on the lines after it.
 
-```nanyx
+```nanyx unformatted
 -- before
 def f = { x -> log(x) ;x + 1 }
 
@@ -119,7 +119,7 @@ We also recommend adding a `nanyx format --check` step to your CI pipeline to en
 
 # Examples
 
-```nanyx
+```nanyx unformatted
 -- before
 def add={a,b->a   +  b}
 
@@ -127,7 +127,7 @@ def add={a,b->a   +  b}
 def add = { a, b -> a + b }
 ```
 
-```nanyx
+```nanyx unformatted
 -- before
 def mapSome: (#some(a) | r), (a -> b) -> (#some(b) | r) = {
     | #some(a), f -> #some(f(a))
@@ -142,7 +142,7 @@ def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = {
 
 A definition that doesn't fit on one line breaks before its `:` and its `=`:
 
-```nanyx
+```nanyx unformatted
 -- before
 def priceLine: list(Product), OrderLine -> #some(Priced) | #unknownSku(string) | #outOfStock(string) = { products, line -> find(products, line) }
 
@@ -156,7 +156,7 @@ def priceLine
 
 A pipeline that doesn't fit puts each stage on its own line, and a record, list, tuple or call's arguments that don't fit put each element on its own line, with no commas between them:
 
-```nanyx
+```nanyx unformatted
 -- before
 def report = orders \list.filter { o -> o.paid and o.total > 100 } \list.map { o -> Summary(id = o.id, customer = o.customer.name, total = o.total, placed = o.placedAt, items = o.lines.length) } \list.take(10)
 

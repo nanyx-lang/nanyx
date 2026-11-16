@@ -15,6 +15,7 @@ def total = memory {
   for counters | c -> MRef.update(c, { n -> n + 1 })
   MRef.get(count)
 }
+
 -- 2
 ```
 

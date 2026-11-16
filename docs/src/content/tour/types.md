@@ -24,10 +24,14 @@ While inference works well, you can (and should) annotate exported functions:
 
 ```nanyx
 -- Explicit type annotation
-def double: int -> int = { x -> x * 2 }
+def double: int -> int = { x ->
+  x * 2
+}
 
 -- Multi-parameter function type
-def multiply: (int, int) -> int = { x, y -> x * y }
+def multiply: int, int -> int = { x, y ->
+  x * y
+}
 ```
 
 # Basic types
@@ -78,9 +82,11 @@ See [Records and tuples](./records) for the full guide.
 `undefined` is the type of an expression that never gives a value, such as a call to a function that stops the program. Since there is no value of it, it can be given wherever a value of any type is expected (as an argument, or as what a function annotated to return some type returns), and an `if` or `match` with a branch of that type has the type of its other branches:
 
 ```nanyx
-def stop: int -> undefined = { x -> stop(x) }
+def stop: int -> undefined = { x ->
+  stop(x)
+}
 
-def double = { n -> if n > 0 then n * 2 else stop(n) }   -- int -> int
+def double = { n -> if n > 0 then n * 2 else stop(n) } -- int -> int
 ```
 
 # Tuple types
@@ -89,7 +95,7 @@ Tuples are anonymous records with numbered fields:
 
 ```nanyx
 -- Tuple type
-def point: (int, int) = (10, 20)
+def point: int, int = (10, 20)
 
 -- Named tuple (equivalent to record)
 def coords: (x: int, y: int) = (x = 10, y = 20)
@@ -124,10 +130,7 @@ Tag unions (also called sum types or discriminated unions) represent values that
 type Result(a, e) = #some(a) | #error(e)
 
 -- Multiple variants
-type Shape =
-  | #circle(float)
-  | #rectangle(float, float)
-  | #triangle(float, float)
+type Shape = #circle(float) | #rectangle(float, float) | #triangle(float, float)
 
 -- Using tag unions
 def area: Shape -> float = { shape ->
@@ -150,7 +153,7 @@ def eval: Expr -> int = {
   | #add(a, b) -> eval(a) + eval(b)
 }
 
-eval(#add(#num(2), #num(3)))  -- 5
+eval(#add(#num(2), #num(3))) -- 5
 
 type Tree(a) = #leaf | #node(Tree(a), a, Tree(a))
 
@@ -184,13 +187,13 @@ Types can be parameterized with type variables:
 def identity: a -> a = { x -> x }
 
 -- Generic list operations
-def map: (list(a), (a -> b)) -> list(b) = { xs, f ->
+def map: list(a), (a -> b) -> list(b) = { xs, f ->
   match xs
     | [] -> []
     | [head, ...tail] -> [f(head), ...map(tail, f)]
 }
 
-def zip: (list(a), list(b)) -> list((a, b)) = { xs, ys ->
+def zip: list(a), list(b) -> list((a, b)) = { xs, ys ->
   match (xs, ys)
     | ([], _) -> []
     | (_, []) -> []
@@ -247,8 +250,13 @@ type Mapper(a, b) = (list(a), (a -> b)) -> list(b)
 In a type, `,` binds tighter than `->`, and `|` binds tighter than both. That means these two annotations are the same type:
 
 ```nanyx
-def add: (int, int) -> int = { x, y -> x + y }
-def sameAdd: int, int -> int = { x, y -> x + y }
+def add: int, int -> int = { x, y ->
+  x + y
+}
+
+def sameAdd: int, int -> int = { x, y ->
+  x + y
+}
 ```
 
 Both describe a function whose single argument is a two-field record of ints. The same rule holds inside brackets, so `(int, a -> b)` is that kind of function too, in brackets, like `| a, b -> ...` in a match is a tuple pattern that goes to its body. Brackets only group; they never change what `,` and `->` mean. So:

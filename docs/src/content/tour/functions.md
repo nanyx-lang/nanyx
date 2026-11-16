@@ -32,10 +32,12 @@ The two differ in one way. A lambda written without parameters, `{ ... }`, that 
 taking something other than unit, takes that argument and ignores it:
 
 ```nanyx
-def apply: (int -> string) -> string = { f -> f(1) }
+def apply: (int -> string) -> string = { f ->
+  f(1)
+}
 
-apply { "ignored" }        -- OK: the lambda is an int -> string that ignores its argument
-apply { () -> "ignored" }  -- error NYX0201: Type mismatch: int vs ()
+apply { "ignored" } -- OK: the lambda is an int -> string that ignores its argument
+apply { () -> "ignored" } -- error NYX0201: Type mismatch: int vs ()
 ```
 
 Written `{ () -> ... }`, the lambda says it takes unit, and it is an error to pass it where an `int` is given. With no
@@ -46,10 +48,12 @@ All functions in Nanyx take exactly one argument and return exactly one result. 
 
 ```nanyx
 -- Simple function
-def double: int -> int = { x -> x * 2 }
+def double: int -> int = { x ->
+  x * 2
+}
 
 -- Calling the function
-def result = double(21)  -- 42
+def result = double(21) -- 42
 ```
 
 # Multi-parameter functions
@@ -57,11 +61,14 @@ def result = double(21)  -- 42
 Since all functions take one argument, multi-parameter functions actually take a record (or tuple, see [Records and tuples](./records)) as their argument:
 
 ```nanyx
-def add: (int, int) -> int = { x, y -> x + y }
+def add: int, int -> int = { x, y ->
+  x + y
+}
+
 -- The type (int, int) -> int means: takes a record of two ints, returns an int
 
 -- Calling with multiple arguments
-def sum = add(5, 10)  -- 15
+def sum = add(5, 10) -- 15
 ```
 
 # Unit type
@@ -176,7 +183,7 @@ def dict: map(string, string) =
   ["Hello" => "Bonjour", "Goodbye" => "Au revoir"]
 
 dict("Hello") -- #some("Bonjour")
-dict("Hola")  -- #notFound
+dict("Hola") -- #notFound
 ```
 
 A map is not a function value yet: where a function is wanted, pass `{ word -> dict(word) }` (see [Maps and sets](../work-in-progress/maps-and-sets#open-questions)).
@@ -187,15 +194,17 @@ Functions that take other functions as arguments or return functions are called 
 
 ```nanyx
 -- Takes a function as an argument
-def apply: ((a -> b), a) -> b = { f, x -> f(x) }
+def apply: (a -> b), a -> b = { f, x ->
+  f(x)
+}
 
 -- Returns a function
-def makeAdder: int -> (int -> int) = { x ->
+def makeAdder: int -> int -> int = { x ->
   { y -> x + y }
 }
 
 def add5 = makeAdder(5)
-def result = add5(10)  -- 15
+def result = add5(10) -- 15
 ```
 
 # Pattern-matching functions
@@ -210,13 +219,13 @@ def sumList: list(int) -> int = {
 }
 
 -- Multiple arguments with patterns
-def divide: (int, int) -> Result(int, #divideByZero) = { 
+def divide: int, int -> Result(int, #divideByZero) = {
   | _, 0 -> #error(#divideByZero)
   | x, y -> #some(x / y)
 }
 
 -- Each arm has a pattern for each argument, except a lone `else`, which matches whatever they all are
-def quadrant: (int, int) -> string = {
+def quadrant: int, int -> string = {
   | 0, 0 -> "origin"
   | 0, _ -> "on the y axis"
   | else -> "elsewhere"
@@ -237,8 +246,7 @@ Top-level definitions in a module all share one scope (see [Declaration order](.
 
 ```nanyx
 def factorial: int -> int = { n ->
-  if n <= 1 then 1
-  else n * factorial(n - 1)
+  if n <= 1 then 1 else n * factorial(n - 1)
 }
 
 def length: list(a) -> int = {
@@ -303,7 +311,7 @@ A [workflow](../advanced/workflows) block is a call to its builder, with the res
 Functions can be composed to create new functions:
 
 ```nanyx
-def compose: ((b -> c), (a -> b)) -> (a -> c) = { f, g ->
+def compose: (b -> c), (a -> b) -> a -> c = { f, g ->
   { x -> f(g(x)) }
 }
 
@@ -311,7 +319,7 @@ def addOne = { + 1 }
 def double = { * 2 }
 
 def addOneThenDouble = compose(double, addOne)
-def result = addOneThenDouble(5)  -- 12
+def result = addOneThenDouble(5) -- 12
 ```
 
 # Currying
@@ -319,22 +327,22 @@ def result = addOneThenDouble(5)  -- 12
 While Nanyx functions naturally take one argument, you can create curried-style functions:
 
 ```nanyx
-def add: int -> (int -> int) = { x ->
+def add: int -> int -> int = { x ->
   { y -> x + y }
 }
 
 def add5 = add(5)
-def result = add5(10)  -- 15
+def result = add5(10) -- 15
 ```
 
 The function a call gives back can be called straight away, without naming it first:
 
 ```nanyx
-def add: int -> (int -> int) = { x ->
+def add: int -> int -> int = { x ->
   { y -> x + y }
 }
 
-def result = add(5)(10)  -- 15
+def result = add(5)(10) -- 15
 ```
 
 # Partial application
@@ -370,7 +378,9 @@ Functions without effects (no contexts) are pure - they always return the same o
 
 ```nanyx
 -- Pure function
-def add: (int, int) -> int = { x, y -> x + y }
+def add: int, int -> int = { x, y ->
+  x + y
+}
 
 -- Effectful function (requires context)
 def greet: [Console] string -> () = { name ->
@@ -383,7 +393,7 @@ def greet: [Console] string -> () = { name ->
 ## Map Implementation
 
 ```nanyx
-def map: (list(a), (a -> b)) -> list(b) = { xs, f ->
+def map: list(a), (a -> b) -> list(b) = { xs, f ->
   match xs
     | [] -> []
     | [head, ...tail] -> [f(head), ...map(tail, f)]
@@ -393,19 +403,18 @@ def map: (list(a), (a -> b)) -> list(b) = { xs, f ->
 ## Filter implementation
 
 ```nanyx
-def filter: (list(a), (a -> bool)) -> list(a) = { xs, predicate ->
+def filter: list(a), (a -> bool) -> list(a) = { xs, predicate ->
   match xs
     | [] -> []
     | [head, ...tail] ->
-        if predicate(head) then [head, ...filter(tail, predicate)]
-        else filter(tail, predicate)
+      if predicate(head) then [head, ...filter(tail, predicate)] else filter(tail, predicate)
 }
 ```
 
 ## Fold implementation
 
 ```nanyx
-def fold: (list(a), b, ((b, a) -> b)) -> b = { xs, acc, f ->
+def fold: list(a), b, (b, a -> b) -> b = { xs, acc, f ->
   match xs
     | [] -> acc
     | [head, ...tail] -> fold(tail, f(acc, head), f)
@@ -437,7 +446,7 @@ to the concept of 'generics' in other languages).
 
 ```nanyx
 def head: list(a) -> #some(a) | #emptyList = {
-  | []       -> #emptyList
+  | [] -> #emptyList
   | [x, ...] -> #some(x)
 }
 ```

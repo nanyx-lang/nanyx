@@ -17,8 +17,9 @@ for 1..5 | i -> print("Hello times {i}")
 # Pattern matching in loops
 
 ```nanyx
-for 1..5 | { < 5 } -> println("Ready...")
-         | _       -> println("Go!")
+for 1..5
+  | { < 5 } -> println("Ready...")
+  | _ -> println("Go!")
 ```
 
 # Looping collections

@@ -2,6 +2,7 @@
 /// test sources and the docs' code blocks.
 module Nanyx.Formatter.Tests.CorpusTests
 
+open System
 open System.IO
 open System.Text.RegularExpressions
 open Xunit
@@ -69,6 +70,53 @@ let ``Formatting keeps every comment, in order`` () =
         | Result.Ok again when commentsOf again <> commentsOf tree ->
             Some $"comments changed from %A{commentsOf tree} to %A{commentsOf again}\n---\n{formatted}"
         | _ -> None)
+
+/// The docs' code blocks that are whole programs, as their name and source: those fenced ```nanyx alone, not
+/// ```nanyx fragment, ```nanyx skip=#<issue> or ```nanyx unformatted (the Formatter page's before-and-after examples),
+/// and with no `-- error` comment, which marks code that is wrong on purpose and is laid out to show where. A block
+/// indented in a list loses its fence's indent.
+let private docsPrograms =
+    lazy
+        let codeBlock = Regex(@"^([ \t]*)```nanyx([^\n]*)\n(.*?)^[ \t]*```", RegexOptions.Singleline ||| RegexOptions.Multiline)
+        Directory.EnumerateFiles(Path.Combine(repositoryRoot, "docs", "src", "content"), "*.md", SearchOption.AllDirectories)
+        |> Seq.collect (fun path ->
+            let text = (File.ReadAllText path).ReplaceLineEndings "\n"
+            codeBlock.Matches text
+            |> Seq.filter (fun m -> m.Groups[2].Value.Trim() = "")
+            |> Seq.map (fun m ->
+                let indent = m.Groups[1].Value.Length
+                let line = text.Substring(0, m.Index).Split('\n').Length
+                let source =
+                    m.Groups[3].Value.Split('\n')
+                    |> Array.map (fun l -> if l.Length >= indent && String.IsNullOrWhiteSpace(l.Substring(0, indent)) then l.Substring indent else l.TrimStart())
+                    |> String.concat "\n"
+                $"{Path.GetRelativePath(repositoryRoot, path)}:{line}", source))
+        |> Seq.filter (fun (_, source) -> not (source.Contains "-- error"))
+        |> List.ofSeq
+
+[<Fact>]
+let ``The examples and the docs' code blocks are formatted`` () =
+    let examples =
+        Directory.EnumerateFiles(Path.Combine(repositoryRoot, "examples"), "*.nyx", SearchOption.AllDirectories) |> List.ofSeq
+    let unformattedExamples =
+        FormatCommand.run Settings.forFile FormatCommand.Check examples
+        |> List.choose (fun (file, result) ->
+            match result with
+            | FormatCommand.Changed -> Some $"{Path.GetRelativePath(repositoryRoot, file)}: not formatted; run nanyx format on it"
+            | FormatCommand.Failed (FormatCommand.NotParsed _)
+            | FormatCommand.Unchanged -> None
+            | FormatCommand.Failed failure -> Some $"{Path.GetRelativePath(repositoryRoot, file)}: %A{failure}")
+    let unformattedBlocks =
+        docsPrograms.Value
+        |> List.choose (fun (name, source) ->
+            match FormatCommand.formatText Formatter.Options.defaults name source with
+            | FormatCommand.Formatted formatted when formatted <> source ->
+                Some $"{name}: not formatted; it should be\n---\n{formatted}---"
+            | FormatCommand.Formatted _
+            | FormatCommand.NotParsed _ -> None
+            | failure -> Some $"{name}: %A{failure}")
+    let failures = unformattedExamples @ unformattedBlocks
+    Assert.True(failures.IsEmpty, $"{failures.Length} pieces are not formatted:\n\n" + String.concat "\n\n" failures)
 
 [<Fact>]
 let ``Formatting formatted code changes nothing`` () =

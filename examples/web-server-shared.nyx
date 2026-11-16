@@ -13,11 +13,7 @@ export type Todo = (
   dateAdded: Instant
 )
 
-export type TodoError =
-  | #todoDoesNotExist
-  | #insertNotSuccessful
-  | #updateNotSuccessful
-  | #deleteNotSuccessful
+export type TodoError = #todoDoesNotExist | #insertNotSuccessful | #updateNotSuccessful | #deleteNotSuccessful
 
 export type DeleteResult = #deleted | #deleteError(TodoError)
 export type UpdateResult = #updated(Todo) | #updateError(TodoError)
@@ -33,6 +29,8 @@ export type TodoProtocol = (
 )
 
 -- How routes are generated on the server and mapped from the client
-export def routeBuilder: (typeName: string, methodName: string) -> string = { typeName, methodName ->
-  "/api/{typeName}/{methodName}"
-}
+export def routeBuilder
+  : (typeName: string, methodName: string) -> string
+  = { typeName, methodName ->
+    "/api/{typeName}/{methodName}"
+  }

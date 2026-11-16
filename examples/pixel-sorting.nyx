@@ -22,7 +22,7 @@ def Pixel.hsv: Pixel -> (h: float, s: float, v: float) = { p ->
   def h =
     if
       | delta == 0.0 -> 0.0
-      | max == p.r -> ((p.g - p.b) / delta % 6.0) / 6.0
+      | max == p.r -> (p.g - p.b) / delta % 6.0 / 6.0
       | max == p.g -> ((p.b - p.r) / delta + 2.0) / 6.0
       | else -> ((p.r - p.g) / delta + 4.0) / 6.0
 
@@ -41,7 +41,9 @@ def stepKey: Pixel, int -> (int, float, int) = { p, repetitions ->
     else (band, p.luminance, value)
 }
 
-def Pixel.isBlack: Pixel -> bool = { p -> p.r == 0.0 and p.g == 0.0 and p.b == 0.0 }
+def Pixel.isBlack: Pixel -> bool = { p ->
+  p.r == 0.0 and p.g == 0.0 and p.b == 0.0
+}
 
 -- A row is sorted only if every pixel has some colour; rows containing black
 -- pixels are left alone so that hard edges survive

@@ -13,10 +13,10 @@ Nanyx has a convention where any tag union that includes `#some(a)` is considere
 The function below accepts any union that contains `#some(a)` and transforms that value while leaving the rest of the union intact:
 
 ```nanyx
-def mapSome
-  : ((#some(a) | r), (a -> b)) -> (#some(b) | r)
-  = { | #some(a), f -> #some(f(a))
-      | other, _ -> other }
+def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = {
+  | #some(a), f -> #some(f(a))
+  | other, _ -> other
+}
 ```
 
 The type variable `r` represents all other tags in the union, allowing us to use it in an output position in the function type.
