@@ -71,7 +71,7 @@ A manifest holds only data: records, lists, tuples, strings, numbers, `true` and
 
 Manifests were once written in TOML. One still in that form, starting `[package]` or `name = "..."`, is an error that says so (`NYX0034`). While a package's manifest has errors, checking or running any of its files reports them, at the manifest, rather than checking the file on its own.
 
-The editor checks a manifest as you type it, and the formatter formats it as it does any Nanyx. For scripts and other tools that read a manifest, `nanyx manifest --json` checks it and prints it as JSON: a record is an object, a list or a tuple is an array, and a tag is a string, `"#error"`.
+The editor checks a manifest as you type it, and the formatter formats it as it does any Nanyx. For scripts and other tools that read a manifest, [`nanyx manifest --json`](../standard-tools/command-line#nanyx-manifest) checks it and prints it as JSON: a record is an object, a list or a tuple is an array, and a tag is a string, `"#error"`.
 
 ## Source files
 

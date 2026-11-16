@@ -23,7 +23,7 @@ Any other host is found by its directory, relative to the manifest, as a depende
 
 A package whose manifest names no host is a **library**. It can't be run, and an `@entry` in it is an error (`NYX0031`). See [Packages and projects](../tour/packages#entrypoints).
 
-`nanyx run`, `nanyx build` and `nanyx check` take `--host` to run a package under another host for one command: a host the compiler ships, `--host nanyx.console`, or the directory of one, `--host ../server`.
+[`nanyx run`, `nanyx build` and `nanyx check`](../standard-tools/command-line#running-and-checking-code) take `--host` to run a package under another host for one command: a host the compiler ships, `--host nanyx.console`, or the directory of one, `--host ../server`.
 
 A single `.nyx` file runs under the console host unless a `::host` directive at its top names another, in the same words a manifest would use (see [Directives](../getting-started/files-and-projects#directives)):
 
