@@ -198,4 +198,57 @@ def doubled: string -> int = { input ->
 
 `int.fromString` gives `#some(int) | #invalidInt`, so the `Option` helpers apply: they work on any union with a `#some` case. The `Result` helpers are for `#some(a) | #error(e)`. See [results and options](../stdlib/prelude-results).
 
+# Deferred errors
+
+A type error or an unknown name doesn't stop you running a program. `nanyx run` reports every error, and then runs the program all the same: the code that checked runs as normal, and the program stops only if it reaches code that didn't, with that code's error. So you can try the part of a program you're working on while another part is still broken.
+
+```nanyx
+def area: int -> int = { side -> side * side }
+
+def perimeter: int -> int = { side -> side * "4" } -- error NYX0201: a string is not a number
+
+@entry
+def main = {
+  println(area(3))
+  println(perimeter(3))
+  println("done")
+}
+```
+
+`nanyx run shapes.nyx` reports the error, says that it is running in spite of it, and runs `main`:
+
+```text
+shapes.nyx:3:39: error NYX0201: 'string' cannot be used with *: it is not a number
+  |
+3 | def perimeter: int -> int = { side -> side * "4" }
+  |                                       ^^^^^^^^^^
+Running with 1 deferred error
+9
+shapes.nyx:3:39: error NYX0201: 'string' cannot be used with *: it is not a number (deferred from compile time)
+```
+
+`area(3)` runs and prints `9`. `perimeter(3)` reaches the broken expression, which writes its error to standard error, marked `(deferred from compile time)`, and ends the program with exit code 1, as `crash` does. `done` is never printed. Everything that runs before the error still happens: in `f(a(), bad, c())`, `a()` is called and `c()` is not.
+
+The error stays where it was found, so the program fails no sooner than it has to:
+
+- **An expression that doesn't check**, such as an unknown name, a type mismatch, a call with the wrong number of arguments, a missing field, or a call that needs a context nothing provides, stops the program when it is evaluated. The rest of its function runs as usual.
+- **A match that doesn't handle every case** runs the cases it handles, and stops the program on a case it doesn't.
+- **A definition whose type is wrong**, such as one whose body doesn't fit its annotation, is reported once. Calling it stops the program with its error, and the functions that call it are not errors themselves.
+- **`???`**, the [placeholder for unwritten code](../getting-started/basics#unimplemented-code), stops the program when it is reached.
+
+Some errors can't be deferred, and with any of them nothing runs: a syntax error, an error in a type definition, an import that can't be found or has errors of its own, an error in a `::` directive, and a [linter](../advanced/linters) rule configured as an error.
+
+## Debug and release builds
+
+`nanyx run` is a debug build, and so are `nanyx build` and `nanyx wasm` unless you ask for a release build:
+
+| Command | With deferrable errors |
+|---------|------------------------|
+| `nanyx run` | Reports them, says `Running with 2 deferred errors`, and runs the program |
+| `nanyx build`, `nanyx wasm` | Reports them, and writes a program that stops where they are, saying so: `WASM (WAT) emitted with 2 deferred errors` |
+| `nanyx build --release`, `nanyx wasm --release` | Reports them and writes nothing |
+| `nanyx check` | Reports them and runs nothing |
+
+Deferred errors don't change the exit status. A debug run exits with the program's own status: 0 if it ends normally without reaching an error, and 1 if it reaches one. A debug build that writes a program exits with 0. A script or CI job that must not pass a program with errors uses `nanyx check` or `--release`, which exit with 1 on any error.
+
 > **Philosophy:** By making errors explicit in the type system, Nanyx ensures you always handle failure cases. No more unexpected crashes!
