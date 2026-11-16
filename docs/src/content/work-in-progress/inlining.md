@@ -144,12 +144,15 @@ function's locals that are read once, at once, are made temporaries (`CoreIrSimp
   the next time over the block is inlined too, then the members its `use` binds, then the continuations they are
   given.
 - **What is not.** A function in a cycle of calls, found with Tarjan's algorithm over calls and the closures a function
-  makes. The start function, whose body must stay a sequence of top-level expressions, takes nothing inlined, and
-  nothing is inlined into a guard. A function stops taking more once it has 4,000 nodes.
+  makes, and the start function itself. Nothing is inlined into a guard. The start function takes inlining as any
+  other does ([#1469](https://github.com/nanyx-lang/nanyx/issues/1469)): the host's `run` is inlined into it, so the
+  closure over the entry and the members of the host's `use` are known there, the entry is called directly, and a
+  member the entry never reads is not reached. A program that only prints has none of the code that reads standard
+  input: hello world went from 60,418 bytes of WAT to 9,996. A function stops taking more once it has 4,000 nodes.
 - **How.** The callee's body is copied in with every variable it binds made new, with a new name, so that none shares a
   local with the caller's: variables of the same kind and name share one. A parameter is the caller's variable when the
   argument is one of its type, and a new local let-bound to the argument otherwise (a lambda's environment, which it
-  reads as a record, is bound to the closure, and a tag to a parameter whose type has other tags). A call is inlined
+  reads as a record, is bound to the closure, a tag to a parameter whose type has other tags, and a function that gives or takes tags to one whose type has other tags there, since tags are held alike). A call is inlined
   as what a chain ends in or as a `let`'s or `do`'s value, a temporary's among them (`acc + double(n)`). Every
   temporary of the chain still waiting to be used becomes a local first, since the inlined body stores before it reads
   what it is given, and nothing may be stored while a temporary waits; temporaries are bound in the order they are

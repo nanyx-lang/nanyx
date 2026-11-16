@@ -10,7 +10,8 @@ let ``A script's statements run through the host's run`` () =
     let source =
         """println("hi")
 """
-    let wat = transpileWat source
+    // Inlined, the host's run is part of the start function (#1469).
+    let wat = transpileWatNotInlined source
     Assert.Contains("call $__host_run", wat)
     runSource source |> assertRan "hi\n"
 
@@ -60,7 +61,7 @@ println("first {line}")
 @entry
 def main = { println("then main") }
 """
-    let wat = transpileWat source
+    let wat = transpileWatNotInlined source
     Assert.Equal(2, countOccurrences "call $__host_run" wat)
     runSourceWithInput "a\n" source |> assertRan "first #some(a)\nthen main\n"
 

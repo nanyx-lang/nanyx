@@ -36,10 +36,21 @@ let ``The host writes with its foreign function of fd_write, which a deferred er
 
 [<Fact>]
 let ``The start calls the host's run with the entry point`` () =
-    let wat = transpileWat (withFinalNewline """@entry
+    let wat = transpileWatNotInlined (withFinalNewline """@entry
 def main = { println("hi") }""")
     Assert.Contains("(func $__host_run", wat)
     Assert.Contains("call $__host_run", wat)
+
+[<Fact>]
+let ``The host's run is inlined into the start, which calls the entry and the host's write directly`` () =
+    // So a program that only prints has none of the code that reads standard input (#1469).
+    let wat = transpileWat (withFinalNewline """@entry
+def main = { println("ok") }""")
+    Assert.DoesNotContain("call $__host_run", wat)
+    Assert.Equal(0, countOccurrences "call_indirect" wat)
+    Assert.DoesNotContain("console_host_readStdin", wat)
+    Assert.DoesNotContain("console_host_readLineAfter", wat)
+    Assert.True(wat.Length < 20000, $"the module is {wat.Length} bytes of WAT")
 
 [<Fact>]
 let ``An entry point that does not write its type is passed the host's instance`` () =

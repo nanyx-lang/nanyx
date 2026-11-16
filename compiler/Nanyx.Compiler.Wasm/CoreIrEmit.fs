@@ -1054,20 +1054,11 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
         | None -> definition
     { Text = text; Helpers = emitter.Helpers; UsesMemory = emitter.UsesMemory }
 
-/// The start function, `func` (see `CoreIrLower.StartFunction`): each top-level expression in turn, its value
-/// dropped, then the code `after`. It takes nothing and returns nothing.
+/// The start function, `func` (see `CoreIrLower.StartFunction`): the top-level expressions, with what was inlined into
+/// them, each value dropped, then the code `after`. It takes nothing and returns nothing, and makes no tail call.
 let emitStart (context: EmitContext) (func: Function) (after: string list) : Emitted =
     let emitter = FunctionEmitter(context)
-    let notExpressions () = internalError "the start function is not a sequence of top-level expressions"
-    let expressions =
-        match Chain.split func.Body with
-        | links, { Kind = Atom AUnit } -> links |> List.map (fun link -> match link.Kind with Do(value, _) -> value | _ -> notExpressions ())
-        | _ -> notExpressions ()
-    let bodyCode =
-        expressions
-        |> List.map (fun value -> $"{emitter.Sequence false value}\n    {dropValue value.Type}")
-        |> fun code -> code @ after
-        |> String.concat "\n    "
+    let bodyCode = $"{emitter.Sequence false func.Body}\n    {dropValue func.Body.Type}" :: after |> String.concat "\n    "
     let header =
         match localDeclarations (declaredLocals func.Body @ emitter.ExtraLocals) with
         | "" -> ""

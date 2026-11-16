@@ -161,14 +161,23 @@ type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string
         let mutable grown = size body
 
         // Whether `args` are of the types of `callee`'s parameters. A lambda's first parameter is its environment, the
-        // closure (or box) read as a record of what it captures, and a tag is held alike whatever tags its type has.
+        // closure (or box) read as a record of what it captures, and a tag is held alike whatever tags its type has, so
+        // a function that gives or takes tags is held alike whatever tags its type has too.
+        let rec heldAlike (paramTy: IrType) (argTy: IrType) =
+            match paramTy, argTy with
+            | IrTags _, IrTags _ -> true
+            | IrFunction(input, output, members), IrFunction(input', output', members') ->
+                heldAlike input input'
+                && heldAlike output output'
+                && members.Length = members'.Length
+                && List.forall2 (fun (key, memberTy) (key', memberTy') -> key = key' && heldAlike memberTy memberTy') members members'
+            | _ -> paramTy = argTy
         let typed (callee: Function) (args: Atom list) =
             List.forall2
                 (fun (param: Var) arg ->
                     match param.Type, atomType arg with
-                    | IrTags _, IrTags _ -> true
                     | IrRecord _, (IrFunction _ | IrBox) -> param.Name = ClosureSyntax.envParameter
-                    | paramTy, argTy -> paramTy = argTy)
+                    | paramTy, argTy -> heldAlike paramTy argTy)
                 callee.Params
                 args
 
@@ -279,30 +288,29 @@ type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string
         let result = sequence 0 body
         result, changed
 
-/// `functions` with calls inlined into each but the start function, `start`. The functions in `kept` are never inlined
-/// themselves: a cached value's (see `CoreIrCachedValues`), which a call reads rather than computes.
+/// `functions` with calls inlined into each. The start function, `start`, is never inlined itself, and nor are the
+/// functions in `kept`: a cached value's (see `CoreIrCachedValues`), which a call reads rather than computes.
 let inlineCalls (start: string option) (kept: Set<string>) (functions: Function list) : Function list =
     let byName = functions |> List.map (fun f -> f.Name, f) |> Map.ofList
     let edges = byName |> Map.map (fun _ f -> references f.Body)
-    let cyclic = inCycles byName edges + kept
+    let cyclic = inCycles byName edges + kept + Set.ofList (Option.toList start)
     let current = Dictionary<string, Function>()
     for f in functions do
         current.[f.Name] <- f
     for name in calleesFirst byName edges do
-        if Some name <> start then
-            let f = current.[name]
-            let inliner = Inliner(current, cyclic, f)
-            let mutable body = f.Body
-            let mutable round = 0
-            let mutable changed = true
-            while changed && round < rounds do
-                let simplified, didSimplify = CoreIrSimplify.simplify current { f with Body = body }
-                let next, didInline = inliner.Round simplified
-                body <- next
-                changed <- didSimplify || didInline
-                round <- round + 1
-            current.[name] <- { f with Body = fst (CoreIrSimplify.simplify current { f with Body = body }) }
+        let f = current.[name]
+        let inliner = Inliner(current, cyclic, f)
+        let mutable body = f.Body
+        let mutable round = 0
+        let mutable changed = true
+        while changed && round < rounds do
+            let simplified, didSimplify = CoreIrSimplify.simplify current { f with Body = body }
+            let next, didInline = inliner.Round simplified
+            body <- next
+            changed <- didSimplify || didInline
+            round <- round + 1
+        current.[name] <- { f with Body = fst (CoreIrSimplify.simplify current { f with Body = body }) }
     // Only once nothing more is inlined: a temporary can be read only where it is computed, which would hide its value
     // from a caller that inlines the function.
     functions
-    |> List.map (fun f -> if Some f.Name = start then f else { current.[f.Name] with Body = CoreIrSimplify.withTemporaries current.[f.Name].Body })
+    |> List.map (fun f -> { current.[f.Name] with Body = CoreIrSimplify.withTemporaries current.[f.Name].Body })
