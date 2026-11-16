@@ -41,11 +41,22 @@ module internal ModuleLinking =
 
     /// `module'` with each name a block import brought in (`zero`, `Money.new`) written as the definition it stands
     /// for (`money.zero`), which is the only name the backend knows. Only a name inference resolved to that definition
-    /// is rewritten, not a local that shadows it.
+    /// is rewritten, not a local that shadows it. So is each context a def's type requires (`Tx`, as `db.Tx`), whose
+    /// members the backend finds by the context's layout, which the block's type definition has under its own name.
     let internal writeBlockAliases (state: NyxCompiler.Infer.InferState) (module': Module) : Module =
         if state.BlockAliases.IsEmpty then
             module'
         else
+            let declaredContext (context: TypeExpr) =
+                match context.Kind with
+                | TypeName name -> { context with Kind = TypeName (WrittenContexts.canonical state name) }
+                | TypeApply(name, args) -> { context with Kind = TypeApply(WrittenContexts.canonical state name, args) }
+                | _ -> context
+            let declaredContexts (typeOpt: TypeExpr option) =
+                match typeOpt with
+                | Some ({ Kind = TypeWithContext(contexts, inner) } as annotation) ->
+                    Some { annotation with Kind = TypeWithContext(contexts |> List.map declaredContext, inner) }
+                | _ -> typeOpt
             let resolved (node: Expression) (name: string) =
                 match state.BlockAliases |> Map.tryFind name, state.References |> Map.tryFind node.Id |> Option.bind (fun id -> state.Symbols |> Map.tryFind id) with
                 | Some qualified, Some symbol when symbol.Name = qualified -> qualified
@@ -60,7 +71,7 @@ module internal ModuleLinking =
             module'
             |> List.map (fun item ->
                 match item.Kind with
-                | Def (ValueDef(isExport, name, typeOpt, value)) -> { item with Kind = Def (ValueDef(isExport, name, typeOpt, rewrite value)) }
+                | Def (ValueDef(isExport, name, typeOpt, value)) -> { item with Kind = Def (ValueDef(isExport, name, declaredContexts typeOpt, rewrite value)) }
                 | Expr value -> { item with Kind = Expr (rewrite value) }
                 | _ -> item)
 
