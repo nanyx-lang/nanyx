@@ -73,13 +73,18 @@ let parse (text: string) : Result<Query, string> =
     else
         readType text |> Result.map (fun ty -> { Name = None; Type = ty })
 
+/// The arguments a nominal type is written with: `MRef(a)`'s `a`, without the scope a type in a scoped context's scope
+/// has as its last argument.
+let private writtenArguments (args: Ty list) =
+    args |> List.filter (function FunctionContexts.ScopedContext _ -> false | _ -> true)
+
 /// The name a type is written by, with its arguments: a primitive's, a nominal type's, an applied type's or an
 /// alias's, without the module an aliased import qualifies it with.
 let private headOf (ty: Ty) : (string * Ty list) option =
     let simple (name: string) = name.Substring(name.LastIndexOf '.' + 1)
     match ty with
     | TyPrimitive name -> Some (simple name, [])
-    | TyNominal(id, _, _, _) -> Some (simple id.Name, [])
+    | TyNominal(id, args, _, _) -> Some (simple id.Name, writtenArguments args)
     | TyApply(name, args)
     | TyAlias(name, args, _) -> Some (simple name, args)
     | _ -> None
@@ -101,8 +106,8 @@ let rec private substitute (subst: Substitution) (ty: Ty) : Ty =
 let rec private variablesOf (ty: Ty) : int list =
     match ty with
     | TyVar var -> [ var.Id ]
-    // A nominal type is matched by its name, an alias by its name and arguments, and a function without its contexts.
-    | TyNominal _ -> []
+    // A nominal type or an alias is matched by its name and written arguments, and a function without its contexts.
+    | TyNominal(_, args, _, _) -> writtenArguments args |> List.collect variablesOf
     | TyFunc(input, output, _) -> variablesOf input @ variablesOf output
     | TyAlias(_, args, _) -> args |> List.collect variablesOf
     | _ -> Ty.children ty |> List.collect variablesOf

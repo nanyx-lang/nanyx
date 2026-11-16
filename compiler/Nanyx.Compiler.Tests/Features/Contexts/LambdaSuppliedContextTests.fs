@@ -89,3 +89,34 @@ def main: [Console] () -> () = {
 """
     )
     |> ignore
+
+[<Fact>]
+let ``A module block's function supplies its context to a lambda in the module that imports the block`` () =
+    let source = """
+module db =
+  export context Tx = (commit: () -> ())
+  export def transaction: [c] ([Tx, c] () -> a) -> a = { body -> use Tx(commit = { () }) in body() }
+
+import db
+
+def f: [Tx] () -> () = { commit() }
+def main = transaction { f() }
+def direct = transaction { commit() }
+"""
+    let typed = compileClean (source.ReplaceLineEndings "\n")
+    Assert.Equal("()", Unifier.tyToString typed.Types.["main"])
+
+[<Fact>]
+let ``So does an imported module's function`` () =
+    let moduleSource = """module mod
+
+export context Tx = (commit: () -> ())
+export def transaction: [c] ([Tx, c] () -> a) -> a = { body -> use Tx(commit = { () }) in body() }
+"""
+    let mainSource = """import mod
+
+def f: [Tx] () -> () = { commit() }
+def main = transaction { f() }
+"""
+    let result = compileImporting (moduleSource.ReplaceLineEndings "\n") (mainSource.ReplaceLineEndings "\n")
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")

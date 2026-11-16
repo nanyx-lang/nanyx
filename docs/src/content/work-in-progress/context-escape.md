@@ -85,6 +85,9 @@ def main = {
   `withLog(body)` works the same. `Contexts.extendEnvForLambdaArgument` binds the members of the plain contexts the
   parameter's type requires, at a call whose callee's type is known
   ([#1218](https://github.com/nanyx-lang/nanyx/issues/1218)). `RunLambdaSuppliedContextTests.fs` runs this example.
+  A context a function type carries is named as it is declared: a `module db =` block's `Tx`, which the module that
+  imports the block calls `Tx` too, is `db.Tx` in both function types (`WrittenContexts.canonical`), so the lambda's
+  requirement meets the parameter's ([#1486](https://github.com/nanyx-lang/nanyx/issues/1486)).
 
 - **The backend needs nothing new.** `CoreIrLowerMembers.coerce` already adapts a function value given where one that
   passes fewer members is expected, capturing the members it needs where it is given. A `use` binding goes through it.
@@ -481,7 +484,12 @@ Hover hides a private context's members outside its file, as it hides a private 
      that `FunctionContexts.ScopedContext` knows it (`FunctionContexts.scoped`). Every scoped context of a name that one
      signature writes shares a scope (`WrittenContexts.read`), and a def's own `Memory`, where the def is named or
      called, takes the scope its type has there (`WrittenContexts.plain`). The printer leaves the scope out
-     (`FunctionContexts.withoutScope`), and so does the backend (`CoreIrLowerTypes.concreteContexts`).
+     (`FunctionContexts.withoutScope`), and so does the backend (`CoreIrLowerTypes.concreteContexts`). Where one type
+     requires a scoped context at more than one scope, the printer numbers them in order of first appearance,
+     `([Memory₁] () -> a), ([Memory₂] () -> b) -> b` (`Unifier.printingFor`), in hover, inlay hints, error messages
+     and `nanyx check`; at one scope it is plain `[Memory]`
+     ([#1553](https://github.com/nanyx-lang/nanyx/issues/1553)). No source can write the numbered form yet
+     ([#1591](https://github.com/nanyx-lang/nanyx/issues/1591)), so Write the inferred type refuses such a type.
    - `ScopedCalls.fs` checks it. At each call, `enter` finds what the callee supplies from its type: a scoped context a
      parameter's type requires, of a scope the callee's type is generalised over, that its own contexts don't name. The
      scope that is instantiated to is the call's, open while its arguments are checked, and a `memory` block's cells

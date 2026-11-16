@@ -91,17 +91,62 @@ module Unifier =
         else
             None, namedFields
 
+    /// `index` in subscript digits: `12` is `₁₂`.
+    let private subscript (index: int) =
+        string index |> String.map (fun digit -> char (int '₀' + int digit - int '0'))
+
+    /// The scoped contexts the function types of `ty` require, in the order they are printed, each as often.
+    let rec private scopedContextsInPrintOrder (ty: Ty) : (string * Ty) list =
+        let all = List.collect scopedContextsInPrintOrder
+        match ty with
+        | TyFunc(arg, ret, contexts) ->
+            (writtenContexts contexts |> List.choose (function FunctionContexts.ScopedContext(name, scope) -> Some (name, scope) | _ -> None))
+            @ scopedContextsInPrintOrder arg
+            @ scopedContextsInPrintOrder ret
+        | TyRecord fields
+        | TyOpenRecord(fields, _) -> all (List.ofSeq fields.Values)
+        | TyTag(_, Some payload) -> scopedContextsInPrintOrder payload
+        | TyNominal(_, args, _, _)
+        | TyAlias(_, args, _)
+        | TyApply(_, args)
+        | TyUnion args
+        | TySelf args -> all args
+        | TyRecursive(body, _) -> scopedContextsInPrintOrder body
+        | _ -> []
+
+    /// How `printTy` writes a type: an open record's or union's rest is spread with `Spread`, and each scoped context
+    /// of a name `ty` requires at more than one scope is numbered by its scope's place in `Scopes`.
+    type private Printing = { Spread: string; Scopes: Map<string, Ty list> }
+
+    /// `Printing` for `ty`: the scopes of each scoped context it requires at more than one, in order of first appearance.
+    let private printingFor (spread: string) (ty: Ty) : Printing =
+        let scopes =
+            scopedContextsInPrintOrder ty
+            |> List.groupBy fst
+            |> List.map (fun (name, found) -> name, found |> List.map snd |> List.distinct)
+            |> List.filter (fun (_, scopes) -> scopes.Length > 1)
+            |> Map.ofList
+        { Spread = spread; Scopes = scopes }
+
+    /// `context` as `p` writes it among a function type's contexts: a scoped one numbered when `p` numbers its name, as
+    /// `Memory₁`, and without its scope.
+    let private contextAsPrinted (p: Printing) (context: Ty) : Ty =
+        match context with
+        | FunctionContexts.ScopedContext(name, scope) when p.Scopes.ContainsKey name ->
+            TyApply($"{name}{subscript (List.findIndex ((=) scope) p.Scopes.[name] + 1)}", [])
+        | _ -> FunctionContexts.withoutScope context
+
     /// `ty` with the fewest brackets the grammar allows. `,` binds tighter than `->`, which groups to the right,
     /// and `|` binds tighter than both, so a function needs brackets only where it is an item of a comma list
     /// (`(int, (a -> b))`), the input of another function (`(a -> b) -> c`) or a member of a union; a union never
     /// does. At the top, `signature` writes a function's parameters bare, as a def's annotation would:
     /// `int, (a -> b) -> a`. An open record's rest is spread with `spread`: `...` as in source, or `…` for a reader.
-    let rec private printTy (spread: string) (signature: bool) (ty: Ty) : string =
+    let rec private printTy (p: Printing) (signature: bool) (ty: Ty) : string =
         // A function, bracketed; in brackets its parameters are not bare.
         let grouped ty =
             match ty with
-            | TyFunc _ -> $"({printTy spread false ty})"
-            | _ -> printTy spread false ty
+            | TyFunc _ -> $"({printTy p false ty})"
+            | _ -> printTy p false ty
         // The items of a tuple, each bracketed where a comma list needs it.
         let items tys = tys |> List.map grouped |> String.concat ", "
         let bareTuple ty =
@@ -118,9 +163,9 @@ module Unifier =
             match ty with
             | TyRecord fields
             | TyOpenRecord(fields, _) when not fields.IsEmpty && (fst (tryTupleLikeRecord fields)).IsNone ->
-                let written = printTy spread false ty
+                let written = printTy p false ty
                 written.Substring(1, written.Length - 2)
-            | _ -> printTy spread false ty
+            | _ -> printTy p false ty
         match ty with
         // The unit type is written `()`; `unit` is only its internal name.
         | TyPrimitive "unit" -> "()"
@@ -151,12 +196,12 @@ module Unifier =
             // A result that requires contexts is bracketed, so that its contexts read as its own.
             let retText =
                 match ret with
-                | TyFunc(_, _, contexts) when not (writtenContexts contexts).IsEmpty -> $"({printTy spread false ret})"
-                | _ -> printTy spread false ret
-            match writtenContexts contexts |> List.map FunctionContexts.withoutScope with
+                | TyFunc(_, _, contexts) when not (writtenContexts contexts).IsEmpty -> $"({printTy p false ret})"
+                | _ -> printTy p false ret
+            match writtenContexts contexts |> List.map (contextAsPrinted p) |> List.distinct with
             | [] -> $"{argText} -> {retText}"
             | written ->
-                $"""[{written |> List.map (printTy spread false) |> String.concat ", "}] {argText} -> {retText}"""
+                $"""[{written |> List.map (printTy p false) |> String.concat ", "}] {argText} -> {retText}"""
         | TyRecord fields ->
             match tryTupleLikeRecord fields with
             | Some tupleItems, namedFields ->
@@ -181,8 +226,8 @@ module Unifier =
         // An open record's other fields are written as a spread of its row: `(name: string, ...ω)`. A row named
         // nothing (see `displayRenaming`) is written as a bare spread: `(name: string, ...)`.
         | TyOpenRecord(fields, row) ->
-            let rowText = $"{spread}{printTy spread false (TyVar row)}"
-            match printTy spread false (TyRecord fields) with
+            let rowText = $"{p.Spread}{printTy p false (TyVar row)}"
+            match printTy p false (TyRecord fields) with
             | "()" -> $"({rowText})"
             | closed -> $"{closed.Substring(0, closed.Length - 1)}, {rowText})"
         // Tags are written with their `#`, as in source: `#some(int) | #notFound`. A record payload's fields are
@@ -190,11 +235,11 @@ module Unifier =
         | TyTag(name, payloadOpt) ->
             match payloadOpt with
             | Some (TyRecord fields as payload) when not fields.IsEmpty ->
-                let written = printTy spread false payload
+                let written = printTy p false payload
                 $"#{name}{written}"
             // The unit value is written as no payload in the brackets, as in source: `#some()`.
             | Some (TyPrimitive "unit") -> $"#{name}()"
-            | Some payload -> $"#{name}({bareTuple payload |> Option.defaultWith (fun () -> printTy spread false payload)})"
+            | Some payload -> $"#{name}({bareTuple payload |> Option.defaultWith (fun () -> printTy p false payload)})"
             | None -> $"#{name}"
         // A context with no arguments is written by its name: `Console`, and `Memory` without its scope.
         | FunctionContexts.PlainContext name -> name
@@ -207,16 +252,16 @@ module Unifier =
         // A rest named nothing (see `displayRenaming`) is written as a bare spread: `#some(int) | ...`.
         | TyUnion members ->
             members
-            |> List.map (function TyPrimitive "" -> spread | item -> grouped item)
+            |> List.map (function TyPrimitive "" -> p.Spread | item -> grouped item)
             |> String.concat " | "
         // Only inside what a recursive alias stands for, which is written by the alias's name.
-        | TyRecursive(body, _) -> printTy spread signature body
+        | TyRecursive(body, _) -> printTy p signature body
         | TySelf [] -> "self"
         | TySelf args -> $"self({items args})"
         | TyParam index -> $"${index}"
 
     /// `ty` as it would be written in a def's annotation: see `printTy`.
-    let tyToString (ty: Ty) : string = printTy "..." true ty
+    let tyToString (ty: Ty) : string = printTy (printingFor "..." ty) true ty
 
     /// The type variables of `ty` in the order `tyToString` prints them, each as many times as it is printed. A
     /// nominal's or alias's underlying type is not printed, so its variables are not included (its arguments' are).
@@ -457,10 +502,6 @@ module Unifier =
 
     let private greekLetters = "αβγδεζηθικλμνξοπρστυφχψω"
 
-    /// `index` in subscript digits: `12` is `₁₂`.
-    let private subscript (index: int) =
-        string index |> String.map (fun digit -> char (int '₀' + int digit - int '0'))
-
     let private latinLetters = "abcdefghijklmnopqrstuvwxyz"
 
     /// The ids of the variables in `ty` that stand for the rest of a union or record: `r` in `#some(a) | r` and
@@ -545,7 +586,7 @@ module Unifier =
 
     /// `ty` as `tyToString` writes it, with a spread written in `notation`.
     let private printIn (notation: TypeNotation) (ty: Ty) : string =
-        printTy (match notation with Unicode -> "…" | Ascii | Source -> "...") true ty
+        printTy (printingFor (match notation with Unicode -> "…" | Ascii | Source -> "...") ty) true ty
 
     /// `ty` for a reader, in `notation`, with the variables the compiler made up named as `displayRenaming`
     /// describes, and a rest that appears nowhere else written as a bare spread: `(name: α, …)`, `#some(α) | …`.

@@ -9,6 +9,16 @@ open NyxCompiler.InferState
 let isScoped (state: InferState) (name: Identifier) =
     state.TypeDefs |> Map.tryFind name |> Option.exists _.IsScoped
 
+/// The name the context `name` is declared under: a block import's name (`Tx`) stands for the qualified one (`db.Tx`),
+/// which the block's own types write, so that the two are one context where function types meet (#1486).
+let canonical (state: InferState) (name: Identifier) : Identifier =
+    match state.BlockAliases |> Map.tryFind name with
+    | Some qualified ->
+        match state.TypeDefs |> Map.tryFind name, state.TypeDefs |> Map.tryFind qualified with
+        | Some short, Some declared when short.Symbol = declared.Symbol -> qualified
+        | _ -> name
+    | None -> name
+
 /// The context `context` names, as a function type carries it: `Console` is `TyApply("Console", [])`, `Show(a)` is
 /// `TyApply("Show", [a])` and a context variable `c` is the type variable of that name. A scoped context is of a scope
 /// that every scoped context of its name written in the same signature shares, a variable no name written in source
@@ -20,11 +30,11 @@ let private read (typeExprToTy: InferState -> TypeExpr -> Ty * InferState) (stat
         Some var, next
     | TypeName name when isScoped state name ->
         let scope, next = typeExprToTy state (TypeExpr.synthetic (TypeVar (FunctionContexts.scopeVariableName name)))
-        Some (FunctionContexts.scoped name scope), next
-    | TypeName name -> Some (TyApply(name, [])), state
+        Some (FunctionContexts.scoped (canonical state name) scope), next
+    | TypeName name -> Some (TyApply(canonical state name, [])), state
     | TypeApply(name, args) ->
         let argTys, next = args |> List.mapFold typeExprToTy state
-        Some (TyApply(name, argTys)), next
+        Some (TyApply(canonical state name, argTys)), next
     | _ -> None, state
 
 /// The scope of the scoped context `name` somewhere in `ty`, if `ty` has one: a cell's type has `Memory`'s.
@@ -44,13 +54,14 @@ let plain (state: InferState) (ty: Ty) (written: TypeExpr list) : Ty list * Infe
     written
     |> List.choose (fun ctx -> match ctx.Kind with TypeName name -> Some name | _ -> None)
     |> List.mapFold (fun current name ->
+        let declared = canonical current name
         if isScoped current name then
-            match scopeIn name ty with
-            | Some scope -> FunctionContexts.scoped name scope, current
+            match scopeIn declared ty |> Option.orElse (scopeIn name ty) with
+            | Some scope -> FunctionContexts.scoped declared scope, current
             | None ->
                 let scope, next = freshVar current
-                FunctionContexts.scoped name scope, next
-        else TyApply(name, []), current) state
+                FunctionContexts.scoped declared scope, next
+        else TyApply(declared, []), current) state
 
 /// `inner`, the type `[contexts] inner` is written with, requiring `contexts` too when it is a function type. On any
 /// other type the contexts are left out.

@@ -59,6 +59,7 @@
     <Compile Include="Features\Tuples\TupleTests.fs" />
     <Compile Include="Features\Types\TypeTests.fs" />
     <Compile Include="Features\Types\ProtectedTypeTests.fs" />
+    <Compile Include="Features\Types\TypeSignatureTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

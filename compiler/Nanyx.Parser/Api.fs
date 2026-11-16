@@ -78,10 +78,8 @@ let parseModule (input: string) : Result<Module, string> = parseModuleFile "" in
 
 /// Parses `input` as the type in a def's annotation is written: `bool -> string`, `list(a), (a -> bool) -> list(a)`.
 let parseTypeSignature (input: string) : Result<TypeExpr, string> =
-    // The type grammar is filled in when the module grammar's file is first used.
-    ignore moduleParser
     let normalized = normalizeSource input
-    match runParserOnString (ws >>. typeSignature .>> ws .>> eof) (ParseState.empty ()) "" normalized with
+    match runParserOnString typeSignatureParser (ParseState.empty ()) "" normalized with
     | ParserResult.Success(typeExpr, _, _) -> Result.Ok typeExpr
     | ParserResult.Failure(message, _, _) -> Result.Error message
 
