@@ -38,16 +38,35 @@ let ``A package whose host is the console host runs under it`` () =
     Assert.Equal(0, outcome.ExitCode)
 
 [<Fact>]
-let ``A host that isn't one is an error naming it`` () =
+let ``A host the compiler doesn't ship, with no path, is an error saying how to find it`` () =
     let outcome = onPackage $"""host = (package = "nanyx.nope", version = "{Toolchain.version}")""" main [ "check" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("app.nyxp:3:21: error NYX0023: there is no host 'nanyx.nope'; the hosts are 'nanyx.console'", outcome.StandardError)
+    Assert.Contains(
+        """app.nyxp:3:21: error NYX0023: the compiler ships no package 'nanyx.nope': a host the compiler doesn't ship is found by its path, as host = (package = "nanyx.nope", path = "../nanyx.nope")""",
+        outcome.StandardError)
+
+[<Fact>]
+let ``A host is found by its path`` () =
+    let path = (ShippedPackages.directoryOf Hosts.consolePackage).Replace("\\", "/")
+    let outcome = onPackage $"""host = (package = "nanyx.console", path = "{path}")""" main [ "run" ]
+    Assert.Equal("", outcome.StandardError)
+    Assert.Equal("hello\n", outcome.StandardOutput)
+    Assert.Equal(0, outcome.ExitCode)
+
+[<Fact>]
+let ``A package whose manifest doesn't declare it a host is not one`` () =
+    use other = new TempDirectory()
+    File.WriteAllText(Path.Combine(other.Path, "acme.util.nyxp"), "(package = (name = \"acme.util\", version = \"0.1.0\"))\n")
+    let path = other.Path.Replace("\\", "/")
+    let outcome = onPackage $"""host = (package = "acme.util", path = "{path}")""" main [ "check" ]
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Contains("'acme.util' is not a host: a host's manifest declares that it is one", outcome.StandardError)
 
 [<Fact>]
 let ``A host's settings are an error at the field, until hosts take settings`` () =
     let outcome = onPackage $"""host = (package = "nanyx.console", version = "{Toolchain.version}", settings = (port = 3000))""" main [ "build" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("app.nyxp:3:58: error NYX0024: nanyx.console takes no settings", outcome.StandardError)
+    Assert.Contains("app.nyxp:3:58: error NYX0024: a host takes no settings yet", outcome.StandardError)
 
 [<Fact>]
 let ``A host without a package is an error`` () =
@@ -59,26 +78,32 @@ let ``A host without a package is an error`` () =
 [<InlineData("build")>]
 [<InlineData("check")>]
 let ``--host chooses the package's host in place of its manifest's`` (command: string) =
-    let outcome = onPackage "" main [ command; "--host"; "nanyx.console/console.host" ]
+    let outcome = onPackage "" main [ command; "--host"; Hosts.consolePackage ]
     Assert.Equal("", outcome.StandardError)
     Assert.Equal(0, outcome.ExitCode)
 
 [<Fact>]
-let ``--host naming a module that isn't a host is a usage error naming it`` () =
-    let outcome = onPackage "" main [ "run"; "--host"; "nanyx/console" ]
+let ``--host naming a package the compiler doesn't ship is a usage error naming it`` () =
+    let outcome = onPackage "" main [ "run"; "--host"; "nanyx.nope" ]
     Assert.Equal(2, outcome.ExitCode)
-    Assert.Equal(
-        "--host: 'nanyx/console' is not a host: until any package can be one, a host is one the compiler ships, 'nanyx.console/console.host'",
-        outcome.StandardError.Trim())
+    Assert.StartsWith("--host: ", outcome.StandardError.Trim())
+    Assert.Contains("the compiler ships no package 'nanyx.nope'", outcome.StandardError)
+
+[<Fact>]
+let ``--host takes the directory of a host package`` () =
+    let outcome = onPackage "" main [ "run"; "--host"; ShippedPackages.directoryOf Hosts.consolePackage ]
+    Assert.Equal("", outcome.StandardError)
+    Assert.Equal("hello\n", outcome.StandardOutput)
+    Assert.Equal(0, outcome.ExitCode)
 
 [<Fact>]
 let ``--host on a script is a usage error: a script runs under the console host`` () =
     use directory = new TempDirectory()
     let path = Path.Combine(directory.Path, "script.nyx")
-    File.WriteAllText(path, "import nanyx/console\n\nprintln(\"hi\")\n")
-    let outcome = nanyxIn directory.Path [ "run"; "--host"; "nanyx.console/console.host"; path ]
+    File.WriteAllText(path, "println(\"hi\")\n")
+    let outcome = nanyxIn directory.Path [ "run"; "--host"; Hosts.consolePackage; path ]
     Assert.Equal(2, outcome.ExitCode)
-    Assert.Equal("--host chooses a package's host: a script always runs under nanyx.console/console.host.", outcome.StandardError.Trim())
+    Assert.Equal("--host chooses a package's host: a script always runs under nanyx.console.", outcome.StandardError.Trim())
 
 [<Fact>]
 let ``An entry that doesn't fit the package's host names the host, in the editor as on the command line`` () =

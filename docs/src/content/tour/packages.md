@@ -184,7 +184,7 @@ The entrypoint runs under the package's host, which loads the contexts it may us
 )
 ```
 
-`nanyx.console` is the host for a command-line program, whose module is `nanyx.console/console.host`. The compiler ships it beside itself, so it needs nothing installed. A package with no `host` is a library: it can't have an `@entry`, and running it is an error. `nanyx run`, `nanyx build` and `nanyx check` take `--host <module>` to choose one for a single command instead. The hosts the compiler ships are the only ones yet, and a single `.nyx` file always runs under `nanyx.console/console.host`.
+`nanyx.console` is the host for a command-line program. The compiler ships it beside itself, so it needs nothing installed, and it brings `println`, `Console` and `Env` into scope in every module of the program. A host the compiler doesn't ship is found by its path instead of a version, as a dependency is: `host = (package = "acme.host", path = "../acme.host")`. A package with no `host` is a library: it can't have an `@entry`, and running it is an error. `nanyx run`, `nanyx build` and `nanyx check` take `--host` with a host's name or directory to choose one for a single command instead, and a single `.nyx` file always runs under `nanyx.console`.
 
 # Building and running a package
 

@@ -17,6 +17,16 @@ type Dependency =
       /// Where its `path` is written.
       PathSpan: SourceSpan }
 
+/// The host an application's manifest names in its `host` field: a package the compiler ships, at its version, or one
+/// found by its path, `host = (package = "acme.server", path = "../server")`.
+type HostEntry =
+    { /// The host's package.
+      Package: string
+      /// The full path of the host package's directory, for a host found by its `path`; none for one the compiler ships.
+      Path: string option
+      /// Where the entry is written, which an error about the host it names is reported at.
+      Span: SourceSpan }
+
 /// A package's `.nyxp` manifest, as far as it is read so far: what the package is called, which files are its
 /// sources, which of its modules other packages may import, what it depends on, which linters check it, and which host
 /// runs its `@entry`. Its `formatter` field is the formatter's, which reads it itself.
@@ -37,7 +47,9 @@ type Manifest =
       /// The linters the manifest's `linters` turns on, and the severities their `settings` set.
       Linters: LinterOptions
       /// The host `host` names, if the manifest has one: a package with none is a library, which has no `@entry`.
-      Host: Host option
+      Host: HostEntry option
+      /// The host this package is, if its `package` declares one (see `HostPackages`).
+      Declares: Host option
       /// The whole manifest as it is written, for tools that read the rest (see `toJson`).
       Value: DataValue }
 
@@ -49,10 +61,13 @@ module Manifest =
     /// The fields a manifest may have. `formatter` is the formatter's, which checks what is in it.
     let private fields = [ "package"; "dependencies"; "linters"; "host"; "formatter" ]
 
-    let private packageFields = [ "name"; "version"; "sources"; "publicModules" ]
+    let private packageFields = [ "name"; "version"; "sources"; "publicModules"; HostPackages.field ]
 
-    /// The fields of an entry of `linters`, or of `host`.
+    /// The fields of an entry of `linters`.
     let private entryFields = [ "package"; "version"; "settings" ]
+
+    /// The fields of the `host` entry.
+    let private hostFields = [ "package"; "version"; "path"; "settings" ]
 
     /// Lower-case dotted names, as packaging.md proposes: `acme.web`, `word_counter`.
     let internal namePattern = Regex(@"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
@@ -204,19 +219,50 @@ module Manifest =
         { Linters = Linters.all |> List.filter (fun linter -> chosen |> List.exists (fun (a, _) -> a.Name = linter.Name))
           Severities = chosen |> List.collect snd |> Map.ofList }
 
-    /// The host the manifest's `host` names, if it is right. It takes no settings yet.
-    let private readHost (problems: Problems) (value: DataValue) : Host option =
-        let host (name: string) =
-            match Hosts.all |> List.tryFind (fun host -> host.Package = name) with
-            | Some host -> Result.Ok host
-            | None -> Result.Error $"there is no host '{name}'; the hosts are {quoted (Hosts.all |> List.map _.Package)}"
-        match entry problems "the host" host value with
-        | Some (fields, host) ->
+    /// The host the manifest's `host` names, if the entry is right: a package the compiler ships, named at the compiler's
+    /// version exactly, or one found by its `path`, relative to `root`, which has no version. It takes no settings yet.
+    let private readHost (problems: Problems) (root: string) (value: DataValue) : HostEntry option =
+        problems.Record "the host" hostFields value
+        |> Option.bind (fun fields ->
             match DataValue.field "settings" fields with
-            | Some field -> problems.Add DiagnosticCodes.UnsupportedManifestField field.NameSpan $"{host.Package} takes no settings"
+            | Some field -> problems.Add DiagnosticCodes.UnsupportedManifestField field.NameSpan "a host takes no settings yet"
             | None -> ()
-            Some host
-        | None -> None
+            let name = problems.RequiredText "the host" value.Location fields "package" namePattern nameRule
+            match name, problems.Text "the host" fields "path" anyText "" with
+            | Some name, Some path ->
+                match DataValue.field "version" fields with
+                | Some field ->
+                    problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"the host {name} is found by its path, so it has no version: give one or the other"
+                    None
+                | None -> Some { Package = name; Path = Some(Path.GetFullPath(Path.Combine(root, path))); Span = value.Location }
+            | Some name, None ->
+                let version = problems.RequiredText "the host" value.Location fields "version" versionPattern "a semantic version: 1.2.0"
+                match HostPackages.tryShipped name with
+                | Result.Error message ->
+                    problems.Add
+                        DiagnosticCodes.InvalidManifestValue
+                        (DataValue.field "package" fields).Value.Value.Location
+                        $"{message}: a host the compiler doesn't ship is found by its path, as host = (package = \"{name}\", path = \"../{name}\")"
+                    None
+                | Result.Ok _ ->
+                    match version with
+                    | Some version when version <> Toolchain.version ->
+                        problems.Add
+                            DiagnosticCodes.VersionNotShipped
+                            (DataValue.field "version" fields).Value.Value.Location
+                            $"the compiler ships {name} {Toolchain.version}, not {version}: a package the compiler ships is named at its version exactly"
+                        None
+                    | Some _ -> Some { Package = name; Path = None; Span = value.Location }
+                    | None -> None
+            | None, _ -> None)
+
+    /// Checks the `host` field of the manifest's `package`, which declares the package a host: its root module, and its
+    /// prelude, if it has one (see `HostPackages`).
+    let private checkHostDeclaration (problems: Problems) (value: DataValue) =
+        problems.Record "the package's host" [ HostPackages.rootField; HostPackages.preludeField ] value
+        |> Option.iter (fun fields ->
+            problems.RequiredText "the package's host" value.Location fields HostPackages.rootField anyText "" |> ignore
+            problems.Text "the package's host" fields HostPackages.preludeField anyText "" |> ignore)
 
     /// The fields of an entry of `dependencies`.
     let private dependencyFields = [ "package"; "path"; "version" ]
@@ -301,10 +347,11 @@ module Manifest =
                     let publicModules = problems.Strings "package" fields "publicModules"
                     publicModules
                     |> Option.iter (fun entries -> problems.Repeats entries (fun name -> $"the module '{name}' is listed twice in publicModules"))
+                    DataValue.field HostPackages.field fields |> Option.iter (fun field -> checkHostDeclaration problems field.Value)
                     name, version, problems.Strings "package" fields "sources" |> Option.map (List.map fst), publicModules
                 | None -> None, None, None, None
             let linters = field "linters" |> Option.map (fun field -> readLinters problems field.Value)
-            let host = field "host" |> Option.bind (fun field -> readHost problems field.Value)
+            let host = field "host" |> Option.bind (fun field -> readHost problems (Path.GetDirectoryName path) field.Value)
             match problems.All with
             | [] ->
                 Result.Ok
@@ -319,6 +366,7 @@ module Manifest =
                       Linters = defaultArg linters Linters.none
                       // No `host` means a library: an application names the host it runs under.
                       Host = host
+                      Declares = HostPackages.ofManifest (defaultArg name "") (Path.GetDirectoryName path) manifest
                       Value = manifest }
             | problems -> Result.Error problems
 

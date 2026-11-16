@@ -113,10 +113,3 @@ println("after")
         Assert.Equal(0, outcome.ExitCode)
     finally
         File.Delete path
-
-[<Fact>]
-let ``A program that does not use Env imports nothing for it`` () =
-    let wat = transpileWat (withFinalNewline """@entry
-def main = { println("hi") }""")
-    Assert.DoesNotContain("args_get", wat)
-    Assert.DoesNotContain("environ_get", wat)

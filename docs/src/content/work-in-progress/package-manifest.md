@@ -49,15 +49,18 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
   lambda, an interpolated string, a definition, an import, a `::` directive. The manifest can always be read without
   running or type-checking a program, which `nanyx add` needs in order to edit it.
 - **Its shape is checked** (`Manifest.check`). The fields are the manifest's own: `package`, `dependencies`,
-  `linters`, `host` and `formatter` at the top, and `name`, `version`, `sources` and `publicModules` in `package`. A
-  linter or host entry has `package`, `version` and `settings`. An unknown field (`NYX0021`), a missing `name`
+  `linters`, `host` and `formatter` at the top, and `name`, `version`, `sources`, `publicModules` and `host` in
+  `package`. A linter entry has `package`, `version` and `settings`, and a host entry `package`, `version` or `path`,
+  and `settings`. A host package's `package` declares it one with `host = (root = "<module>", prelude = "<module>")`
+  ([A host package](./hosts#a-host-package)). An unknown field (`NYX0021`), a missing `name`
   (`NYX0022`), a string where a list is expected (`NYX0023`) or a field that isn't supported yet (`NYX0024`) is an
   error at that field. A module listed twice in `publicModules`, or a package listed twice in `dependencies`, is
   `NYX0023` at the repeat, and so is a `publicModules` entry that no source file of the package declares.
 - **What works today.** A dependency gives a `path`; one with a `version` is `NYX0024` until packages can be
   downloaded. The only linter is `nanyx.lint`, whose
-  `settings` hold `rules`, each set to `#error`, `#warning`, `#info`, `#hint` or `#off`. The only host is
-  `nanyx.console`, which takes no `settings`.
+  `settings` hold `rules`, each set to `#error`, `#warning`, `#info`, `#hint` or `#off`. A host is one the compiler
+  ships, `nanyx.console`, named at the compiler's version, or one found by its `path`, with no version. No host takes
+  `settings` yet.
 - **Settings are typed by their package.** A linter or host exports its settings as a record type, and the entry's
   `settings` is checked against it with the ordinary type checker. A misspelt key is an ordinary type error, with a
   span, naming the package. It needs the package's module compiled first, which happens anyway before it runs. Until

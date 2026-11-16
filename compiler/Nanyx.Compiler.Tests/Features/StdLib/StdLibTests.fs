@@ -68,10 +68,9 @@ println(Id(3))
     Assert.Contains("'Id.toString' is not defined", diagnostic.Message)
 
 [<Fact>]
-let ``println is not in scope without importing nanyx/console`` () =
+let ``println is in scope without an import, from the console host's prelude`` () =
     let result = Compiler.compile """def main = { println("hi") }"""
-    let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-    Assert.Contains("Unknown function 'println'", message)
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
 [<Fact>]
 let ``Standard library import is resolved without a file`` () =
@@ -212,7 +211,7 @@ let ``Unknown standard library module is an error`` () =
         Assert.Contains("nanyx/console", message))
 
 [<Fact>]
-let ``Entry point module sees nanyx/console without importing it`` () =
+let ``Every module sees the host's prelude without importing it, with an entry point or without`` () =
     let source =
         normalized """module main
 @entry
@@ -227,7 +226,7 @@ def main = {
 def main = {
   println("Hello, World!")
 }""")
-    assertReports DiagnosticCodes.UnknownFunction withoutEntry
+    Assert.True(withoutEntry.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{withoutEntry.Diagnostics}")
 
 [<Fact>]
 let ``nanyx/math exports int functions with their types`` () =

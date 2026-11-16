@@ -124,7 +124,7 @@ let ``Check --timings - writes the modules' checks as a tree, with a module chec
     // console host's are left out, since which of them a check reports depends on what the process checked before.
     let shape =
         (normalizeOutput outcome.StandardError).Split('\n')
-        |> Array.filter (fun line -> line.Contains ".nyx" && not (line.Contains(Hosts.console.Package + "/")))
+        |> Array.filter (fun line -> line.Contains ".nyx" && not (line.Contains(Hosts.consolePackage + "/")))
         |> Array.map (fun line ->
             let line = Regex.Replace(line, @"\S*src[\\/](\w+\.nyx)", "src/$1")
             Regex.Replace(line, @" \((\d+\.\d\ds of )?\d+\.\d\ds\)", ""))

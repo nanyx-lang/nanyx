@@ -194,6 +194,9 @@ module Compiler =
           InlinedUseContexts: Map<NodeId, TypeExpr>
           /// The types of the defs the imports bring in, with the contexts they require (see `ImportedContextTypes`).
           ImportedContextTypes: Map<SymbolId, Ty * Ty list>
+          /// Whether a module declares contexts the module's host provides, which importing it makes ambient (see
+          /// `providesContexts`).
+          ProvidesContexts: ModuleOrigin -> bool
           /// The members of the ambient contexts carried in with imported functions, with the definitions that stand in for them.
           CarriedAmbientMembers: AmbientMember list
           /// The modules that bring each name in unqualified, by the module's key, with the name of the module.
@@ -202,6 +205,34 @@ module Compiler =
           ImportedFiles: Map<SymbolId, ImportedFile>
           /// The module's re-exports as each is merged, with the module it re-exports from.
           ReExports: ReExported list }
+
+    /// The modules each host's prelude re-exports from, by the prelude's file, as `originKey`s.
+    let private preludeSources = System.Collections.Concurrent.ConcurrentDictionary<string, Set<string>>()
+
+    /// Whether a module, by its origin, declares contexts that `host` provides: those its prelude re-exports from, as
+    /// the console host's re-exports `nanyx/console`'s `Console`. Importing one binds the names of its contexts' members,
+    /// so that the contexts are ambient. A module with no host, a library's, sees no context as a host's.
+    let private providesContexts (host: Host option) (hostModules: PackageModules option) : ModuleOrigin -> bool =
+        let sources =
+            match host, hostModules with
+            | Some host, Some modules ->
+                match host.Prelude |> Option.bind (fun prelude -> modules.Modules |> Map.tryFind prelude) with
+                | Some (file :: _) ->
+                    preludeSources.GetOrAdd(file, fun file ->
+                        match parseModuleFile file (File.ReadAllText file) with
+                        | Result.Ok items ->
+                            ModuleLinking.reExportsOf items
+                            |> List.choose (fun item ->
+                                match StandardLibrary.tryModuleName item, item.Source with
+                                | Some name, _ -> Some (originKey (StandardLibraryModule name))
+                                | None, ModuleImport name ->
+                                    PackageModules.resolveWithin modules item name |> Result.toOption |> Option.map (SourceFile >> originKey)
+                                | None, PathImport _ -> None)
+                            |> Set.ofList
+                        | Result.Error _ -> Set.empty)
+                | _ -> Set.empty
+            | _ -> Set.empty
+        fun origin -> sources.Contains (originKey origin)
 
     /// The members of the module's ambient contexts, each with the imported definition that stands in for it, as the
     /// type checker found them (see `InferState.AmbientMembers`), then those of the contexts carried in (`carried`).
@@ -230,11 +261,11 @@ module Compiler =
         // exports would be, each a name of its own, so that the context is an ambient one (see `InferModule`): code at a
         // script's top level, or in a def that infers the context, calls `readLine()`. The host supplies the instance.
         let hostMembers =
-            if Hosts.providesContexts importedOrigin then
+            if merged.ProvidesContexts importedOrigin then
                 imported.Typed.TypeDefs
                 |> Map.filter (fun name info -> info.IsContext && info.Parameters.IsEmpty && (ModuleLinking.exportedTypeNames imported.Own).Contains name)
-                |> Map.values
-                |> Seq.collect (fun info ->
+                |> Map.toSeq
+                |> Seq.collect (fun (contextName, info) ->
                     match Unifier.unalias info.Underlying with
                     | TyRecord members ->
                         members
@@ -244,14 +275,18 @@ module Compiler =
                             |> Map.tryFind memberName
                             |> Option.bind (fun memberSymbol -> imported.Typed.Symbols |> Map.tryFind memberSymbol)
                             |> Option.map (fun declared ->
-                                memberName, ty, { Id = SymbolId.next (); Name = memberName; Kind = TopLevelValue; Declaration = declared.Declaration; IsExported = true }))
+                                contextName, (memberName, ty, { Id = SymbolId.next (); Name = memberName; Kind = TopLevelValue; Declaration = declared.Declaration; IsExported = true })))
                     | _ -> Seq.empty)
                 |> List.ofSeq
             else []
+        // An import that selects such a context selects its members too.
+        let contextOfMember = hostMembers |> List.map (fun (context, (name, _, _)) -> name, context) |> Map.ofList
+        let hostMembers = hostMembers |> List.map snd
         let exportedValues = SyntaxTree.exportedValueNames imported.Own |> Set.union (hostMembers |> List.map (fun (name, _, _) -> name) |> Set.ofList)
         // An import brings in every export, or only those it selects.
         let selected = item.Selection |> Option.map (ModuleLinking.selectedExports imported)
-        let isSelected (name: string) = selected |> Option.forall (fun selected -> selected.Contains name)
+        let isSelected (name: string) =
+            selected |> Option.forall (fun selected -> selected.Contains name || contextOfMember |> Map.tryFind name |> Option.exists selected.Contains)
         let unqualifiedSources =
             if qualifier.IsNone && importedKey <> preludeKey then
                 let moduleName =
@@ -378,7 +413,7 @@ module Compiler =
                 HiddenTypeNames = carried @ carriedParameterised |> List.fold (fun acc (name, _) -> acc |> Set.add name) hiddenTypeNames
                 CarriedAmbientContexts = carried |> List.fold (fun acc (name, _) -> acc |> Set.add name) state.CarriedAmbientContexts
                 HostContexts =
-                    if Hosts.providesContexts importedOrigin then
+                    if merged.ProvidesContexts importedOrigin then
                         exportedTypeDefs
                         |> Map.filter (fun name info -> info.IsContext && info.Parameters.IsEmpty && isSelected name)
                         |> Map.keys
@@ -476,15 +511,27 @@ module Compiler =
     /// `typecheckModule`, unreported.
     and private checkModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
-        // A package's files run under its host (see `PackageModules.Host`), and a library's under none; a loose script runs
-        // under the console host. The host is a module of a package the compiler ships, which the import of it and the
-        // host's own imports resolve in.
-        let host = match checkedModules.Package with Some package -> package.Host | None -> Some Hosts.console
-        let hostModules = host |> Option.bind (fun host -> ShippedPackages.tryModules host.Package)
+        // The build's host: the package's (see `PackageModules.Host`), none for a library, or the console host for a loose
+        // script or source. Its package's modules are where the import of the host, and the host's own imports, resolve.
+        let buildHost, hostModules =
+            match checkedModules.Package with
+            | Some package -> package.Host, package.HostPackage
+            | None -> Some HostPackages.console.Value, ShippedPackages.tryModules Hosts.consolePackage
+        let inHostPackage (path: string) = hostModules |> Option.exists (fun modules -> PackageModules.contains modules path)
         let isHost (path: string) =
-            Option.map2 (fun (host: Host) (modules: PackageModules) -> modules.Modules |> Map.tryFind host.Module) host hostModules
+            Option.map2 (fun (host: Host) (modules: PackageModules) -> modules.Modules |> Map.tryFind host.Module) buildHost hostModules
             |> Option.flatten
             |> Option.exists (List.exists (PackageModules.samePath path))
+        // The module's own host: the build's, for a module of the program itself, which sees the host's prelude and may
+        // declare its `@entry`. A file of a package the program depends on, or of the host's package, is a library's, and
+        // a module of the standard library is the standard library's: none.
+        let host =
+            match origin with
+            | StandardLibraryModule _ -> None
+            | SourceFile path when inHostPackage path -> None
+            | SourceFile path when checkedModules.Package |> Option.exists (fun package -> not (PackageModules.contains package path)) -> None
+            | SourceFile _
+            | InMemory -> buildHost
         let resolved =
             parseWithDocs (checkedModules.FileName origin) source
             // A module split across files is checked as one: its other files' items join this one's.
@@ -506,7 +553,6 @@ module Compiler =
                         // A module's statements run as an entry point of their own (see `Scripts`).
                         let desugared, script =
                             match origin, entries with
-                            | SourceFile path, _ when isHost path -> desugared, None
                             | (SourceFile _ | InMemory), _ when host.IsSome -> Scripts.asEntry host.Value (fun span -> (NyxCompiler.InferState.blockAround moduleBlocks span).IsSome) entries desugared
                             | _ -> desugared, None
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
@@ -522,12 +568,19 @@ module Compiler =
             // An import of a `module name =` block of this file is not of another file: inference resolves it.
             let blockImported = NyxCompiler.Infer.blockImports moduleBlocks desugared |> List.map _.Import
             let fileImports = SyntaxTree.collectImports desugared |> List.filter (fun item -> not (List.contains item blockImported))
+            // Then the host's prelude, in a module of the program (see `Host.Prelude`).
+            let hostPrelude =
+                host
+                |> Option.bind _.PreludeImport
+                |> Option.map (fun prelude -> ImportItem.synthetic (ModuleImport prelude) None)
+                |> Option.toList
             let imports =
                 if key = preludeKey then
                     fileImports
                 else
                     ImportItem.synthetic (ModuleImport (StandardLibrary.importPrefix + StandardLibrary.preludeModuleName)) None
-                    :: fileImports
+                    :: hostPrelude
+                    @ fileImports
             let initial =
                 { Env =
                     match origin with
@@ -550,6 +603,7 @@ module Compiler =
                   InlinedInstances = Map.empty
                   InlinedUseContexts = Map.empty
                   ImportedContextTypes = Map.empty
+                  ProvidesContexts = providesContexts host hostModules
                   CarriedAmbientMembers = []
                   UnqualifiedSources = Map.empty
                   ImportedFiles = Map.empty

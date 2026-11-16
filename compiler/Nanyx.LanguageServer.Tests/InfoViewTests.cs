@@ -78,8 +78,10 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var inDef = Assert.Single(Section(await InfoViewAt(uri, 2, 16), "function", "contexts"));
         Assert.Equal(("Console", "inferred", new Range(2, 4, 2, 9)), (inDef.Text, inDef.Detail, inDef.Location?.Range));
-        var atTopLevel = Assert.Single(Section(await InfoViewAt(uri, 3, 2), "module", "contexts"));
-        Assert.Equal(("Console", "runtime", null), (atTopLevel.Text, atTopLevel.Detail, atTopLevel.Location));
+        // The runtime supplies every context of the host's prelude at the top level.
+        var topLevel = Section(await InfoViewAt(uri, 3, 2), "module", "contexts");
+        Assert.Equal([("Console", "runtime", null), ("Env", "runtime", null)], topLevel.Select(item => (item.Text, item.Detail, item.Location)));
+        var atTopLevel = topLevel.First();
         // A standard-library context shows its doc comment.
         Assert.StartsWith("The terminal: standard output", atTopLevel.Documentation);
     }
@@ -385,7 +387,8 @@ public sealed class InfoViewTests : LanguageServerTestBase
         var view = await InfoViewAt(uri, 1, 1);
 
         Assert.Equal([("cursor", "At the cursor"), ("module", "this module")], view.Scopes.Select(scope => (scope.Kind, scope.Heading)));
-        Assert.Equal(["names"], view.Scopes[1].Sections.Select(section => section.Id));
+        // The module's contexts are the ones the runtime supplies, from the host's prelude.
+        Assert.Equal(["names", "contexts"], view.Scopes[1].Sections.Select(section => section.Id));
     }
 
     [Fact]

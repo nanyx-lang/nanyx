@@ -15,17 +15,21 @@ let private manifestOf (name: string) =
 
 [<Fact>]
 let ``The console host is shipped beside the compiler, at the compiler's version`` () =
-    let manifest = manifestOf Hosts.console.Package
-    Assert.Equal(Hosts.console.Package, manifest.Name)
+    let manifest = manifestOf Hosts.consolePackage
+    Assert.Equal(Hosts.consolePackage, manifest.Name)
     Assert.Equal(Toolchain.version, manifest.Version)
     // `ShippedPackages` reads a shipped package's sources from its `src` directory.
     Assert.Equal<string list>([ "src/**/*.nyx" ], manifest.Sources)
-    Assert.Equal<string list>([ Hosts.console.Module ], manifest.PublicModules |> List.map fst)
+    Assert.Equal<string list>([ "console.host"; "console.prelude" ], manifest.PublicModules |> List.map fst)
+    // It declares that it is a host, with its root module and its prelude.
+    let host = manifest.Declares.Value
+    Assert.Equal(("console.host", Some "console.prelude"), (host.Module, host.Prelude))
+    Assert.Equal(host, HostPackages.console.Value)
 
 [<Fact>]
 let ``The console host's module is one of the shipped package's`` () =
-    let modules = (ShippedPackages.tryModules Hosts.console.Package).Value
-    Assert.True(modules.Modules.ContainsKey Hosts.console.Module, $"%A{modules.Modules}")
+    let modules = (ShippedPackages.tryModules Hosts.consolePackage).Value
+    Assert.True(modules.Modules.ContainsKey HostPackages.console.Value.Module, $"%A{modules.Modules}")
 
 [<Fact>]
 let ``A package the compiler doesn't ship has no modules`` () =
@@ -33,6 +37,6 @@ let ``A package the compiler doesn't ship has no modules`` () =
 
 [<Fact>]
 let ``A shipped package's file is named after its package, wherever the compiler is`` () =
-    let file = Path.Combine(ShippedPackages.directoryOf Hosts.console.Package, "src", "console.host.nyx")
+    let file = Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "src", "console.host.nyx")
     Assert.Equal(Some "nanyx.console/src/console.host.nyx", ShippedPackages.tryDisplay file)
     Assert.Equal(None, ShippedPackages.tryDisplay (Path.GetFullPath "main.nyx"))

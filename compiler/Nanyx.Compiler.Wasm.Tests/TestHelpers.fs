@@ -178,7 +178,7 @@ type TempDirectory() =
 /// what it printed and whether it wrote the program to out/app.wat.
 /// A manifest's `host` entry naming the console host the compiler ships, at its version: what an application with an
 /// `@entry` writes.
-let consoleHostEntry = $"host = (package = \"{Hosts.console.Package}\", version = \"{Toolchain.version}\")"
+let consoleHostEntry = $"host = (package = \"{Hosts.consolePackage}\", version = \"{Toolchain.version}\")"
 
 let nanyxOnPackage (files: (string * string) list) (arguments: string list) : RunOutcome * bool =
     use directory = new TempDirectory()
@@ -358,7 +358,7 @@ def writeStdout: [HostRuntime] string -> () = { text ->
 /// `source` checked as the console host's file is (see `ShippedPackages`), so that it may require `HostRuntime`, and compiled
 /// with `options`; any diagnostic fails.
 let hostWatWith (options: WasmOptions) (source: string) =
-    let consoleHostFile = Path.Combine(ShippedPackages.directoryOf Hosts.console.Package, "src", "console.host.nyx")
+    let consoleHostFile = Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "src", "console.host.nyx")
     match Compiler.compileFrom Linters.none (SourceFile consoleHostFile) (normalized source) with
     | { Typed = Some typed } as result when result.Diagnostics.IsEmpty -> transpileTypedModuleWithOptions options typed |> fst
     | result -> failwith $"""Compile error: {result.Diagnostics |> List.map _.Message |> String.concat "\n"}"""
