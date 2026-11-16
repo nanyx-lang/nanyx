@@ -60,12 +60,19 @@ How it works:
   with no special case.
 - A local def isn't generalised over a scope the lambdas around it use (`Infer.generalizeDef`), so `def c = open(...)`
   keeps the block's scope.
+- A type whose written representation holds a value of a scope declares that scope's context
+  ([#1604](https://github.com/nanyx-lang/nanyx/issues/1604)), as a function type never hides one:
+  `type MStack(a) = [Memory] private MRef(list(a))`. Its body reads the context's scope as the type's own,
+  `TypeDefInfo.Scope`, which `freshNominalType` and `nominalType` replace with the value's, so all one value holds
+  belongs to one block. `TypeResolution.undeclaredHeldScopes` reports a context the body holds and the declaration
+  doesn't write as NYX0256, with a fix that writes it before the `private` or `protected` (`TypeDefModifier.KindAt`).
+  It counts the hidden scope arguments of the nominal types the body names, but not what a nominal type is made of,
+  nor the contexts a function type requires. A type argument given at a use counts for nothing.
+- The standard library declares `MRef`, `MArray`, `MStack` and `MList` this way (`type MRef(a) = [Memory] private box(a)`,
+  [Mutation](./mutation#planned)), with no special case for them.
 
 Still open:
 
-- The standard library declares `MRef`, `MArray`, `MStack` and `MList` this way (`type MRef(a) = [Memory] protected (...)`,
-  [Mutation](./mutation#planned)), with no special case for them: [#1491](https://github.com/nanyx-lang/nanyx/issues/1491)
-  and [#1493](https://github.com/nanyx-lang/nanyx/issues/1493).
 - A type in a scope is matched to its context by the context's name where it's declared, so a module that imports both
   under an alias, `t.Cursor` and `[t.Tx]`, gets a `Cursor` whose written scope is not the signature's `t.Tx`.
 

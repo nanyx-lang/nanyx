@@ -13,7 +13,7 @@ module mlist
 import nanyx/mref
 
 -- The elements last first, so that `add` puts one in front, and how many there are.
-export type MList(a) = private MRef((reversed: list(a), count: int))
+export type MList(a) = [Memory] private MRef((reversed: list(a), count: int))
 
 --| A new list with nothing in it.
 export def MList.empty: [Memory] () -> MList(a) = {

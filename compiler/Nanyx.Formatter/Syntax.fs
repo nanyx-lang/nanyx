@@ -5,7 +5,7 @@ open System.Collections.Generic
 open Parser.Program
 
 /// The items with what formatting may change taken out: each destructuring temporary, whose name says where its def is written, is renamed by the order it first
-/// appears in, imports and a field's attributes lose their spans (the only spans syntax equality looks at), imports in a row become one and are
+/// appears in, imports, a field's attributes and a type's modifiers lose their spans (the only spans syntax equality looks at), imports in a row become one and are
 /// sorted (see `ImportOrder`), and a
 /// lambda whose body is a block of one expression has that expression as its body, as does the match that takes a
 /// lambda's pattern parameters apart.
@@ -127,7 +127,13 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
         | TypeFieldAttribute(n, argument, _) -> TypeFieldAttribute(n, Option.map expr argument, SourceSpan.none)
 
     and typeDef (n, modifiers, parameters, body) =
-        n, modifiers, parameters |> List.map (fun (p, t) -> p, Option.map typeExpr t), typeExpr body
+        let modifier m =
+            match m with
+            | KindAt _ -> KindAt SourceSpan.none
+            | Scoped _ -> Scoped SourceSpan.none
+            | InScopeOf contexts -> InScopeOf (contexts |> List.map (fun (context, _) -> context, SourceSpan.none))
+            | Export | Context | Private | Protected -> m
+        n, List.map modifier modifiers, parameters |> List.map (fun (p, t) -> p, Option.map typeExpr t), typeExpr body
 
     and statement (s: Statement) : Statement =
         let kind =

@@ -200,7 +200,7 @@ def top = memory {
 }
 ```
 
-An `MList` from [`nanyx/mlist`](../stdlib/mlist) grows at the end with `add`, and reads and sets its elements by index. Both are written in Nanyx over `MRef`, so every operation requires the block's `Memory`, and neither can leave the block.
+An `MList` from [`nanyx/mlist`](../stdlib/mlist) grows at the end with `add`, and reads and sets its elements by index. Both are written in Nanyx over `MRef`, so every operation requires the block's `Memory`, and neither can leave the block. Each says so in its declaration, `type MStack(a) = [Memory] private MRef(list(a))`, as a type of your own that holds an `MRef` or an `MArray` must ([Types in a scope](./contexts#types-in-a-scope)).
 
 An `MArray` from [`nanyx/marray`](../stdlib/marray) is a fixed-length array whose elements `set` changes in place, laid out in one block as an [`Array`](../stdlib/array) is. It belongs to its block too. Converting between an `Array` and an `MArray` copies, so an `Array` never changes.
 
