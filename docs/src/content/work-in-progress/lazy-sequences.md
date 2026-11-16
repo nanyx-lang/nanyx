@@ -14,8 +14,10 @@ order: 25
   may be infinite.
 - A sequence is a value that, when asked, gives back either `#done` or its first element and the rest of the sequence.
   Asking does not change anything, so a sequence is an ordinary immutable value.
-- A sequence whose steps need contexts says so in its type, `[k] seq(a)`, as any value does under
-  [context-qualified types](./context-qualified-types).
+- A sequence whose steps need contexts says so in its type, `[k] seq(a)`: `seq` is declared generic in contexts,
+  `type seq(a) = [k] protected (...)`, as any user's type can be
+  ([Context-qualified types](./context-qualified-types#a-context-variable-the-type-is-generic-in-contexts),
+  [#1525](https://github.com/nanyx-lang/nanyx/issues/1525)).
 - A function that takes "anything that can be iterated" requires a context, `Iterable(c, a)`, which a type gets by
   attaching a `toSeq`. A list is never a sequence by subtyping or by implicit conversion.
 - Sequences are built with `Seq.unfold` or with a `seq { ... }` workflow whose `yield` keyword produces the elements.
@@ -188,10 +190,10 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
 - **Iterable values that need contexts.** If `c` is a `[k] seq(a)`, `toSeq` has to keep `k` in its result. Either the
   context's member carries `c`'s own requirements, or, to start with, `Iterable` takes only pure values and the
   `Seq` functions also take `[k] seq(a)` directly.
-- **How a value's contexts reach its members.** A `[k] seq(a)` is a value whose `moveNext` needs `k`. How a value's
-  requirements show on the functions inside it is for
-  [context-qualified types](./context-qualified-types) and [#768](https://github.com/nanyx-lang/nanyx/issues/768) to
-  settle.
+- ~~**How a value's contexts reach its members.**~~ Settled in
+  [#1059](https://github.com/nanyx-lang/nanyx/issues/1059): `seq`'s declaration names `k`, and its pull function's type
+  is `[k] () -> ...`, so the contexts are on the function, where calling it requires them
+  ([#1525](https://github.com/nanyx-lang/nanyx/issues/1525)).
 - **The context's name.** The compiler matches the member, `toSeq`, by name; the context's own name is free.
   `Iterable` reads well in signatures; `ToSeq` would sit beside `ToString` and `FromString`.
 - **An instance's second parameter.** Building an instance from attached definitions has only been used for contexts
