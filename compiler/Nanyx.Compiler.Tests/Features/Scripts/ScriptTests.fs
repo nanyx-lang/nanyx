@@ -66,9 +66,7 @@ let ``A #! line, comments and blank lines can come among the directives`` () =
 [<InlineData("::linters.default.unusedBindings", "NYX0009", "::linters.default.unusedBindings needs a severity")>]
 [<InlineData("::linters.default = \"error\"", "NYX0009", "::linters.default is a table, so it takes no value")>]
 [<InlineData("::linters", "NYX0009", "::linters takes a linter")>]
-[<InlineData("::dependencies.acme.json = \"1.2\"", "NYX0011", "::dependencies is not supported yet")>]
-[<InlineData("::dependencies.acme.json", "NYX0009", "::dependencies takes a package and its version")>]
-[<InlineData("::colour = \"red\"", "NYX0009", "unknown directive ::colour; the tables are '::linters', '::formatter', '::dependencies'")>]
+[<InlineData("::colour = \"red\"", "NYX0009", "unknown directive ::colour; the tables are '::linters', '::formatter', '::host', '::dependencies'")>]
 [<InlineData("::linter default", "NYX0009", "a directive is a manifest's dotted key after '::'")>]
 [<InlineData("::", "NYX0009", "a directive is a manifest's dotted key after '::'")>]
 let ``A directive that is not valid is an error at its line`` (directive: string, code: string, message: string) =

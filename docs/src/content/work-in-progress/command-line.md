@@ -48,7 +48,7 @@ nanyx hello
 - `format` rewrites the files that are not formatted, or with `--check` lists them and exits with 1. With `--stdin`
   it formats standard input to standard output (see [Formatter](./formatter)).
 - `stdlib-docs` writes the generated reference of each standard-library page in the directory it is given,
-  `docs/src/content/stdlib`, from the library's doc comments, or with `--check` lists the pages that are out of date
+  `docs/src/content/stdlib`, from the doc comments of the library and of the packages the compiler ships, or with `--check` lists the pages that are out of date
   and exits with 1. It also fails for a file of the library that has no page, and a page that has no file (see
   [Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)).
 - `search` searches the standard library by name, by type, or both, and prints what matches, best first: each
@@ -209,7 +209,7 @@ The package's `@entry` runs under the host its manifest's `host` names,
 host package the compiler ships, `--host nanyx.console`, or the directory of one, `--host ../acme.host`. A `--host`
 that the compiler doesn't ship, or whose manifest doesn't declare it a host, is a usage error that names it, as a
 manifest's `host` is an error, and so is `settings` for a host; `--host` on a single `.nyx` file is a usage error,
-since a script always runs under the console host.
+since a script names its host with a `::host` directive.
 
 `nanyx new acme.demo` makes a package in a new directory, `demo` (the name's last segment) unless another
 is given: `acme.demo.nyxp`, with the official linter on and the console host, both at the compiler's version, and

@@ -8,7 +8,7 @@ Conversions between `int`, `float` and the [sized number types](../advanced/size
 
 # Reference
 
-<!-- The reference below is generated from the doc comments in stdlib/ by `nanyx stdlib-docs`: edit those, not this. -->
+<!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->
 
 ## `int.toI8`
 

@@ -99,7 +99,7 @@ module Package =
                 | several ->
                     Result.Error [ AboutPackage $"""{manifest.Path}: a package can have one @entry, but these files each declare one: {several |> List.map display |> String.concat ", "}""" ]
         let publicModules = publicModuleErrors manifest files |> List.map AtManifest
-        match entry, dependenciesIn reached ((manifest.Path, manifest.Name) :: chain) manifest, hostIn reached manifest.Host with
+        match entry, dependenciesIn reached ((manifest.Path, manifest.Name) :: chain) manifest.Dependencies, hostIn reached manifest.Host with
         | Result.Ok entry, Result.Ok dependencies, Result.Ok host when publicModules.IsEmpty ->
             Result.Ok
                 { Manifest = manifest
@@ -135,10 +135,10 @@ module Package =
                         reached.[found.Name] <- path
                         ofManifestIn reached [] found |> Result.map (fun package -> Some (host, package))
 
-    /// The packages `manifest` depends on, each read with its own dependencies, or what is wrong: a directory with no
+    /// The packages `dependencies` lists, each read with its own dependencies, or what is wrong: a directory with no
     /// manifest, a package named other than its dependant names it, one that depends on itself through others, or one
-    /// reached by two paths. `chain` holds `manifest` itself first.
-    and private dependenciesIn (reached: Reached) (chain: (string * string) list) (manifest: Manifest) : Result<Package list, Problem list> =
+    /// reached by two paths. `chain` holds the manifest that lists them first, if one does.
+    and private dependenciesIn (reached: Reached) (chain: (string * string) list) (dependencies: Dependency list) : Result<Package list, Problem list> =
         let error code span message = Result.Error [ AtManifest(Diagnostics.at code span message) ]
         let read (dependency: Dependency) =
             match manifestIn dependency.Directory with
@@ -164,7 +164,7 @@ module Package =
                     | _ ->
                         reached.[found.Name] <- path
                         ofManifestIn reached chain found
-        manifest.Dependencies |> List.map read |> all
+        dependencies |> List.map read |> all
 
     /// The packages of a build whose root is `manifest`: none read yet but the root.
     let private reachedFrom (manifest: Manifest) : Reached =
@@ -189,7 +189,7 @@ module Package =
                 let reached = reachedFrom manifest
                 let dependencyErrors =
                     let host = match hostIn reached manifest.Host with Result.Ok _ -> [] | Result.Error problems -> problems
-                    match dependenciesIn reached [ manifest.Path, manifest.Name ] manifest with
+                    match dependenciesIn reached [ manifest.Path, manifest.Name ] manifest.Dependencies with
                     | Result.Ok _ when host.IsEmpty -> []
                     | Result.Ok _ -> host |> List.map (function AtManifest diagnostic -> diagnostic | AboutPackage message -> Diagnostics.at DiagnosticCodes.InvalidManifestValue manifest.Value.Location message)
                     | Result.Error problems ->
@@ -276,7 +276,7 @@ module Package =
             | Result.Ok manifest when selects manifest filePath ->
                 let reached = reachedFrom manifest
                 let dependencies =
-                    match dependenciesIn reached [ manifest.Path, manifest.Name ] manifest with
+                    match dependenciesIn reached [ manifest.Path, manifest.Name ] manifest.Dependencies with
                     | Result.Ok dependencies -> dependencies
                     | Result.Error _ -> []
                 let host = match hostIn reached manifest.Host with Result.Ok host -> host | Result.Error _ -> None
@@ -291,6 +291,26 @@ module Package =
                 Some (if PackageModules.contains modules filePath then modules else { modules with Files = modules.Files @ [ filePath ] })
             | _ -> None
         | _ -> None
+
+    /// The build of the script at `filePath`, which runs under the host `host` names, the console host the compiler ships
+    /// if it names none, and imports from the packages `dependencies` lists, as its `::host` and `::dependencies`
+    /// directives say (see `Script`); or what is wrong with them, each at the directive it is about, or at `span` for
+    /// what is about a package as a whole.
+    let scriptModules (filePath: string) (span: SourceSpan) (host: HostEntry option) (dependencies: Dependency list) : Result<PackageModules, Diagnostic list> =
+        let host = host |> Option.defaultValue { Package = Hosts.consolePackage; Path = None; Span = span }
+        let reached = Reached()
+        let diagnostics problems =
+            problems |> List.map (function AtManifest diagnostic -> diagnostic | AboutPackage message -> Diagnostics.at DiagnosticCodes.InvalidManifestValue span message)
+        match hostIn reached (Some host), dependenciesIn reached [] dependencies with
+        | Result.Ok (Some (host, hostPackage)), Result.Ok dependencies ->
+            Result.Ok
+                { PackageModules.ofFiles "" (Path.GetDirectoryName(Path.GetFullPath filePath)) (Some host) [] with
+                    HostPackage = Some (modules hostPackage)
+                    Dependencies = dependencies |> List.map modules
+                    Script = true }
+        | host, dependencies ->
+            let errorsOf = function Result.Error errors -> errors | Result.Ok _ -> []
+            Result.Error(diagnostics (errorsOf host @ errorsOf dependencies) |> List.distinct)
 
     /// `result`, the compile of the source file at `filePath` of the package `modules`, with the errors of a file that
     /// is not a named module of its own (see `PackageModules.fileErrors`).

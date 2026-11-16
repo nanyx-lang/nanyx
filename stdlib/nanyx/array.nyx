@@ -1,0 +1,63 @@
+--| Arrays: immutable, fixed-length sequences with constant-time indexing.
+
+  An `Array(a)` holds its elements in one block, so [`array.at`] reads any of them in the same time,
+  where `at` on a list walks to it. Nothing about an array changes once it is made, so it needs no
+  `Memory`. There is no literal for one: make it from a list with [`array.fromList`], from its
+  indices with [`array.init`], or filled with each slot's default with [`array.create`].
+
+  Each function is attached to `array`, so with `import nanyx/array` it is called as
+  `array.length(xs)`, or as `xs \length` when `xs` is known to be an array. `==` compares two arrays
+  element by element, and an array is written as a list is, `[10, 20, 30]`.
+module array
+
+--| An array of the elements of `xs`, in order.
+export def array.fromList: list(a) -> array(a) = { xs ->
+  __nanyx_array_of_list(xs)
+}
+
+--| The elements of `xs`, in order, as a list.
+export def array.toList: array(a) -> list(a) = { xs ->
+  __nanyx_array_to_list(xs)
+}
+
+--| How many elements `xs` holds.
+export def array.length: array(a) -> int = { xs ->
+  __nanyx_array_length(xs)
+}
+
+--| The element of `xs` at `index`, counting from 0, or `#none` when `index` is negative or past the
+  end.
+export def array.at: array(a), int -> #some(a) | #none = { xs, index ->
+  if index >= 0 and index < __nanyx_array_length(xs)
+    then #some(__nanyx_array_get(xs, index))
+    else #none
+}
+
+--| An array of `count` elements, the one at each index `f` of it: `array.init(3, { i -> i * i })`
+  is `[0, 1, 4]`. A `count` of 0 or less makes an empty array.
+export def array.init: [c] int, ([c] int -> a) -> array(a) = { count, f ->
+  __nanyx_array_of_list(list.init(count, f))
+}
+
+--| An array of `count` elements, each the [`Default`] of its type: `array.create(3)` of ints is
+  `[0, 0, 0]`. A `count` of 0 or less makes an empty array.
+export def array.create: [Default(a)] int -> array(a) = { count ->
+  __nanyx_array_of_list(list.init(count, { _ -> default() }))
+}
+
+--| An array of `f` of each element of `xs`, in order.
+export def array.map: [c] array(a), ([c] a -> b) -> array(b) = { xs, f ->
+  __nanyx_array_of_list(list.map(__nanyx_array_to_list(xs), f))
+}
+
+--| `step` applied to `initial` and the first element of `xs`, then to that and the second, and so
+  on to the last: `array.fold(xs, 0, { total, x -> total + x })` adds them up.
+export def array.fold: [c] array(a), b, ([c] b, a -> b) -> b = { xs, initial, step ->
+  foldFrom(xs, 0, initial, step)
+}
+
+def foldFrom: [c] array(a), int, b, ([c] b, a -> b) -> b = { xs, index, acc, step ->
+  if index >= __nanyx_array_length(xs)
+    then acc
+    else foldFrom(xs, index + 1, step(acc, __nanyx_array_get(xs, index)), step)
+}

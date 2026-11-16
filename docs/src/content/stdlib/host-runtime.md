@@ -8,7 +8,7 @@ Only a host imports `nanyx/host.runtime`, as the console host the compiler ships
 
 # Reference
 
-<!-- The reference below is generated from the doc comments in stdlib/ by `nanyx stdlib-docs`: edit those, not this. -->
+<!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->
 
 The capability a host is written on: what lets it call the foreign functions its embedder provides
 (those declared with `@extern`) and reach the module's linear memory (with `nanyx/host.memory`).

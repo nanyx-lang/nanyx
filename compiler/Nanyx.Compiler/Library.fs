@@ -511,8 +511,8 @@ module Compiler =
     /// `typecheckModule`, unreported.
     and private checkModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
-        // The build's host: the package's (see `PackageModules.Host`), none for a library, or the console host for a loose
-        // script or source. Its package's modules are where the import of the host, and the host's own imports, resolve.
+        // The build's host: the package's (see `PackageModules.Host`), none for a library, the one a script's `::host`
+        // names, or the console host for a loose script or source. Its package's modules are where the import of the host, and the host's own imports, resolve.
         let buildHost, hostModules =
             match checkedModules.Package with
             | Some package -> package.Host, package.HostPackage
@@ -530,7 +530,7 @@ module Compiler =
             match origin with
             | StandardLibraryModule _ -> None
             | SourceFile path when inHostPackage path -> None
-            | SourceFile path when checkedModules.Package |> Option.exists (fun package -> not (PackageModules.contains package path)) -> None
+            | SourceFile path when checkedModules.Package |> Option.exists (fun package -> not (PackageModules.isProgramFile package path)) -> None
             | SourceFile _
             | InMemory -> buildHost
         let resolved =

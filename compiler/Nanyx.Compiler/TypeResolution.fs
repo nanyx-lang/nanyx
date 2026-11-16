@@ -59,6 +59,7 @@ let internal isBuiltInTypeName (name: string) =
     || name = CellPassingSyntax.typeName
     || Maps.isTypeName name
     || Sets.isTypeName name
+    || Arrays.isTypeName name
 
 /// Whether the type `name` is attached to exists; `span` is where the definition's name is written.
 let internal ensureAttachedTypeExists (state: InferState) (currentModuleOpt: string option) (name: Identifier) (span: SourceSpan) : Result<unit, Diagnostic list> =
@@ -90,6 +91,7 @@ let rec attachedTypeNames (ty: Ty) : string list =
     | Seqs.SeqType _ -> [ Seqs.typeName ]
     | Maps.MapType _ -> [ Maps.typeName ]
     | Sets.SetType _ -> [ Sets.typeName ]
+    | Arrays.ArrayType _ -> [ Arrays.typeName ]
     | _ -> []
 
 /// The attached definition `x \funcName` calls: `Name.funcName` for the first name of `x`'s type that has one in
@@ -250,6 +252,8 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
             Maps.ofTypes argTys.[0] argTys.[1], current
         elif Sets.isTypeName name && argTys.Length = 1 then
             Sets.ofType argTys.[0], current
+        elif Arrays.isTypeName name && argTys.Length = 1 then
+            Arrays.ofType argTys.[0], current
         // `mut T`: a cell of the `memory` block whose `Memory` the signature writes, as `[Memory] mut int -> ()` says
         // (see `WrittenContexts.read`). A `mut cell` parameter's own annotation, which has no source, is of a scope of
         // its own: the cell given for it says which. A signature inference writes out has no source either, but what

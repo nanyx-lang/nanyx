@@ -24,7 +24,7 @@ if name == "nobody" then exit(1) else ()
 
 # Reference
 
-<!-- Written by hand from the doc comments in packages/nanyx.console.core until the generator covers the packages the compiler ships (#1505): keep it in step with them. -->
+<!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->
 
 What a program is started with, and how it ends: its command-line arguments, its environment
 variables and its exit code.
@@ -53,3 +53,4 @@ what the program was started with.
 - `exit`: Ends the program with the exit code `code`, without running the rest of it. It never returns,
   so its result is `undefined` and a call fits wherever a value of any type is expected.
 
+<!-- End of the generated reference. -->

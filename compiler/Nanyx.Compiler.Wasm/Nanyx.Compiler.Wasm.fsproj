@@ -43,6 +43,7 @@
     <Compile Include="CoreIrEquality.fs" />
     <Compile Include="CoreIrOrdering.fs" />
     <Compile Include="CoreIrHashing.fs" />
+    <Compile Include="CoreIrArrays.fs" />
     <Compile Include="CoreIrRewrite.fs" />
     <Compile Include="CoreIrSimplify.fs" />
     <Compile Include="CoreIrInline.fs" />

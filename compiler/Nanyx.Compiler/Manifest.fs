@@ -335,6 +335,21 @@ module Manifest =
             problems.Add DiagnosticCodes.InvalidManifestValue value.Location $"dependencies must be a list, [(package = ..., path = ...)], not {DataValue.describe value}"
             []
 
+    /// The host `value` names, written as a manifest's `host` is, with its `path` relative to `root`, or what is wrong
+    /// with it, as `check` reports it: how a script's `::host` directive is read (see `Script`).
+    let internal hostEntry (root: string) (value: DataValue) : Result<HostEntry, Diagnostic list> =
+        let problems = Problems()
+        match readHost problems root value, problems.All with
+        | Some entry, [] -> Result.Ok entry
+        | _, problems -> Result.Error problems
+
+    /// The packages `value` lists, written as a manifest's `dependencies` is, each `path` relative to `root`, with what is
+    /// wrong with them, as `check` reports it: how a script's `::dependencies` directives are read (see `Script`).
+    let internal dependencyEntries (root: string) (value: DataValue) : Dependency list * Diagnostic list =
+        let problems = Problems()
+        let dependencies = readDependencies problems root value
+        dependencies, problems.All
+
     /// What is wrong with a file that is not one data value, as diagnostics.
     let private dataErrors (errors: DataError list) =
         errors

@@ -237,9 +237,9 @@ public sealed class DocumentStore
     {
         _settings.CompileStarted?.Invoke(uri);
         // A file on disk gets its imports resolved through its package's modules if it is a source file of one, or
-        // else relative to itself; anything else (an untitled buffer, say) can still import the standard library. A
-        // file of the standard library is checked as the library module it is, as a build of the library checks it.
-        // The compiler names a file by its full path.
+        // else relative to itself, and through the packages its ::dependencies name; anything else (an untitled
+        // buffer, say) can still import the standard library. A file of the standard library is checked as the
+        // library module it is, as a build of the library checks it. The compiler names a file by its full path.
         var path = uri.Scheme == "file" ? FileNameOf(uri) : null;
         var read = new Dictionary<string, string>(FilePaths);
         if (path is not null && path.EndsWith(ManifestModule.extension, StringComparison.OrdinalIgnoreCase))
@@ -257,7 +257,7 @@ public sealed class DocumentStore
             var result = path is null
                 ? Compiler.compileReporting(timings, linters, text)
                 : Compiler.compileStandardLibraryFileReporting(timings, linters, path, text)?.Value
-                    ?? PackageModule.compileSourceReading(timings, Microsoft.FSharp.Core.FuncConvert.FromFunc((string file) => ReadFile(file, read)), linters, path, text);
+                    ?? Script.compileSourceReading(timings, Microsoft.FSharp.Core.FuncConvert.FromFunc((string file) => ReadFile(file, read)), directives, linters, path, text);
             LogCompiled(uri, stopwatch.Elapsed, timings);
             return new OpenDocument(text, path ?? string.Empty, Script.withDirectives(directives, result), null) { Sources = read };
         }

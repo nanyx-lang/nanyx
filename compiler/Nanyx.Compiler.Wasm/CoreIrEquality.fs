@@ -32,6 +32,7 @@ let private needsFunction (ty: IrType) =
     | IrBox
     | IrError
     | IrSelf
+    | IrArray _
     | IrWord -> false
 
 /// The types of the (first) operands of the calls to the runtime helper `helper` in `functions`, and the parts of those types
@@ -93,6 +94,8 @@ let private compare (ty: IrType) (loadA: string list) (loadB: string list) : str
     | IrBox
     | IrError
     | IrSelf
+    // Two arrays are compared by the `==` derived for them (see `StructuralInstances`).
+    | IrArray _
     | IrWord -> internalError $"an equality of {IrType.show ty}, which has none"
 
 /// Returns 0 from the function unless the code before it left 1.

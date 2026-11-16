@@ -23,7 +23,7 @@ println(math.min("pear", "apple"))
 
 # Reference
 
-<!-- The reference below is generated from the doc comments in stdlib/ by `nanyx stdlib-docs`: edit those, not this. -->
+<!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->
 
 Numeric utilities.
 

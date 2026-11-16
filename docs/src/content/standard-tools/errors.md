@@ -150,18 +150,6 @@ export def total = 1
 
 To fix it, move the setting to the package's manifest, and remove the directive.
 
-# NYX0011: Unsupported directive
-
-A `::` directive is one the compiler knows, but does not support in a script yet.
-
-```nanyx
-::dependencies.acme.json = "1.2"  -- error NYX0011: ::dependencies is not supported yet: ...
-
-def total = 1
-```
-
-To fix it, make the script a package, whose manifest can name its dependencies.
-
 # NYX0012: Code in a module block
 
 A module block (`module name =`) holds code to run. A block can only hold definitions, types and imports; code to run

@@ -29,6 +29,9 @@ type IrType =
     | IrRecord of (string * IrType) list
     /// A list of values of this type: 0 when empty, else a pointer to a cell of (head, tail).
     | IrList of IrType
+    /// An array of values of this type: a pointer to a block of its length, an `i32`, then its elements one after
+    /// another, each stored as a list cell's head is (see `CoreIrLayout.arrayElementOffset`).
+    | IrArray of IrType
     /// A function value: a closure block holding the function's table slot and what it captures. The input is a
     /// record of the parameters when there are several, as a function's type has it. The members are those of the
     /// contexts the function requires where it is called, by key, each with its type: a call passes them after its
@@ -289,6 +292,7 @@ module IrType =
             | IrTags tags -> IrTags(tags |> List.map (fun (name, payload) -> name, Option.map replace payload))
             | IrRecord fields -> IrRecord(fields |> List.map (fun (name, fieldTy) -> name, replace fieldTy))
             | IrList element -> IrList(replace element)
+            | IrArray element -> IrArray(replace element)
             | IrFunction(input, output, members) ->
                 IrFunction(replace input, replace output, members |> List.map (fun (key, memberTy) -> key, replace memberTy))
             | IrInt
@@ -345,9 +349,10 @@ module IrType =
             | _ -> parameterNames.Length
         values + members
 
-    /// Whether a value of `ty` is, or holds, a tag or a function, which have no order.
+    /// Whether a value of `ty` is, or holds, a tag, a function or an array, which have no order.
     let rec holdsUnordered (ty: IrType) =
         match ty with
+        | IrArray _
         | IrTags _
         | IrFunction _
         | IrBox
@@ -389,6 +394,7 @@ module IrType =
             let shown = fields |> List.map (fun (name, fieldTy) -> $"{name}: {show fieldTy}") |> String.concat ", "
             $"({shown})"
         | IrList element -> $"list({show element})"
+        | IrArray element -> $"array({show element})"
         | IrFunction(input, output, []) -> $"({show input} -> {show output})"
         | IrFunction(input, output, members) ->
             let keys = members |> List.map (fst >> ContextMemberKey.text) |> String.concat ", "
@@ -413,6 +419,7 @@ module IrType =
             |> String.concat "_"
             |> sprintf "rec_%s"
         | IrList element -> $"list_{mangle element}"
+        | IrArray element -> $"array_{mangle element}"
         | IrFunction(input, output, []) -> $"fn_{mangle input}_to_{mangle output}"
         | IrFunction(input, output, members) ->
             let keys = members |> List.map (fst >> ContextMemberKey.text) |> String.concat "_"

@@ -33,6 +33,9 @@ module InterpolationHoles =
     /// The prelude function the derived `toString` of a set calls, with the set and what writes an element.
     let setFunction = "__setToString"
 
+    /// The prelude function the derived `toString` of an array calls, with the array and what writes an element.
+    let arrayFunction = "__arrayToString"
+
     /// Whether a call to `calleeName` is a hole's.
     let isHole (calleeName: Identifier) = calleeName = holeFunction
 
