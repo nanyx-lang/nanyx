@@ -28,7 +28,7 @@ are chosen, what a published package is, and where it lives.
 | Module resolution | Imports by package and module name, `export module`, direct-dependency-only imports |
 | Version resolution | Choosing one version of each package, the lockfile, error messages when no choice works |
 | Package cache | Downloading, verifying and storing packages on the user's machine |
-| CLI | `nanyx new`, `add`, `restore`, `build`, `run` (without a file), `publish`, `yank` |
+| CLI | `nanyx new`, `migrate`, `install`, `pull`, `build`, `run` (without a file), `publish`, `yank` |
 | Package index | The service or repository that maps a name and version to an artifact |
 | Publishing | Checks a package must pass before it is accepted, including the API compatibility check |
 | Editor | The language server and extension resolving packages the way the CLI does |
@@ -57,7 +57,7 @@ Local packages work: a package and the packages it depends on by path are built,
   `out/<name>.wat`. `nanyx new` makes a package (`NewPackage.fs`). The language server reads the manifest's linter
   configuration too. Path dependencies work (`Package.dependenciesIn`): each is read with its own, and a directory without a manifest, a
   name that doesn't match, a cycle (`NYX0027`) or a package reached by two paths (`NYX0028`) is an error; a
-  dependency's `version` is refused (`NYX0024`). There is no `.nyxproj` or `restore`. The formatter
+  dependency's `version` is refused (`NYX0024`). There is no `.nyxproj`. `nanyx migrate` makes a package of scripts, `nanyx pull` checks and lists its dependencies, and `nanyx install` adds one; for a package named by its version, `pull` and `install` are stubs until downloading exists ([#1471](https://github.com/nanyx-lang/nanyx/issues/1471), [The nanyx command](./command-line#packages)). The formatter
   reads the manifest's `formatter` field itself.
 - **The compiler ships packages as source directories** beside it (`ShippedPackages`): the console host,
   `packages/nanyx.console`, at the compiler's version, which a manifest's `host` names at that version exactly
@@ -97,7 +97,7 @@ Local packages work: a package and the packages it depends on by path are built,
 
 # Goals
 
-- `nanyx add acme.json` followed by `nanyx run` works on a clean machine, and gives the same result on every
+- `nanyx install acme.json` followed by `nanyx run` works on a clean machine, and gives the same result on every
   machine that has the same lockfile.
 - Publishing a version takes one command and needs no approval from a person. Only registering a package's name
   is reviewed, once.
@@ -148,7 +148,7 @@ how a claim survives a GitHub rename (it is kept by account ID), how organisatio
   [#859](https://github.com/nanyx-lang/nanyx/issues/859)), using
   [PubGrub](https://github.com/dart-lang/pub/blob/master/doc/solver.md) (as Dart and uv do). Its main attraction is that when
   there is no solution it explains why in plain sentences, which matches the error-message principles.
-- `nanyx.lock` records the exact version and SHA-256 of every package in the build. It is written by `restore`,
+- `nanyx.lock` records the exact version and SHA-256 of every package in the build. It is written by `pull`,
   `add` and `build`, is committed, and is the only input a build needs from the network.
 - Only direct dependencies can be imported, as the docs say. The resolver still sees the whole graph.
 
@@ -277,7 +277,7 @@ the network.
 ## The editor
 
 The language server resolves imports exactly as the CLI does, from the manifest, lockfile and cache. When the
-manifest changes, the extension offers to run `nanyx restore`. Go-to-definition into a dependency opens the
+manifest changes, the extension offers to run `nanyx pull`. Go-to-definition into a dependency opens the
 cached source read-only.
 
 ## Local packages first
@@ -296,7 +296,7 @@ Decided by the maintainer. Packaging is built in two halves, so that hosts and l
   - **Projects** (`.nyxproj`, project references) wait until a workspace of several packages needs them
     ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
 - **The manifest is Nanyx** ([The package manifest](./package-manifest)), so path dependencies are added to that form.
-- **Remote packages, later:** `.nyxpkg`, the cache, `nanyx.lock`, resolving versions, `nanyx add` and `restore`,
+- **Remote packages, later:** `.nyxpkg`, the cache, `nanyx.lock`, resolving versions, `nanyx install` and `pull`,
   publishing and `api.json`. None of this page's open questions block the local half.
 
 # Plan
@@ -317,14 +317,14 @@ Local packages first (items 3a to 3c), then remote packages. Each produces somet
    - Projects (`.nyxproj`) later ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
 4. **The lockfile and the cache.** `nanyx.lock`, the `.nyxpkg` format, verification and the per-user cache, tested
    against a local directory acting as an index.
-5. **Resolution.** PubGrub over the index protocol, with error messages for conflicts; `nanyx add` and `restore`.
+5. **Resolution.** PubGrub over the index protocol, with error messages for conflicts; `nanyx install` and `pull`.
 6. **The index.** Done ([#209](https://github.com/nanyx-lang/nanyx/issues/209)): `nanyx-lang/packages` on GitHub
    Pages, with the registration check, the release sync and the `nanyx` namespace reserved. Not done: recording
    owners' account IDs, and mirroring artifacts.
 7. **Publishing.** `nanyx publish` and `yank`; `api.json`; the API comparison and version check
    ([#865](https://github.com/nanyx-lang/nanyx/issues/865), [#1470](https://github.com/nanyx-lang/nanyx/issues/1470)).
    `export module` ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457), done) decides what the API is.
-8. **Editor support.** Resolve packages in the language server; restore from the extension.
+8. **Editor support.** Resolve packages in the language server; pull from the extension.
 9. **First packages.** Publish at least one official package (`nanyx.json`, say) end to end before launch, to
    prove the whole path.
 

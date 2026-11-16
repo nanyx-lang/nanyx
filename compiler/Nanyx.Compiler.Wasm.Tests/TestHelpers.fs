@@ -145,6 +145,21 @@ let private command (arguments: string list) : Shell -> int =
     | "wasm" :: inputFile :: rest ->
         let outputPath, release, _, _, _ = options (null, false, false, null, []) rest
         fun shell -> CliCommands.WasmIn(shell, inputFile, outputPath, release)
+    | "migrate" :: rest ->
+        let name, path =
+            match rest with
+            | "--name" :: name :: path -> name, path
+            | path -> null, path
+        fun shell -> CliCommands.MigrateIn(shell, name, Array.ofList path)
+    | "pull" :: path -> fun shell -> CliCommands.PullIn(shell, Array.ofList path)
+    | "install" :: package :: rest ->
+        let rec installOptions (version: string, directory: string) (rest: string list) =
+            match rest with
+            | "--version" :: version :: rest -> installOptions (version, directory) rest
+            | "--path" :: directory :: rest -> installOptions (version, directory) rest
+            | _ -> version, directory
+        let version, directory = installOptions (null, null) rest
+        fun shell -> CliCommands.InstallIn(shell, package, version, directory)
     | _ -> failwith $"""The tests do not run `nanyx {String.concat " " arguments}`"""
 
 /// Does what `nanyx` does with `arguments`, through the same code (`CliCommands`) but in this process, which saves
