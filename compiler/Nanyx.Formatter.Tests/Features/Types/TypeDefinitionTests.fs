@@ -38,3 +38,8 @@ let ``A protected or private type keeps its word after the =`` () =
     unchanged "type Email = protected string\n"
     unchanged "export type User = protected (name: string, age: int)\n"
     unchanged "type UserId = private int\n"
+
+[<Fact>]
+let ``A type in a scoped context's scope keeps its context before its kind`` () =
+    unchanged "export type Cursor = [Tx] protected (row: int)\n"
+    Assert.Equal("type MRef(a) = [Memory] protected (value: a)\n", format "type MRef(a) =   [ Memory ]   protected (value: a)")

@@ -45,6 +45,12 @@ let record (contexts: Ty list) (state: InferState) : InferState =
     | used :: outer when not contexts.IsEmpty -> { state with LambdaContexts = (List.rev contexts @ used) :: outer }
     | _ -> state
 
+/// The variables of the contexts the lambdas being inferred use, as `resolve` resolves them. They are those lambdas',
+/// so a local def that holds a value of one's scope, as a value of a type in a scoped context's scope is, is of that
+/// scope and is not generalised over it.
+let usedVars (resolve: Ty -> Ty) (state: InferState) : Set<int> =
+    state.LambdaContexts |> List.concat |> List.map (resolve >> TypeEnv.freeTyVars) |> Set.unionMany
+
 /// `state` with `value`, the instance a `use` loads, noted as loaded inside the lambdas being inferred now.
 let enterUse (value: Expression) (state: InferState) : InferState =
     { state with UseDepths = state.UseDepths |> Map.add value.Id state.LambdaContexts.Length }

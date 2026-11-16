@@ -45,25 +45,33 @@ contexts; writing contexts in front of any other type (`[Console] Point`, `x: [C
 
 ## A scoped context: the type belongs to its scope
 
-([#1521](https://github.com/nanyx-lang/nanyx/issues/1521))
+Done in [#1521](https://github.com/nanyx-lang/nanyx/issues/1521), and described in
+[Types in a scope](../advanced/contexts#types-in-a-scope): `type Cursor = [Tx] protected (...)`, with NYX0252 for a
+context that isn't one scoped context and NYX0253 for contexts on any other type that isn't a function.
 
-```nanyx fragment
-scoped export context Tx = private (...)
+How it works:
 
-export type Cursor = [Tx] protected (...)
-```
+- The parser keeps the contexts as `TypeDefModifier.InScopeOf`, and `TypeDefInfo.ScopedBy` names the context.
+- A nominal type's `TyNominal` holds the arguments it's applied to
+  ([#1530](https://github.com/nanyx-lang/nanyx/issues/1530)). A type in a scope has one more, last: the scoped context
+  itself, of the value's scope (`FunctionContexts.scoped`), which `tyToString` leaves out. A written `Cursor` takes the
+  signature's scope of `Tx` (`TypeResolution.writtenScope`), as a written `mut T` takes `Memory`'s. A constructor call
+  makes a scope of its own and records the context as used by the lambda around it (`freshNominalType`), so a block
+  given to `transaction` that makes one ties it to the call's scope, and NYX0233 finds the scope in the call's result
+  with no special case.
+- A local def isn't generalised over a scope the lambdas around it use (`Infer.generalizeDef`), so `def c = open(...)`
+  keeps the block's scope.
 
-A value of `Cursor` carries the scope of the `Tx` it was made under, as `mut T` carries its block's. It's written
-`Cursor`; the scope is never shown. [NYX0233](./context-escape#scoped-contexts) keeps it, and anything holding it,
-inside that `Tx`. Its operations require `Tx` as usual, and holding one requires nothing.
+Still open:
 
-The standard library declares `MRef`, `MArray`, `MStack` and `MList` this way (`type MRef(a) = [Memory] protected (...)`,
-[Mutation](./mutation#planned)), with no special case for them.
-
-A nominal type's `TyNominal` holds the arguments it's applied to, and what it's made from with them for its parameters
-([#1530](https://github.com/nanyx-lang/nanyx/issues/1530)): a written `MRef(int)` is the type the constructor makes at
-`int`, and two are the same type only when their arguments are. The scope is the natural hidden last argument, as
-`mut T` is `TyApply("mut", [T; scope])`.
+- The standard library declares `MRef`, `MArray`, `MStack` and `MList` this way (`type MRef(a) = [Memory] protected (...)`,
+  [Mutation](./mutation#planned)), with no special case for them: [#1491](https://github.com/nanyx-lang/nanyx/issues/1491)
+  and [#1493](https://github.com/nanyx-lang/nanyx/issues/1493).
+- A type in a scope is matched to its context by the context's name where it's declared, so a module that imports both
+  under an alias, `t.Cursor` and `[t.Tx]`, gets a `Cursor` whose written scope is not the signature's `t.Tx`.
+- Each call that requires a scoped context requires it of the callee's own scope, so two such calls in one block make
+  it require the context twice ([#1553](https://github.com/nanyx-lang/nanyx/issues/1553)), and a context with no members
+  is satisfied where nothing supplies it ([#1479](https://github.com/nanyx-lang/nanyx/issues/1479)).
 
 ## A context variable: the type is generic in contexts
 

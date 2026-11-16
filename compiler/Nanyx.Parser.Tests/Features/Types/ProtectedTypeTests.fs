@@ -62,3 +62,15 @@ let ``protected is a word of its own`` () =
     match parsed "type Id = protectedId" with
     | [ Def (TypeDef ("Id", [], [], Kind (TypeName "protectedId"))) ] -> ()
     | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Fact>]
+let ``A scoped context written before a type's kind puts its values in the context's scope`` () =
+    match parsed "export type Cursor = [Tx] protected (row: int)" with
+    | [ Def (TypeDef ("Cursor", modifiers, [], Kind (TypeRecord _))) ] ->
+        Assert.Equal<string list>([ "Tx" ], TypeDefModifier.scopeContexts modifiers |> List.map fst)
+        Assert.True(TypeDefModifier.isNominal modifiers)
+    | other -> failwith $"Unexpected parse: %A{other}"
+    match parsed "type MRef(a) = [Memory] protected (value: a)" with
+    | [ Def (TypeDef ("MRef", modifiers, [ "a", None ], _)) ] ->
+        Assert.Equal<string list>([ "Memory" ], TypeDefModifier.scopeContexts modifiers |> List.map fst)
+    | other -> failwith $"Unexpected parse: %A{other}"

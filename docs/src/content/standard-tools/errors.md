@@ -1471,6 +1471,31 @@ def add: [`+`: a, a -> a] a, a -> a = { x, y -> x + y }  -- error NYX0251: An op
 To fix it, write the context, which the error's fix does: `[Add(a)]` for `` `+` ``, and `[Num(a)]` for `` `+` `` and
 `` `*` `` together. Where a function's operators don't fit one context, list the contexts they need: `[Ord(a), Add(a)]`.
 
+# NYX0252: Type in the scope of something other than one scoped context
+
+A type declaration writes a context before its kind, `type Cursor = [Tx] protected (...)`, to say that each value of
+the type belongs to the scope of the `Tx` it was made under (see
+[Types in a scope](../advanced/contexts#types-in-a-scope)). That context must be a scoped context, and there can be
+only one.
+
+```nanyx
+type Cursor = [Console] protected (row: int)  -- error NYX0252: 'Console' isn't a scoped context: a type can only belong to a scoped context's scope
+```
+
+To fix it, name the scoped context whose scope the values belong to, or leave the contexts out.
+
+# NYX0253: Contexts written on a type that is not a function
+
+Only a function type carries contexts: `[Console] string -> ()` requires `Console` where it's called. Written on any
+other type, contexts would say nothing, so they're an error. A type whose values belong to a scoped context's scope
+says so on its declaration, not where it's used.
+
+```nanyx
+def count: [Console] int = 3  -- error NYX0253: Only a function type carries contexts, and 'int' isn't one: write them on the function that requires them
+```
+
+To fix it, write the contexts on the function that requires them, or leave them out.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

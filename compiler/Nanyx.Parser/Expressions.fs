@@ -154,16 +154,28 @@ let typeDefCore: Parser<Definition, ParseState> =
                 (start, name), TypeDef(name, modifiers, typeParams, typeValue))
         >>= declaringTypeName defStart
 
+    /// The scoped contexts a type's values belong to the scope of, written before its kind: `[Tx] protected (...)`.
+    /// Without a kind after them, they are the contexts of a function type the alias stands for:
+    /// `type Handler = [Console] string -> ()`.
+    let inScopeOf =
+        let contexts =
+            between
+                (pstring "[" >>. wsInline)
+                (wsInline >>. pstring "]")
+                (sepBy1 (withSpan typeNameIdentifier) (attempt (wsInline >>. pstring ",") >>. wsInline))
+        let kind = followedBy (attempt ((pstring "protected" <|> pstring "private") .>> keywordEnd))
+        opt (attempt (contexts .>> ws .>> kind)) |>> Option.map InScopeOf
+
     let typeDefWithModifiers defStart =
         pipe5
             typeModifiers
             (pstring "type" >>. ws >>. (getPosition .>>. typeNameIdentifier))
             (opt (attempt (wsInline >>. typeParams)))
-            (wsInline >>. pstring "=" >>. ws >>. kindModifier)
+            (wsInline >>. pstring "=" >>. ws >>. (inScopeOf .>>. kindModifier))
             typeExprWithWhere
-            (fun modifiers (start, name) paramsOpt kind typeValue ->
+            (fun modifiers (start, name) paramsOpt (scope, kind) typeValue ->
                 let typeParams = defaultArg paramsOpt []
-                let modifiers = withKind modifiers kind
+                let modifiers = withKind modifiers kind @ Option.toList scope
                 (start, name), TypeDef(name, modifiers, typeParams, typeValue))
         >>= declaringTypeName defStart
 

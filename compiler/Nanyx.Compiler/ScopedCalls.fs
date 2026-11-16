@@ -82,8 +82,8 @@ let private mentions (scope: Ty) (ty: Ty) =
     | _ -> false
 
 /// What inside the call `call` makes it require its scope `scope`, as `resolve` resolves types, if anything does, and
-/// how to name it: a use of a cell of that scope or, failing that, the first name whose type mentions the scope and
-/// that `isCandidate` picks.
+/// how to name it: a use of a cell of that scope or, failing that, the first value and then the first call whose type
+/// mentions the scope and that `isCandidate` picks.
 let private introducer (state: InferState) (resolve: Ty -> Ty) (call: Expression) (scope: Ty) (isCandidate: SymbolId -> bool) =
     let nodes =
         match call.Kind with
@@ -101,13 +101,14 @@ let private introducer (state: InferState) (resolve: Ty -> Ty) (call: Expression
             | Some (name, symbol, _) when state.Cells.TryFind symbol |> Option.exists (resolve >> (=) scope) && isCandidate symbol ->
                 Some (node, $"the cell '{name}'")
             | _ -> None)
-    cellUse
-    |> Option.orElse (
+    let mentioning (isValue: bool) =
         nodes
         |> List.tryPick (fun node ->
-            match named node with
-            | Some (name, symbol, Some ty) when isCandidate symbol && mentions scope (resolve ty) -> Some (node, $"'{name}'")
-            | _ -> None))
+            match named node, node.Kind with
+            | Some (name, symbol, Some ty), kind when isCandidate symbol && (match kind with IdentifierExpr _ -> isValue | _ -> not isValue) && mentions scope (resolve ty) ->
+                Some (node, $"'{name}'")
+            | _ -> None)
+    cellUse |> Option.orElse (mentioning true) |> Option.orElse (mentioning false)
 
 /// The error for the scoped context `context` of the call `call`, which is the context's escape: reported at what
 /// introduced it, `found`, with the call as a related span, or at the call.
@@ -146,7 +147,8 @@ let leave (call: Expression) (state: InferState) : InferState =
                         $"'{context}' of this '{callee}' call would reach outside it{through}, which is bound outside the call: only what is made inside the call can require it"))
                 elif mentions scope result then
                     let found = introducer state resolve call scope (fun _ -> true)
+                    let instead = if context = MemoryCells.context then ": return what the cells hold instead" else ""
                     Some (escape call found (fun through ->
-                        $"The result of this '{callee}' call requires its '{context}'{through}, so it cannot leave the call: return what the cells hold instead"))
+                        $"The result of this '{callee}' call requires its '{context}'{through}, so it cannot leave the call{instead}"))
                 else None)
         if errors.IsEmpty then state else { state with FailedExprs = (call.Id, errors) :: state.FailedExprs }

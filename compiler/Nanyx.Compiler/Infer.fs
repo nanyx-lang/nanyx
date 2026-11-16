@@ -75,6 +75,7 @@ let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSch
     let envVars =
         TypeEnv.freeEnvVars env
         |> Seq.map (fun id -> TypeEnv.freeTyVars (Unifier.apply subst (TyVar { Id = id; Name = None })))
+        |> Seq.append [ LambdaContexts.usedVars (Unifier.apply subst) state ]
         |> Set.unionMany
     let closed =
         Unifier.outputOnlyRestVars resolved @ Unifier.outputOnlyContextVars resolved
@@ -684,7 +685,7 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                 elif info.IsPrivate && not (inNominalHome state' (TypeDefInfo.nominalId info) pattern.Span) then
                     Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule pattern.Span $"The private type '{typeName}' can only be taken apart in the module that defines it; use a function that module exports instead" ]
                 else
-                    let nominalTy, underlying, instantiated = freshNominalType state' info
+                    let nominalTy, underlying, _, instantiated = freshNominalType state' info
                     let constrained = addConstraint scrutineeTy nominalTy instantiated
                     match inferPattern armBody env' constrained underlying payload with
                     | Ok (nextEnv, nextState, _) -> Ok (nextEnv, nextState, mkTypedPattern pattern scrutineeTy)
@@ -1132,9 +1133,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     $"A context's instance can only be written in a `use`: to reuse one, write a function that runs a lambda under it, as in `{{ f -> use {name}(...) in f() }}`"
                 Error [ Diagnostics.at DiagnosticCodes.InstanceOutsideUse calleeSpan message ]
             | Some info ->
-                // Each value a generic type's constructor makes is of the type at arguments of its own.
-                let madeTy, underlying, instantiated =
-                    if isNominal info then freshNominalType state info else namedType name info, info.Underlying, state
+                let madeTy, underlying, instantiated = ScopedTypes.made env state name info
                 let mutable current = recordConstructorReference expr info instantiated
                 let argResults =
                     args
@@ -1165,7 +1164,8 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     | None ->
                     let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
                     let inputTy, fitted = UseDischarge.fit env current expr underlying args (inputTypeFromArgs argTys)
-                    Ok (mkTypedExpr expr madeTy None None None, addAssignableConstraint inputTy underlying fitted)
+                    ScopedTypes.requireContext env (addAssignableConstraint inputTy underlying fitted) expr name info calleeSpan
+                    |> Result.map (fun next -> mkTypedExpr expr madeTy None None None, next)
                 else
                     Error errors
             | None ->
