@@ -18,7 +18,7 @@ def s = Stack.empty \push(1) \push(2) \push(3)
 match Stack.pop(s)
   | #some(top, rest) -> println("{top} {Stack.toList(rest)} {Stack.peek(rest)}")
   | #none -> println("empty")
-println("{Stack.count(s)} {Stack.isEmpty(s)} {Stack.toList(s)}")
+println("{Stack.length(s)} {Stack.isEmpty(s)} {Stack.toList(s)}")
 println(Stack.toString(s))
 """
     |> assertRan "3 [2, 1] #some(2)\n3 false [3, 2, 1]\nStack[3, 2, 1]\n"
@@ -35,7 +35,7 @@ def popped =
     | #some(_, _) -> "popped"
     | #none -> "none"
 
-println("{popped} {Stack.peek(s)} {Stack.isEmpty(s)} {Stack.count(s)}")
+println("{popped} {Stack.peek(s)} {Stack.isEmpty(s)} {Stack.length(s)}")
 println(Stack.toString(s))
 """
     |> assertRan "none #none true 0\nStack[]\n"

@@ -21,7 +21,7 @@ def drain: Queue(int), list(int) -> list(int) = { q, taken ->
 
 def q = Queue.empty \enqueue(1) \enqueue(2) \enqueue(3)
 
-println("{drain(q, [])} {Queue.peek(q)} {Queue.count(q)} {Queue.isEmpty(q)}")
+println("{drain(q, [])} {Queue.peek(q)} {Queue.length(q)} {Queue.isEmpty(q)}")
 println(Queue.toString(q))
 """
     |> assertRan "[1, 2, 3] #some(1) 3 false\nQueue[1, 2, 3]\n"
@@ -38,7 +38,7 @@ def taken =
     | #some(_, _) -> "dequeued"
     | #none -> "none"
 
-println("{taken} {Queue.peek(q)} {Queue.isEmpty(q)} {Queue.count(q)}")
+println("{taken} {Queue.peek(q)} {Queue.isEmpty(q)} {Queue.length(q)}")
 println(Queue.toString(q))
 """
     |> assertRan "none #none true 0\nQueue[]\n"
@@ -60,8 +60,8 @@ def q = Queue.empty \enqueue(1) \enqueue(2) \enqueue(3) \enqueue(4)
 def afterOne = rest(q)
 def afterTwo = rest(afterOne) \enqueue(5)
 
-println("{Queue.peek(afterOne)} {Queue.toList(afterOne)} {Queue.count(afterOne)}")
-println("{Queue.peek(afterTwo)} {Queue.toList(afterTwo)} {Queue.count(afterTwo)}")
+println("{Queue.peek(afterOne)} {Queue.toList(afterOne)} {Queue.length(afterOne)}")
+println("{Queue.peek(afterTwo)} {Queue.toList(afterTwo)} {Queue.length(afterTwo)}")
 """
     |> assertRan "#some(2) [2, 3, 4] 3\n#some(3) [3, 4, 5] 3\n"
 
