@@ -18,9 +18,9 @@ nanyx run [--timings] [--check-memory] [--no-inline] <file.nyx> [<arguments>]
 nanyx check <file.nyx> [--timings]
 nanyx parse <file.nyx>
 nanyx wasm <file.nyx> [--out <path>]
-nanyx run [--timings] [--check-memory] [--no-inline] [--host <module>] [<directory or .nyxp> [<arguments>]]
-nanyx check [<directory or .nyxp>] [--timings] [--host <module>]
-nanyx build [<directory or .nyxp>] [--out <path>] [--timings] [--host <module>] [--no-inline]
+nanyx run [--timings] [--check-memory] [--no-inline] [--host <host>] [<directory or .nyxp> [<arguments>]]
+nanyx check [<directory or .nyxp>] [--timings] [--host <host>]
+nanyx build [<directory or .nyxp>] [--out <path>] [--timings] [--host <host>] [--no-inline]
 nanyx new <name> [<directory>]
 nanyx manifest --json [<directory or .nyxp>]
 nanyx format [--check | --write] <files or directories>
@@ -203,10 +203,11 @@ above it.
 
 The package's `@entry` runs under the host its manifest's `host` names,
 `(package = "nanyx.console", version = "0.28.0")`; a package without one is a library, which can't be run (see
-[Hosts](./hosts#choosing-a-host)). `--host <module>` chooses another for one command, in place of the manifest's. A
-`--host` that isn't one the compiler ships, or a module that isn't a host, is an error that names it, and so
-is a manifest's `host` package other than `nanyx.console`, or `settings` for it; `--host` on a single `.nyx` file is a
-usage error, since a script always runs under the console host.
+[Hosts](./hosts#choosing-a-host)). `--host <host>` chooses another for one command, in place of the manifest's: a
+host package the compiler ships, `--host nanyx.console`, or the directory of one, `--host ../acme.host`. A `--host`
+that the compiler doesn't ship, or whose manifest doesn't declare it a host, is a usage error that names it, as a
+manifest's `host` is an error, and so is `settings` for a host; `--host` on a single `.nyx` file is a usage error,
+since a script always runs under the console host.
 
 `nanyx new acme.demo` makes a package in a new directory, `demo` (the name's last segment) unless another
 is given: `acme.demo.nyxp`, with the official linter on and the console host, both at the compiler's version, and

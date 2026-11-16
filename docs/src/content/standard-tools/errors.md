@@ -571,7 +571,7 @@ offers to add it. A name qualified by the module's own name is imported under th
 exports lists each of them.
 
 ```nanyx
-def greet = println("hi")  -- error NYX0102: Unknown function 'println'. 'println' is defined in 'nanyx/console': add `import nanyx/console`
+def larger = max(1, 2)  -- error NYX0102: Unknown function 'max'. 'max' is defined in 'nanyx/math': add `import nanyx/math`
 def found = string.contains("nanyx", "x")  -- error NYX0102: Unknown function 'string.contains'. 'string.contains' is defined in 'nanyx/text': add `import nanyx/text`
 def size = math.abs(-1)  -- error NYX0102: Unknown function 'math.abs'. 'abs' is defined in 'nanyx/math': add `import nanyx/math as math`
 ```
@@ -667,8 +667,8 @@ has.
 def greet: [Telegraph] () -> () = { () }  -- error NYX0108: Unknown context 'Telegraph' in the signature of 'greet'
 ```
 
-When a standard library module exports the context, as `nanyx/console` does `Console`, the message says which import
-brings it in, and an editor offers to add it.
+When a standard library module exports the context, the message says which import brings it in, and an editor offers
+to add it.
 
 To fix it, correct the context's name, define it, or import the module that exports it.
 

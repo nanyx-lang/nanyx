@@ -26,9 +26,10 @@ the rest) are in `compiler/Nanyx.Compiler/Linters.fs`, about 970 lines, run by t
 [#107](https://github.com/nanyx-lang/nanyx/issues/107).
 
 **The console host** is written in Nanyx on [foreign functions](./foreign-functions), with no compiler intrinsics, and
-ships with the compiler as a source directory, the package `nanyx.console` (see [What's built](#whats-built)). `Console`,
-`Env` and `HostRuntime` are still in the standard library, and the compiler still knows the host by name: `Hosts.fs` has
-a table of hosts, the default host is in that table, and `HostRuntime` is provided only to a host in it.
+ships with the compiler as a source directory, the package `nanyx.console`, whose manifest declares it a host, with a
+prelude that brings `println`, `Console` and `Env` into every program (see [What's built](#whats-built)). `Console`,
+`Env` and `HostRuntime` are still in the standard library, and the compiler still names the console host as the one a
+script runs under.
 
 # Where they're going
 
@@ -40,10 +41,11 @@ host: loading linter packages, severities, configuration and suppression. The ru
 **The console host is a pair of packages** ([Libraries for a host](./hosts#libraries-for-a-host)): an interface
 package that declares `Console` and `Env`, which libraries depend on, and the host that implements them, which
 applications name. The working names are `nanyx.console.core` and `nanyx.console`, while the naming is open. Any
-module that exports a host
-`run` is a host, from any package. `HostRuntime` goes to the module the manifest's `host` (or `--host`) names, rather
-than to a list the compiler keeps. The table of hosts in `Hosts.fs` goes. The standard library keeps only what every
-program needs, whatever its host. ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344))
+package whose manifest declares it a host is one ([A host package](./hosts#a-host-package)), found by its `path` when
+the compiler doesn't ship it. `HostRuntime` goes to the module the manifest's `host` (or `--host`) names, rather than
+to a list the compiler keeps. The host's prelude brings `Console`, `Env` and `println` into every module of an
+application and of a script, and a library depends on `nanyx.console.core` and imports from it. The standard library
+keeps only what every program needs, whatever its host. ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344))
 
 **Shipped, but not special.** The compiler's distribution includes both packages, built and pinned to its release, so
 an offline install with nothing downloaded builds, runs and lints a program. They are not defaults either: a package
@@ -91,7 +93,8 @@ level, so a field is never mistaken for a package's configuration:
     [What's built](#whats-built)).
   - `nanyx new` writes both entries, at the compiler's version.
 - **Scripts.** A loose script has no manifest. It runs under the console host, and runs the linters its `::linters`
-  directives name, if any.
+  directives name, if any. It will name another host with `::host`, as a manifest's `host` does, and the packages it
+  depends on with `::dependencies`.
 
 # What it needs
 
@@ -111,7 +114,9 @@ level, so a field is never mistaken for a package's configuration:
    named at the compiler's version. A manifest names a shipped package at that version exactly: anything else is
    `NYX0029`, naming the version shipped. Done, with the console host as the first (see [What's built](#whats-built)).
 2. **The console host as a package** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)), as the first shipped
-   source directory.
+   source directory. Its manifest declares it a host, with a prelude, and a host the compiler doesn't ship is found by
+   its path: done (see [What's built](#whats-built)). Still to do: `Console` and `Env` in the interface package
+   `nanyx.console.core`, and a script's `::host` and `::dependencies` directives.
 3. **The official linter as a package** ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)), once the linter
    contract is designed. The rules move one at a time, with the tests checking that each one reports what it did.
 
@@ -123,13 +128,17 @@ level, so a field is never mistaken for a package's configuration:
   with `CopyToOutputDirectory` and `CopyToPublishDirectory`), so the tests, the language server and the published
   `nanyx` all find it at `ShippedPackages.directory`, and each release archive holds it beside the executable. A test
   checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with the compiler.
-- **The console host is resolved in its package.** `Hosts.console` is the module `console.host` of the package
-  `nanyx.console`, imported as `nanyx.console/console.host` (`Host.Import`). `ShippedPackages.tryModules` reads the
-  package's modules, and the module that declares an `@entry`, a script, or a module given as source, imports the host
-  through them, as do the host's own files (`PackageModules.resolveWithin`); it needs no `dependencies` entry.
-  `HostRuntime` goes to the host's file (`Hosts.mayRequireRuntime`, given the files that declare the host's module),
-  and a statement in that file isn't a script's. A shipped package's file is named after its package in messages,
-  `nanyx.console/src/console.host.nyx`, wherever the compiler is installed (`ShippedPackages.tryDisplay`).
+- **The console host declares itself.** `nanyx.console`'s manifest has `host = (root = "console.host", prelude =
+  "console.prelude")` in its `package`, and the compiler reads it (`HostPackages.tryShipped`) rather than keeping a
+  table of hosts; `HostPackages.console` is the host a script runs under. Its prelude, `console.prelude`, re-exports
+  `Console`, `IoError`, `print`, `println`, `eprint` and `eprintln` from `nanyx/console`, and `Env` from `nanyx/env`.
+  The program's package records the host's package (`PackageModules.HostPackage`; for a script or a module given as
+  source, `ShippedPackages.tryModules`), and the program's modules import the host and its prelude through it, as do
+  the host's own files (`PackageModules.resolveWithin`); it needs no `dependencies` entry. A host found by its path is
+  read the same way, from its directory. `HostRuntime` goes to the host's file (`Hosts.mayRequireRuntime`, given the
+  files that declare the host's module), and a statement in that file isn't a script's. A shipped package's file is
+  named after its package in messages, `nanyx.console/src/console.host.nyx`, wherever the compiler is installed
+  (`ShippedPackages.tryDisplay`).
 - **No host means a library.** `Manifest.Host` and `PackageModules.Host` are options. A package file under no host gets
   no host import, an `@entry` there is `NYX0031` (`Attributes.applyAttributes`), and `nanyx run` on a library says it
   has no entry point. A loose script still runs under the console host.

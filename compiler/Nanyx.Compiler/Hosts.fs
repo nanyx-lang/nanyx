@@ -2,24 +2,26 @@ namespace NyxCompiler
 
 open Parser.Program
 
-/// A host: the module of a package the compiler ships that runs the program's entry point, under `use`s of the contexts
-/// it provides (see the Hosts page of the docs, and `ShippedPackages`). The program's `@entry` is passed to the host's
-/// `run`, which is the module's start.
+/// A host: a package whose manifest declares that it is one (see `HostPackages`), with the module that runs the
+/// program's entry point, under `use`s of the contexts it provides, and the prelude that brings what it provides into
+/// scope in every module of the program (see the Hosts page of the docs). The program's `@entry` is passed to the
+/// host's `run`, which is the module's start.
 type Host =
     { /// The package a manifest's `host` names it by: `nanyx.console`.
       Package: string
-      /// The module of the package that is the host: `console.host`.
+      /// The host's root module, which exports `run`: `console.host`.
       Module: string
-      /// The modules of the contexts the host provides to the entry point: `nanyx/console` for `Console` and
-      /// `nanyx/env` for `Env`.
-      ProvidedModules: string list
-      /// The provided modules that the module declaring the entry point sees without importing them: `nanyx/console`,
-      /// so that `println` is in scope. A program imports the others itself, as `import nanyx/env`.
-      ImplicitModules: string list }
+      /// The host's prelude, if it has one: a module of the package whose exports every module of the program sees
+      /// without importing them, as `println` and `Console`.
+      Prelude: string option
+      /// The directory of the host's package: beside the compiler for one it ships (see `ShippedPackages`).
+      Directory: string }
 
-    /// The host's module as an import names it, and `--host` does: `nanyx.console/console.host`.
+    /// The host's root module as an import names it: `nanyx.console/console.host`.
     member host.Import = $"{host.Package}/{host.Module}"
 
+    /// The host's prelude as an import names it, if it has one: `nanyx.console/console.prelude`.
+    member host.PreludeImport = host.Prelude |> Option.map (fun prelude -> $"{host.Package}/{prelude}")
 /// A definition marked `@entry`, and the call of its host's `run` with it that `Attributes.applyAttributes` made up.
 type EntryPoint =
     { /// The node of the `@entry` attribute.
@@ -47,35 +49,12 @@ module Hosts =
     /// declares it, and `nanyx/host.memory`.
     let private runtimeModules = [ runtimeModule; "host.memory" ]
 
+    /// The package of the console host the compiler ships: what a script runs under, unless it names another, and what
+    /// `nanyx new` names.
+    let consolePackage = "nanyx.console"
+
     /// The context a host is written on: raw reads and writes, which only a host may require.
     let runtimeContext = "HostRuntime"
-
-    /// The host a program runs under when it names none: a command-line program, with `Console` and `Env`.
-    let console =
-        { Package = "nanyx.console"
-          Module = "console.host"
-          ProvidedModules = [ StandardLibrary.importPrefix + "console"; StandardLibrary.importPrefix + "env" ]
-          ImplicitModules = [ StandardLibrary.importPrefix + "console" ] }
-
-    /// The hosts the compiler ships.
-    let all = [ console ]
-
-    /// The hosts that can be chosen, as a message lists them.
-    let private choices () = all |> List.map (fun host -> $"'{host.Import}'") |> String.concat ", "
-
-    /// The host that is the module `name`, as `--host` writes it (`nanyx.console/console.host`), or why there is none.
-    /// Until any package can be a host, only the hosts the compiler ships can be chosen.
-    let tryFind (name: string) : Result<Host, string> =
-        match all |> List.tryFind (fun host -> host.Import = name) with
-        | Some host -> Ok host
-        | None -> Error $"'{name}' is not a host: until any package can be one, a host is one the compiler ships, {choices ()}"
-
-    /// Whether the module `origin` declares contexts a host provides, as `nanyx/console` declares `Console`.
-    let providesContexts (origin: ModuleOrigin) =
-        match origin with
-        | StandardLibraryModule name -> all |> List.exists (fun host -> host.ProvidedModules |> List.contains (StandardLibrary.importPrefix + name))
-        | SourceFile _
-        | InMemory -> false
 
     /// Whether the module `origin` may require `HostRuntime`: the host, whose files `isHost` tells apart, or a module a
     /// host is written on (see `runtimeModules`).

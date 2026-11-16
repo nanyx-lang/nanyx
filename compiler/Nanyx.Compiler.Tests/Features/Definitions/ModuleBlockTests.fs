@@ -71,11 +71,11 @@ let ``A module block cannot use its file's definitions`` () =
 
 [<Fact>]
 let ``A module block's imports are its own`` () =
-    let fileImport = "import nanyx/console\n\n" + moneyBlock.Replace("def secret = 42", """def secret = { println("x") }""")
-    Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, """println("x")""" ], codesAt fileImport)
-    let blockImport = moneyBlock.Replace("module money =\n", "module money =\n  import nanyx/console\n").Replace("def secret = 42", """def secret = { println("x") }""")
+    let fileImport = "import nanyx/math\n\n" + moneyBlock.Replace("def secret = 42", "def secret = abs(-1)")
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, "abs(-1)" ], codesAt fileImport)
+    let blockImport = moneyBlock.Replace("module money =\n", "module money =\n  import nanyx/math\n").Replace("def secret = 42", "def secret = abs(-1)")
     Assert.Empty(codesAt blockImport)
-    Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, """println("y")""" ], codesAt (blockImport + "println(\"y\")\n"))
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, "abs(-2)" ], codesAt (blockImport + "def other = abs(-2)\n"))
 
 [<Fact>]
 let ``A module block can import the block beside it, but not reach it without an import`` () =

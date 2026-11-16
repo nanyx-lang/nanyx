@@ -14,10 +14,10 @@ let private reported (source: string) =
 let ``An unknown function a standard-library module exports says which import brings it in`` () =
     Assert.Equal(
         (DiagnosticCodes.UnknownFunction.Code,
-         """Unknown function 'println'. 'println' is defined in 'nanyx/console': add `import nanyx/console`""",
-         "println",
-         [ "Add `import nanyx/console`" ]),
-        reported "def c = println(1)\n")
+         """Unknown function 'max'. 'max' is defined in 'nanyx/math': add `import nanyx/math`""",
+         "max",
+         [ "Add `import nanyx/math`" ]),
+        reported "def c = max(1, 2)\n")
 
 [<Fact>]
 let ``An unknown qualified name says which import brings it in`` () =
@@ -50,19 +50,19 @@ let ``An unknown identifier says which import brings it in, instead of asking ab
 let ``An unknown context in a signature says which import brings it in, at the context's name`` () =
     Assert.Equal(
         (DiagnosticCodes.UnknownContext.Code,
-         """Unknown context 'Console' in the signature of 'g'. 'Console' is defined in 'nanyx/console': add `import nanyx/console`""",
-         "Console",
-         [ "Add `import nanyx/console`" ]),
-        reported "def g: [Console] () -> () = { }\n")
+         """Unknown context 'HostRuntime' in the signature of 'g'. 'HostRuntime' is defined in 'nanyx/host.runtime': add `import nanyx/host.runtime`""",
+         "HostRuntime",
+         [ "Add `import nanyx/host.runtime`" ]),
+        reported "def g: [HostRuntime] () -> () = { }\n")
 
 [<Fact>]
 let ``An unknown type says which import brings it in`` () =
     Assert.Equal(
         (DiagnosticCodes.UnknownType.Code,
-         """Unknown type 'IoError'. 'IoError' is defined in 'nanyx/console': add `import nanyx/console`""",
-         "IoError",
-         [ "Add `import nanyx/console`" ]),
-        reported "def r: IoError = #endOfInput\n")
+         """Unknown type 'HostRuntime'. 'HostRuntime' is defined in 'nanyx/host.runtime': add `import nanyx/host.runtime`""",
+         "HostRuntime",
+         [ "Add `import nanyx/host.runtime`" ]),
+        reported "def r: list(HostRuntime) = []\n")
 
 [<Fact>]
 let ``A name two modules export lists both, with an import for each`` () =

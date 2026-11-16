@@ -439,13 +439,19 @@ let internal canonicalName (env: TypeEnv) (state: InferState) (name: Identifier)
 let private symbolNamed (env: TypeEnv) (state: InferState) (name: Identifier) =
     TypeEnv.tryFind name env |> Option.bind _.Symbol |> Option.bind (fun id -> state.Symbols |> Map.tryFind id)
 
+/// Whether `name` is, where `env` is the environment, the member of a context an instance provides: a def's declared
+/// context's, or a `use`'s.
+let private isProvidedMember (env: TypeEnv) (name: Identifier) =
+    TypeEnv.tryFind name env |> Option.exists (fun scheme -> scheme.ProvidedBy.IsSome)
+
 /// The contexts the function `name` names where `env` is the environment requires, as written or inferred. A local
-/// def's are its own, by its symbol, and a parameter or a pattern's variable has none: neither takes those of a
-/// top-level def it shadows, which `ContextRequirements` holds under the same name.
+/// def's are its own, by its symbol, and a parameter, a pattern's variable or a context's member has none: none takes
+/// those of a top-level or imported def it shadows, which `ContextRequirements` holds under the same name.
 let internal contextRequirementsOf (env: TypeEnv) (state: InferState) (name: Identifier) : TypeExpr list option =
     match symbolNamed env state name with
     | Some symbol when symbol.Kind = LocalValue -> state.LocalContextRequirements |> Map.tryFind symbol.Id
     | Some symbol when symbol.Kind = Parameter || symbol.Kind = PatternVariable -> None
+    | _ when isProvidedMember env name -> None
     | _ -> state.ContextRequirements |> Map.tryFind (canonicalName env state name)
 
 /// The type the function `name` names where `env` is the environment declares without its contexts, where it writes
@@ -454,6 +460,7 @@ let internal contextSignatureOf (env: TypeEnv) (state: InferState) (name: Identi
     match symbolNamed env state name with
     | Some symbol when symbol.Kind = LocalValue -> state.LocalContextSignatures |> Map.tryFind symbol.Id
     | Some symbol when symbol.Kind = Parameter || symbol.Kind = PatternVariable -> None
+    | _ when isProvidedMember env name -> None
     | _ -> state.ContextSignatures |> Map.tryFind (canonicalName env state name)
 
 /// The ambient contexts the unannotated top-level function `name`, as `env` binds it, was inferred to require, once its
