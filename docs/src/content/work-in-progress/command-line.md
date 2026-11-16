@@ -209,7 +209,7 @@ The package's `@entry` runs under the host its manifest's `host` names,
 host package the compiler ships, `--host nanyx.console`, or the directory of one, `--host ../acme.host`. A `--host`
 that the compiler doesn't ship, or whose manifest doesn't declare it a host, is a usage error that names it, as a
 manifest's `host` is an error, and so is `settings` for a host; `--host` on a single `.nyx` file is a usage error,
-since a script always runs under the console host.
+since a script names its host with a `::host` directive.
 
 `nanyx new acme.demo` makes a package in a new directory, `demo` (the name's last segment) unless another
 is given: `acme.demo.nyxp`, with the official linter on and the console host, both at the compiler's version, and

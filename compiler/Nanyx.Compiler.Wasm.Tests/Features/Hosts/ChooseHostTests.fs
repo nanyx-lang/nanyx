@@ -97,13 +97,41 @@ let ``--host takes the directory of a host package`` () =
     Assert.Equal(0, outcome.ExitCode)
 
 [<Fact>]
-let ``--host on a script is a usage error: a script runs under the console host`` () =
+let ``--host on a script is a usage error: a script names its host with ::host`` () =
     use directory = new TempDirectory()
     let path = Path.Combine(directory.Path, "script.nyx")
     File.WriteAllText(path, "println(\"hi\")\n")
     let outcome = nanyxIn directory.Path [ "run"; "--host"; Hosts.consolePackage; path ]
     Assert.Equal(2, outcome.ExitCode)
-    Assert.Equal("--host chooses a package's host: a script always runs under nanyx.console.", outcome.StandardError.Trim())
+    Assert.Equal(
+        """--host chooses a package's host: a script names its own with a ::host directive, ::host.acme.server = { path = "../server" }, and runs under nanyx.console without one.""",
+        outcome.StandardError.Trim())
+
+[<Fact>]
+let ``A script runs under the host its ::host finds by path`` () =
+    use directory = new TempDirectory()
+    let path = Path.Combine(directory.Path, "script.nyx")
+    let host = (ShippedPackages.directoryOf Hosts.consolePackage).Replace("\\", "/")
+    File.WriteAllText(path, $"::host.nanyx.console = {{ path = \"{host}\" }}\n\nprintln(\"hi\")\n")
+    let outcome = nanyxIn directory.Path [ "run"; path ]
+    Assert.Equal("", outcome.StandardError)
+    Assert.Equal("hi\n", outcome.StandardOutput.ReplaceLineEndings "\n")
+    Assert.Equal(0, outcome.ExitCode)
+
+[<Fact>]
+let ``A script runs with the packages its ::dependencies list`` () =
+    use directory = new TempDirectory()
+    Directory.CreateDirectory(Path.Combine(directory.Path, "util")) |> ignore
+    File.WriteAllText(
+        Path.Combine(directory.Path, "util", "util.nyxp"),
+        """(package = (name = "acme.util", version = "0.1.0", publicModules = ["strings"]))""")
+    File.WriteAllText(Path.Combine(directory.Path, "util", "strings.nyx"), "module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n")
+    let path = Path.Combine(directory.Path, "script.nyx")
+    File.WriteAllText(path, "::dependencies.acme.util = { path = \"util\" }\n\nimport acme.util/strings\n\nprintln(shout(\"hi\"))\n")
+    let outcome = nanyxIn directory.Path [ "run"; path ]
+    Assert.Equal("", outcome.StandardError)
+    Assert.Equal("hi!\n", outcome.StandardOutput.ReplaceLineEndings "\n")
+    Assert.Equal(0, outcome.ExitCode)
 
 [<Fact>]
 let ``An entry that doesn't fit the package's host names the host, in the editor as on the command line`` () =

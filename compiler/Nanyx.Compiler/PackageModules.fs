@@ -28,7 +28,11 @@ type PackageModules =
       /// The modules a package that depends on this one may import: its manifest's `publicModules`.
       PublicModules: string list
       /// The packages it depends on directly, each with its own dependencies.
-      Dependencies: PackageModules list }
+      Dependencies: PackageModules list
+      /// Whether this is a script's build, whose `::host` and `::dependencies` directives say what a manifest would (see
+      /// `Script`): it has no files of its own, and every file of the build that is in no package it depends on is the
+      /// program's, its imports found by their paths.
+      Script: bool }
 
 module PackageModules =
     /// Whether two full paths name the same file: file names differ only in case on Windows and macOS, and an editor
@@ -67,6 +71,7 @@ module PackageModules =
           Files = files
           PublicModules = []
           Dependencies = []
+          Script = false
           Modules =
             files
             |> List.choose (fun file -> declaredName file |> Option.map (fun moduleName -> moduleName, file))
@@ -82,6 +87,11 @@ module PackageModules =
     /// on, directly or through others.
     let rec ownerOf (modules: PackageModules) (filePath: string) : PackageModules option =
         if contains modules filePath then Some modules else modules.Dependencies |> List.tryPick (fun dependency -> ownerOf dependency filePath)
+
+    /// Whether `filePath` is a file of the program the build `modules` is of, rather than of a library it depends on: a
+    /// source file of the package, or, in a script's build, any file in no package it depends on.
+    let isProgramFile (modules: PackageModules) (filePath: string) =
+        if modules.Script then (ownerOf modules filePath).IsNone else contains modules filePath
 
     /// The package named `name` among those of the build `modules`, the package itself or one it depends on.
     let rec private tryFindPackage (modules: PackageModules) (name: string) : PackageModules option =
@@ -166,6 +176,9 @@ module PackageModules =
         | Some modules, ModuleImport name ->
             match ownerOf modules importer with
             | Some owner -> resolveModule modules owner item name
+            // A script's file imports a public module of a package its `::dependencies` name after the package's name.
+            | None when modules.Script && modules.Dependencies |> List.exists (fun dependency -> name.StartsWith(dependency.Package + "/")) ->
+                resolveModule modules modules item name
             | None -> FileImports.resolvePath (Path.GetDirectoryName importer) item
         | _ -> FileImports.resolvePath (Path.GetDirectoryName importer) item
 

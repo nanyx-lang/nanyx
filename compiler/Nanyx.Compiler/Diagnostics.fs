@@ -66,7 +66,6 @@ module DiagnosticCodes =
     let MisplacedAttribute = code 8 "Misplaced attribute" Severity.Error
     let InvalidDirective = code 9 "Invalid directive" Severity.Error
     let DirectiveInPackage = code 10 "Directive in a package" Severity.Error
-    let UnsupportedDirective = code 11 "Unsupported directive" Severity.Error
     let CodeInModuleBlock = code 12 "Code in a module block" Severity.Error
     let UnexpectedAttributeArgument = code 13 "Unexpected attribute argument" Severity.Error
     let PathImportWithoutAlias = code 14 "File-path import without an alias" Severity.Error
@@ -161,7 +160,7 @@ module DiagnosticCodes =
     let all =
         [ SyntaxError; FileNotFound; ImportNotFound; ImportCycle; UnknownStandardLibraryModule
           InvalidStandardLibraryModule; UnknownAttribute; MisplacedAttribute; InvalidDirective; DirectiveInPackage
-          UnsupportedDirective; CodeInModuleBlock; UnexpectedAttributeArgument; PathImportWithoutAlias
+          CodeInModuleBlock; UnexpectedAttributeArgument; PathImportWithoutAlias
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
           ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped; DefinitionWithoutValue; EntryInLibrary
