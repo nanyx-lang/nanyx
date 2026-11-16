@@ -200,10 +200,23 @@ def top = memory {
 }
 ```
 
-An `MList` from [`nanyx/mlist`](../stdlib/mlist) grows at the end with `add`, and reads and sets its elements by index. Both are written in Nanyx over `MRef`, so every operation requires the block's `Memory`, and neither can leave the block. Each says so in its declaration, `type MStack(a) = [Memory] private MRef(list(a))`, as a type of your own that holds an `MRef` or an `MArray` must ([Types in a scope](./contexts#types-in-a-scope)).
+An `MList` from [`nanyx/mlist`](../stdlib/mlist) grows at the end with `add`, or `+=`, and reads and sets its elements by index. Both are written in Nanyx over `MRef`, so every operation requires the block's `Memory`, and neither can leave the block. Each says so in its declaration, `type MStack(a) = [Memory] private MRef(list(a))`, as a type of your own that holds an `MRef` or an `MArray` must ([Types in a scope](./contexts#types-in-a-scope)).
+
+```nanyx
+import nanyx/mlist
+
+def names = memory {
+  def items: MList(string) = MList.empty()
+  items += "ada"
+  items += "bob"
+  MList.toList(items) -- [ada, bob]
+}
+```
+
+`+=` is a [spare operator](../tour/operators#the-operators) that `MList` attaches, so `items += x` is `MList.add(items, x)`, and gives `()`. It doesn't assign: a `mut` cell changes with `:=`, so `count += 1` on one is an error that says to write `count := count + ...`.
 
 An `MArray` from [`nanyx/marray`](../stdlib/marray) is a fixed-length array whose elements `set` changes in place, laid out in one block as an [`Array`](../stdlib/array) is. It belongs to its block too. Converting between an `Array` and an `MArray` copies, so an `Array` never changes.
 
 # Planned
 
-`+=` on an `MList` ([#1564](https://github.com/nanyx-lang/nanyx/issues/1564)) and `mut` record fields are planned; see [Work in progress: Mutation](../work-in-progress/mutation).
+`mut` record fields are planned; see [Work in progress: Mutation](../work-in-progress/mutation).

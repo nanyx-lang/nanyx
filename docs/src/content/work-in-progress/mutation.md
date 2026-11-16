@@ -96,9 +96,14 @@ context of their own, `type MRef(a) = [Memory] protected (...)`
    `type MStack(a) = [Memory] private MRef(list(a))`, so the `MRef` it holds is of the stack's own scope.
    `MStack` is an `MRef(list(a))`, the top first. `MList` is an `MRef` of its
    elements last first, and their count, so `add` is constant-time and `at` and `set` walk to the element; `set` gives
-   `#ok | #outOfRange`. It can move onto a growable `MArray` later without changing its interface. `+=` to append
-   isn't on Nanyx's list of operators, so whether and how it joins it is
-   [#1564](https://github.com/nanyx-lang/nanyx/issues/1564).
+   `#ok | #outOfRange`. It can move onto a growable `MArray` later without changing its interface.
+   `+=` appends too ([#1564](https://github.com/nanyx-lang/nanyx/issues/1564), decided by the maintainer): it is a
+   spare operator, the loosest, grouping none, which means only what is attached to its left operand's type, as `^`
+   and `<>` do. `MList` attaches ``def MList.`+=`: [Memory] MList(a), a -> () = MList.add``. It is not sugar for
+   `:=`: nothing reads it as assignment, so `x += 1` on a cell is an error that says to write `x := x + ...`
+   (`OperatorCalls.undefinedSpare`). An operator whose attached definition requires plain contexts, as this one
+   requires `Memory`, requires them where it is written, as a call to the definition would
+   (`Contexts.requireOperatorContexts`).
 5. **Slices** ([#1545](https://github.com/nanyx-lang/nanyx/issues/1545)): done, views that share storage instead of
    copying, each a type of its own written in Nanyx, so a small slice can't silently keep a large parent alive, and
    `Array` stays a plain flat block. `Slice(a)` in [`nanyx/slice`](../stdlib/slice) is a private record of the

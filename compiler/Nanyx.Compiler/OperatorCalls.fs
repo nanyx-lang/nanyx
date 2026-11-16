@@ -88,13 +88,14 @@ module internal OperatorCalls =
     let infer (state: InferState) (expr: Expression) (callee: Identifier) (scheme: TypeScheme) (instance: TypeExpr option) (input: Ty) : Ty * InferState =
         let funcTy, next = instantiate (recordReference expr scheme state) scheme
         let resultTy, next = freshVar next
+        let contexts = match Unifier.unalias funcTy with TyFunc(_, _, contexts) -> contexts | _ -> []
         let next =
             match Unifier.unalias funcTy, input with
             | TyFunc(TyRecord parameters, _, _), TyRecord operands when Set.ofSeq parameters.Keys = Set.ofSeq operands.Keys ->
                 operands
                 |> Map.fold (fun current field operandTy -> addAssignableConstraint operandTy parameters.[field] current)
-                    (addConstraint funcTy (TyFunc(TyRecord parameters, resultTy, [])) next)
-            | _ -> addConstraint funcTy (TyFunc(input, resultTy, [])) next
+                    (addConstraint funcTy (TyFunc(TyRecord parameters, resultTy, contexts)) next)
+            | _ -> addConstraint funcTy (TyFunc(input, resultTy, contexts)) next
         resultTy,
         { next with
             CalleeTypes = next.CalleeTypes |> Map.add expr.Id funcTy
@@ -103,6 +104,18 @@ module internal OperatorCalls =
                 match instance with
                 | Some instance -> next.OperatorInstances |> Map.add expr.Id instance
                 | None -> next.OperatorInstances }
+
+    /// The error, at `span`, for the spare operator `op` (`^`, `<>`, `+=`, ...) on `left`, of the type `leftTy`, which
+    /// nothing gives it a meaning on. `+=` is not assignment, so on a name that `isCell` says is a cell, the error says
+    /// what is.
+    let undefinedSpare (isCell: Identifier -> bool) (op: string) (span: SourceSpan) (left: Expression) (leftTy: Ty) : Diagnostic =
+        let message =
+            match left.Kind with
+            | IdentifierExpr name when op = addInPlaceOperator && isCell name ->
+                $"`+=` doesn't change a cell: write `{name} := {name} + ...`. `+=` means only what a type attaches to it, as `MList` does to add to the list"
+            | _ ->
+                $"`{op}` has no built-in meaning, and `{Unifier.tyToString leftTy}` has no `{op}` attached. A type gets one by attaching it: def Money.`{op}` = ..."
+        Diagnostics.at DiagnosticCodes.UnknownFunction span message
 
     /// `expr`, `-x` on an operand of the type `operandTy`: a call to the `negate` of that type or of the function's
     /// `Add` (see `definition`), or else the negation of a built-in number. `numberTy` is the number that negation is
