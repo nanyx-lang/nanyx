@@ -1350,7 +1350,7 @@ def same: [Foo(_)] a -> a = { x -> x }  -- error NYX0236: The body of 'same' doe
 
 # NYX0237: Entry point does not fit the host
 
-The definition marked `@entry` does not have the type its [host](../work-in-progress/hosts) runs. The host is a
+The definition marked `@entry` does not have the type its [host](../advanced/hosts) runs. The host is a
 function that takes the entry point, so the entry point must fit the type of its parameter. A command-line program runs
 under the console host, `nanyx.console/console.host`, whose entry point takes nothing and may require `Console`.
 

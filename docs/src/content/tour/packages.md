@@ -71,6 +71,8 @@ A manifest holds only data: records, lists, tuples, strings, numbers, `true` and
 
 Manifests were once written in TOML. One still in that form, starting `[package]` or `name = "..."`, is an error that says so (`NYX0034`). While a package's manifest has errors, checking or running any of its files reports them, at the manifest, rather than checking the file on its own.
 
+The editor checks a manifest as you type it, and the formatter formats it as it does any Nanyx. For scripts and other tools that read a manifest, [`nanyx manifest --json`](../standard-tools/command-line#nanyx-manifest) checks it and prints it as JSON: a record is an object, a list or a tuple is an array, and a tag is a string, `"#error"`.
+
 ## Source files
 
 The package manifest determines which Nanyx source files belong to the package:
@@ -102,7 +104,7 @@ Dependencies on other packages are declared in the package manifest's `dependenc
 )
 ```
 
-The directory holds the package's own `.nyxp`, whose `name` must be the one the entry gives. Packages can't be downloaded yet, so an entry with a `version` instead of a `path` is an error (`NYX0024`).
+The directory holds the package's own `.nyxp`, whose `name` must be the one the entry gives. Packages can't be downloaded yet, so an entry with a `version` instead of a `path` is an error (`NYX0024`), unless it names a package the compiler ships, such as `nanyx.console.core`, at the compiler's version: `(package = "nanyx.console.core", version = "0.28.0")`. Any other version of a shipped package is an error that names the one shipped (`NYX0029`). See [Packages the compiler ships](../advanced/hosts#packages-the-compiler-ships).
 
 Source code imports modules using the dependency's package name:
 
@@ -190,7 +192,7 @@ The entrypoint runs under the package's host, which loads the contexts it may us
 )
 ```
 
-`nanyx.console` is the host for a command-line program. The compiler ships it beside itself, so it needs nothing installed, and it brings `println`, `Console` and `Env` into scope in every module of the program. A host the compiler doesn't ship is found by its path instead of a version, as a dependency is: `host = (package = "acme.host", path = "../acme.host")`. A package with no `host` is a library: it can't have an `@entry`, and running it is an error. `nanyx run`, `nanyx build` and `nanyx check` take `--host` with a host's name or directory to choose one for a single command instead. A single `.nyx` file runs under `nanyx.console` unless it names another host with a `::host` directive (see [Script mode](#script-mode)).
+`nanyx.console` is the host for a command-line program. The compiler ships it beside itself, so it needs nothing installed, and it brings `println`, `Console` and `Env` into scope in every module of the program. A host the compiler doesn't ship is found by its path instead of a version, as a dependency is: `host = (package = "acme.host", path = "../acme.host")`. A package with no `host` is a library: it can't have an `@entry`, and running it is an error. `nanyx run`, `nanyx build` and `nanyx check` take `--host` with a host's name or directory to choose one for a single command instead. A single `.nyx` file runs under `nanyx.console` unless it names another host with a `::host` directive (see [Script mode](#script-mode)). [Hosts](../advanced/hosts) describes what a host provides, and how to write one.
 
 # Building and running a package
 

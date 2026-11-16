@@ -82,28 +82,10 @@ comment and what fits no topic: `crash`, `ignore`, booleans and memory blocks.
 
 # What is written
 
-This table names each module's topics, not its functions. The [Standard Library](../stdlib/standard-library) pages
-list every function a module exports.
-
-| Module          | What it holds                                                                                     |
-| --------------- | ------------------------------------------------------------------------------------------------- |
-| `nanyx/prelude` | Imported automatically. `proc`, the result workflow: in `proc { ... }`, `try x` continues with the payload of `#some` or gives back any other tag (the block's type collects them), and `return x` is `#some(x)`. The `Result(a, e)` type and its functions ([results and options](../stdlib/prelude-results)), and the helpers for option-like unions, named for the `#some` tag, among them `someOrElse`, which `a ?? b` calls by its reserved name `__someOrElse` ([results and options](../stdlib/prelude-results#options)). The contexts for equality, ordering, hashing and joining. `ToString(a)`, which every interpolation hole goes through (`"{x}"` is a call to `__interpolate(x)`, which requires it), and `FromString(a, e)`, with the `toString` and `fromString` attached to the built-in types. `int` and `float`, the number contexts (`Add`, `Num`) and powers, the sized number types, and conversions between them. Lists ([lists](../stdlib/prelude-lists)), maps and sets ([maps and sets](../stdlib/prelude-maps)) |
-| `nanyx/host.runtime` | The `HostRuntime` context, with no members, which the toolchain provides to hosts; anywhere else, requiring it is an error (`NYX0238`) |
-| `nanyx/host.memory` | A host's access to linear memory, for the foreign functions it calls: blocks, reads and writes, strings' addresses ([host.memory](../stdlib/host-memory)) |
-| `nanyx/math`    | Arithmetic over `Num(a)`, so on `int` and `float`; comparisons over `Ord(a)` (`min`, `max`, `clamp` and the like); square roots, exponentials, logarithms and rounding on `float`; the constants `pi` and `e` ([math](../stdlib/math)) |
-| `nanyx/text`    | Functions attached to `String`: measuring, searching, slicing, case, trimming, padding, splitting and joining, replacing, and characters; called as `string.trim(s)` or `s \trim` ([text](../stdlib/text)) |
-
-`println`, `Console` and `Env` aren't in the standard library: they are in the console host's interface package,
-`nanyx.console.core`, which the compiler ships beside it, and the console host's prelude brings them into every module
-of a program (see [Built-ins as packages](./built-ins-as-packages)).
-
-Strings are UTF-8 and this first slice of `nanyx/text` works byte by byte: `length` counts bytes,
-indices and widths are byte offsets, `uppercase`/`lowercase` only change ASCII letters and the trimming
-functions and `words` only treat ASCII whitespace as whitespace. `indexOf` and `lastIndexOf` return
-`#some(index)` or `#notFound`, as the language docs specify. `split`, `substring`, `replace`, `padStart` and
-`padEnd` take their arguments after the string by name, as in `s \split(on = ",")`, and `join` takes its separator by
-position ([Named parameters](../stdlib/standard-library#named-parameters)). `++` (concatenation) and `==`
-on strings are language operators, lowered by the backend.
+What each module holds is in the [Standard Library](../stdlib/standard-library) section, generated from the library's
+doc comments. `println`, `Console` and `Env` aren't in the standard library: they are in the console host's interface
+package, `nanyx.console.core`, which the compiler ships beside it, and the console host's prelude brings them into every
+module of a program (see [Hosts](../advanced/hosts#the-console-host)).
 
 # Its pages on the docs site
 

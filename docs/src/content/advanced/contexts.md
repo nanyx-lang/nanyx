@@ -351,7 +351,7 @@ def readAndPrintFile: [Console, FileSystem] string -> () = { path ->
 
 # Console by default
 
-The entry function (the one marked `@entry`, see [Attributes](../tour/attributes)) runs in `Console`, which is why `println` is available in `main` without extra setup. `println`, `print`, `eprintln` and `eprint` take any value with a [`ToString`](#tostringa): `println(42)` prints `42`, and `println([1, 2])` prints `[1, 2]`.
+The entry function (the one marked `@entry`, see [Attributes](../tour/attributes)) runs in `Console`, which is why `println` is available in `main` without extra setup: the console host, which runs command-line programs, provides it, with `Env` (see [Hosts](./hosts)). `println`, `print`, `eprintln` and `eprint` take any value with a [`ToString`](#tostringa): `println(42)` prints `42`, and `println([1, 2])` prints `[1, 2]`.
 
 # Contexts as typeclasses
 

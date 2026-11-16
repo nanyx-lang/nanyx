@@ -4,7 +4,7 @@ description: A host's access to linear memory, for the foreign functions it call
 order: 16
 ---
 
-Only a host imports `nanyx/host.memory`, to pass buffers to and from the foreign functions it calls. How hosts and foreign functions work is described in [Hosts](../work-in-progress/hosts) and [Foreign functions](../work-in-progress/foreign-functions).
+Only a host imports `nanyx/host.memory`, to pass buffers to and from the foreign functions it calls. How hosts use it is described in [Hosts](../advanced/hosts#host-memory).
 
 # Reference
 
