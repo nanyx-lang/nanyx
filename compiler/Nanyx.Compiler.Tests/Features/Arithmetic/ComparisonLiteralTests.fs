@@ -10,12 +10,12 @@ let ``An integer literal beside a comparison of a value of a type variable is ze
     let typed =
         compileClean (
             """
-def isNegative: [Num(a) & Ord(a)] a -> bool = { n -> n < 0 }
-def atMost: [Num(a) & Ord(a)] a -> bool = { n -> n <= 3 }
-def above: [Num(a) & Ord(a)] a -> bool = { n -> 3 > n }
-def atLeast: [Num(a) & Ord(a)] a -> bool = { n -> n >= 1 }
-def isZero: [Num(a) & Eq(a)] a -> bool = { n -> 0 == n }
-def notTwo: [Num(a) & Eq(a)] a -> bool = { n -> n != 2 }
+def isNegative: [Num(a), Ord(a)] a -> bool = { n -> n < 0 }
+def atMost: [Num(a), Ord(a)] a -> bool = { n -> n <= 3 }
+def above: [Num(a), Ord(a)] a -> bool = { n -> 3 > n }
+def atLeast: [Num(a), Ord(a)] a -> bool = { n -> n >= 1 }
+def isZero: [Num(a), Eq(a)] a -> bool = { n -> 0 == n }
+def notTwo: [Num(a), Eq(a)] a -> bool = { n -> n != 2 }
 def checks = [isNegative(-2.5), atMost(3), above(1.5), atLeast(1), isZero(0.0), notTwo(2)]
 """
                 .ReplaceLineEndings "\n"
@@ -26,10 +26,10 @@ def checks = [isNegative(-2.5), atMost(3), above(1.5), atLeast(1), isZero(0.0), 
 let ``An integer literal beside a comparison needs Num, and a decimal one is an error`` () =
     Assert.Equal(
         ("'1' is an 'a' here, which needs Num(a): add [Num(a)] to the type of 'isOne'", "1"),
-        missingContext "def isOne: [Add(a) & Eq(a)] a -> bool = { n -> n == 1 }\n")
+        missingContext "def isOne: [Add(a), Eq(a)] a -> bool = { n -> n == 1 }\n")
     Assert.Equal(
         (DiagnosticCodes.TypeMismatch.Code, "0.5"),
-        singleError "def isHalf: [Num(a) & Eq(a)] a -> bool = { n -> n == 0.5 }\n")
+        singleError "def isHalf: [Num(a), Eq(a)] a -> bool = { n -> n == 0.5 }\n")
 
 [<Fact>]
 let ``An integer literal beside a comparison outside generic code is an int`` () =

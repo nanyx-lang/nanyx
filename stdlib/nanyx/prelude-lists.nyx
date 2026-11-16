@@ -295,7 +295,7 @@ def distinctOnto: [Eq(a)] list(a), list(a) -> list(a) = {
 
 --| The elements of `xs` whose key is not in `seen`, each the first with its key, last first, in front
   of `acc`.
-def distinctByReversed: [Eq(b) & Hash(b) & c] list(a), ([c] a -> b), set(b), list(a) -> list(a) = {
+def distinctByReversed: [Eq(b), Hash(b), c] list(a), ([c] a -> b), set(b), list(a) -> list(a) = {
   | [], _, _, acc -> acc
   | [x, ...rest], key, seen, acc ->
     def k = key(x)
@@ -308,14 +308,14 @@ def distinctByReversed: [Eq(b) & Hash(b) & c] list(a), ([c] a -> b), set(b), lis
 --| The elements without two of the same `key`, each kept where the first with its key appears:
   `list.distinctBy(people, { p -> p.name })` keeps one person of each name. Stack-safe: it works on a
   list of any length.
-export def list.distinctBy: [Eq(b) & Hash(b) & c] list(a), ([c] a -> b) -> list(a) = { xs, key ->
+export def list.distinctBy: [Eq(b), Hash(b), c] list(a), ([c] a -> b) -> list(a) = { xs, key ->
   reverseOnto(distinctByReversed(xs, key, set.empty, []), [])
 }
 
 --| `xs` and `ys`, each already in order of `key`, merged into one list in that order, after the
   elements of `acc` (which holds the merged elements so far, last first). Of two elements with the
   same key, the one from `xs` comes first.
-def mergeBy: [Ord(b) & c] list(a), list(a), ([c] a -> b), list(a) -> list(a) = {
+def mergeBy: [Ord(b), c] list(a), list(a), ([c] a -> b), list(a) -> list(a) = {
   | [], ys, _, acc -> reverseOnto(acc, ys)
   | xs, [], _, acc -> reverseOnto(acc, xs)
   | [x, ...xs], [y, ...ys], key, acc -> if key(y) < key(x)
@@ -324,13 +324,13 @@ def mergeBy: [Ord(b) & c] list(a), list(a), ([c] a -> b), list(a) -> list(a) = {
 }
 
 --| `runs` with each pair of neighbouring runs merged into one, in order, after the reversed `acc`.
-def mergePairs: [Ord(b) & c] list(list(a)), ([c] a -> b), list(list(a)) -> list(list(a)) = {
+def mergePairs: [Ord(b), c] list(list(a)), ([c] a -> b), list(list(a)) -> list(list(a)) = {
   | [xs, ys, ...rest], key, acc -> mergePairs(rest, key, [mergeBy(xs, ys, key, []), ...acc])
   | rest, _, acc -> reverseOnto(acc, rest)
 }
 
 --| The elements of `runs`, each run already in order of `key`, merged into one list in that order.
-def mergeRuns: [Ord(b) & c] list(list(a)), ([c] a -> b) -> list(a) = {
+def mergeRuns: [Ord(b), c] list(list(a)), ([c] a -> b) -> list(a) = {
   | [], _ -> []
   | [run], _ -> run
   | runs, key -> mergeRuns(mergePairs(runs, key, []), key)
@@ -339,7 +339,7 @@ def mergeRuns: [Ord(b) & c] list(list(a)), ([c] a -> b) -> list(a) = {
 --| The elements in ascending order of `key`. The sort is stable: elements with the same key keep
   their order. A key can be of any type with an order: `list.sortBy(people, { p -> p.name })`.
   Stack-safe: it works on a list of any length.
-export def list.sortBy: [Ord(b) & c] list(a), ([c] a -> b) -> list(a) = { xs, key ->
+export def list.sortBy: [Ord(b), c] list(a), ([c] a -> b) -> list(a) = { xs, key ->
   mergeRuns(list.map(xs, { x -> [x] }), key)
 }
 
@@ -377,7 +377,7 @@ export def list.max: [Ord(a)] list(a) -> #some(a) | #emptyList = {
 
 --| Of `least`, whose key is `leastKey`, and the elements of `xs`, the one with the least key, the first
   of them when several keys are least.
-def leastByOf: [Ord(b) & c] list(a), ([c] a -> b), a, b -> a = {
+def leastByOf: [Ord(b), c] list(a), ([c] a -> b), a, b -> a = {
   | [], _, least, _ -> least
   | [x, ...rest], key, least, leastKey ->
     def k = key(x)
@@ -386,7 +386,7 @@ def leastByOf: [Ord(b) & c] list(a), ([c] a -> b), a, b -> a = {
 
 --| Of `greatest`, whose key is `greatestKey`, and the elements of `xs`, the one with the greatest key,
   the first of them when several keys are greatest.
-def greatestByOf: [Ord(b) & c] list(a), ([c] a -> b), a, b -> a = {
+def greatestByOf: [Ord(b), c] list(a), ([c] a -> b), a, b -> a = {
   | [], _, greatest, _ -> greatest
   | [x, ...rest], key, greatest, greatestKey ->
     def k = key(x)
@@ -398,14 +398,14 @@ def greatestByOf: [Ord(b) & c] list(a), ([c] a -> b), a, b -> a = {
 
 --| The element with the least `key`, or `#emptyList`. Of several elements with the least key, the
   first. `key` is called once for each element.
-export def list.minBy: [Ord(b) & c] list(a), ([c] a -> b) -> #some(a) | #emptyList = {
+export def list.minBy: [Ord(b), c] list(a), ([c] a -> b) -> #some(a) | #emptyList = {
   | [], _ -> #emptyList
   | [x, ...rest], key -> #some(leastByOf(rest, key, x, key(x)))
 }
 
 --| The element with the greatest `key`, or `#emptyList`. Of several elements with the greatest key,
   the first. `key` is called once for each element.
-export def list.maxBy: [Ord(b) & c] list(a), ([c] a -> b) -> #some(a) | #emptyList = {
+export def list.maxBy: [Ord(b), c] list(a), ([c] a -> b) -> #some(a) | #emptyList = {
   | [], _ -> #emptyList
   | [x, ...rest], key -> #some(greatestByOf(rest, key, x, key(x)))
 }

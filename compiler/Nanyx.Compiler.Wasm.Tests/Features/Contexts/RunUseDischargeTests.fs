@@ -78,7 +78,7 @@ let ``Run - a use's member given by its name runs with the instance the def arou
     let source =
         choose
         + """
-def go: [Choose & Console] () -> () = {
+def go: [Choose, Console] () -> () = {
   use Move(move = chooser)
   println("{move(7)}")
 }

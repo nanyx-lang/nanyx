@@ -19,7 +19,7 @@ def main = { name: string -> println("Hello, {name}!") }
     Assert.Equal(DiagnosticCodes.EntryDoesNotFitHost.Code, code)
     Assert.Equal(
         """The entry point 'main' doesn't fit the host 'nanyx.console/console.host'
-  expected: [Console & Env] () -> a
+  expected: [Console, Env] () -> a
   found:    string -> ()""".ReplaceLineEndings "\n",
         message)
     Assert.Equal("@entry", text)

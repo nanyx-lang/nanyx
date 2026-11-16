@@ -82,7 +82,7 @@ let ``A context's or a type's parameter is a single lowercase letter, and a long
         | Result.Ok _ -> failwith $"Expected '{source}' not to parse"
 
 [<Fact>]
-let ``An operator is required by the member it reads, among a def's contexts`` () =
+let ``An operator required by the member it reads is read among a def's contexts, for the compiler to report`` () =
     let contextsOf source =
         match parseModule source with
         | Result.Ok [ Kind (Def (ValueDef (_, _, Some { Kind = TypeWithContext (contexts, _) }, _))) ]
@@ -95,29 +95,29 @@ let ``An operator is required by the member it reads, among a def's contexts`` (
     Assert.Equal<TypeExprKind list>([ required "+" (binary a) ], contextsOf "def add: [`+`: (a, a) -> a] a, a -> a = { + }")
     Assert.Equal<TypeExprKind list>(
         [ required "+" (binary a); TypeApply ("Eq", [ a ]); required "==" (binary (TypeExpr.synthetic (TypeName "bool"))); TypeName "Console" ],
-        contextsOf "def f: [(`+`: a, a -> a) & Eq(a) & (`==`: a, a -> bool) & Console] a -> a = { x -> x }")
-    // A member's type runs to the end of the set, so a `&` after it is an intersection in its type.
+        contextsOf "def f: [(`+`: a, a -> a), Eq(a), (`==`: a, a -> bool), Console] a -> a = { x -> x }")
+    // A member's type runs to the end of the list, so a `&` after it is an intersection in its type.
     let b = TypeExpr.synthetic (TypeVar "b")
     Assert.Equal<TypeExprKind list>(
         [ required "-" (TypeExpr.synthetic (TypeFunc (a, TypeExpr.synthetic (TypeIntersection [ a; b ])))) ],
         contextsOf "def f: [`-`: a -> a & b] a -> a = { x -> x }")
-    // The bracketed member spans its brackets, which the official linter's fixes rely on.
-    match parseModule "def f: [(`+`: a, a -> a) & Eq(a)] a -> a = { x -> x }" with
+    // The bracketed member spans its brackets, which the compiler's fix relies on.
+    match parseModule "def f: [(`+`: a, a -> a), Eq(a)] a -> a = { x -> x }" with
     | Result.Ok [ Kind (Def (ValueDef (_, _, Some { Kind = TypeWithContext (requirement :: _, _) }, _))) ] ->
         Assert.Equal(8, requirement.Span.Start)
         Assert.Equal(24, requirement.Span.End)
     | other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]
-let ``A def's contexts are joined with &, or with + as an earlier spec had it`` () =
+let ``A def's contexts are separated by commas, and & and + between them are read for the compiler to report`` () =
     let contextsOf source =
         match parseModule source with
         | Result.Ok [ Kind (Def (ValueDef (_, _, Some { Kind = TypeWithContext (contexts, _) }, _))) ] -> contexts |> List.map _.Kind
         | other -> failwith $"Unexpected parse: %A{other}"
     let a = TypeExpr.synthetic (TypeVar "a")
     let expected = [ TypeApply ("Eq", [ a ]); TypeApply ("Hash", [ a ]); TypeName "Console" ]
-    Assert.Equal<TypeExprKind list>(expected, contextsOf "def both: [Eq(a) & Hash(a) & Console] a, a -> bool = { x, y -> x == y }")
-    Assert.Equal<TypeExprKind list>(expected, contextsOf "def both: [Eq(a) + Hash(a) + Console] a, a -> bool = { x, y -> x == y }")
+    Assert.Equal<TypeExprKind list>(expected, contextsOf "def both: [Eq(a), Hash(a), Console] a, a -> bool = { x, y -> x == y }")
+    Assert.Equal<TypeExprKind list>(expected, contextsOf "def both: [Eq(a) & Hash(a) + Console] a, a -> bool = { x, y -> x == y }")
 
 /// The statements of `def main = { ... }` in `source`, its line endings made `\n`.
 let private mainStatements (source: string) =

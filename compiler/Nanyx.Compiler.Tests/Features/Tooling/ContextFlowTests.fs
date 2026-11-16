@@ -43,7 +43,7 @@ def note: [Log] string -> () = { s -> log(s) }
 
 def tick: [Clock] () -> int = { now() }
 
-def main: [Log & Clock] () -> int = {
+def main: [Log, Clock] () -> int = {
   note("a")
   use Log(log = { s -> () })
   note("b")

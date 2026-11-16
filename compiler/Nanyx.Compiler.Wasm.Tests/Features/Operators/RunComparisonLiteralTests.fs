@@ -10,12 +10,12 @@ let ``Run - generic code compares with integer literals, at ints and floats`` ()
         """
 import nanyx/math as math
 
-def isNegative: [Num(a) & Ord(a)] a -> bool = { n -> n < 0 }
-def atMost: [Num(a) & Ord(a)] a -> bool = { n -> n <= 3 }
-def below: [Num(a) & Ord(a)] a -> bool = { n -> 3 > n }
-def atLeast: [Num(a) & Ord(a)] a -> bool = { n -> n >= 1 }
-def isZero: [Num(a) & Eq(a)] a -> bool = { n -> 0 == n }
-def notTwo: [Num(a) & Eq(a)] a -> bool = { n -> n != 2 }
+def isNegative: [Num(a), Ord(a)] a -> bool = { n -> n < 0 }
+def atMost: [Num(a), Ord(a)] a -> bool = { n -> n <= 3 }
+def below: [Num(a), Ord(a)] a -> bool = { n -> 3 > n }
+def atLeast: [Num(a), Ord(a)] a -> bool = { n -> n >= 1 }
+def isZero: [Num(a), Eq(a)] a -> bool = { n -> 0 == n }
+def notTwo: [Num(a), Eq(a)] a -> bool = { n -> n != 2 }
 @entry
 def main = {
   println("{isNegative(-2)} {isNegative(0)} {isNegative(-2.5)} {isNegative(0.5)}")

@@ -51,7 +51,7 @@ def main = {
 [<Fact>]
 let ``Run - a function that requires one context applied to two structural types`` () =
     // Each instance's members are known by a key of their own, not both by `ToString_unknown_toString`.
-    let source = """def f: [ToString(#x(a) | #y) & ToString((int, bool))] (#x(a) | #y), (int, bool) -> string = { v, p -> "{v} {p}" }
+    let source = """def f: [ToString(#x(a) | #y), ToString((int, bool))] (#x(a) | #y), (int, bool) -> string = { v, p -> "{v} {p}" }
 
 @entry
 def main = {

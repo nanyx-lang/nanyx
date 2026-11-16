@@ -63,7 +63,7 @@ apply(println, "seven")
 let ``Run - println passed as a value at a type variable gets the ToString its def requires`` () =
     let source = """def apply: [c] ([c] a -> ()), a -> () = { f, x -> f(x) }
 
-def show: [ToString(a) & Console] a -> () = { x -> apply(println, x) }
+def show: [ToString(a), Console] a -> () = { x -> apply(println, x) }
 
 show(5)
 """
@@ -113,7 +113,7 @@ apply(say, "loud")
 let ``Run - a function that requires a context of the module's own passed as a value`` () =
     let source = """context Greeter = (greet: [Console] string -> ())
 
-def hello: [Greeter & Console] string -> () = { name -> greet(name) }
+def hello: [Greeter, Console] string -> () = { name -> greet(name) }
 
 def apply: [c] ([c] string -> ()), string -> () = { f, s -> f(s) }
 
@@ -137,7 +137,7 @@ def nested = {
   { use Log(log = { m -> println("inner " ++ m) }) in greet("a") }
 }
 
-def before: [Log & Console] () -> ([Log & Console] () -> ()) = {
+def before: [Log, Console] () -> ([Log, Console] () -> ()) = {
   {
     greet("b")
     use Log(log = { m -> println("inner " ++ m) })

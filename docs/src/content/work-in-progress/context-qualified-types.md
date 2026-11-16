@@ -81,7 +81,7 @@ user's reach. Only intrinsics stay private to it.
 
 # Open questions
 
-- **Both forms on one declaration,** such as `[Memory & k]`, or two scoped contexts: an error to start with, unless
+- **Both forms on one declaration,** such as `[Memory, k]`, or two scoped contexts: an error to start with, unless
   the implementation finds it falls out.
-- **Separators.** Several contexts are joined with `,`, not `&`, in these declarations as in every context list
+- **Separators.** Several contexts are separated by `,` in these declarations, as in every context list
   ([#1531](https://github.com/nanyx-lang/nanyx/issues/1531)).

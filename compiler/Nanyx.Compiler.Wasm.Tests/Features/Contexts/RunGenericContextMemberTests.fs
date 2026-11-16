@@ -77,7 +77,7 @@ def lookup: [Proc] int -> #some(int) | #missing = { i ->
   bind(name(i), { s -> bind(size(s), { n -> ret(n) }) })
 }
 
-def display: [Proc & Console] int -> () = { i ->
+def display: [Proc, Console] int -> () = { i ->
   match lookup(i)
     | #some(n) -> println("{n}")
     | #missing -> println("missing")
@@ -129,7 +129,7 @@ let ``Run - a context member's boxed values may be lists, converted element by e
   firstOr: (list(a), a) -> a
 )
 
-def describe: [Lists & Console] () -> () = {
+def describe: [Lists, Console] () -> () = {
   def numbers = reversed([1, 2, 3])
   def words = reversed(["x", "y"])
   println("{firstOr(numbers, 0)} {firstOr(words, "none")} {firstOr(reversed([]), 7)}")

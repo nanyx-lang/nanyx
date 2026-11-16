@@ -194,7 +194,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
             [
                 ("def apply: [c] ([c] a -> b), a -> b", "declared"),
                 ("def apply: [Console] ([Console] string -> ()), string -> ()", "at this use"),
-                ("c = Console, a = string, b = ()", "type variables")
+                ("c = [Console], a = string, b = ()", "type variables")
             ],
             Section(await InfoViewAt(uri, 2, 14), "cursor", "expression").Select(item => (item.Text, item.Detail)));
     }
@@ -478,7 +478,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
             context Show(a) = (show: a -> string)
             context Log = (log: string -> ())
             type Point = (x: int, y: int)
-            def describe: [Log & Show(a)] a -> string = { x -> show(x) }
+            def describe: [Log, Show(a)] a -> string = { x -> show(x) }
             def main: [Log] () -> string = {
               use Show(Point)(show = { p -> "p" })
               describe(Point(x = 1, y = 2))

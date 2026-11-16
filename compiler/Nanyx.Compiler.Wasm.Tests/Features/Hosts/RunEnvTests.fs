@@ -57,7 +57,7 @@ let ``A variable that is set gives its value, and one that is not gives notSet``
     let source =
         """module main
 
-def show: [Env & Console] string -> () = { name ->
+def show: [Env, Console] string -> () = { name ->
   match variable(name)
     | #some(value) -> println("{name}={value}")
     | #notSet -> println("{name} is not set")

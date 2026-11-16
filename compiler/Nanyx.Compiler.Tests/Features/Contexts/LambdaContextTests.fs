@@ -201,7 +201,7 @@ def heading: [Log] string -> () = { title -> log(title) }
     Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, code)
     Assert.Equal("log", text)
     compileClean (
-        source.Replace("def heading: [Log]", "def heading: [Log & Console]")
+        source.Replace("def heading: [Log]", "def heading: [Log, Console]")
         + """
 def main: [Console] () -> () = {
   use Log(log = { (s: string) -> println(s) })

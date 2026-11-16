@@ -50,7 +50,7 @@ export context Proc = (
   `try` that fails in the body ends the whole block with that failure, and a `return` ends it
   with its value, as they do outside the loop: the items after it, and what follows the loop,
   don't run.
-export def proc: [c] ([Proc & c] () -> #some(b) | r) -> #some(b) | r = { block ->
+export def proc: [c] ([Proc, c] () -> #some(b) | r) -> #some(b) | r = { block ->
   use Proc(
     try = {
       | #some(value), continue -> continue(value)

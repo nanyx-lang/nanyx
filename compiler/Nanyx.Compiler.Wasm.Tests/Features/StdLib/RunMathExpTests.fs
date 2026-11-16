@@ -33,7 +33,7 @@ let ``Run - nanyx/math sign gives -1, 0 or 1 of the argument's type`` () =
     let source =
         """import nanyx/math as math
 
-def direction: [Num(a) & Ord(a)] a, a -> a = { from, to -> math.sign(to - from) }
+def direction: [Num(a), Ord(a)] a, a -> a = { from, to -> math.sign(to - from) }
 
 println("{math.sign(-7)} {math.sign(0)} {math.sign(42)}")
 println("{math.sign(-2.5)} {math.sign(0.0)} {math.sign(0.5)} {math.sign(-0.0)}")

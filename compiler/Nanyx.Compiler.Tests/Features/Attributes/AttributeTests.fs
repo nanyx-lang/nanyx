@@ -59,7 +59,7 @@ let ``A context member's keyword kind is accepted, and the builder's block compi
   return: int -> int
 )
 
-def logged: [c] ([Logged & c] () -> int) -> int = { block ->
+def logged: [c] ([Logged, c] () -> int) -> int = { block ->
   use Logged(step = { value, continue -> continue(value + 1) }, return = { value -> value }) in block()
 }
 

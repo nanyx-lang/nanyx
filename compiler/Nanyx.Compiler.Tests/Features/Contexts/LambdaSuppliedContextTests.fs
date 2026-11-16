@@ -9,7 +9,7 @@ open Nanyx.Compiler.Tests.TestSupport
 
 let private withLog = """context Log = (log: string -> ())
 
-def withLog: [Console & c] ([Log & c] () -> ()) -> () = { f ->
+def withLog: [Console, c] ([Log, c] () -> ()) -> () = { f ->
   use Log(log = { m -> println("[log] {m}") }) in f()
 }
 
@@ -37,7 +37,7 @@ def main: [Console] () -> () = {
 let ``A lambda passed as one of several arguments can use the context its parameter requires`` () =
     compileClean """context Log = (log: string -> ())
 
-def withPrefix: [Console & c] string, ([Log & c] () -> ()) -> () = { prefix, f ->
+def withPrefix: [Console, c] string, ([Log, c] () -> ()) -> () = { prefix, f ->
   use Log(log = { m -> println("[{prefix}] {m}") }) in f()
 }
 

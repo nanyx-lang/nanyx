@@ -21,13 +21,13 @@ export def pi: float = 3.141592653589793
 export def e: float = 2.718281828459045
 
 --| `n` without its sign. A value that is neither below nor above `0` is `zero`, so `abs(-0.0)` is `0.0`.
-export def abs: [Num(a) & Ord(a)] a -> a = { n ->
+export def abs: [Num(a), Ord(a)] a -> a = { n ->
   if n < 0 then -n else if n > 0 then n else zero
 }
 
 --| `-1`, `0` or `1`, of the type of `n`, as `n` is below, neither below nor above, or above `zero`:
   `sign(-2.5)` is `-1.0` and `sign(-0.0)` is `0.0`.
-export def sign: [Num(a) & Ord(a)] a -> a = { n ->
+export def sign: [Num(a), Ord(a)] a -> a = { n ->
   match compare(n, zero)
     | #less -> -fromInt(1)
     | #greater -> fromInt(1)

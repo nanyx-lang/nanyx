@@ -151,7 +151,7 @@ module Unifier =
             match writtenContexts contexts |> List.map FunctionContexts.withoutScope with
             | [] -> $"{argText} -> {retText}"
             | written ->
-                $"""[{written |> List.map (printTy spread false) |> String.concat " & "}] {argText} -> {retText}"""
+                $"""[{written |> List.map (printTy spread false) |> String.concat ", "}] {argText} -> {retText}"""
         | TyRecord fields ->
             match tryTupleLikeRecord fields with
             | Some tupleItems, namedFields ->

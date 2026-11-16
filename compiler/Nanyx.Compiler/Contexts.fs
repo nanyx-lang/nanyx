@@ -24,13 +24,12 @@ let extractDefContexts (typeExpr: TypeExpr option) (value: Expression) : TypeExp
     | Some (Kind (TypeWithContext(_, Kind (TypeFunc _)))), _ -> None, typeExpr
     | _ -> extractContextFromTypeExpr typeExpr
 
-/// `typeOpt`, a def's annotation, with each operator it requires by its member read as the prelude's context that has
-/// it (see `InlineContexts`), and the errors in how they are written, if any.
-let internal readInlineContexts (state: InferState) (typeOpt: TypeExpr option) : TypeExpr option * Result<unit, Diagnostic list> =
-    match typeOpt |> Option.map (InlineContexts.resolve typeExprToTy state) with
-    | Some (Ok resolved) -> Some resolved, Ok ()
-    | Some (Error errors) -> typeOpt, Error errors
-    | None -> None, Ok ()
+/// The errors for the operators `typeOpt`, a def's annotation, requires by their members rather than by the contexts
+/// that have them (see `InlineContexts`), if any.
+let internal checkMemberRequirements (state: InferState) (typeOpt: TypeExpr option) : Result<unit, Diagnostic list> =
+    match typeOpt with
+    | Some annotation -> InlineContexts.check typeExprToTy state annotation
+    | None -> Ok ()
 
 /// `env` with the members of the instance a `use` of a value of type `ty` loads, each bound by its name. When the
 /// type names a plain context, as `Foo(bar = ...)`'s does, each member has the symbol the context's definition
@@ -195,7 +194,7 @@ let internal extendEnvWithContexts (env: TypeEnv) (state: InferState) (contexts:
 
 /// `env` for the body of `lambda`, passed as a parameter of the type `paramTy`: with the members of each plain context
 /// that type requires, as far as `state` says, so the body can call them and what requires them. The function the
-/// lambda is passed to supplies them, as `withLog: [Console & c] ([Log & c] () -> ()) -> ()` supplies `Log` to its
+/// lambda is passed to supplies them, as `withLog: [Console, c] ([Log, c] () -> ()) -> ()` supplies `Log` to its
 /// block, so the lambda's type requires them and the code around it does not (see `LambdaContexts`). Each is provided
 /// by the type the lambda is checked against, at the lambda. A script's statements (`InferState.ScriptEntry`) are not
 /// given them: they are the top level, whose names they see, as the module's own defs, and whose ambient contexts they

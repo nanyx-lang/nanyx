@@ -31,7 +31,7 @@ The simplest possible workflow can be illustrated with a builder whose context h
 ```nanyx fragment
 context Debug = (yield: [c] (string, ([c] () -> ())) -> ())
 
-def debug: [c & Console] ([Debug & c] () -> ()) -> () = { block ->
+def debug: [c, Console] ([Debug, c] () -> ()) -> () = { block ->
   use Debug(
     yield = { value, continue ->
       println(value)
@@ -62,13 +62,13 @@ Because `yield` here calls its continuation immediately, the block runs top to b
 
 Three things about the types are worth knowing when writing a builder:
 
-- **The builder writes its type.** The block's type, `[Debug & c] () -> ()`, is what gives the block the context's members. A builder whose type is inferred can't say that.
+- **The builder writes its type.** The block's type, `[Debug, c] () -> ()`, is what gives the block the context's members. A builder whose type is inferred can't say that.
 - **A continuation takes a context variable.** The rest of the block calls the context's members, so the continuation requires the context. A member that takes a continuation writes its type as `[c] ... -> ...` with a context variable, as `yield`'s `[c] () -> ()` does, and so does the block's type, so that the block may also call what requires other contexts, such as `println`.
 - **Members are generic at each call.** A member's own type variables are instantiated afresh at each call, so one block can bind values of different types: `try` in `proc` binds an `int` in one statement and a `string` in the next.
 
 Applying a keyword to a value without parentheses, as in `yield! 1` or `try f()`, is sugar reserved for workflow keywords; ordinary functions are always called with parentheses. `try` and `return` are written without the `!`.
 
-A builder can take parameters before its block, and can require contexts of its own. `retrying(3) { ... }` is `retrying(3, { ... })`, and a builder whose type is `[Scheduler & c] ([Async & c] () -> a) -> a` needs a `Scheduler` where it is called.
+A builder can take parameters before its block, and can require contexts of its own. `retrying(3) { ... }` is `retrying(3, { ... })`, and a builder whose type is `[Scheduler, c] ([Async, c] () -> a) -> a` needs a `Scheduler` where it is called.
 
 # Yield and collection builders
 
@@ -123,7 +123,7 @@ context Retry = (
   retry: [c] (Attempt(a), ([c] a -> Attempt(b))) -> Attempt(b)
 )
 
-def retrying: [c] int, ([Retry & c] () -> Attempt(a)) -> Attempt(a) = { times, block ->
+def retrying: [c] int, ([Retry, c] () -> Attempt(a)) -> Attempt(a) = { times, block ->
   use Retry(retry = { attempt, continue -> ... }) in block()
 }
 ```
