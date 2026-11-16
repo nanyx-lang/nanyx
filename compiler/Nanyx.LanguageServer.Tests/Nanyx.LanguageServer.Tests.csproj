@@ -22,4 +22,6 @@
     <ProjectReference Include="..\Nanyx.LanguageServer\Nanyx.LanguageServer.csproj" />
   </ItemGroup>
 
+  <Import Project="..\CheckedLibrary.targets" />
+
 </Project>

@@ -1,5 +1,6 @@
 module Nanyx.Compiler.Tests.Features.StdLib.StandardLibraryCache
 
+open System.IO
 open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
@@ -63,3 +64,31 @@ let ``A standard-library file's source is read once per process`` () =
     let second = StandardLibrary.tryLoadFile "nanyx/prelude.nyx"
     Assert.True(obj.ReferenceEquals(first.Value, second.Value))
     Assert.Equal(None, StandardLibrary.tryLoadFile "nanyx/missing.nyx")
+
+// The build checks the library once and puts it beside the compiler (#837), so a compile does not check it at all.
+
+let private preludeKey = StandardLibrary.importPrefix + StandardLibrary.preludeModuleName
+
+let private preludeSource = StandardLibrary.tryLoadSource StandardLibrary.preludeModuleName |> Option.get
+
+[<Fact>]
+let ``The build puts the checked library beside the compiler`` () =
+    Assert.True(File.Exists CheckedLibrary.path, $"{CheckedLibrary.path} is missing")
+    Assert.NotEmpty(CheckedLibrary.read CheckedLibrary.path CheckedLibrary.libraryHash.Value)
+
+[<Fact>]
+let ``A compile takes the prelude from the checked library and does not check it`` () =
+    let recording = Recording()
+    let result = Compiler.compileReporting recording Linters.none "def x = 1\n"
+    Assert.True(result.TypeChecked, sprintf "%A" result.Diagnostics)
+    Assert.DoesNotContain($"start {preludeKey}", recording.Events)
+    Assert.Contains($"reused {preludeKey}", recording.Events)
+
+[<Fact>]
+let ``A library module whose source has changed is not taken from the checked library`` () =
+    Assert.True((CheckedLibrary.tryFind preludeKey preludeSource).IsSome)
+    Assert.True((CheckedLibrary.tryFind preludeKey (preludeSource + "\ndef changed = 1\n")).IsNone)
+
+[<Fact>]
+let ``A checked library checked from another library is not read`` () =
+    Assert.Empty(CheckedLibrary.read CheckedLibrary.path (CheckedLibrary.libraryHash.Value + "0"))

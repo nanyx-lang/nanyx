@@ -930,11 +930,19 @@ module Compiler =
                 match origin with
                 | StandardLibraryModule _ ->
                     let source = readSource ()
+                    // The checked library has the module, unless its source has changed since (see `CheckedLibrary`): a
+                    // module read from it is reused, as one this process checked already is.
                     let check _ =
-                        lazy
-                            (let own = CheckedModules(None, None, checkedModules.Listener)
-                             let checkedModule = typecheckModule own origin source visited
-                             checkedModule, [ for KeyValue(importKey, imported) in own -> importKey, imported ])
+                        match CheckedLibrary.tryFind key source with
+                        | Some checkedModule ->
+                            let read = lazy checkedModule
+                            read.Force() |> ignore
+                            read
+                        | None ->
+                            lazy
+                                (let own = CheckedModules(None, None, checkedModules.Listener)
+                                 let checkedModule = typecheckModule own origin source visited
+                                 checkedModule, [ for KeyValue(importKey, imported) in own -> importKey, imported ])
                     let checking = checkedStandardLibrary.GetOrAdd((key, source), check)
                     if checking.IsValueCreated then checkedModules.Listener.ModuleReused key
                     let checkedModule, imports = checking.Value
@@ -975,6 +983,20 @@ module Compiler =
                 checkedSourceFiles.[key] <- { Package = checkedModules.Package; Read = List.ofSeq read; Module = checked; Imports = imports }
             | _ -> checkedSourceFiles.TryRemove key |> ignore
             checkedModule
+
+    /// Checks every module of the standard library, as an import of it does, and writes them to the file at `path` (see
+    /// `CheckedLibrary`). Only the build of the compiler does, in a process of its own, before it checks anything else:
+    /// the ids of what it checks start at `CheckedLibrary.firstId`.
+    let writeCheckedLibrary (path: string) =
+        CheckedLibrary.reading <- false
+        NodeId.startAt CheckedLibrary.firstId
+        SymbolId.startAt CheckedLibrary.firstId
+        Nanyx.LargeStack.run (fun () ->
+            let checkedModules = CheckedModules(None)
+            for name in StandardLibrary.preludeModuleName :: StandardLibrary.moduleNames do
+                let source = StandardLibrary.tryLoadSource name |> Option.defaultValue ""
+                typecheckImport checkedModules (StandardLibraryModule name) (fun () -> source) Set.empty |> ignore
+            CheckedLibrary.write path [ for KeyValue((key, source), checking) in checkedStandardLibrary -> key, source, checking.Value ])
 
     let parse (source: string) : Result<Module, Diagnostic list> =
         match parseModuleFileWithNames "" source with

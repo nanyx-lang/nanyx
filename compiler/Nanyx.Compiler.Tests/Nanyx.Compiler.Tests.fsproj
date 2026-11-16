@@ -197,4 +197,6 @@
     <ProjectReference Include="..\Nanyx.Compiler\NanyxCompiler.fsproj" />
   </ItemGroup>
 
+  <Import Project="..\CheckedLibrary.targets" />
+
 </Project>
