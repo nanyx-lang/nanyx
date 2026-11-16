@@ -353,6 +353,16 @@ module Unifier =
         let what = if extra.Length = 1 then "the context" else "the contexts"
         $"A '{tyToString given}' is given where '{tyToString expected}' is expected, whose functions don't require {what} {contexts}. Write them in front of the type expected, or a context variable for any, as in `[c] {tyToString expected}`."
 
+    /// Says which contexts make two values of a type generic in contexts, `left` and `right`, differ where they must be
+    /// the same type: `onlyLeft` are those the first carries that the second has no room for, and `onlyRight` the reverse.
+    let private carriedMismatchMessage (onlyLeft: Ty list) (onlyRight: Ty list) left right =
+        let onlyIn which contexts =
+            match contexts with
+            | [] -> None
+            | _ -> Some $"""only the {which} carries {contexts |> List.map (fun c -> $"'{tyToString c}'") |> String.concat ", "}"""
+        let differences = [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat "; "
+        $"Context mismatch: '{tyToString left}' and '{tyToString right}' must be the same type, but {differences}. Write the same contexts in front of both, or a context variable for any."
+
     /// Says which tags make two unions differ: `onlyLeft` are tags only the first has that the second cannot take,
     /// and `onlyRight` the reverse. `Tag union mismatch: only the first has #bad; only the second has #underflow.`
     let private tagUnionMessage (onlyLeft: Set<string>) (onlyRight: Set<string>) left right =
@@ -836,15 +846,24 @@ module Unifier =
                         // A value whose contexts nothing has settled yet, as a constructor's, carries the other's, as
                         // where it is given (see the nominal case of assignability): made the same as another such, the
                         // two would otherwise share a made-up variable.
+                        // Settled contexts agree as two function types' do, and a mismatch is reported as the two
+                        // nominal types', not as the function type that carries them (#1677).
                         let argConstraints =
                             List.map2
                                 (fun lTy rTy ->
                                     match lTy, rTy with
                                     | FunctionContexts.Carried [ TyVar unsettled ], FunctionContexts.Carried other
                                     | FunctionContexts.Carried other, FunctionContexts.Carried [ TyVar unsettled ] when isPlainVar unsettled ->
-                                        (TyVar unsettled, TyUnion other, Equal, origin)
-                                    | _ -> (lTy, rTy, Equal, origin))
+                                        Ok [ (TyVar unsettled, TyUnion other, Equal, origin) ]
+                                    | FunctionContexts.Carried lContexts, FunctionContexts.Carried rContexts ->
+                                        FunctionContexts.agree freshRest origin lContexts rContexts
+                                        |> Result.mapError (fun (onlyLeft, onlyRight) -> carriedMismatchMessage onlyLeft onlyRight l r)
+                                    | _ -> Ok [ (lTy, rTy, Equal, origin) ])
                                 lArgs rArgs
+                        match argConstraints |> List.tryPick (function Error message -> Some message | Ok _ -> None) with
+                        | Some message -> Error (message, origin, ContextsNotAllowed)
+                        | None ->
+                        let argConstraints = argConstraints |> List.collect (function Ok constraints -> constraints | Error _ -> [])
                         match lUnderlying, rUnderlying with
                         | _ when lPrivate || rPrivate -> loop subst (argConstraints @ rest)
                         | TyRecursive _, _

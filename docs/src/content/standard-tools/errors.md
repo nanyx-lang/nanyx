@@ -1232,7 +1232,9 @@ context variable for any, as in `[c] (int -> int)`.
 
 The same goes for a value of a type generic in contexts (see
 [Types generic in contexts](../advanced/contexts#types-generic-in-contexts)): a `[Console] Thunk(int)` given where a
-`Thunk(int)` is expected is an error, as its functions require `Console`.
+`Thunk(int)` is expected is an error, as its functions require `Console`. So are two such values that must be the
+same type but carry different contexts, as when one's type is still being inferred where the other is passed: the
+message names both types and the contexts only one of them carries.
 
 # NYX0228: Type alias refers to itself outside a tag
 
