@@ -119,6 +119,31 @@ let valueDef: Parser<TopLevelItem, ParseState> =
                 (fun exportOpt (name, typeOpt, expr) -> Def(ValueDef(exportOpt.IsSome, name, typeOpt, expr))))
     <?> "value definition"
 
+/// `pattern int -> #Even | #Odd = { n -> ... }`, or `export pattern ...`: a custom pattern, as the def of its function
+/// (see `PatternSyntax`). Its type ends in the tags it returns, which are capitalised; the def declares its made-up name
+/// at the type.
+let patternDef: Parser<TopLevelItem, ParseState> =
+    let header =
+        attempt (opt (attempt (pstring "export" >>. keywordEnd >>. ws)) .>> pstring PatternSyntax.keyword .>> keywordEnd .>> ws)
+    let signature =
+        getPosition .>>. withSpan typeSignature >>= fun (start, (signature, span)) ->
+            match signature with
+            | PatternSyntax.Signature s ->
+                match s.Results |> List.tryFind (fst >> PatternSyntax.isPatternTag >> not) with
+                | Some (tag, _) -> reportFocused start $"A pattern's tags are capitalised, which tells them apart from other tags: write `#{Char.ToUpperInvariant tag[0]}{tag.Substring 1}`"
+                | None -> preturn (s, signature, span)
+            | _ -> reportFocused start "A pattern's type ends in the tags it returns, as in `pattern int -> #Even | #Odd`, with `| _` after them if it can fail to match"
+    getPosition >>= fun lineStart ->
+        spannedItem (
+            header .>>. signature >>= fun (exportOpt, (s, signature, span)) ->
+                defEqualsContinuation lineStart.Column >>. pstring "=" >>. ws >>. valueDefExprParser
+                >>= fun body ->
+                    let name = PatternSyntax.defName (PatternSyntax.shape s)
+                    declare DefValue body.Id [ name, span ]
+                    >>. noteDocumentable lineStart span.Start
+                    >>% Def(ValueDef(exportOpt.IsSome, name, Some signature, body)))
+    <?> "pattern declaration"
+
 // Top-level `def (x, y) = ...`, as the defs it desugars into (see `destructuringBindings`). Each spans the whole
 // `def (...) = value`.
 let valueDestructuringDef: Parser<TopLevelItem list, ParseState> =
@@ -237,6 +262,7 @@ let topLevelItem: Parser<TopLevelItem, ParseState> =
         attributeItem
         topLevelUse
         attempt typeDef
+        patternDef
         valueDef
         topLevelExpr
     ] .>> ws

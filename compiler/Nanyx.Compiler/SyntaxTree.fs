@@ -249,6 +249,7 @@ module SyntaxTree =
         | GuardPattern predicate -> referencedNames predicate
         | RangePattern(startValue, endValue) -> referencedNames startValue @ referencedNames endValue
         | TagPattern(_, Some payload) -> referencedNamesInPattern payload
+        | ArgumentTagPattern(_, arguments, payload) -> referencedNames arguments @ (payload |> Option.toList |> List.collect referencedNamesInPattern)
         | TuplePattern patterns
         | AndPattern patterns
         | ListPattern(patterns, _) -> patterns |> List.collect referencedNamesInPattern

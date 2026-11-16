@@ -238,6 +238,12 @@ and PatternKind =
     | RangePattern of Expression * Expression  // start..end (inclusive)
     | GuardPattern of Expression  // a predicate lambda, `{ < 0 }` or `{ x -> x % 2 == 0 }`: matches when it returns true
     | TagPattern of Identifier * Pattern option  // #tagName or #tagName(pattern)
+    /// `#SplitOn(",")(a, b)`: a custom pattern's tag with the arguments it is given, then the pattern its payload is
+    /// matched against, if it is written. Several arguments are a tuple. The parser writes it only where the brackets
+    /// can't be a payload: two groups, or one that is an expression but not a pattern, as `#DivisibleBy(n + 1)`.
+    /// `#DivisibleBy(3)` is a `TagPattern` whose payload the compiler reads as the arguments of a pattern that takes
+    /// them (see `PatternSyntax`).
+    | ArgumentTagPattern of tag: Identifier * arguments: Expression * payload: Pattern option
     /// `p1 & p2 & ...`: matches when every one of its patterns matches the same value, and binds the names of all
     /// of them. It has two parts or more.
     | AndPattern of Pattern list
@@ -677,6 +683,104 @@ module DestructuringSyntax =
     /// Whether `name` is the temporary of a destructuring def.
     let isTemp (name: Identifier) = tempName.IsMatch name
 
+/// `pattern int -> #Even | #Odd = { n -> ... }` (see the custom patterns page): a top-level def of the pattern's
+/// function, typed as written, under a name made up from what its type says, which no code can write. `export pattern`
+/// is an exported def. A pattern is identified by its tags, which are capitalised: a capitalised tag is always a
+/// pattern's. A `_` among the tags makes the pattern partial, and `_` as an expression in its body is "no match".
+module PatternSyntax =
+    let keyword = "pattern"
+    let private prefix = "__pattern_"
+
+    /// `_`, written in a pattern's body: the input doesn't match.
+    let noMatch = "_"
+
+    /// Whether `tag` is a pattern's: it is capitalised.
+    let isPatternTag (tag: Identifier) = tag <> "" && Char.IsUpper tag[0]
+
+    /// What a pattern's def name says of it, which is what a match that uses it needs to know: the tags it returns,
+    /// whether it takes arguments, whether it is partial, and whether its function returns a `bool`, as a partial
+    /// pattern with one tag and no payload does.
+    type Shape =
+        { Tags: Identifier list
+          TakesArguments: bool
+          IsPartial: bool
+          ReturnsBool: bool }
+
+    let private flags = [ 'A', (fun shape -> shape.TakesArguments); 'P', (fun shape -> shape.IsPartial); 'B', (fun shape -> shape.ReturnsBool) ]
+
+    /// The def name of the pattern of shape `shape`: its flags, then each tag after its length, so that the tags can be
+    /// read back whatever they are made of. `#Even | #Odd` is `__pattern__4Even3Odd`, and `#Zero | _` is
+    /// `__pattern_PB_4Zero`.
+    let defName (shape: Shape) =
+        let written = flags |> List.filter (fun (_, isSet) -> isSet shape) |> List.map (fst >> string) |> String.concat ""
+        prefix + written + "_" + (shape.Tags |> List.map (fun tag -> $"{tag.Length}{tag}") |> String.concat "")
+
+    /// The shape of the pattern whose def is named `name`, the last part of a qualified name, if it is a pattern's.
+    let shapeOf (name: Identifier) : Shape option =
+        let local = name.Substring(name.LastIndexOf '.' + 1)
+        let separator = if local.StartsWith prefix then local.IndexOf('_', prefix.Length) else -1
+        if separator < 0 then
+            None
+        else
+            let written = local.Substring(prefix.Length, separator - prefix.Length)
+            let rec read (at: int) (tags: Identifier list) =
+                if at = local.Length then
+                    Some (List.rev tags)
+                else
+                    let digits = Seq.length (Seq.takeWhile Char.IsDigit (local.Substring at))
+                    if digits = 0 then
+                        None
+                    else
+                        let length = int (local.Substring(at, digits))
+                        let start = at + digits
+                        if start + length > local.Length then None else read (start + length) (local.Substring(start, length) :: tags)
+            read (separator + 1) []
+            |> Option.filter (fun tags -> not tags.IsEmpty)
+            |> Option.map (fun tags ->
+                { Tags = tags
+                  TakesArguments = written.Contains 'A'
+                  IsPartial = written.Contains 'P'
+                  ReturnsBool = written.Contains 'B' })
+
+    /// What a pattern's type says: the arguments it takes, if it takes any; its input; the tags it returns, each with
+    /// its payload's type; and whether it is partial, written with `_` among its tags.
+    type Signature =
+        { Arguments: TypeExpr option
+          Input: TypeExpr
+          Results: (Identifier * TypeExpr option) list
+          IsPartial: bool }
+
+    /// The shape of a pattern with the signature `signature`.
+    let shape (signature: Signature) : Shape =
+        { Tags = signature.Results |> List.map fst
+          TakesArguments = signature.Arguments.IsSome
+          IsPartial = signature.IsPartial
+          ReturnsBool = signature.IsPartial && (match signature.Results with [ _, None ] -> true | _ -> false) }
+
+    /// The tags `results` writes, and whether they include `_`, if it is only tags and `_`.
+    let private resultsOf (results: TypeExpr) =
+        let items = match results.Kind with TypeUnion items -> items | _ -> [ results ]
+        let tags = items |> List.choose (function { Kind = TypeTag(name, payload) } -> Some (name, payload) | _ -> None)
+        let holes = items |> List.filter (function { Kind = TypeHole } -> true | _ -> false)
+        if tags.IsEmpty || tags.Length + holes.Length <> items.Length || holes.Length > 1 then None
+        else Some (tags, not holes.IsEmpty)
+
+    /// What a pattern's type, `input -> tags` or `arguments -> input -> tags`, says.
+    let (|Signature|_|) (typeExpr: TypeExpr) : Signature option =
+        match typeExpr.Kind with
+        | TypeFunc(arguments, { Kind = TypeFunc(input, results) }) when (resultsOf results).IsSome ->
+            let tags, isPartial = (resultsOf results).Value
+            Some { Arguments = Some arguments; Input = input; Results = tags; IsPartial = isPartial }
+        | TypeFunc(input, results) ->
+            resultsOf results
+            |> Option.map (fun (tags, isPartial) -> { Arguments = None; Input = input; Results = tags; IsPartial = isPartial })
+        | _ -> None
+
+    /// The pattern a top-level def declares, as the parser writes it: its signature and its body.
+    let (|Declaration|_|) (definition: Definition) =
+        match definition with
+        | ValueDef(_, name, Some (Signature signature), body) when (shapeOf name).IsSome -> Some (signature, body)
+        | _ -> None
 /// The names the compiler makes up: the built-ins syntax is desugared into (`__for`, `__with`) and the temporaries
 /// desugared code binds (`__tuple_3_1`) all start with "__".
 module MadeUpNames =
@@ -903,6 +1007,7 @@ module Pattern =
         | ListPattern(patterns, rest) -> (patterns @ Option.toList rest) |> List.collect expressions
         | ListSplatMiddle(before, after) -> (before @ after) |> List.collect expressions
         | TagPattern(_, payload) -> payload |> Option.toList |> List.collect expressions
+        | ArgumentTagPattern(_, arguments, payload) -> arguments :: (payload |> Option.toList |> List.collect expressions)
         | LiteralPattern _
         | IdentifierPattern _
         | WildcardPattern
@@ -919,7 +1024,8 @@ module Pattern =
             | RecordMemberPattern(members, _) -> members |> List.map snd
             | ListPattern(patterns, rest) -> patterns @ Option.toList rest
             | ListSplatMiddle(before, after) -> before @ after
-            | TagPattern(_, payload) -> Option.toList payload
+            | TagPattern(_, payload)
+            | ArgumentTagPattern(_, _, payload) -> Option.toList payload
             | GuardPattern _
             | RangePattern _
             | LiteralPattern _
@@ -939,7 +1045,8 @@ module Pattern =
         | RecordMemberPattern(members, _) -> members |> List.collect (snd >> boundNames)
         | ListPattern(patterns, rest) -> (patterns @ Option.toList rest) |> List.collect boundNames
         | ListSplatMiddle(before, after) -> (before @ after) |> List.collect boundNames
-        | TagPattern(_, payload) -> payload |> Option.toList |> List.collect boundNames
+        | TagPattern(_, payload)
+        | ArgumentTagPattern(_, _, payload) -> payload |> Option.toList |> List.collect boundNames
         | GuardPattern _
         | RangePattern _
         | LiteralPattern _
@@ -975,6 +1082,7 @@ module Pattern =
             | ListPattern(patterns, rest) -> ListPattern(List.map recur patterns, Option.map recur rest)
             | ListSplatMiddle(before, after) -> ListSplatMiddle(List.map recur before, List.map recur after)
             | TagPattern(name, payload) -> TagPattern(name, Option.map recur payload)
+            | ArgumentTagPattern(name, arguments, payload) -> ArgumentTagPattern(name, f arguments, Option.map recur payload)
             | LiteralPattern _
             | IdentifierPattern _
             | WildcardPattern

@@ -745,6 +745,8 @@ module Compiler =
                 // the first import that brings it in.
                 Error (Typed, List.distinctBy Diagnostics.inItsModule merged.Errors)
             else
+                // A capitalised tag is a custom pattern's (see `CustomPatterns`).
+                let patternErrors = CustomPatterns.check (CustomPatterns.scopeOf env ambiguousImports desugared) desugared
                 let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.InferModule.inferModuleWithEnv env state desugared
                 let subst, mismatches = Unifier.solveDetailed state.Constraints |> fun (subst, mismatches) -> Unifier.keepWrittenNames types.Values subst, mismatches
                 // Every error in the module is reported: the items that failed to check, and each conflict among the
@@ -802,7 +804,7 @@ module Compiler =
                     match script, runtimeErrors with
                     | Some _, _ :: _ -> mismatchErrors |> List.filter (fun diagnostic -> not (diagnostic.Code = DiagnosticCodes.ContextsNotAllowed.Code && diagnostic.Span.IsNone))
                     | _ -> mismatchErrors
-                let moduleErrors = nameErrors @ inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
+                let moduleErrors = nameErrors @ patternErrors @ inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let defer =
                     if moduleErrors.IsEmpty then fun expr -> expr, []

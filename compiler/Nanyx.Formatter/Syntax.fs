@@ -96,6 +96,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | RangePattern(a, b) -> RangePattern(expr a, expr b)
             | GuardPattern predicate -> GuardPattern(expr predicate)
             | TagPattern(n, payload) -> TagPattern(n, Option.map pattern payload)
+            | ArgumentTagPattern(n, args, payload) -> ArgumentTagPattern(n, expr args, Option.map pattern payload)
         { p with Kind = kind }
 
     and typeExpr (t: TypeExpr) : TypeExpr =

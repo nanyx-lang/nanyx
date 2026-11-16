@@ -271,6 +271,7 @@ and private expressionsOfPattern (pattern: Pattern) =
     | RangePattern (low, high) -> expressions low @ expressions high
     | GuardPattern predicate -> expressions predicate
     | TagPattern (_, payload) -> payload |> Option.toList |> List.collect expressionsOfPattern
+    | ArgumentTagPattern (_, arguments, payload) -> expressions arguments @ (payload |> Option.toList |> List.collect expressionsOfPattern)
 
 and private expressionsOfType (typeExpr: TypeExpr) =
     match typeExpr.Kind with
@@ -320,7 +321,8 @@ let rec private patternsWithin (pattern: Pattern) : Pattern list =
         | RecordMemberPattern(members, _) -> members |> List.collect (snd >> patternsWithin)
         | ListPattern (patterns, rest) -> (patterns @ Option.toList rest) |> List.collect patternsWithin
         | ListSplatMiddle (before, after) -> (before @ after) |> List.collect patternsWithin
-        | TagPattern (_, payload) -> payload |> Option.toList |> List.collect patternsWithin
+        | TagPattern (_, payload)
+        | ArgumentTagPattern (_, _, payload) -> payload |> Option.toList |> List.collect patternsWithin
         | LiteralPattern _
         | IdentifierPattern _
         | WildcardPattern

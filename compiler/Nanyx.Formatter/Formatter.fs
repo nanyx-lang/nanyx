@@ -416,6 +416,13 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ head; underHead (cat [ text " "; lambdaDoc value parameters body true ]) ]
         | _ -> cat [ head; underHead (cat [ text " "; expr full value ]) ]
 
+    /// A custom pattern's declaration (see `PatternSyntax`): `pattern`, its type, and its body after the `=`.
+    and patternDoc (isExport: bool) (signatureType: TypeExpr) (value: Expression) : Doc =
+        let head = cat [ (if isExport then text "export " else Doc.empty); text $"{PatternSyntax.keyword} "; signature signatureType; text " =" ]
+        match value.Kind with
+        | Block _ when isWrittenBlock value -> cat [ head; nest (cat [ hard; block value ]) ]
+        | _ -> cat [ head; text " "; expr full value ]
+
     and destructuringDef (group: Def list) (span: SourceSpan) : Doc =
         let _, _, _, value = List.head group
         let bindings = List.tail group
@@ -585,6 +592,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         match i.Kind with
         | ModuleDecl(isExport, n) -> text $"""{if isExport then "export " else ""}module {n}"""
         | ModuleBlock(n, items) -> cat [ text $"module {n} ="; nest (cat [ hard; topLevel true i.Span.Start i.Span.End items ]) ]
+        | Def(PatternSyntax.Declaration _ & ValueDef(isExport, _, Some t, value)) -> patternDoc isExport t value
         | Def(ValueDef(isExport, n, t, Kind ExternSyntax.Bodiless)) -> declarationDoc isExport n t
         | Def(ValueDef(isExport, n, t, value)) -> defDoc isExport "def" n t value
         | Def(TypeDef(n, modifiers, parameters, body)) -> typeDefDoc n modifiers parameters body

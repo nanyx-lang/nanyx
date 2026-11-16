@@ -68,6 +68,7 @@
     <Compile Include="Features\Contexts\ExpectedTypeInstanceTests.fs" />
     <Compile Include="Features\Contexts\DefaultContextTests.fs" />
     <Compile Include="Features\Contexts\OwnInstanceTests.fs" />
+    <Compile Include="Features\CustomPatterns\CustomPatternTests.fs" />
     <Compile Include="Features\Definitions\DefinitionOrderTests.fs" />
     <Compile Include="Features\Definitions\DuplicateDefinitionTests.fs" />
     <Compile Include="Features\Definitions\DuplicateFieldTests.fs" />
