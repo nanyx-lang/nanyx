@@ -95,6 +95,7 @@
     <Compile Include="Features\Imports\ReExportTests.fs" />
     <Compile Include="Features\Inference\ErrorRecoveryTests.fs" />
     <Compile Include="Features\Inference\InferenceTests.fs" />
+    <Compile Include="Features\Inference\ModuleSolveTests.fs" />
     <Compile Include="Features\Inference\TypedAstTests.fs" />
     <Compile Include="Features\Inference\UnifierTests.fs" />
     <Compile Include="Features\Inference\BranchJoinTests.fs" />

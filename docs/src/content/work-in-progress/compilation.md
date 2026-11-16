@@ -41,6 +41,15 @@ Out of scope here, with their own workstreams:
 - **Type and name errors are deferred.** The type checker reports every error in a module, and a debug build
   (`nanyx run`, `build`, `wasm`) runs in spite of them, reporting each if the program reaches it; `--release`
   refuses them. See [Deferred errors](./deferred-errors).
+- **A module is checked a def at a time.** The type checker holds one list of constraints for the whole module, adds
+  to its front, and solves it again and again as it goes (`Unifier.unifyDetailed`). A list is solved on top of the
+  last one solved, when that can't change the result; when it can, it is solved on top of the checkpoint the
+  type checker made once it generalised the def before (`Unifier.checkpoint`), if the newer constraints share no
+  variable with it and name no rest the solver made up; and only otherwise afresh, newest first, which fixes the
+  failure reported and the order of a union's tags. Generalising a def looks only at the names in scope whose types
+  have free variables (`TypeEnv.Unquantified`, `envVarsUnder`). So 400 defs that pass a lambda to `list.map` check
+  in about 1 s, and 800 in 1.6 s ([#1266](https://github.com/nanyx-lang/nanyx/issues/1266)). Defs that share a
+  variable (mutual recursion, a use before the def is checked) and a module with a type error still solve afresh.
 - **A parse error stops everything.** There is no error recovery, so one syntax error hides every problem after
   it. The language server needs recovery too.
 - **Most of the standard library is designed but not written.** The docs describe it; `stdlib/nanyx/` holds a

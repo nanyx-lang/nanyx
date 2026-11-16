@@ -136,6 +136,35 @@ let ``Constraints in front of a list whose union was put off give what solving t
     Assert.DoesNotContain("Error", afresh)
     Assert.Equal(afresh, onTop)
 
+/// What `vars` resolve to, and the failure if any, when `newer` is unified in front of `older` once `older` is a
+/// checkpoint, and when the same constraints are unified afresh: a copy of `older` is no checkpoint.
+let private onCheckpointAndAfresh (vars: int list) (newer: ConstraintSet) (older: ConstraintSet) =
+    let shown result =
+        match result with
+        | Ok subst -> vars |> List.map (fun id -> Unifier.tyToString (Unifier.apply subst (TyVar { Id = id; Name = None }))) |> String.concat "; "
+        | Error (message: string, span: SourceSpan) -> $"{message} at {span.Start}"
+    Unifier.checkpoint older
+    shown (Unifier.unify (newer @ older)), shown (Unifier.unify (newer @ List.map id older))
+
+[<Fact>]
+let ``Constraints in front of a checkpoint give what solving them afresh does`` () =
+    let spanAt start = { SourceSpan.none with Start = start; End = start + 1 }
+    let v, w = TyVar { Id = 1; Name = None }, TyVar { Id = 2; Name = None }
+    // `#a` and `#b` given where `v` is expected: a union whose tags come in the order the constraints are solved.
+    let older: ConstraintSet = [ (TyTag("a", None), v, Assignable, spanAt 0); (TyTag("b", None), v, Assignable, spanAt 1) ]
+    // Constraints that share no variable with it.
+    let onCheckpoint, afresh =
+        onCheckpointAndAfresh [ 1; 2 ] [ (TyTag("c", None), w, Assignable, spanAt 2); (TyTag("d", None), w, Assignable, spanAt 3) ] older
+    Assert.Equal(afresh, onCheckpoint)
+    // One that fails, which is reported where solving afresh reports it.
+    let onCheckpoint, afresh =
+        onCheckpointAndAfresh [ 2 ] [ (w, TyPrimitive "int", Equal, spanAt 4); (w, TyPrimitive "string", Equal, spanAt 5) ] older
+    Assert.StartsWith("Type mismatch", afresh)
+    Assert.Equal(afresh, onCheckpoint)
+    // Constraints on its variable, which solving afresh solves first: they are not solved on top of it.
+    let onCheckpoint, afresh = onCheckpointAndAfresh [ 1 ] [ (TyTag("c", None), v, Assignable, spanAt 6) ] older
+    Assert.Equal(afresh, onCheckpoint)
+
 [<Fact>]
 let ``A union's member that fits is not blamed for a failure in a later constraint`` () =
     // `#none` fits `#none | #some(int)`; the conflict is `int` and `string`, solved after it. Trying `#some(int)` as
