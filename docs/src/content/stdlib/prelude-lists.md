@@ -371,6 +371,19 @@ The elements without two of the same `key`, each kept where the first with its k
 `list.distinctBy(people, { p -> p.name })` keeps one person of each name. Stack-safe: it works on a
 list of any length.
 
+## `list.sortWith`
+
+```nanyx fragment
+def list.sortWith: [c] list(a), ([c] (a, a) -> #less | #equal | #greater) -> list(a)
+```
+
+The elements in the order `order` gives: `order(a, b)` says whether `a` comes before `b`
+(`#less`), after it (`#greater`), or either way (`#equal`), as `compare` and [`int.compare`](prelude-contexts#intcompare) do.
+It sorts by an order that isn't a type's own: `{ a, b -> b.age \int.compare(a.age) }` sorts by
+age, oldest first, and one that compares a second key when the first is `#equal` sorts by both.
+The sort is stable: elements `order` finds equal keep their order. Stack-safe: it works on a list
+of any length.
+
 ## `list.sortBy`
 
 ```nanyx fragment
@@ -381,6 +394,16 @@ The elements in ascending order of `key`. The sort is stable: elements with the 
 their order. A key can be of any type with an order: `list.sortBy(people, { p -> p.name })`.
 Stack-safe: it works on a list of any length.
 
+## `list.sortByDescending`
+
+```nanyx fragment
+def list.sortByDescending: [Ord(b), c] list(a), ([c] a -> b) -> list(a)
+```
+
+The elements in descending order of `key`: `list.sortByDescending(people, { p -> p.age })` puts
+the oldest first. The sort is stable: elements with the same key keep their order, which reversing
+[`list.sortBy`](#listsortby)'s result would not do. Stack-safe: it works on a list of any length.
+
 ## `list.sort`
 
 ```nanyx fragment
@@ -390,6 +413,15 @@ def list.sort: [Ord(a)] list(a) -> list(a)
 The elements in ascending order of their `Ord`: numbers numerically, strings by their bytes,
 tuples and lists position by position. The sort is stable. Records and tags have no order, so a
 list of them is sorted with [`list.sortBy`](#listsortby) and a key. Stack-safe: it works on a list of any length.
+
+## `list.sortDescending`
+
+```nanyx fragment
+def list.sortDescending: [Ord(a)] list(a) -> list(a)
+```
+
+The elements in descending order of their `Ord`, greatest first: `[3, 1, 2]` gives `[3, 2, 1]`.
+The sort is stable. Stack-safe: it works on a list of any length.
 
 ## `list.min`
 
