@@ -44,7 +44,12 @@ let rec private asPipe (source: string) (name: string -> string) (call: Expressi
     | Some (called, _, first :: rest) ->
         let value =
             if isCall first && (written source first).IsSome then asPipe source name first else bracketed first (textOf source first)
-        let arguments = match rest with [] -> "" | _ -> $"""({rest |> List.map (textOf source) |> String.concat ", "})"""
+        let arguments =
+            match rest with
+            | [] -> ""
+            // A lambda alone is written after the name, as a trailing lambda is.
+            | [ { Kind = Lambda _ } as lambda ] when IntroduceLocal.isWritten source lambda -> $" {textOf source lambda}"
+            | _ -> $"""({rest |> List.map (textOf source) |> String.concat ", "})"""
         $"{value} \\{name called}{arguments}"
     | _ -> textOf source call
 
@@ -57,8 +62,15 @@ let rec private asCall (source: string) (name: string -> string) (pipe: Expressi
         $"""{name called}({value :: (rest |> List.map (textOf source)) |> String.concat ", "})"""
     | _ -> textOf source pipe
 
-/// The symbols every name in `result` refers to, each as many times as it is named.
-let private referenced (result: CompileResult) = Definition.referenceSites result |> List.map snd |> List.sort
+/// What every name in `result` refers to, each as many times as it is named: the name, kind and file of its symbol,
+/// since a compile makes up symbols of its own.
+let private referenced (result: CompileResult) =
+    match result.Typed with
+    | Some typed ->
+        Definition.referenceSites result
+        |> List.choose (fun (_, id) -> typed.Symbols |> Map.tryFind id |> Option.map (fun symbol -> symbol.Name, symbol.Kind, symbol.Declaration.File))
+        |> List.sort
+    | None -> []
 
 /// The refactorings at `offset` in `source`, the text of the root module of `result` compiled as `file`, laid out with
 /// `options`: on the name of a call, converting it to a pipe of its first argument, `f(x, y)` to `x \f(y)`, and on the
@@ -81,26 +93,23 @@ let at
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
         let expressions = Hover.allExpressions syntax
-        let parents =
-            expressions
-            |> List.collect (fun parent ->
-                let children, statements = SyntaxTree.childrenOf parent
-                children @ (statements |> List.collect SyntaxTree.ofStatement) |> List.map (fun child -> child.Id, parent))
-            |> Map.ofList
+
         let atOffset =
             expressions
             |> List.filter (fun expr ->
                 match written source expr with
-                | Some (_, span, _) -> span.Start <= offset && offset <= span.End
+                // A function that is not found has nothing to convert to.
+                | Some (_, span, _) -> span.Start <= offset && offset <= span.End && typed.References.ContainsKey expr.Id
                 | None -> false)
             |> List.sortBy (fun expr -> expr.Span.End - expr.Span.Start)
             |> List.tryHead
         // The outermost call or pipe of the same kind that takes its first argument from `expr`.
         let rec outermost (isKind: Expression -> bool) (expr: Expression) =
-            match parents |> Map.tryFind expr.Id with
-            | Some parent when isKind parent && (match written source parent with Some (_, _, first :: _) -> first.Id = expr.Id | _ -> false) ->
-                outermost isKind parent
-            | _ -> expr
+            let takesIt (outer: Expression) =
+                isKind outer && (match written source outer with Some (_, _, first :: _) -> first.Id = expr.Id | _ -> false)
+            match expressions |> List.tryFind takesIt with
+            | Some outer -> outermost isKind outer
+            | None -> expr
         let before = referenced result
         // The text with `chain` written by `write` with each name given by one of `namings` in turn, the first that
         // means the same, or why none does.

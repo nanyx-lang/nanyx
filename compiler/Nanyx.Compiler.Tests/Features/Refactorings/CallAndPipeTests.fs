@@ -59,9 +59,9 @@ let ``A chain of calls converts as a whole`` () =
     Assert.Contains(
         "def total = xs \\map { x -> x * 2 } \\filter { x -> x > 2 }",
         rewritten
-            """def xs = [ 1, 2, 3 ]
+            """def xs = [1, 2, 3]
 
-def total = filter(^map(xs, { x -> x * 2 }), { x -> x > 2 })
+def total = list.filter(^list.map(xs, { x -> x * 2 }), { x -> x > 2 })
 """)
 
 [<Fact>]
@@ -77,9 +77,9 @@ def total = 1 \^add(2)
 [<Fact>]
 let ``A chain of pipes converts as a whole`` () =
     Assert.Contains(
-        "def total = filter(map(xs, { x -> x * 2 }), { x -> x > 2 })",
+        "def total = list.filter(list.map(xs, { x -> x * 2 }), { x -> x > 2 })",
         rewritten
-            """def xs = [ 1, 2, 3 ]
+            """def xs = [1, 2, 3]
 
 def total = xs \^map { x -> x * 2 } \filter { x -> x > 2 }
 """)
@@ -98,7 +98,7 @@ let ``A pipe of an attached definition becomes a call by its whole name`` () =
         rewritten
             """def tidy = { (s: string) -> s \^trim }
 """
-    Assert.Contains("trim(s)", after)
+    Assert.Contains("string.trim(s)", after)
 
 [<Fact>]
 let ``Where the own name would find another definition the whole name is kept`` () =
@@ -106,7 +106,7 @@ let ``Where the own name would find another definition the whole name is kept`` 
         "def shout = { (s: string) -> s \\text.trim }",
         rewritten
             """module text =
-  def trim = { (s: string) -> s }
+  export def trim = { (s: string) -> s }
 
 def trim = { (n: int) -> n }
 
@@ -126,3 +126,4 @@ def total = ^double(1 + 2)
 [<Fact>]
 let ``Nothing is offered off a call or pipe`` () =
     Assert.Empty(snd (offersAt "def ^total = 1 + 2\n"))
+

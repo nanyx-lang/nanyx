@@ -14,8 +14,8 @@ and inline, and the small rewrites that save typing. Its issues carry the
 
 The language server offers go to definition, find references within a document, hover, inlay hints, completion,
 semantic tokens, formatting, and quick fixes from diagnostics ([Language server and editor](./language-server)).
-Expand and shrink selection, writing the inferred type, introducing a local or a function and inlining are done, and
-rename within a module.
+Expand and shrink selection, writing the inferred type, introducing a local or a function, inlining and converting
+between a call and a pipe are done, and rename within a module.
 
 Refactorings live in the compiler's `Refactorings/` folder, one file each, after the editor features they build on
 (`Outline.fs`), in the namespace `NyxCompiler.Refactorings`. Their tests are in `Features/Refactorings/` of the
@@ -121,6 +121,22 @@ this use of `x`" replaces only that one. A def that is exported is inlined at a 
 
 Like introduce function, it compiles the document again for each offer, here whenever the cursor is on a def's name.
 
+## Convert between a call and a pipe
+
+`CallAndPipe.at` is offered on the name of a call the user wrote that finds its function: "Convert to pipe" writes
+`f(x, y)` as `x \f(y)`, and `f(x)` as `x \f`; on a pipe's name, "Convert to call" writes it back. A chain converts as a
+whole, from the outermost call (or pipe) that takes its first argument (or value) from the one at the cursor:
+`list.filter(list.map(xs, f), g)` becomes `xs \map(f) \filter(g)`. A value that may need brackets gets them, and a
+lambda that is the only other argument is written after the name, as a trailing lambda is. Calls with named arguments
+are left alone.
+
+Names: a dotted name is piped by its own part first, `s \trim` for `string.trim(s)`, which finds the definition
+attached to the value's type; converting to a call keeps a pipe's name first, and then writes each by the name of the
+definition it found (`string.trim(s)` for `s \trim`). Each choice is tried on the whole chain: the text is compiled, and
+taken only if it has no new errors and every name in the module refers to what it did (compared by each symbol's name,
+kind and file, since a compile makes up symbols of its own). So where the own name would find another definition, the
+whole name is kept (`s \text.trim`); where neither naming means the same, it is refused.
+
 ## Rename
 
 `Rename.prepare` finds the name at a position (or just before it, where an editor's cursor often is) and its own part,
@@ -170,7 +186,7 @@ prefixes.
 | Introduce function (done) | [#1537](https://github.com/nanyx-lang/nanyx/issues/1537) |
 | Inline a local or a function (done) | [#1538](https://github.com/nanyx-lang/nanyx/issues/1538) |
 | Write the inferred type (done) | [#1539](https://github.com/nanyx-lang/nanyx/issues/1539) |
-| Convert between a call and a pipe | [#1540](https://github.com/nanyx-lang/nanyx/issues/1540) |
+| Convert between a call and a pipe (done) | [#1540](https://github.com/nanyx-lang/nanyx/issues/1540) |
 | Organise imports | [#1541](https://github.com/nanyx-lang/nanyx/issues/1541) |
 
 Rename across files depends on finding references across the package's files
