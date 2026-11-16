@@ -267,6 +267,8 @@ So the builder decides how the iterations combine. `proc`'s `for` goes through t
 
 For now the loop must be a statement of its own in the block, and walk one list.
 
+A loop over a long list is stack-safe when every step is a [tail call](../tour/functions#tail-recursion): the body's call of the rest of the loop is its last, so the builder's `for` and the members the body uses have to call what they are given last too. `proc`'s do, so a `proc` loop runs in constant stack however many items it walks. A member that does something after its continuation returns, as `defer` does, makes each step keep a stack frame.
+
 ## Where a keyword can't be
 
 A keyword whose continuation cannot be the rest of the block is an error:

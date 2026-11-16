@@ -156,6 +156,5 @@ Some sequences built from operator characters are syntax, not operators, and can
 | `&` | And-pattern, intersection type |
 | `#` | Tag prefix |
 | `@` | Attribute prefix |
-| `$` | Before a type's name, as [nominal types](../advanced/nominal-and-protected-types#before-protected) were once written |
 | `:` | Type annotation |
 | `???` | Unimplemented placeholder |
