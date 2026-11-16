@@ -136,7 +136,23 @@ module FunctionContexts =
                 | None -> go matches rest remaining pairs (context :: unmatched)
         let same, leftOver, rightOver = go (=) leftContexts rightContexts [] []
         // An outer block's `Memory` is not an inner block's: it goes into a variable instead.
-        let paired, leftExtra, rightExtra = go (fun l r -> key l = key r && not (ofTwoCalls l r)) leftOver rightOver [] []
+        let fits l r = key l = key r && not (ofTwoCalls l r)
+        let paired, leftExtra, rightExtra = go fits leftOver rightOver [] []
+        // Any other scoped context of a name already paired is of the same scope: two calls in one block that require
+        // `Memory` require the block's, not one each.
+        let pairedScoped = same @ paired |> List.filter (fst >> function ScopedContext _ -> true | _ -> false)
+        let absorb (partnerOf: Ty * Ty -> Ty) (extra: Ty list) =
+            extra
+            |> List.fold (fun (pairs, unmatched) context ->
+                match context with
+                | ScopedContext _ ->
+                    match pairedScoped |> List.map partnerOf |> List.tryFind (fits context) with
+                    | Some partner -> (context, partner) :: pairs, unmatched
+                    | None -> pairs, unmatched @ [ context ]
+                | _ -> pairs, unmatched @ [ context ]) ([], [])
+        let leftAbsorbed, leftExtra = absorb snd leftExtra
+        let rightAbsorbed, rightExtra = absorb fst rightExtra
+        let paired = paired @ List.rev leftAbsorbed @ (List.rev rightAbsorbed |> List.map (fun (r, l) -> l, r))
         let leftOnly = leftVars |> List.filter (fun v -> not (List.contains v rightVars))
         let rightOnly = rightVars |> List.filter (fun v -> not (List.contains v leftVars))
         let shared = leftVars |> List.filter (fun v -> List.contains v rightVars)
