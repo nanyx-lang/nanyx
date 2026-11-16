@@ -1,5 +1,5 @@
-/// Every ```nanyx block in the language tour (docs/src/content/tour) and the standard library's pages
-/// (docs/src/content/stdlib), compiled and run as `nanyx run` runs it, so that they keep describing what the compiler
+/// Every ```nanyx block in the language tour (docs/src/content/tour), the standard library's pages
+/// (docs/src/content/stdlib) and the custom patterns page (docs/src/content/advanced/custom-patterns.md), compiled and run as `nanyx run` runs it, so that they keep describing what the compiler
 /// does. The words after `nanyx` on a block's opening fence say what kind of example it is; the conventions are in
 /// docs/src/content/work-in-progress/compilation.md#tour-examples. A standard-library page's generated reference is
 /// left out: its blocks are signatures, and its doc comments' examples are checked where they are written.
@@ -12,7 +12,7 @@ open Xunit
 open NyxCompiler
 open TranspilerWasmTestHelpers
 
-/// The ```nanyx blocks of `page` in the section `section` (`tour` or `stdlib`), by the line of their opening fence,
+/// The ```nanyx blocks of `page` in the section `section` (`tour`, `stdlib` or `advanced`), by the line of their opening fence,
 /// but for those in a standard-library page's generated reference.
 let private examplesOf (section: string) (page: string) =
     let path = Path.Combine(docsContentDirectory, section, page)
@@ -33,6 +33,10 @@ let private examplesIn (section: string) : obj array seq =
 let tourExamples () : obj array seq = examplesIn "tour"
 
 let standardLibraryExamples () : obj array seq = examplesIn "stdlib"
+
+/// The custom patterns page's examples, which run as the tour's do while custom patterns are being built.
+let customPatternExamples () : obj array seq =
+    examplesOf "advanced" "custom-patterns.md" |> Map.keys |> Seq.map (fun line -> [| box "custom-patterns.md"; box line |])
 
 /// The tour's examples work on strings with `nanyx/text` without importing it, as though each imported it: after its
 /// directives and its module declaration, if it has them, and before its first line of code. They print with the
@@ -102,3 +106,7 @@ let ``Tour example compiles and runs`` (page: string, line: int) = check "tour" 
 [<Theory>]
 [<MemberData(nameof standardLibraryExamples)>]
 let ``Standard library page example compiles and runs`` (page: string, line: int) = check "stdlib" page line
+
+[<Theory>]
+[<MemberData(nameof customPatternExamples)>]
+let ``Custom patterns example compiles and runs`` (page: string, line: int) = check "advanced" page line

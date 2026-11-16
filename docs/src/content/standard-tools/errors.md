@@ -1820,6 +1820,39 @@ To fix it, make the value with one of the definitions the message names. When th
 order, and it returns the type itself, an editor offers to rewrite the record as a call to it: `Point.at(3, 4)`. A value
 of another shape is an ordinary type mismatch (NYX0201).
 
+# NYX0261: Custom pattern inside another pattern
+
+A [custom pattern](../advanced/custom-patterns)'s tag is written inside another pattern, such as a tag's payload or a
+tuple's element. A match runs a custom pattern on one of the values it matches, so its tag goes at the top of an
+arm's pattern for that value, alone or as a part of an and-pattern there.
+
+```nanyx
+pattern int -> #Even | #Odd = { n -> if n % 2 == 0 then #Even else #Odd }
+
+def f = { x ->
+  match x
+    | #some(#Even) -> 1  -- error NYX0261: `#Even` is a custom pattern, which a match runs on one of the values it matches
+    | _ -> 2
+}
+```
+
+To fix it, take the inner value apart first, and match the pattern on it: `| #some(n) -> match n | #Even -> ...`.
+
+# NYX0262: Custom pattern that requires a context
+
+The body of a [custom pattern](../advanced/custom-patterns) calls something that requires a context, such as
+`println`. A pattern is pure, so that it never matters how often a match runs it.
+
+```nanyx
+pattern int -> #Loud | #Quiet = { n ->
+  println("checking")  -- error NYX0262: 'println' requires the context 'Console', but a pattern is pure
+  if n > 100 then #Loud else #Quiet
+}
+```
+
+To fix it, do the work that needs the context where the match is, in an arm, and keep the pattern to working out
+its result.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

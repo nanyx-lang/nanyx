@@ -95,8 +95,9 @@ as a `BackendInternalError` (`NYX0302`) that asks for a bug report. The backend 
 
 ## Tour examples
 
-Every ` ```nanyx ` block in the [language tour](../tour/variables) and the
-[Standard Library](../stdlib/standard-library) pages is a test case: `RunTourExampleTests.fs` in
+Every ` ```nanyx ` block in the [language tour](../tour/variables), the
+[Standard Library](../stdlib/standard-library) pages and the [Custom patterns](../advanced/custom-patterns) page is a
+test case: `RunTourExampleTests.fs` in
 `Nanyx.Compiler.Wasm.Tests` reads their pages, and compiles and runs each block in the test process, as `nanyx run`
 would run it as a script. A standard-library page's generated reference is left out (see
 [Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)). The words after
@@ -137,8 +138,8 @@ counting over a core IR ([Memory management](./memory-management)), a tail call 
 ([Deferred errors](./deferred-errors)), and record types are closed unless they say `...`
 ([Closed and open records](./closed-and-open-records)). Those pages say what is left of each.
 
-1. **Docs coverage beyond the tour.** Only the tour's and the Standard Library pages' examples are compiled. The
-   other docs sections, such as Getting started and Advanced, are not; Getting started comes first
+1. **Docs coverage beyond the tour.** Only the tour's, the Standard Library pages' and the Custom patterns page's examples
+   are compiled. The other docs sections, such as Getting started and the rest of Advanced, are not; Getting started comes first
    ([#1256](https://github.com/nanyx-lang/nanyx/issues/1256)). Examples there drift: the Contexts page's comments are
    written with `//` ([#1476](https://github.com/nanyx-lang/nanyx/issues/1476)). The blocks marked `skip=` wait on
    the issues they name.

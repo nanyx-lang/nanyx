@@ -155,3 +155,148 @@ module internal CustomPatterns =
                 | NoPattern -> Some (unknownPattern tag span)
                 | Ambiguous sources -> Some (ambiguousPattern tag span sources))
         clashingDeclarations items @ atUses
+
+    /// A custom pattern's tag at the top of an arm's pattern for one of a match's values: the pattern, and the
+    /// pattern the match on what it returns has in its place.
+    type private Use =
+        { Pattern: InScope
+          Result: Pattern }
+
+    /// The use `part`, a pattern at the top of an arm's pattern for one value or one part of an and-pattern there, is,
+    /// if it is a pattern's tag that the match is rewritten for.
+    let private useOf (scope: Scope) (part: Pattern) : Use option =
+        match part.Kind with
+        | TagPattern(tag, _) when PatternSyntax.isPatternTag tag ->
+            match resolve scope tag with
+            | Found pattern when not pattern.Shape.TakesArguments && not pattern.Shape.IsPartial -> Some { Pattern = pattern; Result = part }
+            | _ -> None
+        | _ -> None
+
+    /// `pattern`, an arm's pattern for one value, split into what is matched against the value itself, which is `_` if
+    /// nothing is, and the patterns' tags it uses.
+    let private split (scope: Scope) (pattern: Pattern) : Pattern * Use list =
+        let parts = match pattern.Kind with AndPattern parts -> parts | _ -> [ pattern ]
+        let used = parts |> List.map (fun part -> part, useOf scope part)
+        let uses = used |> List.choose snd
+        let rest = used |> List.filter (snd >> Option.isNone) |> List.map fst
+        let remaining =
+            match rest with
+            | [] -> Pattern.at pattern.Span WildcardPattern
+            | [ _ ] when uses.IsEmpty -> pattern
+            | [ single ] -> single
+            | several -> { pattern with Kind = AndPattern several }
+        remaining, uses
+
+    /// The match `matchExpr` on `scrutinees` with `arms` as a block that runs each pattern its arms use on the value it
+    /// is used for, once, and matches on what the patterns return as more values, if its arms use any:
+    ///
+    ///   match n            def __patternResult_7_0 = __pattern__4Even3Odd(n)
+    ///     | #Even -> a     match n, __patternResult_7_0
+    ///     | 0 -> b    =>     | _, #Even -> a
+    ///     | _ -> c           | 0, _ -> b
+    ///                        | _, _ -> c
+    ///
+    /// A value that is not a name is bound first, so that it is worked out once. Patterns are pure, so running each
+    /// one before the arms are tried can't be told from running it when an arm first needs it.
+    let private rewriteMatch (scope: Scope) (matchExpr: Expression) (scrutinees: Expression list) (arms: MatchArm list) : ExpressionKind option =
+        let splitArms =
+            arms |> List.map (fun (patterns, body) -> patterns |> List.map (split scope), body)
+        // Each pattern used, on each value, is run once, in the order the arms first use them.
+        let columns =
+            splitArms
+            |> List.collect (fun (patterns, _) -> patterns |> List.indexed |> List.collect (fun (position, (_, uses)) -> uses |> List.map (fun used -> position, used.Pattern.Name)))
+            |> List.distinct
+        let countsAgree = arms |> List.forall (fun (patterns, _) -> patterns.Length = scrutinees.Length)
+        if columns.IsEmpty || not countsAgree then
+            None
+        else
+            let made kind = Expression.from matchExpr kind
+            let positions = columns |> List.map fst |> List.distinct
+            // The values the patterns run on, each by a name.
+            let subjects =
+                positions
+                |> List.map (fun position ->
+                    let scrutinee = scrutinees[position]
+                    match scrutinee.Kind with
+                    | IdentifierExpr name -> position, (name, [])
+                    | _ ->
+                        let name = PatternSyntax.subjectName matchExpr.Id position
+                        position, (name, [ Statement.from scrutinee (DefStatement(false, name, None, scrutinee)) ]))
+                |> Map.ofList
+            let scrutinees' =
+                scrutinees |> List.mapi (fun position scrutinee ->
+                    match subjects |> Map.tryFind position with
+                    | Some (name, _ :: _) -> Expression.from scrutinee (IdentifierExpr name)
+                    | _ -> scrutinee)
+            let results =
+                columns
+                |> List.mapi (fun column (position, patternName) ->
+                    let subject, _ = subjects[position]
+                    let scrutinee = scrutinees[position]
+                    let name = PatternSyntax.resultName matchExpr.Id column
+                    let call = Expression.from scrutinee (FunctionCall(patternName, None, [ Expression.from scrutinee (IdentifierExpr subject) ]))
+                    Statement.from scrutinee (DefStatement(false, name, None, call)), Expression.from scrutinee (IdentifierExpr name))
+            let arms' =
+                splitArms
+                |> List.map (fun (patterns, body) ->
+                    let resultPatterns =
+                        columns
+                        |> List.map (fun (position, patternName) ->
+                            let _, uses = patterns[position]
+                            match uses |> List.tryFind (fun used -> used.Pattern.Name = patternName) with
+                            | Some used -> used.Result
+                            | None -> Pattern.at SourceSpan.none WildcardPattern)
+                    (patterns |> List.map fst) @ resultPatterns, body)
+            let bindings = (subjects |> Map.toList |> List.collect (snd >> snd)) @ (results |> List.map fst)
+            let rewritten = made (Match(scrutinees' @ (results |> List.map snd), arms'))
+            Some (Block(bindings @ [ Statement.from matchExpr (ExprStatement rewritten) ]))
+
+    /// The pattern tags of `pattern`, an arm's pattern for one value, that are inside another pattern, where a match
+    /// can't use them, each with where it is written.
+    let private nestedUses (scope: Scope) (pattern: Pattern) : (Identifier * SourceSpan) list =
+        let isPattern tag = PatternSyntax.isPatternTag tag && (match resolve scope tag with Found _ -> true | _ -> false)
+        let parts = match pattern.Kind with AndPattern parts -> parts | _ -> [ pattern ]
+        parts
+        |> List.collect (fun part ->
+            let inner =
+                match part.Kind with
+                | TagPattern(tag, payload)
+                | ArgumentTagPattern(tag, _, payload) when isPattern tag -> Option.toList payload
+                | _ -> [ part ]
+            inner
+            |> List.collect Pattern.within
+            |> List.choose (fun within ->
+                match within.Kind with
+                | TagPattern(tag, _)
+                | ArgumentTagPattern(tag, _, _) when isPattern tag -> Some (tag, within.Span)
+                | _ -> None))
+
+    let private nestedPattern (tag: Identifier, span: SourceSpan) =
+        Diagnostics.at
+            DiagnosticCodes.PatternInsidePattern
+            span
+            $"`#{tag}` is a custom pattern, which a match runs on one of the values it matches, so it goes at the top of an arm's pattern for a value, or of an and-pattern there, not inside another pattern"
+
+    /// `items` with each match whose arms use a pattern's tags rewritten to run the patterns (see `rewriteMatch`), and
+    /// the errors for pattern tags written where a match can't use them.
+    let rewrite (scope: Scope) (items: Module) : Module * Diagnostic list =
+        let errors = ResizeArray<Diagnostic>()
+        let visit (current: Expression) (kind: ExpressionKind) =
+            match kind with
+            | Match(scrutinees, arms) ->
+                arms |> List.collect fst |> List.collect (nestedUses scope) |> List.map nestedPattern |> errors.AddRange
+                rewriteMatch scope current scrutinees arms |> Option.defaultValue kind
+            | other -> other
+        let inValue = ExpressionRewrites.mapExpressionKinds visit
+        let rec inItem (item: TopLevelItem) =
+            match item.Kind with
+            | Def(ValueDef(isExport, name, typeOpt, value)) -> { item with Kind = Def(ValueDef(isExport, name, typeOpt, inValue value)) }
+            | Expr value -> { item with Kind = Expr(inValue value) }
+            | ModuleBlock(name, blockItems) -> { item with Kind = ModuleBlock(name, List.map inItem blockItems) }
+            | Def(TypeDef _)
+            | ModuleDecl _
+            | Import _
+            | ReExport _
+            | Attribute _ -> item
+        let rewritten = List.map inItem items
+        rewritten, List.ofSeq errors

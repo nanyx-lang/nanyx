@@ -843,7 +843,7 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                 if restError.IsSome then
                     []
                 else
-                    MatchExhaustiveness.ofWitnesses arms resolvedScrutineeTypes headSpan missingWitnesses
+                    MatchExhaustiveness.ofWitnesses arms (MatchExhaustiveness.patternColumns scrutinees) resolvedScrutineeTypes headSpan missingWitnesses
             let armTypes = armExprs |> List.rev |> List.map (fun typedExpr -> typedExpr.Type)
             let resultTy, constrained = joinBranchTypes rowVars current armTypes
             // A match that does not handle every case is reported, and typed as if it did: a debug build gives it
