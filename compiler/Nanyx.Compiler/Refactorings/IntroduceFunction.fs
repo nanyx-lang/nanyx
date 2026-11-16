@@ -47,14 +47,19 @@ let private selectedIn (values: Expression list) (selection: SourceSpan) =
         |> Option.orElse statements
 
 /// Why the selected statements `run` can't be a function of their own, if they can't: a `use`, an import or a type
-/// definition among them, which the statements after them may need.
+/// definition among them, which the statements after them may need, or an attribute at the end, which applies to the
+/// def after them.
 let private statementRefusal (run: Statement list) =
+    match List.tryLast run with
+    | Some { Kind = AttributeStatement _ } -> Some "It ends with an attribute, which applies to the def after it"
+    | _ ->
     run
     |> List.tryPick (fun statement ->
         match statement.Kind with
         | UseStatement _ -> Some "It has a `use`, whose context the statements after it would lose"
         | ImportStatement _ -> Some "It has an import, which the statements after it would lose"
         | TypeDefStatement _ -> Some "It defines a type, which the statements after it would lose"
+        | AttributeStatement _
         | DefStatement _
         | ExprStatement _
         | AttributeStatement _ -> None)
