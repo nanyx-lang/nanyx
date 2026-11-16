@@ -50,40 +50,57 @@ export def string.skip: string, int -> string = { s, n ->
       else string.substring(s, start = n, length = string.length(s) - n)
 }
 
+-- Whether the bytes of `needle` from `index` up to `length`, its length, are those of `s` from
+-- `at + index` on, compared in place, without copying either. `s` holds at least `at + length` bytes.
+def matchesAt: string, string, int, int, int -> bool = { s, needle, length, at, index ->
+  if index >= length
+    then true
+    else if __nanyx_string_byte_at(s, at + index) == __nanyx_string_byte_at(needle, index)
+      then matchesAt(s, needle, length, at, index + 1)
+      else false
+}
+
 --| Whether `s` begins with `prefix`.
 export def string.startsWith: string, string -> bool = { s, prefix ->
-  if string.length(prefix) > string.length(s)
-    then false
-    else string.substring(s, start = 0, length = string.length(prefix)) == prefix
+  def length = string.length(prefix)
+  length <= string.length(s) and matchesAt(s, prefix, length, 0, 0)
 }
 
 --| Whether `s` ends with `suffix`.
 export def string.endsWith: string, string -> bool = { s, suffix ->
-  if string.length(suffix) > string.length(s)
-    then false
-    else string.substring(
-        s
-        start = string.length(s) - string.length(suffix)
-        length = string.length(suffix)
-      ) == suffix
+  def length = string.length(suffix)
+  def start = string.length(s) - length
+  start >= 0 and matchesAt(s, suffix, length, start, 0)
 }
 
 --| The byte index of the first occurrence of `needle` in `s` at or after `from`, or -1.
 def indexFrom: string, string, int -> int = { s, needle, from ->
-  if from + string.length(needle) > string.length(s)
+  def length = string.length(needle)
+  indexBetween(s, needle, length, from, string.length(s) - length)
+}
+
+--| The byte index of the first occurrence of `needle`, of `length` bytes, in `s` starting at or
+  after `from` and at or before `last`, or -1.
+def indexBetween: string, string, int, int, int -> int = { s, needle, length, from, last ->
+  if from > last
     then -1
-    else if string.substring(s, start = from, length = string.length(needle)) == needle
+    else if matchesAt(s, needle, length, from, 0)
       then from
-      else indexFrom(s, needle, from + 1)
+      else indexBetween(s, needle, length, from + 1, last)
 }
 
 --| The byte index of the last occurrence of `needle` in `s` starting at or before `from`, or -1.
+  `from + string.length(needle)` is at most `string.length(s)`.
 def lastIndexFrom: string, string, int -> int = { s, needle, from ->
+  lastIndexBefore(s, needle, string.length(needle), from)
+}
+
+def lastIndexBefore: string, string, int, int -> int = { s, needle, length, from ->
   if from < 0
     then -1
-    else if string.substring(s, start = from, length = string.length(needle)) == needle
+    else if matchesAt(s, needle, length, from, 0)
       then from
-      else lastIndexFrom(s, needle, from - 1)
+      else lastIndexBefore(s, needle, length, from - 1)
 }
 
 --| The byte index of the first occurrence of `needle` in `s`. An empty `needle` is found at 0.
@@ -513,15 +530,8 @@ export def StringSlice.slice: StringSlice, int, int -> StringSlice = { s, from, 
 
 --| Whether the bytes `s` views begin with `prefix`, compared without copying them.
 export def StringSlice.startsWith: StringSlice, string -> bool = { s, prefix ->
-  string.length(prefix) <= s.length and sameBytesFrom(s, prefix, 0)
-}
-
-def sameBytesFrom: StringSlice, string, int -> bool = { s, prefix, index ->
-  if index >= string.length(prefix)
-    then true
-    else if __nanyx_string_byte_at(s.text, s.start + index) == __nanyx_string_byte_at(prefix, index)
-      then sameBytesFrom(s, prefix, index + 1)
-      else false
+  def length = string.length(prefix)
+  length <= s.length and matchesAt(s.text, prefix, length, s.start, 0)
 }
 
 --| A copy of the bytes `s` views, as a string of its own, which doesn't keep the string `s` views
