@@ -145,7 +145,7 @@ def string.removeSuffix: string, string -> string
 def string.uppercase: string -> string
 ```
 
-`s` with every ASCII letter upper-cased.
+`s` with every ASCII letter upper-cased, made in one allocation.
 
 ## `string.lowercase`
 
@@ -153,7 +153,7 @@ def string.uppercase: string -> string
 def string.lowercase: string -> string
 ```
 
-`s` with every ASCII letter lower-cased.
+`s` with every ASCII letter lower-cased, made in one allocation.
 
 ## `string.trim`
 
