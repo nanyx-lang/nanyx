@@ -454,6 +454,16 @@ allocation `reusing` a token.
   drops the old value of each field on the heap it replaces and stores the new ones into the same block; otherwise
   the release has taken the count down, and it copies the record, takes a reference to each field on the heap it
   keeps, and stores the new values into the copy (`UpdateRecord` in `CoreIrEmit.fs`).
+- **Exclusivity checks.** Reuse covers what the compiler can see; the standard library does the rest at run time, as
+  Lean 4's `Array` does ([#1671](https://github.com/nanyx-lang/nanyx/issues/1671)). The intrinsic
+  `__nanyx_is_exclusive` takes over a reference to a value that is always on the heap, reads its count, gives the
+  reference up, and says whether the count was 1 (an immortal object's is 0, so never). Taking the reference over is
+  what makes the answer mean something: a caller that uses the value afterwards keeps a reference of its own, which
+  counting adds before the check, inlined or not, and a function that checks a parameter owns it. `MList.toList`
+  checks its box this way, and hands over the cells the `MList` built when it holds the only reference, or copies them.
+  `__nanyx_list_set_tail` changes a cell's tail in place, giving up the old one and taking the new one over: what
+  builds a list front to back, in cells nothing else sees yet (`MList.add`, `list.select`). Both are written out where
+  they are used (`CoreIrEmit.fs`), with no helper.
 - **`[a, ...rest]`** is `[a] ++ rest` to the parser. It is lowered to a cell for `a` in front of `rest`, rather than
   a one-element list whose cell `++` copies, so that it allocates one cell, and can reuse one.
 
