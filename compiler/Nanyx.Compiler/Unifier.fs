@@ -1161,6 +1161,54 @@ module Unifier =
                 | constraint :: rest -> walk (constraint :: newer) rest
         walk [] constraints
 
+    /// Which constraints given after two lists solved one on top of the other, the older first, can be solved on top
+    /// of both.
+    let private both (older: Extension) (newer: Extension) =
+        match older, newer with
+        | NoneAfter, _
+        | _, NoneAfter -> NoneAfter
+        | AnyAfter, other
+        | other, AnyAfter -> other
+        | ApartFrom older, ApartFrom newer ->
+            let reached = HashSet<int>(older)
+            reached.UnionWith newer
+            ApartFrom reached
+
+    /// A list of constraints the type checker held when it had generalised a top-level def (see `checkpoint`): what
+    /// solving it gave, and the variables its constraints name.
+    type private Checkpoint = { Subst: Subst; NextRestId: int; Extension: Extension; Vars: Set<int> }
+
+    /// The checkpoints, by their lists, kept as long as the lists are.
+    let private checkpoints = System.Runtime.CompilerServices.ConditionalWeakTable<ConstraintSet, Checkpoint>()
+
+    /// `known` with the variables `constraints` name.
+    let private varIds (constraints: ConstraintSet) (known: Set<int>) =
+        let rec add (acc: Set<int>) ty =
+            match ty with
+            | TyVar v -> acc.Add v.Id
+            | _ -> Ty.fold add acc ty
+        constraints |> List.fold (fun acc (left, right, _, _) -> add (add acc left) right) known
+
+    /// Whether `constraints` name none of `vars`.
+    let private apart (vars: Set<int>) (constraints: ConstraintSet) =
+        let rec named ty =
+            match ty with
+            | TyVar v -> vars.Contains v.Id
+            | _ -> Ty.exists named ty
+        constraints |> List.forall (fun (left, right, _, _) -> not (named left || named right))
+
+    /// The constraints at the front of `constraints` that come before its nearest checkpointed list, and that
+    /// checkpoint.
+    let private checkpointTail (constraints: ConstraintSet) =
+        let rec walk (newer: ConstraintSet) (remaining: ConstraintSet) =
+            match remaining with
+            | [] -> None
+            | constraint :: rest ->
+                match checkpoints.TryGetValue remaining with
+                | true, found -> Some (List.rev newer, found)
+                | false, _ -> walk (constraint :: newer) rest
+        walk [] constraints
+
     /// Solves `constraints`, or gives the first that cannot be satisfied (see `Mismatch`). The type checker adds
     /// constraints only at the front of the list it holds, and looks types up against it again and again as it goes.
     /// So when the list ends in one solved lately that agreed, only the constraints in front of it are solved, on top
@@ -1168,6 +1216,10 @@ module Unifier =
     /// solved again, newest first, so that the failure reported, and the order in which a union's tags are added, are
     /// those solving it afresh gives. So is a list that ends in one whose order showed only in the constraints it put
     /// off to the end, when the constraints in front reach what those do (see `Extension`).
+    ///
+    /// Before it is solved again, a list that ends in a checkpoint (see `checkpoint`) is solved on top of that, when the
+    /// constraints in front of it name none of its variables: the two share nothing, so which is solved first does not
+    /// show, and they agree when each does. A failure is found by solving the whole list again, as before.
     let unifyDetailed (constraints: ConstraintSet) : Result<Subst, Mismatch> =
         let solved = solvedLists.Value
         match solved.TryGetValue constraints with
@@ -1178,14 +1230,21 @@ module Unifier =
             // A made-up rest variable a constraint names, taken from what an earlier solve gave, names nothing when
             // the whole list is solved (see `isMadeUpRest`), but would name what it was solved to on top of that solve.
             let namesMadeUpRest newer = highestVarId newer >= firstMadeUpRest
+            let fromCheckpoint () =
+                match checkpointTail constraints with
+                | Some (newer, found) when not (namesMadeUpRest newer) && apart found.Vars newer ->
+                    match unifyFrom found.Subst found.NextRestId newer with
+                    | Ok (subst, nextRestId, order) -> Ok (subst, nextRestId, both found.Extension (extensionOf subst order))
+                    | Error _ -> fromStart ()
+                | _ -> fromStart ()
             let result =
                 match solvedTail solved constraints with
                 | Some (newer, subst, restFrom, extension) when not (namesMadeUpRest newer) ->
                     // The constraints it put off reach nothing the newer ones bind, so they reach the same still.
                     match unifyFrom subst restFrom newer with
                     | Ok (subst, nextRestId, Hidden) -> Ok (subst, nextRestId, extension)
-                    | _ -> fromStart ()
-                | _ -> fromStart ()
+                    | _ -> fromCheckpoint ()
+                | _ -> fromCheckpoint ()
             if solved.Count >= solvedListsKept then solved.Clear()
             let known =
                 match result with
@@ -1193,6 +1252,22 @@ module Unifier =
                 | Error mismatch -> { Result = Error mismatch; NextRestId = 0; Extension = NoneAfter }
             solved[constraints] <- known
             known.Result
+
+    /// Marks `constraints`, the list the type checker holds once it has generalised a top-level def, as one later
+    /// solves can start from (see `unifyDetailed`), if it agrees: the next def's constraints usually share no variable
+    /// with it, so a module is solved once, a def at a time, rather than again for each def (#1266).
+    let checkpoint (constraints: ConstraintSet) =
+        match constraints, unifyDetailed constraints with
+        | _ :: _, Ok _ ->
+            match checkpoints.TryGetValue constraints, solvedLists.Value.TryGetValue constraints with
+            | (false, _), (true, { Result = Ok subst; NextRestId = nextRestId; Extension = extension }) ->
+                let vars =
+                    match checkpointTail constraints with
+                    | Some (newer, previous) -> varIds newer previous.Vars
+                    | None -> varIds constraints Set.empty
+                checkpoints.AddOrUpdate(constraints, { Subst = subst; NextRestId = nextRestId; Extension = extension; Vars = vars })
+            | _ -> ()
+        | _ -> ()
 
     /// Solves `constraints`, or gives the first that cannot be satisfied, with what was wrong and where.
     let unify (constraints: ConstraintSet) : Result<Subst, string * SourceSpan> =
@@ -1226,7 +1301,9 @@ module Unifier =
     /// an error earlier in the module, reported where it is, does not make every later constraint seem not to fit.
     ///
     /// The constraints in front of a list it gave lately are put in front of what that list gave, so that solving them
-    /// is on top of what that solved to (see `unifyDetailed`), rather than the whole list from the start each time.
+    /// is on top of what that solved to (see `unifyDetailed`), rather than the whole list from the start each time. Where
+    /// that list kept all its constraints, they are `constraints` itself, which is given as it is, so that the checkpoints
+    /// in it are still found (see `checkpoint`).
     let agreeing (constraints: ConstraintSet) : ConstraintSet =
         let given = agreeingLists.Value
         match given.TryGetValue constraints with
@@ -1234,6 +1311,7 @@ module Unifier =
         | false, _ ->
             let rec walk (newer: ConstraintSet) (remaining: ConstraintSet) =
                 match given.TryGetValue remaining with
+                | true, kept when obj.ReferenceEquals(kept, remaining) -> constraints
                 | true, kept -> List.rev newer @ kept
                 | false, _ ->
                     match remaining with

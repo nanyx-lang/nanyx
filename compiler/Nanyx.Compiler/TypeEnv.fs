@@ -18,15 +18,30 @@ type InstanceBinding =
       Provider: ContextProvider }
 
 /// The names in scope, each with its type, and the instances of parameterised contexts in scope, nearest first.
+/// `Unquantified` holds the free type variables of each name whose scheme has any, by name: few of them do (a
+/// parameter, a def not yet generalised), so `freeEnvVars` looks at those, not at every name in scope (#1266).
 type TypeEnv =
     { Names: Map<string, TypeScheme>
-      Instances: InstanceBinding list }
+      Instances: InstanceBinding list
+      Unquantified: Map<string, Set<int>> }
 
 module TypeEnv =
-    let empty : TypeEnv = { Names = Map.empty; Instances = [] }
+    let empty : TypeEnv = { Names = Map.empty; Instances = []; Unquantified = Map.empty }
+
+    let rec freeTyVars (ty: Ty) : Set<int> =
+        match ty with
+        | TyVar v -> Set.singleton v.Id
+        | TyAlias(_, _, underlying) -> freeTyVars underlying
+        | _ -> Ty.children ty |> List.map freeTyVars |> Set.unionMany
+
+    let freeSchemeVars (scheme: TypeScheme) : Set<int> =
+        Set.difference (freeTyVars scheme.Type) scheme.Quantified
 
     let extend (name: string) (scheme: TypeScheme) (env: TypeEnv) =
-        { env with Names = env.Names |> Map.add name scheme }
+        let free = freeSchemeVars scheme
+        { env with
+            Names = env.Names |> Map.add name scheme
+            Unquantified = if free.IsEmpty then env.Unquantified |> Map.remove name else env.Unquantified |> Map.add name free }
 
     /// Binds `name` to `scheme` as a reference to the declaration `symbol`.
     let declare (name: string) (symbol: SymbolId option) (scheme: TypeScheme) (env: TypeEnv) =
@@ -37,7 +52,7 @@ module TypeEnv =
 
     /// `env` without `name` in scope.
     let remove (name: string) (env: TypeEnv) =
-        { env with Names = env.Names |> Map.remove name }
+        { env with Names = env.Names |> Map.remove name; Unquantified = env.Unquantified |> Map.remove name }
 
     /// `env` with `instance` in scope, nearer than those already in it.
     let withInstance (instance: InstanceBinding) (env: TypeEnv) =
@@ -49,19 +64,9 @@ module TypeEnv =
           Symbol = None
           ProvidedBy = None }
 
-    let rec freeTyVars (ty: Ty) : Set<int> =
-        match ty with
-        | TyVar v -> Set.singleton v.Id
-        | TyAlias(_, _, underlying) -> freeTyVars underlying
-        | _ -> Ty.children ty |> List.map freeTyVars |> Set.unionMany
-
-    let freeSchemeVars (scheme: TypeScheme) : Set<int> =
-        Set.difference (freeTyVars scheme.Type) scheme.Quantified
-
     let freeEnvVars (env: TypeEnv) : Set<int> =
-        env.Names
+        env.Unquantified
         |> Map.values
-        |> Seq.map freeSchemeVars
         |> Seq.append (env.Instances |> Seq.map (_.Context >> freeTyVars))
         |> Seq.fold Set.union Set.empty
 

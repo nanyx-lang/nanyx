@@ -674,3 +674,18 @@ let internal resolveSoFar (state: InferState) (ty: Ty) : Ty =
     | TyPrimitive _ -> ty
     // A conflict elsewhere in the module does not stop the rest of the constraints saying what `ty` is.
     | _ -> Unifier.applySolved (fst (Unifier.solve state.Constraints)) ty
+
+/// The type variables of the types of what is in scope in `env`, each resolved by `subst`: those a def's type shares
+/// with its surroundings, which generalising it must leave alone. Only the names whose schemes have free variables are
+/// looked at (see `TypeEnv.Unquantified`), and a variable `subst` does not bind stands for itself, so the many names in
+/// scope that are generalised, and the defs of the module not yet checked, cost little (#1266).
+let internal envVarsUnder (subst: Subst) (env: TypeEnv) : System.Collections.Generic.HashSet<int> =
+    let found = System.Collections.Generic.HashSet<int>()
+    let add (id: int) =
+        if subst.ContainsKey id then found.UnionWith(TypeEnv.freeTyVars (Unifier.apply subst (TyVar { Id = id; Name = None })))
+        else found.Add id |> ignore
+    for free in env.Unquantified.Values do
+        Set.iter add free
+    for instance in env.Instances do
+        Set.iter add (TypeEnv.freeTyVars instance.Context)
+    found

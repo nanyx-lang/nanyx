@@ -28,10 +28,7 @@ module internal ScrutineeRests =
         if resolved |> List.forall (Unifier.outputOnlyRestVars >> List.isEmpty) then
             resolved
         else
-            let envVars =
-                TypeEnv.freeEnvVars env
-                |> Seq.map (fun id -> TypeEnv.freeTyVars (Unifier.apply subst (TyVar { Id = id; Name = None })))
-                |> Set.unionMany
+            let envVars = envVarsUnder subst env
             resolved
             |> List.map (fun ty ->
                 let closing =
