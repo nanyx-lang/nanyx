@@ -82,3 +82,15 @@ def main = {
 main()
 """
     runSource source |> assertRan "[outer] hello Ada\n[inner] hello Bob\n[outer] back\n"
+
+[<Fact>]
+let ``Run - a block that calls two functions requiring a scoped context is given it once`` () =
+    let source =
+        """scoped context Tx = private ()
+
+def transaction: [c] ([Tx, c] () -> a) -> a = { block -> block() }
+def step: [Tx] int -> int = { n -> n + 1 }
+
+println(transaction { step(step(1)) })
+"""
+    runSource (normalized source) |> assertRan "3\n"

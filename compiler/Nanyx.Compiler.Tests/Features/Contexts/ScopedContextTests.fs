@@ -55,6 +55,19 @@ let ``Hovering a scoped context's name shows that it is scoped`` () =
     Assert.Equal(Some "scoped context Tx = protected ()", hover |> Option.map _.Type)
 
 [<Fact>]
+let ``Calls in one block that require a scoped context require the block's, once`` () =
+    let typed = compileClean ("""
+scoped context Tx = private ()
+
+def transaction: [c] ([Tx, c] () -> a) -> a = { block -> block() }
+def step: [Tx] int -> int = { n -> n + 1 }
+
+def twice: [Console] () -> () = { println(transaction { step(step(1)) }) }
+def thrice = transaction { step(1) + step(2) + step(3) }
+""".ReplaceLineEndings "\n")
+    Assert.Equal("int", Unifier.tyToString typed.Types.["thrice"])
+
+[<Fact>]
 let ``The outline tells a scoped context from another`` () =
     let outline = (Outline.ofSource "" "scoped context Tx = protected ()\ncontext Log = ()\n").Value
     Assert.Equal<Outline.OutlineKind list>(
