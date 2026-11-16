@@ -56,7 +56,8 @@ let private statementRefusal (run: Statement list) =
         | ImportStatement _ -> Some "It has an import, which the statements after it would lose"
         | TypeDefStatement _ -> Some "It defines a type, which the statements after it would lose"
         | DefStatement _
-        | ExprStatement _ -> None)
+        | ExprStatement _
+        | AttributeStatement _ -> None)
 
 /// `text`, which starts at `offset` in `source`, with each line after its first moved left by the indent of the line
 /// it starts on, and every line then indented by `indent`.
