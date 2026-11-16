@@ -490,6 +490,24 @@ let internal asConstructorField (fieldTy: Ty) (infer: InferState -> Result<'T * 
         infer { state with ContextScope = AmbientScope } |> Result.map (fun (typed, next) -> typed, { next with ContextScope = defScope })
     | _ -> outsideValue infer state
 
+/// `infer` run on `state` for a lambda given to a call for the parameter of type `paramTy`, where the call's result is
+/// `resultTy` and `ownContexts` are what the callee's own context variables stand for at the call. Where the
+/// parameter's contexts are only variables that the result carries and the callee does not declare, as `d` in
+/// `seq.map: ([c] seq(a)), ([d] a -> b) -> [c, d] seq(b)`, the call does not run the lambda: the value it gives carries
+/// what the lambda requires, as a constructor's field does (see `asConstructorField`), so the lambda is inferred
+/// outside the def or value around the call (#1738).
+let internal asCarriedArgument (ownContexts: Ty list) (resultTy: Ty) (paramTy: Ty) (infer: InferState -> Result<'T * InferState, Diagnostic list>) (state: InferState) =
+    let carried = TypeEnv.freeTyVars (resolveSoFar state resultTy)
+    let own = ownContexts |> List.map TypeEnv.freeTyVars |> Set.unionMany
+    let isCarried context =
+        match context with
+        | TyVar v -> carried.Contains v.Id && not (own.Contains v.Id)
+        | _ -> false
+    match state.ContextScope, Unifier.unalias (resolveSoFar state paramTy) with
+    | (DefScope _ | ValueScope _ | ScriptValueScope _ as scope), TyFunc(_, _, (_ :: _ as contexts)) when contexts |> List.forall isCarried ->
+        infer { state with ContextScope = AmbientScope } |> Result.map (fun (typed, next) -> typed, { next with ContextScope = scope })
+    | _ -> infer state
+
 /// `what` needs the ambient context `ctxName` where nothing nearer supplies it: fine at the top level, inferred for
 /// an unannotated def or a script's value, and an error in a def whose type does not declare it or in a named module's
 /// value.

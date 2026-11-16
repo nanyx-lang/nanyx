@@ -127,6 +127,11 @@ Seq.map:  ([c] seq(a)), ([d] a -> b) -> [c, d] seq(b)   -- runs f when pulled: t
 Seq.fold: [c, d] ([c] seq(a)), b, ([d] b, a -> b) -> b  -- runs now again
 ```
 
+So a lambda given for `d`, a context variable that only the result carries, is checked as a constructor's field is:
+outside the def or top-level value it is written in, which needn't have its contexts. A pure function, or a top-level
+value, can make a `[Console] seq(int)` with `seq.map`, and whatever pulls it needs `Console` (#1738). Where a
+`[Console] seq(int)` is expected, either of `[c, d]` may be the one that requires `Console`.
+
 A sequence whose steps read a `mut` cell requires `Memory`, so it can't leave its `memory` block
 ([Context escape](./context-escape)). The `range` example on the Ranges page, which builds a sequence from a `while`
 loop over a cell, can never return; it becomes a `Seq.unfold`.
