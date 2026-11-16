@@ -4,17 +4,31 @@ description: "Reusable pattern-matching logic with the pattern keyword"
 order: 13
 ---
 
-> **Planned.** Custom patterns aren't built yet: `pattern` is not a keyword today, and the open design questions are in [#1719](https://github.com/nanyx-lang/nanyx/issues/1719). This page describes the intended design, and its examples will change as that settles.
+> **Planned.** Custom patterns aren't built yet: `pattern` is not a keyword today. The design below is decided
+> ([#1719](https://github.com/nanyx-lang/nanyx/issues/1719)); the work is
+> [#1720](https://github.com/nanyx-lang/nanyx/issues/1720) to [#1723](https://github.com/nanyx-lang/nanyx/issues/1723).
 
 The `pattern` keyword allows for the encapsulation of matching logic in reusable components.
 
-A custom pattern is ultimately a function with a signature but no name; instead the pattern is identified by the tag(s) it returns. Custom patterns return tags that use the type naming scheme (to distinguish them from standard tags), meaning they must start with a capital letter after the `#`.
+A custom pattern is a function with a signature but no name: it is identified by the tags it returns. Its tags are
+**capitalised** (`#Even`, `#Hsl`), which is what tells them apart from ordinary tags: a capitalised tag is always a
+custom pattern, and one that names no pattern in scope is an error.
 
-The function body contains the logic for matching and extracting values, and returns one of the tags used in the pattern signature. As with tags elsewhere in the language, members of the pattern union can carry payloads. This gives the custom pattern the ability to return values that are then available in the match body.
+The function body contains the logic for matching and extracting values, and returns one of the tags in the pattern's
+signature. As with tags elsewhere in the language, they can carry payloads, which are then bound in the match arm.
 
-> **Note:** Because custom patterns are used only by their return tags, return tags must be unique within the module. This means that two custom patterns cannot share a return tag (because then the compiler would not know which pattern code should be executed when that tag is used in a pattern match). 
-> 
-> Custom pattern tags don't conflict with regular tags due to the relative naming conventions.
+# Sharing patterns
+
+A pattern is a top-level declaration, like a `def`. `export pattern ...` shares it, and importing its module brings
+it into scope. Two patterns in scope that return the same tag are an error, as two imports of the same name are,
+since a match couldn't tell which one to run.
+
+# Patterns are pure
+
+A pattern's type requires no contexts: it can't print, read input or change a cell. A pattern that would is an error.
+
+So it never matters how often a pattern runs, and the compiler is free to share the work. A pattern without arguments
+runs at most once per match, however many arms use it. Arms are tried top to bottom, as in any match.
 
 # Total patterns
 
@@ -22,13 +36,13 @@ A pattern is _total_ if it matches all possible inputs.
 
 A total pattern can have one choice:
 
-```nanyx
+```nanyx fragment
 pattern Rgb -> #Hsl(h: float, s: float, l: float) = { rgb ->
   -- conversion logic here
   def h = ...
   def s = ...
   def l = ...
-  
+
   #Hsl(h, s, l)
 }
 
@@ -42,21 +56,33 @@ def #Hsl(h, s, l) = getRgbColor()
 
 or many:
 
-```nanyx
-pattern int -> #Even | #Odd = { n -> 
-  if n % 2 == 0 then #Even 
-  else #Odd 
+```nanyx fragment
+pattern int -> #Even | #Odd = { n ->
+  if n % 2 == 0 then #Even else #Odd
+}
+```
+
+A total pattern's tags cover its input type, so a match whose arms use all of them is exhaustive, with no `_` arm
+needed, on its own or mixed with ordinary patterns of the same type:
+
+```nanyx fragment
+def parity = { n: int ->
+  match n
+    | #Even -> "even"
+    | #Odd -> "odd"
 }
 ```
 
 # Partial patterns
 
-Custom patterns can be partial (meaning they might not match all possible inputs). For a pattern to be partial, one of its return values must be a wildcard (`_`).
+Custom patterns can be partial (meaning they might not match all possible inputs). For a pattern to be partial, one of
+its return values must be a wildcard (`_`). A match using a partial pattern needs a `_` arm to be exhaustive.
 
-As a convenience, Nanyx allows a partial pattern with exactly one choice and no output values to return a `bool` instead of an explicit tag:
+As a convenience, a partial pattern with exactly one choice and no payload may return a `bool` instead of an explicit
+tag:
 
-```nanyx
-pattern int -> #Zero | _  = { n -> n == 0 }
+```nanyx fragment
+pattern int -> #Zero | _ = { n -> n == 0 }
 
 match num
   | #Zero -> "zero"
@@ -67,9 +93,9 @@ if num is #Zero then
   println("It's zero!")
 ```
 
-In the case of partial patterns with multiple choices or output values, the wildcard case must be explicitly returned using the `_` value:
+Otherwise, the body says "no match" by returning `_`, which is valid only in a pattern's body:
 
-```nanyx
+```nanyx fragment
 pattern string -> #ParseInt(int) | #ParseBool(bool) | _ = { s ->
   if | int.fromString(s) is #some(i) -> #ParseInt(i)
      | bool.fromString(s) is #some(b) -> #ParseBool(b)
@@ -84,40 +110,49 @@ match getUserInput()
 
 # Patterns with arguments
 
-Patterns can also take arguments, which are values that are passed in when the pattern is used. This allows for more flexible and reusable patterns and are useful for complex conditions like regex matching:
+Patterns can also take arguments: values passed in where the pattern is used. A pattern with arguments has the form
+`<args> -> <input> -> <output>`, and its body is curried: given the arguments, it returns a function of the input.
+Work that depends only on the arguments can then be done once, outside the part that runs for each input.
 
-```nanyx
-pattern Regex -> string -> #MatchesRegex | _  = { r, s ->
-  s \Regex.matches(r)
+```nanyx fragment
+pattern string -> string -> #StartsWith | _ = { prefix ->
+  { s -> s \string.startsWith(prefix) }
 }
 
-match userInput
-  | #MatchesRegex('[^@]+@\w+\.\w+') -> "valid email"
-  | _ -> "invalid format"
+match url
+  | #StartsWith("https://") -> "secure"
+  | _ -> "not secure"
 ```
 
-A pattern with arguments has the form `<args> -> <input> -> <output>`, where the first part is the argument type, the second part is the input type that the pattern matches against, and the third part is the output tag union indicating match success or failure. The pattern's function receives the arguments first and the input second, in the same order as the signature.
+At the use site, a pattern with arguments takes two parenthesised groups: the arguments first, then the payload to
+destructure. When the pattern's result tag carries no payload, the second group is left out, as in
+`#StartsWith(...)` above. The compiler knows which patterns take arguments from their declarations, so there is no
+ambiguity with an ordinary tag such as `#circle(r)`, whose single group is always a payload.
 
-At the use site, a pattern declared with arguments always takes two parenthesised groups: the arguments first, then the payload to destructure. When the pattern's result tag carries no payload, the second group is omitted, as in `#MatchesRegex(...)` above. The compiler knows which patterns take arguments from their declarations, so there is no ambiguity with an ordinary tag such as `#circle(r)`, whose single group is always a payload.
-
-```nanyx
--- A pattern that checks whether a string contains a given separator and splits on it
-pattern string -> string -> #SplitOnChar(string, string) | _ = { c, s ->
-  if [a, b] = s \split(on = c) then #SplitOnChar(a, b) else _
+```nanyx fragment
+-- A pattern that splits a string in two on a separator
+pattern string -> string -> #SplitOn(string, string) | _ = { separator ->
+  { s ->
+    match s \split(on = separator)
+      | [a, b] -> #SplitOn(a, b)
+      | _ -> _
+  }
 }
 
 match "hello,world"
-  | #SplitOnChar(',')(s1, s2) -> "First: {s1}, Second: {s2}"
-  | _ -> "Input string does not contain a comma"
+  | #SplitOn(",")(first, second) -> "First: {first}, Second: {second}"
+  | _ -> "Input string does not contain exactly one comma"
 ```
 
-You can also compose patterns to handle more sophisticated matching:
+Several arguments are a tuple: `pattern (int, int) -> int -> #Between | _`. A pattern with arguments runs once per
+argument list the compiler can see is the same (literals, or the same names), and otherwise once per arm that uses
+it; since patterns are pure, the difference can't be observed.
 
-```nanyx
-pattern int -> int -> #DivisibleBy | _ = { divisor -> 
-  { n -> 
-    if n % divisor == 0 then #DivisibleBy else _   
-  }
+Patterns compose with `&`, which matches only when both sides do:
+
+```nanyx fragment
+pattern int -> int -> #DivisibleBy | _ = { divisor ->
+  { n -> n % divisor == 0 }
 }
 
 match n
