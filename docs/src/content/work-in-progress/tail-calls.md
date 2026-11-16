@@ -6,8 +6,10 @@ order: 24
 
 Tail calls are built: the WebAssembly backend lowers every call in tail position to `return_call`, the official
 linter reports recursion that is not in tail position, and every walk in the standard library is stack-safe. The
-tour states the guarantee in [Tail recursion](../tour/functions#tail-recursion). This page keeps the rules, how the
-compiler keeps them, and the [plan](#plan) for the rest. It is part of the [compilation](./compilation) workstream,
+guarantee and the rules for tail position are described in [Tail recursion](../tour/functions#tail-recursion), stack
+safety in a workflow's loops in [Keywords in loops](../advanced/workflows#keywords-in-loops), and the linter's rule in
+[Recursion not in tail position](../standard-tools/official-linter#recursion-not-in-tail-position). This page keeps
+why it is a guarantee, how the compiler keeps it, and the [plan](#plan) for the rest. It is part of the [compilation](./compilation) workstream,
 and its issues carry the `compilation` and `wasm backend` labels.
 
 # Summary
@@ -40,29 +42,9 @@ or .NET backend would need trampolines, which are slow. Choosing this rules thos
 
 # Tail position
 
-Tail position is defined on the program after workflows are desugared, so a workflow block needs no rule of its
-own.
-
-- The body of a function is in tail position.
-- When an `if` is in tail position, so are its `then` and `else` branches.
-- When a `match` (including a `\match` in a pipeline) is in tail position, so is the body of each arm. So is
-  each arm of an `except`, which is a `match` with an arm that passes the other cases through.
-- When a block is in tail position, so is its last expression.
-- When `use C(...) in body` is in tail position, so is `body`: loading a context only binds it.
-- A pipe `x \f(y)` is the call `f(x, y)`, and is a tail call when it is in tail position.
-
-Nothing else is in tail position. In particular:
-
-- arguments to a call, and operands of an operator (`1 + f(n)`),
-- the scrutinee of a `match`, a guard, and the condition of an `if`,
-- interpolated values (`"{f(n)}"`),
-- list, tuple and record construction (`[x, ...f(xs)]`, `(a = f(n))`),
-- the body of a `for` or `while`.
-
-A workflow block becomes `builder({ ... })`, with each keyword's continuation a closure holding the rest of the
-block, so the rules above apply to the desugared code. A loop written inside a workflow is stack-safe when the
-members of the builder's context call their continuation in tail position, which is the builder author's choice. A
-keyword that runs code after its continuation returns (`defer`) is not.
+The rules are listed in [Tail position](../tour/functions#tail-position). They are defined on the program after
+workflows are desugared, so a workflow block needs no rule of its own: it becomes `builder({ ... })`, with each
+keyword's continuation a closure holding the rest of the block.
 
 # Design
 
@@ -101,14 +83,10 @@ error that names the function that recursed, not a WebAssembly backtrace. It doe
 
 ## Checking tail position
 
-The official linter's `nonTailRecursion` rule (`default/nonTailRecursion`) reports a function that calls itself
-other than in tail position: a top-level def whose value is a lambda, or a local `rec`. It reports at the call,
-and says why the call is not in tail position by naming what is done with its result: the operator it is an
-operand of, the function it is passed to, the list it goes into, the name it is bound to, and so on.
+The official linter's `nonTailRecursion` rule (`default/nonTailRecursion`, described in
+[Recursion not in tail position](../standard-tools/official-linter#recursion-not-in-tail-position)) reports a
+function that calls itself other than in tail position: a top-level def whose value is a lambda, or a local `rec`.
 
-- **It is `info` by default.** Recursion that is not in tail position is often right: walking a tree recurses as
-  deep as the tree, and it is the plainest way to write a function that builds a list. A project that
-  wants every loop to be stack-safe raises it to a warning or an error in its `.nyxp`.
 - **Only a function's own calls count.** A call from a lambda written in the function (a workflow block, a `for`
   loop's body, an argument to `list.map`) is a call from that lambda, and is not reported. Nor is mutual recursion:
   the rule looks at one function at a time.

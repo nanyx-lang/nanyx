@@ -201,7 +201,7 @@ nanyx run examples/greeter
 nanyx build examples/greeter/greeter.nyxp
 ```
 
-Both are debug builds: a type or name error is reported, but does not stop the program being built or run. The code where it was found reports the error again, and stops the program, if the program reaches it. `nanyx build --release` refuses any error.
+Both are debug builds: a type or name error is reported, but does not stop the program being built or run. The code where it was found reports the error again, and stops the program, if the program reaches it (see [Deferred errors](./error-handling#deferred-errors)). `nanyx build --release` refuses any error.
 
 `nanyx check` does the same checks as `nanyx build`, but writes nothing, and any error fails it. It takes the package's directory or manifest too, or a single `.nyx` file.
 
