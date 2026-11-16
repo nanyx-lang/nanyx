@@ -71,6 +71,10 @@ context of their own, `type MRef(a) = [Memory] protected (...)`
 4. **`MStack(a)` and `MList(a)`** ([#1493](https://github.com/nanyx-lang/nanyx/issues/1493)): written in Nanyx over
    `MRef`, as protected types, so they need nothing new in the compiler. `MList` has `+=` attached to append. It can
    move onto a growable `MArray` later without changing its interface.
+5. **Slices** ([#1545](https://github.com/nanyx-lang/nanyx/issues/1545)): views that share storage instead of copying.
+   `Slice(a)` is an immutable view of an `Array` that holds a counted reference to it, so it needs no lifetime rules;
+   `MSlice(a)` is a mutable view of an `MArray`, carrying its block's scope; and a string slice is for parsers. Each is
+   a type of its own, so a small slice can't silently keep a large parent alive. After `MArray`.
 
 - **`mut` record fields.** The parser reads `mut` before a field name in a record type; nothing checks or compiles it
   yet.
