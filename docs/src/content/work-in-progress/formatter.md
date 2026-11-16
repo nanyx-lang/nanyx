@@ -103,8 +103,9 @@ file in the repository and every Nanyx code block in the docs.
 
 ## The style
 
-The docs' examples are the starting point. Proposed rules, each to be confirmed by the maintainer (see the tracking
-issue):
+The docs' examples are the starting point. Decided by the maintainer as written here
+([#855](https://github.com/nanyx-lang/nanyx/issues/855), [#856](https://github.com/nanyx-lang/nanyx/issues/856)), and
+built in [#220](https://github.com/nanyx-lang/nanyx/issues/220):
 
 - Two spaces of indent and a line width of 100, unless [configured](#configuration). Indent is measured from the
   start of the line, never from a keyword's column.
@@ -319,6 +320,11 @@ the lines from the first such item's to the last's are replaced with the same it
 (`RangeFormatting.formatRange`). The comments and blank lines around them are left as they are. When formatting
 changes how many top-level items there are, as joining imports does, the whole document is replaced.
 
+Planned ([#705](https://github.com/nanyx-lang/nanyx/issues/705), decided): the language server highlights where a
+document differs from its formatted text, as one Hint diagnostic per changed block of whole lines, each with a quick fix
+that applies it. It runs the formatter itself rather than through a linter, so it works on a module with type errors.
+It's on by default, with an extension setting to turn it off; `nanyx format --check` stays the command-line check.
+
 # Plan
 
 Its issues carry the [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) label. Items in order. Each produces something usable on
@@ -358,8 +364,12 @@ On 2026-11-07, in [#215](https://github.com/nanyx-lang/nanyx/issues/215):
 - **Imports.** Sorted, within each run of consecutive imports.
 - **Unparseable files.** Refused.
 
-# Open questions
+On 2026-11-16:
 
-- **The style rules** in [The style](#the-style), starting from the docs' examples.
-- **Alignment.** Aligning `=` or `->` across consecutive lines looks tidy but makes one edit change many lines in a
-  diff. This page proposes no alignment beyond the `|`s of match cases.
+- **The style rules** in [The style](#the-style) are adopted as written ([#855](https://github.com/nanyx-lang/nanyx/issues/855)).
+- **Alignment.** None beyond the `|`s of a match's cases: aligning `=` or `->` across lines makes one edit change many
+  lines in a diff ([#856](https://github.com/nanyx-lang/nanyx/issues/856)).
+- **Highlighting differences in the editor** as described under [The editor](#the-editor)
+  ([#705](https://github.com/nanyx-lang/nanyx/issues/705)).
+- **A field named by a number is positional,** so `` (`0`: a, x: int) `` is printed `(a, x: int)`; the formatter
+  normalises to the positional form ([#1430](https://github.com/nanyx-lang/nanyx/issues/1430)).

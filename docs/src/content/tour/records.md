@@ -30,6 +30,8 @@ You can also use positional fields:
 def point = (10, 20)
 ```
 
+A positional field's name is its position: the fields of `(10, 20)` are `` `0` `` and `` `1` ``. So a field written with a number for its name, `` (`0`: int, `1`: int) ``, is a positional field, the same as `(int, int)`, and the formatter writes it that way.
+
 Because records and tuples are unified, both styles can be combined in one value:
 
 ```nanyx
