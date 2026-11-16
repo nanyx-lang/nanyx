@@ -63,7 +63,7 @@ and the live view is drawn inside the box.
 # Packages
 
 `nanyx migrate` is `Migration.fs`, `nanyx pull` is `PackageDependencies.pull`, `nanyx install` is
-`PackageDependencies.install` and `nanyx pack` is `PackageArchive.pack`. The cache and the index a command uses are the
+`PackageDependencies.install`, `nanyx pack` is `PackageApi.pack` (`PackageArchive.packWith`, with the package's `api.json`) and `nanyx bump` is `PackageApi.bump`. The cache and the index a command uses are the
 `Shell`'s `Packages`, `PackageStore.user ()` (`NANYX_PACKAGES`, `NANYX_INDEX`); the Wasm tests give their own.
 `nanyx pull` downloads what `nanyx.lock` locks (`PackageIndex.download`), but nothing writes the lockfile yet:
 

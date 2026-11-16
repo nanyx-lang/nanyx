@@ -32,7 +32,9 @@ Numeric utilities.
 [`abs`](#abs), [`sign`](#sign) and [`pow`](#pow) are generic over the `Num(a)` context, so they take an `int` or a
 `float`. `abs`, `sign`, [`min`](#min), [`max`](#max), [`minMax`](#minmax) and [`clamp`](#clamp) compare through `Ord(a)`, so the
 last four take a value of any type that has an order, a `string` among them. [`sqrt`](#sqrt), [`exp`](#exp),
-[`ln`](#ln), [`floor`](#floor), [`ceil`](#ceil), [`round`](#round) and [`truncate`](#truncate) take a `float`. [`pi`](#pi), [`e`](#e),
+[`ln`](#ln), [`log10`](#log10), [`log2`](#log2), [`floor`](#floor), [`ceil`](#ceil), [`round`](#round) and [`truncate`](#truncate) take a `float`, and so
+do the trigonometric functions, [`sin`](#sin), [`cos`](#cos), [`tan`](#tan), [`asin`](#asin), [`acos`](#acos), [`atan`](#atan) and
+[`atan2`](#atan2), whose angles are in radians. [`pi`](#pi), [`e`](#e),
 [`infinity`](#infinity) and [`nan`](#nan) are constants, and [`isNaN`](#isnan), [`isInfinite`](#isinfinite) and [`isFinite`](#isfinite) tell the
 special floats from the others.
 
@@ -183,6 +185,83 @@ def ln: float -> float
 The natural logarithm of `x`, the power `e` is raised to to give `x`: `ln(e)` is `1.0` and `ln(1.0)` is
 `0.0`. It is minus infinity at zero, and NaN below it. `exp` and `ln` are computed from their series,
 as WebAssembly has neither, so a result can be one unit in the last place from the nearest `float`.
+
+## `log10`
+
+```nanyx fragment
+def log10: float -> float
+```
+
+The base-10 logarithm of `x`, the power 10 is raised to to give `x`: exact at a power of ten,
+so `log10(1000.0)` is `3.0`. It is minus infinity at zero, and NaN below it.
+
+## `log2`
+
+```nanyx fragment
+def log2: float -> float
+```
+
+The base-2 logarithm of `x`, the power 2 is raised to to give `x`: exact at a power of two, so
+`log2(1024.0)` is `10.0`. It is minus infinity at zero, and NaN below it.
+
+## `sin`
+
+```nanyx fragment
+def sin: float -> float
+```
+
+The sine of `x`, an angle in radians: `sin(pi / 6.0)` is `0.5`. NaN for an infinite `x`.
+
+## `cos`
+
+```nanyx fragment
+def cos: float -> float
+```
+
+The cosine of `x`, an angle in radians: `cos(pi)` is `-1.0`. NaN for an infinite `x`.
+
+## `tan`
+
+```nanyx fragment
+def tan: float -> float
+```
+
+The tangent of `x`, an angle in radians, its sine over its cosine: `tan(pi / 4.0)` is `1.0`. NaN
+for an infinite `x`.
+
+## `atan`
+
+```nanyx fragment
+def atan: float -> float
+```
+
+The arctangent of `x`, the angle in (-pi/2, pi/2) whose tangent is `x`: `atan(1.0)` is `pi / 4.0`.
+
+## `asin`
+
+```nanyx fragment
+def asin: float -> float
+```
+
+The arcsine of `x`, the angle in [-pi/2, pi/2] whose sine is `x`: NaN outside [-1, 1].
+
+## `acos`
+
+```nanyx fragment
+def acos: float -> float
+```
+
+The arccosine of `x`, the angle in [0, pi] whose cosine is `x`: NaN outside [-1, 1].
+
+## `atan2`
+
+```nanyx fragment
+def atan2: float, float -> float
+```
+
+The angle of the point (`x`, `y`) from the positive x axis, in (-pi, pi]. It takes `y` first, then
+`x`, as C, .NET, Rust and Python do: `atan2(1.0, -1.0)` is `3.0 * pi / 4.0`. Unlike `atan(y / x)`,
+it tells the four quarters apart, and is defined where `x` is zero.
 
 ## `floor`
 

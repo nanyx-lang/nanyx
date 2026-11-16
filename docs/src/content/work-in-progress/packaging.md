@@ -171,6 +171,30 @@ the exported definitions of every exported module, with their types.
 `nanyx bump` prints the changes and writes the right version into the manifest. The index refuses a release that
 skipped the check.
 
+**Built** ([#1470](https://github.com/nanyx-lang/nanyx/issues/1470)), but for what waits on publishing (#865), in
+`PackageApi.fs`:
+
+- **`api.json`** (`PackageApi.ofPackage`, `toJson`, `ofJson`): for each module exported with `export module`, sorted,
+  each export with its kind (`def`, `type`, `context`) and what another package sees of it: a def's type, after the
+  contexts it requires, as hover writes it, or a type's whole definition. `nanyx pack` puts it in the `.nyxpkg`, so the
+  baseline's API is read from the cache, not compiled again.
+- **The comparison** (`PackageApi.compare`): the rows above, each a change with the bump it needs and a sentence that
+  says what it is. Types are compared as written: both are parsed as annotations, and a new def type is more general
+  when the old one is it with its type variables replaced; a type variable renamed is no change. Contexts are compared
+  after that substitution, so a context added is major and one dropped minor. Any change to an exported type's
+  definition is major, described as a field or tag removed or added, its parameters changed, or it made protected or
+  private, where that can be told. A field *added* to a record type is major too, since a record written without it is
+  no longer one; the decision didn't list it.
+- **The version rules** (`required`, `bumped`, `allows`), with the 0.x rule, and **`versionErrors`**, what
+  `nanyx publish` refuses: a version not after the newest published, or a bump too small, with the changes that need
+  the bigger one.
+- **`nanyx bump`** reads the newest version of the package published at or below the manifest's from the index,
+  downloads it into the cache, and writes into the manifest that version bumped as the changes need, unless the
+  manifest already says a later version that is big enough. With nothing published, the version stays.
+
+**Left for #865:** `nanyx publish` calling `versionErrors` against the newest version published below the one it
+publishes, and the index's check that a release's `api.json` came from a bump that passed it.
+
 This needs the type of every exported definition, which inference already has, and it is one more reason for the
 linter rule that asks for annotations on exported definitions
 ([#104](https://github.com/nanyx-lang/nanyx/issues/104)): an inferred type can change by accident.
@@ -340,6 +364,7 @@ Local packages first (items 3a to 3c), then remote packages. Each produces somet
 7. **Publishing.** `nanyx publish` and `yank`; `api.json`; the API comparison and version check
    ([#865](https://github.com/nanyx-lang/nanyx/issues/865), [#1470](https://github.com/nanyx-lang/nanyx/issues/1470)).
    `export module` ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457), done) decides what the API is.
+   `api.json`, the comparison and `nanyx bump` are done (#1470); `publish` and `yank` are left.
 8. **Editor support.** Resolve packages in the language server; pull from the extension.
 9. **First packages.** Publish at least one official package (`nanyx.json`, say) end to end before launch, to
    prove the whole path.

@@ -38,6 +38,7 @@
     <Compile Include="Features\Commands\MigrateCommandTests.fs" />
     <Compile Include="Features\Commands\PullCommandTests.fs" />
     <Compile Include="Features\Commands\PackCommandTests.fs" />
+    <Compile Include="Features\Commands\BumpCommandTests.fs" />
     <Compile Include="Features\Commands\InstallCommandTests.fs" />
     <Compile Include="Features\Console\RunConsoleTests.fs" />
     <Compile Include="Features\Contexts\RunContextTests.fs" />
@@ -91,6 +92,7 @@
     <Compile Include="Features\Maps\RunMapTests.fs" />
     <Compile Include="Features\Maps\RunMapEqualityTests.fs" />
     <Compile Include="Features\Loops\RunLoopTests.fs" />
+    <Compile Include="Features\Loops\RunSeqLoopTests.fs" />
     <Compile Include="Features\Matching\RunMatchingTests.fs" />
     <Compile Include="Features\Matching\RunAndPatternTests.fs" />
     <Compile Include="Features\Matching\RunCustomPatternTests.fs" />
@@ -149,6 +151,7 @@
     <Compile Include="Features\StdLib\RunStdLibTests.fs" />
     <Compile Include="Features\StdLib\RunStackSafeTests.fs" />
     <Compile Include="Features\StdLib\RunMathExpTests.fs" />
+    <Compile Include="Features\StdLib\RunMathTrigonometryTests.fs" />
     <Compile Include="Features\StdLib\RunMathSpecialFloatTests.fs" />
     <Compile Include="Features\StdLib\RunStringTakeSkipTests.fs" />
     <Compile Include="Features\StdLib\RunStringJoinTests.fs" />

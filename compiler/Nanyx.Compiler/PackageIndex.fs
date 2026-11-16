@@ -42,6 +42,7 @@ module PackageIndex =
             if isAddress location then
                 use response = client.Value.GetAsync(location).GetAwaiter().GetResult()
                 if response.IsSuccessStatusCode then Result.Ok(response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult())
+                elif response.StatusCode = Net.HttpStatusCode.NotFound then Result.Error $"there is no {location}"
                 else Result.Error $"{location} answered {int response.StatusCode} {response.ReasonPhrase}"
             elif File.Exists location then
                 Result.Ok(File.ReadAllBytes location)
@@ -80,14 +81,14 @@ module PackageIndex =
             | _ -> Result.Error $"{config} has no format and index")
 
     /// The versions the index at `index` lists of the package `name`, oldest first, with where its index file is, which a
-    /// version's `url` is relative to; or why they can't be read.
+    /// version's `url` is relative to; none for a package it doesn't list. Or why they can't be read.
     let versions (index: string) (name: string) : Result<string * IndexedVersion list, string> =
         let namespace' = name.Substring(0, max 0 (name.IndexOf '.'))
         indexFiles index
         |> Result.bind (fun files ->
             let file = resolve (files + "config.json") $"{namespace'}/{name}.json"
             match readJson file with
-            | Result.Error _ when not (isAddress file) && not (File.Exists file) -> Result.Error $"the index at {index} has no package {name}"
+            | Result.Error _ when not (isAddress file) && not (File.Exists file) -> Result.Ok(file, [])
             | Result.Error message -> Result.Error message
             | Result.Ok listing ->
                 let text name' (element: JsonElement) = property name' element |> Option.filter (fun value -> value.ValueKind = JsonValueKind.String) |> Option.map _.GetString()

@@ -37,26 +37,32 @@ module PackageArchive =
     /// machine that packed it.
     let private entryTime = DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero)
 
-    /// `package`, packed: its manifest and its source files. Or what keeps it from being packed (see `packErrors`).
-    let pack (package: Package) : Result<byte array, Diagnostic list> =
+    /// `package`, packed: its manifest, its source files, and `extra`, files made for the package, each a path at the
+    /// zip's root and its bytes, such as its `api.json` (see `PackageApi.pack`). Or what keeps it from being packed (see
+    /// `packErrors`).
+    let packWith (extra: (string * byte array) list) (package: Package) : Result<byte array, Diagnostic list> =
         match packErrors package.Manifest with
         | _ :: _ as errors -> Result.Error errors
         | [] ->
             let root = package.Manifest.Root
             let entries =
-                package.Manifest.Path :: package.Sources
-                |> List.map (fun file -> Path.GetRelativePath(root, file).Replace('\\', '/'), file)
+                (package.Manifest.Path :: package.Sources
+                 |> List.map (fun file -> Path.GetRelativePath(root, file).Replace('\\', '/'), lazy File.ReadAllBytes file))
+                @ (extra |> List.map (fun (name, bytes) -> name, lazy bytes))
                 |> List.sortWith (fun (a, _) (b, _) -> String.CompareOrdinal(a, b))
             use stream = new MemoryStream()
             (
                 use zip = new ZipArchive(stream, ZipArchiveMode.Create, true)
-                for name, file in entries do
+                for name, bytes in entries do
                     let entry = zip.CreateEntry(name, CompressionLevel.Optimal)
                     entry.LastWriteTime <- entryTime
                     use target = entry.Open()
-                    target.Write(File.ReadAllBytes file)
+                    target.Write(bytes.Value)
             )
             Result.Ok(stream.ToArray())
+
+    /// `package`, packed with nothing but its manifest and its source files (see `packWith`).
+    let pack (package: Package) : Result<byte array, Diagnostic list> = packWith [] package
 
     /// The path of `entry`, a name in a packed package, under the prefix `prefix`, relative to where it is unpacked; or
     /// none if it would land outside that directory.

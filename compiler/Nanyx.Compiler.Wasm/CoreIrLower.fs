@@ -254,7 +254,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | ForSyntax.Call(iterables, _, parameters, body) when parameters.Length = iterables.Length ->
             let depth = scope.ForDepth
             let lowerBody vars = this.Tail { scope with Vars = vars; ForDepth = depth + 1 } body
-            CoreIrLowerLoops.forEach newVar tyOf (this.Atoms scope) lowerBody scope.Vars depth iterables parameters k
+            if CoreIrLowerLoops.pullsSequence tyOf iterables then
+                let local name ty = newVar (uniqueName name) Local ty
+                let members wanted k = CoreIrLowerMembers.memberAtoms this.MemberTools scope None wanted k
+                // The iterables are held in locals, which the loop's own locals are set from.
+                CoreIrLowerLoops.forEachPulling local tyOf (this.AtomsInLocals scope) members lowerBody scope.Vars depth iterables parameters k
+            else CoreIrLowerLoops.forEach newVar tyOf (this.Atoms scope) lowerBody scope.Vars depth iterables parameters k
         | WhileSyntax.Call(condition, body) ->
             let inner = { scope with ForDepth = scope.ForDepth + 1 }
             k (CoreIrLowerLoops.whileLoop scope.ForDepth (this.Tail inner condition) (this.Tail inner body))

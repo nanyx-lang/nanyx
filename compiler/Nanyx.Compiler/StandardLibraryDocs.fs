@@ -87,7 +87,7 @@ let rec internal exportsOf (moduleName: string) (typed: TypedModule) (docOf: Sym
     exportsIn (StandardLibrary.moduleFiles moduleName) typed docOf
 
 /// `exportsOf` a module whose files are `files`.
-and private exportsIn (files: string list) (typed: TypedModule) (docOf: Symbol -> string option) : Map<string, Export list> =
+and internal exportsIn (files: string list) (typed: TypedModule) (docOf: Symbol -> string option) : Map<string, Export list> =
     let files = Set.ofList files
     typed.Symbols
     |> Map.values
