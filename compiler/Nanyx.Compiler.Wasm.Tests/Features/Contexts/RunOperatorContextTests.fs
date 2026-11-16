@@ -32,6 +32,22 @@ def main = {
     runSource source |> assertRan "3 3.75 3\n-4 -2.5 -7\n5.0 20\n14 2.5 11\n"
 
 [<Fact>]
+let ``Run - a def that does not write its type named as a value adds whatever type it is passed at`` () =
+    // #1693: naming `add` as a value no longer makes its arithmetic on ints.
+    let source =
+        """
+def add = { x, y -> x + y }
+
+@entry
+def main = {
+    println([1.5, 2.5] \list.fold(0.0, add))
+    println(add(1.5, 2.0))
+    println([1, 2, 3] \list.fold(0, add))
+}
+"""
+    runSource source |> assertRan "4.0\n3.5\n6\n"
+
+[<Fact>]
 let ``Run - a def that compares values of two type variables calls each one's instance`` () =
     // #690: `same2` is `[Eq(a), Eq(b)] a, a, b, b -> bool`, and each `==` calls the member of its own instance.
     let source =

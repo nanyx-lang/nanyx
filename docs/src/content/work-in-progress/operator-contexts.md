@@ -87,16 +87,13 @@ def r = { x, y, p, q -> (x + y, p * q) } -- [Add(a), Num(b)] a, a, b, b -> (a, b
 def same2 = { x, y, p, q -> x == y and p == q } -- [Eq(a), Eq(b)] a, a, b, b -> bool
 ```
 
-Two cases keep their operators on ints, as they were, because the requirement could not be used yet:
+One case keeps its operators on ints, as they were: **a local function requires no contexts**, so an operator on a
+type a local function would be generic in is on ints: in `def twice = { v -> v + v }` inside another function, `v`
+is an `int`.
 
-- **A local function requires no contexts**, so an operator on a type a local function would be generic in is on
-  ints: in `def twice = { v -> v + v }` inside another function, `v` is an `int`.
-
-- **A function the module names as a value**, as `add` is in `xs \list.fold(0, add)`, stays `int, int -> int`
-  there (`namedAsValue`). This was because a function that requires a parameterised context could not be a value
-  ([#599](https://github.com/nanyx-lang/nanyx/issues/599)); that is done, and the fallback is left to remove
-  ([#1693](https://github.com/nanyx-lang/nanyx/issues/1693)). Only the module's own text is looked at: an exported
-  function another module passes as a value has its requirement inferred.
+A function the module names as a value, as `add` is in `xs \list.fold(0.0, add)`, requires its contexts as any
+other does, and is passed with the instance found where it is named
+([#599](https://github.com/nanyx-lang/nanyx/issues/599), [#1693](https://github.com/nanyx-lang/nanyx/issues/1693)).
 
 ## How it is inferred
 
@@ -104,7 +101,7 @@ Two cases keep their operators on ints, as they were, because the requirement co
 (`InferState.PendingArithmetic`) instead of making its operands ints. When the function around it is generalised
 (`ArithmeticInference.generalize`):
 
-- an operator on one of the function's own type variables stays, unless one of the two cases above applies, and
+- an operator on one of the function's own type variables stays, unless the function is local, and
   `ArithmeticInference.require` turns it into a call that requires its context of that variable, which `ContextInference.resolvePending` makes the function
   require, as it does for a call to a function that requires a context. The operator then calls the member of
   that instance (see [Two instances of one context](#two-instances-of-one-context));
@@ -164,9 +161,6 @@ prelude, or a member to one:
   parameterised context is inferred to require it ([#550](https://github.com/nanyx-lang/nanyx/issues/550)), but an
   operator in a local def that does not write its type is not inferred to need its context: the def is not generic in
   it.
-- **Functions named as values**: the fallback in `ArithmeticInference.generalize` (`namedAsValue`) is to go, now
-  that [#599](https://github.com/nanyx-lang/nanyx/issues/599) is done
-  ([#1693](https://github.com/nanyx-lang/nanyx/issues/1693)).
 - **Calling one of two members of one name by its name.** An operator on a type variable calls its variable's
   instance's member, but a call written with the member's name has only the name to go by. The plan is to write
   the instance, `Log(string).write(...)`.

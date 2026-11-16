@@ -32,13 +32,6 @@ module internal ArithmeticInference =
         | SizedNumberType _ -> state
         | _ -> addConstraintAt pending.At pending.OperandTy (TyPrimitive "int") state
 
-    /// Whether the module writes the top-level def `name` as a value of its own, as `add` is in `fold(0, add)`: a
-    /// function that requires a parameterised context cannot be a value yet (#599), so such a def requires none for
-    /// its arithmetic. A def of a `module name =` block is written inside it without the block's name.
-    let private namedAsValue (state: InferState) (name: Identifier) =
-        state.NamedAsValues.Contains name
-        || (name.Contains '.' && state.NamedAsValues.Contains (name.Substring(name.LastIndexOf '.' + 1)))
-
     /// `state` with the number literals the def about to be generalised settles made their default types, where nothing
     /// else has settled them (see `NumericLiterals`): every one so far for a top-level def, and for a local def those of
     /// a variable it would be generalised over, since a literal is not of every type. The def's operators are then
@@ -55,8 +48,7 @@ module internal ArithmeticInference =
     /// the def settles (see `Generalising`) are read. An operator found to be on numbers constrains its operands, so
     /// the def is generalised again with them.
     ///
-    /// A top-level def requires the contexts of each of its type variables its operators are on. The operators of a
-    /// def the module names as a value are all on numbers (see `namedAsValue`).
+    /// A top-level def requires the contexts of each of its type variables its operators are on.
     let generalize (generalizeDef: InferState -> TypeScheme * InferState) (generalising: Generalising) (state: InferState) : TypeScheme * InferState =
         let state = settleLiterals generalizeDef generalising state
         if state.PendingArithmetic.IsEmpty then generalizeDef state
@@ -81,7 +73,7 @@ module internal ArithmeticInference =
                         resolved |> List.filter (fun (pending, ty) -> isOwn ty && (OperatorContexts.smallest state pending.MemberName).IsSome)
                     // A def whose type an annotation cannot write requires nothing (see `ContextInference.annotation`).
                     let writable () = (ContextInference.typeExprOf (ContextInference.varNames tentative.Type) tentative.Type).IsSome
-                    let requires = not onVariables.IsEmpty && not (namedAsValue state name) && writable ()
+                    let requires = not onVariables.IsEmpty && writable ()
                     fun pending ty -> requires && onVariables |> List.exists (fun (other, _) -> other.Operator = pending.Operator)
             let staying, numbers = resolved |> List.partition (fun (pending, ty) -> stays pending ty)
             let pending = staying |> List.map fst

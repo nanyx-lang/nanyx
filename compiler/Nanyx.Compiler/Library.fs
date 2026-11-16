@@ -739,8 +739,7 @@ module Compiler =
             let state =
                 { merged.State with
                     AmbiguousImports = ambiguousImports
-                    PreludeContexts = OperatorContexts.inModule (key = preludeKey) desugared merged.State.PreludeContexts
-                    NamedAsValues = SyntaxTree.namedAsValues desugared }
+                    PreludeContexts = OperatorContexts.inModule (key = preludeKey) desugared merged.State.PreludeContexts }
             if not merged.Errors.IsEmpty then
                 // A module imported along several paths fails each importer with the same diagnostics, each through
                 // the first import that brings it in.

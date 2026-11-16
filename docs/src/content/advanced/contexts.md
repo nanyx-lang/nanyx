@@ -62,7 +62,7 @@ import db
 
 def report: [Tx] () -> () = {
   query("select 1") -- fine: query is db's
-  -- commit()         -- NYX0244: only db can call commit
+  -- commit() -- NYX0244: only db can call commit
 }
 ```
 
@@ -91,7 +91,7 @@ export def next: [Tx] Cursor -> int = { c -> c.row + 1 }
 
 def row = transaction {
   def c = open("select")
-  next(c)          -- fine
+  next(c) -- fine
 }
 
 def leaks = transaction {
@@ -179,7 +179,7 @@ def greet: [Log] string -> () = { name ->
 }
 
 def main = {
-  use Log(log = { message -> println(message) })   // main requires Console here
+  use Log(log = { message -> println(message) }) -- main requires Console here
   greet("world")
 }
 ```
@@ -236,11 +236,13 @@ An instance of a parameterised context names the type it is for after the contex
 ```nanyx
 context Show(a) = (show: a -> string)
 
-def describe: [Show(a)] a -> string = { v -> Show(a).show(v) }
+def describe: [Show(a)] a -> string = { v ->
+  Show(a).show(v)
+}
 
 def main = {
   use Show(int)(show = { n -> "#{n}" })
-  describe(42)   // "#42"
+  describe(42) -- "#42"
 }
 ```
 
@@ -292,7 +294,9 @@ def run: [c] ([c] () -> string) -> string = { f ->
   use Foo(bar = { s -> "inner " ++ s }) in f()
 }
 
-def main: [Foo] () -> string = { run({ bar("x") }) }   // "inner x"
+def main: [Foo] () -> string = {
+  run({ bar("x") }) -- "inner x"
+}
 ```
 
 A function value given where one requiring other contexts is expected, such as a lambda that prints given for a context's member whose type doesn't require `Console`, keeps the instances of those other contexts that are in scope where it is given.
@@ -308,8 +312,8 @@ def fooEscapes: [Foo] string -> ([Foo] () -> string) = { s ->
 
 def main: [Console] () -> () = {
   def escaped = use Foo(bar = { s -> s }) in fooEscapes("hi")
-  use Foo(bar = { s -> s ++ "!" }) in println(escaped())   // hi!
-  println(escaped())                                       // error: requires 'Foo'
+  use Foo(bar = { s -> s ++ "!" }) in println(escaped())   -- hi!
+  println(escaped())                                       -- error: requires 'Foo'
 }
 ```
 
@@ -318,8 +322,11 @@ A result type that leaves the context out, `[Foo] string -> () -> string`, is an
 The same goes for a parameterised context. A function that does not write its type, and calls a function that requires `Show(a)` with a value of one of its own type variables, requires `Show` at that variable itself:
 
 ```nanyx
-def describe: [Show(a)] a -> string = { v -> Show(a).show(v) }
-def twice = { v -> describe(v) ++ describe(v) }   // [Show(α)] α -> string
+def describe: [Show(a)] a -> string = { v ->
+  Show(a).show(v)
+}
+
+def twice = { v -> describe(v) ++ describe(v) } -- [Show(α)] α -> string
 ```
 
 Each call to `twice` then finds a `Show` for the type it is called with, as a call to `describe` does. A generic local `def` that does not write its type is inferred to require it the same way.
@@ -383,7 +390,7 @@ def lerp = { a, b, t -> a + (b - a) * t } -- [Num(a)] a, a, a -> a
 def inc = { x -> x + 1 } -- int -> int: `1` is an int
 ```
 
-Adding and multiplying values of one type needs `Num` alone, which has every member of `Add`. A function inside another function that doesn't write its type requires no contexts, so its arithmetic is on ints or floats. For now the same goes for a top-level function the module passes as a value, as `add` in `xs \list.fold(0, add)`, which stays `int, int -> int` ([#1693](https://github.com/nanyx-lang/nanyx/issues/1693)); write its type, `[Add(a)] a, a -> a`, to make it generic.
+Adding and multiplying values of one type needs `Num` alone, which has every member of `Add`. A function inside another function that doesn't write its type requires no contexts, so its arithmetic is on ints or floats. A top-level function passed as a value keeps its contexts: `add` in `xs \list.fold(0.0, add)` is passed with the `Add(float)` found where it is named.
 
 Operators on two of a function's type variables need the contexts of each, and each operator calls the member of its own variable's instance, though both members have one name:
 
@@ -442,10 +449,12 @@ Only a nominal type, protected or private, can: a structural type, such as `type
 An `==` passes through the structures around it. A tag with a payload, a tuple, a record and a list are compared part by part, each part with its own `==`:
 
 ```nanyx
-#some(Email("A@x.io")) == #some(Email("a@x.io"))   // true
-[Email("A@x.io")] == [Email("a@x.io")]             // true
+#some(Email("A@x.io")) == #some(Email("a@x.io")) -- true
+[Email("A@x.io")] == [Email("a@x.io")] -- true
 
-def bothSome: [Eq(a)] (a, a) -> bool = { x, y -> #some(x) == #some(y) }   // compares x and y with Eq(a)
+def bothSome: [Eq(a)] a, a -> bool = { x, y ->
+  #some(x) == #some(y) -- compares x and y with Eq(a)
+}
 ```
 
 ## Ord(a)
@@ -617,14 +626,17 @@ type Point = (x: int, y: int)
 
 def Point.toString = { p -> "({p.x}, {p.y})" }
 
-def message = "Moved to {Point(x = 1, y = 2)}"   // "Moved to (1, 2)"
+def message = "Moved to {Point(x = 1, y = 2)}" -- "Moved to (1, 2)"
 ```
 
 A function that interpolates a value of one of its type variables requires `ToString` of it, as it would by calling any function that does. A function that writes its type says so; one that does not has it inferred:
 
 ```nanyx
-def label: [ToString(a)] (string, a) -> string = { name, value -> "{name}: {value}" }
-def angled = { value -> "<{value}>" }   // [ToString(α)] α -> string
+def label: [ToString(a)] string, a -> string = { name, value ->
+  "{name}: {value}"
+}
+
+def angled = { value -> "<{value}>" } -- [ToString(α)] α -> string
 ```
 
 Such a function can be called with any type that has a `ToString`, the compiler's own included: `angled(3)` is `"<3>"`, and `angled(#red)` is `"<#red>"`. A tag with a payload has one the compiler derives from its parts, so `angled(#some(1))` is `"<#some(1)>"`.
@@ -632,9 +644,11 @@ Such a function can be called with any type that has a `ToString`, the compiler'
 A type's own `ToString`, the compiler's own, a derived one or one built from an attached `toString`, can't be replaced with a `use` (see [A type's own instance wins](#a-types-own-instance-wins)), so `"{250}"` is `"250"` wherever it is written. To write a value differently, call a function in the hole:
 
 ```nanyx
-def pounds: int -> string = { pence -> "£{pence / 100}.{pence % 100}" }
+def pounds: int -> string = { pence ->
+  "£{pence / 100}.{pence % 100}"
+}
 
-def receipt = "Total: {pounds(250)}"   // "Total: £2.50"
+def receipt = "Total: {pounds(250)}" -- "Total: £2.50"
 ```
 
 A `use` gives a `ToString` to a type that has none of its own, such as a [protected type](./nominal-and-protected-types) without a `toString`, and it reaches generic code called from its block:
@@ -644,7 +658,7 @@ type Cents = protected int
 
 def receipt = {
   use ToString(Cents)(toString = { c -> "some cents" })
-  "Total: {Cents(250)}"   // "Total: some cents"
+  "Total: {Cents(250)}" -- "Total: some cents"
 }
 ```
 
@@ -653,14 +667,19 @@ The holes in the instance itself are checked before it is loaded, so they write 
 A tag with a payload, a tuple, a record, a list, a map and a set have a `ToString` when their parts do. The compiler derives it, writing each part with the `ToString` of its type:
 
 ```nanyx
-"{#some(Point(x = 1, y = 2))}"   // "#some((1, 2))"
-"{[1, 2, 3]}"                    // "[1, 2, 3]"
-"{(name = "Ada", age = 36)}"     // "(age = 36, name = Ada)"
-"{["tea" => 3, "cake" => 1]}"    // "[tea => 3, cake => 1]"
-"{set.fromList([3, 1, 3])}"      // "[3, 1]"
+"{#some(Point(x = 1, y = 2))}" -- "#some((1, 2))"
+"{[1, 2, 3]}" -- "[1, 2, 3]"
+"{(name = "Ada", age = 36)}" -- "(age = 36, name = Ada)"
+"{["tea" => 3, "cake" => 1]}" -- "[tea => 3, cake => 1]"
+"{set.fromList([3, 1, 3])}" -- "[3, 1]"
 
-def wrapped: [ToString(a)] a -> string = { value -> "{#some(value)}" }
-def passed: [ToString(a)] a -> string = { value -> angled([value]) }
+def wrapped: [ToString(a)] a -> string = { value ->
+  "{#some(value)}"
+}
+
+def passed: [ToString(a)] a -> string = { value ->
+  angled([value])
+}
 ```
 
 Each part is written with the `ToString` found where the value is written: in generic code, the one the function was given for its type variable, and in a block with a `use`, the one it loads, so in the second `receipt` above `"{[Cents(250)]}"` would be `"[some cents]"`.
