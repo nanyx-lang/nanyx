@@ -5,14 +5,15 @@ open Wasmtime
 open Xunit
 open Transpiler.Wasm.CodeGen
 
-/// The allocator's `alloc` and `free`, instantiated on Wasmtime, together with the block size `alloc` recorded.
+/// The allocator's `alloc` and `free`, instantiated on Wasmtime, together with the block size `alloc` recorded (its size
+/// word without the bits that say whether it and the block before it are free).
 type private Allocator(engine: Engine, store: Store, instance: Instance) =
     let alloc = instance.GetFunction<int, int>("alloc")
     let free = instance.GetAction<int>("free")
     let memory = instance.GetMemory("memory")
     member _.Alloc(size: int) = alloc.Invoke size
     member _.Free(ptr: int) = free.Invoke ptr
-    member _.BlockSize(ptr: int) = memory.ReadInt32(int64 (ptr - 4))
+    member _.BlockSize(ptr: int) = memory.ReadInt32(int64 (ptr - 4)) &&& ~~~3
     member _.Pages = memory.GetSize()
     interface IDisposable with
         member _.Dispose() =
@@ -79,7 +80,7 @@ let ``Allocator - a freed large block is reused by an allocation it can hold`` (
     let _ = allocator.Alloc 8
     allocator.Free bigger
     allocator.Free big
-    // First fit in address order: `big` is too small for this, so the search moves on to `bigger`.
+    // First fit: `big`, freed last, is first on the list but too small for this, so the search moves on to `bigger`.
     Assert.Equal(bigger, allocator.Alloc 600)
     // `big` has too little to spare to split, so it is handed out whole and keeps its own size.
     Assert.Equal(big, allocator.Alloc 300)
@@ -112,6 +113,46 @@ let ``Allocator - freed large blocks next to each other are joined into one`` ()
     allocator.Free b
     Assert.Equal(a, allocator.Alloc 1208)
     Assert.Equal(1208, allocator.BlockSize a)
+
+[<Fact>]
+let ``Allocator - a freed large block is joined to the free one before it, whatever was freed in between (#1614)`` () =
+    use allocator = instantiate ()
+    let a = allocator.Alloc 400
+    let b = allocator.Alloc 400
+    let _ = allocator.Alloc 8
+    let others = [ for _ in 1 .. 5 -> allocator.Alloc 400, allocator.Alloc 8 ]
+    allocator.Free a
+    for other, _ in others do
+        allocator.Free other
+    // `a` is behind five other blocks on the list, and `b` finds it by the size at its end.
+    allocator.Free b
+    Assert.Equal(a, allocator.Alloc 804)
+    Assert.Equal(804, allocator.BlockSize a)
+
+[<Fact>]
+let ``Allocator - a large block handed out again is not joined to the block after it when that is freed (#1614)`` () =
+    use allocator = instantiate ()
+    let a = allocator.Alloc 400
+    let b = allocator.Alloc 400
+    let _ = allocator.Alloc 8
+    allocator.Free a
+    // Too little to spare to split, so `a` is handed out whole, and `b` no longer follows a free block.
+    Assert.Equal(a, allocator.Alloc 300)
+    allocator.Free b
+    Assert.NotEqual(a, allocator.Alloc 804)
+    Assert.Equal(b, allocator.Alloc 400)
+
+[<Fact>]
+let ``Allocator - the rest of a split block is joined to the block after it when that is freed (#1614)`` () =
+    use allocator = instantiate ()
+    let big = allocator.Alloc 800
+    let after = allocator.Alloc 400
+    let _ = allocator.Alloc 8
+    allocator.Free big
+    Assert.Equal(big, allocator.Alloc 400)
+    // The rest, 396 bytes at `big + 404`, is free; `after` follows it, and joins it.
+    allocator.Free after
+    Assert.Equal(big + 404, allocator.Alloc 800)
 
 [<Fact>]
 let ``Allocator - a freed large block at the top of the heap goes back to it`` () =
