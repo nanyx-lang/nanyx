@@ -4,19 +4,17 @@ description: "Editor tools for changing programs safely: rename, extract, inline
 order: 32
 ---
 
+> The refactorings below are built, and described for users on
+> [VS Code extension](../standard-tools/vs-code-extension#refactorings). This page keeps how each is built, the rules
+> every refactoring follows, and the [ideas for later](#ideas-for-later).
+
 Nanyx should have the best editing experience we can manage, and that means the editor giving people the tools to
 change a program without breaking it. This workstream is those tools: rename, expand and shrink selection, extract
 and inline, and the small rewrites that save typing. Its issues carry the
 [`refactoring`](https://github.com/nanyx-lang/nanyx/labels/refactoring) label and the Refactoring stream on the
 [project](https://github.com/orgs/nanyx-lang/projects/1).
 
-# Where we are
-
-The language server offers go to definition, find references across a package, hover, inlay hints, completion,
-semantic tokens, formatting, and quick fixes from diagnostics ([Language server and editor](./language-server)).
-Expand and shrink selection, writing the inferred type, introducing a local or a function, inlining, converting
-between a call and a pipe and organising imports are done, and rename across the files of a package, of a context's
-members, records' fields and modules too.
+# How they are built
 
 Refactorings live in the compiler's `Refactorings/` folder, one file each, after the editor features they build on
 (`Outline.fs`), in the namespace `NyxCompiler.Refactorings`. Their tests are in `Features/Refactorings/` of the
@@ -218,21 +216,9 @@ Not yet: a `module name =` block can't be renamed.
 - **A new name starts a rename.** A refactoring that invents a name (introduce local, introduce function) leaves the
   cursor on it, ready to rename.
 
-# Starter issues
-
-| Refactoring | Issue |
-|---|---|
-| Rename a symbol (done) | [#1534](https://github.com/nanyx-lang/nanyx/issues/1534) |
-| Rename a context's members, record fields and modules (done) | [#1639](https://github.com/nanyx-lang/nanyx/issues/1639) |
-| Expand and shrink selection (done) | [#1535](https://github.com/nanyx-lang/nanyx/issues/1535) |
-| Introduce local (done) | [#1536](https://github.com/nanyx-lang/nanyx/issues/1536) |
-| Introduce function (done) | [#1537](https://github.com/nanyx-lang/nanyx/issues/1537) |
-| Inline a local or a function (done) | [#1538](https://github.com/nanyx-lang/nanyx/issues/1538) |
-| Write the inferred type (done) | [#1539](https://github.com/nanyx-lang/nanyx/issues/1539) |
-| Convert between a call and a pipe (done) | [#1540](https://github.com/nanyx-lang/nanyx/issues/1540) |
-| Organise imports (done) | [#1541](https://github.com/nanyx-lang/nanyx/issues/1541) |
-
 # Ideas for later
+
+- Rename a `module name =` block.
 
 - Change a def's signature: add, remove or reorder parameters, updating every call.
 - Move a def to another module, updating imports.
