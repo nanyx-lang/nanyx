@@ -106,7 +106,13 @@ and memberAtoms (tools: MemberTools) (scope: Scope) (node: NodeId option) (membe
         | (key, ty) :: rest ->
             let found (atom: Atom) = coerce tools scope atom ty (fun atom -> go rest (atom :: acc))
             let foundAtCall = node |> Option.bind (fun node -> CoreIrLowerInstances.foundAt tools.Input (tools.Subst ()) node (scope.Members |> Map.keys |> Set.ofSeq) key)
-            match foundAtCall, scope.Members |> Map.tryFind key, tools.Input.AmbientMembers |> Map.tryFind key with
+            // The one member in scope that is the same member at other type arguments, as a specialisation of a
+            // generic function has `Yield_b_yield` from its `use Yield(b)` where `Yield_int_yield` is wanted.
+            let compatible () =
+                match scope.Members |> Map.toList |> List.filter (fst >> ContextMemberKey.sameMember key) with
+                | [ _, var ] -> Some var
+                | _ -> None
+            match foundAtCall, scope.Members |> Map.tryFind key |> Option.orElseWith compatible, tools.Input.AmbientMembers |> Map.tryFind key with
             | Some argument, _, _ -> argumentAtom tools scope argument None found
             | None, Some var, _ -> found (AVar var)
             | None, None, Some wrapper -> found (wrapperClosure tools wrapper None)

@@ -179,6 +179,26 @@ export def list.find: [c] list(a), ([c] a -> bool) -> #some(a) | #notFound = {
   | [x, ...rest], matches -> if matches(x) then #some(x) else list.find(rest, matches)
 }
 
+--| The values `f` yields for each element in turn, in the order it yields them: `f` runs with a
+  [`Yield`] whose `yield` adds a value to the list. `items \list.select { item -> if item is #other(v)
+  then yield(v) }` gives the payload of each `#other`.
+export def list.select: [c] list(a), ([Yield(b), c] a -> ()) -> list(b) = { xs, f ->
+  memory {
+    mut found = []
+    use Yield(b)(yield = { x -> found := [x, ...found] })
+    list.fold(xs, (), { _, x -> f(x) })
+    list.reverse(found)
+  }
+}
+
+--| The first value `f` yields, running it on the elements in turn as [`list.select`] does, or `#notFound`
+  when it yields none.
+export def list.selectOne: [c] list(a), ([Yield(b), c] a -> ()) -> #some(b) | #notFound = { xs, f ->
+  match list.select(xs, f)
+    | [] -> #notFound
+    | [x, ..._] -> #some(x)
+}
+
 --| Whether `test` holds for every element (so `true` for an empty list).
 export def list.all: [c] list(a), ([c] a -> bool) -> bool = {
   | [], _ -> true

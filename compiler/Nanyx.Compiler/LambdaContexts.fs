@@ -112,18 +112,24 @@ let enterUse (value: Expression) (state: InferState) : InferState =
     { state with UseDepths = state.UseDepths |> Map.add value.Id state.LambdaContexts.Length }
 
 /// Whether a `use` inside the innermost lambda being inferred supplies the context `ctx` in `env`: it binds every
-/// member of it there. The lambda runs with that instance, so it does not require the context.
+/// member of it there, or, for a parameterised context, the nearest instance of it at its types is the `use`'s. The
+/// lambda runs with that instance, so it does not require the context.
 let private suppliedWithin (env: TypeEnv) (state: InferState) (ctx: Ty) : bool =
     let depth = state.LambdaContexts.Length
-    let loadedWithin memberName =
-        match TypeEnv.tryFind memberName env |> Option.bind _.ProvidedBy with
+    let usedWithin (provider: ContextProvider option) =
+        match provider with
         | Some (FromUse value) -> state.UseDepths |> Map.tryFind value |> Option.exists (fun loaded -> loaded >= depth)
         | _ -> false
-    match ctx with
+    let loadedWithin memberName = TypeEnv.tryFind memberName env |> Option.bind _.ProvidedBy |> usedWithin
+    match resolveSoFar state ctx with
     | FunctionContexts.PlainContext name ->
         match state.TypeDefs |> Map.tryFind name with
         | Some info when info.IsContext && not info.Members.IsEmpty -> info.Members |> Map.forall (fun memberName _ -> loadedWithin memberName)
         | _ -> false
+    | TyApply(_, _ :: _) as instance ->
+        env.Instances
+        |> List.tryFind (fun binding -> resolveSoFar state binding.Context = instance)
+        |> Option.exists (fun binding -> usedWithin (Some binding.Provider))
     | _ -> false
 
 /// `record` for the contexts among `contexts` that no `use` inside the innermost lambda supplies in `env`.
