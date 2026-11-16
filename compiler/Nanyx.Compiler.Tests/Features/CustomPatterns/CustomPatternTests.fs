@@ -190,3 +190,48 @@ let ``_ as a value outside a pattern's body is an error of its own`` () =
     Assert.Equal(DiagnosticCodes.NoMatchOutsidePattern.Code, code)
     Assert.Equal("_", text)
     Assert.Contains("no match", message)
+let private divisibleBy = "pattern int -> int -> #DivisibleBy | _ = { divisor -> { n -> n % divisor == 0 } }"
+
+/// The one diagnostic of `divisibleBy` and a function of `n` that matches it with `arm` and then `_`.
+let private armWith (arm: string) =
+    let source =
+        """
+pattern int -> #Even | #Odd = { n -> if n % 2 == 0 then #Even else #Odd }
+
+def f = { (n: int) ->
+  match n
+    | ARM -> 1
+    | _ -> 2
+}
+"""
+    onlyDiagnostic (divisibleBy + source.Replace("ARM", arm).ReplaceLineEndings "\n")
+
+[<Fact>]
+let ``A pattern that takes arguments, used without them, is an error`` () =
+    let code, message, text = armWith "#DivisibleBy"
+    Assert.Equal(DiagnosticCodes.PatternArguments.Code, code)
+    Assert.Equal("#DivisibleBy", text)
+    Assert.Contains("takes arguments", message)
+
+[<Fact>]
+let ``A pattern that takes no arguments, given some, is an error`` () =
+    let code, message, text = armWith "#Even(2)(x)"
+    Assert.Equal(DiagnosticCodes.PatternArguments.Code, code)
+    Assert.Equal("2", text)
+    Assert.Contains("takes no arguments", message)
+
+[<Fact>]
+let ``A pattern's arguments are values, not patterns`` () =
+    let code, _, text = armWith "#DivisibleBy(_)"
+    Assert.Equal(DiagnosticCodes.PatternArguments.Code, code)
+    Assert.Equal("_", text)
+
+[<Fact>]
+let ``A pattern given arguments of the wrong type, or too few, is a type mismatch at them`` () =
+    let code, _, text = armWith "#DivisibleBy(\"three\")"
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    Assert.Equal("\"three\"", text)
+    let source = "pattern (int, int) -> int -> #Between | _ = { low, high -> { n -> n >= low and n <= high } }\ndef f = { (n: int) ->\n  match n\n    | #Between(1) -> 1\n    | _ -> 2\n}\n"
+    let code, _, text = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    Assert.Equal("1", text)

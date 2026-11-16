@@ -211,6 +211,111 @@ parsed 12
 """
 
 [<Fact>]
+let ``Run - patterns with arguments compose with &, as fizzbuzz`` () =
+    """
+pattern int -> int -> #DivisibleBy | _ = { divisor ->
+  { n -> n % divisor == 0 }
+}
+
+def fizzbuzz = { (n: int) ->
+  match n
+    | #DivisibleBy(3) & #DivisibleBy(5) -> "fizzbuzz"
+    | #DivisibleBy(3) -> "fizz"
+    | #DivisibleBy(5) -> "buzz"
+    | _ -> "{n}"
+}
+
+for 1..15 | n -> println(fizzbuzz(n))
+"""
+    |> printsAs """
+1
+2
+fizz
+4
+buzz
+fizz
+7
+8
+fizz
+buzz
+11
+fizz
+13
+14
+fizzbuzz
+"""
+
+[<Fact>]
+let ``Run - a pattern with arguments and a payload takes two groups of brackets`` () =
+    """
+pattern string -> string -> #SplitOn(string, string) | _ = { separator ->
+  { s ->
+    match s \string.split(on = separator)
+      | [a, b] -> #SplitOn(a, b)
+      | _ -> _
+  }
+}
+
+def halves = { (s: string) ->
+  match s
+    | #SplitOn(",")(first, second) -> "First: {first}, Second: {second}"
+    | _ -> "not two halves"
+}
+
+println(halves("hello,world"))
+println(halves("hello"))
+"""
+    |> printsAs """
+First: hello, Second: world
+not two halves
+"""
+
+[<Fact>]
+let ``Run - a pattern's arguments may be any expressions, several of them a tuple`` () =
+    """
+pattern (int, int) -> int -> #Between | _ = { low, high ->
+  { n -> n >= low and n <= high }
+}
+
+def size = { n: int, limit: int ->
+  match n
+    | #Between(0, limit / 2) -> "small"
+    | #Between(limit / 2 + 1, limit) -> "big"
+    | _ -> "out of range"
+}
+
+println(size(3, 10))
+println(size(8, 10))
+println(size(20, 10))
+"""
+    |> printsAs """
+small
+big
+out of range
+"""
+
+[<Fact>]
+let ``Run - a pattern given the same literal arguments runs once per match`` () =
+    """
+pattern int -> int -> #DivisibleBy | _ = { divisor ->
+  { n -> dbg(n % divisor) == 0 }
+}
+
+def fizz = { (n: int) ->
+  match n
+    | #DivisibleBy(3) & 0 -> "zero"
+    | #DivisibleBy(3) -> "fizz"
+    | _ -> "{n}"
+}
+
+println(fizz(4))
+"""
+    |> printsAs """
+dbg: 1
+4
+"""
+
+[<Fact>]
 let ``Run - an imported pattern runs as the module's own does`` () =
     let directory = Directory.CreateTempSubdirectory "nanyx-patterns-"
     try
