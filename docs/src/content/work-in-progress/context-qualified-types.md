@@ -86,7 +86,10 @@ How it works:
 - A constructor's value carries a variable of its own, which the functions it's made with widen, as a function type's
   variable keeps room for more; given where a value is expected, a variable nothing has settled carries the expected
   contexts (`Unifier`, the nominal case of assignability), and one left over when a def is generalised carries none
-  (`Unifier.outputOnlyContextVars`). The lambdas a constructor is given are inferred outside a top-level value, as a
+  (`Unifier.outputOnlyContextVars`). A pure function given where one that requires a context variable a def's type
+  writes is expected leaves that variable alone (`FunctionContexts.fit`), so a constructor whose field has taken the
+  def's `[d]`, as the rest of a recursive value does, keeps it
+  ([#1701](https://github.com/nanyx-lang/nanyx/issues/1701)). The lambdas a constructor is given are inferred outside a top-level value, as a
   record's are, and outside a function's body when the field's type requires contexts, so the value made carries what
   they use, not the function that makes it (`Contexts.asConstructorField`,
   [#1676](https://github.com/nanyx-lang/nanyx/issues/1676)).
@@ -104,6 +107,9 @@ Still open:
 
 - A generic def's result is still read from its value's type, so one whose value carries fewer contexts than it
   declares isn't adapted.
+- A lambda given to a constructor isn't adapted to the contexts the value carries, so a value made with a pure lambda
+  where its type carries `[Console]` traps when its function is called
+  ([#1725](https://github.com/nanyx-lang/nanyx/issues/1725)).
 
 # No special cases
 

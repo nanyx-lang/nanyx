@@ -226,5 +226,11 @@ module FunctionContexts =
             | _ :: _ when not scoped.IsEmpty ->
                 let rest = fresh ()
                 Ok (arguments @ solveTo origin givenVars (scoped @ [ rest ]) @ solveTo origin expectedVars (givenExtra @ [ rest; fresh () ]))
+            // A function that requires nothing leaves alone a variable the type of the def it is in writes, which
+            // would otherwise be solved to a made-up one, as where a constructor's field has taken it (#1701).
+            | [] when givenExtra.IsEmpty && expectedVars |> List.exists (function TyVar v -> v.Name.IsSome | _ -> false) ->
+                match expectedVars |> List.filter (function TyVar v -> v.Name.IsNone | _ -> true) with
+                | [] -> Ok arguments
+                | unwritten -> Ok (arguments @ solveTo origin unwritten [ fresh () ])
             // The variable keeps room for more, so that a function given for it elsewhere can require others.
             | _ -> Ok (arguments @ solveTo origin expectedVars (givenExtra @ givenVars @ [ fresh () ]))
