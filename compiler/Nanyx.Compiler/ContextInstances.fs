@@ -440,6 +440,20 @@ let internal qualifiedDefinition (env: TypeEnv) (qualifier: Identifier) (field: 
     if isBuiltInTypeName qualifier && (TypeEnv.tryFind qualifier env).IsSome then None
     else TypeEnv.tryFind qualifiedName env |> Option.map (fun scheme -> qualifiedName, scheme)
 
+/// The context `ctxName` at the arguments of the instance of it nearest in scope in `env`, when that is for a type with
+/// no variables in it, not `argTys`. One for a variable, as a def that declares the context has, may be the one.
+let private otherInstanceInScope (env: TypeEnv) (state: InferState) (ctxName: Identifier) (argTys: Ty list) : Ty option =
+    nearestInstance env state (fun name instanceArgs -> if name = ctxName then Some instanceArgs else None)
+    |> Option.filter (fun (_, instanceArgs) -> instanceArgs |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty))
+    |> Option.filter (fun _ -> (instanceInScope env state ctxName argTys).IsNone)
+    |> Option.map (fun (_, instanceArgs) -> TyApply(ctxName, instanceArgs))
+
+/// The error for a call of `name`, at `span`, that requires `ctxName` at a type nothing settles, where the instance of
+/// it in scope is `other`, for another type.
+let private unsettledBesideOther (name: Identifier) (ctxName: Identifier) (other: Ty) (span: SourceSpan) : Diagnostic =
+    Diagnostics.at DiagnosticCodes.MissingContextMembers span
+        $"'{name}' requires the context '{ctxName}' at a type nothing here settles, and the instance in scope is a '{Unifier.tyToString other}': write the type the call gives, or load an instance of '{ctxName}' for it with `use`"
+
 /// Finds where `call`, the node where `name` is called at the type `calleeTy` (or, when `reference`, named as a value
 /// of that type), finds each parameterised context the callee requires (see `TypedModule.ContextInstances`), once its
 /// arguments have settled what the context is for. A context for a type inference has not worked out yet is left to
@@ -535,7 +549,13 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     | None, None when InterpolationHoles.isHole name ->
                         InterpolationHoles.resolveLater env current call ctxName argTys calleeSpan found contexts.Length
                     | None, None ->
-                        match ensureContextAvailable (Some call.Id) true env current name [ ctx ] calleeSpan, current.ContextScope with
+                        // An instance of the context at other arguments puts its members in scope by their names, but
+                        // it is not one for a type the call leaves open: that is found once the type is known.
+                        let available =
+                            match otherInstanceInScope env current ctxName argTys with
+                            | Some other when not settled -> Error [ unsettledBesideOther name ctxName other calleeSpan ]
+                            | _ -> ensureContextAvailable (Some call.Id) true env current name [ ctx ] calleeSpan
+                        match available, current.ContextScope with
                         | Ok next, _ -> Ok (found @ [ None ], next)
                         // In an unannotated def, a type the call leaves open may be settled by the rest of the body,
                         // or be one of the def's own variables, which the def then requires the context at.
@@ -713,7 +733,12 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
                 | None -> Some (Ok (Some (InstanceSynthesized (WellKnownContexts.builtInMembers wellKnown)), current))
             | _ when InterpolationHoles.passesBuiltIn env pending.Context argTys ->
                 Some (Ok (Some (InstanceSynthesized InterpolationHoles.builtInMembers), current))
-            | _ -> synthesize scopeEnv |> Option.map (Result.map (fun (instance, next) -> Some instance, next)))
+            | _ ->
+                // An instance in scope where the call is, now that its type is known, as one written there is found
+                // when the call's arguments settle it.
+                match instanceInScope scopeEnv current pending.Context argTys with
+                | Some inScope when argTys |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty) -> Some (Ok (Some (InstanceInScope inScope), current))
+                | _ -> synthesize scopeEnv |> Option.map (Result.map (fun (instance, next) -> Some instance, next)))
     |> Result.map (fun (annotation, resolved) ->
         let inputOf ty = inputTypeFromArgs [ ty; ty ]
         annotation,

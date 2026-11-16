@@ -71,13 +71,13 @@ None of that is impossible to learn, but it is extra conceptual weight that does
 Currying makes pointfree composition effortless, but pointfree code is often harder to read. Compare:
 
 ```nanyx
-def reverseSort = compose(list.reverse, list.sort)
+def sortedUnique = compose(list.sort, list.distinct)
 ```
 
 with:
 
 ```nanyx
-def reverseSort = { xs -> list.reverse(list.sort(xs)) }
+def sortedUnique = { xs -> list.sort(list.distinct(xs)) }
 ```
 
 The second version is slightly longer, but it is clearer about what happens to `list`. In more complex examples, pointfree code makes readers do extra mental translation, which increases the chance of misunderstanding.

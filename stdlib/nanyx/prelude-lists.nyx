@@ -412,42 +412,75 @@ export def list.distinctBy: [Eq(b), Hash(b), c] list(a), ([c] a -> b) -> list(a)
   reverseOnto(distinctByReversed(xs, key, set.empty, []), [])
 }
 
---| `xs` and `ys`, each already in order of `key`, merged into one list in that order, after the
-  elements of `acc` (which holds the merged elements so far, last first). Of two elements with the
-  same key, the one from `xs` comes first.
-def mergeBy: [Ord(b), c] list(a), list(a), ([c] a -> b), list(a) -> list(a) = {
+--| `xs` and `ys`, each already in the order `order` gives, merged into one list in that order, after
+  the elements of `acc` (which holds the merged elements so far, last first). Of two elements
+  `order` finds equal, the one from `xs` comes first.
+def mergeWith: [c] list(a), list(a), ([c] a, a -> #less | #equal | #greater), list(a) -> list(a) = {
   | [], ys, _, acc -> reverseOnto(acc, ys)
   | xs, [], _, acc -> reverseOnto(acc, xs)
-  | [x, ...xs], [y, ...ys], key, acc -> if key(y) < key(x)
-    then mergeBy([x, ...xs], ys, key, [y, ...acc])
-    else mergeBy(xs, [y, ...ys], key, [x, ...acc])
+  | [x, ...xs], [y, ...ys], order, acc ->
+    match order(y, x)
+      | #less -> mergeWith([x, ...xs], ys, order, [y, ...acc])
+      | _ -> mergeWith(xs, [y, ...ys], order, [x, ...acc])
 }
 
 --| `runs` with each pair of neighbouring runs merged into one, in order, after the reversed `acc`.
-def mergePairs: [Ord(b), c] list(list(a)), ([c] a -> b), list(list(a)) -> list(list(a)) = {
-  | [xs, ys, ...rest], key, acc -> mergePairs(rest, key, [mergeBy(xs, ys, key, []), ...acc])
-  | rest, _, acc -> reverseOnto(acc, rest)
-}
+def mergePairs
+  : [c] list(list(a)), ([c] a, a -> #less | #equal | #greater), list(list(a)) -> list(list(a))
+  = {
+    | [xs, ys, ...rest], order, acc -> mergePairs(
+      rest
+      order
+      [mergeWith(xs, ys, order, []), ...acc]
+    )
+    | rest, _, acc -> reverseOnto(acc, rest)
+  }
 
---| The elements of `runs`, each run already in order of `key`, merged into one list in that order.
-def mergeRuns: [Ord(b), c] list(list(a)), ([c] a -> b) -> list(a) = {
+--| The elements of `runs`, each run already in the order `order` gives, merged into one list in that
+  order.
+def mergeRuns: [c] list(list(a)), ([c] a, a -> #less | #equal | #greater) -> list(a) = {
   | [], _ -> []
   | [run], _ -> run
-  | runs, key -> mergeRuns(mergePairs(runs, key, []), key)
+  | runs, order -> mergeRuns(mergePairs(runs, order, []), order)
 }
+
+--| The elements in the order `order` gives: `order(a, b)` says whether `a` comes before `b`
+  (`#less`), after it (`#greater`), or either way (`#equal`), as `compare` and [`int.compare`] do.
+  It sorts by an order that isn't a type's own: `{ a, b -> b.age \int.compare(a.age) }` sorts by
+  age, oldest first, and one that compares a second key when the first is `#equal` sorts by both.
+  The sort is stable: elements `order` finds equal keep their order. Stack-safe: it works on a list
+  of any length.
+export def list.sortWith
+  : [c] list(a), ([c] a, a -> #less | #equal | #greater) -> list(a)
+  = { xs, order ->
+    mergeRuns(list.map(xs, { x -> [x] }), order)
+  }
 
 --| The elements in ascending order of `key`. The sort is stable: elements with the same key keep
   their order. A key can be of any type with an order: `list.sortBy(people, { p -> p.name })`.
   Stack-safe: it works on a list of any length.
 export def list.sortBy: [Ord(b), c] list(a), ([c] a -> b) -> list(a) = { xs, key ->
-  mergeRuns(list.map(xs, { x -> [x] }), key)
+  list.sortWith(xs, { x, y -> compare(key(x), key(y)) })
+}
+
+--| The elements in descending order of `key`: `list.sortByDescending(people, { p -> p.age })` puts
+  the oldest first. The sort is stable: elements with the same key keep their order, which reversing
+  [`list.sortBy`]'s result would not do. Stack-safe: it works on a list of any length.
+export def list.sortByDescending: [Ord(b), c] list(a), ([c] a -> b) -> list(a) = { xs, key ->
+  list.sortWith(xs, { x, y -> compare(key(y), key(x)) })
 }
 
 --| The elements in ascending order of their `Ord`: numbers numerically, strings by their bytes,
   tuples and lists position by position. The sort is stable. Records and tags have no order, so a
   list of them is sorted with [`list.sortBy`] and a key. Stack-safe: it works on a list of any length.
 export def list.sort: [Ord(a)] list(a) -> list(a) = { xs ->
-  list.sortBy(xs, { x -> x })
+  list.sortWith(xs, compare)
+}
+
+--| The elements in descending order of their `Ord`, greatest first: `[3, 1, 2]` gives `[3, 2, 1]`.
+  The sort is stable. Stack-safe: it works on a list of any length.
+export def list.sortDescending: [Ord(a)] list(a) -> list(a) = { xs ->
+  list.sortWith(xs, { x, y -> compare(y, x) })
 }
 
 --| The least of `least` and the elements of `xs`, the first of them when several are least.
