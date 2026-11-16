@@ -8,7 +8,28 @@ Nanyx keeps compiler errors focused on correctness, while style and convention c
 
 The **official Nanyx style linter** enforces recommended coding conventions, including guidance around exported definitions.
 
-Linters are just Nanyx libraries that run during compilation and emit diagnostics. The official Nanyx style linter is the package `nanyx.lint`, installable / uninstallable in any project with an entry in its manifest's `linters`, and is included in the default project template. It is entirely possible (even encouraged) to write custom linters for your team or project.
+Linters run during compilation and emit diagnostics. The official Nanyx style linter is the package `nanyx.lint`, turned on in a project by an entry in its manifest's `linters`, and in a script by a `::linter nanyx.lint` directive (see [Linters](../advanced/linters#configuring-linters)). `nanyx new` turns it on for you. Writing your own linter is planned, but not possible yet.
+
+Each rule's diagnostics have the code `default/<rule>`, such as `default/unusedBindings`. That is the name to use in [`@allow`](#suppressing-a-rule-in-one-place); in a manifest's `settings` and in a `::lint` directive, a rule is named on its own, `unusedBindings`. Many rules come with a fix, which the editor offers as a quick fix.
+
+| Rule | Default | Reports |
+|------|---------|---------|
+| [`unannotatedExports`](#exported-annotations) | warning | an exported def that does not write its type |
+| [`unusedBindings`](#unused-local-value) | warning | a local, a lambda's argument or a pattern variable that is never used |
+| [`unusedImports`](#unused-import) | warning | an import nothing uses |
+| [`unusedPrivateDefinitions`](#unused-private-definition) | warning | a definition the module does not export and does not use |
+| [`unreachableArms`](#unreachable-match-branch) | warning | a match arm the arms before it already cover |
+| [`noTagInCommon`](#comparison-that-is-always-false) | warning | `==` or `!=` on two unions with no tag in common |
+| [`useInBraces`](#use--in-with-a-body-in-braces) | warning | `use ... in { ... }`, whose body is a function, not a block |
+| [`strayDocComments`](#doc-comment-that-documents-nothing) | warning | a doc comment that documents nothing |
+| [`unreachableCode`](#unreachable-code-path) | warning | statements after one that never gives a value |
+| [`nonTailRecursion`](#recursion-not-in-tail-position) | info | a function calling itself other than in tail position |
+| [`unusedResults`](#unused-return-value) | error | a statement whose value is thrown away |
+| [`uselessExpressions`](#expression-that-does-nothing) | error | a pure statement whose value is thrown away |
+| [`shadowedPreludeNames`](#name-that-hides-a-prelude-member) | warning | a name that hides one the prelude brings into scope |
+| [`semicolons`](#statements-separated-by-) | warning | statements separated by `;` |
+| [`unusedAllows`](#allow-that-suppresses-nothing) | warning | an `@allow` that suppresses nothing |
+| [`linterFailed`](#when-the-linter-fails) | warning | the linter could not check a module |
 
 # Why it matters
 
@@ -36,6 +57,8 @@ def total =
   def taxRate = 0.2 -- Linter warning: `taxRate` is never used
   100
 ```
+
+The rule (`unusedBindings`) reports a local def, a lambda's argument or a variable a pattern binds that is never used. A name starting with `_` is not reported, so `_rate` says a binding is unused on purpose. Its fix removes an unused local, or renames an unused argument or pattern variable to `_`.
 
 ## Unused function argument
 
@@ -210,6 +233,10 @@ def total: () -> int = { 100 }
 ```
 
 The rule (`unusedAllows`) reports each rule an [`@allow`](../tour/attributes#allow) names that suppresses nothing in the def after it, so that an `@allow` doesn't outlive the code it was written for. It also reports a rule or linter there is none of. It is a warning by default. When the `@allow` names only that rule, its fix removes the `@allow`.
+
+## When the linter fails
+
+If the linter itself fails on a module, a bug in the linter, the module still compiles: the failure is reported as one `default/linterFailed` diagnostic, a warning, and the linter's other diagnostics for that module are left out. Like any rule, it can be given another severity, or turned off.
 
 # Suppressing a rule in one place
 

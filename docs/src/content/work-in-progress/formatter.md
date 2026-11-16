@@ -1,62 +1,31 @@
 ---
 title: "Formatter"
-description: "How nanyx format is built, and the style it enforces"
+description: "How nanyx format is built, and the decisions behind its style"
 order: 31
 ---
 
-> **Status: built.** This page describes how `nanyx format` is built and the style it enforces; the repository's own
-> Nanyx is kept in that style (see [Plan](#plan)). The user's side is described in the docs. Configuration, blank lines, import sorting and
-> unparseable files were decided on 2026-11-07, and the style on 2026-11-16 (see [Decided](#decided)). Work is
-> tracked under the `formatting` label.
+> The formatter is built. Its style, settings and command are described for users on
+> [Formatter](../standard-tools/formatter), and its editor features on
+> [VS Code extension](../standard-tools/vs-code-extension#formatting). This page keeps how it is built and why its
+> style is what it is. Work is tracked under the [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting)
+> label.
 
-# Summary
-
-Nanyx should ship with one official formatter, `nanyx format`, so that there is one layout for Nanyx code and nobody
-argues about it. The [Formatter](../standard-tools/formatter) page already describes what
-users see: a write mode (the default) and a `--check` mode, files or directories as arguments, a line width of 100
-and an indent of 2, and a `formatter` field in `.nyxp` with those two settings and nothing else.
-
-This page is about what that page leaves out: how the formatter keeps comments the parser throws away, how it
-decides where lines break, and how it guarantees it never changes what a program means.
-
-# Scope
+There is one official formatter, `nanyx format`, so that there is one layout for Nanyx code and nobody argues about
+it. This page is about what the user's page leaves out: how the formatter keeps comments the parser would throw away,
+how it decides where lines break, and how it guarantees it never changes what a program means.
 
 | Area | Where |
 |------|-------|
-| Comments and blank lines | Kept by the parser alongside the syntax tree, so the formatter can put them back |
-| Printing | A new `compiler/Nanyx.Formatter` project: a syntax tree in, Nanyx source out |
-| Style | The layout rules for each construct, written down here and tested |
-| CLI | `nanyx format` and `nanyx format --check` |
-| Editor | Formatting a document from the language server, and format-on-save in the VS Code extension |
-| The repository | Formatting the Nanyx code in `examples/`, `stdlib/` and the docs, and checking it in CI |
+| Comments and blank lines | Kept by the parser beside the syntax tree (`SourceTrivia.fs`), so the formatter can put them back |
+| Printing | `compiler/Nanyx.Formatter`: a syntax tree in, Nanyx source out |
+| CLI | `nanyx format` (`FormatCommand`) |
+| Editor | `FormattingHandler` and `RangeFormatting` in the language server |
 
-Out of scope here:
+The formatter only moves whitespace and comments, adds or removes brackets and blank lines, and sorts imports. Style
+diagnostics (naming, unused code, preferring one construct to another) belong to the
+[official linter](../standard-tools/official-linter).
 
-- Style diagnostics (naming, unused code, preferring one construct to another): the
-  [official linter](../standard-tools/official-linter), in the linters workstream. The
-  formatter only moves whitespace and comments, adds or removes parentheses and blank lines, and sorts imports. It
-  never renames anything or reorders anything else.
-- Reading the rest of `.nyxp`: the packaging workstream. The formatter reads only its `formatter` field.
-
-# Where the compiler is today
-
-- **Comments are discarded.** The parser (FParsec, `compiler/Nanyx.Parser`) skips `--` comments as
-  whitespace (`ws`, `comment`, `inlineCommentNoNl`). Nothing records where they were. Blank lines are skipped the
-  same way. A `---` block comment (`lineComment` in `ParseState.fs`) is recorded as one comment whose text spans
-  lines.
-- **The syntax tree has spans.** Every expression, pattern, type expression, statement and top-level item carries a
-  `SourceSpan`, and equality on them compares `Kind` only, ignoring spans. That makes "the formatted file parses to
-  the same tree" a one-line check.
-- **Some source text is lost.** Parentheses are not kept (`tupleOrParenExpr` returns the inner expression), and
-  literals are stored by value (`IntLit of int`, decoded `StringLit`), so `0xFF`, `1_000` or a string's escapes
-  cannot be printed back from the tree. The spans can recover them from the source text.
-- **The CLI** (`compiler/Nanyx.Compiler.Cli/Program.cs`) has `parse`, `check`, `wasm`, `run`, `hello` and `lsp`.
-  There is no `format`.
-- **The language server** does not offer formatting.
-
-# Proposal
-
-## Keeping comments
+# Keeping comments
 
 The parser records every comment and every run of blank lines it skips, with its span, in a side list returned with
 the syntax tree. The tree itself does not change, so the type checker and code generator are untouched. The formatter
@@ -73,306 +42,96 @@ attaches each comment to a node:
 - A `--|` doc comment is a leading comment too. Its text and line breaks are kept, without rewrapping, and each
   of its continuation lines is set one indent step past its first line, keeping their indents relative to each other.
 
-Blank lines are covered under [Blank lines](#blank-lines) below.
-
-## Printing
+# Printing
 
 The formatter is a document printer in the style of Wadler's "prettier printer" (as in Prettier, `ocamlformat` and
 Elm's formatter): each construct is turned into a document of text, possible line breaks, nesting and groups, and the
 printer lays out each group on one line if it fits in the line width and breaks it otherwise. The rules for each
 construct are written once, as documents, and the printer decides where to break.
 
-- Parentheses are printed where precedence needs them, and nowhere else. A record of plain named fields that is a type
-  application's only argument or a tag's payload shares its brackets: `list(price: int)`, not `list((price: int))`
+- Parentheses are not kept by the parser (`tupleOrParenExpr` returns the inner expression), so they are printed where
+  precedence needs them, and nowhere else. A record of plain named fields that is a type application's only argument
+  or a tag's payload shares its brackets: `list(price: int)`, not `list((price: int))`
   ([#1628](https://github.com/nanyx-lang/nanyx/issues/1628)).
-- Literals are printed from their source text, through their spans, so `0xFF`, `1_000` and escapes survive. The text
-  between the holes of an interpolated string has no span of its own: `writtenStringText` finds it in the source after
-  the opening quote or the hole before it, and keeps it if `StringEscapes.decode` gives back the parsed text.
+- Literals are stored by value (`IntLit of int`, a decoded `StringLit`), so they are printed from their source text,
+  through their spans, and `0xFF`, `1_000` and escapes survive. The text between the holes of an interpolated string
+  has no span of its own: `writtenStringText` finds it in the source after the opening quote or the hole before it,
+  and keeps it if `StringEscapes.decode` gives back the parsed text.
 - Identifiers, operators and keywords are printed as written; the formatter never renames.
+- Whether a construct spans more than one line, which decides the blank lines around it, depends on its layout, which
+  depends on where it starts, so the renderer decides it (`Doc.Stack`): a construct is multi-line if it always breaks,
+  or if it does not fit flat in the width left at its indent.
+- A pipeline's stages are indented once from the line it starts on because the parser needs a stage that continues a
+  statement to be indented more than the statement's line. A chain of operators stays on one line in a statement
+  because the parser takes a line break after an operator but not before one, and not at all there. A lambda's body
+  on its own line is read as a statement, which takes every operator but `..`, so a range stays on the `->`'s line
+  rather than being bracketed ([#312](https://github.com/nanyx-lang/nanyx/issues/312),
+  [#960](https://github.com/nanyx-lang/nanyx/issues/960)).
 
-## Never changing meaning
+# Never changing meaning
 
 `nanyx format` refuses a file that does not parse, and says where the parse error is.
 
-After formatting, it parses its own output and compares the tree with the original (equality ignores spans), with
-the original's imports sorted the same way first. If they differ, or a comment was dropped, it leaves the file alone
-and reports an internal error with the file's name. This
-check runs on every file, always: it costs one extra parse, and a formatter that silently changes a program is worse
-than none.
+After formatting, it parses its own output and compares the tree with the original (equality on the syntax tree
+compares `Kind` only, ignoring spans), with the original's imports sorted the same way first. If they differ, or a
+comment was dropped, it leaves the file alone and reports an internal error with the file's name. This check runs on
+every file, always: it costs one extra parse, and a formatter that silently changes a program is worse than none.
 
 Formatting is idempotent: formatting formatted code changes nothing. Both properties are tested over every `.nyx`
 file in the repository and every Nanyx code block in the docs.
 
-## The style
+# Sorting imports
 
-The docs' examples are the starting point. Decided by the maintainer as written here
-([#855](https://github.com/nanyx-lang/nanyx/issues/855), [#856](https://github.com/nanyx-lang/nanyx/issues/856)), and
-built in [#220](https://github.com/nanyx-lang/nanyx/issues/220). The examples on the
-[Formatter](../standard-tools/formatter#examples) page are tested (`StyleExampleTests`):
-
-- Two spaces of indent and a line width of 100, unless [configured](#configuration). Indent is measured from the
-  start of the line, never from a keyword's column.
-- One space around binary operators and `->`, after commas, and inside a lambda's braces: `{ a, b -> a + b }`.
-- A definition whose signature fits on the def's line stays on it, even when its value spans lines. One whose
-  signature does not fit breaks before its `:` and its `=`, each indented once:
-
-  ```nanyx
-  def priceLine
-    : list(Product), OrderLine -> #some(Priced) | #unknownSku(string) | #outOfStock(string)
-    = { products, line ->
-      find(products, line)
-    }
-  ```
-
-- A lambda with match cases puts each case on its own line, the `|`s one under another, indented once from the
-  lambda's line, and the `}` on a line of its own. A single case that fits stays on the lambda's line, `{ | 0 -> 1 }`:
-
-  ```nanyx
-  def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = {
-    | #some(a), f -> #some(f(a))
-    | other, _ -> other
-  }
-  ```
-
-- A `for` loop or an `except` with one arm (perhaps with alternatives, `| a | b -> ...`) keeps it on the head's line,
-  `for xs | x -> body`, with a block body on the lines after the `->`. With several arms, each goes on a line of its
-  own after the head, indented once.
-- A lambda whose body is on the `->`'s line but spans lines indents the body once, and puts its `}` back at the
-  lambda's line's indent, so two closing braces never line up (decided 2026-11-07):
-
-  ```nanyx
-  def checkOrder = { products, lines -> proc {
-      match lines
-        | [] -> (return [])
-        | [first, ...rest] -> ...
-    }
-  }
-  ```
-
-- A pipeline written with a stage at the start of a line, or one of two or more stages that does not fit, puts each
-  stage on its own line, indented once from the line the pipeline starts on (the parser needs a stage that continues
-  a statement to be indented more than the statement's line). A pipeline written on one line that fits stays on it, as
-  does one whose stages take up lines anyway, with a lambda that spans lines. A stage after a `\match`'s arms always
-  starts a line, and a comment between stages stays between them:
-
-  ```nanyx
-  def total = orders
-    \list.filter { o -> o.paid }
-    \list.map { o -> o.amount }
-    \list.sum
-  ```
-- A record, list, tuple or call's arguments that does not fit puts each element on its own line, separated by newlines
-  instead of commas, as the docs write them, with the closing bracket on a line of its own; trailing commas therefore
-  never arise. The outermost brackets break first.
-- An `if` with expressions for branches that does not fit puts `then` and `else` at the start of lines of their own,
-  indented once (decided 2026-11-07):
-
-  ```nanyx
-  if line.qty > p.stock
-    then #outOfStock(p.name)
-    else #some(Priced(name = p.name, qty = line.qty, each = p.price, cost = p.price * line.qty))
-  ```
-
-- A chain of operators of one precedence that does not fit puts as many operands on a line as fit, each line ending in
-  an operator and the lines after the first indented once. The parser takes a line break after an operator but not
-  before one, and not at all in a statement, an arm's body or a top-level expression, where a chain stays on one line
-  unless it is inside brackets.
-- A def with a type annotation whose value is a lambda puts the lambda's body on the line after the `->`, unless the
-  body is only a name or a literal (decided 2026-11-07), or a statement could not take it without parentheses. A
-  body on its own line is read as a statement, which takes every operator but `..`, so a range stays on the `->`'s
-  line rather than being bracketed ([#312](https://github.com/nanyx-lang/nanyx/issues/312),
-  [#960](https://github.com/nanyx-lang/nanyx/issues/960)); a block of only that body in brackets is written the
-  same way, unless there is a comment in it:
-
-  ```nanyx
-  def heading: [Log] string -> () = { title ->
-    log("== " ++ string.uppercase(title) ++ " ==")
-  }
-
-  def id: a -> a = { x -> x }
-
-  def upTo: int -> list(int) = { n -> 1..n }
-  ```
-
-- A record, tuple or call's arguments with an element that spans lines (a lambda with a block) also puts each
-  element on its own line, with the closing bracket on a line of its own:
-
-  ```nanyx fragment
-  use Log(
-    log = { message ->
-      println(message)
-    }
-  )
-  ```
-
-- A type or context definition whose body is a record of more than three fields puts each field on its own line
-  (decided 2026-11-07):
-
-  ```nanyx
-  type Product = (
-    sku: string
-    name: string
-    price: int
-    stock: int
-  )
-  ```
-
-## Blank lines
-
-A construct that spans more than one line, once laid out, gets a blank line before and after it, at every level: top
-level, module blocks, and the statements of a lambda or of an indented block (a def's value written on the lines
-after it, an arm's body, an `if` branch). The first and last statements of a body are the
-exception: there is no blank line after the opening `{` or before the closing `}`.
-
-Between constructs that each fit on one line, the author's choice is kept: a single blank line stays, a run of them
-becomes one, and none is added.
-
-```nanyx
-def zero = 0
-def one = 1
-
-def add: int, int -> int = { a, b ->
-  a + b
-}
-
-def two = 2
-```
-
-Blank lines inside an expression (between a lambda's match cases, between record fields) are removed.
-
-Two exceptions. Imports in a row stay together, however many lines a bracketed `import (...)` takes, and an
-attribute such as `@entry` stays on the line before its item.
-
-Imports in a row, with no blank line between them, become one bracketed import, any comments among them going inside
-the brackets; a blank line keeps groups of imports apart (decided 2026-11-09):
-
-```nanyx
-import (
-  nanyx/math
-  nanyx/text
-)
-```
-
-Whether a construct spans more than one line depends on its layout, which depends on where it starts, so the renderer
-decides it (`Doc.Stack`): a construct is multi-line if it always breaks, or if it does not fit flat in the width left at
-its indent.
-
-## Sorting imports
-
-The imports in each run of consecutive `import` statements are sorted, and the names within one `import (...)` are
-sorted. A blank line or a comment on a line of its own (a `--` comment or a `---` block comment) ends a run, so authors
-can group imports and keep the groups apart. Since imports in a row become one bracketed import, a run is a stretch of its names with no comment line among
-them: the comment stays where it is, as a heading for the names after it. A comment at the end of an import's line
-moves with the import. Duplicate imports are left alone: removing them is a linter's job.
-
-```nanyx
-import (
-  nanyx/math -- for sqrt
-  nanyx/text
-  -- parsing
-  json
-  "./tokens.nyx"
-)
-```
-
-The order: standard library modules (`nanyx/...`) first, then other packages' modules, then imports by path, each
-group alphabetical by its source as written, ignoring case, with ties broken by case. The alias (`as m`) doesn't affect
-the order. The order is `compiler/Nanyx.Formatter/ImportOrder.fs`; `ImportPrinter.fs` applies it.
+The order is `compiler/Nanyx.Formatter/ImportOrder.fs`; `ImportPrinter.fs` applies it. Within each group the sources
+are compared as written, ignoring case, with ties broken by case, and the alias doesn't affect the order. Duplicate
+imports are left alone: removing them is a linter's job. Imports inside a block (`ImportStatement`) have their names
+sorted within one `import (...)`, but separate import statements in a row in a block are not merged or reordered.
 
 The safety check sorts each side's imports before comparing the trees (`Syntax.normalize`), so a sort that dropped or
 duplicated an import is still caught. It compares the comments at the end of import lines as a sorted list, since they
 move with their imports, and every other comment in order (`FormatCommand.commentsOf`, which the corpus tests use too).
 
-Imports inside a block (`ImportStatement`) have their names sorted within one `import (...)`, but separate import
-statements in a row in a block are not merged or reordered.
-
 Reordering imports is safe because an import only brings names into scope, and a name exported by two imports is an
 error whatever their order (#155). If imports ever gain effects, this rule changes with them.
 
-## Configuration
+# Configuration
 
-The `formatter` field of the package's `.nyxp` manifest, as the docs describe, a record with two settings:
-
-```nanyx fragment
-formatter = (lineWidth = 100, indentSize = 2)  -- the defaults
-```
-
-`nanyx format` finds the nearest `.nyxp` in the file's directory or above it, reads it as data
-(`DataValue.read`), and looks only at that field (`Settings.read`); the compiler checks the rest of the manifest.
-With no `.nyxp`, or no `formatter` field, the defaults apply. An unknown setting or a value that is not a positive
-integer is an error naming the file and setting, and so is a manifest that holds code. The language
+`nanyx format` finds the nearest `.nyxp` in the file's directory or above it, reads it as data (`DataValue.read`), and
+looks only at its `formatter` field (`Settings.read`); the compiler checks the rest of the manifest. The language
 server uses the same settings for the document it formats.
 
-## The command
+# The command
 
-```bash
-nanyx format [--check | --write] [paths...]
-nanyx format [--check] --stdin
-```
+`--stdin` formats the input as a file named `<stdin>` in the current directory, with that directory's settings, and
+messages name it so ([#858](https://github.com/nanyx-lang/nanyx/issues/858)). It is a flag rather than
+`nanyx format -` because the CLI's argument parser reads `-` as an option.
 
-With no path it formats every `.nyx` file under the current directory; a directory means every `.nyx` file under
-it. `--write` is the default. `--check` writes nothing, lists each file that would change, and exits 1 if any would.
-Exit code 2 means a file could not be formatted (it does not parse, or the safety check failed).
-
-`--stdin` formats standard input and writes the result to standard output, for an editor other than VS Code to format
-a buffer it has not saved ([#858](https://github.com/nanyx-lang/nanyx/issues/858)). The input is formatted as a file
-named `<stdin>` in the current directory, with that directory's settings, and messages name it so. Nothing is written
-out if it cannot be formatted. It is a flag rather than `nanyx format -` because the CLI's argument parser reads `-` as
-an option.
-
-## The editor
+# The editor
 
 The language server answers `textDocument/formatting` with one edit replacing the document, or no edits if it does
-not parse. The VS Code extension registers Nanyx as formattable, so "Format Document" and `editor.formatOnSave` work.
-
-It answers `textDocument/rangeFormatting` ("Format Selection") by formatting the top-level items the range touches
+not parse. It answers `textDocument/rangeFormatting` by formatting the top-level items the range touches
 ([#857](https://github.com/nanyx-lang/nanyx/issues/857)): the whole document is formatted, with the same check, and
 the lines from the first such item's to the last's are replaced with the same items' lines in the formatted text
 (`RangeFormatting.formatRange`). The comments and blank lines around them are left as they are. When formatting
 changes how many top-level items there are, as joining imports does, the whole document is replaced.
 
-The language server highlights where a document differs from its formatted text
-([#705](https://github.com/nanyx-lang/nanyx/issues/705)), as one Hint diagnostic, with the code `format`, per block of
-whole lines that formatting changes (`FormattingHints`, from the blocks `LineDiff` finds by Myers' algorithm). Each has
-a quick fix that formats its lines, and another that formats the document. It runs the formatter itself rather than
-through a linter, so it works on a module with type errors; the hints and **Format Document** both read
-`FormattingHandler.FormattedText`, so they never disagree. A document that does not parse, or that the safety check
-refuses, has none. It's on by default; the extension's `nanyx.formattingHints` setting turns it off by starting the
-server with `nanyx lsp --no-format-hints`. `nanyx format --check` stays the command-line check.
+The lines formatting would change ([#705](https://github.com/nanyx-lang/nanyx/issues/705)) are one Hint diagnostic,
+with the code `format`, per block of whole lines that formatting changes (`FormattingHints`, from the blocks
+`LineDiff` finds by Myers' algorithm). It runs the formatter itself rather than through a linter, so it works on a
+module with type errors; the hints and **Format Document** both read `FormattingHandler.FormattedText`, so they never
+disagree. `nanyx lsp --no-format-hints` turns them off.
 
-# Plan
+# The repository's Nanyx
 
-Its issues carry the [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) label. Items in order. Each produces something usable on
-its own:
-
-1. **Keep comments and blank lines** ([#217](https://github.com/nanyx-lang/nanyx/issues/217)). The parser returns
-   them alongside the tree.
-2. **The document printer** ([#218](https://github.com/nanyx-lang/nanyx/issues/218)). `compiler/Nanyx.Formatter`
-   with the document type and the layout algorithm, tested on its own.
-3. **Print every construct** ([#219](https://github.com/nanyx-lang/nanyx/issues/219)). A printer for the whole
-   syntax tree, with comments, parentheses and literals, checked by the round-trip and idempotence tests. Its layout
-   can be crude.
-4. **The style** ([#220](https://github.com/nanyx-lang/nanyx/issues/220)). Done: the layout rules above, construct
-   by construct, with the Formatter page's examples as tests.
-5. **`nanyx format`** ([#221](https://github.com/nanyx-lang/nanyx/issues/221)). The command, its modes and exit
-   codes, and the safety check.
-6. **The editor** ([#222](https://github.com/nanyx-lang/nanyx/issues/222)). Document formatting in the language
-   server; format-on-save in the extension.
-7. **Blank lines** ([#225](https://github.com/nanyx-lang/nanyx/issues/225)). Blank lines around multi-line
-   constructs, at every level.
-8. **Sorting imports** ([#226](https://github.com/nanyx-lang/nanyx/issues/226)). Done.
-9. **Configuration** ([#227](https://github.com/nanyx-lang/nanyx/issues/227)). The `formatter` field of
-   `.nyxp`.
-10. **The repository** ([#223](https://github.com/nanyx-lang/nanyx/issues/223)). Done. `stdlib/` and `packages/` are
-    checked by `nanyx format --check` in CI. The examples that parse, and the docs' code blocks fenced ` ```nanyx `,
-    are checked by a test that CI runs (`CorpusTests`, "The examples and the docs' code blocks are formatted"), which
-    names each one that isn't formatted and shows what it should be. A test rather than a CLI step, because some
-    examples are written in syntax the parser doesn't take yet, and the command can't read a Markdown file. A block
-    fenced ` ```nanyx fragment `, ` ```nanyx skip=#<issue> ` or ` ```nanyx unformatted ` (code shown before
-    formatting, as on the Formatter page) is not checked, and nor is one with an `-- error` comment, whose code is
-    wrong on purpose (the formatter would write NYX0032's `&` as `,`) and laid out to put the comment on the line it
-    is about.
-
+`stdlib/` and `packages/` are checked by `nanyx format --check` in CI
+([#223](https://github.com/nanyx-lang/nanyx/issues/223)). The examples that parse, and the docs' code blocks fenced
+` ```nanyx `, are checked by a test that CI runs (`CorpusTests`, "The examples and the docs' code blocks are
+formatted"), which names each one that isn't formatted and shows what it should be. A test rather than a CLI step,
+because some examples are written in syntax the parser doesn't take yet, and the command can't read a Markdown file.
+A block fenced ` ```nanyx fragment `, ` ```nanyx skip=#<issue> ` or ` ```nanyx unformatted ` (code shown before
+formatting, as on the Formatter page) is not checked, and nor is one with an `-- error` comment, whose code is wrong on
+purpose (the formatter would write NYX0032's `&` as `,`) and laid out to put the comment on the line it is about. The
+style examples on the Formatter page are tested (`StyleExampleTests`).
 
 # Decided
 
@@ -383,15 +142,20 @@ On 2026-11-07, in [#215](https://github.com/nanyx-lang/nanyx/issues/215):
   between single-line constructs, the author's single blank lines are kept.
 - **Trailing commas.** A non-issue: Nanyx separates the elements of a multi-line record or list with newlines, not
   commas.
-- **Imports.** Sorted, within each run of consecutive imports.
+- **Imports.** Sorted, within each run of consecutive imports. On 2026-11-09, imports in a row became one bracketed
+  import.
 - **Unparseable files.** Refused.
+- **Layout.** A lambda's `}` goes back to its line's indent, so two closing braces never line up; an `if` that doesn't
+  fit puts `then` and `else` on lines of their own; a lambda's body goes on the line after a typed def's `->` unless
+  it is only a name or a literal; a record type of more than three fields puts each on its own line.
 
 On 2026-11-16:
 
-- **The style rules** in [The style](#the-style) are adopted as written ([#855](https://github.com/nanyx-lang/nanyx/issues/855)).
-  The `mapSome` example first showed its cases hung from the `{`'s column, `= { | ...`, with the `}` after the last
-  one; that measured indent from a column rather than the line's start and contradicted the typed-def lambda rule
-  decided on 2026-11-07, so it now shows the cases on the lines after the `{`, as the formatter writes them.
+- **The style rules** on the [Formatter](../standard-tools/formatter#the-style) page are adopted as written
+  ([#855](https://github.com/nanyx-lang/nanyx/issues/855)). The `mapSome` example first showed its cases hung from the
+  `{`'s column, `= { | ...`, with the `}` after the last one; that measured indent from a column rather than the
+  line's start and contradicted the typed-def lambda rule decided on 2026-11-07, so it now shows the cases on the
+  lines after the `{`, as the formatter writes them.
 - **Alignment.** None beyond the `|`s of a match's cases: aligning `=` or `->` across lines makes one edit change many
   lines in a diff ([#856](https://github.com/nanyx-lang/nanyx/issues/856)).
 - **Highlighting differences in the editor** as described under [The editor](#the-editor)

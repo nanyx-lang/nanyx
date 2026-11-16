@@ -79,6 +79,8 @@ The severities are `#error`, `#warning`, `#info` and `#hint`, in a manifest and 
 settings = (rules = (shadowedPreludeNames = #off))
 ```
 
+A linter's diagnostics have codes made of the linter's name and the rule's, `default/unusedBindings` for the default linter's rules. To let one definition break a rule rather than turning it off everywhere, write [`@allow`](../tour/attributes#allow) before the definition, naming the rule by that code: `@allow(default/unusedBindings)` (see [Suppressing a rule in one place](../standard-tools/official-linter#suppressing-a-rule-in-one-place)).
+
 Because severity is configured per project, a team that wants strictness can promote a linter rule to `#error`, which then blocks a release build exactly as a compiler error would. This is how "warnings as errors" works in Nanyx: it is a project choice, not a compiler setting.
 
 # Writing custom linters

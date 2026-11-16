@@ -494,7 +494,7 @@ The composite host runs each part under the right sub-host and coordinates start
   entry, every program contains them and imports what they call, whether it uses them or not
   ([#1497](https://github.com/nanyx-lang/nanyx/issues/1497)). `nanyx run` passes what follows the
   file or package as the arguments, after the program's name, and the process's environment variables (see
-  [The `nanyx` command](./command-line#usage)); an `exit(0)` part-way is a clean end, which `--check-memory` doesn't
+  [`nanyx run`](../standard-tools/command-line#nanyx-run)); an `exit(0)` part-way is a clean end, which `--check-memory` doesn't
   count as a leak. A script's entry point requires only the plain contexts that are ambient in its module
   (`Scripts.withAmbientContextsOnly`): a statement that calls a function whose type is an error would otherwise leave it
   requiring all that `run` provides, `Env` too in a script that doesn't import it.
