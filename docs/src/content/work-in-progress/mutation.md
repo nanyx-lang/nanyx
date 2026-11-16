@@ -42,7 +42,10 @@ is planned.
   is (`MemoryCells.parameterContexts`); any other lambda's type carries it. The unifier treats every function type that
   takes a cell as requiring `Memory` of the cell's scope (`FunctionContexts.withCellMemory`), so `mut int -> ()` is
   `[Memory] mut int -> ()` written or not. A def that writes contexts without `Memory` and takes a cell is NYX0211
-  (`MemoryCells.ensureMemoryWritten`). Not yet: a def that writes no type and only calls a function that requires
+  (`MemoryCells.ensureMemoryWritten`). A call is given the `Memory` of the cell it passes, which the call checks
+  (`ScopedCalls`), so the pass that carries ambient contexts from a def to its callers (`DeferredContextUses`, used
+  where a host module is imported) neither passes `Memory` on nor reports it: a call in a `memory` block is not a
+  requirement of the def around the block ([#1473](https://github.com/nanyx-lang/nanyx/issues/1473)). Not yet: a def that writes no type and only calls a function that requires
   `Memory`, outside any `memory` block, is not inferred to require it, since nothing tracks `Memory` by name there.
 
 # Planned
