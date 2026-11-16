@@ -14,8 +14,8 @@ and inline, and the small rewrites that save typing. Its issues carry the
 
 The language server offers go to definition, find references within a document, hover, inlay hints, completion,
 semantic tokens, formatting, and quick fixes from diagnostics ([Language server and editor](./language-server)).
-Expand and shrink selection, writing the inferred type, introducing a local or a function, inlining and converting
-between a call and a pipe are done, and rename within a module.
+Expand and shrink selection, writing the inferred type, introducing a local or a function, inlining, converting
+between a call and a pipe and organising imports are done, and rename within a module.
 
 Refactorings live in the compiler's `Refactorings/` folder, one file each, after the editor features they build on
 (`Outline.fs`), in the namespace `NyxCompiler.Refactorings`. Their tests are in `Features/Refactorings/` of the
@@ -137,6 +137,20 @@ taken only if it has no new errors and every name in the module refers to what i
 kind and file, since a compile makes up symbols of its own). So where the own name would find another definition, the
 whole name is kept (`s \text.trim`); where neither naming means the same, it is refused.
 
+## Organise imports
+
+`OrganiseImports.at` takes the module's top-level imports, drops each that nothing uses (its symbol is in no
+`ImportReferences`, as the `unusedImports` rule finds it; an alias starting with `_` is kept, as the rule keeps it) and
+each name of a selection nothing names (`as (abs, max)` to `as (abs)`), and writes the rest as one import where the
+first import was, sorted by the formatter's `ImportOrder`: the standard library, then packages, then imports by path.
+The other import statements are removed with their lines. It is offered only when that changes the formatted text,
+and it is refused where the imports have comments among them, which it would lose, or where the result would not
+compile. Imports in a `module name =` block and re-exports are left alone.
+
+The server offers it as `source.organizeImports`, which VS Code runs on save when `editor.codeActionsOnSave` asks
+for it, and as a quick fix of each `unusedImports` diagnostic. The handler computes only the kinds a request asks for
+(`context.only`), so a save that asks for organising imports runs nothing else.
+
 ## Rename
 
 `Rename.prepare` finds the name at a position (or just before it, where an editor's cursor often is) and its own part,
@@ -187,7 +201,7 @@ prefixes.
 | Inline a local or a function (done) | [#1538](https://github.com/nanyx-lang/nanyx/issues/1538) |
 | Write the inferred type (done) | [#1539](https://github.com/nanyx-lang/nanyx/issues/1539) |
 | Convert between a call and a pipe (done) | [#1540](https://github.com/nanyx-lang/nanyx/issues/1540) |
-| Organise imports | [#1541](https://github.com/nanyx-lang/nanyx/issues/1541) |
+| Organise imports (done) | [#1541](https://github.com/nanyx-lang/nanyx/issues/1541) |
 
 Rename across files depends on finding references across the package's files
 ([#1556](https://github.com/nanyx-lang/nanyx/issues/1556)), which waits for the language server to resolve packages

@@ -348,7 +348,9 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    function, as `refactor.extract` ([#1536](https://github.com/nanyx-lang/nanyx/issues/1536),
    [#1537](https://github.com/nanyx-lang/nanyx/issues/1537)), and inlining a def, as `refactor.inline`
    ([#1538](https://github.com/nanyx-lang/nanyx/issues/1538)). One that makes up a name runs the extension's
-   `nanyx.renameAt` command after its edits, which starts renaming the name.
+   `nanyx.renameAt` command after its edits, which starts renaming the name. Organising imports is
+   `source.organizeImports` ([#1541](https://github.com/nanyx-lang/nanyx/issues/1541)), and a quick fix of an unused
+   import too.
 7. **Diagnostics in imported files.** Done ([#794](https://github.com/nanyx-lang/nanyx/issues/794)): each is
    published on the file it belongs to, with one at the import that brings that file in.
 8. **A library browser, search by type and an info view.** Planned on
