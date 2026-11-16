@@ -17,7 +17,7 @@ from the Nanyx language server.
 - Formatting: **Format Document** formats a `.nyx` file with the standard formatter, as `nanyx format`
   does. A file that does not parse is left as it is. To format on save, set `"editor.formatOnSave": true`, or
   `"[nanyx]": { "editor.formatOnSave": true }` for Nanyx files only. Compilers released before formatting
-  existed do not offer it.
+  existed do not offer it. The lines formatting would change are marked as hints, with quick fixes that format them.
 - Running a file: the run button in a `.nyx` editor's title bar, or **Nanyx: Run the current file**, saves
   the file and runs it with `nanyx run`, as a task in a terminal of its own, so the program can read from
   stdin and Ctrl+C stops it. It uses the `nanyx` the language server runs from, and its working directory is
@@ -83,6 +83,9 @@ describes these settings too. A change to them goes on both.
   top-level definitions get hints. Turning one off starts the server with `--no-local-type-hints`,
   `--no-parameter-type-hints` or `--no-pattern-variable-type-hints`, which compilers before these settings do not
   understand.
+- `nanyx.formattingHints`: whether to mark the lines `nanyx format` would change, each block with a quick fix that
+  formats it (on by default). Turning it off starts the server with `--no-format-hints`, which compilers before this
+  setting do not understand.
 
 Changing any of these restarts the language server.
 

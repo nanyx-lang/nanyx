@@ -55,7 +55,13 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
     /// <summary>The test's own folder for its files, made by the first <see cref="TempPath"/>, deleted after the test.</summary>
     private string? _tempDirectory;
 
-    public Task InitializeAsync() => StartAsync(ServerSettings.Default);
+    /// <summary>
+    /// The settings the tests start the server with: the defaults, without formatting hints, so that a test's diagnostics
+    /// are the compiler's alone however its code is laid out. <c>FormattingHintTests</c> turns them on.
+    /// </summary>
+    protected static readonly ServerSettings TestSettings = ServerSettings.Default with { FormattingHints = false };
+
+    public Task InitializeAsync() => StartAsync(TestSettings);
 
     /// <summary>
     /// A path in a folder of the test's own, so tests in overlapping runs never share a file. The folders the

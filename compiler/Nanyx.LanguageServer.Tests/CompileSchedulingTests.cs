@@ -11,7 +11,7 @@ public sealed class CompileSchedulingTests : LanguageServerTestBase
     public async Task A_burst_of_changes_is_compiled_at_most_twice_and_its_last_text_is_published()
     {
         var compiles = 0;
-        await RestartWithAsync(ServerSettings.Default with
+        await RestartWithAsync(TestSettings with
         {
             CompileDelay = TimeSpan.FromMilliseconds(150),
             CompileStarted = _ => Interlocked.Increment(ref compiles)
@@ -46,7 +46,7 @@ public sealed class CompileSchedulingTests : LanguageServerTestBase
     [Fact]
     public async Task Requests_during_the_pause_read_the_last_text_that_was_typed()
     {
-        await RestartWithAsync(ServerSettings.Default with { CompileDelay = TimeSpan.FromSeconds(10) });
+        await RestartWithAsync(TestSettings with { CompileDelay = TimeSpan.FromSeconds(10) });
         var uri = DocumentUri.From("untitled:pause.nyx");
 
         Open(uri, "def answer = 42\n");

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.FSharp.Core;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
@@ -27,6 +28,8 @@ public sealed class DiagnosticsPublisher
 
     private readonly ILanguageServerFacade _server;
     private readonly DocumentStore _documents;
+    private readonly ServerSettings _settings;
+    private readonly ILogger<DiagnosticsPublisher> _logger;
     private readonly object _lock = new();
 
     /// <summary>
@@ -35,22 +38,28 @@ public sealed class DiagnosticsPublisher
     /// </summary>
     private readonly Dictionary<DocumentUri, List<(DocumentUri Importer, IReadOnlyList<Diagnostic> Diagnostics)>> _imported = new();
 
-    public DiagnosticsPublisher(ILanguageServerFacade server, DocumentStore documents)
+    public DiagnosticsPublisher(ILanguageServerFacade server, DocumentStore documents, ServerSettings settings, ILogger<DiagnosticsPublisher> logger)
     {
         _server = server;
         _documents = documents;
+        _settings = settings;
+        _logger = logger;
     }
 
     /// <summary>
     /// Publishes what the compiler reported for the document at <paramref name="uri"/>, on it and on the files it
-    /// imports, and clears what its last compile published on an imported file that has none now.
+    /// imports, and clears what its last compile published on an imported file that has none now. The document's own
+    /// are followed by its <see cref="FormattingHints"/>, unless <see cref="ServerSettings.FormattingHints"/> is off.
     /// </summary>
     public void Publish(DocumentUri uri, OpenDocument document, int? version)
     {
         var converted = document.ConvertedDiagnostics(uri);
+        var own = _settings.FormattingHints
+            ? [.. converted.Own, .. document.FormattingHints(uri, _logger).Select(hint => hint.Diagnostic)]
+            : converted.Own;
         lock (_lock)
         {
-            Send(uri, converted.Own, version);
+            Send(uri, own, version);
             UpdateImported(uri, converted.Imported);
         }
     }

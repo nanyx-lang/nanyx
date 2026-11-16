@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.9.20",
+  "version": "0.9.21",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -230,6 +230,11 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Show an inlay hint with the inferred type of each variable a pattern binds. Turning it off passes `--no-pattern-variable-type-hints` to `nanyx lsp`, which needs a compiler that has it."
+        },
+        "nanyx.formattingHints": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Mark the lines that `nanyx format` would change, with a quick fix that formats them. Turning it off passes `--no-format-hints` to `nanyx lsp`, which needs a compiler that has it."
         },
         "nanyx.infoView.contextLines": {
           "type": "string",

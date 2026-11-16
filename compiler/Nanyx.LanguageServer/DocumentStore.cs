@@ -30,6 +30,7 @@ public sealed record OpenDocument(
     private Lazy<Outline.OutlineItem[]?>? _outline;
 
     private Lazy<ConvertedDiagnostics>? _converted;
+    private Lazy<IReadOnlyList<FormattingHint>>? _formattingHints;
 
     /// <summary>Converts positions in <see cref="Text"/>, built once per change rather than on every request.</summary>
     public SourcePositions Positions { get; } = new(Text);
@@ -58,6 +59,13 @@ public sealed record OpenDocument(
     /// </summary>
     public ConvertedDiagnostics ConvertedDiagnostics(DocumentUri uri) =>
         (_converted ??= new Lazy<ConvertedDiagnostics>(() => DiagnosticsPublisher.Convert(uri, this))).Value;
+
+    /// <summary>
+    /// Where this text differs from its formatted text (see <see cref="Nanyx.LanguageServer.FormattingHints"/>), worked
+    /// out once, when first asked for, by publishing its diagnostics or by a request for code actions.
+    /// </summary>
+    public IReadOnlyList<FormattingHint> FormattingHints(DocumentUri uri, ILogger logger) =>
+        (_formattingHints ??= new Lazy<IReadOnlyList<FormattingHint>>(() => Nanyx.LanguageServer.FormattingHints.Of(uri, this, logger))).Value;
 
     /// <summary>The LSP diagnostics of this text's compile published on the document itself, at <paramref name="uri"/>.</summary>
     public IReadOnlyList<OmniSharp.Extensions.LanguageServer.Protocol.Models.Diagnostic> PublishedDiagnostics(DocumentUri uri) =>

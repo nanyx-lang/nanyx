@@ -687,6 +687,7 @@ internal static partial class CliCommands
     /// <param name="noParameterTypeHints">Show no inlay hints for lambda parameters' inferred types.</param>
     /// <param name="noPatternVariableTypeHints">Show no inlay hints for pattern variables' inferred types.</param>
     /// <param name="timings">Log how long each module took to check with each compile, as a tree of the modules each one imported, not only how long the compile took.</param>
+    /// <param name="noFormatHints">Don't show where a document differs from what nanyx format would make of it.</param>
     [Consolo("lsp")]
     public static int Lsp(
         [Consolo("stdio")] bool stdio = false,
@@ -695,7 +696,8 @@ internal static partial class CliCommands
         [Consolo("no-local-type-hints")] bool noLocalTypeHints = false,
         [Consolo("no-parameter-type-hints")] bool noParameterTypeHints = false,
         [Consolo("no-pattern-variable-type-hints")] bool noPatternVariableTypeHints = false,
-        [Consolo("timings")] bool timings = false)
+        [Consolo("timings")] bool timings = false,
+        [Consolo("no-format-hints")] bool noFormatHints = false)
     {
         Nanyx.LanguageServer.TopLevelTypeHints? topLevel = topLevelTypeHints switch
         {
@@ -716,7 +718,8 @@ internal static partial class CliCommands
             LocalTypeHints: !noLocalTypeHints,
             ParameterTypeHints: !noParameterTypeHints,
             PatternVariableTypeHints: !noPatternVariableTypeHints,
-            Timings: timings);
+            Timings: timings,
+            FormattingHints: !noFormatHints);
         Nanyx.LanguageServer.NanyxLanguageServer.RunStdioAsync(settings).GetAwaiter().GetResult();
         return 0;
     }

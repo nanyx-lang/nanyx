@@ -132,7 +132,7 @@ public sealed class DefinitionTests : LanguageServerTestBase
         var root = Directory.CreateTempSubdirectory("nanyx-stdlib-");
         try
         {
-            await RestartWithAsync(ServerSettings.Default with
+            await RestartWithAsync(TestSettings with
             {
                 StandardLibrarySource = new StandardLibrarySource(root.FullName)
             });
