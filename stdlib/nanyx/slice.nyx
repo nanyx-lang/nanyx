@@ -1,0 +1,93 @@
+--| Slices: views of part of an array, which share its storage instead of copying it.
+
+  A `Slice(a)` is a view of a run of an `Array(a)`'s elements: the array, where the run starts and
+  how long it is. Making one with [`array.slice`], or a slice of a slice, copies nothing and takes
+  the same time however long the run is. A slice holds the array it views, so the array stays
+  alive as long as the slice is used, and [`Slice.toArray`] copies the run into an array of its
+  own, which lets go of the larger one.
+
+  Bounds clamp: `array.slice(xs, from, to)` is the elements from `from` up to but not including
+  `to`, each bound moved into `0` to the length, and an empty slice when `to` is before `from`.
+  Reading one element, [`Slice.at`], gives `#none` past the end, never a trap.
+
+  Each function is attached to `Slice`, so with `import nanyx/slice` it is called as
+  `Slice.length(s)`, or as `s \length`; `xs \slice(1, 4)` makes a slice of the array `xs`.
+module slice
+
+import nanyx/array
+
+export type Slice(a) = private (items: Array(a), start: int, length: int)
+
+--| `value` moved into the range from `low` to `high`.
+def clamp: int, int, int -> int = { value, low, high ->
+  if value < low then low else if value > high then high else value
+}
+
+--| The run of `length` elements of `items` from `start`, bounds from `from` up to `to` clamped into
+  it.
+def within: Array(a), int, int, int, int -> Slice(a) = { items, start, length, from, to ->
+  def first = clamp(from, 0, length)
+  def last = clamp(to, first, length)
+  Slice(items = items, start = start + first, length = last - first)
+}
+
+--| The elements of `xs` from `from` up to but not including `to`, sharing `xs`'s storage: each bound
+  is moved into `0` to the length of `xs`, so `xs \slice(1, 100)` is everything after the first.
+export def array.slice: array(a), int, int -> Slice(a) = { xs, from, to ->
+  within(xs, 0, array.length(xs), from, to)
+}
+
+--| All of `xs`, as a slice that shares its storage.
+export def Slice.ofArray: Array(a) -> Slice(a) = { xs ->
+  Slice(items = xs, start = 0, length = array.length(xs))
+}
+
+--| How many elements `s` views.
+export def Slice.length: Slice(a) -> int = { s ->
+  s.length
+}
+
+--| Whether `s` views no elements.
+export def Slice.isEmpty: Slice(a) -> bool = { s ->
+  s.length == 0
+}
+
+--| The element of `s` at `index`, counting from 0 at the start of `s`, or `#none` when `index` is
+  negative or past its end.
+export def Slice.at: Slice(a), int -> #some(a) | #none = { s, index ->
+  if index >= 0 and index < s.length then array.at(s.items, s.start + index) else #none
+}
+
+--| The elements of `s` from `from` up to but not including `to`, counting from the start of `s`,
+  sharing the same storage. The bounds clamp into `s`, as [`array.slice`]'s do.
+export def Slice.slice: Slice(a), int, int -> Slice(a) = { s, from, to ->
+  within(s.items, s.start, s.length, from, to)
+}
+
+--| `step` applied to `initial` and the first element, then to that and the second, and so on: the
+  last result, or `initial` for an empty slice.
+export def Slice.fold: [c] Slice(a), b, ([c] b, a -> b) -> b = { s, initial, step ->
+  foldFrom(s, 0, initial, step)
+}
+
+def foldFrom: [c] Slice(a), int, b, ([c] b, a -> b) -> b = { s, index, acc, step ->
+  match Slice.at(s, index)
+    | #some(element) -> foldFrom(s, index + 1, step(acc, element), step)
+    | #none -> acc
+}
+
+--| The elements of `s`, in order, as a list.
+export def Slice.toList: Slice(a) -> list(a) = { s ->
+  list.reverse(Slice.fold(s, [], { acc, element -> [element, ...acc] }))
+}
+
+--| A copy of the elements of `s`, in order, as an array of its own, which doesn't keep the array
+  `s` views alive.
+export def Slice.toArray: Slice(a) -> Array(a) = { s ->
+  array.fromList(Slice.toList(s))
+}
+
+--| An array of `f` applied to each element of `s`, in order.
+export def Slice.map: [c] Slice(a), ([c] a -> b) -> Array(b) = { s, f ->
+  array.fromList(list.map(Slice.toList(s), f))
+}
