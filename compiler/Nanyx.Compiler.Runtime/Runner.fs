@@ -11,6 +11,9 @@ type RunError =
     /// The program asked for more memory than there is: its allocator trapped because a new block would end past
     /// 4 GB, or because the host would not grow its memory.
     | OutOfMemory
+    /// The program ran out of stack, in the function named here when there is one: the innermost on the stack that the
+    /// source names, usually one that recurses in a call that is not in tail position.
+    | StackOverflow of functionName: string option
     /// The program ended itself with a non-zero exit code, through WASI `proc_exit`: a deferred error does, once it
     /// has written itself to stderr.
     | Exited of int
@@ -82,15 +85,38 @@ module WasmRunner =
     /// when the program is out of memory.
     let private allocator = "__nanyx_alloc"
 
-    /// What the trap `ex` means: out of memory when it is an `unreachable` in the allocator itself.
+    /// The names of the functions on the stack when `trap` happened, innermost first.
+    let private frameNames (trap: TrapException) =
+        if isNull trap.Frames then [] else trap.Frames |> Seq.map _.FunctionName |> List.ofSeq
+
+    /// The name a function has in the source, from the name the backend gave it: `count`; `list_fold` for a library
+    /// module's `fold`; `go` for a local `rec go` (`__rec_go_16`, see `LambdaLifting`); without the type arguments of a
+    /// specialisation (`map__int`) or the suffix of a closure's owning entry (`__owning`, see `CoreIrClosureEntries`).
+    /// None for a lambda (`__lambda_3`), a runtime helper (`__nanyx_alloc`) and the other functions the backend makes,
+    /// whose names all start with `__`.
+    let private sourceName (name: string) =
+        // The name without what follows its first `__`, the type arguments of a specialisation or `__owning`.
+        let own (name: string) =
+            match name.IndexOf "__" with
+            | -1 -> name
+            | index -> name.Substring(0, index)
+        if String.IsNullOrEmpty name then None
+        elif name.StartsWith "__rec_" then
+            let numbered = own (name.Substring "__rec_".Length)
+            match numbered.LastIndexOf '_' with
+            | index when index > 0 -> Some(numbered.Substring(0, index))
+            | _ -> None
+        elif name.StartsWith "__fn_" then Some(own (name.Substring "__fn_".Length))
+        elif name.StartsWith "__" then None
+        else Some(own name)
+
+    /// What the trap `ex` means: out of memory when it is an `unreachable` in the allocator itself, and out of stack
+    /// when the call stack is exhausted, in the innermost function on it that the source names.
     let private trapped (ex: WasmtimeException) =
         match ex with
-        | :? TrapException as trap when
-            trap.Type = TrapCode.Unreachable
-            && not (isNull trap.Frames)
-            && trap.Frames.Count > 0
-            && trap.Frames[0].FunctionName = allocator ->
+        | :? TrapException as trap when trap.Type = TrapCode.Unreachable && List.tryHead (frameNames trap) = Some allocator ->
             OutOfMemory
+        | :? TrapException as trap when trap.Type = TrapCode.StackOverflow -> StackOverflow(frameNames trap |> List.tryPick sourceName)
         | _ -> Trapped ex.Message
 
     /// Instantiates the module described by `wat`, which runs its start function, then calls its export `start` if it
