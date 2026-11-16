@@ -59,7 +59,7 @@ def main = {
 [<Fact>]
 let ``Typecheck allows use-in expression`` () =
     let source =
-        normalized """type Ctx = (value: int)
+        normalized """context Ctx = (value: int)
 def result = use Ctx(value = 1) in value"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
@@ -222,33 +222,6 @@ let ``An instance is checked against the context's members at the type it is for
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
         Assert.Equal("Type mismatch: int vs string.", diagnostic.Message)
-    | other -> failwith $"Expected one diagnostic, got %A{other}"
-
-/// `showContext` with a record of the shape of `Show(Point)`.
-let private namedShowInstance =
-    showContext +
-    normalized """def showPoint = ( show = { p: Point -> "p" } )
-"""
-
-[<Fact>]
-let ``A use of a named value loads it as the instance of the context it has the shape of`` () =
-    let loaded = "the instance in scope Show(Point)"
-    let statement = namedShowInstance + "def main = {\n  use showPoint\n  describe(Point(x = 1, y = 2))\n}\n"
-    let expression = namedShowInstance + "def main = {\n  use showPoint in describe(Point(x = 1, y = 2))\n}\n"
-    for source in [ statement; expression ] do
-        match instancesIn source with
-        | [ [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])), _)) ] ] -> ()
-        | other -> failwith $"Expected {loaded}, got %A{other}"
-
-[<Fact>]
-let ``A use of a named value is only an instance for the type it has the shape of`` () =
-    let source = namedShowInstance + "def main = {\n  use showPoint\n  describe(5)\n}\n"
-    match (Compiler.compile source).Diagnostics with
-    | [ diagnostic ] ->
-        Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
-        Assert.Equal(
-            "'describe' requires the context 'Show(int)', which is not loaded here, and 'int.show' is not defined: define it, or load an instance with `use`",
-            diagnostic.Message)
     | other -> failwith $"Expected one diagnostic, got %A{other}"
 
 [<Fact>]

@@ -1,16 +1,16 @@
-type Println = ( println: (string) -> () )
+context Println = ( println: (string) -> () )
 
-def f: [Println] (int, int) -> int = { x, y -> 
+def f: [Println] (int, int) -> int = { x, y ->
   println("Hello")
-  x + y 
+  x + y
 }
 
 def main = {
-  use (
-    println = { s -> 
+  use Println(
+    println = { s ->
       dbg(s)
       ()
-    } 
+    }
   )
 
   f(3, 4)

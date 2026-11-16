@@ -21,7 +21,13 @@ let ``Run - a use binding overrides the runtime's Console`` () =
         normalized """def greet: [Console] string -> () = { name -> println(name) }
 
 def main = {
-  use (write = { s -> write("[" ++ s ++ "]") })
+  use Console(
+    write = { s -> write("[" ++ s ++ "]") }
+    writeError = writeError
+    readLine = readLine
+    readToEnd = readToEnd
+    flush = flush
+  )
   greet("quiet")
 }
 
@@ -87,7 +93,7 @@ def main = {
     runSource source |> assertRan "local!\n[parameter]\n"
 
 [<Fact>]
-let ``Run - use bindings of parameterised contexts and records`` () =
+let ``Run - use bindings of parameterised and plain contexts`` () =
     let source =
         normalized """context Show(a) = (show: a -> string)
 context Ask = (ask: () -> int)
@@ -101,77 +107,31 @@ def main = {
   use Show(int)(show = { n -> "{n}{unit}" })
   use Show(string)(show = { s -> s })
   println(describe(3, "three"))
-  def answers = (ask = { 21 })
-  use answers
+  use Ask(ask = { 21 })
   println("{twice()}")
 }
 """
     runSource source |> assertRan "3cm & three\n42\n"
 
 [<Fact>]
-let ``Run - a use of a record value of a parameterised context's shape loads it as the instance`` () =
-    // `string` has no `+` of its own, so an instance found by the record's shape gives it one (#581).
+let ``Run - a use gives a parameterised context's instance to a type with none of its own`` () =
+    // `string` has no `+` of its own, so a `use` can give it one (#581).
     let source =
         normalized """context Add(a) = (`+`: (a, a) -> a)
 
 def add: [Add(a)] a, a -> a = { x, y -> `+`(x, y) }
 
-def named = {
-  def addText = ( `+` = { x: string, y: string -> x ++ "*" ++ y } )
-  use addText
+def statement = {
+  use Add(string)(`+` = { x, y -> x ++ "*" ++ y })
   add("1", "2")
 }
 
-def written = {
-  use ( `+` = { x, y -> x ++ "+" ++ y } )
-  add("3", "4")
-}
+def expression = { use Add(string)(`+` = { x, y -> x ++ "+" ++ y }) in add("3", "4") }
 
 @entry
-def main = { println("{named()} {written()}") }
+def main = { println("{statement()} {expression()}") }
 """
     runSource source |> assertRan "1*2 3+4\n"
-
-[<Fact>]
-let ``Run - use loads a top-level record of a parameterised context's shape (#587)`` () =
-    let source =
-        normalized """context Add(a) = (
-  `+`: (a, a) -> a
-)
-
-def add: [Add(a)] a, a -> a = { x, y -> `+`(x, y) }
-
-def addText = (
-  `+` = { x: string, y: string -> x ++ y ++ y }
-)
-
-@entry
-def main = {
-  use addText
-  println(add("1", "2"))
-}
-"""
-    runSource source |> assertRan "122\n"
-
-[<Fact>]
-let ``Run - use loads a top-level record of a plain context's shape (#587)`` () =
-    let source =
-        normalized """context Greeter = (greet: string -> string)
-
-def hello: [Greeter] string -> string = { name -> greet(name) }
-
-def polite = (greet = { name: string -> "Good day, {name}" })
-
-def casual = (greet = { name: string -> "Hi {name}" })
-
-@entry
-def main = {
-  use polite
-  println(hello("Ann"))
-  println(use casual in hello("Bo"))
-}
-"""
-    runSource source |> assertRan "Good day, Ann\nHi Bo\n"
 
 [<Fact>]
 let ``Run - use ... in loads an instance for its body only (#320)`` () =

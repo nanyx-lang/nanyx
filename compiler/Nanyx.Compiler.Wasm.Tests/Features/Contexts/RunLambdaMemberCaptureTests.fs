@@ -25,7 +25,7 @@ def hello = { s -> "hi " ++ s }
 
 @entry
 def main = {
-  use (greet = hello)
+  use Greet(greet = hello)
   for shout(["a", "b"]) | s -> println(s)
 }
 """
@@ -44,7 +44,7 @@ def hello = { s -> "hi " ++ s }
 
 @entry
 def main = {
-  use (greet = hello)
+  use Greet(greet = hello)
   for shout(["a", "b"]) | s -> println(s)
 }
 """
@@ -59,7 +59,7 @@ def hello = { s -> "hi " ++ s }
 
 @entry
 def main = {
-  use (greet = hello)
+  use Greet(greet = hello)
   def marked = ["a", "b"] \list.map({ s -> s ++ "?" })
   for marked | s -> println(greet(s))
 }

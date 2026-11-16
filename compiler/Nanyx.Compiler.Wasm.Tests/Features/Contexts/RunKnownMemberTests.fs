@@ -91,7 +91,7 @@ def shout: [Greet] string -> string = { name -> greet(name) ++ "!" }
 
 def main = {
   def suffix = "?"
-  use (greet = { s -> s ++ suffix })
+  use Greet(greet = { s -> s ++ suffix })
   println(shout("a"))
 }
 

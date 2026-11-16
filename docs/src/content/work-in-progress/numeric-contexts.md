@@ -65,7 +65,7 @@ dimensions, all to describe something the compiler has to know about anyway to u
    decimal literal at a type variable is an error. (Rejected: literal polymorphism everywhere; no literals in
    generic code.)
 6. **A `use` can't replace a type's own arithmetic** (done), as it can't replace its `==`
-   ([#1501](https://github.com/nanyx-lang/nanyx/issues/1501), NYX0249), so there is one rule across well-known contexts: an
+   ([#1501](https://github.com/nanyx-lang/nanyx/issues/1501), NYX0250), so there is one rule across well-known contexts: an
    `Add(int)` loaded with `use` is an error, and `1 + 2` is always the built-in `+`. This replaces the earlier decision
    that a `use` changes concrete arithmetic. (Rejected: `use` reaches only generic code, which makes arithmetic the
    exception; `use` changes concrete arithmetic too.)

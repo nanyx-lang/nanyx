@@ -1413,7 +1413,25 @@ To fix it, write the instance in the `use` that loads it, `use Log(log = { m -> 
 `def quietly: ([Log] () -> a) -> a = { f -> use Log(log = { m -> () }) in f() }`, and run code with
 `quietly { ... }`. A handler writes its type, so that the lambda it is given is given the context.
 
-# NYX0249: Use of an instance for a type that has its own
+# NYX0249: use of something other than a context instance
+
+A `use` loads something other than a context's constructor or a name a lambda bound with `context`: a record, a def's
+name, a call's result or a field. A `use` loads only a declared context, with its instance written there, so loose
+members are never in scope ([Contexts](../advanced/contexts#loading-a-context)).
+
+```nanyx
+context Log = (log: string -> ())
+
+def quiet = {
+  use (log = { m: string -> () })  -- error NYX0249: `use` loads a context's constructor, as in `use Log(...)`, or a name bound with `context`
+  log("hi")
+}
+```
+
+To fix it, write the context's constructor, `use Log(log = { m -> () })`. To reuse an instance, write a handler, a
+function that runs a lambda under the `use`, as NYX0248 shows.
+
+# NYX0250: Use of an instance for a type that has its own
 
 A `use` loads an instance of a context for a type that already has its own: one built from its attached definitions,
 derived from its parts, or the compiler's own. A type's own instance always wins, so `1 == 2` is false and a set is
@@ -1421,7 +1439,7 @@ read with the `Hash` it was built with wherever they are written
 ([A type's own instance wins](../advanced/contexts#a-types-own-instance-wins)).
 
 ```nanyx
-def n = use Eq(int)(`==` = { x, y -> true }) in 1  -- error NYX0249: 'int' already has `==`: a `use` can't replace it. For a different equality, wrap the value in a protected type with its own `==`, or pass the comparison to a `...By` function
+def n = use Eq(int)(`==` = { x, y -> true }) in 1  -- error NYX0250: 'int' already has `==`: a `use` can't replace it. For a different equality, wrap the value in a protected type with its own `==`, or pass the comparison to a `...By` function
 ```
 
 To fix it, give the values a type that says how they behave, a protected type with its own `==`, `compare`, `hash` or

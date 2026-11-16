@@ -1,6 +1,8 @@
 -- Context test: context functions with different arities
+context Calc = (add: (int, int) -> int, getVal: () -> int)
+
 def main = {
-  use (add = { a, b -> a + b }, getVal = { 42 })
-  
+  use Calc(add = { a, b -> a + b }, getVal = { 42 })
+
   add(getVal(), 8)
 }

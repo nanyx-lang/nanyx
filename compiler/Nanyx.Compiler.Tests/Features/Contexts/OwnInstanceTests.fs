@@ -37,10 +37,9 @@ let ``A use can't replace a type's attached ==`` () =
             """
 type Email = protected string
 def Email.`==`: Email, Email -> bool = { a, b -> a == b }
-def ignoringCase = (`==` = { a: Email, b: Email -> true })
-def n = use ignoringCase in 1
+def n = use Eq(Email)(`==` = { a, b -> true }) in 1
 """
-    Assert.Equal("ignoringCase", at)
+    Assert.Equal("Eq(Email)(`==` = { a, b -> true })", at)
 
 [<Fact>]
 let ``A use can't replace the == derived for a record`` () =
@@ -81,11 +80,11 @@ let ``A use can't replace an instance built from a type's attached definitions``
         replaced
             """
 def n = {
-  use (zero = 0, `+` = { x, y -> x * y }, `-` = { x, y -> x }, negate = { x -> x })
+  use Add(int)(zero = 0, `+` = { x, y -> x * y }, `-` = { x, y -> x }, negate = { x -> x })
   1 + 2
 }
 """
-    Assert.Equal("(zero = 0, `+` = { x, y -> x * y }, `-` = { x, y -> x }, negate = { x -> x })", at)
+    Assert.Equal("Add(int)(zero = 0, `+` = { x, y -> x * y }, `-` = { x, y -> x }, negate = { x -> x })", at)
     Assert.StartsWith("'int' already has its own Add: a `use` can't replace it.", message)
 
 [<Fact>]
