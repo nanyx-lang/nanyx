@@ -1956,9 +1956,7 @@
       i32.eqz
     (if (result i64)
       (then
-        local.get $__match_tmp_0
-    call $__nanyx_drop_list_int
-    i64.const 0
+        i64.const 0
       )
       (else
         local.get $__match_tmp_0
@@ -1972,27 +1970,6 @@
     local.get $__match_tmp_0
       i32.load offset=8
         local.set $__payload_rest
-    local.get $__match_tmp_0
-    i32.const 4
-    i32.sub
-    i32.load
-    i32.const 1
-    i32.eq
-    if
-      local.get $__match_tmp_0
-      i32.const 4
-      i32.sub
-      call $__nanyx_free
-    else
-      local.get $__payload_rest
-    call $__nanyx_dup_list_int
-    drop
-      local.get $__match_tmp_0
-      i32.const 4
-      i32.sub
-      call $__nanyx_release
-      drop
-    end
     local.get $__payload_x_i64
     local.get $__payload_rest
     call $sum
@@ -2192,7 +2169,7 @@
     return_call $console_host_exitProcess
   )
 
-  (func $__fn___script (param $__env i32) (result i32) (local $__dbg_value__in1__in1_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__owned_0 i32)
+  (func $__fn___script (param $__env i32) (result i32) (local $__dbg_value__in1__in1_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__owned_0 i32) (local $__owned_1 i32)
     i64.const 1
     i64.const 2
     i64.const 3
@@ -2200,7 +2177,10 @@
     call $__nanyx_list_cons_i64
     call $__nanyx_list_cons_i64
     call $__nanyx_list_cons_i64
+    local.tee $__owned_0
     call $sum
+    local.get $__owned_0
+    call $__nanyx_drop_list_int
     local.set $__dbg_value__in1__in1_i64
     i32.const 0
     local.set $__interp_len
@@ -2220,10 +2200,10 @@
     call $__nanyx_int_text_write
     local.set $__interp_cursor
     local.get $__interp_base
-    local.tee $__owned_0
+    local.tee $__owned_1
     call $dbg_str
     i32.const 0
-    local.get $__owned_0
+    local.get $__owned_1
     call $__nanyx_drop_string
     drop
     i32.const 0

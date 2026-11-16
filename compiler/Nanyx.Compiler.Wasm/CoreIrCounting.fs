@@ -175,12 +175,50 @@ let rec private tailCalls (e: Expr) : (string * Atom list) list =
     | Call(name, args) -> [ name, args ]
     | _ -> []
 
+/// The variables of `func` whose values the borrowed variables `roots` keep alive: the roots, each `match` scrutinee
+/// that is a copy of one (`let __match_tmp_0 = xs`), and each name a pattern binds in a value one of them is. They live
+/// as long as the roots do, so the function borrows them too.
+let private borrowedFrom (func: Function) (roots: Set<int>) : Set<int> =
+    let mutable found = roots
+    // A value's node comes before the nodes of what follows it, and a match's before its arms.
+    for e in nodes func.Body do
+        match e.Kind with
+        | Let(var, { Kind = Atom(AVar source) }, _) when var.Kind = MatchTemp && found.Contains source.Id -> found <- found.Add var.Id
+        | Match(scrutinees, arms) ->
+            for arm in arms do
+                for scrutinee, pattern in List.zip scrutinees arm.Patterns do
+                    if found.Contains scrutinee.Id then
+                        for var in Pattern.binds pattern do
+                            found <- found.Add var.Id
+        | _ -> ()
+    found
+
+/// Whether an arm of a `match` in `func` on one of `borrowed` could reuse the block of the object it takes apart (see
+/// `CoreIrReuseSites`), which only a function that owns the object can.
+let private couldReuse (func: Function) (borrowed: Set<int>) : bool =
+    let token = { Id = 0; Name = "__reuse"; Kind = Scratch; Type = IrWord }
+    nodes func.Body
+    |> Seq.exists (fun e ->
+        match e.Kind with
+        | Match(scrutinees, arms) ->
+            arms
+            |> List.exists (fun arm ->
+                List.zip scrutinees arm.Patterns
+                |> List.exists (fun (scrutinee, pattern) ->
+                    borrowed.Contains scrutinee.Id
+                    && match CoreIrReuseSites.fieldsTakenApart scrutinee.Type pattern with
+                       | Some(_, size) -> (CoreIrReuseSites.reuseFirst token size arm.Body).IsSome
+                       | None -> false))
+        | _ -> false)
+
 /// Which parameters each function owns. A function called through the function table (a lifted lambda, or the
 /// wrapper of a function passed as a value) borrows its environment and owns the rest, as every call through a closure
 /// passes them owned; its owning entry owns them all (see `CoreIrClosureEntries`). Another function owns a parameter on
-/// the heap when it takes it over somewhere (passes it on owned, stores it, returns it, matches on it), and borrows it
-/// when it only reads it. A parameter that a tail call passes something the caller owns to is owned as well: the caller
-/// could otherwise only drop it after the call, which would then not be a tail call (see "Reference counting" in
+/// the heap when it takes it over somewhere (passes it on owned, stores it, returns it), and borrows it when it only
+/// reads it. A parameter it matches on is borrowed as Lean 4 infers it: when nothing bound from it is taken over (see
+/// `borrowedFrom`), save by a call that borrows it in turn, and no arm could reuse its block (see `couldReuse`). A
+/// parameter that a tail call passes something the caller owns to is owned as well: the caller could otherwise only
+/// drop it after the call, which would then not be a tail call (see "Reference counting" in
 /// `docs/src/content/work-in-progress/tail-calls.md`).
 let internal inferOwnership (functions: Function list) : Ownership =
     let indirect = CoreIrClosureEntries.targets functions
@@ -207,14 +245,22 @@ let internal inferOwnership (functions: Function list) : Ownership =
             | _ -> ()
         for f in functions do
             let borrowedParams = f.Params |> List.indexed |> List.filter (fun (index, _) -> parameterUse ownership f.Name index = Borrowed)
+            let borrowedIds = borrowedFrom f (borrowedParams |> List.map (snd >> _.Id) |> Set.ofList)
+            // A scrutinee that copies a borrowed variable borrows it, and takes nothing over.
+            let copies = HashSet<Expr>(HashIdentity.Reference)
+            for e in nodes f.Body do
+                match e.Kind with
+                | Let(var, value, _) when var.Kind = MatchTemp && borrowedIds.Contains var.Id -> copies.Add value |> ignore
+                | _ -> ()
             let takenOver =
                 nodes f.Body
+                |> Seq.filter (copies.Contains >> not)
                 |> Seq.collect (operands ownership)
-                |> Seq.choose (function AVar var, Owned -> Some var.Id | _ -> None)
+                |> Seq.choose (function AVar var, Owned when isHeapType var.Type -> Some var.Id | _ -> None)
                 |> Set.ofSeq
             for index, parameter in borrowedParams do
-                if takenOver.Contains parameter.Id then own f.Name index
-            let borrowedIds = borrowedParams |> List.map (snd >> _.Id) |> Set.ofList
+                let kept = borrowedFrom f (Set.singleton parameter.Id)
+                if not (Set.intersect kept takenOver).IsEmpty || couldReuse f kept then own f.Name index
             for callee, args in tailCalls f.Body do
                 args
                 |> List.iteri (fun index arg ->
@@ -231,6 +277,14 @@ type private Counter(ownership: Ownership, addresses: Atom -> Var list, owningEn
     let counted = Dictionary<int, Expr>()
     let free = Dictionary<Expr, Set<int>>(HashIdentity.Reference)
     let tails = HashSet<Expr>(results func.Body, HashIdentity.Reference)
+    // The variables the function borrows: its borrowed parameters, and what they keep alive (see `borrowedFrom`).
+    let borrowed =
+        func.Params
+        |> List.indexed
+        |> List.filter (fun (index, parameter) -> isHeapType parameter.Type && parameterUse ownership func.Name index = Borrowed)
+        |> List.map (snd >> _.Id)
+        |> Set.ofList
+        |> borrowedFrom func
 
     do
         for parameter in func.Params do
@@ -339,6 +393,11 @@ type private Counter(ownership: Ownership, addresses: Atom -> Var list, owningEn
                     dropDead (Expr.make (Let(var, value, body)) ty))
                 owned <- ownedHere
                 current <- body
+            // A scrutinee that copies a borrowed variable borrows it too.
+            | Let(var, value, body) when var.Kind = MatchTemp && borrowed.Contains var.Id ->
+                rebuilds.Add(fun body -> dropDead (Expr.make (Let(var, value, body)) ty))
+                owned <- Set.intersect ownedHere (Set.union (this.Free body) after)
+                current <- body
             | Let(var, value, body) ->
                 let afterValue = Set.union (this.Free body) after
                 let value = this.Count ownedHere afterValue value
@@ -364,11 +423,12 @@ type private Counter(ownership: Ownership, addresses: Atom -> Var list, owningEn
             Expr.make (If(cond, this.Count owned after ifTrue, this.Count owned after ifFalse)) e.Type
         | Match(scrutinees, arms) ->
             // An arm takes a reference to each name its patterns bind that it uses: they are fields of the scrutinee,
-            // which the arm then drops if it does not use it either.
+            // which the arm then drops if it does not use it either. A name bound in a value the function borrows is
+            // borrowed too.
             let countArm (arm: Arm) =
                 let patterns = arm.Patterns |> List.map (Pattern.mapGuards (this.Count Set.empty Set.empty))
                 let bodyFree = this.Free arm.Body
-                let used = arm.Patterns |> List.collect Pattern.binds |> List.filter (fun var -> isHeapType var.Type && bodyFree.Contains var.Id)
+                let used = arm.Patterns |> List.collect Pattern.binds |> List.filter (fun var -> isHeapType var.Type && bodyFree.Contains var.Id && not (borrowed.Contains var.Id))
                 let owned = Set.union owned (used |> List.map _.Id |> Set.ofList)
                 let body = this.Count owned after arm.Body
                 { Patterns = patterns
