@@ -179,8 +179,14 @@ let newlineIndentedContinuation (refCol: int64) : Parser<unit, ParseState> =
             if pos.Column > refCol then preturn () else pzero
     )
 
+/// The gap before a def's `=`: spaces on the signature's line, or the rest of that line and any blank or comment lines
+/// after it, then the indent of the `=`'s line, further in than `refCol`. The comments in it are noted, so the formatter
+/// puts them back.
 let defEqualsContinuation (refCol: int64) : Parser<unit, ParseState> =
-    attempt (wsInline >>. followedBy (pstring "=")) <|> newlineIndentedContinuation refCol
+    let nextLine =
+        blockLinesEnd () >>. wsInline >>. getPosition >>= fun pos ->
+            if pos.Column > refCol then followedBy (pstring "=") else pzero
+    attempt (wsInline >>. followedBy (pstring "=")) <|> attempt nextLine
 
 /// A character that can continue an identifier. A word such as `true` is only that word when none follows it.
 let isIdentifierChar c = isLetter c || isDigit c || c = '_'

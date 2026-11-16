@@ -100,6 +100,17 @@ def f = { x -> log(x) ;x + 1 }
 def f = { x -> log(x); x + 1 }
 ```
 
+# Comments before a def's `=`
+
+A def's `=` may start the line after its signature, with comments between them: at the end of the signature's line, or on lines of their own. The formatter keeps those comments where they are, and the `=` on a line of its own after them.
+
+```nanyx
+def scale: int, int -> int -- times k, plus x
+  = { x, k ->
+    x * k + x
+  }
+```
+
 # Typical workflow
 
 Format files before committing changes, and enable format-on-save in your editor where possible.

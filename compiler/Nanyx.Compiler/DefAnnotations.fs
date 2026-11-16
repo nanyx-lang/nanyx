@@ -60,8 +60,18 @@ let internal read
             Error [ Diagnostics.at DiagnosticCodes.ContextsWithoutType annotation.Span
                         $"'{name}' is not a lambda, so it does not run in the contexts its annotation writes: write them on its function type, as in '[Console] string -> ()'" ]
         | _ -> Ok ()
+    // An operator takes its two operands as two arguments, so the lambda that defines one takes two parameters.
+    let operatorArity =
+        let last = name.Substring(name.LastIndexOf '.' + 1)
+        match expr.Kind with
+        | Lambda(parameters, _, _) when Names.isOperator last && parameters.Length <> 2 ->
+            let takes = match parameters.Length with 0 -> "none" | 1 -> "one" | n -> string n
+            Error [ Diagnostics.at DiagnosticCodes.OperatorArity span
+                        $"'{Names.written last}' is an operator, so it takes exactly two arguments, its left and right operands, but the lambda that defines it takes {takes}" ]
+        | _ -> Ok ()
     let contextsExist =
         onlyContextsOnValue
+        |> Result.bind (fun () -> operatorArity)
         |> Result.bind (fun () -> contextsExist)
         |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt)
         |> Result.bind (fun () -> ensureContextTypesDetermined name typeOpt)

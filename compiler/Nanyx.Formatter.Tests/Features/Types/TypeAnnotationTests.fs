@@ -33,3 +33,25 @@ let ``An open record type keeps its ... and the name of its other fields`` () =
     unchanged (lines [ "def g: (x: int, y: int, ...) -> int = { x, y ->"; "  x + y"; "}" ])
     unchanged (lines [ "def moveRight: (x: int, ...r) -> (x: int, ...r) = { p ->"; "  p with x = p.x + 1"; "}" ])
     Assert.Equal("def p: (x: int, ...r) = p\n", format "def p:(x:int,...r)=p")
+
+[<Fact>]
+let ``A comment between a def's signature and its = keeps the = on a line of its own`` () =
+    formatsTo
+        """def scale: int, int -> int -- times k, plus x
+  = { x, k ->
+    x * k + x
+  }"""
+        """def scale: int, int -> int  -- times k, plus x
+  = { x, k -> x * k + x }"""
+    formatsTo
+        """def scale: int, int -> int
+  -- times k, plus x
+  -- and more
+  = { x, k ->
+    x * k + x
+  }"""
+        """def scale: int, int -> int
+  -- times k, plus x
+
+  -- and more
+  = { x, k -> x * k + x }"""

@@ -47,7 +47,7 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
 - **What it may contain.** Only record, list and tuple literals, strings, numbers, `true` and `false`, tags
   (`#error`) and `--` comments. Anything else is an error with a span (`NYX0020`): a name, a call, an operator, a
   lambda, an interpolated string, a definition, an import, a `::` directive. The manifest can always be read without
-  running or type-checking a program, which `nanyx add` needs in order to edit it.
+  running or type-checking a program, which `nanyx install` needs in order to edit it.
 - **Its shape is checked** (`Manifest.check`). The fields are the manifest's own: `package`, `dependencies`,
   `linters`, `host` and `formatter` at the top, and `name`, `version`, `sources` and `host` in
   `package`. A linter entry has `package`, `version` and `settings`, and a host entry `package`, `version` or `path`,
@@ -83,7 +83,7 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
 - **Tools outside the compiler.** Scripts and CI that read a manifest, such as the package index's registration
   check in `nanyx-lang/packages`, use `nanyx manifest --json`, which checks the manifest and prints it as JSON: a record is an object, a list or
   tuple an array, and a tag a string, `"#error"` (or `{ "#name": payload }` for a tag with a payload).
-- **Editing it.** `nanyx add` and `nanyx new` edit the record and reformat it with the formatter, so a manifest the
+- **Editing it.** `nanyx install` and `nanyx new` edit the record and reformat it with the formatter, so a manifest the
   tools touched still looks hand-written.
 
 # Plan

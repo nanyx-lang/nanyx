@@ -46,7 +46,7 @@ internal sealed record Shell(string Directory, TextWriter Out, TextWriter Error,
     }
 }
 
-internal static class CliCommands
+internal static partial class CliCommands
 {
     /// <summary>
     /// Parse a Nanyx source file and print its syntax tree, without checking it.
@@ -117,33 +117,9 @@ internal static class CliCommands
             return UsageError;
         }
 
-        var full = single is null ? shell.Directory : shell.FullPath(single);
-        string? manifestPath;
-        if (File.Exists(full) && full.EndsWith(ManifestModule.extension, StringComparison.OrdinalIgnoreCase))
+        if (!TryFindManifest(shell, single, out var manifestPath, out var failed))
         {
-            manifestPath = full;
-        }
-        else if (Directory.Exists(full))
-        {
-            var found = ManifestModule.tryFind(full);
-            if (found.IsError)
-            {
-                shell.Error.WriteLine(found.ErrorValue);
-                return 1;
-            }
-
-            manifestPath = found.ResultValue?.Value;
-        }
-        else
-        {
-            shell.Error.WriteLine($"Not a directory or a {ManifestModule.extension} manifest: {single}");
-            return UsageError;
-        }
-
-        if (manifestPath is null)
-        {
-            shell.Error.WriteLine($"No {ManifestModule.extension} manifest in {full} or any directory above it");
-            return 1;
+            return failed;
         }
 
         var read = ManifestModule.read(manifestPath);
@@ -360,6 +336,48 @@ internal static class CliCommands
             return false;
         }
 
+        return true;
+    }
+
+    /// <summary>
+    /// The full path of the manifest <paramref name="path"/> names: a .nyxp file, or the manifest of the package a
+    /// directory is in, the nearest in it or above it; none means the current directory. What is wrong is written to
+    /// stderr, with the exit code it comes to in <paramref name="failed"/>.
+    /// </summary>
+    private static bool TryFindManifest(Shell shell, string? path, out string manifestPath, out int failed)
+    {
+        manifestPath = string.Empty;
+        failed = 0;
+        var full = path is null ? shell.Directory : shell.FullPath(path);
+        if (File.Exists(full) && full.EndsWith(ManifestModule.extension, StringComparison.OrdinalIgnoreCase))
+        {
+            manifestPath = full;
+            return true;
+        }
+
+        if (!Directory.Exists(full))
+        {
+            shell.Error.WriteLine($"Not a directory or a {ManifestModule.extension} manifest: {path}");
+            failed = UsageError;
+            return false;
+        }
+
+        var found = ManifestModule.tryFind(full);
+        if (found.IsError)
+        {
+            shell.Error.WriteLine(found.ErrorValue);
+            failed = 1;
+            return false;
+        }
+
+        if (found.ResultValue is null)
+        {
+            shell.Error.WriteLine($"No {ManifestModule.extension} manifest in {full} or any directory above it");
+            failed = 1;
+            return false;
+        }
+
+        manifestPath = found.ResultValue.Value;
         return true;
     }
 

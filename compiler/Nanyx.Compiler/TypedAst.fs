@@ -351,4 +351,6 @@ type TypedModule =
       AmbientMembers: AmbientMember list
       ImportedFiles: Map<SymbolId, ImportedFile>
       InlinedExprTypes: Map<NodeId, Ty>
-      InlinedCalleeTypes: Map<NodeId, Ty> }
+      InlinedCalleeTypes: Map<NodeId, Ty>
+      /// A script's values that need a context, which run in its entry point (see `InferState.ScriptEntryValues`).
+      ScriptEntryValues: Set<Identifier> }

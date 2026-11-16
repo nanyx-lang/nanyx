@@ -489,7 +489,10 @@ Hover hides a private context's members outside its file, as it hides a private 
      otherwise: `FunctionContexts.fit` gives a function value's context variable the scoped contexts the block it is
      called in is given, so `{ mk -> memory { mk() } }` is generalised over the scope and supplies `Memory` in turn.
      Contexts are paired with the same scope first, so a block's requirement of an outer block's `Memory` goes into
-     its context variable.
+     its context variable. Any other scoped context of a name already paired, unless it is of another call's scope, is
+     paired with the same one: each call in a block that requires `Tx` requires `Tx` of a scope of its own, and all of
+     them are the block's, so `transaction { step(step(1)) }` requires it once
+     ([#1553](https://github.com/nanyx-lang/nanyx/issues/1553)).
 5. ~~Let a `memory` block name its `Memory`, `memory { context m -> ... }`~~
    ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058), then
    [#1446](https://github.com/nanyx-lang/nanyx/issues/1446) for the `context m` form). Done: see
