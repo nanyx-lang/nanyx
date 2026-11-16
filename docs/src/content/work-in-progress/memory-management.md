@@ -472,13 +472,24 @@ and counts that check themselves (`checkedRuntimeHelpers` in `WasmRuntime.fs` an
 Every Wasm test that runs a program runs it as `nanyx run --check-memory` does, through the CLI's own code in the
 test process (`runScriptWith` in `TestHelpers.fs`), and the tests that read the counters compile with the checks too. So a leak, a double free or a use after free in any test program fails that test.
 
-On the examples that compile (blocks allocated, and the heap's peak in bytes):
+`nanyx run --memory` runs a program as `--check-memory` does and then writes what the counters say to stderr
+(`MemoryReport.cs` in the CLI, [#1562](https://github.com/nanyx-lang/nanyx/issues/1562)). The checked allocator keeps
+them beside the block counts: the bytes of every block it hands out (`bytes_allocated`, an `i64`), the bytes in use and
+the most there have been at once (`live_bytes`, `peak_live_bytes`), and the highest `$heap_ptr` has been
+(`peak_heap`, an address, so it counts the string literals and the free lists' table below the heap). A block's bytes
+are its size word's, so without the word itself. `reused_in_place` counts the objects built in a block given up with a
+count of one: `__nanyx_list_cons_at`, `__nanyx_tag_box_at` and `__nanyx_reuse_object` count it when the token holds a
+block, and `UpdateRecord` when it updates the record in place. The runner reads the counters however the program
+stopped (`WasmRunner.runCounting`), so the report follows a trap, a failed check or a leak too.
 
-| Example | No counting | Counting (#294) | Reuse (#295) |
-|---------|-------------|-----------------|--------------|
-| `directives` | 13, 256 | 13, 136 | 13, 136 |
-| `money` | 6, 120 | 6, 104 | 6, 104 |
-| `shop` | 2,605, 54,868 | 2,605, 1,832 | 2,562, 1,832 |
+On the examples, from `nanyx run --memory examples/<name>.nyx` at the commit that added it (an earlier table, filled
+in by hand, compared the allocator before counting, with counting, and with reuse):
+
+| Example | Allocations | Reused in place | Bytes allocated | Peak live bytes | Peak heap |
+|---------|-------------|-----------------|-----------------|-----------------|-----------|
+| `directives` | 13 | 0 | 264 | 100 | 5,124 |
+| `money` | 6 | 0 | 128 | 112 | 4,956 |
+| `shop` | 1,618 | 392 | 31,408 | 824 | 9,260 |
 
 ## Things that need care
 
@@ -507,5 +518,6 @@ On the examples that compile (blocks allocated, and the heap's peak in bytes):
 - **Should reuse be visible?** Koka's `fip` annotation lets a function promise it runs fully in place, and the
   compiler checks it. That would suit Nanyx's stance on predictable performance, but is not needed to start.
 - **Measuring.** Both, for now: every test program runs with the memory checks, the tests run long loops in
-  constant memory, and the table above gives allocations and peak memory on the examples. The examples are small
-  and mostly build strings; a benchmark that transforms large data structures would show what reuse is worth.
+  constant memory, and `nanyx run --memory` gives allocations, reuses and peak memory for any program, as the table
+  above does for the examples. The examples are small and mostly build strings; a benchmark that transforms large data
+  structures would show what reuse is worth.

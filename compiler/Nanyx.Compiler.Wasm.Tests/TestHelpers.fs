@@ -141,8 +141,11 @@ let private command (arguments: string list) : Shell -> int =
         fun shell -> CliCommands.CheckIn(shell, path, timings, host)
     | "run" :: rest ->
         let noInline, rest = takeFlag "--no-inline" rest
+        let checkMemory, rest = takeFlag "--check-memory" rest
+        let memory, rest = takeFlag "--memory" rest
+        let memoryCheck = if memory then MemoryCheck.Report elif checkMemory then MemoryCheck.Check else MemoryCheck.Off
         let _, _, timings, host, path = options (null, false, false, null, []) rest
-        fun shell -> CliCommands.RunIn(shell, false, path, timings, host, not noInline)
+        fun shell -> CliCommands.RunIn(shell, memoryCheck, path, timings, host, not noInline)
     | "build" :: rest ->
         let noInline, rest = takeFlag "--no-inline" rest
         let outputPath, release, timings, host, path = options (null, false, false, null, []) rest
@@ -193,7 +196,7 @@ let nanyxInStore (store: NyxCompiler.PackageStore) (directory: string) (argument
 /// and the run's own errors in it as the CLI prints them.
 /// Without `inlineCalls`, as `--no-inline` does, every call is compiled as a call.
 let runScriptWithOptions (checkMemory: bool) (inlineCalls: bool) (standardInput: string) (inputPath: string) : RunOutcome =
-    inProcess (Directory.GetCurrentDirectory()) standardInput [] (fun shell -> CliCommands.RunScript(shell, inputPath, checkMemory, false, null, inlineCalls))
+    inProcess (Directory.GetCurrentDirectory()) standardInput [] (fun shell -> CliCommands.RunScript(shell, inputPath, (if checkMemory then MemoryCheck.Check else MemoryCheck.Off), false, null, inlineCalls))
 
 let runScriptWith (checkMemory: bool) (standardInput: string) (inputPath: string) : RunOutcome =
     runScriptWithOptions checkMemory true standardInput inputPath

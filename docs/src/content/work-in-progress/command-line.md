@@ -15,7 +15,9 @@ and the streams it runs with, so the Wasm tests run commands in their own proces
 `Program.cs`, tested by `ExitCodeTests.fs`.
 
 `run --check-memory` sets `WasmOptions.CheckMemory` (see [Memory management](./memory-management)), and the Wasm tests
-run every program this way, so a leak anywhere fails a test. `run --no-inline` and `build --no-inline` clear
+run every program this way, so a leak anywhere fails a test. `run --memory` does too, and then writes the report of
+`MemoryReport.cs` from the checked allocator's counters; the two are `MemoryCheck.Check` and `MemoryCheck.Report`, which
+`RunIn` and `RunScript` take. `run --no-inline` and `build --no-inline` clear
 `WasmOptions.Inline` (see [Inlining](./inlining)); the tour examples are run both ways, and must print the same.
 
 # The stopwatch

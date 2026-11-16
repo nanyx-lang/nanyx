@@ -8,7 +8,7 @@ order: 0
 and is the language server for editors. `nanyx --help` lists its commands, and `nanyx <command> --help` describes one.
 
 ```text
-nanyx run [--check-memory] [--timings] [--host <host>] [<file.nyx | package>] [--] [<arguments>]
+nanyx run [--check-memory | --memory] [--timings] [--host <host>] [<file.nyx | package>] [--] [<arguments>]
 nanyx check [--timings] [--host <host>] [<file.nyx | package>]
 nanyx build [--out <path>] [--release] [--timings] [--host <host>] [<package>]
 nanyx wasm <file.nyx> [--out <path>] [--release]
@@ -66,7 +66,24 @@ run. A script runs under the console host, `nanyx.console`, unless a `::host` di
 |--------|--------------|
 | `--host <host>` | Runs the package's `@entry` under another host, in place of its manifest's: a host package the compiler ships, `--host nanyx.console`, or the directory of one, `--host ../acme.host`. A host the compiler doesn't ship, or a directory whose manifest doesn't declare a host, is an error. A script names its host with `::host`, so `--host` with a `.nyx` file is an error. |
 | `--check-memory` | Checks the program's memory as it runs: it stops with exit code 70 at a block freed twice or an object used after it was freed, and fails with exit code 1 if the program finishes with memory it never freed. |
+| `--memory` | Checks the program's memory as `--check-memory` does, and once the program stops, however it stops, writes a report to standard error (see below). |
 | `--timings` | Writes how long each module took to check (see [Timings](#timings)). |
+
+The report of `--memory` says how many blocks of memory the program allocated and freed, how many were still in use
+when it stopped, how many objects it built in the memory of one it had finished with rather than allocating (see
+[Reference counting](../foundations/reference-counting)), how many bytes it allocated in all, the most it had in use
+at once, and the highest address its heap reached, with the memory's size in 64 KiB pages:
+
+```text
+Memory
+  allocations        1,618
+  frees              1,618
+  live at exit       0
+  reused in place    392
+  bytes allocated    31,408
+  peak live bytes    824
+  peak heap          9,260 bytes (1 page)
+```
 
 ## `nanyx check`
 

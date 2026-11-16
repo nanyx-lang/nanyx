@@ -187,22 +187,25 @@ internal static partial class CliCommands
     /// </summary>
     /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest, followed by the program's arguments; none means the package the current directory is in. Put -- before arguments that start with -, so that they are not read as run's options.</param>
     /// <param name="checkMemory">Check the program's reference counting as it runs: stop at a block freed twice or an object used after it was freed, and fail if anything is left on the heap at the end.</param>
+    /// <param name="memory">Check the program's memory as --check-memory does, and once it stops, write to stderr how many blocks it allocated and freed, how many objects it built in the block of one it gave up, how many bytes it allocated, the most it held at once, and how far the heap grew.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
     /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script names its host with a ::host directive.</param>
     /// <param name="noInline">Compile every call as a call, without inlining: for working on the compiler, to tell whether a misbehaving program is the inliner's doing.</param>
     [Consolo("run")]
     public static int Run(
         [Consolo("check-memory")] bool checkMemory = false,
+        [Consolo("memory")] bool memory = false,
         [Consolo("timings")] bool timings = false,
         [Consolo("host")] string? host = null,
         [Consolo("no-inline")] bool noInline = false,
         params string[] path)
     {
-        return RunIn(Shell.Process, checkMemory, path, timings, host, !noInline);
+        var memoryCheck = memory ? MemoryCheck.Report : checkMemory ? MemoryCheck.Check : MemoryCheck.Off;
+        return RunIn(Shell.Process, memoryCheck, path, timings, host, !noInline);
     }
 
     /// <summary>What <c>nanyx run</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int RunIn(Shell shell, bool checkMemory, string[] path, bool timings = false, string? host = null, bool inlineCalls = true)
+    internal static int RunIn(Shell shell, MemoryCheck memoryCheck, string[] path, bool timings = false, string? host = null, bool inlineCalls = true)
     {
         // What follows the program is its own: its arguments, which it reads through `Env`.
         var single = path.FirstOrDefault();
@@ -211,7 +214,7 @@ internal static partial class CliCommands
         if (single is not null && !IsPackagePath(shell, single))
         {
             return NoHostForScript(shell, host)
-                ?? Execute(shell, single, Target.Run, outputPath: null, checkMemory: checkMemory, timings: timings, programArguments: programArguments, inlineCalls: inlineCalls);
+                ?? Execute(shell, single, Target.Run, outputPath: null, memoryCheck: memoryCheck, timings: timings, programArguments: programArguments, inlineCalls: inlineCalls);
         }
 
         if (!TryFindPackage(shell, single, host, out var package, out var failed))
@@ -240,7 +243,7 @@ internal static partial class CliCommands
         }
 
         ReportDeferredRun(compiling, deferred, build.Diagnostics);
-        return RunProgram(compiling, entry.Value, deferred, checkMemory, timings, [package.Manifest.Name, .. programArguments], inlineCalls);
+        return RunProgram(compiling, entry.Value, deferred, memoryCheck, timings, [package.Manifest.Name, .. programArguments], inlineCalls);
     }
 
     /// <summary>
@@ -757,7 +760,7 @@ internal static partial class CliCommands
         return $"{count} deferred error{(count == 1 ? "" : "s")}";
     }
 
-    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, bool checkMemory = false, bool timings = false, string[]? programArguments = null, bool inlineCalls = true)
+    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? programArguments = null, bool inlineCalls = true)
     {
         if (string.IsNullOrWhiteSpace(inputFile))
         {
@@ -778,7 +781,7 @@ internal static partial class CliCommands
 
         if (target == Target.Run)
         {
-            return RunScript(shell, inputFile, checkMemory, timings, programArguments, inlineCalls);
+            return RunScript(shell, inputFile, memoryCheck, timings, programArguments, inlineCalls);
         }
 
         // Script mode: the file's :: directives say what a package's manifest would.
@@ -801,7 +804,7 @@ internal static partial class CliCommands
     /// shell's stderr. The program's command-line arguments are <paramref name="inputFile"/> followed by
     /// <paramref name="programArguments"/>. The Wasm tests call this to run programs in their own process.
     /// </summary>
-    internal static int RunScript(Shell shell, string inputFile, bool checkMemory, bool timings = false, string[]? programArguments = null, bool inlineCalls = true)
+    internal static int RunScript(Shell shell, string inputFile, MemoryCheck memoryCheck, bool timings = false, string[]? programArguments = null, bool inlineCalls = true)
     {
         // `run` is the user-facing command: its stdout belongs to the program, so compiler chatter is kept off it, and
         // on a terminal it goes in the run's box.
@@ -815,7 +818,7 @@ internal static partial class CliCommands
         // program reaches it.
         var deferred = ErrorsDeferred(result);
         ReportDeferredRun(compiling, deferred, result.Diagnostics);
-        return RunProgram(compiling, result, deferred, checkMemory, timings, [inputFile, .. programArguments ?? []], inlineCalls);
+        return RunProgram(compiling, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls);
     }
 
     private static int RunParse(Shell shell, string inputFile)
@@ -960,11 +963,11 @@ internal static partial class CliCommands
     /// <paramref name="arguments"/>, its name first, reporting what stops it to the shell's stderr, and gives the exit
     /// code.
     /// </summary>
-    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, bool checkMemory = false, bool timings = false, string[]? arguments = null, bool inlineCalls = true)
+    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true)
     {
         var programArguments = ListModule.OfSeq(arguments ?? ["nanyx"]);
         var errors = shell.Error;
-        var options = new CodeGen.WasmOptions(checkMemory, inlineCalls);
+        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls);
         if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred, timings))
         {
             return 1;
@@ -972,31 +975,38 @@ internal static partial class CliCommands
 
         // The program's output follows the run's box, unmarked, and so does what the run reports after it.
         (errors as RunBox.Writer)?.Box.Close("output");
-        if (!checkMemory)
+        if (memoryCheck == MemoryCheck.Off)
         {
             var outcome = WasmRunner.run(shell.Io, programArguments, wat);
             return outcome.IsOk ? 0 : ReportRunError(outcome.ErrorValue, errors);
         }
 
-        var counted = WasmRunner.runReading(
-            shell.Io,
-            programArguments,
-            CodeGen.CheckedExports.start,
-            new[] { CodeGen.CheckedExports.liveBlocks, CodeGen.CheckedExports.allocations },
-            wat);
-        if (counted.IsError)
+        var (counted, counters) = WasmRunner.runCounting(shell.Io, programArguments, CodeGen.CheckedExports.start, MemoryReport.Counters, wat);
+        var exitCode = counted.IsError ? ReportRunError(counted.ErrorValue, errors) : CheckNothingLeft(counted.ResultValue, errors);
+        // The report follows what stopped the program, or the leak the check found.
+        if (memoryCheck == MemoryCheck.Report && counters is not null)
         {
-            return ReportRunError(counted.ErrorValue, errors);
+            MemoryReport.Write(errors, counters.Value);
         }
 
-        var (live, allocated) = (counted.ResultValue[0], counted.ResultValue[1]);
+        return exitCode;
+    }
+
+    /// <summary>
+    /// The exit code of a program run with memory checks that returned, given its <see cref="MemoryReport.Counters"/>:
+    /// 1 when it left blocks on the heap, which it says to <paramref name="errors"/>.
+    /// </summary>
+    private static int CheckNothingLeft(int[] counters, TextWriter errors)
+    {
+        int Counter(string name) => counters[Array.IndexOf(MemoryReport.Counters, name)];
+        var live = Counter(CodeGen.CheckedExports.liveBlocks);
         if (live == 0)
         {
             return 0;
         }
 
         errors.WriteLine(
-            $"Memory check failed: {live} of the {allocated} blocks the program allocated were never freed.");
+            $"Memory check failed: {live} of the {Counter(CodeGen.CheckedExports.allocations)} blocks the program allocated were never freed.");
         return 1;
     }
 

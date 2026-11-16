@@ -75,10 +75,26 @@ module CheckedExports =
     let liveBlocks = MemoryChecks.liveBlocks
     /// How many blocks the program allocated.
     let allocations = MemoryChecks.allocations
-    /// The top of the heap: the most it has grown to.
+    /// How many bytes the blocks the program allocated took, all told: an `i64`.
+    let bytesAllocated = MemoryChecks.bytesAllocated
+    /// The most bytes the program's blocks took at once.
+    let peakLiveBytes = MemoryChecks.peakLiveBytes
+    /// The highest the top of the heap has been, as an address.
+    let peakHeap = MemoryChecks.peakHeap
+    /// How many objects the program built in the block of one it gave up, rather than in a new one.
+    let reusedInPlace = MemoryChecks.reusedInPlace
+    /// The counters a checked module exports, which `memoryCheckExports` declares.
+    let counters = [ liveBlocks; allocations; bytesAllocated; peakLiveBytes; peakHeap; reusedInPlace ]
+    /// The top of the heap now: blocks freed at the top give it back, so it can be lower than `peakHeap`.
     let heapPointer = "heap_ptr"
     /// The exit code a program stops with when a memory check fails.
     let failureExitCode = MemoryChecks.exitCode
+
+/// The exports of the counters a checked module has (see `CheckedExports.counters`), each under its global's name.
+let private memoryCheckExports =
+    CheckedExports.counters
+    |> List.map (fun name -> $"""  (export "{name}" (global ${name}))""")
+    |> String.concat "\n"
 
 let private ctxFnName (name: string, _, _) = name
 let private ctxFnSlot (_, slot: int, _) = slot
@@ -221,8 +237,7 @@ let allocatorModuleWat (options: WasmOptions) =
               yield helpers |> Map.find name
           yield $"""  (export "retain" (func ${Helpers.retain}))"""
           yield $"""  (export "release" (func ${Helpers.release}))"""
-          yield $"""  (export "{CheckedExports.liveBlocks}" (global ${MemoryChecks.liveBlocks}))"""
-          yield $"""  (export "{CheckedExports.allocations}" (global ${MemoryChecks.allocations}))"""
+          yield memoryCheckExports
       yield ")" ]
     |> String.concat "\n"
 
@@ -768,7 +783,8 @@ let private lowerTypedModule (typed: TypedModule) : LoweredModule =
           FunctionSlot = (fun _ _ -> 0)
           IndirectCall = ignore
           Signature = (fun _ -> None)
-          HostState = 0 }
+          HostState = 0
+          CheckMemory = false }
     let lowered =
         let input: CoreIrLowerInput.LowerInput =
             { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
@@ -1057,7 +1073,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           FunctionSlot = functionValueSlot functionTable withOwningEntry
           IndirectCall = functionTable.IndirectSignatures.Add >> ignore
           Signature = fun name -> signatures |> Map.tryFind name
-          HostState = hostStateAddress }
+          HostState = hostStateAddress
+          CheckMemory = options.CheckMemory }
 
     let specialisations = lowered.Specialisations |> Map.values |> Seq.concat |> Seq.map (fun (func, _) -> func.Name) |> Set.ofSeq
 
@@ -1147,8 +1164,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               |> List.map (fun name -> helpers |> Map.find name)
           if checksMemory then
               yield memoryCheckFunctions heapBase (fun message -> stringLiteralMap |> Map.find message)
-              yield $"""  (export "{CheckedExports.liveBlocks}" (global ${MemoryChecks.liveBlocks}))"""
-              yield $"""  (export "{CheckedExports.allocations}" (global ${MemoryChecks.allocations}))"""
+              yield memoryCheckExports
           if options.CheckMemory && moduleUsesHeap then
               yield $"""  (export "{CheckedExports.heapPointer}" (global $heap_ptr))""" ]
         |> String.concat "\n"
