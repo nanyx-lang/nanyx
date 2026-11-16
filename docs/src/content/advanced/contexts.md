@@ -51,7 +51,7 @@ This differs from leaving out `export`, which stops other modules naming the con
 
 The full form of a context definition is `scoped export context Name(params) = protected ...`, where `scoped`, `export` and the parameters are each optional and the modifiers come in that order. A `scoped` context belongs to the scope that supplies it, as the prelude's `Memory` belongs to a `memory` block, and nothing that requires it may leave that scope:
 
-```nanyx fragment
+```nanyx
 scoped export context Memory = protected ()
 ```
 
@@ -384,18 +384,30 @@ As with `==`, only a nominal type can attach `hash`. The built-in types have the
 
 ## Default(a)
 
-Use `Default(a)` when a function needs a fallback value for a type.
+`Default(a)` is the prelude's context for a fallback value of a type: a function that needs one requires it.
 
 ```nanyx
 context Default(a) = (
   default: () -> a
 )
+```
 
+```nanyx
 def valueOrDefault: [Default(a)] #some(a) | #none -> a = {
   | #some(v) -> v
   | #none -> default()
 }
 ```
+
+Each built-in type has one: `int`'s default is `0`, `float`'s `0.0`, `string`'s `""`, `bool`'s `false`, a `list`'s `[]`, and `#some(a) | #none`'s `#none`. The prelude attaches them as `int.default` and the others, and the compiler has its own for `#some(a) | #none`, a union, which has no name to attach one to. Any other type gets one by attaching `default`, which is [synthesized](#context-synthesis) into the context:
+
+```nanyx
+type Point = (x: int, y: int)
+
+def Point.default = { -> Point(x = 0, y = 0) }
+```
+
+A call that requires `Default` of a type with no `default`, such as a function, is an error.
 
 ## Add(a)
 

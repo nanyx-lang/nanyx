@@ -57,6 +57,7 @@
     <Compile Include="ArithmeticInference.fs" />
     <Compile Include="InlineContexts.fs" />
     <Compile Include="StructuralInstances.fs" />
+    <Compile Include="NoneDefault.fs" />
     <Compile Include="OperatorCalls.fs" />
     <Compile Include="NamedArguments.fs" />
     <Compile Include="LambdaArguments.fs" />

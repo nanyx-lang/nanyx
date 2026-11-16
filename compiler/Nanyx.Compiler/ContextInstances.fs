@@ -140,16 +140,17 @@ let internal memberOfInstanceInScope (env: TypeEnv) (state: InferState) (memberN
 /// Whether an instance of a context applied to `argTys` can be built from attached definitions: whether the type it
 /// is for, its first argument, has a name definitions can be attached to (not a variable, or a record written out).
 /// The others may still be open: the definitions' types settle them, as `int.fromString` makes a
-/// `FromString(int, e)` a `FromString(int, #invalidInt)`.
-let private canSynthesize (argTys: Ty list) =
+/// `FromString(int, e)` a `FromString(int, #invalidInt)`. The `Default` of `#some(a) | #none` is built too, from the
+/// prelude's definition (see `NoneDefault`).
+let private canSynthesize (ctxName: Identifier) (argTys: Ty list) =
     match argTys with
-    | forType :: _ -> not (List.isEmpty (attachedTypeNames forType))
+    | forType :: _ -> not (List.isEmpty (attachedTypeNames forType)) || (NoneDefault.tryDefinitions ctxName argTys).IsSome
     | [] -> false
 
 /// The instance of `ctxName` applied to `argTys` built from the definitions attached to the type it is for, its first
-/// argument, as `Point.0` and `Point.+` make a `Sum(Point)`: each member's name and the definition it is. The
-/// definitions' types must be the members' types, which settles any other argument still open. `calleeName` requires
-/// the context at `span`.
+/// argument, as `Point.0` and `Point.+` make a `Sum(Point)`, or from the prelude's for the `Default` of
+/// `#some(a) | #none`: each member's name and the definition it is. The definitions' types must be the members' types,
+/// which settles any other argument still open. `calleeName` requires the context at `span`.
 let private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: Identifier) (ctxName: Identifier) (argTys: Ty list) (span: SourceSpan) : Result<(string * string) list * InferState, Diagnostic list> =
     let ctxText = $"""{ctxName}({argTys |> List.map Unifier.tyToString |> String.concat ", "})"""
     let requirer = InterpolationHoles.requirer calleeName argTys
@@ -158,7 +159,11 @@ let private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: I
     | forType :: _, Some members ->
         // The name a definition for the type is attached under: `Point`, `Money`, `int`.
         let attachTo = attachedTypeNames forType |> List.tryHead |> Option.defaultValue (Unifier.tyToString forType)
-        let found = members |> List.map (fun (memberName, memberTy) -> memberName, memberTy, tryResolveAttachedFunction env forType memberName)
+        let definitionOf memberName =
+            match NoneDefault.tryDefinitions ctxName argTys with
+            | Some definitions -> definitions |> List.tryFind (fst >> (=) memberName) |> Option.map snd |> Option.filter (fun name -> (TypeEnv.tryFind name env).IsSome)
+            | None -> tryResolveAttachedFunction env forType memberName
+        let found = members |> List.map (fun (memberName, memberTy) -> memberName, memberTy, definitionOf memberName)
         match found |> List.filter (fun (_, _, definition) -> definition.IsNone) |> List.map (fun (memberName, _, _) -> $"'{attachTo}.{memberName}'") with
         | [] ->
             found
@@ -498,7 +503,7 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     // A function is passed the compiler's own `ToString` of a tag as a function that writes it.
                     | None, None when InterpolationHoles.passesBuiltIn env ctxName argTys ->
                         Ok (found @ [ Some (InstanceSynthesized InterpolationHoles.builtInMembers) ], current)
-                    | None, None when canSynthesize argTys ->
+                    | None, None when canSynthesize ctxName argTys ->
                         synthesizeInstance env current name ctxName argTys calleeSpan
                         |> Result.map (fun (members, next) -> found @ [ Some (InstanceSynthesized members) ], next)
                     | None, None when InterpolationHoles.isHole name ->
@@ -644,7 +649,7 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
         let derived (env: TypeEnv) =
             derivedInstance env current rigid instanceOf annotatedDef pending.Callee pending.Call pending.Span pending.Context argTys
         let attached env =
-            if canSynthesize argTys then
+            if canSynthesize pending.Context argTys then
                 Some (synthesizeInstance env current pending.Callee pending.Context argTys pending.Span)
             else None
         let synthesize env =
@@ -747,7 +752,7 @@ let internal synthesizeSettledInstances (env: TypeEnv) (state: InferState) (name
         |> List.partition (fun pending ->
             pending.Def = name
             && pending.ArgTys.Length > 1
-            && canSynthesize (pending.ArgTys |> List.map (resolveSoFar state)))
+            && canSynthesize pending.Context (pending.ArgTys |> List.map (resolveSoFar state)))
     settled
     |> List.rev
     |> List.fold (fun result pending ->

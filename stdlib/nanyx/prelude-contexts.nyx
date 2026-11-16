@@ -298,3 +298,31 @@ export def string.toString: string -> string = { s -> s }
   `float` and `bool` do, so a function can read a value of whichever type it is called at:
   `def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e)`.
 export context FromString(a, e) = (fromString: string -> #some(a) | e)
+
+-- Defaults --------------------------------------------------------------------------------------
+
+--| A value of type `a` to fall back on, or to fill with: `def valueOrDefault: [Default(a)] #some(a) |
+  #none -> a`. A type gets one by attaching a `default`, `def Point.default = { -> Point(x = 0, y = 0) }`,
+  as each built-in type does.
+export context Default(a) = (default: () -> a)
+
+--| `0`.
+export def int.default: () -> int = { 0 }
+
+--| `0.0`.
+export def float.default: () -> float = { 0.0 }
+
+--| `""`, the empty string.
+export def string.default: () -> string = { "" }
+
+--| `false`.
+export def bool.default: () -> bool = { false }
+
+--| `[]`, the empty list.
+export def list.default: () -> list(a) = {
+  []
+}
+
+--| `#none`: the `default` of the compiler's own [`Default`] of `#some(a) | #none`, which, being a union, has no
+  name to attach one to.
+export def __noneDefault: () -> #some(a) | #none = { #none }
