@@ -14,24 +14,6 @@ type private Inlined =
       Value: Expression
       Removed: int * int }
 
-/// Whether `expr`, written in place of a name, may need brackets: an operator, a pipe, a branch or a lambda, which
-/// could take in what is around it. The formatter drops the brackets it doesn't need.
-let private isLoose (expr: Expression) =
-    match expr.Kind with
-    | BinaryOp _
-    | Pipe _
-    | IfExpr _
-    | Match _
-    | Except _
-    | UseIn _
-    | Lambda _
-    | WorkflowBindExpr _
-    | WorkflowReturnExpr _ -> true
-    | _ -> false
-
-/// `text`, the text of `expr`, in brackets if it may need them.
-let private bracketed (expr: Expression) (text: string) = if isLoose expr then $"({text})" else text
-
 /// The text of `span` in `source` with `edits` made, those of them that are inside it.
 let private textWith (source: string) (span: SourceSpan) (edits: (int * int * string) list) =
     edits
