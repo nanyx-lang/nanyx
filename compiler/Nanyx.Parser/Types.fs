@@ -261,11 +261,16 @@ let internal fillTypeRefs () =
             sepBy1 typeUnion (attempt (wsInline >>. pstring "," >>. ws))
             .>>. opt (attempt (ws >>. pstring "->" >>. ws >>. typeExpr)))
 
-    // A def's annotation: a type list, possibly after the contexts it needs.
+    // A def's annotation: a type list, possibly after the contexts it needs. A list of several types without `->` is a
+    // tuple, which carries no contexts, so they are its first item's: `([Console] Thunk(int), int)`.
     typeSignatureRef :=
         attempt (
             withSpan ((contextSet .>> ws) .>>. typeList) |>> fun ((ctx, list), span) ->
-                TypeExpr.at span (TypeWithContext(contextsOf ctx, typeListToType list)))
+                match list with
+                | (first :: rest, None), _ when not rest.IsEmpty ->
+                    let first = TypeExpr.at (SourceSpan.between ctx.Span first.Span) (TypeWithContext(contextsOf ctx, first))
+                    typeListToType ((first :: rest, None), span)
+                | _ -> TypeExpr.at span (TypeWithContext(contextsOf ctx, typeListToType list)))
         <|> (typeList |>> typeListToType)
 
     parameterTypeRef := typeUnion

@@ -131,6 +131,26 @@ def p: [Console] Point = Point(x = 1)
     Assert.Contains("doesn't take contexts", diagnostic.Message)
 
 [<Fact>]
+let ``Contexts in front of a tuple type's first item are the item's`` () =
+    // #1728: a tuple carries no contexts, so they are `Thunk(int)`'s.
+    let source = """type Thunk(a) = [k] protected (get: [k] () -> a)
+
+def pair: () -> ([Console] Thunk(int), int) = { (Thunk(get = { 3 }), 0) }
+"""
+    let typed = compileClean (normalized source)
+    Assert.Equal("() -> ([Console] Thunk(int), int)", Unifier.tyToString typed.Types.["pair"])
+
+[<Fact>]
+let ``Contexts in front of a bracketed tuple type are NYX0253`` () =
+    let source = """type Thunk(a) = [k] protected (get: [k] () -> a)
+
+def pair: () -> [Console] (Thunk(int), int) = { (Thunk(get = { 3 }), 0) }
+"""
+    let diagnostic = single (Compiler.compile (normalized source))
+    Assert.Equal(DiagnosticCodes.ContextsOnValueType.Code, diagnostic.Code)
+    Assert.Contains("Only a function type carries contexts", diagnostic.Message)
+
+[<Fact>]
 let ``A type has one context variable, and not a scoped context's scope too`` () =
     let source = """scoped context Tx = private ()
 

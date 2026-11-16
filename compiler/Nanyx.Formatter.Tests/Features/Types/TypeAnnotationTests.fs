@@ -14,6 +14,14 @@ let ``Type annotations read as the docs write them`` () =
     unchanged "export context Console(a) = (print: a -> ())\n"
 
 [<Fact>]
+let ``Contexts in front of a tuple's first item stay its own, and those on a whole tuple keep its brackets`` () =
+    // #1728: without `->`, the contexts in front of a list of types are its first item's.
+    unchanged "def pair: () -> ([Console] Thunk(int), int) = make\n"
+    unchanged "def pair: [Console] Thunk(int), int = (t, 0)\n"
+    unchanged "def pair: () -> [Console] (Thunk(int), int) = make\n"
+    unchanged "def f: [Console] Thunk(int), int -> int = second\n"
+
+[<Fact>]
 let ``A record that is a type's only argument is written in the application's own brackets`` () =
     Assert.Equal(
         "def total = { (items: list(price: int)) -> items \\map { .price } \\sum }\n",
