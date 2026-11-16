@@ -107,6 +107,12 @@ VS Code's own `editor.codeLens` and `editor.inlayHints.enabled` settings turn al
 
 **Format Document** formats a `.nyx` file with the [standard formatter](./formatter). **Format Selection** formats only the top-level definitions the selection touches, and leaves the rest of the file as it is. A file that does not parse is left as it is. To format every time you save, set `editor.formatOnSave` to `true`, as in the example above.
 
+The lines that formatting would change are marked as you type, with a hint (three dots under the start of the first line) on each block of them, even while the file has type errors. Each has two quick fixes: **Format these lines** formats that block alone, and **Format the document** formats them all. A file that does not parse has no marks.
+
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `nanyx.formattingHints` | on | Mark the lines that `nanyx format` would change. |
+
 # Info view
 
 The info view follows the cursor and shows what the compiler knows there. It lives in VS Code's secondary side bar (the

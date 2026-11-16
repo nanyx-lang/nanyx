@@ -5,7 +5,16 @@
 -- Arrays ----------------------------------------------------------------------------------------
 
 -- An array's functions are in `nanyx/array`. What the compiler derives for an array's `==` and
--- `toString` calls these, which every module can reach.
+-- `toString` calls these, which every module can reach, and calling an array, `xs(i)`, calls
+-- `array.at`.
+
+--| The element of `xs` at `index`, counting from 0, or `#none` when `index` is negative or past the
+  end. Calling the array, `xs(index)`, is the same.
+export def array.at: array(a), int -> #some(a) | #none = { xs, index ->
+  if index >= 0 and index < __nanyx_array_length(xs)
+    then #some(__nanyx_array_get(xs, index))
+    else #none
+}
 
 --| Whether the arrays `xs` and `ys` hold equal elements in the same order, as `same` compares two
   elements. The `==` the compiler derives for an array calls it.

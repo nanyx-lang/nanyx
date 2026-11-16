@@ -25,14 +25,6 @@ export def array.length: array(a) -> int = { xs ->
   __nanyx_array_length(xs)
 }
 
---| The element of `xs` at `index`, counting from 0, or `#none` when `index` is negative or past the
-  end.
-export def array.at: array(a), int -> #some(a) | #none = { xs, index ->
-  if index >= 0 and index < __nanyx_array_length(xs)
-    then #some(__nanyx_array_get(xs, index))
-    else #none
-}
-
 --| An array of `count` elements, the one at each index `f` of it: `array.init(3, { i -> i * i })`
   is `[0, 1, 4]`. A `count` of 0 or less makes an empty array.
 export def array.init: [c] int, ([c] int -> a) -> array(a) = { count, f ->

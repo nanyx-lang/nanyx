@@ -218,3 +218,18 @@ export def somes: list(#some(a) | r) -> list(a) = { options ->
 
   options \list.fold([], keep) \list.reverse
 }
+
+--| The values of `options`, in order, if every element is `#some`; otherwise the first element that
+  isn't, as it is. It works on results too, giving the first `#error`, and turns what parses a list
+  of inputs into one result: `["1", "2", "x"] \list.map(int.fromString) \allSome` is `#invalidInt`.
+  Stack-safe: it works on a list of any length.
+export def allSome: list(#some(a) | r) -> #some(list(a)) | r = { options ->
+  allSomeOnto(options, [])
+}
+
+--| The values of `options` in order after the reversed `acc`, or the first element that isn't `#some`.
+def allSomeOnto: list(#some(a) | r), list(a) -> #some(list(a)) | r = {
+  | [], acc -> #some(list.reverse(acc))
+  | [#some(x), ...rest], acc -> allSomeOnto(rest, [x, ...acc])
+  | [other, ..._], _ -> other
+}

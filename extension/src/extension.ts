@@ -74,7 +74,8 @@ export async function activate(context: vscode.ExtensionContext) {
         event.affectsConfiguration("nanyx.asciiTypes") ||
         event.affectsConfiguration("nanyx.greekTypeVariables") ||
         event.affectsConfiguration("nanyx.topLevelTypeHints") ||
-        event.affectsConfiguration("nanyx.inlayHints")
+        event.affectsConfiguration("nanyx.inlayHints") ||
+        event.affectsConfiguration("nanyx.formattingHints")
       ) {
         void startOrRestart(context);
       }
@@ -303,6 +304,9 @@ async function restartClient(context: vscode.ExtensionContext, executable: strin
   }
   if (!config.get<boolean>("inlayHints.patternVariables", true)) {
     args.push("--no-pattern-variable-type-hints");
+  }
+  if (!config.get<boolean>("formattingHints", true)) {
+    args.push("--no-format-hints");
   }
   // Working on the compiler, the output channel shows what each compile cost, module by module.
   if (config.get<boolean>("developmentMode", false)) {

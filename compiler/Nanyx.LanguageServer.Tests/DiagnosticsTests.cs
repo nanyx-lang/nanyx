@@ -82,7 +82,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
 
         async Task<Diagnostic> PublishedWith(FSharpMap<string, FSharpOption<Severity>> severities)
         {
-            await RestartWithAsync(ServerSettings.Default with
+            await RestartWithAsync(TestSettings with
             {
                 Linters = new LinterOptions(ListModule.OfSeq([linter]), severities)
             });
