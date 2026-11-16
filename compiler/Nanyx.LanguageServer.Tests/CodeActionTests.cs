@@ -139,10 +139,33 @@ public sealed class CodeActionTests : LanguageServerTestBase
         Open(uri, text);
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        var extract = Assert.Single(await CodeActionsIn(uri, new Range(1, 13, 1, 18)), action => action.Kind == CodeActionKind.RefactorExtract);
+        var extract = Assert.Single(await CodeActionsIn(uri, new Range(1, 13, 1, 18)), action => action.Title.StartsWith("Introduce local `"));
         Assert.Equal("Introduce local `result`", extract.Title);
         Assert.Equal(
             "def area = { (s: int) ->\n  def result = s * 2\n  def side = result + 1\n  side * side\n}\n",
             Applied(text, Assert.Single(extract.Edit!.Changes![uri])));
+
+        // Then the new name is renamed.
+        Assert.Equal("nanyx.renameAt", extract.Command?.Name);
+        Assert.Equal([uri.ToString(), "1", "6"], extract.Command!.Arguments!.Select(argument => argument.ToString()));
+    }
+
+    [Fact]
+    public async Task A_selected_expression_offers_to_introduce_a_function()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-introduce-function");
+        const string text = "def area = { (s: int) ->\n  def side = s * 2 + 1\n  side * side\n}\n";
+
+        Open(uri, text);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var actions = await CodeActionsIn(uri, new Range(1, 13, 1, 18));
+        var extract = Assert.Single(actions, action => action.Title == "Introduce function `extracted`");
+        Assert.Equal(CodeActionKind.RefactorExtract, extract.Kind);
+        Assert.Equal(
+            "def area = { (s: int) ->\n  def side = extracted(s) + 1\n  side * side\n}\n\ndef extracted: int -> int = { s ->\n  s * 2\n}\n",
+            Applied(text, Assert.Single(extract.Edit!.Changes![uri])));
+        Assert.Equal([uri.ToString(), "5", "4"], extract.Command!.Arguments!.Select(argument => argument.ToString()));
+        Assert.Contains(actions, action => action.Title == "Introduce local function `extracted`");
     }
 }

@@ -129,6 +129,7 @@
     <Compile Include="Refactorings/SelectionRanges.fs" />
     <Compile Include="Refactorings/WriteInferredType.fs" />
     <Compile Include="Refactorings/IntroduceLocal.fs" />
+    <Compile Include="Refactorings/IntroduceFunction.fs" />
     <Compile Include="Refactorings/Rename.fs" />
     <Compile Include="Documentation.fs" />
     <Compile Include="StandardLibraryDocs.fs" />

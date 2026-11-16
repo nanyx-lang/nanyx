@@ -74,9 +74,6 @@ let private resolutions (file: string) (move: int -> int) (result: CompileResult
         |> Set.ofList
     | None -> Set.empty
 
-let private errorCount (result: CompileResult) =
-    result.Diagnostics |> List.filter (fun diagnostic -> diagnostic.Severity = Severity.Error) |> List.length
-
 /// The edits that rename the name at `offset` in `source`, the text of the root module of `result` compiled as `file`,
 /// and every use of it in the module, to `newName`, or why it can't be. `recompile` compiles a text of the module as
 /// `result` was compiled: the renamed text is compiled, and the rename refused unless every name in it refers to what
@@ -116,14 +113,9 @@ let edits
             let after = recompile renamed
             let before = resolutions file move result
             let now = resolutions file id after
-            if after.Typed.IsNone || errorCount after > errorCount result then
-                let reason =
-                    after.Diagnostics
-                    |> List.tryFind (fun diagnostic -> diagnostic.Severity = Severity.Error && not (result.Diagnostics |> List.exists (fun old -> old.Message = diagnostic.Message)))
-                    |> Option.map (fun diagnostic -> $": {diagnostic.Message}")
-                    |> Option.defaultValue ""
-                Error $"The renamed module would not compile{reason}"
-            else
+            match RefactoringText.newError result after with
+            | Some reason -> Error $"The renamed module would not compile{reason}"
+            | None ->
                 match Set.difference now before |> Set.toList with
                 | [] -> Ok edits
                 | (start, _) :: _ ->

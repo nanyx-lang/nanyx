@@ -20,6 +20,8 @@ const COMMAND_DOWNLOAD = "nanyx.downloadCompiler";
 const COMMAND_RESTART = "nanyx.restartServer";
 const COMMAND_RUN = "nanyx.runFile";
 const COMMAND_INFO_VIEW = "nanyx.showInfoView";
+/** Run by the language server after a refactoring that makes up a name, to start renaming it. Not in the palette. */
+const COMMAND_RENAME_AT = "nanyx.renameAt";
 
 /** When the extension last asked GitHub for a newer compiler release (milliseconds since the epoch). */
 const LAST_UPDATE_CHECK = "nanyx.lastUpdateCheck";
@@ -62,6 +64,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand(COMMAND_RESTART, () => startOrRestart(context)),
     vscode.commands.registerCommand(COMMAND_RUN, (uri?: vscode.Uri) => runCurrentFile(context, uri)),
+    vscode.commands.registerCommand(COMMAND_RENAME_AT, renameAt),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (
         event.affectsConfiguration("nanyx.path") ||
@@ -345,4 +348,15 @@ function log(line: string): void {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Starts renaming the name at `line` and `character` of the document `uri`, in the editor that shows it. */
+async function renameAt(uri: string, line: number, character: number) {
+  const editor = vscode.window.visibleTextEditors.find((candidate) => candidate.document.uri.toString() === uri);
+  if (!editor) {
+    return;
+  }
+  const position = new vscode.Position(line, character);
+  editor.selection = new vscode.Selection(position, position);
+  await vscode.commands.executeCommand("editor.action.rename");
 }

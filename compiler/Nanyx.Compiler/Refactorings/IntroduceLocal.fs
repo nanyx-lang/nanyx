@@ -6,6 +6,7 @@ module NyxCompiler.Refactorings.IntroduceLocal
 open Parser.Program
 open NyxCompiler
 open Nanyx.Formatter
+open NyxCompiler.Refactorings.RefactoringText
 
 let private title = "Introduce local"
 
@@ -72,38 +73,6 @@ let rec private findIn (source: string) (selection: SourceSpan) (site: Site) (so
         | Some found -> Some found
         | None -> inChildren ()
 
-/// Each expression within `expr`, `expr` among them, with the statements of blocks, in the order they are written.
-let rec private within (expr: Expression) : Expression list =
-    let children, statements = SyntaxTree.childrenOf expr
-    expr :: (children @ (statements |> List.collect SyntaxTree.ofStatement) |> List.collect within)
-
-/// The start of the line `offset` is on, and the spaces it starts with.
-let private lineOf (source: string) (offset: int) =
-    let start = source.LastIndexOf('\n', max 0 (offset - 1)) + 1
-    let start = if offset = 0 then 0 else start
-    let indent = source.Substring(start) |> Seq.takeWhile (fun c -> c = ' ') |> Seq.length
-    start, String.replicate indent " "
-
-/// Where a def before what starts at `offset` goes: before the comments on the lines just above it, which are its doc
-/// comment or about it, and before the attributes written above it.
-let private insertionPoint (source: string) (items: TopLevelItem list) (offset: int) =
-    let attributeStart =
-        items
-        |> List.sortBy (fun item -> item.Span.Start)
-        |> List.filter (fun item -> item.Span.End <= offset)
-        |> List.rev
-        |> List.takeWhile (fun item -> match item.Kind with Attribute _ -> true | _ -> false)
-        |> List.tryLast
-        |> Option.map (fun item -> item.Span.Start)
-        |> Option.defaultValue offset
-    let rec above (lineStart: int) =
-        if lineStart = 0 then lineStart
-        else
-            let previous, _ = lineOf source (lineStart - 1)
-            if source.Substring(previous, lineStart - 1 - previous).TrimStart().StartsWith "--" then above previous else lineStart
-    let lineStart, _ = lineOf source attributeStart
-    if source.Substring(lineStart, attributeStart - lineStart).Trim() = "" then above lineStart else attributeStart
-
 /// The name a local for `expr` takes: the name of the function it calls or the field it reads, or else `result`, made
 /// unique among `taken` by a number after it. The function's name is usually taken: a local of that name would hide
 /// it.
@@ -115,9 +84,7 @@ let private nameFor (taken: Set<string>) (expr: Expression) =
         | Pipe(_, name, _, _) when not (MadeUpNames.isMadeUp name) -> ownName name
         | MemberAccess(_, field, _) -> field
         | _ -> "result"
-    let named = if Names.isIdentifier named && not (MadeUpNames.isMadeUp named) then named else "result"
-    if not (taken.Contains named) then named
-    else Seq.initInfinite (fun index -> if index = 0 then "result" else $"result{index + 1}") |> Seq.find (taken.Contains >> not)
+    unique taken "result" (if Names.isIdentifier named && not (MadeUpNames.isMadeUp named) then named else "result")
 
 /// The names the identifiers within `exprs` are written with, each with the symbol it resolved to.
 let private referencesIn (typed: TypedModule) (expr: Expression) =
@@ -182,27 +149,6 @@ let private sameAs (typed: TypedModule) (scope: Expression list) (expr: Expressi
         // An occurrence inside another is replaced with it.
         |> fun found -> found |> List.filter (fun other -> not (found |> List.exists (fun outer -> outer.Id <> other.Id && SourceSpan.contains outer.Span other.Span)))
 
-/// `source` with `edits` made.
-let private applied (source: string) (edits: (int * int * string) list) =
-    edits
-    |> List.sortByDescending (fun (start, _, _) -> start)
-    |> List.fold (fun (text: string) (start, finish, text') -> text.Substring(0, start) + text' + text.Substring(finish)) source
-
-/// The one edit that turns `before` into `after`: what differs between their common start and their common end.
-let private difference (file: string) (before: string) (after: string) : TextEdit =
-    let prefix = Seq.zip before after |> Seq.takeWhile (fun (a, b) -> a = b) |> Seq.length
-    let maxSuffix = min before.Length after.Length - prefix
-    let suffix =
-        Seq.zip (Seq.rev before) (Seq.rev after) |> Seq.take maxSuffix |> Seq.takeWhile (fun (a, b) -> a = b) |> Seq.length
-    let like = { File = file; Start = 0; End = 0; StartLine = 0; StartColumn = 0 }
-    { Span = TextEdit.spanBetween before like prefix (before.Length - suffix); NewText = after.Substring(prefix, after.Length - suffix - prefix) }
-
-/// `text` with the top-level items from `start` to `finish` formatted with `options`, or as it is when it can't be.
-let private formatted (options: Formatter.Options) (file: string) (text: string) (start: int) (finish: int) =
-    match RangeFormatting.formatRange options file text start finish with
-    | Ok edits -> applied text (edits |> List.map (fun edit -> edit.Start, edit.End, edit.Text))
-    | Error _ -> text
-
 /// The refactorings at `selection` in `source`, the text of the root module of `result` compiled as `file`, laid out
 /// with `options`: where the selection is exactly an expression, introducing a local for it, and for it and the other
 /// expressions after it in the same block that are written and mean the same, when there are any. The def goes
@@ -212,7 +158,7 @@ let private formatted (options: Formatter.Options) (file: string) (text: string)
 /// of `and`, a lambda), uses `try` or `return`, or reads a cell assigned before it. Empty where the selection is not
 /// an expression, or where the module did not type-check.
 let at (options: Formatter.Options) (file: string) (source: string) (result: CompileResult) (selection: SourceSpan) : Offer list =
-    let source = source.Replace("\r\n", "\n").Replace("\r", "\n")
+    let source = normalised source
     match result.Syntax, result.Typed with
     | Some syntax, Some typed when selection.End > selection.Start ->
         // The selection less the spaces around it.
@@ -247,19 +193,7 @@ let at (options: Formatter.Options) (file: string) (source: string) (result: Com
             match movingRefusal typed outer siteStart expr with
             | Some reason -> [ Refused(title, RefactoringKind.Extract, reason) ]
             | None ->
-                let taken =
-                    (typed.Symbols |> Map.values |> Seq.map (fun symbol -> symbol.Name) |> Set.ofSeq)
-                    + (typed.ModuleNames |> Map.keys |> Set.ofSeq)
-                    + (syntax |> List.collect (function Kind (Def (ValueDef(_, _, _, value))) | Kind (Expr value) -> within value | _ -> [])
-                       |> List.collect (fun part ->
-                           match part.Kind with
-                           | IdentifierExpr name -> [ name ]
-                           // A pipe or call finds its function by name among the locals first.
-                           | FunctionCall(name, _, _)
-                           | Pipe(_, name, _, _) -> [ name; name.Substring(name.LastIndexOf '.' + 1) ]
-                           | _ -> [])
-                       |> Set.ofList)
-                let name = nameFor taken expr
+                let name = nameFor (takenNames syntax typed) expr
                 let exprText = source.Substring(expr.Span.Start, expr.Span.End - expr.Span.Start)
                 let offer (title: string) (uses: Expression list) =
                     let replacements = uses |> List.map (fun used -> used.Span.Start, used.Span.End, name)
@@ -285,12 +219,8 @@ let at (options: Formatter.Options) (file: string) (source: string) (result: Com
                                     (source.Substring(body.Span.Start, body.Span.End - body.Span.Start))
                                     (replacements |> List.map (fun (start, finish, text) -> start - body.Span.Start, finish - body.Span.Start, text))
                             [ body.Span.Start, body.Span.End, $"\n{indent}def {name} = {exprText}\n{indent}{bodyText}\n{lambdaIndent}" ]
-                    let after = applied source edits
-                    let changedStart = edits |> List.map (fun (start, _, _) -> start) |> List.min
-                    let growth = after.Length - source.Length
-                    let changedEnd = (edits |> List.map (fun (_, finish, _) -> finish) |> List.max) + growth
-                    let after = formatted options file after changedStart changedEnd
-                    Available { Title = title; Kind = RefactoringKind.Extract; Edits = [ difference file source after ] }
+                    let after = appliedAndFormatted options file source edits
+                    Available { Title = title; Kind = RefactoringKind.Extract; Edits = [ difference file source after ]; Rename = declarationOf after name }
                 let others = sameAs typed scope expr
                 offer $"{title} `{name}`" [ expr ]
                 :: (if others.IsEmpty then [] else [ offer $"{title} `{name}` for all {others.Length + 1} occurrences" (expr :: others) ])

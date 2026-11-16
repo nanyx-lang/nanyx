@@ -14,14 +14,19 @@ and inline, and the small rewrites that save typing. Its issues carry the
 
 The language server offers go to definition, find references within a document, hover, inlay hints, completion,
 semantic tokens, formatting, and quick fixes from diagnostics ([Language server and editor](./language-server)).
-Expand and shrink selection, writing the inferred type and introducing a local are done, and rename within a module.
+Expand and shrink selection, writing the inferred type, introducing a local or a function are done, and rename within a
+module.
 
 Refactorings live in the compiler's `Refactorings/` folder, one file each, after the editor features they build on
 (`Outline.fs`), in the namespace `NyxCompiler.Refactorings`. Their tests are in `Features/Refactorings/` of the
 compiler's tests. `Refactoring.fs` holds what they share: a `Refactoring` is a title, a `RefactoringKind` (the code
-action kind) and its edits, and an `Offer` is one that is `Available` or `Refused` with its reason. The language
+action kind), its edits and where a name it made up is in the text they make, and an `Offer` is one that is `Available`
+or `Refused` with its reason. Its `RefactoringText` module has what the ones that write code share: making edits and
+formatting the result, where a def goes, which names are taken, and whether a recompiled text has new errors. The language
 server's `CodeActionHandler` lists the offers at the start of the requested range as code actions, a refused one
-disabled with its reason, so the editor shows why; selection ranges have a handler of their own.
+disabled with its reason, so the editor shows why; selection ranges have a handler of their own. A refactoring
+that makes up a name carries the command `nanyx.renameAt`, which the VS Code extension registers: after the edits, it
+puts the cursor on the name and starts a rename.
 
 ## Expand and shrink selection
 
@@ -63,9 +68,34 @@ where it reads a cell assigned earlier in the statement.
 
 Its output is formatted: the compiler references the formatter, and `RangeFormatting.formatRange` lays out the
 top-level items the edit touches, with the document's formatter settings, and the refactoring is the one edit from
-the old text to that. Its tests check the result compiles and is formatted.
+the old text to that. Its tests check the result compiles and is formatted. The new name starts a rename.
 
-Still to do: the new name should start a rename.
+## Introduce function
+
+`IntroduceFunction.at` is offered where the selection, less the spaces around it, is exactly an expression or a run of
+whole statements of a block (a run with a def in it wins over the expression that is a def's value, as `mut x = 0`'s
+is). It makes two offers: a top-level def after the item that holds the selection, and a local function before the
+statement that holds it, when that statement starts its line. The new name is `extracted`, numbered to be unique as
+introduce local's is, and starts a rename.
+
+- **Parameters** are the locals, parameters and pattern variables it uses that are declared outside it, in the order
+  they are first used. A cell is passed as one (`{ mut count -> ... }`, called `extracted(mut count)`), so the
+  function reads and changes the cell itself; this covers a cell only read, too, which a lambda in the selection
+  might read later.
+- **Result:** an expression's value. Statements give the locals they define that the statements after them in the
+  block use: one is defined again by the call (`def doubled = extracted(w)`), several as a tuple
+  (`def (a, b) = extracted(w)`); with none the call is a statement, and statements ending in a def end with `()`.
+- **Type:** the text is compiled with the def written without a type, and the type it was inferred is written as
+  Write the inferred type writes it, contexts included (`[ToString(a), Console] a -> ()`). If the text with the type
+  written does not compile, the def is left without one. The offer is refused if the text does not compile at all,
+  with the first new error. `at` takes the function that compiles a text, as `Rename.edits` does; the server compiles
+  the document's text as it does when it changes.
+- **Refused** where the selection uses `try` or `return`, where statements have a `use`, an import or a type definition
+  (the statements after them may need it), where they declare a cell the statements after them use, and where a
+  selection inside a def is not a whole expression or whole statements.
+
+Its tests compile the result and check it is formatted. Each code action request with such a selection compiles the
+document two or three times more; if that is slow on large files, the work can move to `codeAction/resolve`.
 
 ## Rename
 
@@ -101,7 +131,7 @@ prefixes.
 - **Its output is formatted.** Edits are laid out as the formatter would lay out the result, so applying a
   refactoring never leaves code `nanyx format` would change.
 - **Code action kinds** are the standard ones, so editors put them in the usual menus: `refactor.extract` (introduce
-  local, introduce function), `refactor.inline`, `refactor.rewrite` (write the inferred type, call and pipe), and
+  local and introduce function), `refactor.inline`, `refactor.rewrite` (write the inferred type, call and pipe), and
   `source.organizeImports`. Rename and selection ranges have their own LSP requests.
 - **A new name starts a rename.** A refactoring that invents a name (introduce local, introduce function) leaves the
   cursor on it, ready to rename.
@@ -113,7 +143,7 @@ prefixes.
 | Rename a symbol (within a module) | [#1534](https://github.com/nanyx-lang/nanyx/issues/1534) |
 | Expand and shrink selection (done) | [#1535](https://github.com/nanyx-lang/nanyx/issues/1535) |
 | Introduce local (done) | [#1536](https://github.com/nanyx-lang/nanyx/issues/1536) |
-| Introduce function | [#1537](https://github.com/nanyx-lang/nanyx/issues/1537) |
+| Introduce function (done) | [#1537](https://github.com/nanyx-lang/nanyx/issues/1537) |
 | Inline a local or a function | [#1538](https://github.com/nanyx-lang/nanyx/issues/1538) |
 | Write the inferred type (done) | [#1539](https://github.com/nanyx-lang/nanyx/issues/1539) |
 | Convert between a call and a pipe | [#1540](https://github.com/nanyx-lang/nanyx/issues/1540) |
