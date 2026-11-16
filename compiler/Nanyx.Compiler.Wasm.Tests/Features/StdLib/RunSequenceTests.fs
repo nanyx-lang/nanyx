@@ -67,3 +67,26 @@ for 1..3 | i -> println(i)
 for ["a", "b"], 10.. | s, i -> println("{s}{i}")
 """
     |> assertRan "1\n2\n3\na10\nb11\n"
+
+[<Fact>]
+let ``Run - a sequence made in a pure function runs its function's context when it is pulled`` () =
+    // #1738
+    run """
+def made: () -> [Console] seq(int) = {
+  (1..3) \seq.map { x ->
+    println("pull {x}")
+    x * 10
+  }
+}
+
+def first: [Console] () -> () = {
+  def s = made()
+  println("made")
+  match s.next()
+    | #next(x, _) -> println("got {x}")
+    | #done -> ()
+}
+
+first()
+"""
+    |> assertRan "made\npull 1\ngot 10\n"

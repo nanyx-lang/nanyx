@@ -1032,12 +1032,21 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     | _ -> None
                 // A lambda can use the contexts its parameter's type requires, which the callee supplies.
                 // The instances of parameterised contexts it is given are in its type, so the callee passes them.
+                // One whose contexts only the call's result carries is not run by the call (see
+                // `Contexts.asCarriedArgument`).
                 let inferLambda state lambda lambdaArgs lambdaBody expectedInput paramTy =
                     let lambdaEnv, state = extendEnvForLambdaArgument env state lambda (Some paramTy)
                     let instances = instancesSuppliedToLambda state lambda (Some paramTy)
-                    match expectedInput with
-                    | Some expectedInput -> inferLambdaWithExpected lambdaEnv state lambda lambdaArgs lambdaBody (Some expectedInput) None
-                    | None -> inferExpr lambdaEnv state lambda
+                    let ownContexts =
+                        match contextRequirementsOf env state name |> Option.map ContextVariables.names with
+                        | Some vars when not vars.IsEmpty -> ContextVariables.boundAt (resolveSoFar state) vars scheme.Type funcTy
+                        | _ -> []
+                    let resultTy = match Unifier.unalias funcTy with TyFunc(_, ret, _) -> ret | _ -> TyUnion []
+                    state
+                    |> Contexts.asCarriedArgument ownContexts resultTy paramTy (fun state ->
+                        match expectedInput with
+                        | Some expectedInput -> inferLambdaWithExpected lambdaEnv state lambda lambdaArgs lambdaBody (Some expectedInput) None
+                        | None -> inferExpr lambdaEnv state lambda)
                     |> Result.map (fun (typedLambda, next) ->
                         match instances, Unifier.unalias typedLambda.Type with
                         | _ :: _, TyFunc(input, output, used) ->
