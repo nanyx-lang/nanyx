@@ -189,9 +189,8 @@ def bindSome: [c] #some(a) | r, ([c] a -> #some(b) | r) -> #some(b) | r
 
 Continues with `f` on the value of `#some`. The other tags of both steps are kept: `r` stands for all of them,
 and a step given with other tags adds them to it, so `#some("42") \bindSome(int.fromString)` on a
-`#some(string) | #notFound` is a `#some(int) | #notFound | #invalidInt`. A function that is itself
-generic in both steps cannot say so yet: a union has one rest, so `#some(b) | r | s` is not a type
-([#680](https://github.com/nanyx-lang/nanyx/issues/680)).
+`#some(string) | #notFound` is a `#some(int) | #notFound | #invalidInt`. A union has one rest, so a
+function generic in both steps shares one `r` too: `#some(b) | r | s` is an error (NYX0259).
 
 ## `someOr`
 

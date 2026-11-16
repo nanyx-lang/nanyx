@@ -1689,6 +1689,20 @@ def a = Array[...s, 3]  -- error NYX0258: A spread in a square-bracket literal t
 ```
 
 To fix it, spread a list of the elements, such as `set.toList(s)`.
+
+# NYX0259: Union with more than one rest variable
+
+A union has at most one rest variable, which stands for the tags it has besides those it names
+([Tags](../tour/tags#polymorphic-tag-unions)). A second one would stand for the same other tags, so it is an error where
+it is written rather than dropped.
+
+```nanyx
+def both: (#some(a) | r), (a -> #some(b) | s) -> #some(b) | r | s = { x, f -> bindOption(x, f) }
+-- error NYX0259: A union has at most one rest variable, and this one already has 'r': 's' would stand for the same other tags
+```
+
+To fix it, write one rest, and let the unions it is joined from share it: `(#some(a) | r), (a -> #some(b) | r) -> #some(b) | r`.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it
