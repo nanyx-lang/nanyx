@@ -182,7 +182,9 @@ A rule promoted to `error` fails `nanyx run` and `build` like a compiler error d
 ## 5. The public contract (later)
 
 Once the internal linters have shaken out the semantic model, the public contract can be designed with
-evidence rather than guesses. The direction so far:
+evidence rather than guesses. Decided by the maintainer as the design
+([#107](https://github.com/nanyx-lang/nanyx/issues/107)), with the details (the query functions, the diagnostic and
+fix types, the version scheme, the time budget per keystroke) to be written here next:
 
 - Linters are Nanyx packages, compiled to WebAssembly and run at compile time on the embedded Wasmtime engine
   the compiler already ships. The official linter becomes one too ([Built-ins as packages](./built-ins-as-packages)).
@@ -190,6 +192,16 @@ evidence rather than guesses. The direction so far:
   symbol, children of a node) rather than a serialized copy of the whole tree. Queries keep the compiler's internal
   representation free to change, and avoid copying large trees across the WASM boundary.
 - The contract is versioned from day one, and a linter declares the version it targets.
+- A fix is a list of text edits, applied by the editor and by `nanyx check --fix`.
+- A linter may see the whole package, not only one module, for rules such as "exported but never used".
+- A package names its linters in its manifest's `linters` field ([The package manifest](./package-manifest)).
+
+## 6. Suppression in source
+
+Decided ([#106](https://github.com/nanyx-lang/nanyx/issues/106)): an attribute, `@allow(default/unusedBindings)`,
+before a def (a local one too), suppresses that rule's diagnostics inside it; several rules are listed
+comma-separated. There's no comment form. An `@allow` that suppresses nothing is itself reported. The `_`-prefixed
+name for an intentionally unused binding stays as a convention alongside it.
 
 # Code with errors
 
@@ -204,10 +216,9 @@ a type: `Types` is a map, and a missing entry means "unknown".
 **Public linters.** Design the contract for Nanyx-authored linters
 ([#107](https://github.com/nanyx-lang/nanyx/issues/107)), based on what the internal linters taught us.
 
-# Open questions
+# Planned rules
 
-- **Suppression in source.** An attribute (`@allow(default/unusedBindings)`) on a definition, a comment form, or
-  only the convention that a `_`-prefixed name is intentionally unused? The docs already use `_` patterns.
-- **Linters across modules.** "Exported but never used anywhere in the project" needs every module's semantic
-  model at once; per-module analysis is enough for the first rules.
-- **Fix application.** Fixes are text edits; does the CLI get a `--fix`, or are fixes editor-only at first?
+- **A pure value thrown away** ([#900](https://github.com/nanyx-lang/nanyx/issues/900), decided): a rule of its own,
+  separate from `unusedResults`, for a statement whose value is thrown away and which is pure (neither its type nor
+  any call in it requires a context), such as `n + 2` on a line of its own. An error by default, with a fix that
+  removes the statement. `unusedResults` stays for calls.

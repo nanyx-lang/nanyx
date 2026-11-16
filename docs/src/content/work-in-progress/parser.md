@@ -4,9 +4,8 @@ description: "Moving the parser from FParsec to a lexer and a hand-written recur
 order: 34
 ---
 
-This page is a proposal for how the parser should work, and how to get there from today's parser without a rewrite
-all at once. Nothing on it is decided yet: [#846](https://github.com/nanyx-lang/nanyx/issues/846) tracks it, labelled
-`needs decision` until the maintainer settles the open questions at the end.
+This page is how the parser should work, and how to get there from today's parser without a rewrite all at once.
+Decided by the maintainer ([#846](https://github.com/nanyx-lang/nanyx/issues/846)): go ahead, in the stages below.
 
 # Today
 
@@ -143,14 +142,17 @@ Once comments and whitespace travel with tokens, the formatter could work from a
 trivia (a concrete syntax tree), instead of re-attaching comments by position. That is a separate decision, after
 stage 6.
 
+# Decided
+
+On 2026-11-16, in [#846](https://github.com/nanyx-lang/nanyx/issues/846):
+
+1. **Do it, in stages, at Priority Soon.** Error recovery (stage 5) is what the language server and the
+   [refactorings](./refactorings) need most.
+2. **All the way,** through stage 6, not stopping after the lexer and layout pass.
+3. **Error messages that change at stage 4** are accepted after review, and their tests updated, following the
+   [house style](./error-messages#house-style).
+
 # Open questions
 
-1. **Whether to do this at all, and when.** FParsec works, and the bugs above have been fixed one at a time. The case
-   for the move grows with how much the language server matters, because error recovery (stage 5) is what it needs
-   most.
-2. **Where to stop.** Stages 1 and 2 alone remove the keyword and layout classes of bug, and could stand on their
-   own with FParsec reading layout tokens. That isn't recommended, since FParsec is built to read characters and
-   loses most of its convenience on tokens, but it is a smaller step.
-3. **Error messages that change at stage 4.** Accept the new wording wholesale after review, or keep today's
-   messages where tests assert them?
-4. **A concrete syntax tree** for the formatter, after stage 6, or not.
+- **A concrete syntax tree** for the formatter and the refactorings, after stage 6, or not: decided once the
+  refactorings show whether they need one.
