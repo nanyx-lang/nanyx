@@ -26,7 +26,7 @@ chosen by the expected type (`def a: Array(int) = [1, 2]`) or by the type's name
 - **Spreads.** `__spreadItems(x)` is read as the prelude's `__spreadArray(x)` for an array and `__spreadList(x)` for a
   list (`CollectionLiterals.inferSpread`); anything else is NYX0258.
 - **The standard library.** `fromArray` is attached to `list`, `set`, `map` and `Array` in the prelude, and to `MStack`,
-  `MList` and `MArray` in their modules, written in Nanyx. `__arrayOf` makes the array from the list of the items.
+  `MList`, `MArray`, `Stack`, `Queue`, `Trie` and `StringTrie` in their modules, written in Nanyx. `__arrayOf` makes the array from the list of the items.
 
 # Still open
 
