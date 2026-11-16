@@ -73,3 +73,42 @@ let ``The outline tells a scoped context from another`` () =
     Assert.Equal<Outline.OutlineKind list>(
         [ Outline.OutlineKind.ScopedContextType; Outline.OutlineKind.ContextType ],
         outline |> List.map _.Kind)
+
+// A type that requires a scoped context at more than one scope numbers them in order of first appearance; at one
+// scope it is written plain (#1553).
+
+let private twoScopes = """def run2 = { f, g ->
+  def a = memory { f() }
+  memory { g() }
+}
+
+def one = { f -> memory { f() } }
+
+def nested = memory {
+  mut y = 0
+  memory {
+    mut z = 1
+    def both = { y := z }
+    both()
+  }
+  y
+}
+"""
+
+[<Fact>]
+let ``A scoped context required at two scopes is numbered in the module's types and in hover`` () =
+    let source = twoScopes.ReplaceLineEndings "\n"
+    let typed = compileClean source
+    Assert.Equal("([Memory₁] () -> a), ([Memory₂] () -> b) -> b", Unifier.tyToDisplayString Ascii typed.Types.["run2"])
+    Assert.Equal("([Memory] () -> a) -> a", Unifier.tyToDisplayString Ascii typed.Types.["one"])
+    Assert.Equal(Some "both: [Memory₁, Memory₂] () -> ()", hoverType source "both =")
+
+[<Fact>]
+let ``So it is in inlay hints and in error messages`` () =
+    let source = twoScopes.ReplaceLineEndings "\n"
+    let hints = localInlayHints Unicode "" (Compiler.compile source) |> List.map (fun hint -> hint.Name, hint.Type)
+    Assert.Contains(("both", "[Memory₁, Memory₂] () -> ()"), hints)
+    let result = Compiler.compile (source + "def wrong: int = run2\n")
+    let diagnostic = Assert.Single result.Diagnostics
+    Assert.Contains("Memory₁", diagnostic.Message)
+    Assert.Contains("Memory₂", diagnostic.Message)
