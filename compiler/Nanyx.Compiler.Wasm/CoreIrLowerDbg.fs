@@ -230,5 +230,10 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
                 let entryTy = TyRecord(Map.ofList [ "0", keyTy; "1", valueTy ])
                 listText value entryTy "Map" (fun entry k -> entryText entry keyTy valueTy k) (ShowingRest(entryTy, true))
             | Sets.SetType elementTy -> listText value elementTy "Set" (showElement elementTy) (ShowingRest(elementTy, false))
+            // An array is written as the list of its elements is, after its type's name.
+            | Arrays.ArrayType elementTy ->
+                let elements = local "__dbg_elements" (IrList(tools.ToIrType elementTy))
+                bind elements (Expr.make (CallRuntime(Intrinsics.arrayToList, [ AVar value ], true)) elements.Type) (
+                    listText elements elementTy "Array" (showElement elementTy) (ShowingRest(elementTy, false)))
             | other -> cannot $"`dbg` of a value of type {Unifier.tyToString other}"
         make [ value ] body

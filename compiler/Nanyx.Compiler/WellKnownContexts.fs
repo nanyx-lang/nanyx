@@ -117,6 +117,7 @@ module internal WellKnownContexts =
                 | TyFunc _ -> Some ("a function", "functions")
                 | Maps.MapType _ -> Some ("a map", "maps")
                 | Sets.SetType _ -> Some ("a set", "sets")
+                | Arrays.ArrayType _ -> Some ("an array", "arrays")
                 | TyRecord fields when not (isTuple fields) -> Some ("a record", "records")
                 | TyOpenRecord _ -> Some ("a record", "records")
                 | TyTag _
@@ -132,7 +133,7 @@ module internal WellKnownContexts =
     /// `Hash`: every type that has the compiler's own `Eq` has the compiler's own `Hash`, which hashes by structure, so
     /// that values equal by their structure have the same hash. It has no operators. A type that attaches its own `==`
     /// must attach `hash` too. A map or a set has none yet: hashing the list of its entries would give equal maps
-    /// different hashes.
+    /// different hashes. Nor has an array yet.
     let hashing =
         { Context = "Hash"
           Member = "hash"
@@ -143,6 +144,7 @@ module internal WellKnownContexts =
                 | TyFunc _ -> Some ("a function", "functions")
                 | Maps.MapType _ -> Some ("a map", "maps")
                 | Sets.SetType _ -> Some ("a set", "sets")
+                | Arrays.ArrayType _ -> Some ("an array", "arrays")
                 | _ -> None)
           ListHelpers = Map.empty
           AgreesWith = Some equality.Member

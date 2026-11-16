@@ -74,6 +74,8 @@ module internal StructuralInstances =
         /// A map's key and value types. `Eq` and `ToString` are derived for a map, or a set; `Hash` is not.
         | MapShape of Ty * Ty
         | SetShape of Ty
+        /// An array's element type. `Eq` and `ToString` are derived for an array, as for a set; `Hash` is not.
+        | ArrayShape of Ty
 
     let private isTuple (fields: Map<string, Ty>) = not fields.IsEmpty && WellKnownContexts.isTuple fields
 
@@ -148,23 +150,26 @@ module internal StructuralInstances =
         | Lists.ListType element -> Some (ListShape element)
         | _ -> None
 
-    /// What `ty` is built from, as far as comparing two values of it goes: a map and a set are structures too, which
-    /// the compiler's own comparison cannot compare, as it would compare the order their entries were added in.
+    /// What `ty` is built from, as far as comparing two values of it goes: a map, a set and an array are structures too,
+    /// which the compiler's own comparison cannot compare: it would compare the order a map's entries were added in, and
+    /// it does not read an array.
     /// A union with a rest left in it, as `closedFor` leaves one for `Eq`, is one too.
     let private comparedShapeOf (ty: Ty) : Shape option =
         match Unifier.unalias ty with
         | Maps.MapType(key, value) -> Some (MapShape(key, value))
         | Sets.SetType element -> Some (SetShape element)
+        | Arrays.ArrayType element -> Some (ArrayShape element)
         | TyUnion items when items |> List.exists (function TyVar _ -> true | _ -> false) ->
             items |> List.filter (function TyVar _ -> false | _ -> true) |> tagsOf |> Option.map OpenTagShape
         | _ -> shapeOf ty
 
     /// What `ty` is built from, as far as writing it as text goes: a map is written entry by entry, and a set element
-    /// by element.
+    /// by element, and so is an array.
     let private writtenShapeOf (ty: Ty) : Shape option =
         match Unifier.unalias ty with
         | Maps.MapType(key, value) -> Some (MapShape(key, value))
         | Sets.SetType element -> Some (SetShape element)
+        | Arrays.ArrayType element -> Some (ArrayShape element)
         | _ -> shapeOf ty
 
     /// The shape an instance of `ctxName` is derived from.
@@ -180,7 +185,8 @@ module internal StructuralInstances =
         | TupleShape items -> items
         | RecordShape fields -> fields |> List.map snd
         | ListShape element
-        | SetShape element -> [ element ]
+        | SetShape element
+        | ArrayShape element -> [ element ]
         | MapShape(key, value) -> [ key; value ]
 
     /// The first part of the structure `ty`, at any depth, that `found` picks, as `shape` takes structures apart. A
@@ -199,13 +205,13 @@ module internal StructuralInstances =
     let private functionPart (ty: Ty) : Ty option =
         ty |> tryPickPart writtenShapeOf (fun part -> match Unifier.unalias part with TyFunc _ -> Some part | _ -> None)
 
-    /// Whether `ty` is a map or a set, which only a derived `==` compares.
+    /// Whether `ty` is a map, a set or an array, which only a derived `==` compares.
     let private isCollection (ty: Ty) =
         match comparedShapeOf ty with
-        | Some (MapShape _ | SetShape _) -> true
+        | Some (MapShape _ | SetShape _ | ArrayShape _) -> true
         | _ -> false
 
-    /// Whether `ty` is a map or a set, or holds one at any depth, so that only a derived `==` compares it.
+    /// Whether `ty` is a map, a set or an array, or holds one at any depth, so that only a derived `==` compares it.
     let holdsCollection (ty: Ty) : bool =
         (ty |> tryPickPart comparedShapeOf (fun part -> if isCollection part then Some () else None)).IsSome
 
@@ -284,6 +290,7 @@ module internal StructuralInstances =
         // A collection is written by a prelude function, passed what writes each part.
         | ListShape _
         | SetShape _
+        | ArrayShape _
         | MapShape _ ->
             let write (index: int) =
                 let element = partName index
@@ -292,6 +299,7 @@ module internal StructuralInstances =
                 match shape with
                 | MapShape _ -> InterpolationHoles.mapFunction, [ write 0; write 1 ]
                 | SetShape _ -> InterpolationHoles.setFunction, [ write 0 ]
+                | ArrayShape _ -> InterpolationHoles.arrayFunction, [ write 0 ]
                 | _ -> InterpolationHoles.listFunction, [ write 0 ]
             expr (FunctionCall(helper, None, value :: writers))
         | OpenTagShape _ -> invalidOp "ToString is never derived for an open union (see shapeFor)"
@@ -339,12 +347,14 @@ module internal StructuralInstances =
         | RecordShape fields -> fields |> List.map (fun (fieldName, _) -> same (field value fieldName) (field other fieldName)) |> all
         | ListShape _
         | MapShape _
-        | SetShape _ ->
+        | SetShape _
+        | ArrayShape _ ->
             let compare = expr (Lambda([ partName 0, None; otherPartName 0, None ], same (name (partName 0)) (name (otherPartName 0)), false))
             let helper =
                 match shape with
                 | MapShape _ -> EqualityOperators.mapFunction
                 | SetShape _ -> EqualityOperators.setFunction
+                | ArrayShape _ -> EqualityOperators.arrayFunction
                 | _ -> EqualityOperators.listFunction
             expr (FunctionCall(helper, None, [ value; other; compare ]))
 
@@ -385,7 +395,8 @@ module internal StructuralInstances =
             expr (FunctionCall(listHash, None, [ seed; value; hashPart ]))
         | OpenTagShape _
         | MapShape _
-        | SetShape _ -> invalidOp "Hash is never derived for a map, a set or an open union (see shapeFor)"
+        | SetShape _
+        | ArrayShape _ -> invalidOp "Hash is never derived for a map, a set, an array or an open union (see shapeFor)"
 
     /// The definition the compiler writes for the instance of `ctxName` of the type written `written`, which
     /// requires `ctxName` of each of `varNames`: its name is `name`, and it is reported at `span`.
@@ -468,6 +479,9 @@ module internal StructuralInstances =
             | Sets.SetType element ->
                 let element, acc = part acc element
                 Sets.ofType element, acc
+            | Arrays.ArrayType element ->
+                let element, acc = part acc element
+                Arrays.ofType element, acc
             | Maps.MapType(key, value) ->
                 let key, acc = part acc key
                 let value, acc = part acc value

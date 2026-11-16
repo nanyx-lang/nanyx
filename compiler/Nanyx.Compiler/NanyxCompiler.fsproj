@@ -26,6 +26,7 @@
     <Compile Include="Lists.fs" />
     <Compile Include="Maps.fs" />
     <Compile Include="Sets.fs" />
+    <Compile Include="Arrays.fs" />
     <Compile Include="InferState.fs" />
     <Compile Include="ContextFixes.fs" />
     <Compile Include="WrittenContexts.fs" />

@@ -30,7 +30,8 @@ let rec needsConversion (given: IrType) (expected: IrType) : bool =
             | _ -> false)
     | IrRecord givenFields, IrRecord expectedFields when List.map fst givenFields = List.map fst expectedFields ->
         List.exists2 (fun (_, givenTy) (_, expectedTy) -> needsConversion givenTy expectedTy) givenFields expectedFields
-    | IrList givenElement, IrList expectedElement -> needsConversion givenElement expectedElement
+    | IrList givenElement, IrList expectedElement
+    | IrArray givenElement, IrArray expectedElement -> needsConversion givenElement expectedElement
     | IrFunction(givenInput, givenOutput, _), IrFunction(expectedInput, expectedOutput, _) ->
         needsConversion expectedInput givenInput || needsConversion givenOutput expectedOutput
     | _ -> false
@@ -41,7 +42,8 @@ let rec holdsBox (ty: IrType) : bool =
     | IrBox -> true
     | IrTags tags -> tags |> List.exists (snd >> Option.exists holdsBox)
     | IrRecord fields -> fields |> List.exists (snd >> holdsBox)
-    | IrList element -> holdsBox element
+    | IrList element
+    | IrArray element -> holdsBox element
     | IrFunction(input, output, _) -> holdsBox input || holdsBox output
     | _ -> false
 
@@ -110,6 +112,13 @@ let rec convert (tools: BoxTools) (atom: Atom) (expected: IrType) (k: Atom -> Ex
     | IrList givenElement, IrList expectedElement ->
         // A new list of the elements, each converted.
         bindLocal tools "__converted" (Expr.make (Call(tools.ListConverter givenElement expectedElement, [ atom ])) expected) (AVar >> k)
+    | IrArray givenElement, IrArray expectedElement ->
+        // A new array of the elements, each converted as a list's are.
+        let call name args ty = Expr.make (CallRuntime(name, args, true)) ty
+        bindLocal tools "__elements" (call NyxCompiler.Intrinsics.arrayToList [ atom ] (IrList givenElement)) (fun elements ->
+            let converted = Expr.make (Call(tools.ListConverter givenElement expectedElement, [ AVar elements ])) (IrList expectedElement)
+            bindLocal tools "__converted" converted (fun list ->
+                bindLocal tools "__converted" (call NyxCompiler.Intrinsics.arrayOfList [ AVar list ] expected) (AVar >> k)))
     | _ -> internalError $"a conversion from {IrType.show given} to {IrType.show expected}"
 
 /// The function `functionName` that converts a list of values of `given` to a list of values of `expected`: a new list

@@ -191,6 +191,8 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
     | IrError
     | IrRecursive _
     | IrSelf
+    // An array has no hash (see `WellKnownContexts.hashing`).
+    | IrArray _
     | IrWord -> internalError $"a hash function for {IrType.show ty}, which has no hash"
 
 /// The runtime helpers the hash functions of `types` call.
