@@ -55,6 +55,8 @@
     <Compile Include="CoreIrEmit.fs" />
     <Compile Include="CoreIrCachedValues.fs" />
     <Compile Include="CodeGen.fs" />
+    <Compile Include="WatSyntax.fs" />
+    <Compile Include="WasmBinary.fs" />
   </ItemGroup>
 
   <ItemGroup>

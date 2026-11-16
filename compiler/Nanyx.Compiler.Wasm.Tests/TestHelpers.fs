@@ -31,10 +31,14 @@ let loadTestFile (directory: string) (fileName: string) =
 let loadFeatureFile featureName fileName = loadTestFile (Path.Combine(featureRootDir, featureName)) fileName
 
 /// `source`, type-checked and compiled with `options`. Errors the type checker defers to run time are compiled to
-/// traps, as `nanyx run` does.
+/// traps, as `nanyx run` does. The text is assembled to the binary format too, so that every module a test compiles
+/// shows the assembler reads what the backend writes (see `WasmBinary`).
 let transpileWatWith (options: WasmOptions) (source: string) =
     match Compiler.compile source with
-    | { Typed = Some typed } -> transpileTypedModuleWithOptions options typed |> fst
+    | { Typed = Some typed } ->
+        let wat = transpileTypedModuleWithOptions options typed |> fst
+        Transpiler.Wasm.WasmBinary.assemble wat |> ignore
+        wat
     | result ->
         let messages = result.Diagnostics |> List.map (fun d -> d.Message) |> String.concat "\n"
         failwith $"Compile error: {messages}"
@@ -148,11 +152,13 @@ let private command (arguments: string list) : Shell -> int =
         fun shell -> CliCommands.RunIn(shell, memoryCheck, path, timings, host, not noInline)
     | "build" :: rest ->
         let noInline, rest = takeFlag "--no-inline" rest
+        let wat, rest = takeFlag "--wat" rest
         let outputPath, release, timings, host, path = options (null, false, false, null, []) rest
-        fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings, host, not noInline)
+        fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings, host, not noInline, (if wat then ProgramFormat.Text else ProgramFormat.Binary))
     | "wasm" :: inputFile :: rest ->
+        let wat, rest = takeFlag "--wat" rest
         let outputPath, release, _, _, _ = options (null, false, false, null, []) rest
-        fun shell -> CliCommands.WasmIn(shell, inputFile, outputPath, release)
+        fun shell -> CliCommands.WasmIn(shell, inputFile, outputPath, release, (if wat then ProgramFormat.Text else ProgramFormat.Binary))
     | "migrate" :: rest ->
         let name, path =
             match rest with
@@ -216,14 +222,14 @@ type TempDirectory() =
 
 /// Runs `nanyx` with `arguments` (with `{package}` standing for the package's directory) on a package of `files`
 /// (paths under its `src` directory, with their text), made in a directory of its own and removed afterwards. Gives
-/// what it printed and whether it wrote the program to out/app.wat.
+/// what it printed and whether it wrote the program to out/app.wasm.
 /// A manifest's `host` entry naming the console host the compiler ships, at its version: what an application with an
 /// `@entry` writes.
 let consoleHostEntry = $"host = (package = \"{Hosts.consolePackage}\", version = \"{Toolchain.version}\")"
 
 /// What `nanyx` printed for `arguments` (`{package}` standing for the package's directory) on an application under the
 /// console host whose source files, in `src`, are `files`, with `dependencies` as its manifest's `dependencies`; and
-/// whether it wrote `out/app.wat`.
+/// whether it wrote `out/app.wasm`.
 let private nanyxOnPackageWith (dependencies: string) (files: (string * string) list) (arguments: string list) : RunOutcome * bool =
     use directory = new TempDirectory()
     let root = directory.Path
@@ -234,7 +240,7 @@ let private nanyxOnPackageWith (dependencies: string) (files: (string * string) 
     for path, text in files do
         File.WriteAllText(Path.Combine(root, "src", path), text)
     let outcome = nanyxWithInput "" (arguments |> List.map (fun argument -> argument.Replace("{package}", root)))
-    outcome, File.Exists(Path.Combine(root, "out", "app.wat"))
+    outcome, File.Exists(Path.Combine(root, "out", "app.wasm"))
 
 /// `nanyxOnPackageWith` an application with no dependencies.
 let nanyxOnPackage (files: (string * string) list) (arguments: string list) : RunOutcome * bool =
