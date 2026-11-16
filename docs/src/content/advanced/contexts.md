@@ -706,7 +706,7 @@ Each call looks for its instance in this order, and takes the first it finds:
 1. The type's own instance: synthesized from its attached definitions, or, for `Eq`, `Ord`, `Hash` and `ToString`, derived from its parts or the compiler's own.
 2. An instance in scope: one loaded with `use` around the call, the nearest first, or one the type of the function around the call declares. A generic `def total: [Add(a)] list(a) -> a` passes its own `Add(a)` on to the functions it calls.
 
-An instance is for one type: an `Add(Size)` loaded with `use` does not stand in for an `Add(Point)`.
+An instance is for one type: an `Add(Size)` loaded with `use` does not stand in for an `Add(Point)`. A call whose type nothing at the call settles finds its instance once something does, such as the type its def writes: `def s: string = use Monoid(int)(...) in empty()` needs a `Monoid(string)`, and is an error with only a `Monoid(int)` in scope. One whose type nothing settles at all is an error too, though an instance of the context is in scope.
 
 ## A type's own instance wins
 
