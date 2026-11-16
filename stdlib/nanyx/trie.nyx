@@ -1,0 +1,359 @@
+--| Tries: maps whose keys are sequences, which also answer questions about prefixes.
+
+  A `Trie(k, v)` maps keys that are lists, `list(k)`, to values, as a map does, and also finds every
+  key that starts with a prefix ([`Trie.withPrefix`]), whether any does ([`Trie.hasPrefix`]), and the
+  longest key that is a prefix of a given one ([`Trie.longestPrefixOf`]), as autocompletion and
+  routing tables need. Each node is an optional value and a map from the next element of a key to
+  the node below it, so finding a key takes time in proportion to its length, however many keys
+  there are. The elements need an `==` and a `hash`, as a map's keys do.
+
+  A [`StringTrie(v)`](#stringtrie) is the common case: its keys are strings, each read as its
+  characters.
+
+  Nothing about a trie changes once it is made: [`Trie.insert`] and [`Trie.remove`] give back a new
+  trie, which shares the nodes it didn't change with the one it was made from. Removing a key
+  removes the nodes left with no value and nothing below them, so two tries holding the same keys
+  and values are `==`, whatever order the keys were added in. A trie has no `hash`, as a map has
+  none. [`Trie.toString`] writes one as its pairs, `Trie[[1, 2] => a]`.
+
+  A `Trie`'s keys come out in the order they were added in, those below one element before those
+  below the next, and each key before the keys it is a prefix of: its elements need no order. A
+  `StringTrie`'s come out sorted.
+
+  Each function is attached to `Trie` or `StringTrie`, so with `import nanyx/trie` it is called as
+  `Trie.insert(t, [1, 2], "a")`, or as `t \insert([1, 2], "a")`. A literal of `key => value`
+  entries makes one: `Trie[[1] => "a", [1, 2] => "b"]`, or `StringTrie["a" => 1, "ab" => 2]`.
+module trie
+
+import nanyx/text
+
+-- A node: the value of the key that leads to it, if it has one, the node below it for each element
+-- that continues a key, and how many keys it and the nodes below it hold values for. Only the root
+-- of an empty trie holds none.
+type Node(k, v) = #node((#some(v) | #none), map(k, Node(k, v)), int)
+
+export type Trie(k, v) = protected Node(k, v)
+
+def emptyNode: Node(k, v) = #node(#none, map.empty, 0)
+
+--| How many keys `node` and the nodes below it hold values for.
+def countOf: Node(k, v) -> int = { | #node(_, _, count) -> count }
+
+--| How many keys `node` holds a value for itself: 1 or 0.
+def ownCount: (#some(v) | #none) -> int = {
+  | #some(_) -> 1
+  | #none -> 0
+}
+
+--| The node that `key` leads to from `node`, and `path` with the nodes passed on the way to it, each
+  with the element of the key taken from it, the nearest first. `#none` when no key starts with
+  `key`, unless `extend`, which takes a missing node to be an empty one.
+def descend
+  : [Eq(k), Hash(k)] Node(k, v), list(k), list((Node(k, v), k)), bool -> #some(Node(k, v), list((Node(k, v), k))) | #none
+  = { node, key, path, extend ->
+    match key
+      | [] -> #some(node, path)
+      | [first, ...rest] ->
+        def #node(_, children, _) = node
+
+        match map.get(children, first)
+          | #some(child) -> descend(child, rest, [(node, first), ...path], extend)
+          | #notFound -> if extend
+            then descend(emptyNode, rest, [(node, first), ...path], extend)
+            else #none
+  }
+
+--| The root above `node`, which has replaced the node at the end of `path` (as [`descend`] gives
+  it), and changed the count of keys there by `delta`: each node on the way has its child replaced,
+  and loses it when it is left with no keys.
+def rebuild
+  : [Eq(k), Hash(k)] Node(k, v), list((Node(k, v), k)), int -> Node(k, v)
+  = { node, path, delta ->
+    match path
+      | [] -> node
+      | [step, ...above] ->
+        def (#node(own, children, count), element) = step
+
+        def kept =
+          if countOf(node) == 0
+            then map.remove(children, element)
+            else map.insert(children, element, node)
+
+        rebuild(#node(own, kept, count + delta), above, delta)
+  }
+
+def insertAt: [Eq(k), Hash(k)] Node(k, v), list(k), v -> Node(k, v) = { root, key, value ->
+  match descend(root, key, [], true)
+    | #some(#node(own, children, count), path) ->
+      def added = 1 - ownCount(own)
+
+      rebuild(#node(#some(value), children, count + added), path, added)
+    | #none -> root
+}
+
+def removeAt: [Eq(k), Hash(k)] Node(k, v), list(k) -> Node(k, v) = { root, key ->
+  match descend(root, key, [], false)
+    | #some(#node(#some(_), children, count), path) -> rebuild(
+      #node(#none, children, count - 1)
+      path
+      -1
+    )
+    | _ -> root
+}
+
+--| The node below `node` that `key` leads to, or `#none` when no key starts with it.
+def nodeAt: [Eq(k), Hash(k)] Node(k, v), list(k) -> #some(Node(k, v)) | #none = { node, key ->
+  match key
+    | [] -> #some(node)
+    | [first, ...rest] ->
+      def #node(_, children, _) = node
+
+      match map.get(children, first)
+        | #some(child) -> nodeAt(child, rest)
+        | #notFound -> #none
+}
+
+--| The keys and values below `node`, each key `reversedPath` reversed and then the elements that
+  lead to it from `node`: the key `node` holds a value for first, then the keys below each child,
+  in the order of its map.
+def pairsBelow: Node(k, v), list(k) -> list((list(k), v)) = { node, reversedPath ->
+  collectPairs([(node, reversedPath)], [])
+}
+
+--| `found`, reversed, after the keys and values below each node in `pending`, in turn, with the
+  path that leads to it reversed, as [`pairsBelow`] gives them: the nodes still to visit are kept in
+  a list, so a long key takes no more stack than a short one.
+def collectPairs
+  : list((Node(k, v), list(k))), list((list(k), v)) -> list((list(k), v))
+  = { pending, found ->
+    match pending
+      | [] -> list.reverse(found)
+      | [next, ...rest] ->
+        def (#node(own, children, _), reversedPath) = next
+
+        def below = list.map(
+          map.toList(children)
+          { entry -> (entry.1, [entry.0, ...reversedPath]) }
+        )
+
+        match own
+          | #some(value) -> collectPairs(
+            below ++ rest
+            [(list.reverse(reversedPath), value), ...found]
+          )
+          | #none -> collectPairs(below ++ rest, found)
+  }
+
+--| The length and value of the longest key below `node` that `rest` starts with, `node` being
+  `depth` elements into the key, or `best` when there is none.
+def longestFrom
+  : [Eq(k), Hash(k)] Node(k, v), list(k), int, (#some(int, v) | #none) -> #some(int, v) | #none
+  = { #node(own, children, _), rest, depth, best ->
+    def found =
+      match own
+        | #some(value) -> #some(depth, value)
+        | #none -> best
+
+    match rest
+      | [] -> found
+      | [first, ...others] ->
+        match map.get(children, first)
+          | #some(child) -> longestFrom(child, others, depth + 1, found)
+          | #notFound -> found
+  }
+
+--| The trie with no keys.
+export def Trie.empty: Trie(k, v) = Trie(emptyNode)
+
+--| `trie` with `key` mapped to `value`, in place of any value it had.
+export def Trie.insert
+  : [Eq(k), Hash(k)] Trie(k, v), list(k), v -> Trie(k, v)
+  = { Trie(root), key, value ->
+    Trie(insertAt(root, key, value))
+  }
+
+--| `trie` without `key`, and without the nodes that leaves with no value and nothing below them.
+  The same trie when it has no `key`.
+export def Trie.remove: [Eq(k), Hash(k)] Trie(k, v), list(k) -> Trie(k, v) = { Trie(root), key ->
+  Trie(removeAt(root, key))
+}
+
+--| The value `trie` maps `key` to, or `#none` when it has no `key`.
+export def Trie.get: [Eq(k), Hash(k)] Trie(k, v), list(k) -> #some(v) | #none = { Trie(root), key ->
+  match nodeAt(root, key)
+    | #some(#node(own, _, _)) -> own
+    | #none -> #none
+}
+
+--| Whether `trie` maps `key` to a value.
+export def Trie.containsKey: [Eq(k), Hash(k)] Trie(k, v), list(k) -> bool = { trie, key ->
+  match Trie.get(trie, key)
+    | #some(_) -> true
+    | #none -> false
+}
+
+--| How many keys `trie` holds.
+export def Trie.count: Trie(k, v) -> int = { Trie(root) ->
+  countOf(root)
+}
+
+--| Whether `trie` holds no keys.
+export def Trie.isEmpty: Trie(k, v) -> bool = { Trie(root) ->
+  countOf(root) == 0
+}
+
+--| Each key in `trie` and its value, in the order the keys were added in, as the module's
+  description says.
+export def Trie.toList: Trie(k, v) -> list((list(k), v)) = { Trie(root) ->
+  pairsBelow(root, [])
+}
+
+--| The keys in `trie`, in the order of [`Trie.toList`].
+export def Trie.keys: Trie(k, v) -> list(list(k)) = { trie ->
+  list.map(Trie.toList(trie), { pair -> pair.0 })
+}
+
+--| A trie of the keys and values in `pairs`; a key that comes twice maps to its last value.
+export def Trie.fromList: [Eq(k), Hash(k)] list((list(k), v)) -> Trie(k, v) = { pairs ->
+  list.fold(pairs, Trie.empty, { trie, pair -> Trie.insert(trie, pair.0, pair.1) })
+}
+
+--| A trie of the keys and values in `pairs`. What a literal builds a trie with,
+  `Trie[[1] => "a", [1, 2] => "b"]`.
+export def Trie.fromArray: [Eq(k), Hash(k)] Array((list(k), v)) -> Trie(k, v) = { pairs ->
+  Trie.fromList(list.fromArray(pairs))
+}
+
+--| Each key in `trie` that starts with `prefix`, `prefix` itself included, and its value, in the
+  order of [`Trie.toList`].
+export def Trie.withPrefix
+  : [Eq(k), Hash(k)] Trie(k, v), list(k) -> list((list(k), v))
+  = { Trie(root), prefix ->
+    match nodeAt(root, prefix)
+      | #some(node) -> pairsBelow(node, list.reverse(prefix))
+      | #none -> []
+  }
+
+--| Whether any key in `trie` starts with `prefix`, or is `prefix`.
+export def Trie.hasPrefix: [Eq(k), Hash(k)] Trie(k, v), list(k) -> bool = { Trie(root), prefix ->
+  match nodeAt(root, prefix)
+    | #some(node) -> countOf(node) > 0
+    | #none -> false
+}
+
+--| The longest key in `trie` that `key` starts with, `key` itself included, and its value, or
+  `#none` when no key in `trie` is a prefix of `key`. A router finds the most specific route for a
+  path with it.
+export def Trie.longestPrefixOf
+  : [Eq(k), Hash(k)] Trie(k, v), list(k) -> #some(list(k), v) | #none
+  = { Trie(root), key ->
+    match longestFrom(root, key, 0, #none)
+      | #some(length, value) -> #some(list.take(key, length), value)
+      | #none -> #none
+  }
+
+--| `trie` as its literal is written, its keys in the order of [`Trie.toList`]:
+  `Trie[[1] => a, [1, 2] => b]`, and `Trie[=>]` when it is empty.
+export def Trie.toString: [ToString(k), ToString(v)] Trie(k, v) -> string = { trie ->
+  match Trie.toList(trie)
+    | [] -> "Trie[=>]"
+    | pairs -> "Trie{__listToString(pairs, { pair -> "{pair.0} => {pair.1}" })}"
+}
+
+-- StringTrie ------------------------------------------------------------------------------------
+
+--| A trie whose keys are strings, each read as its characters, as [`string.chars`] gives them. Its
+  functions take and give strings, and give its keys sorted.
+export type StringTrie(v) = protected Trie(string, v)
+
+--| The string trie with no keys.
+export def StringTrie.empty: StringTrie(v) = StringTrie(Trie.empty)
+
+--| The pairs in `pairs`, each key joined back into a string, sorted by key.
+def sortedStrings: list((list(string), v)) -> list((string, v)) = { pairs ->
+  list.sortBy(list.map(pairs, { pair -> (string.concat(pair.0), pair.1) }), { pair -> pair.0 })
+}
+
+--| `trie` with `key` mapped to `value`, in place of any value it had.
+export def StringTrie.insert
+  : StringTrie(v), string, v -> StringTrie(v)
+  = { StringTrie(trie), key, value ->
+    StringTrie(Trie.insert(trie, string.chars(key), value))
+  }
+
+--| `trie` without `key`, and without the nodes that leaves with no value and nothing below them.
+export def StringTrie.remove: StringTrie(v), string -> StringTrie(v) = { StringTrie(trie), key ->
+  StringTrie(Trie.remove(trie, string.chars(key)))
+}
+
+--| The value `trie` maps `key` to, or `#none` when it has no `key`.
+export def StringTrie.get: StringTrie(v), string -> #some(v) | #none = { StringTrie(trie), key ->
+  Trie.get(trie, string.chars(key))
+}
+
+--| Whether `trie` maps `key` to a value.
+export def StringTrie.containsKey: StringTrie(v), string -> bool = { StringTrie(trie), key ->
+  Trie.containsKey(trie, string.chars(key))
+}
+
+--| How many keys `trie` holds.
+export def StringTrie.count: StringTrie(v) -> int = { StringTrie(trie) ->
+  Trie.count(trie)
+}
+
+--| Whether `trie` holds no keys.
+export def StringTrie.isEmpty: StringTrie(v) -> bool = { StringTrie(trie) ->
+  Trie.isEmpty(trie)
+}
+
+--| Each key in `trie` and its value, sorted by key.
+export def StringTrie.toList: StringTrie(v) -> list((string, v)) = { StringTrie(trie) ->
+  sortedStrings(Trie.toList(trie))
+}
+
+--| The keys in `trie`, sorted.
+export def StringTrie.keys: StringTrie(v) -> list(string) = { trie ->
+  list.map(StringTrie.toList(trie), { pair -> pair.0 })
+}
+
+--| A string trie of the keys and values in `pairs`; a key that comes twice maps to its last value.
+export def StringTrie.fromList: list((string, v)) -> StringTrie(v) = { pairs ->
+  StringTrie(Trie.fromList(list.map(pairs, { pair -> (string.chars(pair.0), pair.1) })))
+}
+
+--| A string trie of the keys and values in `pairs`. What a literal builds one with,
+  `StringTrie["a" => 1, "ab" => 2]`.
+export def StringTrie.fromArray: Array((string, v)) -> StringTrie(v) = { pairs ->
+  StringTrie.fromList(list.fromArray(pairs))
+}
+
+--| Each key in `trie` that starts with `prefix`, `prefix` itself included, and its value, sorted
+  by key: `withPrefix(t, "ab")` gives `"ab"`, `"abc"` and `"abd"`, but not `"a"`.
+export def StringTrie.withPrefix
+  : StringTrie(v), string -> list((string, v))
+  = { StringTrie(trie), prefix ->
+    sortedStrings(Trie.withPrefix(trie, string.chars(prefix)))
+  }
+
+--| Whether any key in `trie` starts with `prefix`, or is `prefix`.
+export def StringTrie.hasPrefix: StringTrie(v), string -> bool = { StringTrie(trie), prefix ->
+  Trie.hasPrefix(trie, string.chars(prefix))
+}
+
+--| The longest key in `trie` that `key` starts with, `key` itself included, and its value, or
+  `#none` when no key in `trie` is a prefix of `key`.
+export def StringTrie.longestPrefixOf
+  : StringTrie(v), string -> #some(string, v) | #none
+  = { StringTrie(trie), key ->
+    match Trie.longestPrefixOf(trie, string.chars(key))
+      | #some(prefix, value) -> #some(string.concat(prefix), value)
+      | #none -> #none
+  }
+
+--| `trie` as its literal is written, its keys sorted: `StringTrie[a => 1, ab => 2]`, and
+  `StringTrie[=>]` when it is empty.
+export def StringTrie.toString: [ToString(v)] StringTrie(v) -> string = { trie ->
+  match StringTrie.toList(trie)
+    | [] -> "StringTrie[=>]"
+    | pairs -> "StringTrie{__listToString(pairs, { pair -> "{pair.0} => {pair.1}" })}"
+}
