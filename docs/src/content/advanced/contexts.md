@@ -383,7 +383,7 @@ def lerp = { a, b, t -> a + (b - a) * t } -- [Num(a)] a, a, a -> a
 def inc = { x -> x + 1 } -- int -> int: `1` is an int
 ```
 
-Adding and multiplying values of one type needs `Num` alone, which has every member of `Add`. A function inside another function that doesn't write its type requires no contexts, so its arithmetic is on ints or floats. For now the same goes for a top-level function the module passes as a value, as `add` in `xs \list.fold(0, add)`, which stays `int, int -> int` ([#1693](https://github.com/nanyx-lang/nanyx/issues/1693)); write its type, `[Add(a)] a, a -> a`, to make it generic.
+Adding and multiplying values of one type needs `Num` alone, which has every member of `Add`. A function inside another function that doesn't write its type requires no contexts, so its arithmetic is on ints or floats. A top-level function passed as a value keeps its contexts: `add` in `xs \list.fold(0.0, add)` is passed with the `Add(float)` found where it is named.
 
 Operators on two of a function's type variables need the contexts of each, and each operator calls the member of its own variable's instance, though both members have one name:
 

@@ -157,10 +157,6 @@ type InferState =
             /// The names of the prelude's contexts, as they are in `TypeDefs`: the only ones an operator on a value of
             /// a type variable is read through (see `OperatorContexts`). A module checked without the prelude has none.
             PreludeContexts: Set<Identifier>;
-            /// The names the module writes as values of their own rather than calls (`add` in `fold(0, add)`). A
-            /// function that requires a parameterised context cannot be a value yet (#599), so one named here has no
-            /// requirement inferred for its arithmetic (see `ArithmeticInference`).
-            NamedAsValues: Set<Identifier>;
             /// Where each interpolation hole among `PendingContextInstances` is, by the hole's node: the environment
             /// there, whose instances it finds its `ToString` among once its type is known, and the def that writes
             /// its type it is in, if it is in one. A `==` or `!=` among them has its place here too, for its `Eq`
@@ -365,7 +361,6 @@ let emptyState =
             NumericLiterals = [];
             UnsettledLiterals = [];
             PreludeContexts = Set.empty;
-            NamedAsValues = Set.empty;
             HoleScopes = Map.empty;
             LocalComparisons = Map.empty;
             CheckedRests = Map.empty;
