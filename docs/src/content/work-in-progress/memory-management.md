@@ -168,7 +168,16 @@ and, when it was the last, drops the fields that are on the heap and frees the o
   closure captures. There is one such function per list of captured types (`__nanyx_drop_env__string`), and one,
   `__nanyx_drop_env`, for closures whose captures are none of them on the heap (a closure that captures nothing at
   all is static data, and is never dropped). It is called through the function table, so it has the type of a
-  closure of one parameter, and returns 0.
+  closure of one parameter, and returns 0;
+- a recursive type's leaves the object it gives up the last reference to waiting on the type's list, a global
+  (`__nanyx_drop_pending_…`) linked through the objects' counts, which they no longer need, and returns. The first
+  of them called, when no drop is under way, then runs `__nanyx_drop_pending`, which takes the objects waiting off
+  their lists one at a time, sets each count back to 1, and drops it with the type's other drop function
+  (`__nanyx_drop_now_…`), until every list is empty. Dropping one object may leave more waiting, but never calls
+  itself, so a value nested 100,000 deep, such as a trie with a key that long, takes no more stack to drop than a
+  shallow one ([#1670](https://github.com/nanyx-lang/nanyx/issues/1670)). Every chain of drop functions that calls
+  itself passes through a recursive type's, except through a closure: a closure that captures a closure, nested
+  deeply, still takes stack to drop.
 
 ## Allocator
 
