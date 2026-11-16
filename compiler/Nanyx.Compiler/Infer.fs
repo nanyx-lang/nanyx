@@ -1136,12 +1136,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                 Error (blockIsolationAt state name info.Symbol calleeSpan)
             // Only a nominal type's home module can make one: anywhere else it comes from what that module exports.
             | Some info when isNominal info && not (inNominalHome state (TypeDefInfo.nominalId info) calleeSpan) ->
-                let kind = if info.IsPrivate then "private" else "protected"
-                let message =
-                    if info.IsContext then
-                        $"The {kind} context '{name}' can only be constructed in the module that defines it; call a function that module exports to supply it instead"
-                    else
-                        $"The {kind} type '{name}' can only be constructed in the module that defines it; use a function that module exports instead"
+                let message = ProtectedShapes.constructedOutside state (Map.toList env.Names) name info
                 Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan message ]
             // A context's instance is never a value: it is written only as what a `use` loads.
             | Some info when info.IsContext && not (state.UseInstances.Contains expr.Id) ->

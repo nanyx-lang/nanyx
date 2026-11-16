@@ -1095,7 +1095,9 @@ import money
 def price = Money(pence = 250)  -- error NYX0212: The nominal type 'Money' can only be constructed in the module that defines it; ...
 ```
 
-To fix it, make the value with a function the module exports, such as `Money.new`.
+To fix it, make the value with a function the module exports, such as `Money.new`. The message names the definitions
+attached to the type that make one, when there are any: `Make one with 'Money.new'.` A value of the type's shape given
+where the type is expected, without the constructor, is NYX0260.
 
 # NYX0213: Wrong number of patterns
 
@@ -1738,6 +1740,31 @@ def both: (#some(a) | r), (a -> #some(b) | s) -> #some(b) | r | s = { x, f -> bi
 ```
 
 To fix it, write one rest, and let the unions it is joined from share it: `(#some(a) | r), (a -> #some(b) | r) -> #some(b) | r`.
+
+# NYX0260: Value of a nominal type's shape outside its module
+
+A value of a protected or private type's shape is given where the type is expected, outside the module that defines
+the type. Only that module makes values of it ([Nominal types](../advanced/nominal-and-protected-types)), so a record
+with the same fields is still not one. The message names the definitions attached to the type that make one.
+
+```nanyx
+module Points =
+  export type Point = protected (x: int, y: int)
+
+  export def Point.new: int, int -> #error(string) | #some(Points.Point) = { x, y ->
+    if x < 0 or y < 0
+      then #error("Coordinates must be non-negative")
+      else #some(Point(x = x, y = y))
+  }
+
+import Points
+
+def p: Point = (x = 3, y = 4)  -- error NYX0260: 'Point' is protected: only the module 'Points' makes values of it, so a record of its shape isn't a 'Point' here. Make one with 'Point.new'.
+```
+
+To fix it, make the value with one of the definitions the message names. When there is one, it takes the fields in
+order, and it returns the type itself, an editor offers to rewrite the record as a call to it: `Point.at(3, 4)`. A value
+of another shape is an ordinary type mismatch (NYX0201).
 
 # NYX0301: Not supported by the WebAssembly backend
 
