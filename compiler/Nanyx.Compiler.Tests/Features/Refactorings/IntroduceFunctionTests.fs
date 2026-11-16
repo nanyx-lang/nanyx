@@ -215,6 +215,19 @@ let ``Statements that declare a cell used after them are refused`` () =
 """)
 
 [<Fact>]
+let ``Statements that end with an attribute are refused`` () =
+    Assert.Equal(
+        "It ends with an attribute, which applies to the def after it",
+        refusal
+            """def area = { (s: int) ->
+  [[def a = s
+  @allow(default/unusedBindings)]]
+  def b = 1
+  a
+}
+""")
+
+[<Fact>]
 let ``A selection inside a def that is not a whole expression is refused`` () =
     Assert.Equal(
         "The selection is not a whole expression or whole statements",

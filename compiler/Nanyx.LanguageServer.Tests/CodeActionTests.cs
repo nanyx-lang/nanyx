@@ -165,6 +165,20 @@ public sealed class CodeActionTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task A_call_offers_to_convert_to_a_pipe()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-call-to-pipe");
+        const string text = "def tidy = { (s: string) -> string.trim(s) }\n";
+
+        Open(uri, text);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var convert = Assert.Single(await CodeActionsIn(uri, new Range(0, 36, 0, 36)), action => action.Title == "Convert to pipe");
+        Assert.Equal(CodeActionKind.RefactorRewrite, convert.Kind);
+        Assert.Equal("def tidy = { (s: string) -> s \\trim }\n", Applied(text, Assert.Single(convert.Edit!.Changes![uri])));
+    }
+
+    [Fact]
     public async Task A_selected_expression_offers_to_introduce_a_function()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-introduce-function");

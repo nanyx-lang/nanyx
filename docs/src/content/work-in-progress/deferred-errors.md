@@ -61,7 +61,9 @@ How it is built:
   unresolved, and a later def's error does not hide it. So are those a def is generalised against, and those a
   check of whether a constraint fits is solved with (`Unifier.agreeing`): an attached def's parameter takes its
   type, and an annotation more general than its body is reported, after a conflict as before one
-  ([#1441](https://github.com/nanyx-lang/nanyx/issues/1441)). A union that tries each of its members against the
+  ([#1441](https://github.com/nanyx-lang/nanyx/issues/1441)). So does an `==` bound by a `use` take the operands it is
+  given, and an attached def of the wrong type for a context's member is reported
+  ([#1483](https://github.com/nanyx-lang/nanyx/issues/1483)). A union that tries each of its members against the
   constraints after it reports a failure from further on (`unionFailure`) rather than blaming itself, so the
   conflict is reported in the def that made it, wherever the def is in the file
   ([#170](https://github.com/nanyx-lang/nanyx/issues/170)). Conflicts do not yet bind anything to the error type: the expressions there are typed by their other
