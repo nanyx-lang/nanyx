@@ -806,19 +806,42 @@
     i32.const 8
     i32.sub
     call $__nanyx_release
+    i32.eqz
     if
-      local.get $p
-      local.get $p
-      i32.const 4
-      i32.sub
-      i32.load
-      call_indirect (type $ctx_fn_1)
-      drop
+      return
+    end
+    global.get $__nanyx_dropping
+    if
       local.get $p
       i32.const 8
       i32.sub
-      call $__nanyx_free
+      global.get $__nanyx_drop_pending_fn_int_to_string
+      i32.store
+      local.get $p
+      global.set $__nanyx_drop_pending_fn_int_to_string
+      return
     end
+    i32.const 1
+    global.set $__nanyx_dropping
+    local.get $p
+    call $__nanyx_drop_dead_fn_int_to_string
+    call $__nanyx_drop_pending
+    i32.const 0
+    global.set $__nanyx_dropping
+  )
+
+  (func $__nanyx_drop_dead_fn_int_to_string (param $p i32)
+    local.get $p
+    local.get $p
+    i32.const 4
+    i32.sub
+    i32.load
+    call_indirect (type $ctx_fn_1)
+    drop
+    local.get $p
+    i32.const 8
+    i32.sub
+    call $__nanyx_free
   )
 
   (func $__nanyx_dup_fn_int_to_string (param $p i32) (result i32)
@@ -837,19 +860,42 @@
     i32.const 8
     i32.sub
     call $__nanyx_release
+    i32.eqz
     if
-      local.get $p
-      local.get $p
-      i32.const 4
-      i32.sub
-      i32.load
-      call_indirect (type $ctx_fn_1)
-      drop
+      return
+    end
+    global.get $__nanyx_dropping
+    if
       local.get $p
       i32.const 8
       i32.sub
-      call $__nanyx_free
+      global.get $__nanyx_drop_pending_fn_string_to_string
+      i32.store
+      local.get $p
+      global.set $__nanyx_drop_pending_fn_string_to_string
+      return
     end
+    i32.const 1
+    global.set $__nanyx_dropping
+    local.get $p
+    call $__nanyx_drop_dead_fn_string_to_string
+    call $__nanyx_drop_pending
+    i32.const 0
+    global.set $__nanyx_dropping
+  )
+
+  (func $__nanyx_drop_dead_fn_string_to_string (param $p i32)
+    local.get $p
+    local.get $p
+    i32.const 4
+    i32.sub
+    i32.load
+    call_indirect (type $ctx_fn_1)
+    drop
+    local.get $p
+    i32.const 8
+    i32.sub
+    call $__nanyx_free
   )
 
   (func $__nanyx_dup_fn_string_to_string (param $p i32) (result i32)
@@ -938,5 +984,39 @@
       call $__nanyx_retain
     end
     local.get $p
+  )
+
+  (global $__nanyx_dropping (mut i32) (i32.const 0))
+  (global $__nanyx_drop_pending_fn_int_to_string (mut i32) (i32.const 0))
+  (global $__nanyx_drop_pending_fn_string_to_string (mut i32) (i32.const 0))
+
+  (func $__nanyx_drop_pending
+    (local $p i32)
+    loop $next
+      global.get $__nanyx_drop_pending_fn_int_to_string
+      local.tee $p
+      if
+        local.get $p
+        i32.const 8
+        i32.sub
+        i32.load
+        global.set $__nanyx_drop_pending_fn_int_to_string
+        local.get $p
+        call $__nanyx_drop_dead_fn_int_to_string
+        br $next
+      end
+      global.get $__nanyx_drop_pending_fn_string_to_string
+      local.tee $p
+      if
+        local.get $p
+        i32.const 8
+        i32.sub
+        i32.load
+        global.set $__nanyx_drop_pending_fn_string_to_string
+        local.get $p
+        call $__nanyx_drop_dead_fn_string_to_string
+        br $next
+      end
+    end
   )
 )

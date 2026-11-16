@@ -106,6 +106,35 @@ def main = {
     runSource (source.ReplaceLineEndings "\n") |> assertRan "100000\n"
 
 [<Fact>]
+let ``Drop - a chain of closures that capture closures, 100,000 deep, takes no stack to drop, and frees every one`` () =
+    let source = """
+def wrap: int, (int -> int) -> (int -> int) = { n, f -> if n == 0 then f else wrap(n - 1, { x -> f(x) }) }
+
+def build: int -> (int -> int) = { n ->
+  def step = n % 7
+  wrap(n, { x -> x + step })
+}
+"""
+    let ty = IrFunction(IrInt, IrInt, [])
+    use program = instantiateWasm (source.ReplaceLineEndings "\n") [ ty ]
+    let live = program.LiveBlocks
+    program.Drop(ty, program.Call("build", 100000))
+    Assert.Equal(live, program.LiveBlocks)
+
+[<Fact>]
+let ``Run - a chain of closures 100,000 deep is dropped, and memory balances`` () =
+    let source = """
+def wrap: int, (int -> int) -> (int -> int) = { n, f -> if n == 0 then f else wrap(n - 1, { x -> f(x) }) }
+
+@entry
+def main = {
+  def f = wrap(100000, { x -> x + 1 })
+  println("built")
+}
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "built\n"
+
+[<Fact>]
 let ``Drop - a closure frees what it captures`` () =
     let source =
         normalized """def prefixer: int -> (string -> string) = { n ->

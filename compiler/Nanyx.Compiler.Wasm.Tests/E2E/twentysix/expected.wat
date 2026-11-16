@@ -790,19 +790,42 @@
     i32.const 8
     i32.sub
     call $__nanyx_release
+    i32.eqz
     if
-      local.get $p
-      local.get $p
-      i32.const 4
-      i32.sub
-      i32.load
-      call_indirect (type $ctx_fn_1)
-      drop
+      return
+    end
+    global.get $__nanyx_dropping
+    if
       local.get $p
       i32.const 8
       i32.sub
-      call $__nanyx_free
+      global.get $__nanyx_drop_pending_fn_int_to_bool
+      i32.store
+      local.get $p
+      global.set $__nanyx_drop_pending_fn_int_to_bool
+      return
     end
+    i32.const 1
+    global.set $__nanyx_dropping
+    local.get $p
+    call $__nanyx_drop_dead_fn_int_to_bool
+    call $__nanyx_drop_pending
+    i32.const 0
+    global.set $__nanyx_dropping
+  )
+
+  (func $__nanyx_drop_dead_fn_int_to_bool (param $p i32)
+    local.get $p
+    local.get $p
+    i32.const 4
+    i32.sub
+    i32.load
+    call_indirect (type $ctx_fn_1)
+    drop
+    local.get $p
+    i32.const 8
+    i32.sub
+    call $__nanyx_free
   )
 
   (func $__nanyx_dup_fn_int_to_bool (param $p i32) (result i32)
@@ -861,6 +884,27 @@
       call $__nanyx_retain
     end
     local.get $p
+  )
+
+  (global $__nanyx_dropping (mut i32) (i32.const 0))
+  (global $__nanyx_drop_pending_fn_int_to_bool (mut i32) (i32.const 0))
+
+  (func $__nanyx_drop_pending
+    (local $p i32)
+    loop $next
+      global.get $__nanyx_drop_pending_fn_int_to_bool
+      local.tee $p
+      if
+        local.get $p
+        i32.const 8
+        i32.sub
+        i32.load
+        global.set $__nanyx_drop_pending_fn_int_to_bool
+        local.get $p
+        call $__nanyx_drop_dead_fn_int_to_bool
+        br $next
+      end
+    end
   )
 
   (func $__nanyx_start (local $__inlined9__in1__in1__in3 i32) (local $keep__in1__in1__in1__in3 i32) (local $__inlined14__in1__in1__in3 i32) (local $__match_tmp_0__in1__in1__in3_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__for_cursor_0__in1__in1__in3 i32) (local $__for_end_0__in1__in1__in3_i64 i64) (local $__for___for_element_0__in1__in1__in3_i64 i64) (local $__owned_0 i32)
