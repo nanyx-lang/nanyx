@@ -3,7 +3,8 @@
   An `MList(a)` is a list that [`MList.add`] grows at the end, in constant time, and whose
   elements [`MList.set`] changes in place. It holds its elements in an [`MRef`](mref), so it
   belongs to the `memory` block it was made in: every operation requires that block's `Memory`,
-  and the list can't leave the block. [`MList.at`] and [`MList.set`] walk to the element, as
+  and the list can't leave the block, so give back [`MList.toList`] of it, which takes no time
+  when the `MList` isn't used afterwards. [`MList.at`] and [`MList.set`] walk to the element, as
   `list.get` does.
 
   Each function is attached to `MList`, so with `import nanyx/mlist` it is called as
@@ -12,17 +13,21 @@ module mlist
 
 import nanyx/mref
 
--- The elements last first, so that `add` puts one in front, and how many there are.
-export type MList(a) = [Memory] private MRef(reversed: list(a), count: int)
+-- The elements in order, the last of their cells, and how many there are. `add` changes the last
+-- cell's tail to a new cell: the cells are the list's own until `toList` hands them over, so
+-- nothing else sees them change.
+export type MList(a) = [Memory] private MRef(first: list(a), last: list(a), count: int)
 
 --| A new list with nothing in it.
 export def MList.empty: [Memory] () -> MList(a) = {
-  MList(MRef.new(reversed = [], count = 0))
+  MList(MRef.new(first = [], last = [], count = 0))
 }
 
 --| A new list holding `xs`, in order.
 export def MList.fromList: [Memory] list(a) -> MList(a) = { xs ->
-  MList(MRef.new(reversed = list.reverse(xs), count = list.length(xs)))
+  def items = MList.empty()
+  for xs | x -> MList.add(items, x)
+  items
 }
 
 --| A new list holding `xs`, in order. What a literal builds a list with, `MList[1, 2, 3]`, or
@@ -34,7 +39,13 @@ export def MList.fromArray: [Memory] Array(a) -> MList(a) = { xs ->
 --| Adds `value` at the end of `items`.
 export def MList.add: [Memory] MList(a), a -> () = { MList(state), value ->
   def held = MRef.get(state)
-  MRef.set(state, (reversed = [value, ...held.reversed], count = held.count + 1))
+  def cell = [value]
+
+  match held.last
+    | [] -> MRef.set(state, (first = cell, last = cell, count = 1))
+    | last ->
+      __nanyx_list_set_tail(last, cell)
+      MRef.set(state, (first = held.first, last = cell, count = held.count + 1))
 }
 
 --| Adds `value` at the end of `items`, as [`MList.add`] does: `items += 5`.
@@ -46,7 +57,7 @@ export def MList.at: [Memory] MList(a), int -> #some(a) | #none = { MList(state)
   def held = MRef.get(state)
 
   if index < 0 then #none else
-    match list.get(held.reversed, held.count - 1 - index)
+    match list.get(held.first, index)
       | #some(x) -> #some(x)
       | #outOfRange -> #none
 }
@@ -59,19 +70,28 @@ export def MList.set
     def held = MRef.get(state)
 
     if index >= 0 and index < held.count then
-      def position = held.count - 1 - index
-      def changed = list.mapIndexed(held.reversed, { i, x -> if i == position then value else x })
-      MRef.set(state, (reversed = changed, count = held.count))
+      def changed = list.mapIndexed(held.first, { i, x -> if i == index then value else x })
+      MRef.set(state, (first = changed, last = lastCell(changed), count = held.count))
       #ok
     else #outOfRange
   }
+
+-- The last cell of `xs`, or `[]` when it has none.
+def lastCell: list(a) -> list(a) = { xs ->
+  match xs
+    | [_, ...rest] -> (if rest is [] then xs else lastCell(rest))
+    | [] -> []
+}
 
 --| How many elements `items` holds.
 export def MList.count: [Memory] MList(a) -> int = { MList(state) ->
   MRef.get(state).count
 }
 
---| The elements of `items`, in order, as a list.
+--| The elements of `items`, in order, as a list. When `items` isn't used afterwards, this takes no
+  time: the list is the cells `items` built. Otherwise it copies them, so that adding to `items`
+  later leaves the list as it is.
 export def MList.toList: [Memory] MList(a) -> list(a) = { MList(state) ->
-  list.reverse(MRef.get(state).reversed)
+  def first = MRef.get(state).first
+  if __nanyx_is_exclusive(state) then first else list.map(first, { x -> x })
 }

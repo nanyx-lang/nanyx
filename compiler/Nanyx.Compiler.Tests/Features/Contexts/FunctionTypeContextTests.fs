@@ -114,7 +114,7 @@ let ``Two function types that must be the same require the same contexts`` () =
 
 [<Fact>]
 let ``A context variable takes the contexts of the function given for it`` () =
-    let c = TyVar { Id = 1; Name = Some "c" }
+    let c = TyVar (TyVar.ordinary 1 (Some "c"))
     match Unifier.unify [ intFunc [ console ], intFunc [ c ], Assignable, SourceSpan.none ] with
     | Ok subst -> Assert.Equal("[Console] int -> int", Unifier.tyToString (Unifier.apply subst (intFunc [ c ])))
     | Error (message, _) -> failwith message
@@ -122,7 +122,7 @@ let ``A context variable takes the contexts of the function given for it`` () =
     match Unifier.unify [ intFunc [], intFunc [ c ], Assignable, SourceSpan.none ] with
     | Ok subst -> Assert.Equal("[c] int -> int", Unifier.tyToString (Unifier.apply subst (intFunc [ c ])))
     | Error (message, _) -> failwith message
-    let made = TyVar { Id = 2; Name = None }
+    let made = TyVar (TyVar.ordinary 2 None)
     match Unifier.unify [ intFunc [], intFunc [ made ], Assignable, SourceSpan.none ] with
     | Ok subst -> Assert.Equal("int -> int", Unifier.tyToString (Unifier.apply subst (intFunc [ made ])))
     | Error (message, _) -> failwith message

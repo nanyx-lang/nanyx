@@ -125,7 +125,8 @@ let internal settleContextHoles (state: InferState) (name: Identifier) (typeOpt:
         let names =
             state.TypeVars
             |> Map.toList
-            |> List.choose (fun (varName, var) ->
+            |> List.choose (fun (key, var) ->
+                let varName = match key with WrittenVar name -> name | ScopeOf context -> context
                 match resolveSoFar state (TyVar var) with
                 | TyVar resolved -> Some (resolved.Id, varName)
                 | _ -> None)

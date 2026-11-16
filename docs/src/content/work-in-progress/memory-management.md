@@ -198,20 +198,27 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
   bytes per object but keeps `free` independent of types, and lets the large list hand out a bigger block than
   asked for and still take all of it back.
 - **Classes.** Each size from 4 to 256 bytes (64 words) has its own list, so a freed block goes back to exactly the
-  size Perceus will next ask for, without a search. Larger blocks share one list, kept in address order and searched
-  first-fit. The classes reach 256 bytes so that the strings and records programs make most of never go on that
-  list: freeing a large block walks it to find its place, and when blocks that do not join pile up there, as the
-  strings of a list do between its cells, freeing them takes time quadratic in their number. Eighty thousand strings
-  of 38 bytes took 4.7 s to drop when the classes stopped at 32 bytes, and take a few milliseconds now
+  size Perceus will next ask for, without a search. Larger blocks share one list, searched first-fit. The classes
+  reach 256 bytes so that the strings and records programs make most of never go on that list
   ([#1464](https://github.com/nanyx-lang/nanyx/issues/1464)).
 - **Lists.** The heads are a table of 65 words at the start of the heap, and `$heap_ptr` starts after it. The
   string literals and static closures run from address 256, and the table goes at 4096 or, when they end past that,
   after them,
   8-byte aligned (`heapBaseAfter`); the module starts with enough pages of memory to hold them. A free block keeps the next block of its list in its first word. On a small size's list, `free` pushes onto the
   front and `alloc` takes from the front, so the most recently freed block is reused first.
-- **Large blocks.** `free` puts a large block into its place on the large list and joins it with the free large
-  blocks just before and after it, and a block that then ends at `$heap_ptr` goes back to the heap instead
-  ([#1290](https://github.com/nanyx-lang/nanyx/issues/1290), done). `alloc` splits a block it takes from the list
+- **Large blocks.** `free` joins a large block with the free large blocks just before and after it, and a block that
+  then ends at `$heap_ptr` goes back to the heap instead ([#1290](https://github.com/nanyx-lang/nanyx/issues/1290),
+  done); otherwise it goes on the front of the large list. It finds those neighbours without walking the list, by
+  boundary tags ([#1614](https://github.com/nanyx-lang/nanyx/issues/1614), `WasmAllocator.SizeWordBits`): a free large
+  block has its size in its last word as well as in its size word, and two bits of a size word, which a size never
+  uses, say whether the block is a free large block and whether the block just before it is one. The block after
+  ends where this one does, so its size word is read directly; the block before is found from the size at its end,
+  when this block's bit says it is free. The list is doubly linked (a free large block's second word links back), so
+  a neighbour is taken off it at once. `alloc` keeps the bits: it clears the bit of the block after a large block it
+  hands out whole, and a small block's size word keeps the bit through being freed and handed out again. A free large
+  block never ends at `$heap_ptr` and never follows another, since `free` would have joined them. Eighty thousand
+  strings of 300 bytes, freed apart lowest first, took 12.3 s to drop when `free` walked a list kept in address
+  order, and take 11 ms now. `alloc` splits a block it takes from the list
   when the rest would be a large block too; otherwise the block keeps its own size. This is what a string grown
   by `++` needs: each copy is freed after the next is made, the copies before it join into a block the one after
   fits in, so the heap holds about two copies of the string, not every copy there was.
@@ -222,9 +229,8 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
   own runtime.
 
 Small free blocks are never joined, with each other or with large ones, and the heap never shrinks: memory once
-grown is not given back to the host. Many blocks of more than 256 bytes freed apart still walk the large list:
-boundary tags (a size word at the end of each block too) and a doubly linked list would let `free` find a block's
-neighbours without the search.
+grown is not given back to the host. `alloc` still searches the large list first-fit, so many large free blocks too
+small for a request are each passed over.
 
 ## Core IR
 
@@ -454,6 +460,16 @@ allocation `reusing` a token.
   drops the old value of each field on the heap it replaces and stores the new ones into the same block; otherwise
   the release has taken the count down, and it copies the record, takes a reference to each field on the heap it
   keeps, and stores the new values into the copy (`UpdateRecord` in `CoreIrEmit.fs`).
+- **Exclusivity checks.** Reuse covers what the compiler can see; the standard library does the rest at run time, as
+  Lean 4's `Array` does ([#1671](https://github.com/nanyx-lang/nanyx/issues/1671)). The intrinsic
+  `__nanyx_is_exclusive` takes over a reference to a value that is always on the heap, reads its count, gives the
+  reference up, and says whether the count was 1 (an immortal object's is 0, so never). Taking the reference over is
+  what makes the answer mean something: a caller that uses the value afterwards keeps a reference of its own, which
+  counting adds before the check, inlined or not, and a function that checks a parameter owns it. `MList.toList`
+  checks its box this way, and hands over the cells the `MList` built when it holds the only reference, or copies them.
+  `__nanyx_list_set_tail` changes a cell's tail in place, giving up the old one and taking the new one over: what
+  builds a list front to back, in cells nothing else sees yet (`MList.add`, `list.select`). Both are written out where
+  they are used (`CoreIrEmit.fs`), with no helper.
 - **`[a, ...rest]`** is `[a] ++ rest` to the parser. It is lowered to a cell for `a` in front of `rest`, rather than
   a one-element list whose cell `++` copies, so that it allocates one cell, and can reuse one.
 

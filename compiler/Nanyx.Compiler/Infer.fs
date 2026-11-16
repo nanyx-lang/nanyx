@@ -89,7 +89,7 @@ let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSch
             subst
             |> Map.toList
             |> List.choose (fun (id, _) ->
-                let var = { Id = id; Name = None }
+                let var = TyVar.ordinary id None
                 let solved = Unifier.apply subst (TyVar var)
                 if Unifier.isMadeUpRest var || Set.isEmpty (Set.intersect madeUpIds (TypeEnv.freeTyVars solved)) then None
                 else Some (TyVar var, Unifier.apply closing solved))

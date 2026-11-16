@@ -21,15 +21,15 @@ let canonical (state: InferState) (name: Identifier) : Identifier =
 
 /// The context `context` names, as a function type carries it: `Console` is `TyApply("Console", [])`, `Show(a)` is
 /// `TyApply("Show", [a])` and a context variable `c` is the type variable of that name. A scoped context is of a scope
-/// that every scoped context of its name written in the same signature shares, a variable no name written in source
-/// can be (see `FunctionContexts.scoped`). `None` for one written by its members, which only a def's own contexts can be.
+/// that every scoped context of its name written in the same signature shares (see `signatureScope`). `None` for one
+/// written by its members, which only a def's own contexts can be.
 let private read (typeExprToTy: InferState -> TypeExpr -> Ty * InferState) (state: InferState) (context: TypeExpr) =
     match context.Kind with
     | TypeVar _ ->
         let var, next = typeExprToTy state context
         Some var, next
     | TypeName name when isScoped state name ->
-        let scope, next = typeExprToTy state (TypeExpr.synthetic (TypeVar (FunctionContexts.scopeVariableName name)))
+        let scope, next = signatureScope state name
         Some (FunctionContexts.scoped (canonical state name) scope), next
     | TypeName name -> Some (TyApply(canonical state name, [])), state
     | TypeApply(name, args) ->

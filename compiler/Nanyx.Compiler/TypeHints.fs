@@ -128,6 +128,7 @@ let rec private mentionsError (ty: Ty) =
        | TyOpenRecord(fields, _) -> fields |> Map.exists (fun _ field -> mentionsError field)
        | TyTag(_, payload) -> payload |> Option.exists mentionsError
        | TyUnion items -> List.exists mentionsError items
+       | TyScope scope -> mentionsError scope
 
 /// The symbols the root module compiled as `file` declares itself, not those of the modules it imports, in source order.
 let private ownSymbols (file: string) (typed: TypedModule) : Symbol list =

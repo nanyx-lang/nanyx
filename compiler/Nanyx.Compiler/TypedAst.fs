@@ -105,10 +105,23 @@ module FieldOrder =
     let within (fields: Map<string, 'T>) (FieldOrder names) = FieldOrder(names |> List.filter fields.ContainsKey)
 
 
+/// What a type variable stands for: any type, or a scoped context's scope (see `FunctionContexts.scoped`).
+type TyVarKind =
+    | Ordinary
+    /// The scope a call that supplies a scoped context starts, which stays the call's (see `ScopedCalls.enter`).
+    | CallScope
+    /// The scope of the scoped context of this name that a signature writes, shared by every one of that name in it.
+    | SignatureScope of context: string
+
 /// Internal types used during type inference.
 type TyVar =
     { Id: int
-      Name: string option }
+      Name: string option
+      Kind: TyVarKind }
+
+module TyVar =
+    /// The variable `id`, named `name` if it is written in a type, that stands for any type.
+    let ordinary (id: int) (name: string option) : TyVar = { Id = id; Name = name; Kind = Ordinary }
 
 type Ty =
     | TyVar of TyVar
@@ -144,6 +157,9 @@ type Ty =
     | TySelf of Ty list
     /// The parameter at this position of the recursive alias whose definition this is in.
     | TyParam of int
+    /// A scoped context's scope, a type variable, as the context and a cell's type hold it (see
+    /// `FunctionContexts.scoped`). A reader never sees it.
+    | TyScope of Ty
 
 /// The types a type is made of, one level down, for walks that treat most cases alike: such a walk matches the cases it
 /// treats differently, and hands the others to `Ty.map`, `Ty.fold` or `Ty.exists`.
@@ -166,6 +182,7 @@ module Ty =
         | TyTag(_, payload) -> Option.toList payload
         | TyApply(_, args)
         | TyUnion args -> args
+        | TyScope scope -> [ scope ]
 
     /// `ty` with `f` applied to each of the types it is made of, one level down (see `children`). An open record's row
     /// is kept as it is.
@@ -184,6 +201,7 @@ module Ty =
         | TyTag(name, payload) -> TyTag(name, Option.map f payload)
         | TyApply(name, args) -> TyApply(name, List.map f args)
         | TyUnion items -> TyUnion(List.map f items)
+        | TyScope scope -> TyScope(f scope)
 
     /// `f` folded over the types `ty` is made of, one level down, in the order `children` gives them.
     let fold (f: 'State -> Ty -> 'State) (state: 'State) (ty: Ty) : 'State = children ty |> List.fold f state

@@ -411,6 +411,11 @@ The design draws the line there, and makes every helper a function that takes th
   of the `memory` block it is in (`MemoryCells.blockScope`), keeping the block's scope, and `use m` makes that scope
   the one a `mut` takes (`MemoryCells.withBlockScope`). A `use` of a name for a context without members loads
   nothing, so `ExpressionRewrites.writeContextNames` drops it before the backend.
+- A scope is held in types, not names ([#1434](https://github.com/nanyx-lang/nanyx/issues/1434)): a scoped
+  context is `TyApply(name, [ TyScope scope ])` (`FunctionContexts.scoped`), and the scope variable says what it is
+  by its `TyVarKind`: a call's own (`CallScope`, made by `ScopedCalls.enter`), or the one a signature writes for every
+  scoped context of a name (`SignatureScope`, kept in `InferState.TypeVars` under `ScopeOf` by
+  `InferState.signatureScope`). The `memory` block code is in is `TypeEnv.BlockScope`.
 - A context's name in a type is an error, and so is a constructor call that isn't a `use`'s instance
   ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)): `TypeResolution.unknownTypeErrors` reports a
   context's name anywhere in an annotation or a type definition outside a context list (NYX0247), except the context
@@ -525,6 +530,6 @@ Hover hides a private context's members outside its file, as it hides a private 
 5. Let a `memory` block name its `Memory`, `memory { context m -> ... }`
    ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058), then
    [#1446](https://github.com/nanyx-lang/nanyx/issues/1446) for the `context m` form). See
-   [How it is built](#how-it-is-built). Each call's own scope is a variable named `@call` (`FunctionContexts.isCallScope`): `pairUp` never
+   [How it is built](#how-it-is-built). Each call's own scope is a variable of the kind `CallScope` (`TyVarKind`, `FunctionContexts.isCallScope`): `pairUp` never
    pairs two of them, so an inner block's requirement of an outer block's `Memory` goes into its context variable,
    and the unifier keeps a call's scope as what a plain variable it meets becomes.

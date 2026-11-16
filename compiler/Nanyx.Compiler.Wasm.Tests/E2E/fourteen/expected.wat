@@ -5,15 +5,18 @@
   (global $heap_ptr (mut i32) (i32.const 4356))
 
   (func $__nanyx_free (param $ptr i32)
+    (local $header i32)
     (local $size i32)
-    (local $head i32)
     (local $next i32)
-    (local $before i32)
     (local $joined i32)
+    (local $link i32)
     local.get $ptr
     i32.const 4
     i32.sub
     i32.load
+    local.tee $header
+    i32.const -4
+    i32.and
     local.set $size
     local.get $size
     i32.const 256
@@ -25,88 +28,102 @@
     else
       i32.const 4352
     end
-    local.set $head
+    local.set $next
     local.get $size
     i32.const 256
     i32.le_u
     if
       local.get $ptr
-      local.get $head
+      local.get $next
       i32.load
       i32.store
-      local.get $head
+      local.get $next
       local.get $ptr
       i32.store
       return
     end
-    block $found
-      loop $search
-        local.get $head
-        i32.load
-        local.tee $next
-        i32.eqz
-        br_if $found
-        local.get $next
-        local.get $ptr
-        i32.gt_u
-        br_if $found
-        local.get $head
-        local.set $before
-        local.get $next
-        local.set $head
-        br $search
-      end
-    end
     local.get $ptr
     local.get $size
     i32.add
-    i32.const 4
-    i32.add
-    local.get $next
-    i32.eq
+    global.get $heap_ptr
+    i32.ne
     if
+      local.get $ptr
       local.get $size
-      local.get $next
+      i32.add
+      i32.const 4
+      i32.add
+      local.tee $next
       i32.const 4
       i32.sub
       i32.load
-      i32.const -4
+      local.tee $joined
+      i32.const 1
       i32.and
-      i32.add
-      i32.const 4
-      i32.add
-      local.set $size
-      local.get $next
-      i32.load
-      local.set $next
-    end
-    local.get $before
-    if
-      local.get $head
-      local.get $head
-      i32.const 4
-      i32.sub
-      i32.load
+      local.get $joined
       i32.const -4
       i32.and
       local.tee $joined
-      i32.add
-      i32.const 4
-      i32.add
-      local.get $ptr
-      i32.eq
+      i32.const 256
+      i32.gt_u
+      i32.and
       if
-        local.get $joined
+        local.get $next
+        i32.load offset=4
+        local.get $next
+        i32.load
+        i32.store
+        local.get $next
+        i32.load
+        local.tee $link
+        if
+          local.get $link
+          local.get $next
+          i32.load offset=4
+          i32.store offset=4
+        end
         local.get $size
+        local.get $joined
         i32.add
         i32.const 4
         i32.add
         local.set $size
-        local.get $head
-        local.set $ptr
-        local.get $before
-        local.set $head
       end
+    end
+    local.get $header
+    i32.const 2
+    i32.and
+    if
+      local.get $ptr
+      i32.const 4
+      i32.sub
+      local.get $ptr
+      i32.const 8
+      i32.sub
+      i32.load
+      local.tee $joined
+      i32.sub
+      local.set $ptr
+      local.get $ptr
+      i32.load offset=4
+      local.get $ptr
+      i32.load
+      i32.store
+      local.get $ptr
+      i32.load
+      local.tee $link
+      if
+        local.get $link
+        local.get $ptr
+        i32.load offset=4
+        i32.store offset=4
+      end
+      local.get $size
+      local.get $joined
+      i32.add
+      i32.const 4
+      i32.add
+      local.set $size
     end
     local.get $ptr
     local.get $size
@@ -114,9 +131,6 @@
     global.get $heap_ptr
     i32.eq
     if
-      local.get $head
-      i32.const 0
-      i32.store
       local.get $ptr
       i32.const 4
       i32.sub
@@ -127,11 +141,38 @@
     i32.const 4
     i32.sub
     local.get $size
+    i32.const 1
+    i32.or
     i32.store
     local.get $ptr
-    local.get $next
+    local.get $size
+    i32.add
+    local.tee $next
+    i32.const 4
+    i32.sub
+    local.get $size
     i32.store
-    local.get $head
+    local.get $next
+    local.get $next
+    i32.load
+    i32.const 2
+    i32.or
+    i32.store
+    local.get $ptr
+    i32.const 4352
+    i32.load
+    local.tee $next
+    i32.store
+    local.get $ptr
+    i32.const 4352
+    i32.store offset=4
+    local.get $next
+    if
+      local.get $next
+      local.get $ptr
+      i32.store offset=4
+    end
+    i32.const 4352
     local.get $ptr
     i32.store
   )

@@ -96,9 +96,17 @@ context of their own, `type MRef(a) = [Memory] protected (...)`
    types, so they needed nothing new in the compiler. Each declares `[Memory]`, as any type whose representation holds
    a scoped value must (NYX0256, [#1604](https://github.com/nanyx-lang/nanyx/issues/1604)):
    `type MStack(a) = [Memory] private MRef(list(a))`, so the `MRef` it holds is of the stack's own scope.
-   `MStack` is an `MRef(list(a))`, the top first. `MList` is an `MRef` of its
-   elements last first, and their count, so `add` is constant-time and `at` and `set` walk to the element; `set` gives
-   `#ok | #outOfRange`. It can move onto a growable `MArray` later without changing its interface.
+   `MStack` is an `MRef(list(a))`, the top first. `MList` is an `MRef` of its elements in order, the last of their
+   cells, and their count ([#1671](https://github.com/nanyx-lang/nanyx/issues/1671)): `add` makes a cell and changes
+   the last cell's tail to it, with the intrinsic `__nanyx_list_set_tail`, so it is constant-time, and `at` and `set`
+   walk to the element; `set` gives `#ok | #outOfRange`. Changing a cell is safe because nothing outside the `MList`
+   sees its cells until `toList` gives them out. `toList` is functional but in place
+   ([Principles](../foundations/principles#functional-but-in-place)): it asks `__nanyx_is_exclusive` whether it holds
+   the only reference to the `MList`'s box, and if so hands over the cells, in constant time, since nothing can add to
+   them again; otherwise the program uses the `MList` afterwards, so it copies them. A copy is a cost, never a change
+   in meaning. `list.select` builds its list the same way, front to back in a `memory` block, with nothing to check:
+   its cells are never seen until it returns them. `MList` can move onto a growable `MArray` later without changing
+   its interface.
    `+=` appends too ([#1564](https://github.com/nanyx-lang/nanyx/issues/1564), decided by the maintainer): it is a
    spare operator, the loosest, grouping none, which means only what is attached to its left operand's type, as `^`
    and `<>` do. `MList` attaches ``def MList.`+=`: [Memory] MList(a), a -> () = MList.add``. It is not sugar for
