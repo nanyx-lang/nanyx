@@ -46,9 +46,9 @@ When the branches of an `if` or `match` evaluate to different [tags](./tags), th
 ```nanyx
 def getMessage = {
   def message = "Hello, from Nanyx!"
-  if false then #some(message)
-  else #noMessage
+  if false then #some(message) else #noMessage
 }
+
 -- inferred as `() -> #some(string) | #noMessage`
 ```
 
@@ -61,6 +61,7 @@ def classify = { n ->
     | 1 -> #one(n)
     | _ -> #many(n)
 }
+
 -- inferred as `int -> #zero | #one(int) | #many(int)`
 ```
 
@@ -89,7 +90,9 @@ def magnitude = { x, y -> math.sqrt(x * x + y * y) }
 import nanyx/math as math
 
 -- The annotation makes field names part of the function signature
-def magnitude2: (x: float, y: float) -> float = { x, y -> math.sqrt(x * x + y * y) }
+def magnitude2: (x: float, y: float) -> float = { x, y ->
+  math.sqrt(x * x + y * y)
+}
 ```
 
 Field names in function signatures should be a deliberate choice, since callers must use the field names to call the function:
@@ -123,9 +126,13 @@ An annotation does not have to spell out the whole type. Write `_` for any part 
 
 ```nanyx
 def xs: list(_) = [1, 2]
+
 -- inferred as list(int)
 
-def add: (int, _) -> _ = { a, b -> a + b }
+def add: int, _ -> _ = { a, b ->
+  a + b
+}
+
 -- inferred as int, int -> int
 
 def answer: #ok(_) | #error(string) = #ok(42)

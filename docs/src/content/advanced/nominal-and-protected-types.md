@@ -31,17 +31,14 @@ export type Email = protected string
 Declaring `Email` also declares a constructor of the same name. Applying `Email` to a value of the underlying shape wraps it, and matching on `Email(e)` unwraps it again:
 
 ```nanyx
-def wrapped = Email("ada@example.com")   -- Email
-def Email(raw) = wrapped                 -- raw: string
+def wrapped = Email("ada@example.com") -- Email
+def Email(raw) = wrapped -- raw: string
 ```
 
 For record shapes the constructor takes the record's fields by name:
 
 ```nanyx
-export type User = protected (
-  name: string
-  email: Email
-)
+export type User = protected (name: string, email: Email)
 
 def user = User(name = "Ada", email = wrapped)
 ```
@@ -104,9 +101,15 @@ A nominal type can take type parameters, as an alias can. It is written with its
 ```nanyx
 type Box(a) = protected (v: a)
 
-def boxed = Box(v = 5)                           -- Box(int)
-def get: Box(int) -> int = { b -> b.v }
-def wrap: a -> Box(a) = { x -> Box(v = x) }
+def boxed = Box(v = 5) -- Box(int)
+
+def get: Box(int) -> int = { b ->
+  b.v
+}
+
+def wrap: a -> Box(a) = { x ->
+  Box(v = x)
+}
 ```
 
 `Box(int)` and `Box(string)` are different types, so `get(Box(v = "five"))` is an error. A type's arguments tell its types apart even when its shape doesn't use them: given `type Tagged(a) = protected int`, a `Tagged(string)` is not a `Tagged(int)`.

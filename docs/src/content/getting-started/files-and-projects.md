@@ -21,6 +21,7 @@ match file.read("input.txt")
     def words = content
       \split(on = " ")
       \filter { != "" }
+
     println("Word count: {words.length}")
   | #error(err) ->
     println("Error: {err}")

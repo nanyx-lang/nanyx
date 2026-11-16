@@ -215,12 +215,14 @@ def main = {
 A keyword means the same wherever it is in the block. A `try` or `return` in a branch of an `if`, or in an arm of a `match`, has the rest of the block as its continuation, just as one outside the branch does. A failed `try` and a `return` end the whole block, not just the branch:
 
 ```nanyx
-def check: int -> #some(int) | #negative | #odd = { n -> proc {
-  if n < 0 then try #negative
-  if n == 0 then return 0
-  def half = try halve(n)
-  return half
-} }
+def check: int -> #some(int) | #negative | #odd = { n ->
+  proc {
+    if n < 0 then try #negative
+    if n == 0 then return 0
+    def half = try halve(n)
+    return half
+  }
+}
 ```
 
 Each branch goes on to the rest of the block when it finishes, so a `def` of an `if` or `match` binds the value its branch ends with. The `if` or `match` need not be a statement of its own: one in a part of a statement that always runs, such as the value a destructuring `def` takes apart or an operand of `+`, is worked out first, just before its statement:
@@ -244,12 +246,15 @@ def parse: string -> #some(int) | #error(string) = { s ->
   if s == "" then #error("empty") else #some(s.length)
 }
 
-def total: list(string) -> #some(int) | #error(string) = { items -> proc {
-  for items | item ->
-    def n = try parse(item)
-    if n > 100 then return n
-  return 0
-} }
+def total: list(string) -> #some(int) | #error(string) = { items ->
+  proc {
+    for items | item ->
+      def n = try parse(item)
+      if n > 100 then return n
+
+    return 0
+  }
+}
 ```
 
 The `for` member of the builder's context runs such a loop. It takes the list, the body and the rest of the block. The body takes an item and the rest of the loop, which it calls to go on to the next item once it has finished with this one. A `for` loop statement like the one above becomes, roughly:

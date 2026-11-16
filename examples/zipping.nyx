@@ -1,10 +1,6 @@
 -- A script module: no module declaration, so the statements run top to bottom
 
-def things = [
-  "Alex"
-  "Sam"
-  "Jo"
-]
+def things = ["Alex", "Sam", "Jo"]
 
 -- This is the "foreach" syntax in Nanyx
 for things | thing ->

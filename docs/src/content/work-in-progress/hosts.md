@@ -321,11 +321,7 @@ Real services often need more than one long-running activity, for example an HTT
 
 ```nanyx
 @entry
-def main = (
-  http = handler
-  worker = processQueue
-  nightly = Schedule.daily(at = "02:00", cleanup)
-)
+def main = (http = handler, worker = processQueue, nightly = Schedule.daily(at = "02:00", cleanup))
 ```
 
 The composite host runs each part under the right sub-host and coordinates startup and shutdown. The open question is whether composition is a language-level concept, with every host composable, or something a dedicated `ServiceHost` provides. .NET's Generic Host, with `IHostedService`, takes the second approach.

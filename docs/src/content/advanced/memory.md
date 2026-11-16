@@ -78,8 +78,10 @@ def inc = { mut cell ->
 
 def count = memory {
   mut count = 0
+
   for 1..10 ->
     inc(mut count)
+
   count -- 10
 }
 ```
@@ -99,7 +101,9 @@ A reference, `MRef(a)` from [`nanyx/mref`](../stdlib/mref), is a cell that is a 
 ```nanyx
 import nanyx/mref
 
-def bump: [Memory] MRef(int) -> () = { r -> MRef.update(r, { n -> n + 1 }) }
+def bump: [Memory] MRef(int) -> () = { r ->
+  MRef.update(r, { n -> n + 1 })
+}
 
 def total = memory {
   def count = MRef.new(0)
@@ -163,6 +167,7 @@ def total = memory { context outer ->
     z := 5
     { z }
   }
+
   get() + get() -- 10
 }
 ```

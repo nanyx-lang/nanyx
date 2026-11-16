@@ -17,9 +17,9 @@ cd word_counter
 
 ```nanyx
 import (
+  nanyx/collections
   nanyx/file
   nanyx/string
-  nanyx/collections
 )
 
 match file.read("input.txt")
@@ -32,7 +32,6 @@ match file.read("input.txt")
     println("Word count: {count}")
   | #error(err) ->
     println("Error reading file: {err}")
-
 ```
 
 # Run it

@@ -126,7 +126,7 @@ Access module members with the module name:
 ```nanyx
 import nanyx/math as m
 
-def result = m.sqrt(16.0)  -- 4.0
+def result = m.sqrt(16.0) -- 4.0
 def pi = m.pi
 ```
 
@@ -139,7 +139,7 @@ Import specific items from a module using deconstruction syntax on the import:
 ```nanyx
 import nanyx/math as (sqrt, pi, abs)
 
-def result = sqrt(16.0)  -- No need for an m. prefix
+def result = sqrt(16.0) -- No need for an m. prefix
 ```
 
 Only the names in the brackets come into scope. A selected name can be a definition or a type; a type brings the definitions attached to it along with it, so `import shapes as (Shape)` brings in `Shape.area` too. Naming something the module does not export is an error: `import nanyx/math as (sqrtt)` says that `nanyx/math` does not export `sqrtt`, and suggests `sqrt`. The names can also be written one per line, without commas.
@@ -291,7 +291,9 @@ module money =
   -- Prices are whole pence, so no rounding ever creeps in.
   export type Money = protected (pence: int)
 
-  export def Money.new: int -> Money = { pence -> Money(pence = pence) }
+  export def Money.new: int -> Money = { pence ->
+    Money(pence = pence)
+  }
 
   export def Money.toString: Money -> string = { m ->
     def pounds = m.pence / 100
@@ -364,10 +366,10 @@ Top-level definitions in a named module must be context-free: they cannot requir
 ```nanyx
 module config
 
-def maxRetries = 3              -- Ok: context-free
-def timeout = maxRetries * 10   -- Ok: context-free, and free to reference other definitions in any order
+def maxRetries = 3 -- Ok: context-free
+def timeout = maxRetries * 10 -- Ok: context-free, and free to reference other definitions in any order
 
-def greeting = println("Hi")    -- error NYX0211: `println` requires [Console], which a top-level initializer cannot have
+def greeting = println("Hi") -- error NYX0211: `println` requires [Console], which a top-level initializer cannot have
 ```
 
 Because ordinary effectful initialization isn't permitted, named modules have no observable source-order initialization semantics: there's no effectful step whose order could ever be seen, which is what makes the order-independence described in [Declaration order](#declaration-order) sound rather than just convenient.

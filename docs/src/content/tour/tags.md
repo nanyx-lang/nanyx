@@ -49,25 +49,17 @@ You rarely have to write a union out by hand. When different branches of a funct
 Tags can also carry payloads, allowing them to function as discriminated unions or sum types:
 
 ```nanyx
-type Color =
-  | #red
-  | #green
-  | #blue
-  | #custom(string)
+type Color = #red | #green | #blue | #custom(string)
 ```
 
 In type syntax, a tag with payload is written `#tagName(PayloadType)`. The payload can be any type, including a record or another tag union:
 
 ```nanyx
-type Shape =
-  | #circle(float)
-  | #rectangle(width: float, height: float)
+type Shape = #circle(float) | #rectangle(width: float, height: float)
 ```
 
 ```nanyx
-type AuthResult =
-  | #authenticated(username: string)
-  | #rejected(#invalidCredentials | #expiredToken)
+type AuthResult = #authenticated(username: string) | #rejected(#invalidCredentials | #expiredToken)
 ```
 
 A tag that carries the unit value `()` is written with empty brackets, in values and in types alike, just as a function that takes nothing is called `f()`. `#some()` is `#some(())`:
@@ -96,10 +88,10 @@ Because tag unions are structural, functions can be written that require specifi
 For example, the prelude has a `mapSome` function that transforms only the `#some` case of a given union type and preserves everything else:
 
 ```nanyx
-def mapSome
-  : (#some(a) | r), (a -> b) -> (#some(b) | r)
-  = { | #some(a), f -> #some(f(a))
-      | other, _ -> other }
+def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = {
+  | #some(a), f -> #some(f(a))
+  | other, _ -> other
+}
 ```
 
 This preserves non-success cases while still transforming success values:
@@ -115,11 +107,11 @@ y \mapSome { \Math.abs }
 `other` can be returned as an `r` because the arm before it takes every `#some`, so `other` is never one. The same holds for a catch-all inside a pattern, in a list's item, a tuple's field or a tag's payload, when an earlier arm takes every value of a tag there and is a catch-all everywhere else:
 
 ```nanyx
-def allSomeOnto
-  : list(#some(a) | r), list(a) -> #some(list(a)) | r
-  = { | [], acc -> #some(list.reverse(acc))
-      | [#some(x), ...rest], acc -> allSomeOnto(rest, [x, ...acc])
-      | [other, ...rest], acc -> other }
+def allSomeOnto: list(#some(a) | r), list(a) -> #some(list(a)) | r = {
+  | [], acc -> #some(list.reverse(acc))
+  | [#some(x), ...rest], acc -> allSomeOnto(rest, [x, ...acc])
+  | [other, ...rest], acc -> other
+}
 ```
 
 For broader union and matching patterns, see [Pattern matching](./pattern-matching) and [Types](./types).
@@ -133,7 +125,7 @@ That said, converting a tag to text gives the expected name:
 ```nanyx
 def t = #readwrite
 
-"{t}"   -- "#readwrite"
+"{t}" -- "#readwrite"
 ```
 
 This is useful for logging and debugging, but it does not change the underlying runtime type of the value.

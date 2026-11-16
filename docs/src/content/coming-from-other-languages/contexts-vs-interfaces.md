@@ -54,7 +54,7 @@ This allows capabilities to be "bolted on" to types without modifying their defi
 
 You can provide implementations with `use`, for a type that has none of its own:
 
-```nanyx
+```nanyx fragment
 type Celsius = (degrees: float)
 
 use Add(Celsius)(
@@ -76,9 +76,7 @@ This is closer to passing a capability dictionary than calling methods on an ins
 Contexts are not only for generic constraints; they also model effects like I/O:
 
 ```nanyx
-context Console = (
-  println: string -> ()
-)
+context Console = (println: string -> ())
 
 def greet: [Console] string -> () = { name ->
   println("Hello, {name}")

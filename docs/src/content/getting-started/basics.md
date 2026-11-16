@@ -39,8 +39,7 @@ def message =
 You can also continue an expression on the next line when the previous line is incomplete:
 
 ```nanyx
-def message = "Hello " +
-  "World"
+def message = "Hello " + "World"
 ```
 
 A block returns the value of its last expression:
@@ -170,19 +169,11 @@ You can use commas or newlines to separate items in lists and records:
 ```nanyx
 def items = [1, 2, 3]
 
-def items = [
-  1
-  2
-  3
-]
+def items = [1, 2, 3]
 
 def myRecord = (a = 1, b = 2, c = 3)
 
-def myRecord = (
-  a = 1
-  b = 2
-  c = 3
-)
+def myRecord = (a = 1, b = 2, c = 3)
 ```
 
 # Comments
@@ -235,11 +226,9 @@ context, a field of a record type and a tag of a union type:
 
 ```nanyx
 --| A shape on the screen.
-type Shape =
-  --| A circle, by its radius.
-  | #circle(float)
-  --| A square, by the length of its side.
-  | #square(float)
+--| A circle, by its radius.
+--| A square, by the length of its side.
+type Shape = #circle(float) | #square(float)
 
 type Point = (
   --| Pixels from the left.
@@ -296,12 +285,13 @@ else
 When there are more than two cases, use the multi-branch form. This is sugar for a `match` where each arm is a boolean condition, tested in order, with `else` as the final catch-all:
 
 ```nanyx
-if | cond1 ->
-     someCode()
-   | cond2 ->
-     someOtherCode()
-   | else ->
-     yetMoreCode()
+if
+  | cond1 ->
+    someCode()
+  | cond2 ->
+    someOtherCode()
+  | else ->
+    yetMoreCode()
 ```
 
 As with a single-branch `if`, the `else` arm may be left out when the branches are unit; if no condition holds, the `if` is `()`. An arm's condition may also be a pattern test with `is` (`| get(3) is #some(v) -> ...`), which binds the pattern's names in that arm.

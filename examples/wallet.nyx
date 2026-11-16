@@ -5,27 +5,19 @@ import nanyx/encoding
 -- Classifying bitcoin addresses and deriving the script hash that an
 -- Electrum-style server indexes them by.
 
-export type AddressType =
-  | #p2pkh
-  | #p2sh
-  | #p2wpkh
-  | #p2tr
-  | #p2pkhTestnet
-  | #p2shTestnet
-  | #p2wpkhTestnet
-  | #p2trTestnet
-  | #unknown
+export type AddressType = #p2pkh | #p2sh | #p2wpkh | #p2tr | #p2pkhTestnet | #p2shTestnet | #p2wpkhTestnet | #p2trTestnet | #unknown
 
 export def addressType: string -> AddressType = { address ->
-  if | address \startsWith("bc1q") -> #p2wpkh
-     | address \startsWith("bc1p") -> #p2tr
-     | address \startsWith("1") -> #p2pkh
-     | address \startsWith("3") -> #p2sh
-     | address \startsWith("tb1q") -> #p2wpkhTestnet
-     | address \startsWith("tb1p") -> #p2trTestnet
-     | address \startsWith("m") -> #p2pkhTestnet
-     | address \startsWith("2") -> #p2shTestnet
-     | else -> #unknown
+  if
+    | address \startsWith("bc1q") -> #p2wpkh
+    | address \startsWith("bc1p") -> #p2tr
+    | address \startsWith("1") -> #p2pkh
+    | address \startsWith("3") -> #p2sh
+    | address \startsWith("tb1q") -> #p2wpkhTestnet
+    | address \startsWith("tb1p") -> #p2trTestnet
+    | address \startsWith("m") -> #p2pkhTestnet
+    | address \startsWith("2") -> #p2shTestnet
+    | else -> #unknown
 }
 
 export def AddressType.isTestnet: AddressType -> bool = {
@@ -34,11 +26,13 @@ export def AddressType.isTestnet: AddressType -> bool = {
 }
 
 -- A pay-to-public-key-hash output script wraps the 20-byte hash of the key
-export def addressToP2PKH: string -> #some(string) | #error(#invalidAddress) = { address -> proc {
-  def decoded = try Base58Check.decode(address) \Result.mapError { _ -> #invalidAddress }
-  def hash160 = decoded \Hex.encode \drop(2)   -- drop the version byte
-  return "76a914{hash160}88ac"
-}}
+export def addressToP2PKH: string -> #some(string) | #error(#invalidAddress) = { address ->
+  proc {
+    def decoded = try Base58Check.decode(address) \Result.mapError { _ -> #invalidAddress }
+    def hash160 = decoded \Hex.encode \drop(2) -- drop the version byte
+    return "76a914{hash160}88ac"
+  }
+}
 
 -- sha256 of the output script, byte-reversed
 export def scriptHash: Binary -> string = { script ->
@@ -53,22 +47,33 @@ export def detectAddressTypeToScriptHash
     match addressType(address)
       | #unknown -> #error(#unrecognizedAddress)
       | #p2pkh | #p2pkhTestnet -> proc {
-          def output = try addressToP2PKH(address)
-          return ScriptInfo(output = output, scriptHash = scriptHash(Hex.decode(output)), address = address)
-        }
+        def output = try addressToP2PKH(address)
+
+        return ScriptInfo(
+          output = output
+          scriptHash = scriptHash(Hex.decode(output))
+          address = address
+        )
+      }
       | _ -> proc {
-          def output = try Bech32.toOutputScript(address) \Result.mapError { _ -> #invalidAddress }
-          return ScriptInfo(output = Hex.encode(output), scriptHash = scriptHash(output), address = address)
-        }
+        def output = try Bech32.toOutputScript(address) \Result.mapError { _ -> #invalidAddress }
+
+        return ScriptInfo(
+          output = Hex.encode(output)
+          scriptHash = scriptHash(output)
+          address = address
+        )
+      }
   }
 
 -- Replace the "primary" and "funding" aliases with real addresses from the wallet
 type WalletInfo = (primary: string, funding: string, imported: map(string, string))
 
-export def resolveAlias: (WalletInfo, string) -> string = { wallet, alias ->
-  if | alias == "primary" -> wallet.primary
-     | alias == "funding" -> wallet.funding
-     | else ->
-       def #some(address) = wallet.imported(alias) except #notFound -> #some(alias)
-       address
+export def resolveAlias: WalletInfo, string -> string = { wallet, alias ->
+  if
+    | alias == "primary" -> wallet.primary
+    | alias == "funding" -> wallet.funding
+    | else ->
+      def #some(address) = wallet.imported(alias) except #notFound -> #some(alias)
+      address
 }

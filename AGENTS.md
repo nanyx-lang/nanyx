@@ -68,13 +68,14 @@ label.
   dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -- format <files>
   ```
 
-  CI fails if any file under `stdlib/` is not formatted. Format only the files you touched: formatting other
-  files belongs in a PR of its own. Leave test inputs alone where their layout is what the test checks, such
-  as parser and formatter fixtures.
-- **Check the standard library when you change the formatter.** A change to how the formatter lays code
-  out can leave `stdlib/` unformatted. Run
+  CI fails if any file under `stdlib/` is not formatted, and a test fails on an example in `examples/` or a
+  docs code block fenced ` ```nanyx ` that is not, naming it and showing its formatted form. Write a docs block
+  as the formatter would. Format only the files you touched: formatting other files belongs in a PR of its own.
+  Leave test inputs alone where their layout is what the test checks, such as parser and formatter fixtures.
+- **Check the repository's Nanyx when you change the formatter.** A change to how the formatter lays code
+  out can leave `stdlib/`, `examples/` or the docs unformatted. Run
   `dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -- format --check ../stdlib` from
-  `compiler/` before you push.
+  `compiler/` before you push, and reformat what the corpus test lists in the same PR.
 - **Write the standard library's pages after changing it.** The reference on each page in
   `docs/src/content/stdlib` is generated from the doc comments of the library and of the packages in `packages/`, and a
   test fails when it is out of date. After you change a doc comment or what the library or a shipped package exports,

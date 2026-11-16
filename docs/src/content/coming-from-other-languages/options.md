@@ -55,10 +55,10 @@ Code that already handles `#loading` and `#loaded` keeps working, and the new ca
 Nanyx still supports option-like values via the `#some` convention and functions like `mapSome` that preserve other tags:
 
 ```nanyx
-def mapSome
-  : ((#some(a) | r), (a -> b)) -> (#some(b) | r)
-  = { | #some(a), f -> #some(f(a))
-      | other, _ -> other }
+def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = {
+  | #some(a), f -> #some(f(a))
+  | other, _ -> other
+}
 ```
 
 This gives you the ergonomics of options without forcing every absence into a single type.

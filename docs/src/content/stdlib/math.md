@@ -9,7 +9,9 @@ The arguments of a function generic over `Num(a)` or `Ord(a)` must all be of the
 ```nanyx
 import nanyx/math as math
 
-def area: float -> float = { r -> math.pi * r * r }
+def area: float -> float = { r ->
+  math.pi * r * r
+}
 
 println(math.abs(-42))
 println(math.clamp(120, min = 0, max = 100))

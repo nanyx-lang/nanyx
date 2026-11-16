@@ -96,6 +96,10 @@ would run it as a script. A standard-library page's generated reference is left 
 | ` ```nanyx fragment ` | The block is part of a program: it uses names defined elsewhere, stands for code with `...`, or is one file of several. It is not compiled. |
 | ` ```nanyx skip=#123 ` | The block is a program the compiler gets wrong, until issue #123 is fixed. It is not compiled. When the issue is fixed, remove the tag. |
 
+A block fenced ` ```nanyx ` must also be formatted, here and on every other docs page: a formatter test checks each one
+that parses and has no `-- error` comment ([Formatter](./formatter#plan)). Outside the tour, ` ```nanyx unformatted `
+marks code shown as it was before formatting, which that test leaves alone.
+
 A whole program is checked further by what its comments say:
 
 - **Errors.** A block with a comment that names an error, such as `-- error NYX0201: ...` or `-- Error NYX0227: ...`,

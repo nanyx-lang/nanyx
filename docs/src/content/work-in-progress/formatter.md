@@ -4,8 +4,8 @@ description: "How nanyx format is built, and the style it enforces"
 order: 31
 ---
 
-> **Status: built, with the repository's own code still to format.** This page describes how `nanyx format` is built
-> and the style it enforces. The user's side is described in the docs. Configuration, blank lines, import sorting and
+> **Status: built.** This page describes how `nanyx format` is built and the style it enforces; the repository's own
+> Nanyx is kept in that style (see [Plan](#plan)). The user's side is described in the docs. Configuration, blank lines, import sorting and
 > unparseable files were decided on 2026-11-07, and the style on 2026-11-16 (see [Decided](#decided)). Work is
 > tracked under the `formatting` label.
 
@@ -195,7 +195,7 @@ built in [#220](https://github.com/nanyx-lang/nanyx/issues/220). The examples on
 - A record, tuple or call's arguments with an element that spans lines (a lambda with a block) also puts each
   element on its own line, with the closing bracket on a line of its own:
 
-  ```nanyx
+  ```nanyx fragment
   use Log(
     log = { message ->
       println(message)
@@ -361,8 +361,15 @@ its own:
 8. **Sorting imports** ([#226](https://github.com/nanyx-lang/nanyx/issues/226)). Done.
 9. **Configuration** ([#227](https://github.com/nanyx-lang/nanyx/issues/227)). The `formatter` field of
    `.nyxp`.
-10. **The repository** ([#223](https://github.com/nanyx-lang/nanyx/issues/223)). Format `examples/`, `stdlib/` and
-    the docs' code blocks, and run `nanyx format --check` in CI.
+10. **The repository** ([#223](https://github.com/nanyx-lang/nanyx/issues/223)). Done. `stdlib/` and `packages/` are
+    checked by `nanyx format --check` in CI. The examples that parse, and the docs' code blocks fenced ` ```nanyx `,
+    are checked by a test that CI runs (`CorpusTests`, "The examples and the docs' code blocks are formatted"), which
+    names each one that isn't formatted and shows what it should be. A test rather than a CLI step, because some
+    examples are written in syntax the parser doesn't take yet, and the command can't read a Markdown file. A block
+    fenced ` ```nanyx fragment `, ` ```nanyx skip=#<issue> ` or ` ```nanyx unformatted ` (code shown before
+    formatting, as on the Formatter page) is not checked, and nor is one with an `-- error` comment, whose code is
+    wrong on purpose (the formatter would write NYX0032's `&` as `,`) and laid out to put the comment on the line it
+    is about.
 
 
 # Decided

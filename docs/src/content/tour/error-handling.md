@@ -9,7 +9,9 @@ In Nanyx, errors are values: a function that can fail says so in its return type
 To crash on purpose, call the prelude's `crash` with a message. It writes `crash: ` and the message to standard error and ends the program with exit code 1. It never returns, so its type is [`undefined`](./types#top-and-bottom-types) and a call to it fits wherever a value is expected:
 
 ```nanyx
-def half: int -> int = { n -> if n % 2 == 0 then n / 2 else crash("{n} is odd") }
+def half: int -> int = { n ->
+  if n % 2 == 0 then n / 2 else crash("{n} is odd")
+}
 ```
 
 Where a missing value can only be a bug, `orCrash` unwraps it: it gives the value in a `#some`, and crashes with its message on anything else, so it works on options and results alike. It reads well at the end of a pipeline:
@@ -81,7 +83,9 @@ def findUser: int -> #some(User) | #none = { id ->
 `a ?? b` unwraps an option-like value: it is the value inside `a`'s `#some`, or `b` for any other tag. `b` is only evaluated when it is needed, so it can be a call that does work:
 
 ```nanyx
-def port: string -> #some(int) | #invalidInt = { text -> int.fromString(text) }
+def port: string -> #some(int) | #invalidInt = { text ->
+  int.fromString(text)
+}
 
 def defaultPort: [Console] () -> int = {
   println("using the default port")
@@ -93,6 +97,7 @@ def main = {
   println(port("3000") ?? defaultPort())
   println(port("http") ?? defaultPort())
 }
+
 -- 3000
 -- using the default port
 -- 8080
@@ -153,15 +158,17 @@ def find: int -> #some(int) | #error(#notFound) = { id ->
 }
 
 def lookup = { id -> proc {
-  def #some(result) = find(id) except #error(#notFound) -> return 0
-  return result + 1
-} }
+    def #some(result) = find(id) except #error(#notFound) -> return 0
+    return result + 1
+  }
+}
 
 @entry
 def main = {
   println(lookup(4))
   println(lookup(-1))
 }
+
 -- #some(41)
 -- #some(0)
 ```

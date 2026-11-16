@@ -26,10 +26,7 @@ def p = Point(x = 10, y = 20)
 Records are structural and immutable by default. To "update an object," create a new value using `with`:
 
 ```nanyx
-def moved = p with (
-  x = p.x + 5
-  y = p.y + 3
-)
+def moved = p with (x = p.x + 5, y = p.y + 3)
 ```
 
 See [Records and tuples](../tour/records) for the full model.
@@ -42,10 +39,7 @@ Behavior is defined separately from data:
 type Point = (x: int, y: int)
 
 def Point.translate = { point, dx, dy ->
-  point with (
-    x = point.x + dx
-    y = point.y + dy
-  )
+  point with (x = point.x + dx, y = point.y + dy)
 }
 
 def moved = Point.translate(p, 5, 3)

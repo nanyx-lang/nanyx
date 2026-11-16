@@ -16,11 +16,7 @@ Create a record by listing its fields and values inside parentheses. For named f
 
 ```nanyx
 -- Record with named fields
-def alice = (
-  name = "Alice"
-  age = 30
-  email = "alice@example.com"
-)
+def alice = (name = "Alice", age = 30, email = "alice@example.com")
 ```
 
 You can also use positional fields:
@@ -44,20 +40,13 @@ def mixed = (1, 2, label = "origin", unit = "px")
 A record type uses the same shape as a record value, but with type annotations on fields:
 
 ```nanyx
-def config: (host: string, port: int) = (
-    host = "localhost"
-    port = 8080
-)
+def config: (host: string, port: int) = (host = "localhost", port = 8080)
 ```
 
 When you use the same structure in multiple places, define a named type alias:
 
 ```nanyx
-type Person = (
-  name: string
-  age: int
-  email: string
-)
+type Person = (name: string, age: int, email: string)
 ```
 
 Then reference that alias in annotations:
@@ -104,7 +93,9 @@ type Person = Named & (age: int)
 A record type is _closed_: it has exactly the fields it lists, no more and no fewer. A record with an extra field is a different type, so it can't be passed where the smaller record is expected:
 
 ```nanyx
-def f: (x: int, y: int) -> int = { x, y -> x + y }
+def f: (x: int, y: int) -> int = { x, y ->
+  x + y
+}
 
 def data = (x = 1, y = 2, z = 3)
 
@@ -116,7 +107,9 @@ This is what makes named arguments safe. A function's parameters are a record, s
 To accept any record that has _at least_ some fields, end the type with `...`. This makes it _open_:
 
 ```nanyx
-def g: (x: int, y: int, ...) -> int = { x, y -> x + y }
+def g: (x: int, y: int, ...) -> int = { x, y ->
+  x + y
+}
 
 def data = (x = 1, y = 2, z = 3)
 
@@ -126,9 +119,11 @@ println(g(data)) -- 3: `z` is one of the other fields
 Give the other fields a name, as in `...r`, when a type needs to say that two records have the same ones. Here, whatever else the input has, the output has too:
 
 ```nanyx
-def moveRight: (x: int, ...r) -> (x: int, ...r) = { p -> p with x = p.x + 1 }
+def moveRight: (x: int, ...r) -> (x: int, ...r) = { p ->
+  p with x = p.x + 1
+}
 
-def moved = moveRight((x = 1, y = 2, label = "a"))
+def moved = moveRight(x = 1, y = 2, label = "a")
 -- moved: (label: string, x: int, y: int)
 
 println("{moved.label} is at {moved.x}") -- a is at 2
@@ -142,7 +137,7 @@ You rarely need to write `...` yourself. When the compiler infers a function's t
 def area = { r -> r.width * r.height }
 -- inferred as `(height: int, width: int, …) -> int`
 
-area((width = 2, height = 3, colour = "red")) -- fine
+area(width = 2, height = 3, colour = "red") -- fine
 ```
 
 An editor writes an inferred record's fields in alphabetical order, and its other fields as an ellipsis, `…`, where you would write `...`. The other fields get a name, such as `…ω`, only where the type uses them twice.
@@ -187,10 +182,10 @@ type Person = (name: string, petsName: #some(string) | #none)
 def alice = Person(name = "Alice", petsName = #some("Rex"))
 def bob = Person(name = "Bob", petsName = #none)
 
-def describe = { person: Person ->
+def describe = { (person: Person) ->
   match person.petsName
-  | #some(pet) -> "{person.name} has a pet called {pet}"
-  | #none -> "{person.name} has no pet"
+    | #some(pet) -> "{person.name} has a pet called {pet}"
+    | #none -> "{person.name} has no pet"
 }
 
 println(describe(alice))
@@ -208,7 +203,7 @@ A field can hold a function. Call it as you would call a function, through the r
 ```nanyx
 type Counter = (add: (int, int) -> int, describe: () -> string)
 
-def make = { start: int ->
+def make = { (start: int) ->
   Counter(add = { x, y -> start + x + y }, describe = { "starts at {start}" })
 }
 
@@ -234,27 +229,16 @@ Update multiple fields at once:
 
 ```nanyx
 def user = (name = "Alice", age = 30, email = "old@example.com")
-def updatedUser = user with (
-  age = 31
-  email = "alice@example.com"
-)
+def updatedUser = user with (age = 31, email = "alice@example.com")
 ```
 
 You can also chain `with` for nested records:
 
 ```nanyx
-def line = (
-  range = (
-    start = (character = 0)
-  )
-)
+def line = (range = (start = (character = 0)))
 
 def updatedLine = line with (
-  range = line.range with (
-    start = line.range.start with (
-      character = 4
-    )
-  )
+  range = line.range with (start = line.range.start with (character = 4))
 )
 ```
 
@@ -271,12 +255,7 @@ def defaults = (host = "localhost", port = 8080)
 def env = (port = 9000)
 def cli = (logLevel = "debug")
 
-def config = (
-  ...defaults
-  protocol = "https"
-  ...env
-  ...cli
-)
+def config = (...defaults, protocol = "https", ...env, ...cli)
 ```
 
 The parts are evaluated in the order they are written, and a later part's field replaces an earlier one's: here `config.port` is `9000`. Each record spread must be one whose fields are known where it is spread; a lambda's parameter whose type nothing has fixed yet can't be spread. The other fields of a record with a spread are written by name.

@@ -9,11 +9,14 @@ order: 2
 Nanyx will support units of measure for numeric types, allowing you to express time, sizes, and rates safely.
 
 ```nanyx
-def lookback = 30d
+def lookback = 30
+d
 
-def timeout = 3000ms
+def timeout = 3000
+ms
 
-def maxFilesize = 50MB
+def maxFilesize = 50
+MB
 ```
 
 This page defines the design direction for units, with two goals:
@@ -106,7 +109,8 @@ The compiler stores normalized dimensions (sorted bases + integer exponents), so
 # Derived units
 
 ```nanyx
-def transferRate = 50(MB / s)
+def transferRate = 50
+MB / s
 ```
 
 # Type rules (F#-style behavior)
@@ -123,16 +127,20 @@ For arithmetic operators on measured numeric values:
 Examples:
 
 ```nanyx
-def d = 100m
-def t = 9.58s
-def v = d / t      -- inferred: number(Length/Time)
-def a = v / t      -- inferred: number(Length/Time^2)
+def d = 100
+m
+def t = 9.58
+s
+def v = d / t -- inferred: number(Length/Time)
+def a = v / t -- inferred: number(Length/Time^2)
 ```
 
 Addition mismatch is rejected:
 
 ```nanyx
-def bad = 10m + 2s
+def bad = 10
+m + 2
+s
 -- error: cannot add number(Length) and number(Time)
 ```
 
@@ -160,14 +168,21 @@ unit(min) Minutes: Time = 60s
 Conversions are compile-time checked and only allowed within equivalent dimensions:
 
 ```nanyx
-def timeout: number(Time) = 500ms
-def twoMinutes = 120s as min     -- explicit conversion syntax (proposed)
+def timeout: number(Time) = 500
+ms
+def twoMinutes = 120 -- explicit conversion syntax (proposed)
+s
+as
+min
 ```
 
 Invalid conversion is rejected:
 
 ```nanyx
-def impossible = 1m as s
+def impossible = 1
+m
+as
+s
 ```
 
 # Ergonomics for `delay(500ms)`

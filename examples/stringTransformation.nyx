@@ -2,13 +2,7 @@ module casing
 
 import nanyx/text.regex
 
-export type Casing =
-  | #camel
-  | #pascal
-  | #kebab
-  | #snake
-  | #title
-  | #sentence
+export type Casing = #camel | #pascal | #kebab | #snake | #title | #sentence
 
 -- Split on case changes, underscores, dashes and whitespace
 def splitWords: string -> list(string) = { input ->
@@ -18,10 +12,10 @@ def splitWords: string -> list(string) = { input ->
 def capitalize: string -> string = { word ->
   match word \chars
     | [] -> ""
-    | [first, ...rest] -> first \toUpper ++ (rest \string.join("") \toLower)
+    | [first, ...rest] -> first \toUpper ++ rest \string.join("") \toLower
 }
 
-export def rejoin: (list(string), Casing) -> string = { words, casing ->
+export def rejoin: list(string), Casing -> string = { words, casing ->
   match casing
     | #kebab -> words \map { .toLower } \string.join("-")
     | #snake -> words \map { .toLower } \string.join("_")
@@ -30,14 +24,14 @@ export def rejoin: (list(string), Casing) -> string = { words, casing ->
     | #camel ->
       match words
         | [] -> ""
-        | [first, ...rest] -> first \toLower ++ (rest \map(capitalize) \string.join(""))
+        | [first, ...rest] -> first \toLower ++ rest \map(capitalize) \string.join("")
     | #sentence ->
       match words
         | [] -> ""
-        | [first, ...rest] -> capitalize(first) ++ " " ++ (rest \map { .toLower } \string.join(" "))
+        | [first, ...rest] -> capitalize(first) ++ " " ++ rest \map { .toLower } \string.join(" ")
 }
 
-export def convert: (string, Casing) -> string = { input, casing ->
+export def convert: string, Casing -> string = { input, casing ->
   rejoin(splitWords(input), casing)
 }
 

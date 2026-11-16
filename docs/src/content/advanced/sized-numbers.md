@@ -18,7 +18,7 @@ types:
 
 ```nanyx
 def total: int = 42
-def same: I64 = total  -- no conversion needed
+def same: I64 = total -- no conversion needed
 ```
 
 # The same width everywhere
@@ -42,9 +42,9 @@ operand of an operator, a pattern's scrutinee), and is `int` (or `float`, with a
 otherwise:
 
 ```nanyx
-def small: U8 = 200      -- a U8
-def big = 3_000_000_000  -- an int
-def ratio: F32 = 0.5     -- an F32
+def small: U8 = 200 -- a U8
+def big = 3_000_000_000 -- an int
+def ratio: F32 = 0.5 -- an F32
 ```
 
 A literal that does not fit its type is a compile error: `def small: U8 = 300` is rejected, with
@@ -69,7 +69,7 @@ does. It never wraps around silently:
 
 ```nanyx
 def big: I32 = 2_000_000_000
-def bigger = big + big  -- runtime error: the sum does not fit in an I32
+def bigger = big + big -- runtime error: the sum does not fit in an I32
 ```
 
 This holds for every integer type, unsigned ones included: subtracting a larger `U32` from a smaller one is an
@@ -81,7 +81,7 @@ Code that wants arithmetic that wraps on purpose, such as a hash function, asks 
 visible in the code:
 
 ```nanyx
-def wrapped = I32.wrappingAdd(2_000_000_000, 2_000_000_000)  -- -294967296
+def wrapped = I32.wrappingAdd(2_000_000_000, 2_000_000_000) -- -294967296
 ```
 
 Swift checks every operation in the same way; Rust checks in debug builds and wraps in release builds. Nanyx checks

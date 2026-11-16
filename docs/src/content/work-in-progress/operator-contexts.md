@@ -31,8 +31,11 @@ and `` list.`++` ``, which are what a function that requires `Append` is passed,
 attaching `` `++` ``, as `` def Path.`++` = ... `` does.
 
 ```nanyx
-def concat: [Append(a)] a, a -> a = { x, y -> x ++ y }   -- concat("a", "b"), concat([1], [2])
-def join = { x, y -> x ++ y }                             -- [Append(a)] a, a -> a
+def concat: [Append(a)] a, a -> a = { x, y ->
+  x ++ y
+} -- concat("a", "b"), concat([1], [2])
+
+def join = { x, y -> x ++ y } -- [Append(a)] a, a -> a
 ```
 
 - `def concat: a, a -> a = { x, y -> x ++ y }` is `NYX0205`: its type must require `Append(a)`.
@@ -55,9 +58,9 @@ A top-level function that does not write its type requires the contexts its oper
 `==` and `<`:
 
 ```nanyx
-def add = { x, y -> x + y }                 -- [Add(a)] a, a -> a
-def lerp = { a, b, t -> a + (b - a) * t }   -- [Num(a)] a, a, a -> a
-def neg = { x -> -x }                       -- [Add(a)] a -> a
+def add = { x, y -> x + y } -- [Add(a)] a, a -> a
+def lerp = { a, b, t -> a + (b - a) * t } -- [Num(a)] a, a, a -> a
+def neg = { x -> -x } -- [Add(a)] a -> a
 ```
 
 Each can then be called with ints, floats, or any type that attaches the members.
@@ -66,8 +69,8 @@ The requirement is inferred only for an operand whose type is one of the functio
 whole function is inferred. Anything that makes the operand a number does so as before:
 
 ```nanyx
-def inc = { x -> x + 1 }       -- int -> int: `1` is an int
-def half = { x -> x / 2.0 }    -- float -> float
+def inc = { x -> x + 1 } -- int -> int: `1` is an int
+def half = { x -> x / 2.0 } -- float -> float
 ```
 
 A literal is still an `int` or a `float` in a function that does not write its type (numeric contexts,
@@ -77,8 +80,8 @@ Operators on two of the function's type variables require the contexts of each, 
 of its own variable's instance:
 
 ```nanyx
-def r = { x, y, p, q -> (x + y, p * q) }          -- [Add(a), Num(b)] a, a, b, b -> (a, b)
-def same2 = { x, y, p, q -> x == y and p == q }   -- [Eq(a), Eq(b)] a, a, b, b -> bool
+def r = { x, y, p, q -> (x + y, p * q) } -- [Add(a), Num(b)] a, a, b, b -> (a, b)
+def same2 = { x, y, p, q -> x == y and p == q } -- [Eq(a), Eq(b)] a, a, b, b -> bool
 ```
 
 Two cases keep their operators on ints, as they were, because the requirement could not be used yet:
@@ -114,7 +117,9 @@ This replaces the numeric contexts page's "unannotated arithmetic is unchanged":
 A function can require two contexts with a member of the same name, of different type variables:
 
 ```nanyx
-def both: [Add(a), Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p + q) }
+def both: [Add(a), Add(b)] a, a, b, b -> (a, b) = { x, y, p, q ->
+  (x + y, p + q)
+}
 ```
 
 Both `` `+` ``s are bound to the name in the body, so the name alone does not say which an operator calls. An

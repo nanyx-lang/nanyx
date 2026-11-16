@@ -30,6 +30,7 @@ data \parse \validate \transform \save
 Manage side effects explicitly through contexts, providing algebraic effect handlers without the complexity:
 ```nanyx
 context Console = (println: string -> ())
+
 def greet: [Console] string -> () = { name ->
   println("Hello, {name}!")
 }
