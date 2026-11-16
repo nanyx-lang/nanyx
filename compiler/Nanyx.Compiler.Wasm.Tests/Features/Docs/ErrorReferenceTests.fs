@@ -87,7 +87,8 @@ let private errorsOf (code: string) =
         File.WriteAllText(path, text)
     let name, text = List.head files
     if name.EndsWith Manifest.extension then
-        (Package.compileManifest (Path.Combine(directory.Path, name)) text).Diagnostics
+        // Nothing is asked of GitHub: an example's references are made up.
+        (Package.compileManifestFrom { PackageStore.user () with GitHub = GitHub.unsupported } (Path.Combine(directory.Path, name)) text).Diagnostics
     else
         let result = Script.compileSource (Path.Combine(directory.Path, name)) text
         let errors = result.Diagnostics |> List.filter Diagnostics.isError

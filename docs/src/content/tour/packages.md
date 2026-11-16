@@ -138,7 +138,7 @@ dependencies = [
 
 The package is imported as one on disk is, `import acme.web/http`, and the file by its module name, `import retry`. A reference must be pinned to a full commit SHA, as its `rev` or as a `commit` beside a tag or branch, because what a tag or branch names can move (`NYX0038`); an editor offers to look the commit up and write it in. A file from GitHub declares no `module` name of its own, can't be exported, and imports only the standard library (`NYX0040`). A package with a GitHub reference can be built and run, but not packed or published (`NYX0039`). In a script, `::dependency retry github:acme/snippets/retry.nyx@<commit>` does the same.
 
-Downloading from GitHub isn't supported yet, so for now a build with a GitHub reference reports that at the entry (`NYX0024`).
+`nanyx pull` fetches what GitHub references name into the package cache, and a build reads it from there: one not fetched yet is an error that says to pull (`NYX0041`).
 
 ## Packages developed together
 

@@ -100,6 +100,7 @@ module Package =
     let private notFetched (span: SourceSpan) (what: string) (failure: FetchFailure) : Problem =
         match failure with
         | FetchingNotSupported -> AtManifest(Diagnostics.at DiagnosticCodes.UnsupportedManifestField span $"{what} is on GitHub, but {GitHub.describe failure}")
+        | NotPulled -> AtManifest(Diagnostics.at DiagnosticCodes.PackageNotDownloaded span $"{what} is on GitHub, but {GitHub.describe failure}")
         | FetchFailed message -> AtManifest(Diagnostics.at DiagnosticCodes.InvalidManifestValue span $"{what} can't be fetched from GitHub: {message}")
 
     /// The files from GitHub `references` lists, fetched by `fetcher`, each with the module name its entry gives it, or
