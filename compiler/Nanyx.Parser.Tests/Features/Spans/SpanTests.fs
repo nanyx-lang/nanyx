@@ -847,7 +847,7 @@ let ``the items of a module block keep their own spans, and the module it become
                       "def origin = Point(0, 0)"
                       "def p = geometry.origin" ]
     match module'.[1].Kind with
-    | ModuleDecl "app.geometry" -> ()
+    | ModuleDecl(_, "app.geometry") -> ()
     | other -> failwith $"Expected the block's module declaration, got %A{other}"
 
 [<Fact>]

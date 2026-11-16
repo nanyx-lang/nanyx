@@ -133,7 +133,7 @@ let rec private expandModuleBlock (prefix: string) (items: TopLevelItem list) : 
         | ModuleBlock(name, nested) ->
             // The nested block becomes a module declaration, written where the block was.
             let nestedPrefix = qualifyModuleName prefix name
-            TopLevelItem.at item.Span (ModuleDecl nestedPrefix) :: expandModuleBlock nestedPrefix nested
+            TopLevelItem.at item.Span (ModuleDecl(false, nestedPrefix)) :: expandModuleBlock nestedPrefix nested
         | Import _
         | ReExport _
         | Attribute _ -> [ item ]
@@ -150,13 +150,13 @@ let internal expandMidFileModules (items: TopLevelItem list) : TopLevelItem list
         | [] -> List.rev acc
         | item :: rest ->
             match item.Kind with
-            | ModuleDecl name -> loop (Some name) rest (item :: acc)
+            | ModuleDecl(_, name) -> loop (Some name) rest (item :: acc)
             | ModuleBlock(name, innerItems) ->
                 let prefix =
                     match currentModule with
                     | Some root when not (String.IsNullOrWhiteSpace root) -> qualifyModuleName root name
                     | _ -> name
-                let expanded = TopLevelItem.at item.Span (ModuleDecl prefix) :: expandModuleBlock prefix innerItems
+                let expanded = TopLevelItem.at item.Span (ModuleDecl(false, prefix)) :: expandModuleBlock prefix innerItems
                 loop currentModule rest ((List.rev expanded) @ acc)
             | _ -> loop currentModule rest (item :: acc)
     loop None items []

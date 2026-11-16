@@ -17,7 +17,7 @@ module FileImports =
         module'
         |> List.tryPick (fun item ->
             match item.Kind with
-            | ModuleDecl name when not (isBlock item.Span) -> Some (name, item.Span)
+            | ModuleDecl(_, name) when not (isBlock item.Span) -> Some (name, item.Span)
             | _ -> None)
 
     /// The name a file declares with `module name`, if it does (see `declaration`).

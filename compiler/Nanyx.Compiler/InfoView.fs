@@ -331,7 +331,7 @@ let rec private splitAs (groups: 'a list list) (written: string list) : string l
 
 /// The module's scope, with no names or contexts yet: headed by the name its `module` declaration gives it, if any.
 let private moduleScope (syntax: Module) : Scope =
-    let declared = syntax |> List.tryPick (fun item -> match item.Kind with ModuleDecl name -> Some (name, item.Span) | _ -> None)
+    let declared = syntax |> List.tryPick (fun item -> match item.Kind with ModuleDecl(_, name) -> Some (name, item.Span) | _ -> None)
     { Kind = ModuleScope
       Heading = match declared with Some (name, _) -> $"module {name}" | None -> "this module"
       Span = declared |> Option.map snd |> Option.defaultValue SourceSpan.none

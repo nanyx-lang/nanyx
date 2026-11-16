@@ -35,7 +35,7 @@ let ``Parse sample-block.nyx file`` () =
     | Result.Ok module' ->
         module' |> List.length |> should be (greaterThan 2)
         match module'.[0] with
-        | Kind (ModuleDecl name) -> name |> should equal "BlockTest"
+        | Kind (ModuleDecl(_, name)) -> name |> should equal "BlockTest"
         | _ -> failwith "Expected ModuleDecl"
     | Result.Error err -> failwith $"Parse failed: {err}"
 
@@ -87,7 +87,7 @@ let private itemsOf (source: string) =
     |> List.map (fun item ->
         let name =
             match item.Kind with
-            | ModuleDecl name -> $"module {name}"
+            | ModuleDecl(_, name) -> $"module {name}"
             | Def (ValueDef (_, name, _, _)) -> $"def {name}"
             | other -> failwith $"Unexpected item %A{other}"
         name, textOf source item.Span)

@@ -112,7 +112,7 @@ module Compiler =
         let lowered =
             items
             |> List.choose (function
-                | TypedModuleDecl name -> Some (ModuleDecl name, [])
+                | TypedModuleDecl name -> Some (ModuleDecl(false, name), [])
                 | TypedImport _ -> None
                 | TypedDef (TypedValueDef(isExport, name, typeOpt, expr)) ->
                     let value, placed = lower expr.Expr

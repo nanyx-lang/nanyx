@@ -19,7 +19,7 @@ let blockImports (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module
     // Each block is a module declaration where the block starts once blocks are expanded, under its full name.
     let prefixOf (block: SourceSpan) =
         module' |> List.tryPick (function
-            | Kind (ModuleDecl name) as item when item.Span.Start = block.Start -> Some name
+            | Kind (ModuleDecl(_, name)) as item when item.Span.Start = block.Start -> Some name
             | _ -> None)
     module'
     |> List.collect (function

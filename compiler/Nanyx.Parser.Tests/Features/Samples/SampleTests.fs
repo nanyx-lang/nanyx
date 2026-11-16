@@ -33,7 +33,7 @@ def pi = 3.14"""
     | Result.Ok module' ->
         module' |> should haveLength 4
         match module'.[0] with
-        | Kind (ModuleDecl name) -> name |> should equal "Test"
+        | Kind (ModuleDecl(_, name)) -> name |> should equal "Test"
         | _ -> failwith "Expected ModuleDecl"
     | Result.Error err ->
         failwith $"Parse failed: {err}"
