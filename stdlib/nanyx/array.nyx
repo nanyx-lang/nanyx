@@ -28,18 +28,45 @@ export def array.length: array(a) -> int = { xs ->
 --| An array of `count` elements, the one at each index `f` of it: `array.init(3, { i -> i * i })`
   is `[0, 1, 4]`. A `count` of 0 or less makes an empty array.
 export def array.init: [c] int, ([c] int -> a) -> array(a) = { count, f ->
-  __nanyx_array_of_list(list.init(count, f))
+  fillFrom(__nanyx_array_new(count), 0, f)
 }
 
 --| An array of `count` elements, each the [`Default`] of its type: `array.create(3)` of ints is
   `[0, 0, 0]`. A `count` of 0 or less makes an empty array.
 export def array.create: [Default(a)] int -> array(a) = { count ->
-  __nanyx_array_of_list(list.init(count, { _ -> default() }))
+  fillWithDefaultFrom(__nanyx_array_new(count), 0)
 }
 
 --| An array of `f` of each element of `xs`, in order.
 export def array.map: [c] array(a), ([c] a -> b) -> array(b) = { xs, f ->
-  __nanyx_array_of_list(list.map(__nanyx_array_to_list(xs), f))
+  mapFrom(xs, __nanyx_array_new(__nanyx_array_length(xs)), 0, f)
+}
+
+-- `made`, a new array, once `f` of each of its indices from `index` on is written into it. Each
+-- helper that fills a new array gives it back, so that its element type is the caller's.
+def fillFrom: [c] array(a), int, ([c] int -> a) -> array(a) = { made, index, f ->
+  if index < __nanyx_array_length(made) then
+    __nanyx_array_write(made, index, f(index))
+    fillFrom(made, index + 1, f)
+  else made
+}
+
+-- `made`, a new array, once the default of its element type is written at each index from `index`
+-- on.
+def fillWithDefaultFrom: [Default(a)] array(a), int -> array(a) = { made, index ->
+  if index < __nanyx_array_length(made) then
+    __nanyx_array_write(made, index, default())
+    fillWithDefaultFrom(made, index + 1)
+  else made
+}
+
+-- `made`, a new array as long as `xs`, once `f` of each element of `xs` from `index` on is written
+-- into it.
+def mapFrom: [c] array(a), array(b), int, ([c] a -> b) -> array(b) = { xs, made, index, f ->
+  if index < __nanyx_array_length(made) then
+    __nanyx_array_write(made, index, f(__nanyx_array_get(xs, index)))
+    mapFrom(xs, made, index + 1, f)
+  else made
 }
 
 --| `step` applied to `initial` and the first element of `xs`, then to that and the second, and so
