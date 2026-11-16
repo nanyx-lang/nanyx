@@ -138,6 +138,14 @@ Each `_` is a type of its own, and is filled in by inference rather than standin
 
 In an editor, hovering over a `_` shows the type it was inferred to be.
 
+A `_` a context is applied to is the type the body uses the context's members at. Here `bar` and `baz` are called with `a`s, so the type is `[Foo(a)] a, a -> a`:
+
+```nanyx fragment
+def doFoo: [Foo(_)] a, a -> a = { a, b -> bar(a, baz(a, b)) }
+```
+
+A call finds the context's instance at the type the `_` stands for, so it must be a type the rest of the annotation names, or one written out such as `int`. If the body never uses the context, nothing says what the `_` is, and it is an error (NYX0236).
+
 `_` can be used wherever the type of a value is written: a def's annotation, a local def's or a lambda parameter's. It cannot be used in a `type` definition, which says what a type is and so has nothing to infer it from:
 
 ```nanyx

@@ -1225,6 +1225,14 @@ def greet: [Log, ToString(a)] string -> () = { name -> log("hello {name}") }  --
 
 To fix it, remove the context, or give a parameter the type it is on.
 
+The same error is reported at a `_` a context is applied to, as in `[Foo(_)]`, when the body does not make it a type the
+definition's type names: the `_` is the type the body calls the context's members at, and nothing says what it is if the
+body never calls them.
+
+```nanyx fragment
+def same: [Foo(_)] a -> a = { x -> x }  -- error NYX0236: The body of 'same' does not make this '_' a type its parameters or result name, ...
+```
+
 # NYX0237: Entry point does not fit the host
 
 The definition marked `@entry` does not have the type its [host](../work-in-progress/hosts) runs. The host is a

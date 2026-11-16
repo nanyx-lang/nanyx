@@ -244,10 +244,14 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
         let var, next = namedTypeVar state name
         TyVar var, next
     // Each `_` is a variable of its own, with no name to share (see `TypeHoles`). It is recorded by node, as an
-    // expression's type is, so an editor can show what it was inferred to be.
+    // expression's type is, so an editor can show what it was inferred to be, and an annotation read again (the
+    // contexts it declares are read for their members, and again for what their instance fixes) reads the same one.
     | TypeHole ->
-        let ty, next = freshVar state
-        ty, { next with ExprTypes = next.ExprTypes |> Map.add typeExpr.Id ty }
+        match state.ExprTypes |> Map.tryFind typeExpr.Id with
+        | Some ty -> ty, state
+        | None ->
+            let ty, next = freshVar state
+            ty, { next with ExprTypes = next.ExprTypes |> Map.add typeExpr.Id ty }
     | TypeUnit -> TyPrimitive "unit", state
     | TypeTuple items ->
         let mutable current = state

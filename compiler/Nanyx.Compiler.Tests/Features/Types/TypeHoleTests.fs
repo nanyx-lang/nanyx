@@ -87,6 +87,34 @@ let ``A hole takes only one type`` () =
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, (List.head result.Diagnostics).Code)
 
 [<Fact>]
+let ``A hole in a context is the type the body calls its members at`` () =
+    let source =
+        normalized """context Foo(a) = (
+  bar: (a, a -> a)
+  baz: (a, a -> a)
+)
+
+def doFoo: [Foo(_)] a, a -> a = { a, b -> bar(a, baz(a, b)) }
+def ofInt: [Foo(_)] int -> int = { x -> bar(x, x) }
+def outer: int -> int = { n ->
+  def local: [Foo(_)] b -> b = { y -> baz(y, y) }
+  n
+}"""
+    Assert.Equal(Some "def doFoo: [Foo(a)] a, a -> a", hoverType source "doFoo")
+    Assert.Equal(Some "def ofInt: [Foo(int)] int -> int", hoverType source "ofInt")
+    Assert.Equal(Some "local: [Foo(α)] α -> α", hoverType source "local")
+
+[<Fact>]
+let ``A hole in a context that the body does not settle is an error at the hole`` () =
+    let source =
+        normalized """context Foo(a) = (bar: (a, a -> a))
+
+def unused: [Foo(_)] a -> a = { x -> x }"""
+    let code, _, text = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.UndeterminedContextType.Code, code)
+    Assert.Equal("_", text)
+
+[<Fact>]
 let ``A hole cannot be used in a type definition`` () =
     let result = Compiler.compile "type Names = list(_)"
     let diagnostic = List.head result.Diagnostics
