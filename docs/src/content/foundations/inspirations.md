@@ -71,13 +71,11 @@ Nanyx has no garbage collector: values are reference-counted, and freed as soon 
 
 See [Reference counting](./reference-counting).
 
-# Workflows and pipes
+# Look and feel, workflows, and pipes
 
 **F#**.
 
-Nanyx's workflows (`proc { try ... }`, with custom keywords) are F#'s computation expressions, rebuilt on contexts. The
-pipe, `xs \map(f)`, is F#'s `|>`, and much of Nanyx's feel comes from F#: indentation-sensitive, expression-oriented,
-with types inferred and written only where they help. See [Workflows](../advanced/workflows) and
+Nanyx generally looks quite a lot like F#: indentation-sensitive, expression-oriented, with types inferred and written only where they help. The pipe, `xs \map(f)`, is F#'s `|>`, and Nanyx's workflows (`proc { try ... }`) are F#'s computation expressions, rebuilt on contexts. See [Workflows](../advanced/workflows) and
 [Piping](../tour/piping).
 
 # Extending a type
