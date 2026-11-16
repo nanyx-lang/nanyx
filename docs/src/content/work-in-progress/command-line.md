@@ -46,7 +46,9 @@ nanyx hello
 - `check` prints the compile phase and diagnostics, then the type of each top-level def the file declares, in
   source order, as hover writes it, with type variables `a`, `b`, ...: `greet : string -> string`, or
   `twice : [ToString(a)] a -> string` for a def that requires a context. It prints nothing from the prelude or
-  the file's imports (`TypeHints.topLevelTypes`).
+  the file's imports (`TypeHints.topLevelTypes`). A file under a package manifest is checked as the package's, and
+  one under a manifest that has errors reports those errors, at the manifest, and nothing of its own
+  ([#1596](https://github.com/nanyx-lang/nanyx/issues/1596)).
 - `parse` prints the AST.
 - `format` rewrites the files that are not formatted, or with `--check` lists them and exits with 1. With `--stdin`
   it formats standard input to standard output (see [Formatter](./formatter)).

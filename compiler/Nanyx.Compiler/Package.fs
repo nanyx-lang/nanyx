@@ -187,6 +187,18 @@ module Package =
         |> Result.mapError (List.map Manifest.describe)
         |> Result.bind (fun manifest -> ofManifestIn (reachedFrom manifest) [] manifest |> Result.mapError (List.map describe))
 
+    /// A compile of nothing, with no diagnostics: what the compile of a file that can't be compiled has, with its errors.
+    let private notCompiled : CompileResult =
+        { Phase = Parsed
+          Diagnostics = []
+          Typed = None
+          TypeChecked = false
+          ErrorsDeferred = false
+          Syntax = None
+          ModuleName = None
+          Lowered = Map.empty
+          DocComments = lazy DocComments.none }
+
     /// The manifest at `path`, whose text is `text`, as the editor shows it: a compile whose diagnostics are the problems
     /// with it (see `Manifest.check`), with a library that exports no module, and with the packages it depends on,
     /// nothing compiled, since a manifest is data.
@@ -208,15 +220,7 @@ module Package =
                             | AtManifest diagnostic -> diagnostic
                             | AboutPackage message -> Diagnostics.at DiagnosticCodes.InvalidManifestValue manifest.Value.Location message)
                 exportErrors manifest (sources manifest) @ dependencyErrors
-        { Phase = Parsed
-          Diagnostics = diagnostics
-          Typed = None
-          TypeChecked = false
-          ErrorsDeferred = false
-          Syntax = None
-          ModuleName = None
-          Lowered = Map.empty
-          DocComments = lazy DocComments.none }
+        { notCompiled with Diagnostics = diagnostics }
 
     /// `package` run under the host `name` names in place of its manifest's, as `--host` chooses: a directory, relative to
     /// `directory`, that holds a host's package, or the name of a host the compiler ships. An error says why it isn't one.
@@ -272,15 +276,17 @@ module Package =
             Dependencies = package.Dependencies |> List.map modules
             HostPackage = package.HostPackage |> Option.map modules }
 
-    /// The modules of the package the file at `filePath` is a source file of, if it is one of a package whose
-    /// manifest reads, with those of the packages it depends on, if they read too. A file the manifest selects that is
-    /// not on disk yet (an editor's new buffer) is one of them.
-    let modulesFor (filePath: string) : PackageModules option =
+    /// The modules of the package the file at `filePath` is a source file of, if it is one, with those of the packages
+    /// it depends on, if they read; none for a file in no package. A file the manifest selects that is not on disk yet
+    /// (an editor's new buffer) is one of them. The manifest's problems are the error if it does not read: which files
+    /// it selects can't be known, and the file can't be checked as a script without blaming its package imports.
+    let modulesFor (filePath: string) : Result<PackageModules option, Diagnostic list> =
         let filePath = Path.GetFullPath filePath
         let directory = Path.GetDirectoryName filePath
         match if Directory.Exists directory then Manifest.tryFind directory else Result.Ok None with
         | Result.Ok (Some manifestPath) ->
             match Manifest.read manifestPath with
+            | Result.Error problems -> Result.Error problems
             | Result.Ok manifest when selects manifest filePath ->
                 let reached = reachedFrom manifest
                 let dependencies =
@@ -296,9 +302,9 @@ module Package =
                           Dependencies = dependencies
                           Host = host |> Option.map fst
                           HostPackage = host |> Option.map snd }
-                Some (if PackageModules.contains modules filePath then modules else { modules with Files = modules.Files @ [ filePath ] })
-            | _ -> None
-        | _ -> None
+                Result.Ok(Some (if PackageModules.contains modules filePath then modules else { modules with Files = modules.Files @ [ filePath ] }))
+            | Result.Ok _ -> Result.Ok None
+        | _ -> Result.Ok None
 
     /// The build of the script at `filePath`, which runs under the host `host` names, the console host the compiler ships
     /// if it names none, and imports from the packages `dependencies` lists, as its `::host` and `::dependencies`
@@ -366,11 +372,13 @@ module Package =
     /// Compiles `source` as the file at `filePath` (which need not hold it yet: an editor's unsaved buffer, say), with
     /// the linters `options` gives: as a source file of the package it is in, if it is in one, or else on its own.
     /// Each module's check is reported to `listener`, and each other source file it needs is read by `readFile`, given
-    /// the file's full path: an editor passes one that reads the text of a file it has open from its buffer.
+    /// the file's full path: an editor passes one that reads the text of a file it has open from its buffer. A file
+    /// under a manifest that does not read is not compiled: the manifest's problems are its errors.
     let compileSourceReading (listener: CompileListener) (readFile: string -> string) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
         match modulesFor filePath with
-        | Some modules -> compileIn listener readFile modules options filePath source
-        | None -> Compiler.compileFromReporting listener readFile options (SourceFile (Path.GetFullPath filePath)) source
+        | Result.Ok (Some modules) -> compileIn listener readFile modules options filePath source
+        | Result.Ok None -> Compiler.compileFromReporting listener readFile options (SourceFile (Path.GetFullPath filePath)) source
+        | Result.Error problems -> { notCompiled with Diagnostics = problems }
 
     /// `compileSourceReading`, with the other source files read from disk.
     let compileSourceReporting (listener: CompileListener) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =

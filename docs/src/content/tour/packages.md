@@ -69,6 +69,8 @@ The manifest describes the package and the source files and dependencies that ma
 
 A manifest holds only data: records, lists, tuples, strings, numbers, `true` and `false`, tags such as `#error`, and `--` comments. A name, a call, an operator or any other code in it is an error, so a manifest can always be read without running anything. Its fields are `package`, `dependencies`, `linters`, `host` and `formatter`; any other is an error. `package` must have a `name`, lower case with words separated by dots, and a `version`, a semantic version.
 
+Manifests were once written in TOML. One still in that form, starting `[package]` or `name = "..."`, is an error that says so (`NYX0034`). While a package's manifest has errors, checking or running any of its files reports them, at the manifest, rather than checking the file on its own.
+
 ## Source files
 
 The package manifest determines which Nanyx source files belong to the package:

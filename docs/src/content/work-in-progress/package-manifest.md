@@ -57,6 +57,13 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
   error at that field. A package listed twice in `dependencies` is `NYX0023` at the repeat. Which modules other
   packages may import is no field of the manifest: a module says it's exported with `export module` in its own
   declaration ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457), [What a package exports](./packaging#what-a-package-exports)).
+- **A manifest in the old TOML form** is `NYX0034` at its first line, in place of the parser's error, when that line
+  is a table header (`[package]`) or a key (`name = "shop"`)
+  ([#1596](https://github.com/nanyx-lang/nanyx/issues/1596)).
+- **A manifest that doesn't read stops its files.** A source file under a manifest with errors is not checked as a
+  script: `nanyx check <file>`, `nanyx run <file>` and the language server report the manifest's errors, at the
+  manifest, in place of the file's own, since which files are the package's and what its imports name can't be known
+  without it (`Package.modulesFor`, [#1596](https://github.com/nanyx-lang/nanyx/issues/1596)).
 - **What works today.** A dependency gives a `path`, or names a package the compiler ships, such as
   `nanyx.console.core`, at the compiler's version exactly (`NYX0029` otherwise); any other with a `version` is
   `NYX0024` until packages can be downloaded, and one with both is an error. The only linter is `nanyx.lint`, whose

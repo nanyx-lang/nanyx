@@ -72,8 +72,25 @@ let ``Linters turn on the linters they name, with the severities their settings 
 
 [<Fact>]
 let ``A manifest that is not Nanyx is a syntax error`` () =
-    let error = errorOf "[package]\nname = \"demo\""
+    let error = errorOf "package: demo"
     Assert.Equal(DiagnosticCodes.SyntaxError.Code, error.Code)
+
+[<Theory>]
+[<InlineData("[package]\nname = \"demo\"\nversion = \"0.1.0\"\n", "[package]")>]
+[<InlineData("# The demo package.\n\nname = \"demo\"\n", "name = \"demo\"")>]
+let ``A manifest in the old TOML form is reported as TOML at its first line`` (text: string, first: string) =
+    let error = errorOf text
+    Assert.Equal(DiagnosticCodes.TomlManifest.Code, error.Code)
+    Assert.Equal("The manifest is a Nanyx record, `( package = (...) ... )`, not TOML", error.Message)
+    Assert.Equal(first, text.Substring(error.Span.Value.Start, error.Span.Value.End - error.Span.Value.Start))
+
+[<Fact>]
+let ``A TOML manifest with Windows line endings is reported at its first line's own place`` () =
+    match Manifest.check "demo.nyxp" "# demo\r\n[package]\r\nname = \"demo\"\r\n" with
+    | Result.Error [ error ] ->
+        Assert.Equal(DiagnosticCodes.TomlManifest.Code, error.Code)
+        Assert.Equal((8, 17, 1), (error.Span.Value.Start, error.Span.Value.End, error.Span.Value.StartLine))
+    | other -> failwith $"Expected one error, got {other}"
 
 [<Fact>]
 let ``Code in a manifest is an error at each place it is written`` () =
