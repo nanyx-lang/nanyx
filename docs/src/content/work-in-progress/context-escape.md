@@ -398,7 +398,8 @@ The design draws the line there, and makes every helper a function that takes th
   `collections.md` (`use (yield = ...)` and ``use (`=>` = ...)``) and the examples in
   [Context-qualified types](./context-qualified-types) change with it. The Contexts page's "contexts are structural by
   default", and its `use addInt` loading a record as each context it has the shape of, go.
-- A protected or private context matches only itself ([#1443](https://github.com/nanyx-lang/nanyx/issues/1443)), and
+- ~~A protected or private context matches only itself ([#1443](https://github.com/nanyx-lang/nanyx/issues/1443))~~
+  Done, and
   a private one's members can be called only in its home module
   ([#1449](https://github.com/nanyx-lang/nanyx/issues/1449)).
 
@@ -412,8 +413,11 @@ The design draws the line there, and makes every helper a function that takes th
     given `def f = { + }`, a `g: [Num(a)]` can call `f`. No relation needs declaring.
   - **A `protected` or `private` context matches only itself.** Otherwise any context with the same members could be
     loaded in its place, and the guarantee those words give (only the home module makes an instance) would be
-    forgeable: `use Fake(commit = ...)` would satisfy a function that requires a protected `Tx`. Today it does
-    ([#1443](https://github.com/nanyx-lang/nanyx/issues/1443)).
+    forgeable: `use Fake(commit = ...)` would satisfy a function that requires a protected `Tx`. Done in
+    [#1443](https://github.com/nanyx-lang/nanyx/issues/1443): `Contexts.ensureContextAvailable` requires each member in
+    scope of a protected or private context without parameters to have the context's own symbol, else NYX0205.
+    A context without members is still satisfied by nothing at all
+    ([#1479](https://github.com/nanyx-lang/nanyx/issues/1479)).
   - **A protected context may serve for a plain one** whose members it has, as a protected type may be used as its
     representation: that hands out nothing the plain context didn't already allow.
   - Declaring the relation (`Num` includes `Add`) and having no relation at all were considered. Declaring it would
