@@ -120,3 +120,33 @@ def main = transaction { f() }
 """
     let result = compileImporting (moduleSource.ReplaceLineEndings "\n") (mainSource.ReplaceLineEndings "\n")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+
+// A parameterised context the parameter's type requires is given at the types it is applied to (#1512).
+
+let private withMonoid = """context Monoid(a) = (empty: a, combine: (a, a) -> a)
+
+def e: [Monoid(a)] () -> a = { empty }
+def twice: [Monoid(a)] a -> a = { x -> combine(x, x) }
+def withM: ([Monoid(int)] () -> b) -> b = { f -> use Monoid(int)(empty = 0, combine = { x, y -> x + y }) in f() }
+"""
+
+[<Fact>]
+let ``A lambda passed where the parameter requires a parameterised context is given its instance`` () =
+    let source =
+        withMonoid
+        + """
+def c: int = withM { e() }
+def d: int = withM { combine(empty, e()) }
+def nested: list(int) = withM { [1, 2] \list.map { x -> combine(x, e()) } }
+"""
+    let typed = compileClean (source.ReplaceLineEndings "\n")
+    Assert.Equal("int", Unifier.tyToString typed.Types.["c"])
+
+[<Fact>]
+let ``The instance a lambda is given is at the parameter's types only`` () =
+    let source =
+        withMonoid
+        + """
+def s: string = withM { twice("a") }
+"""
+    Assert.Equal((DiagnosticCodes.MissingContextMembers.Code, "twice"), singleError (source.ReplaceLineEndings "\n"))

@@ -8,7 +8,8 @@
 /// is not run by it, so what it uses is its own. A context a `use` inside the lambda supplies is not one it uses: it
 /// runs with that instance. A def's own body is not such a lambda: what it uses are the def's
 /// contexts, checked as they always are. A parameterised context is found where the lambda is made, as a call finds it,
-/// and the lambda's type does not carry it.
+/// and the lambda's type does not carry it, unless the parameter the lambda is passed as gives it the instance (see
+/// `Contexts.instancesSuppliedToLambda`).
 ///
 /// The lambda is still checked where it is made, against the contexts there.
 ///

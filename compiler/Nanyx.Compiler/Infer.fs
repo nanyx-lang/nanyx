@@ -1035,11 +1035,19 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                         | _ -> None
                     | _ -> None
                 // A lambda can use the contexts its parameter's type requires, which the callee supplies.
+                // The instances of parameterised contexts it is given are in its type, so the callee passes them.
                 let inferLambda state lambda lambdaArgs lambdaBody expectedInput paramTy =
                     let lambdaEnv, state = extendEnvForLambdaArgument env state lambda (Some paramTy)
+                    let instances = instancesSuppliedToLambda state lambda (Some paramTy)
                     match expectedInput with
                     | Some expectedInput -> inferLambdaWithExpected lambdaEnv state lambda lambdaArgs lambdaBody (Some expectedInput) None
                     | None -> inferExpr lambdaEnv state lambda
+                    |> Result.map (fun (typedLambda, next) ->
+                        match instances, Unifier.unalias typedLambda.Type with
+                        | _ :: _, TyFunc(input, output, used) ->
+                            let ty = TyFunc(input, output, used @ instances |> List.distinct)
+                            { typedLambda with Type = ty }, { next with ExprTypes = next.ExprTypes |> Map.add lambda.Id ty }
+                        | _ -> typedLambda, next)
                 // A square-bracket literal builds the type its parameter takes, if it is one with a `fromArray`.
                 let inferItem state item paramTy =
                     CollectionLiterals.targeted inferExpr env state item paramTy |> Option.defaultWith (fun () -> inferExpr env state item)
