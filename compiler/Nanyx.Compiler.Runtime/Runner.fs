@@ -8,6 +8,9 @@ type RunError =
     | InvalidModule of string
     /// The program trapped (for example `unreachable` from a match with no matching arm) or failed to instantiate.
     | Trapped of string
+    /// The program asked for more memory than there is: its allocator trapped because a new block would end past
+    /// 4 GB, or because the host would not grow its memory.
+    | OutOfMemory
     /// The program ended itself with a non-zero exit code, through WASI `proc_exit`: a deferred error does, once it
     /// has written itself to stderr.
     | Exited of int
@@ -71,6 +74,21 @@ module WasmRunner =
     /// Whether `ex` is the program ending itself through WASI `proc_exit` with exit code 0.
     let private exitedCleanly (ex: WasmtimeException) = ex.ExitCode.HasValue && ex.ExitCode.Value = 0
 
+    /// The allocator's function, which the backend names `WasmAllocator.Names.alloc`. It traps with `unreachable` only
+    /// when the program is out of memory.
+    let private allocator = "__nanyx_alloc"
+
+    /// What the trap `ex` means: out of memory when it is an `unreachable` in the allocator itself.
+    let private trapped (ex: WasmtimeException) =
+        match ex with
+        | :? TrapException as trap when
+            trap.Type = TrapCode.Unreachable
+            && not (isNull trap.Frames)
+            && trap.Frames.Count > 0
+            && trap.Frames[0].FunctionName = allocator ->
+            OutOfMemory
+        | _ -> Trapped ex.Message
+
     /// Instantiates the module described by `wat`, which runs its start function, then calls its export `start` if it
     /// is given and the module exports it, and gives what `read` makes of the instance afterwards: `None` when the program ended itself,
     /// through `proc_exit` with exit code 0, so there is no instance or it stopped without freeing what it held.
@@ -101,7 +119,7 @@ module WasmRunner =
             with
             | :? WasmtimeException as ex when exitedCleanly ex -> Ok (read None)
             | :? WasmtimeException as ex when ex.ExitCode.HasValue -> Error (Exited ex.ExitCode.Value)
-            | :? WasmtimeException as ex -> Error (Trapped ex.Message)
+            | :? WasmtimeException as ex -> Error (trapped ex)
 
     /// Instantiates (and therefore runs) the module described by `wat`, with its standard streams `io` and its
     /// command-line arguments `arguments`, its name first.
