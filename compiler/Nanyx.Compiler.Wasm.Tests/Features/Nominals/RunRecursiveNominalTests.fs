@@ -9,6 +9,27 @@ open TranspilerWasmTestHelpers
 let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
 
 [<Fact>]
+let ``Run - a def that nests constructors of a type generic in contexts is given a function that prints`` () =
+    // #1701: `v1` keeps the `[d]` it declares, so a function that requires `Console` can be passed to it.
+    run """
+type Rq(a) = [k] protected (next: [k] () -> #next(a, Rq(a)) | #done)
+
+def v1: ([d] int -> b) -> [d] Rq(b) = { f -> Rq(next = { #next(f(1), Rq(next = { #done })) }) }
+
+def first: [Console] ([Console] Rq(string)) -> string = { r ->
+  match r.next()
+    | #next(x, _) -> x
+    | #done -> "none"
+}
+
+println(first(v1({ n ->
+  println("got {n}")
+  "{n}"
+})))
+"""
+    |> assertRan "got 1\n1\n"
+
+[<Fact>]
 let ``Run - a protected type that names itself in a field is built and recursed over`` () =
     run """
 type Node = protected (value: int, rest: #some(Node) | #none)

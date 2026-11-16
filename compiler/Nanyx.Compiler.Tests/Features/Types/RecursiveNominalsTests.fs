@@ -92,6 +92,18 @@ def loudRest: [Console] () -> [Console] Stream(int) = { rest(loud, loud) }
     Assert.EndsWith("([c] Stream(a)), ([c] Stream(a)) -> [c] Stream(a)", typeOf typed "rest")
 
 [<Fact>]
+let ``A def whose value nests constructors of a recursive type generic in contexts keeps its declared contexts`` () =
+    // #1701: the inner constructor's contexts are the outer's tail's, `d`, and its pure lambda solved `d` to a made-up
+    // variable, which the def was then generalised without.
+    let typed =
+        clean
+            """type Rq(a) = [k] protected (next: [k] () -> #next(a, Rq(a)) | #done)
+
+def v1: ([d] int -> b) -> [d] Rq(b) = { f -> Rq(next = { #next(f(1), Rq(next = { #done })) }) }
+"""
+    Assert.Equal("([d] int -> b) -> [d] Rq(b)", typeOf typed "v1")
+
+[<Fact>]
 let ``The rest of a value of a type generic in contexts is not pure`` () =
     let diagnostic =
         diagnosticOf (
