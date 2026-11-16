@@ -88,15 +88,6 @@ An attached definition, `def string.shout = ...`, can be added to any type from 
 and reads as `"hi" \shout`. Unlike them, it can never replace a definition the type already has. See
 [Attached definitions](../advanced/attached-definitions).
 
-# Slices
-
-**C#'s `Span<T>`** and **Swift's `ArraySlice`**.
-
-A slice is a view of part of an array or a string, without copying it. C#'s spans are the reason Nanyx has them;
-Swift's `ArraySlice` is why a slice is a type of its own, so a small slice can't quietly keep a large array alive.
-Reference counting means a Nanyx slice needs none of a span's restrictions on where it can live. See
-[Collections](../tour/collections).
-
 # Hosts
 
 **Roc's platforms** and **the Elm Architecture**.
