@@ -67,7 +67,7 @@ let ``Maps and sets can be compared with ==, and so can what holds them`` () =
 def same = ["a" => 1] == ["a" => 1]
 def differ = set.fromList([1]) != set.fromList([2])
 def shops = Shop(prices = ["a" => 1]) == Shop(prices = ["a" => 1])
-def generic: [Eq(k) & Eq(v)] map(k, v), map(k, v) -> bool = { m, n -> m == n }
+def generic: [Eq(k), Eq(v)] map(k, v), map(k, v) -> bool = { m, n -> m == n }
 """
     let source = source.ReplaceLineEndings "\n"
     Assert.Equal<string list>([ "bool"; "bool"; "bool" ], typesOf source [ "same"; "differ"; "shops" ])

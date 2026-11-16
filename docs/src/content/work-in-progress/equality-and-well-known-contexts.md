@@ -404,7 +404,7 @@ This closes [#476](https://github.com/nanyx-lang/nanyx/issues/476) and unblocks 
 # Hashing
 
 `Hash(a)` has `hash: a -> int`, derived for every type `Eq` is derived for. A map or set keyed by `k` requires
-`[Eq(k) & Hash(k)]`, so records and tags can be keys without an order.
+`[Eq(k), Hash(k)]`, so records and tags can be keys without an order.
 
 A type that attaches its own `==` gets **no derived `Hash`**: the derived hash would disagree with the custom
 equality. Asking for `Hash(Email)` is then an error that says to attach `Email.hash` too.

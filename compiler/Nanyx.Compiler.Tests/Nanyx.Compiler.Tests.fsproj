@@ -38,6 +38,7 @@
     <Compile Include="Features\Contexts\UseLoadsTests.fs" />
     <Compile Include="Features\Contexts\AliasedContextTests.fs" />
     <Compile Include="Features\Contexts\OperatorContextTests.fs" />
+    <Compile Include="Features\Contexts\ContextListTests.fs" />
     <Compile Include="Features\Contexts\StructuralInstanceTests.fs" />
     <Compile Include="Features\Contexts\FunctionTypeContextTests.fs" />
     <Compile Include="Features\Contexts\ContextVariableTests.fs" />
@@ -103,7 +104,6 @@
     <Compile Include="Features\Linters\UnreachableCodeTests.fs" />
     <Compile Include="Features\Linters\UseInBracesTests.fs" />
     <Compile Include="Features\Linters\StrayDocCommentsTests.fs" />
-    <Compile Include="Features\Linters\PlusBetweenContextsTests.fs" />
     <Compile Include="Features\Linters\UnannotatedExportsTests.fs" />
     <Compile Include="Features\Linters\UnusedResultsTests.fs" />
     <Compile Include="Features\Linters\ShadowedPreludeNamesTests.fs" />

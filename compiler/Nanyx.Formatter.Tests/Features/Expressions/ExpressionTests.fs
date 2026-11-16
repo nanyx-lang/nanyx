@@ -66,11 +66,13 @@ let ``Names that are operators keep their backticks`` () =
     unchanged "def g = `+`(1, 2)\n"
     unchanged "def add: [`+`: a, a -> a] = { + }\n"
     Assert.Equal(
-        "def f: [(`+`: a, a -> a) & (`*`: a, a -> a) & Eq(a)] a -> a = { x -> x }\n",
+        "def f: [(`+`: a, a -> a), (`*`: a, a -> a), Eq(a)] a -> a = { x -> x }\n",
         format "def f: [`+`:(a, a) -> a + `*` : a,a -> a+Eq(a)] a -> a = { x -> x }\n")
-    // A member's type runs to the end of the set, so a `&` in it is an intersection.
+    // Contexts are separated by `,`, whatever joined them.
+    Assert.Equal("def f: [Eq(a), Hash(a), c] a -> a = { x -> x }\n", format "def f: [Eq(a) & Hash(a) + c] a -> a = { x -> x }\n")
+    // A member's type runs to the end of the list, so a `&` in it is an intersection.
     unchanged "def f: [`-`: a & b -> a] a -> a = { x -> x }\n"
-    unchanged "def f: [(`-`: a & b -> a) & Console] a -> a = { x -> x }\n"
+    unchanged "def f: [(`-`: a & b -> a), Console] a -> a = { x -> x }\n"
     unchanged (lines [ "def main = {"; "  def eqInt: Eq(int) = (`==` = { a, b -> true })"; "  use eqInt"; "  1"; "}" ])
 
 [<Fact>]

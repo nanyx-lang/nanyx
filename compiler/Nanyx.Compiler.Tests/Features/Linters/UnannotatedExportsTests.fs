@@ -64,7 +64,7 @@ let ``The fix writes a generic function's type variables`` () =
 [<Fact>]
 let ``The fix writes the contexts a function requires, joined with &`` () =
     Assert.Equal(
-        "export def same: [Add(a) & Eq(a)] a, a -> bool = { x, y -> x + y == y }\n",
+        "export def same: [Add(a), Eq(a)] a, a -> bool = { x, y -> x + y == y }\n",
         fixedOnce "export def same = { x, y -> x + y == y }\n")
 
 [<Fact>]

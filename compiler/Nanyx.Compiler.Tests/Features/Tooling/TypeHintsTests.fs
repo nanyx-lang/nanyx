@@ -131,7 +131,7 @@ let ``A def's lens shows a parameterised context it was inferred to require, nam
 [<Fact>]
 let ``A def's lens shows both kinds of context it was inferred to require, as hover does`` () =
     let source = ("" + showSource + "def loud = { v -> println(describe(v)) }\n").ReplaceLineEndings "\n"
-    let expected = "[Show(α) & Console] α -> ()"
+    let expected = "[Show(α), Console] α -> ()"
     Assert.Equal<(string * string * int) list>(
         [ "loud", expected, offsetOf source "loud" 0 0 ], typeHints TypeHints.typeLenses source)
     Assert.Equal<(string * string * int) list>(

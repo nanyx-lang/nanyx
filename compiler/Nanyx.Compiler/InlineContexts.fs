@@ -3,13 +3,14 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// Operators a def's type requires by the member each reads, rather than by a context's name (see "Operator contexts"
-/// in the docs' work in progress): `` def add: [`+`: a, a -> a] = { + } ``. Such a requirement is not a context of
-/// its own. It is read, before the def is checked, as the prelude's context that has the member, at the type the
-/// member's type is written for, so `add` is `[Add(a)] a, a -> a`, exactly as if its type said `[Add(a)]`. Several on
-/// one type are the contexts `OperatorContexts.covering` gives: `` [(`+`: a, a -> a) & (`*`: a, a -> a)] `` is `[Num(a)]`.
+/// Operators a def's type requires by the member each reads, rather than by a context's name: `` def add: [`+`: a, a ->
+/// a] = { + } ``. The language no longer has this form (#1531): it was only another way of writing the prelude's
+/// context that has the member, which the inference of operator contexts finds anyway (see "Operator contexts" in the
+/// docs' work in progress). Each one is an error whose fix writes that context, at the type the member's type is
+/// written for: `Add(a)` for `` `+`: a, a -> a ``. Several on one type are the contexts `OperatorContexts.covering`
+/// gives: `` [(`+`: a, a -> a), (`*`: a, a -> a)] `` is `[Num(a)]`.
 ///
-/// Only an operator can be required this way, and only a member of one of the prelude's contexts.
+/// Only an operator could be required this way, and only a member of one of the prelude's contexts.
 module internal InlineContexts =
     /// The member an item in a def's contexts requires, with the type written for it, if it is written as a member.
     let private memberOf (ctx: TypeExpr) : (Identifier * TypeExpr) option =
@@ -60,10 +61,10 @@ module internal InlineContexts =
     let private read (toTy: InferState -> TypeExpr -> Ty * InferState) (state: InferState) (ctx: TypeExpr) (memberName: Identifier) (memberType: TypeExpr) : Result<Required * InferState, Diagnostic list> =
         let written = Names.written memberName
         if Names.isIdentifier memberName then
-            Error [ Diagnostics.at DiagnosticCodes.UnknownContext ctx.Span $"Only an operator can be required by its member, and '{written}' is not one{advice state memberName}" ]
+            Error [ Diagnostics.at DiagnosticCodes.OperatorRequiredByMember ctx.Span $"Only an operator can be required by its member, and '{written}' is not one{advice state memberName}" ]
         else
             match OperatorContexts.smallest state memberName |> Option.bind (fun context -> declaredMember state context memberName |> Option.map (fun found -> context, found)) with
-            | None -> Error [ Diagnostics.at DiagnosticCodes.UnknownContext ctx.Span $"No context in the prelude has a member '{written}'{advice state memberName}" ]
+            | None -> Error [ Diagnostics.at DiagnosticCodes.OperatorRequiredByMember ctx.Span $"No context in the prelude has a member '{written}'{advice state memberName}" ]
             | Some (context, (parameter, declaredTy)) ->
                 let writtenTy, next = toTy state memberType
                 match bindingOf parameter declaredTy writtenTy with
@@ -72,16 +73,14 @@ module internal InlineContexts =
                 | _ ->
                     let declared = Unifier.tyToDisplayString Ascii declaredTy
                     let parameterText = Unifier.tyToDisplayString Ascii (TyVar parameter)
-                    Error [ Diagnostics.at DiagnosticCodes.TypeMismatch memberType.Span $"'{written}' is '{declared}' in {context}({parameterText}), which '{Unifier.tyToDisplayString Ascii writtenTy}' is not for any '{parameterText}'" ]
+                    Error [ Diagnostics.at DiagnosticCodes.OperatorRequiredByMember memberType.Span $"'{written}' is '{declared}' in {context}({parameterText}), which '{Unifier.tyToDisplayString Ascii writtenTy}' is not for any '{parameterText}'" ]
 
-    /// The prelude's contexts that the members `required`, all of the type `forTy`, are read through, as a def's type
-    /// writes them: `Add(a)`. Each member must have the type it is written with in the context it is read through.
-    let private contextsFor (state: InferState) (forTy: Ty) (required: Required list) : Result<TypeExpr list, Diagnostic list> =
-        let names =
-            ContextInference.varsInOrder forTy |> List.choose (fun v -> v.Name |> Option.map (fun name -> v.Id, name)) |> Map.ofList
+    /// The prelude's contexts that the members `required`, all of the type `forTy`, are read through, each written as a
+    /// def's type writes it: `Add(a)`. Each member must have the type it is written with in the context it is read through.
+    let private contextsFor (state: InferState) (forTy: Ty) (required: Required list) : Result<string list, Diagnostic list> =
         let span = required.Head.At
-        match OperatorContexts.covering state (required |> List.map _.Operator |> List.distinct), ContextInference.typeExprOf names forTy with
-        | Some contexts, Some argument ->
+        match OperatorContexts.covering state (required |> List.map _.Operator |> List.distinct) with
+        | Some contexts when (forTy |> function TyVar v -> v.Name.IsSome | _ -> false) ->
             let mismatched =
                 required
                 |> List.filter (fun r ->
@@ -89,18 +88,20 @@ module internal InlineContexts =
                     |> Option.bind (fun context -> declaredMember state context r.Operator)
                     |> Option.forall (fun (parameter, declaredTy) -> Unifier.applyToParameters [ parameter ] [ forTy ] declaredTy <> r.WrittenTy))
             match mismatched with
-            | [] -> Ok (contexts |> List.map (fun context -> TypeExpr.at span (TypeApply(context, [ argument ]))))
+            | [] -> Ok (contexts |> List.map (fun context -> $"{context}({Unifier.tyToDisplayString Source forTy})"))
             | _ ->
                 mismatched
                 |> List.map (fun r ->
-                    Diagnostics.at DiagnosticCodes.TypeMismatch r.At $"'{Names.written r.Operator}' does not have the type '{Unifier.tyToDisplayString Ascii r.WrittenTy}' in the prelude's context it is read through here")
+                    Diagnostics.at DiagnosticCodes.OperatorRequiredByMember r.At $"'{Names.written r.Operator}' does not have the type '{Unifier.tyToDisplayString Ascii r.WrittenTy}' in the prelude's context it is read through here")
                 |> Error
         | _ ->
-            Error [ Diagnostics.at DiagnosticCodes.UnknownContext span $"An operator cannot be required of the type '{Unifier.tyToDisplayString Ascii forTy}', which a def's type cannot write" ]
+            Error [ Diagnostics.at DiagnosticCodes.OperatorRequiredByMember span $"An operator cannot be required of the type '{Unifier.tyToDisplayString Ascii forTy}', which a def's type cannot write" ]
 
-    /// `contexts`, those a def's type requires, with each operator required by its member read as the prelude's
-    /// context that has it (`toTy` reads a type). The contexts for a type are where the first of its members is.
-    let private resolveContexts (toTy: InferState -> TypeExpr -> Ty * InferState) (state: InferState) (contexts: TypeExpr list) : Result<TypeExpr list, Diagnostic list> =
+    /// The error for each of `contexts`, those a def's type requires, that requires an operator by its member (`toTy`
+    /// reads a type). Each is the prelude's context that has the member, at the type the member's type is written for,
+    /// and the fix writes those contexts in place of the members: the contexts for a type where the first of its members
+    /// is, the other members of that type removed.
+    let private errors (toTy: InferState -> TypeExpr -> Ty * InferState) (state: InferState) (contexts: TypeExpr list) : Diagnostic list =
         let readAll =
             contexts
             |> List.fold (fun result ctx ->
@@ -110,29 +111,43 @@ module internal InlineContexts =
                     | Some (memberName, memberType) ->
                         read toTy current ctx memberName memberType |> Result.map (fun (required, next) -> items @ [ Choice2Of2 required ], next)
                     | None -> Ok (items @ [ Choice1Of2 ctx ], current))) (Ok ([], state))
-        readAll
-        |> Result.bind (fun (items, _) ->
-            let required = items |> List.choose (function Choice2Of2 required -> Some required | Choice1Of2 _ -> None)
-            items
-            |> List.fold (fun result item ->
-                result
-                |> Result.bind (fun (written: TypeExpr list, placed: Ty list) ->
-                    match item with
-                    | Choice1Of2 ctx -> Ok (written @ [ ctx ], placed)
-                    | Choice2Of2 first when List.contains first.ForTy placed -> Ok (written, placed)
-                    | Choice2Of2 first ->
-                        contextsFor state first.ForTy (required |> List.filter (fun other -> other.ForTy = first.ForTy))
-                        |> Result.map (fun contexts -> written @ contexts, first.ForTy :: placed))) (Ok ([], []))
-            |> Result.map (fst >> List.distinct))
+        let resolved =
+            readAll
+            |> Result.bind (fun (items, _) ->
+                let required = items |> List.choose (function Choice2Of2 required -> Some required | Choice1Of2 _ -> None)
+                items
+                |> List.fold (fun result item ->
+                    result
+                    |> Result.bind (fun (edits: TextEdit list, written: Map<Ty, string>, previous: SourceSpan) ->
+                        match item with
+                        | Choice1Of2 ctx -> Ok (edits, written, ctx.Span)
+                        // Removed with the `,` before it, from the end of the item before it.
+                        | Choice2Of2 other when written.ContainsKey other.ForTy ->
+                            let removed = { previous with Start = previous.End; End = other.At.End; StartColumn = previous.StartColumn + previous.End - previous.Start }
+                            Ok (edits @ [ { Span = removed; NewText = "" } ], written, other.At)
+                        | Choice2Of2 first ->
+                            contextsFor state first.ForTy (required |> List.filter (fun other -> other.ForTy = first.ForTy))
+                            |> Result.map (fun contexts ->
+                                let text = String.concat ", " contexts
+                                edits @ [ { Span = first.At; NewText = text } ], Map.add first.ForTy text written, first.At))) (Ok ([], Map.empty, SourceSpan.none))
+                |> Result.map (fun (edits, written, _) -> required, edits, written))
+        match resolved with
+        | Error diagnostics -> diagnostics
+        | Ok (required, edits, written) ->
+            required
+            |> List.map (fun r ->
+                let context = written[r.ForTy]
+                let diagnostic =
+                    Diagnostics.at DiagnosticCodes.OperatorRequiredByMember r.At
+                        $"An operator is required by its context, not by its member: write '{context}' for '{Names.written r.Operator}'"
+                { diagnostic with Fixes = [ { Title = $"Write `{context}`"; Edits = edits } ] })
 
-    /// `annotation`, a def's type, with each operator it requires by its member read as the prelude's context that has
-    /// it (see `resolveContexts`); the same annotation when it requires none that way.
-    let resolve (toTy: InferState -> TypeExpr -> Ty * InferState) (state: InferState) (annotation: TypeExpr) : Result<TypeExpr, Diagnostic list> =
-        let resolved (contexts: TypeExpr list) (rebuild: TypeExpr list -> TypeExprKind) =
-            if contexts |> List.exists (memberOf >> Option.isSome) then
-                resolveContexts toTy state contexts |> Result.map (fun contexts -> { annotation with Kind = rebuild contexts })
-            else Ok annotation
-        match annotation.Kind with
-        | TypeWithContext(contexts, inner) -> resolved contexts (fun contexts -> TypeWithContext(contexts, inner))
-        | TypeContext contexts -> resolved contexts TypeContext
-        | _ -> Ok annotation
+    /// The errors for the operators `annotation`, a def's type, requires by their members (see `errors`); `Ok` when it
+    /// requires none that way.
+    let check (toTy: InferState -> TypeExpr -> Ty * InferState) (state: InferState) (annotation: TypeExpr) : Result<unit, Diagnostic list> =
+        let contexts =
+            match annotation.Kind with
+            | TypeWithContext(contexts, _)
+            | TypeContext contexts -> contexts
+            | _ -> []
+        if contexts |> List.exists (memberOf >> Option.isSome) then Error (errors toTy state contexts) else Ok ()

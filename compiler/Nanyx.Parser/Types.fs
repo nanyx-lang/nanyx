@@ -151,10 +151,11 @@ let internal fillTypeRefs () =
                 (between (pstring "(") (ws >>. pstring ")") (ws >>. (attempt recordArgument <|> typeArguments)))
                 (fun name args -> TypeApply(name, args)))
 
-    // An operator a function needs, required by the context member it reads rather than by a context's name:
-    // `` [`+`: a, a -> a] ``. It is a record type of that one member, and its type is a list of types, as a def's is.
-    // Its type runs to the end of the set, a `&` in it being an intersection, so a member with contexts after it is
-    // bracketed: `` [(`+`: a, a -> a) & Eq(a)] ``. A bracketed member spans its brackets.
+    // An operator required by the context member it reads rather than by a context's name: `` [`+`: a, a -> a] ``.
+    // The language no longer has this form; it is read only so that the compiler can report it, with a fix that writes
+    // the context it stands for (see `NyxCompiler.InlineContexts`). It is a record type of that one member, and its
+    // type is a list of types, as a def's is, so it runs to the end of the list unless it is bracketed:
+    // `` [(`+`: a, a -> a), Eq(a)] ``. A bracketed member spans its brackets.
     let contextMember =
         spannedType (
             pipe2
@@ -166,9 +167,10 @@ let internal fillTypeRefs () =
         withSpan (between (pstring "(" >>. ws) (ws >>. pstring ")") contextMember)
         |>> fun (item, span) -> { item with Span = span }
 
-    // The contexts a function needs, joined with `&`: `[Eq(a) & Hash(a)]`. `+` joins them too, as an earlier spec of
-    // the language had it; the official linter's `plusBetweenContexts` rule reports it. An empty set, `[]`, says on
-    // purpose that the function requires no contexts, as leaving the set out does.
+    // The contexts a function needs, separated by `,`: `[Eq(a), Hash(a)]`. `&` and `+`, which earlier versions of the
+    // language joined them with, are read too, so that the compiler can report them with a fix that writes `,` (see
+    // `NyxCompiler.ContextSeparators`). An empty list, `[]`, says on purpose that the function requires no contexts,
+    // as leaving the list out does.
     let contextSet =
         spannedType (
             between
@@ -176,7 +178,7 @@ let internal fillTypeRefs () =
                 (wsInline >>. pstring "]")
                 (sepBy
                     (attempt bracketedContextMember <|> attempt contextMember <|> attempt typeApply <|> typeIdentifier)
-                    (attempt (wsInline >>. (pstring "&" <|> pstring "+")) >>. wsInline))
+                    (attempt (wsInline >>. (pstring "," <|> pstring "&" <|> pstring "+")) >>. wsInline))
             |>> TypeContext)
 
     let contextsOf (contextSet: TypeExpr) =

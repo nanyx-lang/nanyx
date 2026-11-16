@@ -76,7 +76,7 @@ can leave the `memory` block that supplies it.
 ## `memory`
 
 ```nanyx fragment
-def memory: [c] ([Memory & c] () -> a) -> a
+def memory: [c] ([Memory, c] () -> a) -> a
 ```
 
 Runs `block` with `Memory`, so that it can declare cells with `mut` and change them with `:=`, and

@@ -52,7 +52,7 @@ def main = {
 let ``Run - a local function that requires a context without parameters too`` () =
     let source = showContext + """@entry
 def main = {
-  def say: [Console & Show(b)] b -> () = { x -> println(describe(x)) }
+  def say: [Console, Show(b)] b -> () = { x -> println(describe(x)) }
   say(Point(x = 1, y = 2))
   say(Size(w = 5))
 }

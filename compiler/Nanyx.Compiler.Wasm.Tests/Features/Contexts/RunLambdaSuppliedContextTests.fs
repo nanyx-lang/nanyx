@@ -7,11 +7,11 @@ open TranspilerWasmTestHelpers
 
 let private withPrefix = """context Log = (log: string -> ())
 
-def withPrefix: [Console & c] string, ([Log & c] () -> ()) -> () = { prefix, f ->
+def withPrefix: [Console, c] string, ([Log, c] () -> ()) -> () = { prefix, f ->
   use Log(log = { m -> println("[{prefix}] {m}") }) in f()
 }
 
-def withLog: [Console & c] ([Log & c] () -> ()) -> () = { f -> withPrefix("log", f) }
+def withLog: [Console, c] ([Log, c] () -> ()) -> () = { f -> withPrefix("log", f) }
 
 def greet: [Log] string -> () = { name -> log("hello {name}") }
 """
@@ -51,7 +51,7 @@ def greet: [Log] string -> () = { name ->
   log("hello {name}")
 }
 
-def withConsoleLog: [Console & c] ([Log & c] () -> a) -> a = { body ->
+def withConsoleLog: [Console, c] ([Log, c] () -> a) -> a = { body ->
   use Log(log = { m -> println(m) })
   body()
 }

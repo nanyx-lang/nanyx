@@ -149,7 +149,7 @@ let ensureMemoryWritten (state: InferState) (defName: Identifier) (typeOpt: Type
             match typeExpr.Kind with
             | TypeWithContext((first :: _) as contexts, { Kind = TypeFunc(input, _) }) when takesCell input && not (writesMemory contexts) ->
                 let names = contexts |> List.map (fun ctx -> match ctx.Kind with TypeName name | TypeApply(name, _) | TypeVar name -> name | _ -> "...")
-                Some (SourceSpan.between first.Span (List.last contexts).Span, String.concat " & " names)
+                Some (SourceSpan.between first.Span (List.last contexts).Span, String.concat ", " names)
             | _ -> None)
     match missing with
     | [] -> Ok ()
@@ -157,7 +157,7 @@ let ensureMemoryWritten (state: InferState) (defName: Identifier) (typeOpt: Type
         spans
         |> List.map (fun (span, written) ->
             Diagnostics.at DiagnosticCodes.UndeclaredContext span
-                $"'{defName}' takes a cell, a `mut` parameter, so it requires '{context}' too: write '[{written} & {context}]'"
+                $"'{defName}' takes a cell, a `mut` parameter, so it requires '{context}' too: write '[{written}, {context}]'"
             |> ContextFixes.withAddToType state defName context)
         |> Error
 

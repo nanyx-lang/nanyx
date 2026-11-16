@@ -171,13 +171,13 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
         let item (t: TypeExpr) =
             match t.Kind with
             | TypeApply(n, args) -> cat [ text n; text "("; typeArguments args; text ")" ]
-            // An operator required by the member it reads: `` `+`: a, a -> a ``. Its type runs to the end of the set,
-            // so among other contexts it is bracketed: `` [(`+`: a, a -> a) & Eq(a)] ``.
+            // An operator required by the member it reads, `` `+`: a, a -> a ``, which the compiler reports. Its type
+            // runs to the end of the list, so among other contexts it is bracketed: `` [(`+`: a, a -> a), Eq(a)] ``.
             | TypeRecord [ TypeField(n, false, Some memberType, None) ] ->
                 let requirement = cat [ text (Names.written n); text ": "; typeList memberType ]
                 if items.Length > 1 then cat [ text "("; requirement; text ")" ] else requirement
             | _ -> typeExpr t
-        cat [ text "["; Doc.join (text " & ") (List.map item items); text "]" ]
+        cat [ text "["; commaJoin (List.map item items); text "]" ]
 
     /// A def's annotation, or anywhere the parser reads a list of types.
     member _.Signature t = signature t

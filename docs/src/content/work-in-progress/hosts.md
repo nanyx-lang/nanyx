@@ -104,7 +104,7 @@ If the entry has the wrong shape, the error names the host:
 
 ```
 error: the entry `main` doesn't match the host `nanyx.http/host`
-  expected: [Log & Clock] Request -> Response
+  expected: [Log, Clock] Request -> Response
   found:    [Console] () -> ()
 ```
 
@@ -206,7 +206,7 @@ The HTTP host's entry is a request handler, an ordinary function:
 
 ```nanyx fragment
 @entry
-def main: [Log & Clock & Env] Request -> Response = { req ->
+def main: [Log, Clock, Env] Request -> Response = { req ->
   match (req.method, req.path)
     | (#get, "/") -> Response.text(200, "Welcome")
     | (#get, #Path('/hello/{name}')(name)) -> Response.text(200, "Hello, {name}!")
@@ -265,7 +265,7 @@ Some libraries only make sense with a certain kind of host: middleware for the w
 console host. Decided by the maintainer: such a library depends on what a host provides, its contexts and types,
 never on the host itself.
 
-- **Middleware** is a function from handler to handler, `[Log & Clock] (Request -> Response) -> (Request -> Response)`.
+- **Middleware** is a function from handler to handler, `[Log, Clock] (Request -> Response) -> (Request -> Response)`.
   It needs the `Request` and `Response` types and the `Log` and `Clock` contexts, not the host that serves them.
 - **A terminal UI** needs raw keys, the terminal's size, cursor control and colour: a `Terminal` context, which the
   console host provides and a browser host doesn't. The library is ordinary `[Terminal]` code.
@@ -489,7 +489,7 @@ The composite host runs each part under the right sub-host and coordinates start
   backend reads the layout of the context's own name (`CodeGen.layoutOf`), and a member called under the alias,
   `c.write`, is written by its own name for the backend (`ModuleLinking.writeMemberAliases`).
 - **`Env`** is declared in `nanyx.console.core/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, so its
-  parameter is `[Console & Env] () -> a`; an entry that requires fewer contexts fits. The host's prelude re-exports
+  parameter is `[Console, Env] () -> a`; an entry that requires fewer contexts fits. The host's prelude re-exports
   `Env`, so its members are ambient names in every module of the program. Its members are functions of the host's own
   over WASI's `args_sizes_get` and `args_get`, `environ_sizes_get` and `environ_get`, and `proc_exit`, declared with
   `@extern`, with their buffers allocated with `nanyx/host.memory` (see

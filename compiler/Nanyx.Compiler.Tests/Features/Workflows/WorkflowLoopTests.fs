@@ -14,7 +14,7 @@ context Opt = (
   zero: #some() | #none
 )
 
-def opt: [c] ([Opt & c] () -> t) -> t = { block ->
+def opt: [c] ([Opt, c] () -> t) -> t = { block ->
   use Opt(
     try = {
       | #some(value), continue -> continue(value)

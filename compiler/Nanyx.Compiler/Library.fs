@@ -20,10 +20,14 @@ module Compiler =
             if error.Message.StartsWith "Error in " && lineEnd >= 0 then error.Message.Substring(lineEnd + 1)
             else error.Message
         Diagnostics.at DiagnosticCodes.SyntaxError error.Span message
-    /// The source of the file at `filePath` parsed, with its doc comments (see `parseModuleFileWithDocs`), or the syntax error.
+    /// The source of the file at `filePath` parsed, with its doc comments (see `parseModuleFileWithDocs`), or the syntax
+    /// error, or the errors for contexts joined with `&` or `+` rather than separated by `,` (see `ContextSeparators`).
     let private parseWithDocs (filePath: string) (source: string) =
         match parseModuleFileWithDocs filePath source with
-        | Result.Ok parsed -> Ok parsed
+        | Result.Ok (((items, _, _), _) as parsed) ->
+            match ContextSeparators.check (source.Replace("\r\n", "\n").Replace("\r", "\n")) items with
+            | [] -> Ok parsed
+            | errors -> Error errors
         | Result.Error err -> Error [ syntaxError err ]
     let private parseWithDiagnostics (filePath: string) (source: string) : Result<Module * DeclaredNames * (ModuleName * SourceSpan) list, Diagnostic list> =
         parseWithDocs filePath source |> Result.map fst

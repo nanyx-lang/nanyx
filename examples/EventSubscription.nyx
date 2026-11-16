@@ -57,7 +57,7 @@ export def Client.new: Options -> Client = { options ->
 }
 
 @entry
-def main: [Console & Http] () -> () = {
+def main: [Console, Http] () -> () = {
   def client = Client.new(Options(token = "secret", baseUrl = #none))
 
   match client.ingest(channel = "deploys", event = Event(event = "deploy.finished", time = #none, content = #some("v1.2.0"), metadata = #none))

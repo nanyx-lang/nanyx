@@ -240,11 +240,11 @@ Which types other than functions will carry contexts (a type declared generic in
 
 # Combining contexts
 
-You can require multiple contexts by joining them with `&`:
+You can require several contexts by listing them, separated by `,`:
 
 ```nanyx
 def readAndPrintFile
-  : [Console & FileSystem] string -> ()
+  : [Console, FileSystem] string -> ()
   = { path ->
     def contents = openFile(path).contents
     println(contents)
@@ -289,17 +289,7 @@ def inc = { x -> x + 1 }                    -- int -> int: `1` is an int
 
 Adding and multiplying values of one type needs `Num` alone, which has every member of `Add`. A function inside another function requires no contexts, so its arithmetic is on ints or floats. For now the same goes for a function with operators on two different type variables, and for one the module passes as a value, as `add` in `xs \list.fold(0, add)`: see [Operator contexts](../work-in-progress/operator-contexts#functions-that-do-not-write-their-type).
 
-A function's type can also require an operator by its member instead of by the context's name. It means the same as naming the prelude's context that has the member:
-
-```nanyx
-def add: [`+`: a, a -> a] = { + }                           -- [Add(a)] a, a -> a
-def scale: [(`+`: a, a -> a) & (`*`: a, a -> a)] a, a -> a  -- [Num(a)] a, a -> a
-  = { x, k -> x * k + x }
-```
-
-A member's type runs to the end of the brackets, a `&` in it being an intersection of types, so a member among other contexts goes in brackets of its own: `` [(`+`: a, a -> a) & Eq(a)] ``.
-
-Only an operator that is a member of one of the prelude's contexts can be required this way; any other member is required by naming its context, as `[ToString(a)]`.
+Where a function's operators don't fit one context, its type lists the contexts they need: `[Ord(a), Add(a)]`. A context list holds contexts and context variables only; requiring an operator by its member, as in `` [`+`: a, a -> a] ``, is an error (`NYX0251`) whose fix writes the context that has it, `Add(a)`.
 
 Contexts with associated types, members whose value is a type, are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
 
@@ -492,7 +482,7 @@ surround([0], [1, 2])    -- [0, 1, 2, 0]
 
 A function that writes its type and joins values of a type variable without `[Append(a)]` is an error that says to add it, and `def join = { x, y -> x ++ y }` is `[Append(a)] a, a -> a`. So `join(1, 2)` is an error at the call: an `int` has no `++`.
 
-These contexts compose naturally. For example, a generic algorithm can require both `Eq(a)` and `Default(a)` by declaring `[Eq(a) & Default(a)]`.
+These contexts compose naturally. For example, a generic algorithm can require both `Eq(a)` and `Default(a)` by declaring `[Eq(a), Default(a)]`.
 
 ## ToString(a)
 

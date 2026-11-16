@@ -57,7 +57,7 @@ let ``A parameterised context is not a type, and only its name is reported`` () 
 let ``A context list is not a type`` () =
     compileClean (
         (log
-         + """def twice: [Log & ToString(int)] int -> string = { n ->
+         + """def twice: [Log, ToString(int)] int -> string = { n ->
   logged()
   "{n}"
 }

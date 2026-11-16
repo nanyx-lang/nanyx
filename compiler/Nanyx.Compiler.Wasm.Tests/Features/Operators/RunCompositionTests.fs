@@ -110,7 +110,7 @@ let ``Run - a composition of functions that require different contexts requires 
     let source =
         contextParts
         + """
-def tagThenShout: [Console & Log] string -> () = tag >> shout
+def tagThenShout: [Console, Log] string -> () = tag >> shout
 
 @entry
 def main = {

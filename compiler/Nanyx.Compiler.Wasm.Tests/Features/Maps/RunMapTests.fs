@@ -273,7 +273,7 @@ let ``Run - a map is written as its literal is, each key and value by its own to
     program
         [ """def counts = ["tea" => 3, "cake" => 1]"""
           """def none: map(int, int) = map.empty"""
-          """def described: [ToString(k) & ToString(v)] map(k, v) -> string = { m -> "has {m}" }""" ]
+          """def described: [ToString(k), ToString(v)] map(k, v) -> string = { m -> "has {m}" }""" ]
         [ """println(counts)"""
           """println("{counts}")"""
           """println([counts, ["pie" => 4]])"""

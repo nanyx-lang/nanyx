@@ -55,7 +55,7 @@ The base of the natural logarithm, as near as a `float` holds it, so `exp(1.0)` 
 ## `abs`
 
 ```nanyx fragment
-def abs: [Num(a) & Ord(a)] a -> a
+def abs: [Num(a), Ord(a)] a -> a
 ```
 
 `n` without its sign. A value that is neither below nor above `0` is `zero`, so `abs(-0.0)` is `0.0`.
@@ -63,7 +63,7 @@ def abs: [Num(a) & Ord(a)] a -> a
 ## `sign`
 
 ```nanyx fragment
-def sign: [Num(a) & Ord(a)] a -> a
+def sign: [Num(a), Ord(a)] a -> a
 ```
 
 `-1`, `0` or `1`, of the type of `n`, as `n` is below, neither below nor above, or above `zero`:

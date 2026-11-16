@@ -4,12 +4,12 @@
 module NyxCompiler.Signatures
 
 /// The type of a def, written for a reader as `type` is, after the contexts it requires, as its annotation would write
-/// them: `[Show(α) & Console] α -> string`. `written` are the contexts as written for a reader, named together with the
+/// them: `[Show(α), Console] α -> string`. `written` are the contexts as written for a reader, named together with the
 /// type.
 let withContexts (written: string list) (typeWritten: string) =
     match written with
     | [] -> typeWritten
-    | _ -> $"""[{String.concat " & " written}] {typeWritten}"""
+    | _ -> $"""[{String.concat ", " written}] {typeWritten}"""
 
 /// `ty` written for a reader after the contexts `contexts` it requires, as `withContexts` writes them, and each of
 /// `others` written for a reader, the type variables of them all named together and by `names`, so that a variable of
