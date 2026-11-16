@@ -23,7 +23,7 @@ let rec private pairScopes (general: Ty) (instantiated: Ty) : (string * Ty * Ty)
     | TyUnion gs, TyUnion ss -> all gs ss
     | TyRecord gf, TyRecord sf when Set.ofSeq gf.Keys = Set.ofSeq sf.Keys -> all (List.ofSeq gf.Values) (List.ofSeq sf.Values)
     | TyTag(_, Some g), TyTag(_, Some s)
-    | TyNominal(_, g, _), TyNominal(_, s, _) -> pairScopes g s
+    | TyNominal(_, _, g, _), TyNominal(_, _, s, _) -> pairScopes g s
     | _ -> []
 
 /// The names of the scoped contexts among `written`, contexts as a def's type writes them.

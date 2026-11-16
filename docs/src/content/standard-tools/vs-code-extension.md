@@ -14,7 +14,9 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files and package m
 - go to definition (from a name, or from a `` [`name`] `` link in a doc comment), find references and the outline view
 - completion of names, record fields, module members and import paths, each name with its doc comment and each module with the module's. The names the standard library keeps for itself, those that start with `__`, are never offered outside it. VS Code's own suggestions of words already in a file come only from the file being edited (`editor.wordBasedSuggestions` is `currentDocument` for Nanyx), so a standard-library file you opened from go to definition does not fill completion with its words. A word, for those suggestions and for double-clicking, is a name, a number, or a name with a `#` (a tag) or `@` before it
 - quick fixes, such as adding the import for a standard-library name, or writing `int.fromString` for the deprecated `Int.fromString`
+- refactorings, in the light bulb menu and under **Refactor...**: on the name of a def or a lambda parameter that does not write its type, **Write the inferred type** writes it in
 - **Format Document**, which formats the file as `nanyx format` does, and **Format Selection**, which formats the definitions the selection touches
+- **Expand Selection** and **Shrink Selection** (Shift+Alt+Right and Shift+Alt+Left), which grow the selection to the syntax around it, a name, then the call it is an argument of, the statement, the lambda, the def, and back
 - an [info view](#info-view), a view in the secondary side bar that shows what the compiler knows at the cursor
 - a [library browser](#library), which lists what the standard library exports, and a [search](#searching-the-library) of it by name and by type
 - a run button, which runs the file as `nanyx run` does; a manifest has none

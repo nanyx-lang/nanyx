@@ -97,6 +97,20 @@ This is often the sweet spot for domain types: construction is controlled, but r
 
 If you wish a nominal type to be completely opaque and not assignable to its underlying shape, you can use a private type instead.
 
+## Generic nominal types
+
+A nominal type can take type parameters, as an alias can. It is written with its arguments, and each value its constructor makes is of the type at the arguments it was given:
+
+```nanyx
+type Box(a) = protected (v: a)
+
+def boxed = Box(v = 5)                           -- Box(int)
+def get: Box(int) -> int = { b -> b.v }
+def wrap: a -> Box(a) = { x -> Box(v = x) }
+```
+
+`Box(int)` and `Box(string)` are different types, so `get(Box(v = "five"))` is an error. A type's arguments tell its types apart even when its shape doesn't use them: given `type Tagged(a) = protected int`, a `Tagged(string)` is not a `Tagged(int)`.
+
 # Private (opaque) types
 
 Private types go further by hiding their structure completely outside their home module: they are declared with `private` after the `=`. Outside that module the type has a name and nothing else: no shape, no constructor, and none of the operations of the underlying type. A private type is nominal already, so it is never also declared `protected`.

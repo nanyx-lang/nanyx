@@ -41,3 +41,18 @@ def main = {
 """
     let outcome, _ = nanyxOnPackage [ "people.nyx", people; "main.nyx", main ] [ "run"; "{package}" ]
     assertRan "person Ada\nage 36, 2 years\ntrue false\n2\n" outcome
+
+[<Fact>]
+let ``Run - a generic protected type written with its arguments holds what its constructor was given`` () =
+    let source =
+        """
+type Box(a) = protected (v: a)
+type Shelf = (left: Box(int), right: Box(string))
+
+def get: Box(int) -> int = { x -> x.v }
+def label: Box(string) -> string = { Box(r) -> r.v }
+def shelf: Shelf = (left = Box(v = 2), right = Box(v = "two"))
+
+println("{get(shelf.left) + 1} {label(shelf.right)}")
+"""
+    assertRan "3 two\n" (runSource (normalized source))

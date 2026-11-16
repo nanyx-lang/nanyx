@@ -122,6 +122,9 @@
     <Compile Include="InfoView.fs" />
     <Compile Include="ContextFlow.fs" />
     <Compile Include="Outline.fs" />
+    <Compile Include="Refactorings/Refactoring.fs" />
+    <Compile Include="Refactorings/SelectionRanges.fs" />
+    <Compile Include="Refactorings/WriteInferredType.fs" />
     <Compile Include="Documentation.fs" />
     <Compile Include="StandardLibraryDocs.fs" />
     <Compile Include="LibraryCatalog.fs" />

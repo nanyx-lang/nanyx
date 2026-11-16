@@ -806,7 +806,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               NamedTypes =
                 typed.TypeDefs
                 |> Map.filter (fun _ info -> not info.IsContext)
-                |> Map.map (fun _ info -> TyNominal(TypeDefInfo.nominalId info, info.Underlying, info.IsPrivate)) }
+                |> Map.map (fun _ info -> TyNominal(TypeDefInfo.nominalId info, info.Parameters |> List.map TyVar, info.Underlying, info.IsPrivate)) }
         CoreIrLowerModule.lowerModule input (emitFromCoreIr probeContext Set.empty >> ignore)
 
     // The first thing that cannot be compiled is reported where it is written.

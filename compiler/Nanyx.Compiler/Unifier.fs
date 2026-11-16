@@ -133,7 +133,9 @@ module Unifier =
             match v.Name with
             | Some name -> name
             | None -> $"t{v.Id}"
-        | TyNominal(nominal, _, _) -> nominal.Name
+        | TyNominal(nominal, [], _, _) -> nominal.Name
+        | TyNominal(nominal, [ arg ], _, _) -> $"{nominal.Name}({soleArgument arg})"
+        | TyNominal(nominal, args, _, _) -> $"{nominal.Name}({items args})"
         // An alias is written by name, as the user wrote it: `Customer`, `Validator(int)`.
         | TyAlias(name, [], _) -> name
         | TyAlias(name, [ arg ], _) -> $"{name}({soleArgument arg})"
@@ -214,15 +216,14 @@ module Unifier =
     let tyToString (ty: Ty) : string = printTy "..." true ty
 
     /// The type variables of `ty` in the order `tyToString` prints them, each as many times as it is printed. A
-    /// nominal's or alias's underlying type is not printed, so its variables are not included (an alias's arguments'
-    /// are).
+    /// nominal's or alias's underlying type is not printed, so its variables are not included (its arguments' are).
     let private varOccurrences (ty: Ty) : TyVar list =
         let rec collect ty =
             match ty with
             | TyVar v -> [ v ]
             | TyPrimitive _
-            | TyParam _
-            | TyNominal _ -> []
+            | TyParam _ -> []
+            | TyNominal(_, args, _, _)
             | TyAlias(_, args, _)
             | TyRecursive(_, args)
             | TySelf args -> args |> List.collect collect
@@ -257,7 +258,7 @@ module Unifier =
     let private mismatchMessage left right =
         let homes =
             match left, right with
-            | TyNominal(l, _, _), TyNominal(r, _, _) when l.Name = r.Name && l.Home <> r.Home ->
+            | TyNominal(l, _, _, _), TyNominal(r, _, _, _) when l.Name = r.Name && l.Home <> r.Home ->
                 $" They are different types: the first is defined in {moduleText l.Home}, the second in {moduleText r.Home}."
             | _ -> ""
         $"Type mismatch: {tyToString left} vs {tyToString right}.{homes}"
@@ -465,8 +466,8 @@ module Unifier =
         let rec collect ty =
             match ty with
             | TyVar _
-            | TyPrimitive _
-            | TyNominal _ -> Set.empty
+            | TyPrimitive _ -> Set.empty
+            | TyNominal(_, args, _, _)
             | TyAlias(_, args, _) -> args |> List.map collect |> Set.unionMany
             | TyOpenRecord(fields, row) -> collect (TyRecord fields) |> Set.add row.Id
             | TyUnion items ->
@@ -585,7 +586,7 @@ module Unifier =
             match ty with
             | TyVar v -> [ v, false, input ]
             | TyPrimitive _ -> []
-            | TyNominal(_, underlying, _) -> collect true underlying
+            | TyNominal(_, _, underlying, _) -> collect true underlying
             | TyAlias(_, _, underlying) -> collect input underlying
             | TyFunc(arg, ret, contexts) -> collect (not input) arg @ collect input ret @ List.collect (collect input) contexts
             // A record's row is not a union's rest: it is never solved to the empty union.
@@ -613,7 +614,7 @@ module Unifier =
             match ty with
             | TyVar v -> [ v, false, inInput ]
             | TyPrimitive _ -> []
-            | TyNominal(_, underlying, _) -> collect true underlying
+            | TyNominal(_, _, underlying, _) -> collect true underlying
             | TyAlias(_, args, underlying) -> List.collect (collect inInput) (underlying :: args)
             | TyFunc(arg, ret, contexts) ->
                 let ofContext context =
@@ -748,12 +749,15 @@ module Unifier =
                     let pairs = List.zip lArgs rArgs
                     let pairConstraints = pairs |> List.map (fun (lTy, rTy) -> (lTy, rTy, Equal, origin))
                     loop subst (pairConstraints @ rest)
-                | TyNominal(lNominal, lUnderlying, lPrivate), TyNominal(rNominal, rUnderlying, rPrivate) ->
-                    if lNominal = rNominal then
+                // One nominal type is the same as another when their arguments are, whether its parameters are used
+                // in what it is made from or not; that is then the same too.
+                | TyNominal(lNominal, lArgs, lUnderlying, lPrivate), TyNominal(rNominal, rArgs, rUnderlying, rPrivate) ->
+                    if lNominal = rNominal && lArgs.Length = rArgs.Length then
+                        let argConstraints = List.map2 (fun lTy rTy -> (lTy, rTy, Equal, origin)) lArgs rArgs
                         if lPrivate || rPrivate then
-                            loop subst rest
+                            loop subst (argConstraints @ rest)
                         else
-                            loop subst ((lUnderlying, rUnderlying, Equal, origin) :: rest)
+                            loop subst (argConstraints @ (lUnderlying, rUnderlying, Equal, origin) :: rest)
                     else
                         Error (mismatchMessage l r, origin, TypesDiffer)
                 // A nominal type is a different type from its shape. Only assignability, which is one-way, lets a
@@ -988,14 +992,15 @@ module Unifier =
                             | Error extra -> Error (contextsNotAllowedMessage extra l r, origin, ContextsNotAllowed)
                         | _ ->
                         match l, r with
-                        | TyNominal(lNominal, _, _), TyNominal(rNominal, _, _) when lNominal = rNominal ->
-                            loop subst rest
-                        | TyNominal(_, _, true), _
-                        | _, TyNominal(_, _, true) ->
+                        // A nominal type's arguments are its own, not only what it is made from, so they are the same.
+                        | TyNominal(lNominal, lArgs, _, _), TyNominal(rNominal, rArgs, _, _) when lNominal = rNominal && lArgs.Length = rArgs.Length ->
+                            loop subst ((List.map2 (fun lTy rTy -> (lTy, rTy, Equal, origin)) lArgs rArgs) @ rest)
+                        | TyNominal(_, _, _, true), _
+                        | _, TyNominal(_, _, _, true) ->
                             Error (mismatchMessage l r, origin, TypesDiffer)
-                        | TyNominal(_, underlying, false), other when not (match other with TyNominal _ -> true | _ -> false) ->
+                        | TyNominal(_, _, underlying, false), other when not (match other with TyNominal _ -> true | _ -> false) ->
                             loop subst ((underlying, other, Equal, origin) :: rest)
-                        | other, TyNominal(_, _, false) when not (match other with TyNominal _ -> true | _ -> false) ->
+                        | other, TyNominal(_, _, _, false) when not (match other with TyNominal _ -> true | _ -> false) ->
                             Error (mismatchMessage l r, origin, TypesDiffer)
                         | TyNominal _, TyNominal _ ->
                             Error (mismatchMessage l r, origin, TypesDiffer)

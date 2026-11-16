@@ -1,4 +1,5 @@
 using Microsoft.FSharp.Core;
+using NyxCompiler.Refactorings;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
@@ -11,7 +12,8 @@ namespace Nanyx.LanguageServer.Handlers;
 /// document, with the diagnostic it resolves as published. A diagnostic's first fix is the preferred one. Linters
 /// offer fixes (removing an unused local, renaming an unused name to <c>_</c>), and the compiler offers the import
 /// an unknown name from the standard library needs (<c>NyxCompiler.ImportFixes</c>). A fix that would edit another
-/// file is not offered.
+/// file is not offered. It also offers the refactorings at the start of the range (see <c>NyxCompiler.Refactorings</c>),
+/// in a document whose text type-checked: one the compiler refuses there is offered disabled, with its reason.
 /// </summary>
 public sealed class CodeActionHandler : CodeActionHandlerBase
 {
@@ -47,10 +49,56 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             .Where(pair => pair.First.Span.Value.File == document.FileName && Overlaps(pair.First.Span.Value, start, end))
             .SelectMany(pair => pair.First.Fixes.Select((fix, index) => ToAction(uri, document, fix, pair.Second, isPreferred: index == 0)))
             .OfType<CodeAction>()
+            .Concat(Refactorings(uri, document, compiled, start))
             .Select(action => new CommandOrCodeAction(action));
 
         return new CommandOrCodeActionContainer(actions);
     }
+
+    /// <summary>The refactorings at <paramref name="offset"/>, if the document's text type-checked.</summary>
+    private static IEnumerable<CodeAction> Refactorings(DocumentUri uri, OpenDocument document, NyxCompiler.CompileResult compiled, int offset)
+    {
+        if (!document.Typed)
+        {
+            yield break;
+        }
+
+        if (WriteInferredType.at(document.FileName, document.Text, compiled, offset)?.Value is { } offer)
+        {
+            yield return ToAction(uri, document, offer);
+        }
+    }
+
+    private static CodeAction ToAction(DocumentUri uri, OpenDocument document, Offer offer) =>
+        offer switch
+        {
+            Offer.Available { Item: var refactoring } => new CodeAction
+            {
+                Title = refactoring.Title,
+                Kind = KindOf(refactoring.Kind),
+                Edit = new WorkspaceEdit
+                {
+                    Changes = new Dictionary<DocumentUri, IEnumerable<TextEdit>>
+                    {
+                        [uri] = refactoring.Edits.Select(edit => new TextEdit
+                        {
+                            Range = document.Positions.ToRange(edit.Span.Start, edit.Span.End),
+                            NewText = edit.NewText
+                        }).ToList()
+                    }
+                }
+            },
+            Offer.Refused refused => new CodeAction
+            {
+                Title = refused.title,
+                Kind = KindOf(refused.kind),
+                Disabled = new CodeActionDisabled { Reason = refused.reason }
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(offer))
+        };
+
+    private static CodeActionKind KindOf(RefactoringKind kind) =>
+        kind.Equals(RefactoringKind.Rewrite) ? CodeActionKind.RefactorRewrite : throw new ArgumentOutOfRangeException(nameof(kind));
 
     /// <summary>Whether a span touches the range from <paramref name="start"/> to <paramref name="end"/>.</summary>
     private static bool Overlaps(Parser.Program.SourceSpan span, int start, int end) =>
@@ -88,5 +136,5 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
     protected override CodeActionRegistrationOptions CreateRegistrationOptions(
         CodeActionCapability capability,
         ClientCapabilities clientCapabilities) =>
-        new() { DocumentSelector = TextDocumentSyncHandler.Selector, CodeActionKinds = new Container<CodeActionKind>(CodeActionKind.QuickFix) };
+        new() { DocumentSelector = TextDocumentSyncHandler.Selector, CodeActionKinds = new Container<CodeActionKind>(CodeActionKind.QuickFix, CodeActionKind.RefactorRewrite) };
 }

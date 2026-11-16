@@ -34,6 +34,8 @@ type SemanticModel =
       ContextTypes: Map<SymbolId, Ty list>
       /// What the module declares, and the imported definitions it refers to.
       Symbols: Map<SymbolId, Symbol>
+      /// The types and contexts the module can name, by the names it writes them by (see `TypedModule.TypeDefs`).
+      TypeDefs: Map<string, TypeDefInfo>
       /// The symbol each identifier, call, pipe target and qualified name resolved to, by its node.
       References: Map<NodeId, SymbolId>
       /// The import each name brought in by an import came through, by the node that names it.
@@ -57,6 +59,7 @@ module SemanticModel =
           SymbolTypes = typed.SymbolTypes
           ContextTypes = typed.ContextTypes
           Symbols = typed.Symbols
+          TypeDefs = typed.TypeDefs
           References = typed.References
           ImportReferences = typed.ImportReferences
           ContextInstances = typed.ContextInstances
@@ -729,7 +732,8 @@ module UnannotatedExports =
             |> Map.tryFind symbol.Id
             |> Option.map (fun ty ->
                 let contexts = model.ContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue []
-                let written = Signatures.typeWithContexts Ascii ty contexts
+                let named = Signatures.writable model.TypeDefs model.Symbols
+                let written = Signatures.typeWithContexts Source (named ty) (List.map named contexts)
                 let afterName = symbol.Declaration.End
                 { Rule = rule.Id
                   Span = symbol.Declaration

@@ -28,7 +28,11 @@ compile error that lists the ones it does.
 
 Each standard-library module is checked once per process, the first time a compile imports it, and every later
 compile reuses the result (`checkedStandardLibrary` in `Nanyx.Compiler/Library.fs`, keyed by the module and its
-source). So the language server and the compiler's tests check the prelude once, not on every compile. A user's own
+source). So the language server and the compiler's tests check the prelude once, not on every compile. A CLI process
+compiles once, so it still checks the prelude every time: about 85% of a one-line `nanyx check`. Decided
+([#837](https://github.com/nanyx-lang/nanyx/issues/837)): the compiler's build will check the standard library and the
+shipped packages and embed the result, so a command checks none of them; a development build whose sources differ
+from the embedded hash checks them as now. A user's own
 module that a compile imports is kept too, once it checks without errors (`checkedSourceFiles`), with the text of
 every file its check read: its own, its other fragments' and those of the modules it imports, all the way down. A
 later compile reuses it while each of those files reads the same, through the compile's own reader (the editor's
