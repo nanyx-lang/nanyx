@@ -6,7 +6,7 @@ order: 2
 
 The prelude, `nanyx/prelude`, is imported into every module, so what it defines needs no import. It is written across several files, one for each topic, and each has a page here:
 
-- this page: `panic`, `ignore`, `bool.fromString` and `memory`
+- this page: `crash`, `ignore`, `bool.fromString` and `memory`
 - [contexts](prelude-contexts): equality, ordering, hashing, joining, and converting to and from text
 - [numbers](prelude-numbers): arithmetic on `int` and `float`, powers, bitwise functions on ints, and reading floats
 - [sized numbers](prelude-sized-numbers): arithmetic on `I8` to `U64` and `F32`
@@ -35,15 +35,25 @@ names here, so a module can define its own `proc`. It is written across this fil
 beside it that start `@partial module prelude`, one for each topic: lists, maps and sets, numbers
 and so on.
 
-## `panic`
+## `crash`
 
 ```nanyx fragment
-def panic: string -> undefined
+def crash: string -> undefined
 ```
 
-Stops the program: writes `panic: ` and `message` on a line to standard error, and exits with
+Stops the program: writes `crash: ` and `message` on a line to standard error, and exits with
 code 1. It never returns, so its result is `undefined` and a call fits wherever a value of any
-type is expected: `if n > 0 then n else panic("n must be positive")` is an `int`.
+type is expected: `if n > 0 then n else crash("n must be positive")` is an `int`.
+
+## `orCrash`
+
+```nanyx fragment
+def orCrash: #some(a) | r, string -> a
+```
+
+The value in `#some(v)`, or, for anything else, stops the program with `message` as [`crash`](#crash) does.
+It unwraps an option or a result where a missing value is a bug, and reads well at the end of a
+pipeline: `token \float.fromString \orCrash("Invalid number: '{token}'")`.
 
 ## `ignore`
 

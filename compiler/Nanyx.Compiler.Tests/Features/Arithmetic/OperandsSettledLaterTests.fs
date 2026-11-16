@@ -9,7 +9,7 @@ open Nanyx.Compiler.Tests.TestSupport
 let private stack =
     """def pop = { mut stack ->
   match stack
-    | [] -> panic("empty")
+    | [] -> crash("empty")
     | [value, ...rest] ->
       stack := rest
       value

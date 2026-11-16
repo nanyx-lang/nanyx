@@ -48,11 +48,11 @@ export def nine: int = pow(3)
 let ``A local def is reported`` () =
     let source =
         """export def total: int -> int = { x ->
-  def panic = x + 1
-  panic * 2
+  def crash = x + 1
+  crash * 2
 }
 """
-    Assert.Equal<string list>([ "panic" ], reported source |> List.map fst)
+    Assert.Equal<string list>([ "crash" ], reported source |> List.map fst)
 
 [<Fact>]
 let ``A lambda's argument is reported`` () =

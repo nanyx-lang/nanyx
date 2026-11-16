@@ -8,7 +8,7 @@ open TranspilerWasmTestHelpers
 let ``Run - operands a later push settles to float are added as floats`` () =
     let source = """def pop = { mut stack ->
   match stack
-    | [] -> panic("empty")
+    | [] -> crash("empty")
     | [value, ...rest] ->
       stack := rest
       value
