@@ -344,17 +344,18 @@ order above; and an `Eq` loaded for a type that holds a function isn't found ins
 # Extending a type
 
 Decided in [#1501](https://github.com/nanyx-lang/nanyx/issues/1501), so that an attached definition can't get round
-the rule above ([#1514](https://github.com/nanyx-lang/nanyx/issues/1514)). Extensions are allowed anywhere, come into
-scope by import, are ambiguous (`NYX0106`) when two imports extend a type with one name, and can't redefine a name
-in scope for their type (`NYX0254`, `AttachedOperators.redefinitions`), as
-[Extending a type](../advanced/attached-definitions#extending-a-type) describes. What is left:
+the rule above, and built in [#1514](https://github.com/nanyx-lang/nanyx/issues/1514), as
+[Extending a type](../advanced/attached-definitions#extending-a-type) describes. Extensions are allowed anywhere, come
+into scope by import, are ambiguous (`NYX0106`) when two imports extend a type with one name, and can't redefine a
+name in scope for their type (`NYX0254`, `AttachedOperators.redefinitions`). A type's owned definitions are in scope
+wherever its values are: after a module's imports are merged, each module that owns definitions of a type it can see
+is merged as a made-up import selecting just those definitions (`OwnedDefinitions`, `Library.checkModule`). What is
+left open:
 
-- **A type's owned definitions are always in scope.** "Owned" means attached in the type's own module, or in the
-  standard library for a built-in type. They're to be in scope wherever a value of the type is, whether or not their
-  module is imported: `string.length`, `list.map`, `string.hash`, `` int.`<` ``, a user's `` Point.`==` ``. Today a
-  pipe to an owned definition whose module isn't imported is `NYX0102` (`"abc" \length` without `import nanyx/text`,
-  or `p \norm` where `Point.norm` is in a module the importer doesn't import), though redefining one is already an
-  error.
+- A module the importer imports itself, with an alias or without, is reached as the import says, so after
+  `import nanyx/text as t` an owned `string.trim` is `t.string.trim`, not in scope unqualified.
+- Two visible types of one name (two modules' `Point`s) have their owned definitions left out, as an attached name
+  says only the type's name; the importer imports the one it means.
 In generic code a requirement on a structured type **reduces** to requirements on its variables: `==` on a
 `list(a)` needs `Eq(a)`, and on `(name: string, value: a)` needs `Eq(a)`. So a signature writes `[Eq(a)]`, not
 `[Eq(list(a))]`. The diagnostic for a missing requirement names the reduced one.

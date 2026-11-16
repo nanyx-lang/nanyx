@@ -104,11 +104,10 @@ def a = "x" \shout"""
     Assert.Equal("shout", at)
 
 [<Fact>]
-let ``A pipe to a definition a standard-library module attaches says which module to import`` () =
-    let source = """def a = " x " \trim"""
-    let code, message, _ = onlyDiagnosticIn source (Compiler.compile source)
-    Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
-    Assert.Equal("'string' has no attached 'trim', and there is no function 'trim' in scope. 'string.trim' is defined in 'nanyx/text': add `import nanyx/text`", message)
+let ``A pipe to a definition a standard-library module attaches to a built-in type needs no import`` () =
+    let typed = compileClean "def a = \" x \" \\trim\ndef b = string.contains(\"hello world\", \"world\")\n"
+    Assert.Equal("string", Unifier.tyToString typed.Types.["a"])
+    Assert.Equal("bool", Unifier.tyToString typed.Types.["b"])
 
 [<Fact>]
 let ``A pipe to a standard-library definition imported with as says how to reach it`` () =

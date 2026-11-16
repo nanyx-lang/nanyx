@@ -1,6 +1,6 @@
 --| Functions on strings.
 
-  Each is attached to `string`, so with `import nanyx/text` it is called as `string.trim(s)`, or as
+  Each is attached to `string`, so it is in scope wherever strings are, without an import, and is called as `string.trim(s)`, or as
   `s \trim` when `s` is known to be a string. A dot on a value never reaches an attached definition:
   `s.trim` is an error.
 

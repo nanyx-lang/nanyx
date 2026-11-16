@@ -110,6 +110,7 @@
     <Compile Include="CheckedModule.fs" />
     <Compile Include="CompileListener.fs" />
     <Compile Include="ModuleLinking.fs" />
+    <Compile Include="OwnedDefinitions.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Manifest.fs" />
     <Compile Include="Package.fs" />

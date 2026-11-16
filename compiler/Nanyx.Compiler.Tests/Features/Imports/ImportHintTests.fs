@@ -20,15 +20,6 @@ let ``An unknown function a standard-library module exports says which import br
         reported "def c = max(1, 2)\n")
 
 [<Fact>]
-let ``An unknown qualified name says which import brings it in`` () =
-    Assert.Equal(
-        (DiagnosticCodes.UnknownFunction.Code,
-         """Unknown function 'string.contains'. 'string.contains' is defined in 'nanyx/text': add `import nanyx/text`""",
-         "string.contains",
-         [ "Add `import nanyx/text`" ]),
-        reported """def a = string.contains("hello world", "world")""")
-
-[<Fact>]
 let ``A name qualified by a module's name says to import the module under that name`` () =
     Assert.Equal(
         (DiagnosticCodes.UnknownFunction.Code,

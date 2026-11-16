@@ -4,7 +4,7 @@ description: Functions on strings
 order: 10
 ---
 
-Import it as `nanyx/text`. `string.length` is also a built-in property of strings and lists, so `s.length` is the string's length, as `string.length(s)` is. `string.toString`, which gives back the string itself, is in the prelude rather than in this module, with the `toString` of the other built-in types: see [Converting to text](prelude-contexts#converting-to-text).
+Its functions are attached to `string`, so they need no import (see [Extending a type](../advanced/attached-definitions#extending-a-type)); `import nanyx/text as t` reaches them as `t.string.trim`. `string.length` is also a built-in property of strings and lists, so `s.length` is the string's length, as `string.length(s)` is. `string.toString`, which gives back the string itself, is in the prelude rather than in this module, with the `toString` of the other built-in types: see [Converting to text](prelude-contexts#converting-to-text).
 
 ```nanyx
 import nanyx/text
@@ -25,7 +25,7 @@ println("héllo" \chars)
 
 Functions on strings.
 
-Each is attached to `string`, so with `import nanyx/text` it is called as `string.trim(s)`, or as
+Each is attached to `string`, so it is in scope wherever strings are, without an import, and is called as `string.trim(s)`, or as
 `s \trim` when `s` is known to be a string. A dot on a value never reaches an attached definition:
 `s.trim` is an error.
 

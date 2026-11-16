@@ -208,7 +208,9 @@ module Compiler =
           UnqualifiedSources: Map<string, (string * string) list>
           ImportedFiles: Map<SymbolId, ImportedFile>
           /// The module's re-exports as each is merged, with the module it re-exports from.
-          ReExports: ReExported list }
+          ReExports: ReExported list
+          /// The modules merged, by `originKey`.
+          Merged: Set<string> }
 
     /// The modules each host's prelude re-exports from, by the prelude's file, as `originKey`s.
     let private preludeSources = System.Collections.Concurrent.ConcurrentDictionary<string, Set<string>>()
@@ -461,7 +463,8 @@ module Compiler =
             CarriedAmbientMembers =
                 merged.CarriedAmbientMembers @ ModuleLinking.ambientMembersForImport item imported (carried |> List.map fst |> Set.ofList)
             UnqualifiedSources = unqualifiedSources
-            ImportedFiles = importedFiles },
+            ImportedFiles = importedFiles
+            Merged = merged.Merged.Add importedKey },
         importSymbols |> Map.keys |> Seq.tryHead
 
     /// Merges the import `item`, then what `imported` re-exports, as made-up imports of the modules it re-exports
@@ -612,7 +615,8 @@ module Compiler =
                   CarriedAmbientMembers = []
                   UnqualifiedSources = Map.empty
                   ImportedFiles = Map.empty
-                  ReExports = [] }
+                  ReExports = []
+                  Merged = Set.empty }
             let reExportItems = ModuleLinking.reExportsOf desugared
             let merged =
                 imports
@@ -681,6 +685,36 @@ module Compiler =
                                 | PathImport path -> path
                                 | ModuleImport name -> name
                             fail [ Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"Import not found: {shown} (only standard library modules can be imported here)" ]) initial
+            // Then the definitions owned by the types the imports bring in, from their modules (see `OwnedDefinitions`).
+            // The standard library imports what it uses itself.
+            let merged =
+                match origin with
+                | StandardLibraryModule _ -> merged
+                | SourceFile _
+                | InMemory when not merged.Errors.IsEmpty -> merged
+                | SourceFile _
+                | InMemory ->
+                    OwnedDefinitions.owners originKey (merged.Merged.Add key) merged.Env merged.State
+                    |> List.filter (fun owner -> not (visited.Contains (originKey owner)))
+                    |> List.fold (fun (merged: MergedImports) owner ->
+                        let readSource () =
+                            match owner with
+                            | StandardLibraryModule name -> StandardLibrary.tryLoadSource name |> Option.defaultValue ""
+                            | SourceFile path -> checkedModules.ReadFile path
+                            | InMemory -> ""
+                        match typecheckImport checkedModules owner readSource (visited.Add key) with
+                        | Ok ownerModule when ownerModule.Errors.IsEmpty ->
+                            match OwnedDefinitions.selection owner ownerModule.Typed.TypeDefs merged.Env merged.State ownerModule.Exports.Keys with
+                            | [] -> merged
+                            | names ->
+                                let source =
+                                    match owner with
+                                    | StandardLibraryModule name -> ModuleImport (StandardLibrary.importPrefix + name)
+                                    | SourceFile _
+                                    | InMemory -> PathImport (originKey owner)
+                                let item = { Source = source; Alias = None; Selection = Some (names |> List.map (fun name -> name, SourceSpan.none)); Span = SourceSpan.none }
+                                mergeWritten preludeKey [] owner item ownerModule merged
+                        | _ -> merged) merged
             let env = merged.Env
             // A name two imports bring in is an error only where it is used, and only if nothing nearer binds it.
             let ambiguousImports =

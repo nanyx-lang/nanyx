@@ -52,3 +52,42 @@ def Point.twice: Point -> int = { p -> Point.norm(p) * 2 }
     Assert.Equal("Point.norm", textAt main (spanOf diagnostic))
     let related, _ = Assert.Single(diagnostic.Related)
     Assert.EndsWith("geo.nyx", related.File)
+
+[<Fact>]
+let ``A type's own attached definitions are in scope wherever its values are, without importing its module`` () =
+    let geo =
+        normalized """module geo
+
+export type Point = protected (x: int, y: int)
+export def Point.make: int, int -> Point = { x, y -> Point(x = x, y = y) }
+export def Point.norm: Point -> int = { p -> p.x + p.y }
+"""
+    let shapes =
+        normalized """module shapes
+
+import geo
+
+export def origin = Point.make(1, 2)
+"""
+    let main =
+        normalized """import shapes
+
+def n = origin \norm
+"""
+    let result = compileImportingAll [ "geo.nyx", geo; "shapes.nyx", shapes ] main
+    Assert.Empty(result.Diagnostics)
+    Assert.Equal("int", Unifier.tyToString result.Typed.Value.Types.["n"])
+
+[<Fact>]
+let ``The standard library's definitions for a built-in type need no import`` () =
+    let typed = compileClean "def n = \"abc\" \\length\ndef t = string.trim(\" a \")\n"
+    Assert.Equal("int", Unifier.tyToString typed.Types.["n"])
+    Assert.Equal("string", Unifier.tyToString typed.Types.["t"])
+[<Fact>]
+let ``Two imported extensions of one name are ambiguous where they are used`` () =
+    let extension name ending = normalized $"module {name}\n\nexport def string.shout: string -> string = {{ s -> s ++ \"{ending}\" }}\n"
+    let main = normalized "import a\nimport b\n\ndef x = \"hi\" \\shout\n"
+    let result = compileImportingAll [ "a.nyx", extension "a" "!"; "b.nyx", extension "b" "?" ] main
+    let diagnostic = Assert.Single(result.Diagnostics)
+    Assert.Equal(DiagnosticCodes.AmbiguousAttachedFunction.Code, diagnostic.Code)
+    Assert.Equal("shout", textAt main (spanOf diagnostic))

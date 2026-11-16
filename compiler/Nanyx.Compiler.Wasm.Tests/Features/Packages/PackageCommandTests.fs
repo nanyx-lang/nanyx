@@ -122,7 +122,7 @@ let ``Check --timings - writes the modules' checks as a tree, with a module chec
     assertSucceeded outcome
     // The package's own modules, without their times or where the package is; the standard library's lines and those
     // of the console host and its interface package are left out, since which of them a check reports depends on what
-    // the process checked before.
+    // the process checked before. Each module checks last the library's modules that attach definitions to built-in types, `nanyx/text` and `nanyx/array`, as their definitions are in scope.
     let shipped (line: string) = line.Contains(Hosts.consolePackage + "/") || line.Contains(Hosts.consolePackage + ".core/")
     let shape =
         (normalizeOutput outcome.StandardError).Split('\n')
@@ -133,13 +133,13 @@ let ``Check --timings - writes the modules' checks as a tree, with a module chec
         |> String.concat "\n"
     let expected =
         """src/a.nyx
-└── src/c.nyx
+├── src/c.nyx
 src/b.nyx
-└── src/c.nyx (cached)
+├── src/c.nyx (cached)
 src/c.nyx (cached)
 src/main.nyx
 ├── src/a.nyx (cached)
-└── src/b.nyx (cached)"""
+├── src/b.nyx (cached)"""
     Assert.Equal(expected.ReplaceLineEndings "\n", shape)
 
 [<Fact>]

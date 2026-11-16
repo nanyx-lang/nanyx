@@ -4,7 +4,7 @@ description: Immutable arrays with constant-time indexing
 order: 10.5
 ---
 
-Import it as `nanyx/array`. Reach for an array over a [list](prelude-lists) when you read elements by index: `array.at` takes the same time wherever the element is, where `list.at` walks to it. An array can't grow or change; make a new one instead.
+Its functions are attached to `array`, so they need no import. Reach for an array over a [list](prelude-lists) when you read elements by index: `array.at` takes the same time wherever the element is, where `list.at` walks to it. An array can't grow or change; make a new one instead.
 
 ```nanyx
 import nanyx/array
@@ -34,7 +34,7 @@ where `at` on a list walks to it. Nothing about an array changes once it is made
 `Memory`. There is no literal for one: make it from a list with [`array.fromList`](#arrayfromlist), from its
 indices with [`array.init`](#arrayinit), or filled with each slot's default with [`array.create`](#arraycreate).
 
-Each function is attached to `array`, so with `import nanyx/array` it is called as
+Each function is attached to `array`, so it is in scope wherever arrays are, without an import, and is called as
 `array.length(xs)`, or as `xs \length` when `xs` is known to be an array. `==` compares two arrays
 element by element, and an array is written as a list is, `[10, 20, 30]`.
 
