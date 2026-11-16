@@ -252,3 +252,39 @@ def h: [Console] list(int) -> list(int) = { numbers ->
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
     Assert.Equal("Type mismatch: string vs int.", diagnostic.Message)
     Assert.Equal("\"not an int\"", textAt source diagnostic.Span.Value)
+/// The codes and messages of the diagnostics compiling `source`, after a def that fails to check, gives besides that
+/// def's own mismatch (#1483).
+let private afterAnEarlierError (source: string) =
+    let result = Compiler.compile (normalized ("def wrong: int = \"x\"\n\n" + source))
+    let wrong, others = result.Diagnostics |> List.partition (fun diag -> diag.Span.Value.StartLine = 0)
+    Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], wrong |> List.map _.Code)
+    others |> List.map (fun diag -> diag.Code, diag.Message)
+
+[<Fact>]
+let ``After an earlier error an == bound by a use calls the instance`` () =
+    let source =
+        """type Button = (label: string, onClick: () -> ())
+
+def same = {
+  use Eq(Button)(`==` = { p, q -> p.label == q.label })
+  Button(label = "a", onClick = { -> () }) == Button(label = "a", onClick = { -> () })
+}
+"""
+    Assert.Empty(afterAnEarlierError source)
+
+[<Fact>]
+let ``After an earlier error an attached member of the wrong type is still reported`` () =
+    let source =
+        """context Show(a) = (show: a -> string)
+
+type Point = (x: int, y: int)
+
+def describe: [Show(a)] a -> string = { v -> show(v) }
+
+def Point.show: Point -> int = { p -> p.x }
+def s = describe(Point(x = 1, y = 2))
+"""
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.MissingContextMembers.Code,
+          "'describe' requires the context 'Show(Point)', but 'Point.show' has the type 'Point -> int', where 'show' must be 'Point -> string'" ],
+        afterAnEarlierError source)

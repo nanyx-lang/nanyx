@@ -40,15 +40,10 @@ let private bindInstance (env: TypeEnv) (state: InferState) (providerOf: TypeExp
         bindInstanceOf env (providerOf ctx) ctxName argTys ctx, state
     | _ -> env, state
 
-/// `env` with each instance of a parameterised context among `contexts`, which a `use` loads or a signature declares,
-/// in scope (see `bindInstance`).
-let private bindInstancesFrom (env: TypeEnv) (state: InferState) (providerOf: TypeExpr -> ContextProvider) (contexts: TypeExpr list) : TypeEnv * InferState =
-    contexts |> List.fold (fun (env, state) ctx -> bindInstance env state providerOf ctx) (env, state)
-
 /// `env` with each instance of a parameterised context among `contexts`, the contexts a def's signature declares, in
 /// scope (see `bindInstance`).
 let internal bindInstances (env: TypeEnv) (state: InferState) (contexts: TypeExpr list) : TypeEnv * InferState =
-    bindInstancesFrom env state (fun ctx -> FromSignature ctx.Span) contexts
+    contexts |> List.fold (fun (env, state) ctx -> bindInstance env state (fun ctx -> FromSignature ctx.Span) ctx) (env, state)
 
 /// `ty` with each type variable named in `names` replaced by the type it maps to.
 let rec private replaceNamedVars (names: Map<string, Ty>) (ty: Ty) : Ty =
@@ -172,11 +167,9 @@ let private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: I
                 |> Result.bind (fun (bound, current: InferState) ->
                     let definition = definition.Value
                     let definitionTy, next = instantiate current (TypeEnv.tryFind definition env).Value
-                    match Unifier.unify ((memberTy, definitionTy, Equal, span) :: next.Constraints) with
+                    // An error earlier in the module is set aside (see `Unifier.agreeing`).
+                    match Unifier.unify ((memberTy, definitionTy, Equal, span) :: Unifier.agreeing next.Constraints) with
                     | Ok _ -> Ok (bound @ [ memberName, definition ], addConstraintAt span memberTy definitionTy next)
-                    // The constraints so far fail without this one: that is an error reported where it is, not here.
-                    | Error _ when Result.isError (Unifier.unify next.Constraints) ->
-                        Ok (bound @ [ memberName, definition ], addConstraintAt span memberTy definitionTy next)
                     | Error _ ->
                         fail $"{requirer} requires the context '{ctxText}', but '{definition}' has the type '{Unifier.tyToString (resolveSoFar next definitionTy)}', where '{memberName}' must be '{Unifier.tyToString (resolveSoFar next memberTy)}'")) (Ok ([], state))
         | _ when InterpolationHoles.isHole calleeName -> fail (InterpolationHoles.noInstance forType)
@@ -218,33 +211,11 @@ let private contextArgTysAtCall (state: InferState) (signature: TypeExpr option)
     let current = { current with TypeVars = state.TypeVars }
     argTys |> List.map (resolveSoFar current), argTys, current
 
-/// Each parameterised context a value of the type `valueTy` is an instance of, applied to the types it is one for: a
-/// record with exactly the context's members, at types that settle each of its parameters. `use (`+` = ...)`, of a
-/// record whose type does not name a context, finds that it is an `Add(int)` by the record's shape.
-let private contextsOfValue (state: InferState) (valueTy: Ty) : TypeExpr list =
-    match Unifier.unalias (resolveSoFar state valueTy) with
-    | TyRecord fields ->
-        [ for KeyValue(ctxName, info) in state.TypeDefs do
-            if info.IsContext && not info.Parameters.IsEmpty then
-                let paramTys, scratch = freshVars info.Parameters state
-                match contextMemberTypes scratch ctxName paramTys with
-                | Some members when Set.ofList (List.map fst members) = Set.ofSeq fields.Keys ->
-                    let scratch = members |> List.fold (fun current (name, memberTy) -> addConstraint memberTy fields.[name] current) scratch
-                    if Unifier.unify scratch.Constraints |> Result.isOk then
-                        let argTys = paramTys |> List.map (resolveSoFar scratch)
-                        if argTys |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty) then
-                            match argTys |> List.map (ContextInference.typeExprOf Map.empty) with
-                            | args when args |> List.forall Option.isSome ->
-                                yield TypeExpr.synthetic (TypeApply(ctxName, args |> List.map Option.get))
-                            | _ -> ()
-                | _ -> () ]
-    | _ -> []
-
 /// `env` with the instance a `use` of the value of type `valueTy` loads in scope, when it is one of a parameterised
-/// context: a value whose type is the context applied to types, as `def addInt: Sum(int) = (...)` makes `addInt`
-/// (recorded by the node of `value`, see `TypedModule.UseContexts`), or else a record of a context's shape (see
-/// `contextsOfValue`). A number literal in it that nothing has settled is of its default type, as in
-/// `use (`+` = { x, y -> x * 100 + y })`, an `Add(int)` (see `NumericLiterals`).
+/// context: a value whose type is the context applied to types, as `use Sum(int)(...)` makes (recorded by the node of
+/// `value`, see `TypedModule.UseContexts`). A `use` loads only a context's constructor (see `UseDischarge.notLoadable`),
+/// so no other value's type is read for the contexts it fits. A number literal in it that nothing has settled is of its
+/// default type (see `NumericLiterals`).
 let internal useInstance (env: TypeEnv) (state: InferState) (value: Expression) (valueTy: Ty) : TypeEnv * InferState =
     let state = NumericLiterals.settleWithin [ valueTy ] state
     match resolveSoFar state valueTy with
@@ -256,7 +227,7 @@ let internal useInstance (env: TypeEnv) (state: InferState) (value: Expression) 
             bindInstanceOf env (FromUse value.Id) ctxName argTys written,
             { state with UseContexts = state.UseContexts |> Map.add value.Id written }
         | None -> env, state
-    | _ -> bindInstancesFrom env state (fun _ -> FromUse value.Id) (contextsOfValue state valueTy)
+    | _ -> env, state
 
 /// Where a call that requires `ctxName` at `argTys` finds it when no instance is in scope, if the context is a
 /// well-known one (see `WellKnownContexts.atCall`). `hasInstance` says whether an instance of a type variable is in scope.
