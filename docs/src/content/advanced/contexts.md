@@ -136,6 +136,8 @@ def main: [Console] () -> () = {
 
 A value carries the contexts of the functions it's made with, so `Thunk(get = { 1 })` is a pure `Thunk(int)`. That holds inside a function too: a function that makes a value with a lambda that prints returns a `[Console] Thunk(int)`, and needn't declare `Console` itself, since making the value doesn't run the lambda. Holding or passing a `[Console] Thunk(int)` requires nothing; calling its functions requires `Console` there, as calling any `[Console]` function does, so `force(loud)` in a function that doesn't declare `Console` is an error (NYX0211). A value with fewer contexts fits where one with more is expected, as a pure function does: `pure` can be given for a `[Console] Thunk(int)`, but `loud` can't be given for a `Thunk(int)` (NYX0227). A context variable binds as it does for a function type: `map`'s result carries both `c` and `d`, and since only its result writes them, a call to `map` doesn't require them.
 
+In a list of types without `->`, the contexts in front of the list are its first type's, since a tuple carries none: `() -> ([Console] Thunk(int), int)` returns a `[Console] Thunk(int)` and an `int`. Contexts in front of a bracketed tuple, as in `[Console] (Thunk(int), int)`, are an error (NYX0253).
+
 A type has one context variable, which stands for any number of contexts, and can't belong to a scoped context's scope as well (NYX0252).
 # Requiring a context
 

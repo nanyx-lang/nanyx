@@ -225,7 +225,12 @@ module Unifier =
                 named |> List.sortBy (fun (name, _) -> rank name, name)
             match tryTupleLikeRecord fields with
             | Some tupleItems, namedFields ->
-                let tupleText = items tupleItems
+                // In a tuple's own brackets, contexts in front of the first item are its own (#1728).
+                let tupleText =
+                    match tupleItems with
+                    | (TyNominal _ as first) :: rest when namedFields.IsEmpty && not rest.IsEmpty ->
+                        String.concat ", " (printTy p false first :: List.map grouped rest)
+                    | _ -> items tupleItems
                 let namedText =
                     namedFields
                     |> inOrder

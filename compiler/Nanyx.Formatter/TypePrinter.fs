@@ -16,11 +16,17 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
     /// `int, int -> int` is a function of two parameters.
     let rec signature (t: TypeExpr) : Doc =
         match t.Kind with
+        // Contexts in front of a list of types without `->` are its first item's, so a tuple they are written on is
+        // bracketed.
+        | TypeWithContext(contexts, ({ Kind = TypeTuple _ } as inner)) -> cat [ contextSet contexts; text " "; parenType inner ]
         | TypeWithContext(contexts, inner) -> cat [ contextSet contexts; text " "; typeList inner ]
         | _ -> typeList t
 
     and typeList (t: TypeExpr) : Doc =
         match t.Kind with
+        // A tuple's first item takes the contexts in front of it without brackets: `[Console] Thunk(int), int`.
+        | TypeTuple ({ Kind = TypeWithContext(contexts, inner) } :: rest) when (match inner.Kind with TypeFunc _ | TypeTuple _ -> false | _ -> true) ->
+            commaJoin (cat [ contextSet contexts; text " "; listItem inner ] :: List.map listItem rest)
         | TypeTuple items -> commaJoin (List.map listItem items)
         | TypeFunc(parameter, result) when (match parameter.Kind with TypeTuple _ -> true | _ -> false) ->
             let items = match parameter.Kind with TypeTuple items -> items | _ -> []
@@ -83,7 +89,7 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
 
     and parenType (t: TypeExpr) : Doc =
         match t.Kind with
-        | TypeTuple items -> cat [ text "("; commaJoin (List.map listItem items); text ")" ]
+        | TypeTuple _ -> cat [ text "("; typeList t; text ")" ]
         | _ -> cat [ text "("; signature t; text ")" ]
 
     and atomType (t: TypeExpr) : Doc =
