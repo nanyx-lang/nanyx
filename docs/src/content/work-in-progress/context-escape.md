@@ -493,6 +493,15 @@ Hover hides a private context's members outside its file, as it hides a private 
      paired with the same one: each call in a block that requires `Tx` requires `Tx` of a scope of its own, and all of
      them are the block's, so `transaction { step(step(1)) }` requires it once
      ([#1553](https://github.com/nanyx-lang/nanyx/issues/1553)).
+   - A scoped context has no members, so the member check at a call never finds it missing. `ScopedCalls.unsupplied`
+     checks it instead, from `Contexts.ensureContextAvailable`: inside a lambda of the def around the call
+     (`LambdaContexts.withinLambda`) the lambda requires it, as before. Outside one, the def must write it, supply it to
+     a function it is given (as `memory` does), or take a cell, for `Memory`; otherwise the call is NYX0211, and in a
+     top-level value or a script's statements it is an error too. A top-level def that writes no type is inferred to
+     require each scoped context its body requires outside a lambda, all of one scope
+     (`InferState.InferredScopedContexts`), and its type carries them, so its callers are checked in turn. A `for`
+     loop's body runs where the loop is written, so the loop is checked the same way
+     ([#1561](https://github.com/nanyx-lang/nanyx/issues/1561)).
 5. ~~Let a `memory` block name its `Memory`, `memory { context m -> ... }`~~
    ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058), then
    [#1446](https://github.com/nanyx-lang/nanyx/issues/1446) for the `context m` form). Done: see

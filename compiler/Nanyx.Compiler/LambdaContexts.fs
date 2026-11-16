@@ -95,6 +95,11 @@ let record (contexts: Ty list) (state: InferState) : InferState =
     | [], DefScope(defName, true) -> recordInferredScoped defName contexts state
     | _ -> state
 
+/// `after` without what the lambdas being inferred used since `before`: for an expression inferred again, as a pipe's
+/// value is as its call's first argument, whose second inference records it all again.
+let forgetSince (before: InferState) (after: InferState) : InferState =
+    { after with LambdaContexts = before.LambdaContexts; InferredScopedContexts = before.InferredScopedContexts }
+
 /// The variables of the contexts the lambdas being inferred use, as `resolve` resolves them. They are those lambdas',
 /// so a local def that holds a value of one's scope, as a value of a type in a scoped context's scope is, is of that
 /// scope and is not generalised over it.

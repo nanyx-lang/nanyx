@@ -45,9 +45,11 @@ is planned.
   (`MemoryCells.ensureMemoryWritten`). A call is given the `Memory` of the cell it passes, which the call checks
   (`ScopedCalls`), so the pass that carries ambient contexts from a def to its callers (`DeferredContextUses`, used
   where a host module is imported) neither passes `Memory` on nor reports it: a call in a `memory` block is not a
-  requirement of the def around the block ([#1473](https://github.com/nanyx-lang/nanyx/issues/1473)). Not yet: a def that writes no type and only calls a function that requires
-  `Memory`, outside any `memory` block, is not inferred to require it, since nothing tracks `Memory` by name there.
-  Nor is such a call reported where a def writes its type without `Memory`, so an `MRef` can be made outside any block
+  requirement of the def around the block ([#1473](https://github.com/nanyx-lang/nanyx/issues/1473)). A call that
+  requires `Memory` outside any lambda is checked against the def around it, as any scoped context is (see
+  [Context escape](context-escape.md), `ScopedCalls.unsupplied`): NYX0211 where the def writes its type without
+  `Memory` and takes no cell, and an error in a top-level value or a script's statements, so an `MRef` can't be made
+  outside a block. A top-level def that writes no type is inferred to require it, and its type carries it
   ([#1561](https://github.com/nanyx-lang/nanyx/issues/1561)).
 
 # Planned
