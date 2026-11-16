@@ -1444,7 +1444,8 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             let declaredTy, finalState =
                                 match expectedDeclaredOpt with
                                 | Some declaredTy ->
-                                    declaredTy, TypeHoles.constrainToAnnotation expr declaredTypeExprOpt declaredTy typedExpr.Type next
+                                    let valueTy, next = UseDischarge.fitInstance envWithCtx next name expr declaredTy typedExpr.Type
+                                    declaredTy, TypeHoles.constrainToAnnotation expr declaredTypeExprOpt declaredTy valueTy next
                                 | None ->
                                     let updatedState =
                                         if preboundFresh then addConstraintAt expr.Span preboundTy typedExpr.Type next else next

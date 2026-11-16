@@ -95,7 +95,14 @@ and private bindSchemeWith (rests: bool) (bindings: Map<int, Ty>) (scheme: Ty) (
     | TyPrimitive a, TyPrimitive b when a = b -> bindings
     | TyFunc(input, output, contexts), TyFunc(input', output', contexts') ->
         let named = concreteContexts contexts
-        let others = concreteContexts contexts' |> List.filter (fun context -> not (List.contains context named))
+        // `Yield(int)` is the instance of a named `Yield(b)` at the type `b` stands for, not another context.
+        let instanceOfNamed (context: Ty) =
+            named
+            |> List.exists (fun namedContext ->
+                match namedContext, context with
+                | TyApply(name, args), TyApply(name', args') -> name = name' && args.Length = args'.Length && not (freeVars namedContext).IsEmpty
+                | _ -> false)
+        let others = concreteContexts contexts' |> List.filter (fun context -> not (List.contains context named || instanceOfNamed context))
         let bound =
             contexts
             |> List.choose (function TyVar v -> Some v | _ -> None)

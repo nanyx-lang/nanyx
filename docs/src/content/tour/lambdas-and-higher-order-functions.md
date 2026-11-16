@@ -90,10 +90,10 @@ As with a [destructuring binding](./pattern-matching#destructuring-bindings), a 
 Higher-order functions can accept lambdas that require a context. This lets APIs parameterize the capability available inside the callback.
 
 ```nanyx fragment
-list.select: (list(a), [Yield(b)] (a -> ())) -> list(b)
+list.select: [c] list(a), ([Yield(b), c] a -> ()) -> list(b)
 ```
 
-In the type above, the callback `(a -> ())` runs with a `Yield(b)` context, so it can call `yield` while processing each element.
+In the type above, the callback `a -> ()` runs with a `Yield(b)` context, so it can call `yield` while processing each element, and `list.select` gives back the values it yields. (`c` is a context variable, explained [below](#parametric-contexts): the callback may use the caller's contexts too.)
 
 ```nanyx fragment
 def names: list(Person) -> list(string) = { people ->

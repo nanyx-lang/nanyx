@@ -326,4 +326,15 @@ def list.default: () -> list(a)
 
 `[]`, the empty list.
 
+## `Yield`
+
+```nanyx fragment
+context Yield(b) = (
+  yield: b -> ()
+)
+```
+
+Values of type `b` given one at a time: [`list.select`](prelude-lists#listselect) runs a function with one whose `yield` adds to
+the list it gives back, so `xs \list.select { x -> if x > 0 then yield(x) }` keeps the positive ones.
+
 <!-- End of the generated reference. -->

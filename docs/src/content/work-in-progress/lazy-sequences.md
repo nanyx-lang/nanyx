@@ -36,7 +36,7 @@ The docs describe several overlapping ideas, and only the type names exist in th
 | `Iter(a)` with `next` and an associated `elem` type | The standard library's `iter` page, since deleted | Nothing; it waits on [associated types](./type-members-and-reflection#associated-types) |
 | `getIterator` | [Sequences and queries](../advanced/sequences-and-queries) | Nothing, and nothing defines it |
 | `seq { yield ... }` | [Workflows](../advanced/workflows), [Ranges](../tour/ranges) | No `seq` builder |
-| `Yield(b)` for `list.select` | The standard library's `collections` page, since replaced by [lists](../stdlib/prelude-lists), which has no `select` | Nothing ([#478](https://github.com/nanyx-lang/nanyx/issues/478)) |
+| `Yield(b)` for `list.select` | [Lists](../stdlib/prelude-lists), [Lambdas](../tour/lambdas-and-higher-order-functions#contextual-lambdas) | The prelude's `Yield(b)`, over a `mut` list in a `memory` block ([#478](https://github.com/nanyx-lang/nanyx/issues/478)) |
 
 A `for` loop accepts a `list`, `seq`, `gen`, `map` or `set` by name
 ([Infer.fs:325](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/Infer.fs#L325)), and rejects a
@@ -204,9 +204,10 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
   as for `while true`.
 - **One `yield`.** The docs have three: the `seq { }` keyword, the `Yield(b)` context of `list.select`
   ([#478](https://github.com/nanyx-lang/nanyx/issues/478)), and the `ListBuilder` member behind
-  [literal builders](../tour/collections#syntax). The last two are handler-style: they need a mutable cell or
-  resumable handlers. With sequences, `select` is a `flatMap` whose body is a `seq { }`, and a literal builder could
-  take a `seq(a)`, leaving one `yield`.
+  [literal builders](../tour/collections#syntax). The last two are handler-style. `Yield(b)` is in the prelude now:
+  `list.select` loads one whose `yield` adds to a `mut` list in a `memory` block, and `list.selectOne` is its first
+  value, not an early exit. With sequences, `select` could be a `flatMap` whose body is a `seq { }`, and a literal
+  builder could take a `seq(a)`, leaving one `yield`.
 
 # Plan
 

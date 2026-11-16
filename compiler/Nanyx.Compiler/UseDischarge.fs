@@ -10,15 +10,18 @@ open NyxCompiler.InferState
 /// where it is made against the contexts there (see `LambdaContexts`), so it runs with the instances in scope at the
 /// `use`, and the backend's `CoreIrLowerMembers.coerce` captures them where it is given. A function given by its name,
 /// `use Log(log = shout)`, is taken in the same way when an instance of each context it needs besides is in scope
-/// there (#1265).
+/// there (#1265). An instance of a parameterised context, `use Yield(b)(yield = { x -> found := ... })`, is taken in the
+/// same way (see `fitInstance`).
 ///
 /// Only an instance written at the `use` itself: one built as a value, `def inst = Log(log = ...)`, has nowhere to say
 /// what it needs.
 module internal UseDischarge =
-    /// `state` with `value`, the instance a `use` loads, marked as written at the `use` when it is a call.
+    /// `state` with `value`, the instance a `use` loads, marked as written at the `use` when it is a call, or, for
+    /// `use C(T)(members)`, its members (see `UseInstanceSyntax`).
     let mark (value: Expression) (state: InferState) : InferState =
         match value.Kind with
         | FunctionCall _ -> { state with UseInstances = state.UseInstances.Add value.Id }
+        | UseInstanceSyntax.Instance(_, members) -> { state with UseInstances = state.UseInstances.Add members.Id }
         | _ -> state
 
     /// The error for a `use` of `value`, unless it is a context's constructor, `use Log(...)` or `use C(T)(...)`: a `use`
@@ -72,3 +75,10 @@ module internal UseDischarge =
                     | _ -> fitted, extras) (given, [])
             TyRecord fitted, LambdaContexts.record (List.distinct extras) state
         | _ -> inputTy, state
+
+    /// The type of `members`, the members of `use C(T)(members)`, inferred as `valueTy`, as one that fits `declaredTy`,
+    /// the context at its types, as `fit` fits a constructor call's, with `state` using what they need besides where the
+    /// `use` is written. Any other def's value keeps its type.
+    let fitInstance (env: TypeEnv) (state: InferState) (name: Identifier) (members: Expression) (declaredTy: Ty) (valueTy: Ty) : Ty * InferState =
+        if name = UseInstanceSyntax.name then fit env state members (resolveSoFar state declaredTy) [ members ] valueTy
+        else valueTy, state

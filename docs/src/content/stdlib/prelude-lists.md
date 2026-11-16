@@ -183,6 +183,25 @@ def list.find: [c] list(a), ([c] a -> bool) -> #some(a) | #notFound
 
 The first element `matches` holds for, or `#notFound`.
 
+## `list.select`
+
+```nanyx fragment
+def list.select: [c] list(a), ([Yield(b), c] a -> ()) -> list(b)
+```
+
+The values `f` yields for each element in turn, in the order it yields them: `f` runs with a
+`Yield` whose `yield` adds a value to the list. `items \list.select { item -> if item is #other(v)
+then yield(v) }` gives the payload of each `#other`.
+
+## `list.selectOne`
+
+```nanyx fragment
+def list.selectOne: [c] list(a), ([Yield(b), c] a -> ()) -> #some(b) | #notFound
+```
+
+The first value `f` yields, running it on the elements in turn as [`list.select`](#listselect) does, or `#notFound`
+when it yields none.
+
 ## `list.all`
 
 ```nanyx fragment

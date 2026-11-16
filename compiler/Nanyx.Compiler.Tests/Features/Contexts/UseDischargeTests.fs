@@ -124,3 +124,36 @@ def moved = {
     let code, text = singleError (source.ReplaceLineEndings "\n")
     Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)
     Assert.Equal("Move(move = chooser)", text)
+// So may `use C(T)(members)`, an instance of a parameterised context (#478).
+
+[<Fact>]
+let ``An instance of a parameterised context may give a member a lambda that needs more contexts`` () =
+    let source = """context Y(b) = (y: b -> ())
+
+def f: [Y(int)] () -> () = { y(1) }
+
+def shown: [Console] () -> () = { use Y(int)(y = { x -> println(x) }) in f() }
+
+def kept: () -> int = {
+  memory {
+    mut n = 0
+    use Y(int)(y = { x -> n := x })
+    f()
+    n
+  }
+}
+"""
+    let source = source.ReplaceLineEndings "\n"
+    let typed = compileClean source
+    Assert.Equal(Some "def shown: [Console] () -> ()", hoverType source "shown")
+    Assert.Equal("() -> int", Unifier.tyToString typed.Types.["kept"])
+
+[<Fact>]
+let ``What a parameterised instance's member needs besides is required where the use is written`` () =
+    let source = """context Y(b) = (y: b -> ())
+
+def f: [Y(int)] () -> () = { y(1) }
+
+def shown: () -> () = { use Y(int)(y = { x -> println(x) }) in f() }
+"""
+    Assert.Equal((DiagnosticCodes.UndeclaredContext.Code, "println"), singleError (source.ReplaceLineEndings "\n"))
