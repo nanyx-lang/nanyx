@@ -231,3 +231,24 @@ def main = {
 }
 """
     runSource source |> assertRan "10 21 6\n"
+[<Fact>]
+let ``Run - a function whose Memory is inferred changes a cell it is given in a block, with nanyx/console imported`` () =
+    let source = """
+import nanyx/console
+
+def bump = { mut n -> n := n + 1 }
+
+def f: () -> int = {
+  memory {
+    mut s = 0
+    bump(mut s)
+    s
+  }
+}
+
+@entry
+def main = {
+  println(f())
+}
+"""
+    runSource source |> assertRan "1\n"
