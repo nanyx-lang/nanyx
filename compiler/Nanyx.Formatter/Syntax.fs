@@ -130,6 +130,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | ImportStatement items -> ImportStatement(items |> List.map importItem |> ImportOrder.sort)
             | UseStatement value -> UseStatement(expr value)
             | ExprStatement value -> ExprStatement(expr value)
+            | AttributeStatement(n, argument) -> AttributeStatement(n, Option.map expr argument)
         { s with Kind = kind }
 
     let rec item (i: TopLevelItem) : TopLevelItem =

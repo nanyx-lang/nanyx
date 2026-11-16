@@ -258,6 +258,9 @@ and StatementKind =
     /// `use value`: `value`, a context instance, is loaded for the rest of the block.
     | UseStatement of Expression
     | ExprStatement of Expression
+    /// An `@name` attribute line in a block; it applies to the local def that follows it, as `@allow(...)` does. Its
+    /// argument is written as a top-level attribute's is (see `Attribute`).
+    | AttributeStatement of Identifier * Expression option
 
 and Definition =
     | ValueDef of bool * Identifier * TypeExpr option * Expression
@@ -622,6 +625,24 @@ module ExternSyntax =
         let literal text = Expression.from value (LiteralExpr(StringLit text))
         { value with Kind = FunctionCall(builtIn, None, [ literal importModule; literal importName ]) }
 
+/// A linter rule as an attribute's argument names it, `default/unusedBindings`: the linter's name and the rule's,
+/// written with no spaces around the `/`, which the parser reads as a division of the two names. `@allow` takes rules
+/// separated by `,`, which are a tuple of them.
+module LinterRuleSyntax =
+    let separator = "/"
+
+    /// The linter and the rule `expr` names, if it names one.
+    let (|Rule|_|) (expr: Expression) =
+        match expr.Kind with
+        | BinaryOp(op, _, Kind (IdentifierExpr linter), Kind (IdentifierExpr rule)) when op = separator -> Some (linter, rule)
+        | _ -> None
+
+    /// The rules an attribute's argument names, each with the expression that names it, if it names only rules.
+    let (|Rules|_|) (argument: Expression) =
+        let items = match argument.Kind with TupleExpr items -> items | _ -> [ argument ]
+        let rules = items |> List.choose (fun item -> match item with Rule(linter, rule) -> Some (linter, rule, item) | _ -> None)
+        if rules.Length = items.Length then Some rules else None
+
 /// `x := e` (see the memory page): a call to the built-in "__assign" with the cell and its new value. Its name span is
 /// the `:=`.
 module AssignSyntax =
@@ -902,7 +923,8 @@ module Statement =
         | DefStatement(_, _, _, expr)
         | UseStatement expr -> Some expr
         | ImportStatement _
-        | TypeDefStatement _ -> None
+        | TypeDefStatement _
+        | AttributeStatement _ -> None
 
 [<AutoOpen>]
 module PipeCall =

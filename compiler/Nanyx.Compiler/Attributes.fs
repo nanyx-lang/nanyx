@@ -15,6 +15,73 @@ module Attributes =
     /// `@customKeywordType(#bind)` (see the workflows page).
     let customKeywordTypeAttribute = "customKeywordType"
 
+    /// The attribute that lets a def break linter rules: `@allow(default/unusedBindings)` before a def, a local one too,
+    /// suppresses that rule's diagnostics inside it (see `Allows`).
+    let allowAttribute = "allow"
+
+    /// The rules an `@allow` names, each as its linter, its rule and where it is written, or `None` if `argument` is not
+    /// one or more rules separated by `,`.
+    let allowedRules (argument: Expression option) : (Identifier * Identifier * SourceSpan) list option =
+        match argument with
+        | Some (LinterRuleSyntax.Rules rules) -> Some (rules |> List.map (fun (linter, rule, expr) -> linter, rule, expr.Span))
+        | _ -> None
+
+    let private allowArgumentError (span: SourceSpan) =
+        Diagnostics.at
+            DiagnosticCodes.UnexpectedAttributeArgument
+            span
+            $"Attribute '@{allowAttribute}' takes the linter rules it allows, separated by commas, as `@{allowAttribute}(default/unusedBindings)`"
+
+    /// The errors in the attributes of the blocks of `module'`: only `@allow` may be written in a block, with the rules
+    /// it allows, and it must be followed by a def, perhaps after other attributes. They stay where they are.
+    let private statementAttributeErrors (module': Module) : Diagnostic list =
+        let rec inBlock (statements: Statement list) =
+            match statements with
+            | [] -> []
+            | ({ Kind = AttributeStatement(name, argument) } as attribute) :: rest ->
+                let followedByDef =
+                    rest
+                    |> List.skipWhile (fun statement -> match statement.Kind with AttributeStatement _ -> true | _ -> false)
+                    |> List.tryHead
+                    |> Option.exists (fun statement -> match statement.Kind with DefStatement _ -> true | _ -> false)
+                let error =
+                    if name <> allowAttribute then
+                        Some (Diagnostics.at DiagnosticCodes.UnknownAttribute attribute.Span $"Unknown attribute '@{name}': in a block, only '@{allowAttribute}' can come before a def")
+                    elif (allowedRules argument).IsNone then
+                        Some (allowArgumentError attribute.Span)
+                    elif not followedByDef then
+                        Some (Diagnostics.at DiagnosticCodes.MisplacedAttribute attribute.Span $"Attribute '@{name}' must be followed by a definition")
+                    else
+                        None
+                Option.toList error @ inBlock rest
+            | _ :: rest -> inBlock rest
+        module'
+        |> List.collect SyntaxTree.ofItem
+        |> List.collect SyntaxTree.blocksWithin
+        |> List.collect inBlock
+
+    /// `items` without their `@allow` attributes, which are for the linters (see `Allows`), with the errors in them: an
+    /// `@allow` must name the rules it allows, and be followed by a value definition, perhaps after other attributes.
+    let rec private withoutAllows (items: TopLevelItem list) : TopLevelItem list * Diagnostic list =
+        match items with
+        | [] -> [], []
+        | Kind (Attribute(name, argument)) as attribute :: rest when name = allowAttribute ->
+            let others, errors = withoutAllows rest
+            let next = rest |> List.skipWhile (function Kind (Attribute _) -> true | _ -> false) |> List.tryHead
+            let error =
+                match next with
+                | _ when (allowedRules argument).IsNone -> [ allowArgumentError attribute.Span ]
+                | Some (Kind (Def (ValueDef _))) -> []
+                | _ -> [ Diagnostics.at DiagnosticCodes.MisplacedAttribute attribute.Span $"Attribute '@{name}' must be followed by a definition" ]
+            others, error @ errors
+        | Kind (ModuleBlock(name, blockItems)) as block :: rest ->
+            let blockItems, blockErrors = withoutAllows blockItems
+            let others, errors = withoutAllows rest
+            { block with Kind = ModuleBlock(name, blockItems) } :: others, blockErrors @ errors
+        | item :: rest ->
+            let others, errors = withoutAllows rest
+            item :: others, errors
+
     /// The kinds `@customKeywordType` takes. A `#bind` keyword takes a value and the rest of the block, which is how every
     /// keyword is desugared (see `WorkflowDesugaring`).
     let keywordKinds = [ "bind" ]
@@ -95,7 +162,9 @@ module Attributes =
     /// `ExternSyntax`). Any other attribute, an attribute that does not precede a value definition, or a definition with
     /// no value and no `@extern`, is an error. `@entry` takes no argument. The host is `host`: the package's, or the
     /// console host for a file in no package. A package with no host is a library, so an `@entry` in it is an error. With the module, each entry point (see `EntryPoint`). An attribute before
-    /// a member of a context declaration is checked here too, and stays where it is (see `fieldAttributeErrors`).
+    /// a member of a context declaration is checked here too, and stays where it is (see `fieldAttributeErrors`), as is
+    /// one in a block (see `statementAttributeErrors`). `@allow` is for the linters: it is checked and left out (see
+    /// `withoutAllows`).
     let applyAttributes (host: Host option) (module': Module) : Result<Module * EntryPoint list, Diagnostic list> =
         let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entries: (EntryPoint * TopLevelItem) list) (externs: (string * Extern * SourceSpan) list) (errors: Diagnostic list) =
             match remaining with
@@ -134,9 +203,10 @@ module Attributes =
             | Kind (Attribute(name, _)) as attribute :: rest ->
                 loop rest acc entries externs (Diagnostics.at DiagnosticCodes.MisplacedAttribute attribute.Span $"Attribute '@{name}' must be followed by a definition" :: errors)
             | item :: rest -> loop rest (item :: acc) entries externs (List.rev (bodilessErrors [ item ]) @ errors)
+        let module', allowErrors = withoutAllows module'
         match loop module' [] [] [] (List.rev (fieldAttributeErrors module')) with
         | items, entries, externs, errors ->
-            match errors @ Externs.conflicts externs with
+            match allowErrors @ statementAttributeErrors module' @ errors @ Externs.conflicts externs with
             | [] ->
                 // The host's prelude is imported into every module of the program, not here (see `Library`).
                 let entryImport = match host with Some host when not entries.IsEmpty -> [ hostImport host ] | _ -> []

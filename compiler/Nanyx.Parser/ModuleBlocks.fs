@@ -80,6 +80,7 @@ let private rewriteExpressionInModule (valueMap: Map<string, string>) (typeMap: 
         | ImportStatement items -> ImportStatement items
         | UseStatement value -> UseStatement (rewrite value)
         | ExprStatement bodyExpr -> ExprStatement (rewrite bodyExpr)
+        | AttributeStatement _ -> kind
     and rewriteType typeExpr = rewriteTypeExprInModule typeMap rewrite typeExpr
     rewrite expr
 

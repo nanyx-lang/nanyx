@@ -1472,6 +1472,8 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         | Error err -> errors <- err
             | ImportStatement items ->
                 typedStatements <- typedStatements @ [ TypedImportStatement items ]
+            // An attribute is for the linters (see `Allows`), and `Attributes` has checked it.
+            | AttributeStatement _ -> ()
             | TypeDefStatement(name, modifiers, parameters, body) ->
                 current <- registerTypeDef current name modifiers parameters body
                 if errors.IsEmpty then errors <- DefAnnotations.typeDefErrors current name modifiers parameters body

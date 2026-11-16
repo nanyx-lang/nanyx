@@ -990,6 +990,77 @@ module Semicolons =
                   Fixes = fixes }))
         |> List.sortBy (fun report -> report.Span.Start)
 
+/// Where `@allow` suppresses linter rules: before a def, a local one too, it suppresses the diagnostics of the rules it
+/// names within the def (see `Attributes.allowAttribute`). The host applies it to every linter's diagnostics, and the
+/// official linter's `unusedAllows` rule reports a rule an `@allow` names that suppressed nothing.
+module Allows =
+    let rule =
+        { Id = "unusedAllows"
+          Title = "`@allow` that suppresses nothing"
+          DefaultSeverity = Severity.Warning
+          Description = "An `@allow` names a linter rule that reports nothing in the definition after it. Remove it." }
+
+    /// An `@allow`: the attribute, the rules it names (each as its code and where it is written), and the def it is
+    /// before.
+    type Allow =
+        { Attribute: SourceSpan
+          Rules: (Identifier * Identifier * SourceSpan) list
+          Def: SourceSpan }
+
+    let private allowOf (span: SourceSpan) (name: Identifier) (argument: Expression option) (def: SourceSpan option) =
+        match def, Attributes.allowedRules argument with
+        | Some def, Some rules when name = Attributes.allowAttribute -> Some { Attribute = span; Rules = rules; Def = def }
+        | _ -> None
+
+    /// The `@allow`s of `model`, at the top level, in module blocks and in blocks. Attributes may stand between one and
+    /// its def.
+    let collect (model: SemanticModel) : Allow list =
+        let rec ofItems (items: TopLevelItem list) =
+            match items with
+            | [] -> []
+            | Kind (Attribute(name, argument)) as attribute :: rest ->
+                let def =
+                    rest
+                    |> List.skipWhile (function Kind (Attribute _) -> true | _ -> false)
+                    |> List.tryHead
+                    |> Option.bind (function Kind (Def (ValueDef _)) as def -> Some def.Span | _ -> None)
+                Option.toList (allowOf attribute.Span name argument def) @ ofItems rest
+            | Kind (ModuleBlock(_, blockItems)) :: rest -> ofItems blockItems @ ofItems rest
+            | _ :: rest -> ofItems rest
+        let rec ofBlock (statements: Statement list) =
+            match statements with
+            | [] -> []
+            | ({ Kind = AttributeStatement(name, argument) } as attribute) :: rest ->
+                let def =
+                    rest
+                    |> List.skipWhile (fun statement -> match statement.Kind with AttributeStatement _ -> true | _ -> false)
+                    |> List.tryHead
+                    |> Option.bind (fun statement -> match statement.Kind with DefStatement _ -> Some statement.Span | _ -> None)
+                Option.toList (allowOf attribute.Span name argument def) @ ofBlock rest
+            | _ :: rest -> ofBlock rest
+        let local = model.Syntax |> List.collect SyntaxTree.ofItem |> List.collect SyntaxTree.blocksWithin |> List.collect ofBlock
+        ofItems model.Syntax @ local
+
+    /// Whether `allow` suppresses `diagnostic` by the rule it names at `ruleSpan`.
+    let suppresses (allow: Allow) (linter: Identifier, rule: Identifier, _: SourceSpan) (diagnostic: Diagnostic) =
+        diagnostic.Code = $"{linter}/{rule}"
+        && diagnostic.Span |> Option.exists (fun span -> SourceSpan.contains allow.Def span)
+
+    /// What `unusedAllows` says of a rule an `@allow` names that suppressed nothing, from the linters there are.
+    let message (linters: Linter list) (linter: Identifier, rule: Identifier, _: SourceSpan) =
+        match linters |> List.tryFind (fun known -> known.Name = linter) with
+        | None -> $"There is no linter '{linter}', so `@allow({linter}/{rule})` suppresses nothing: remove it"
+        | Some known when not (known.Rules |> List.exists (fun r -> r.Id = rule)) ->
+            $"The linter '{linter}' has no rule '{rule}', so `@allow({linter}/{rule})` suppresses nothing: remove it"
+        | Some _ -> $"`{linter}/{rule}` reports nothing in this definition, so `@allow({linter}/{rule})` suppresses nothing: remove it"
+
+    /// The fix for a rule an `@allow` names that suppressed nothing: when it is the only one it names, removing the
+    /// attribute.
+    let fixes (model: SemanticModel) (allow: Allow) =
+        match allow.Rules with
+        | [ _ ] -> [ { Title = "Remove the `@allow`"; Edits = [ SourceEdits.removal model.Source allow.Attribute ] } ]
+        | _ -> []
+
 module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
@@ -998,7 +1069,8 @@ module Linters =
           Rules =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
               UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule
-              UnannotatedExports.rule; UnusedResults.rule; UselessExpressions.rule; ShadowedPreludeNames.rule; Semicolons.rule ]
+              UnannotatedExports.rule; UnusedResults.rule; UselessExpressions.rule; ShadowedPreludeNames.rule; Semicolons.rule
+              Allows.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
@@ -1063,7 +1135,25 @@ module Linters =
                 |> List.choose (fun report ->
                     diagnostic options linter rules.[report.Rule] (Some report.Span) report.Message report.Related report.Fixes)
 
+    /// `diagnostics` without those an `@allow` suppresses, and, when the official linter runs, its `unusedAllows`
+    /// diagnostics for each rule an `@allow` names that suppressed nothing (see `Allows`).
+    let private applyAllows (options: LinterOptions) (model: SemanticModel) (diagnostics: Diagnostic list) =
+        let allows = Allows.collect model
+        let suppressed (diagnostic: Diagnostic) =
+            allows |> List.exists (fun allow -> allow.Rules |> List.exists (fun rule -> Allows.suppresses allow rule diagnostic))
+        let unused =
+            if not (options.Linters |> List.exists (fun linter -> linter.Name = official.Name)) then
+                []
+            else
+                allows
+                |> List.collect (fun allow ->
+                    allow.Rules
+                    |> List.filter (fun rule -> not (diagnostics |> List.exists (Allows.suppresses allow rule)))
+                    |> List.choose (fun ((_, _, span) as rule) ->
+                        diagnostic options official Allows.rule (Some span) (Allows.message all rule) [] (Allows.fixes model allow)))
+        (diagnostics |> List.filter (suppressed >> not)) @ unused
+
     /// The diagnostics of every linter `options` names over `model`, at their configured severities, in the order
-    /// the linters are given and then the order each reported them.
+    /// the linters are given and then the order each reported them, without those an `@allow` suppresses.
     let run (options: LinterOptions) (model: SemanticModel) : Diagnostic list =
-        options.Linters |> List.collect (runOne options model)
+        options.Linters |> List.collect (runOne options model) |> applyAllows options model

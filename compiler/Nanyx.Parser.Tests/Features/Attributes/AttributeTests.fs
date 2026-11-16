@@ -79,5 +79,27 @@ let ``An attribute after a record type's last field is an error`` () =
     parseModule "context C = (\n  x: int\n  @customKeywordType(#bind)\n)" |> isError |> should equal true
 
 [<Fact>]
+let ``Linter rules are written with no spaces around their slash, separated by commas`` () =
+    match parseModule "@allow(default/unusedBindings, default/unusedResults)\ndef x = 1" with
+    | Result.Ok [ Kind (Attribute("allow", Some (LinterRuleSyntax.Rules [ "default", "unusedBindings", first; "default", "unusedResults", _ ]))); Kind (Def _) ] ->
+        Assert.Equal((7, 29), (first.Span.Start, first.Span.End))
+    | other -> failwith $"Unexpected parse result: %A{other}"
+
+[<Fact>]
+let ``An attribute in a block is a statement before the local def it annotates`` () =
+    let source =
+        """def f = { ->
+  @allow(default/unusedBindings)
+  def x = 1
+  x
+}"""
+    match parseModule (source.ReplaceLineEndings "\n") with
+    | Result.Ok [ Kind (Def (ValueDef(_, "f", _, Kind (Lambda(_, Kind (Block statements), _))))) ] ->
+        match statements |> List.map _.Kind with
+        | [ AttributeStatement("allow", Some (LinterRuleSyntax.Rules [ "default", "unusedBindings", _ ])); DefStatement(_, "x", _, _); ExprStatement _ ] -> ()
+        | other -> failwith $"Unexpected statements: %A{other}"
+    | other -> failwith $"Unexpected parse result: %A{other}"
+
+[<Fact>]
 let ``An attribute needs a name`` () =
     parseModule "@\ndef main = { 1 }" |> isError |> should equal true

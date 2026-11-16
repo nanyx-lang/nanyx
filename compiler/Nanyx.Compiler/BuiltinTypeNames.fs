@@ -128,7 +128,8 @@ module internal BuiltinTypeNames =
                                 { statement with Kind = TypeDefStatement(name, modifiers, typeParameters parameters, typeExpr body) }
                             | ImportStatement _
                             | UseStatement _
-                            | ExprStatement _ -> statement))
+                            | ExprStatement _
+                            | AttributeStatement _ -> statement))
                 | other -> other)
 
         let rec item (topLevel: TopLevelItem) : TopLevelItem =

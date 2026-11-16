@@ -93,6 +93,7 @@ and private inStatement (declared: DeclaredNames) (offset: int) (statement: Stat
             | UseStatement value
             | ExprStatement value -> inExpression declared offset value
             | ImportStatement items -> items |> List.map (fun item -> item.Span)
+            | AttributeStatement(_, argument) -> argument |> Option.map (inExpression declared offset) |> Option.defaultValue []
         statement.Span :: parts
 
 /// The spans of a def's name, its annotation and its value.

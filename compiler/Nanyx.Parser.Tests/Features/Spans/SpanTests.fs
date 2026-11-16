@@ -251,6 +251,7 @@ and private expressionsOfStatement (statement: Statement) =
     | TypeDefStatement (_, _, parameters, typeExpr) ->
         (parameters |> List.collect (snd >> Option.toList >> List.collect expressionsOfType)) @ expressionsOfType typeExpr
     | ImportStatement _ -> []
+    | AttributeStatement (_, argument) -> argument |> Option.toList |> List.collect expressions
     | UseStatement value
     | ExprStatement value -> expressions value
 
@@ -358,7 +359,8 @@ let private typesOfStatement (statement: Statement) =
     | TypeDefStatement (_, _, parameters, body) -> parameterTypes parameters @ [ body ]
     | UseStatement _
     | ImportStatement _
-    | ExprStatement _ -> []
+    | ExprStatement _
+    | AttributeStatement _ -> []
 
 /// The type expressions a top-level item is written with, and those of the items in a module block.
 let rec private typesOfItem (item: TopLevelItem) =

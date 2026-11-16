@@ -48,7 +48,8 @@ and private statementExpressions (statement: Statement) : Expression list =
     | ExprStatement value
     | UseStatement value -> [ value ]
     | TypeDefStatement _
-    | ImportStatement _ -> []
+    | ImportStatement _
+    | AttributeStatement _ -> []
 
 let rec private topLevelExpressions (item: TopLevelItem) : Expression list =
     match item.Kind with

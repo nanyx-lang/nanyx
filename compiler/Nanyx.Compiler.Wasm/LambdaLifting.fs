@@ -42,7 +42,8 @@ and private boundNames (expr: Expression) : string list =
             | ExprStatement value -> boundNames value
             | UseStatement _
             | ImportStatement _
-            | TypeDefStatement _ -> [])
+            | TypeDefStatement _
+            | AttributeStatement _ -> [])
     | Except(value, arms) -> boundNames { expr with Kind = Match([ value ], arms) }
     | Match(values, arms) ->
         (values |> List.collect boundNames)
@@ -421,7 +422,9 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
                         [ yield! evaluated
                           yield! locals |> List.map (fun (_, _, local, value) -> Statement.from value (DefStatement(false, local, None, value)))
                           keep (UseStatement(Expression.synthetic (RecordExpr fields))) ]
-                | ImportStatement _ | TypeDefStatement _ -> [ statement ])
+                | ImportStatement _ | TypeDefStatement _ -> [ statement ]
+                // An attribute is for the linters: the backend has nothing to do with it.
+                | AttributeStatement _ -> [])
             |> leavingScope
             |> Block
             |> rebuild
