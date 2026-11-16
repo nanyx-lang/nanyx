@@ -55,6 +55,22 @@ def main = {
     runSource (normalized source) |> assertRan "got\n3\nlabelling\n1!\nlocal\n10\n"
 
 [<Fact>]
+let ``Run - a value made with a pure lambda where its type carries contexts is pulled with them`` () =
+    // #1725: the pure lambda is adapted to the field's type, which takes `Console`'s members.
+    let source =
+        """type Thunk(a) = [k] protected (get: [k] () -> a)
+
+def run: [Console] ([Console] Thunk(int)) -> int = { t -> t.get() }
+
+def p: [Console] Thunk(int) = Thunk(get = { 1 })
+def mk: () -> [Console] Thunk(int) = { Thunk(get = { 2 }) }
+
+println(run(p))
+println(run(mk()))
+"""
+    runSource (normalized source) |> assertRan "1\n2\n"
+
+[<Fact>]
 let ``Run - a function returns a value made with a lambda that requires its contexts`` () =
     // #1676: the lambda's `Console` is the value's, required where `get` is called.
     let source =
