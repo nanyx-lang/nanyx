@@ -4,8 +4,8 @@ using NyxCompiler;
 
 /// <summary>
 /// The commands that make a package and manage its dependencies: <c>nanyx migrate</c>, <c>nanyx pull</c>,
-/// <c>nanyx install</c> and <c>nanyx pack</c>. What they do is in the compiler (<see cref="MigrationModule"/>,
-/// <see cref="PackageDependencies"/>, <see cref="PackageArchive"/>); these parse their arguments, write what they make
+/// <c>nanyx install</c>, <c>nanyx pack</c> and <c>nanyx bump</c>. What they do is in the compiler (<see cref="MigrationModule"/>,
+/// <see cref="PackageDependencies"/>, <see cref="PackageArchive"/>, <see cref="PackageApiModule"/>); these parse their arguments, write what they make
 /// and say what happened.
 /// </summary>
 internal static partial class CliCommands
@@ -104,7 +104,7 @@ internal static partial class CliCommands
     }
 
     /// <summary>
-    /// Pack a package as a .nyxpkg, the file a release of it carries: a zip of its manifest and its source files. A package with a dependency found by its path, or on GitHub, can't be packed.
+    /// Pack a package as a .nyxpkg, the file a release of it carries: a zip of its manifest, its source files and its api.json, the types of what its public modules export. A package with a dependency found by its path, or on GitHub, can't be packed.
     /// </summary>
     /// <param name="output">The directory to write it to; the package's own by default. Its name is &lt;name&gt;-&lt;version&gt;.nyxpkg.</param>
     /// <param name="path">A package's directory or .nyxp manifest; none means the package the current directory is in.</param>
@@ -124,7 +124,7 @@ internal static partial class CliCommands
             return failed;
         }
 
-        var packed = PackageArchive.pack(package);
+        var packed = PackageApiModule.pack(package);
         if (packed.IsError)
         {
             PrintDiagnostics(shell, packed.ErrorValue, shell.Error);
@@ -137,6 +137,67 @@ internal static partial class CliCommands
         File.WriteAllBytes(file, packed.ResultValue);
         shell.Out.WriteLine($"Packed {package.Manifest.Name} {package.Manifest.Version}: {shell.DisplayPath(file)}");
         shell.Out.WriteLine($"sha256 {PackageArchive.sha256(packed.ResultValue)}");
+        return 0;
+    }
+
+    /// <summary>
+    /// Set a package's version to the one the changes to its public API need, as semantic versioning says: compared with the newest version of it published, a removed or changed export needs a major bump, an added one a minor bump, and no change a patch. Below 1.0.0, a minor bump for a breaking change and a patch for any other.
+    /// </summary>
+    /// <param name="path">A package's directory or .nyxp manifest; none means the package the current directory is in.</param>
+    [Consolo("bump")]
+    public static int Bump(params string[] path) => BumpIn(Shell.Process, path);
+
+    /// <summary>What <c>nanyx bump</c> does, run in <paramref name="shell"/>.</summary>
+    internal static int BumpIn(Shell shell, string[] path)
+    {
+        if (!TrySinglePath(shell, path, out var single))
+        {
+            return UsageError;
+        }
+
+        if (!TryFindPackage(shell, single, out var package, out var failed))
+        {
+            return failed;
+        }
+
+        var bumped = PackageApiModule.bump(shell.Packages, package);
+        if (bumped.IsError)
+        {
+            foreach (var error in bumped.ErrorValue)
+            {
+                shell.Error.WriteLine($"error: {error}");
+            }
+
+            return 1;
+        }
+
+        var result = bumped.ResultValue;
+        var name = package.Manifest.Name;
+        if (result.Baseline?.Value is not { } baseline)
+        {
+            shell.Out.WriteLine($"{name} has no version published before {package.Manifest.Version}, so there is nothing to compare: its version stays {result.Version}");
+            return 0;
+        }
+
+        foreach (var change in result.Changes)
+        {
+            var bump = change.Bump.IsMajorBump ? "major" : change.Bump.IsMinorBump ? "minor" : "patch";
+            shell.Out.WriteLine($"{bump}: {change.Description}");
+        }
+
+        if (result.Changes.IsEmpty)
+        {
+            shell.Out.WriteLine($"Nothing another package sees has changed since {baseline}");
+        }
+
+        if (result.Version == package.Manifest.Version)
+        {
+            shell.Out.WriteLine($"{name} {result.Version} is already the version these changes need, after {baseline}");
+            return 0;
+        }
+
+        File.WriteAllText(package.Manifest.Path, result.Manifest);
+        shell.Out.WriteLine($"{name} {package.Manifest.Version} -> {result.Version}, after {baseline}: written to {shell.DisplayPath(package.Manifest.Path)}");
         return 0;
     }
 

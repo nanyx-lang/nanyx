@@ -157,6 +157,7 @@ let private command (arguments: string list) : Shell -> int =
             | path -> null, path
         fun shell -> CliCommands.MigrateIn(shell, name, Array.ofList path)
     | "pull" :: path -> fun shell -> CliCommands.PullIn(shell, Array.ofList path)
+    | "bump" :: path -> fun shell -> CliCommands.BumpIn(shell, Array.ofList path)
     | "pack" :: rest ->
         let outputPath, _, _, _, path = options (null, false, false, null, []) rest
         fun shell -> CliCommands.PackIn(shell, outputPath, path)

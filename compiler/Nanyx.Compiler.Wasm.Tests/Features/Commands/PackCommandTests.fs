@@ -1,4 +1,4 @@
-/// `nanyx pack`: a package packed as a `.nyxpkg`, the file a release of it carries (#863).
+/// `nanyx pack`: a package packed as a `.nyxpkg`, the file a release of it carries, with its `api.json` (#863, #1470).
 module TranspilerWasmTests.Features.Commands.Pack
 
 open System.IO
@@ -23,7 +23,7 @@ let ``A package is packed beside its manifest, with its SHA-256`` () =
     let packed = Path.Combine(directory.Path, "util", "acme.util-0.3.0.nyxpkg")
     Assert.Equal($"sha256 {NyxCompiler.PackageArchive.sha256 (File.ReadAllBytes packed)}", lines[1])
     use zip = ZipFile.OpenRead packed
-    Assert.Equal<string list>([ "src/strings.nyx"; "util.nyxp" ], zip.Entries |> Seq.map _.FullName |> List.ofSeq)
+    Assert.Equal<string list>([ "api.json"; "src/strings.nyx"; "util.nyxp" ], zip.Entries |> Seq.map _.FullName |> List.ofSeq)
     Assert.Equal(0, outcome.ExitCode)
 
 [<Fact>]

@@ -280,3 +280,21 @@ Internally, Nanyx compiles at module granularity. Modules can therefore be check
 Externally, however, a package is produced and consumed as a single package artifact.
 
 This keeps package boundaries useful for dependency management and distribution without making the whole package the smallest unit of compilation.
+
+## Versions
+
+A package's version is a [semantic version](https://semver.org), and the compiler decides what it must be from what
+the package exports, as Elm does: what another package can see is its public API, the exports of each module it
+declares with `export module`, with their types. `nanyx pack` records it in the package's `.nyxpkg` as `api.json`, and
+`nanyx bump` compares it with the newest version published and writes the version the changes need into the
+manifest:
+
+- **Major:** an export removed or renamed, a def's type changed other than made more general, a new context it
+  requires, a field or a tag added to or removed from an exported type, a type's parameters changed, or a type made
+  protected or private.
+- **Minor:** a new export or module, a def's type made more general, or a context it no longer requires.
+- **Patch:** no change to the public API.
+
+Below `1.0.0`, a breaking change needs a minor bump, `0.3.1` to `0.4.0`, and any other a patch. A dependant that asks
+for `1.2` gets any `1.x` version from `1.2.0` on, so a change the version doesn't announce would break its build. An
+inferred type can change by accident, so writing the types of what a module exports keeps its API what you meant.
