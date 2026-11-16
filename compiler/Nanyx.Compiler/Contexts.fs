@@ -41,7 +41,7 @@ let internal extendEnvWithRecordFields (provider: ContextProvider) (state: Infer
     let context =
         let plain (info: TypeDefInfo) = info.IsContext && info.Parameters.IsEmpty
         match resolveSoFar state ty with
-        | TyNominal(id, _, _) ->
+        | TyNominal(id, _, _, _) ->
             state.TypeDefs |> Map.tryPick (fun _ info -> if plain info && TypeDefInfo.nominalId info = id then Some info else None)
         | TyAlias(name, [], _)
         | TyApply(name, []) -> state.TypeDefs |> Map.tryFind name |> Option.filter plain
@@ -54,7 +54,7 @@ let internal extendEnvWithRecordFields (provider: ContextProvider) (state: Infer
             TypeEnv.extend name { TypeEnv.mono fieldTy with Quantified = quantified; Symbol = symbol; ProvidedBy = Some provider } acc) env
     match Unifier.unalias ty with
     | TyRecord fields -> addFields fields
-    | TyNominal(_, underlying, _) ->
+    | TyNominal(_, _, underlying, _) ->
         match Unifier.unalias underlying with
         | TyRecord fields -> addFields fields
         | _ -> env

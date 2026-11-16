@@ -51,7 +51,7 @@ let rec typeKeyOfType (ty: NyxCompiler.Ty) : TypeKey option =
     | NyxCompiler.TyPrimitive "?error" -> None
     | NyxCompiler.TyPrimitive name
     | NyxCompiler.TyAlias(name, [], _) -> Some (TypeKey(name, []))
-    | NyxCompiler.TyNominal(nominal, _, _) -> Some (TypeKey(nominal.Name, []))
+    | NyxCompiler.TyNominal(nominal, _, _, _) -> Some (TypeKey(nominal.Name, []))
     | NyxCompiler.TyAlias(name, args, _)
     | NyxCompiler.TyApply(name, args) -> all args |> Option.map (fun args -> TypeKey(name, args))
     | NyxCompiler.TyRecord fields ->

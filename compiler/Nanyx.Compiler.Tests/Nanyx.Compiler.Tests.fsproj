@@ -151,6 +151,7 @@
     <Compile Include="Features\Tooling\TypeHintsTests.fs" />
     <Compile Include="Features\Types\AnnotationsTests.fs" />
     <Compile Include="Features\Types\BottomTypeTests.fs" />
+    <Compile Include="Features\Types\GenericNominalsTests.fs" />
     <Compile Include="Features\Types\NominalsTests.fs" />
     <Compile Include="Features\Types\OpenRecordsTests.fs" />
     <Compile Include="Features\Types\RecordsTests.fs" />

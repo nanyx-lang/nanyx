@@ -72,7 +72,7 @@ let internal inNominalHome (state: InferState) (nominal: NominalId) (span: Sourc
 /// In the home module of a nominal type, a value of its underlying type is one of it.
 let internal addDeclaredConstraintAt (span: SourceSpan) (actualTy: Ty) (declaredTy: Ty) (state: InferState) =
     match Unifier.unalias declaredTy with
-    | TyNominal(nominal, underlying, _) when inNominalHome state nominal span ->
+    | TyNominal(nominal, _, underlying, _) when inNominalHome state nominal span ->
         match Unifier.unalias actualTy with
         | TyNominal _ -> addAssignableConstraintAt span actualTy declaredTy state
         | _ -> addAssignableConstraintAt span actualTy underlying state

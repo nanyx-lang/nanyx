@@ -55,7 +55,7 @@ module internal ContextInference =
             | TyVar v -> names |> Map.tryFind v.Id |> Option.map TypeVar
             | TyPrimitive "unit" -> Some TypeUnit
             | TyPrimitive "?error" -> None
-            | TyNominal(nominal, _, _) -> Some (TypeName nominal.Name)
+            | TyNominal(nominal, _, _, _) -> Some (TypeName nominal.Name)
             | TyPrimitive name
             | TyAlias(name, [], _) -> Some (TypeName name)
             | FunctionContexts.CellType(held, _) -> typeExprOf names held |> Option.map (fun held -> TypeApply(CellPassingSyntax.typeName, [ held ]))

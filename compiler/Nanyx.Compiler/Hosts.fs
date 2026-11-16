@@ -84,7 +84,7 @@ module Hosts =
         | _ ->
             match Unifier.unalias ty with
             | TyApply(name, _) -> named name
-            | TyNominal(id, _, _) -> named id.Name
+            | TyNominal(id, _, _, _) -> named id.Name
             | _ -> false
 
     let private runtimeError (span: SourceSpan) (what: string) =

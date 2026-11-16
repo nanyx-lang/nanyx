@@ -79,9 +79,10 @@ type TyVar =
 type Ty =
     | TyVar of TyVar
     | TyPrimitive of string
-    /// A nominal type: its identity, the type it is made from, and whether that is private to its home module. It is
-    /// written by its own name, `Person`.
-    | TyNominal of NominalId * Ty * bool
+    /// A nominal type: its identity, the arguments it is applied to, the type it is made from (its definition's, with
+    /// those arguments for its parameters), and whether that is private to its home module. It is written by its own
+    /// name and its arguments, `Person` or `Box(int)`.
+    | TyNominal of NominalId * Ty list * Ty * bool
     /// A function: its input, its result, and the contexts it requires where it is called (see `FunctionContexts`).
     /// Each context is one applied to its arguments, `TyApply("Console", [])` or `TyApply("Show", [a])`, or a context
     /// variable, `c` in `[c] a -> b`, which stands for any contexts. A function that requires none is pure.
@@ -111,8 +112,7 @@ type Ty =
 /// The types a type is made of, one level down, for walks that treat most cases alike: such a walk matches the cases it
 /// treats differently, and hands the others to `Ty.map`, `Ty.fold` or `Ty.exists`.
 module Ty =
-    /// The types `ty` is made of, one level down: a nominal's underlying type, an alias's arguments then what it stands
-    /// for, a function's input, result and contexts, a record's fields in order of their names, an open record's fields
+    /// The types `ty` is made of, one level down: a nominal's or an alias's arguments then what it stands for, a function's input, result and contexts, a record's fields in order of their names, an open record's fields
     /// then its row as a variable, a tag's payload, an applied type's arguments, a union's members, a closed recursive
     /// definition then its arguments, and the arguments of a reference to the alias inside one.
     let children (ty: Ty) : Ty list =
@@ -122,7 +122,7 @@ module Ty =
         | TyParam _ -> []
         | TyRecursive(body, args) -> body :: args
         | TySelf args -> args
-        | TyNominal(_, underlying, _) -> [ underlying ]
+        | TyNominal(_, args, underlying, _) -> args @ [ underlying ]
         | TyAlias(_, args, underlying) -> args @ [ underlying ]
         | TyFunc(input, output, contexts) -> input :: output :: contexts
         | TyRecord fields -> fields |> Map.toList |> List.map snd
@@ -140,7 +140,7 @@ module Ty =
         | TyParam _ -> ty
         | TyRecursive(body, args) -> TyRecursive(f body, List.map f args)
         | TySelf args -> TySelf(List.map f args)
-        | TyNominal(id, underlying, isPrivate) -> TyNominal(id, f underlying, isPrivate)
+        | TyNominal(id, args, underlying, isPrivate) -> TyNominal(id, List.map f args, f underlying, isPrivate)
         | TyAlias(name, args, underlying) -> TyAlias(name, List.map f args, f underlying)
         | TyFunc(input, output, contexts) -> TyFunc(f input, f output, List.map f contexts)
         | TyRecord fields -> TyRecord(Map.map (fun _ field -> f field) fields)

@@ -147,7 +147,7 @@ and private bindSchemeWith (rests: bool) (bindings: Map<int, Ty>) (scheme: Ty) (
         | _ -> cannot "a union with more than one rest"
     | TyApply(name, args), TyApply(name', args') when name = name' && args.Length = args'.Length ->
         List.fold2 bindScheme bindings args args'
-    | TyNominal(nominal, underlying, _), TyNominal(nominal', underlying', _) when nominal = nominal' ->
+    | TyNominal(nominal, _, underlying, _), TyNominal(nominal', _, underlying', _) when nominal = nominal' ->
         bindScheme bindings underlying underlying'
     | _ -> cannot "a generic definition's type does not fit how it is used"
 
@@ -226,7 +226,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
         IrTags(members tags |> List.distinct |> List.sortBy fst)
     // A `Map`'s keys are in the order a record's fields are stored in.
     | TyRecord fields -> IrRecord(fields |> Map.toList |> sortFields |> List.map (fun (name, fieldTy) -> name, toIrType fieldTy))
-    | TyNominal(_, underlying, _) -> toIrType underlying
+    | TyNominal(_, _, underlying, _) -> toIrType underlying
     | TyApply("list", [ element ]) -> IrList(toIrType element)
     // A map is the list of its entries, each a tuple of its key and its value (see `Maps`).
     | Maps.MapType(key, value) -> toIrType (TyApply("list", [ TyRecord(Map.ofList [ "0", key; "1", value ]) ]))
