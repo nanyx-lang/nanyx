@@ -4,8 +4,8 @@ description: "How to install Nanyx on your system"
 order: 2
 ---
 
-Nanyx is one program, `nanyx`, which compiles, runs, tests and formats Nanyx code and is the language server for
-editors. It runs on Windows, macOS and Linux, and needs nothing else installed: each release is self-contained.
+Nanyx is one program, `nanyx`, which compiles, runs and formats Nanyx code and is the language server for
+editors (see [The nanyx command](../standard-tools/command-line)). It runs on Windows, macOS and Linux, and needs nothing else installed: each release is self-contained.
 
 There are three ways to get it:
 

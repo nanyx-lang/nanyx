@@ -71,13 +71,11 @@ Nanyx has no garbage collector: values are reference-counted, and freed as soon 
 
 See [Reference counting](./reference-counting).
 
-# Workflows and pipes
+# Look and feel, workflows, and pipes
 
 **F#**.
 
-Nanyx's workflows (`proc { try ... }`, with custom keywords) are F#'s computation expressions, rebuilt on contexts. The
-pipe, `xs \map(f)`, is F#'s `|>`, and much of Nanyx's feel comes from F#: indentation-sensitive, expression-oriented,
-with types inferred and written only where they help. See [Workflows](../advanced/workflows) and
+Nanyx generally looks quite a lot like F#: indentation-sensitive, expression-oriented, with types inferred and written only where they help. The pipe, `xs \map(f)`, is F#'s `|>`, and Nanyx's workflows (`proc { try ... }`) are F#'s computation expressions, rebuilt on contexts. See [Workflows](../advanced/workflows) and
 [Piping](../tour/piping).
 
 # Extending a type
@@ -122,7 +120,7 @@ It has changed how writing Nanyx feels more than almost anything else. You no lo
 before you can see whether the part you're working on does what you meant: you change a function, run the program,
 and look, while a half-finished refactor elsewhere waits its turn. The type checker stays strict, and every error is
 still reported, but it no longer stands between you and trying an idea. The loop from writing code to seeing it run is
-as short in Nanyx as in a dynamic language. See [Deferred errors](../work-in-progress/deferred-errors).
+as short in Nanyx as in a dynamic language. See [Deferred errors](../tour/error-handling#deferred-errors).
 
 # Error messages and tools
 

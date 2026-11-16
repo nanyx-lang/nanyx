@@ -35,7 +35,7 @@ The compilation workstream has pages of its own for the larger pieces of its des
 [deferred errors](./deferred-errors), [closed and open records](./closed-and-open-records),
 [tail calls](./tail-calls), [memory management](./memory-management), [context calls](./context-calls), [inlining](./inlining),
 [lazy sequences](./lazy-sequences) and [the standard library's implementation](./standard-library-implementation).
-[The `nanyx` command](./command-line) lists what the CLI does today.
+[The `nanyx` command](./command-line) says how the CLI is built; what it does is on [The nanyx command](../standard-tools/command-line).
 
 An issue that serves more than one workstream gets every label that applies. The finer labels (`parser`, `type checker`, `wasm backend`) say which part of the compiler an issue is in,
 and are used alongside the workstream label.

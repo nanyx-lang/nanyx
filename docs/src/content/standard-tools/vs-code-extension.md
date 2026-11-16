@@ -7,14 +7,16 @@ order: 3
 The Nanyx extension for Visual Studio Code highlights `.nyx` files and package manifests, `.nyxp` files, which are Nanyx too (the type in a definition attached to a built-in type, `def string.shout`, is coloured as a type, the escapes in a double-quoted string, such as `\n` and `\{`, are coloured as escapes, a [doc comment](../getting-started/basics#doc-comments) is coloured as one throughout its lines, only [Nanyx's operators](../tour/operators#the-operators) are coloured as operators, every word the language reserves is coloured as a keyword, as is `scoped` before `context`, and a script's [directives](../getting-started/files-and-projects#directives), such as `::dependency acme.util ../util`, have their name coloured as a keyword and their package names, versions, directories, tags and numbers each coloured as what they are) and runs the compiler as a language server (`nanyx lsp`), which gives you:
 
 - errors and warnings as you type, each compiler error's code (such as `NYX0201`) a link to its section of
-  [Compiler errors](./errors)
+  [Compiler errors](./errors). An error in a file the document imports is shown in that file, and the import that
+  brings the file in gets one diagnostic linking to each of its errors. A change to a file, in the editor or on disk,
+  checks again the open files that import it
 - every name coloured by [what it is](#semantic-highlighting): a function, a parameter, a variable, a field, a tag, a type, a context or a module, as your theme colours other languages' names, and the names of [nominal types](#nominal-types) in italics
-- the inferred type of whatever is under the pointer, on hover, after the name on a name (`def name: [Console] string -> ()`, `n: int`), with the doc comment of the name there. On a type's name it shows the type's definition, and for a nominal type whether it is protected or private and which module declares it. On a module's name, in its `module` line, an import (its path or its alias) or an alias that qualifies a name (`m` in `m.foo`), hover shows the module's doc comment, the `--|` comment before its `module` line
+- the inferred type of whatever is under the pointer, on hover, after the name on a name (`def name: [Console] string -> ()`, `n: int`), with the doc comment of the name there. On a type's name it shows the type's definition, and for a nominal type whether it is protected or private and which module declares it. On a module's name, in its `module` line, an import (its path or its alias) or an alias that qualifies a name (`m` in `m.foo`), hover shows the module's doc comment, the `--|` comment before its `module` line. On a `_` in a type, as in `def xs: list(_) = [1, 2]`, it shows what the `_` was inferred to be, and on an operator that calls a definition, such as a `+` a type defines, it shows that definition. While a file has type errors, hover and the type hints still show what did check, with `???` where an error left a type unknown; while it does not parse, they show what the compiler knew the last time it did
 - inferred types in a lens above each top-level definition that does not write its type, and as inlay hints after locals, lambda parameters and pattern variables
 - go to definition (from a name, or from a `` [`name`] `` link in a doc comment), find references (in every file of the package, for a file in one), the outline view, and **Go to Symbol in Workspace** (Ctrl+T), which finds a def, type, context or `module name =` block in any `.nyx` file under the workspace folders, open or not (outside `bin`, `obj`, `node_modules` and hidden folders), from the files as they are written, so a file with type errors still has its symbols
 - completion of names, record fields, module members and import paths, each name with its doc comment and each module with the module's. The names the standard library keeps for itself, those that start with `__`, are never offered outside it. VS Code's own suggestions of words already in a file come only from the file being edited (`editor.wordBasedSuggestions` is `currentDocument` for Nanyx), so a standard-library file you opened from go to definition does not fill completion with its words. A word, for those suggestions and for double-clicking, is a name, a number, or a name with a `#` (a tag) or `@` before it
 - quick fixes, such as adding the import for a standard-library name, or writing `int.fromString` for the deprecated `Int.fromString`
-- refactorings, in the light bulb menu and under **Refactor...**: on the name of a def or a lambda parameter that does not write its type, **Write the inferred type** writes it in; on a selected expression, **Introduce local** makes it a def of its own before the statement, and offers to replace the same expression later in the block too; on a selected expression or run of statements, **Introduce function** makes it a function of the locals it uses, a top-level def after the one it is in or a local one before the statement, and calls it. Each starts renaming the name it makes up; on the name of a def or a use of it, **Inline** puts its value, or a function's body, in place of every use and removes the def, and **Inline this use** does it at one use; on the name of a call, **Convert to pipe** writes `f(x, y)` as `x \f(y)`, and on a pipe's name **Convert to call** writes it back, a chain of them as a whole
+- [refactorings](#refactorings), in the light bulb menu and under **Refactor...**: on the name of a def or a lambda parameter that does not write its type, **Write the inferred type** writes it in; on a selected expression, **Introduce local** makes it a def of its own before the statement, and offers to replace the same expression later in the block too; on a selected expression or run of statements, **Introduce function** makes it a function of the locals it uses, a top-level def after the one it is in or a local one before the statement, and calls it. Each starts renaming the name it makes up; on the name of a def or a use of it, **Inline** puts its value, or a function's body, in place of every use and removes the def, and **Inline this use** does it at one use; on the name of a call, **Convert to pipe** writes `f(x, y)` as `x \f(y)`, and on a pipe's name **Convert to call** writes it back, a chain of them as a whole
 - **Organize Imports** (Shift+Alt+O, or **Source Action...**) removes the imports nothing uses and the names of a selection nothing uses, and writes the rest as one sorted import; it is also a quick fix of an unused import. To run it on save, add `"editor.codeActionsOnSave": { "source.organizeImports": "explicit" }` to the `[nanyx]` settings
 - **Format Document**, which formats the file as `nanyx format` does, and **Format Selection**, which formats the definitions the selection touches
 - **Rename Symbol** (F2) on a local, a parameter, a pattern variable, a def, a type, an import's alias, a context's member, a record's field or a module: it renames every use in every file of the package (in the file alone, for a file in no package, where an exported name or a module can't be renamed), renames a type's attached definitions' `Type.` part with it, a member where a `use` writes an instance of its context, a field wherever a record of the same type writes it, and a module in its `module` line and each import of it, with its file where the file is named for it, and refuses, saying why, a new name that would change what any name refers to, or a field read from a record whose type isn't known
@@ -137,6 +139,35 @@ The lines that formatting would change are marked as you type, with a hint (thre
 |---------|---------|--------------|
 | `nanyx.formattingHints` | on | Mark the lines that `nanyx format` would change. |
 
+# Refactorings
+
+The refactorings change the code without changing what it does. Each one checks its result: where it can't keep the
+program's meaning, it is shown in the menu disabled, with the reason, rather than offered. What it writes is formatted
+as `nanyx format` would format it. One that makes up a name, such as introducing a local, starts renaming the name
+straight away, so you can type the one you want.
+
+| Refactoring | Where | What it does |
+|---|---|---|
+| **Write the inferred type** | the name of a def or a lambda parameter that does not write its type | Writes the type the compiler inferred, as double-clicking its inlay hint does: `def add = { a, b -> a + b }` becomes `def add: [Add(a)] a, a -> a = { a, b -> a + b }`. |
+| **Introduce local** | a selected expression | Makes it a def before the statement it is in, and uses the def in its place. A second offer replaces the same expression later in the block too, unless it calls something that requires a context or reads a cell, where each could give something different. |
+| **Introduce function** | a selected expression, or a run of whole statements | Makes it a function, taking the locals it uses as parameters and giving back the ones the code after it uses, and calls it. One offer makes a top-level def after the one the selection is in, another a local function before the statement. |
+| **Inline** | the name of a def, or a use of it | Puts the def's value, or a function's body, in place of every use and removes the def. **Inline this use** does it at one use. Arguments are bound by defs where putting them in would run them more or fewer times. |
+| **Convert to pipe** / **Convert to call** | the name of a call, or of a pipe | Writes `f(x, y)` as `x \f(y)`, and back. A chain converts as a whole: `list.filter(list.map(xs, f), g)` becomes `xs \map(f) \filter(g)`. |
+| **Organize Imports** | anywhere (Shift+Alt+O) | Removes the imports nothing uses, and the names of a selection nothing uses, and writes the rest as one sorted import. |
+| **Rename Symbol** | a name (F2) | Renames it and every use of it, in every file of the package. |
+| **Expand Selection** / **Shrink Selection** | anywhere (Shift+Alt+Right, Shift+Alt+Left) | Grows the selection to the syntax around it, and back. |
+
+A refactoring is refused, among other cases:
+
+- where it would move code that runs only sometimes, such as a branch of an `if` or a match arm, to where it always runs;
+- where the code uses `try` or `return`, whose meaning depends on the block they are in;
+- where a name would refer to something else afterwards, because a new name hides another or is hidden by one;
+- where the result would not compile.
+
+Inlining also refuses a recursive def and a def that is a cell or reads one. Introduce function refuses statements
+with a `use`, an import or a type definition, which the statements after them may need. Organize Imports leaves the
+imports alone where there are comments among them, which it would lose. A `module name =` block can't be renamed.
+
 # Info view
 
 The info view follows the cursor and shows what the compiler knows there. It lives in VS Code's secondary side bar (the
@@ -230,7 +261,7 @@ on the command line. It needs a compiler newer than 0.28.0.
 
 # Running a file
 
-The run button at the top right of a `.nyx` editor, or **Nanyx: Run the current file** from the command palette, saves the file and runs it with `nanyx run`. The program runs in a terminal of its own in the panel, so it can read what you type, and Ctrl+C stops it. Running the file again uses the same terminal.
+The run button at the top right of a `.nyx` editor, or **Nanyx: Run the current file** from the command palette, saves the file and runs it with [`nanyx run`](./command-line#nanyx-run). The program runs in a terminal of its own in the panel, so it can read what you type, and Ctrl+C stops it. Running the file again uses the same terminal.
 
 The program's working directory is the workspace folder the file is in, or the file's own folder when it is in none. The file runs as a script, even when it is part of a package. In [development mode](#working-on-the-compiler), it runs with `--timings`, so the terminal also shows how long each module took to check.
 

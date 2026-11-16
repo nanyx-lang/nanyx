@@ -4,10 +4,11 @@ description: "A panel that shows what the compiler knows at the cursor, and a br
 order: 30
 ---
 
-> **Status: in progress.** Doc comments, the info view, the library browser and search by type are done. This page sets out what the features are, what the compiler
-> already records that they can use, what it would have to start recording, and an order to build them in. Each
-> plan item has an issue under the `lsp` label. See [Language server and editor](./language-server) for what the server does
-> today.
+> Doc comments, the info view, the library browser and search by type are built, and described for users on
+> [VS Code extension](../standard-tools/vs-code-extension#info-view),
+> [Basics](../getting-started/basics#doc-comments) and [The nanyx command](../standard-tools/command-line#the-standard-library).
+> This page keeps how they are built, what is [still open](#still-open) and the [open questions](#open-questions).
+> Work is tracked under the `lsp` label.
 
 # Summary
 
@@ -197,12 +198,11 @@ the names in scope where the comment is, then the top-level names of the comment
 is shown on hover over the module's name, in completion of import paths, under the info view's module heading and
 with an import in its list of the module's definitions and imports (`Documentation.Reader.ForModule`, [#937](https://github.com/nanyx-lang/nanyx/issues/937)).
 
+The standard library's pages on the docs site are generated from its doc comments by `nanyx stdlib-docs`
+([#722](https://github.com/nanyx-lang/nanyx/issues/722)).
+
 Still open:
 
-- Generating the standard library's docs pages from its doc comments
-  ([#722](https://github.com/nanyx-lang/nanyx/issues/722)). Its modules, definitions, types, contexts and context
-  members have doc comments ([#721](https://github.com/nanyx-lang/nanyx/issues/721),
-  [#937](https://github.com/nanyx-lang/nanyx/issues/937)).
 - Recording docs by symbol in `TypedModule`, so the info view and the browser read them as they read types, rather
   than parsing the declaring file again.
 - A tag has no symbol, so its doc comment is attached but not shown anywhere yet; nor is a record field's on a
@@ -289,34 +289,24 @@ by the type's shape (its result's head, its number of inputs) first.
 
 Completion could later use the same ranking: offer the functions whose type fits the hole the cursor is in.
 
-# Plan
+# Still open
 
-In order. Each item is one PR:
+Every item of the plan is built: doc comments ([#711](https://github.com/nanyx-lang/nanyx/issues/711)), the library
+requests ([#712](https://github.com/nanyx-lang/nanyx/issues/712)) and browser
+([#713](https://github.com/nanyx-lang/nanyx/issues/713)), search by type
+([#714](https://github.com/nanyx-lang/nanyx/issues/714)), the info view
+([#715](https://github.com/nanyx-lang/nanyx/issues/715)), context providers
+([#716](https://github.com/nanyx-lang/nanyx/issues/716)), the context flow
+([#717](https://github.com/nanyx-lang/nanyx/issues/717)) and scopes
+([#1066](https://github.com/nanyx-lang/nanyx/issues/1066)). What is left:
 
-1. **Doc comments** ([#711](https://github.com/nanyx-lang/nanyx/issues/711)). Done, as
-   [#719](https://github.com/nanyx-lang/nanyx/issues/719) designed them: hover and completion show them. Recording
-   them by symbol is still open (see [Doc comments](#2-doc-comments)).
-2. **Library requests** ([#712](https://github.com/nanyx-lang/nanyx/issues/712)). Done: `nanyx/libraryModules` and
-   `nanyx/libraryModule`, with signatures and docs (see
-   [Language server](./language-server#where-it-is-today)).
-3. **Library browser** ([#713](https://github.com/nanyx-lang/nanyx/issues/713)). Done: the *Library* tree view in
-   the extension (`extension/src/library.ts`), opening definitions and inserting imports through `nanyx/addImport`,
-   which places the import as the quick fix does (`ImportFixes.insertion`).
-4. **Search by type** ([#714](https://github.com/nanyx-lang/nanyx/issues/714)). Done: `LibrarySearch`,
-   `nanyx search`, `nanyx/librarySearch`, and *Search library by type*, also the Library view's search button.
-5. **Info view, first cut** ([#715](https://github.com/nanyx-lang/nanyx/issues/715)). Done: `nanyx/infoView` with
-   the expression, names in scope, contexts from the signature, a `use`, inference and the runtime, and messages; the
-   webview panel with pinning.
-6. **Context providers** ([#716](https://github.com/nanyx-lang/nanyx/issues/716)). Record a `ContextProvider` for
-   every context at every call. Done (`ContextProviders`, and `InstanceInScope`'s provider), and shown as "This
-   call" in the info view ([#989](https://github.com/nanyx-lang/nanyx/issues/989)).
-7. **Context flow view** ([#717](https://github.com/nanyx-lang/nanyx/issues/717)). Done: the info view's *Context
-   flow* section, and the editor highlights between a provider and its calls.
-8. **Scopes** ([#1066](https://github.com/nanyx-lang/nanyx/issues/1066)). Done: the info view organised by scope,
-   from the cursor out to the module. A `memory` block is part of the scope it is in for now. Now that a block
-   can name its `Memory`, `memory { context m -> … }` ([#1446](https://github.com/nanyx-lang/nanyx/issues/1446)), it
-   may become a scope of its own, since it is where a scoped context lives ([#1035](https://github.com/nanyx-lang/nanyx/issues/1035)).
-
+- Recording doc comments by symbol, and showing a tag's and a record field's (see [Doc comments](#2-doc-comments)).
+- A `memory` block is part of the scope it is in. Now that a block can name its `Memory`,
+  `memory { context m -> … }` ([#1446](https://github.com/nanyx-lang/nanyx/issues/1446)), it may become a scope of
+  its own, since it is where a scoped context lives ([#1035](https://github.com/nanyx-lang/nanyx/issues/1035)).
+- A pinned position does not move with edits above it.
+- Search by type does not look for a context instance derived from a type's parts, such as a list's `ToString`, so
+  such a match is shown as still needing it.
 # Open questions
 
 - Should the info view show types as trees, so each part can be hovered and followed to its definition, as Lean's

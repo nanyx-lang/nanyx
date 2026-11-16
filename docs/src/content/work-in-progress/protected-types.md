@@ -18,8 +18,8 @@ is described on [Nominal types](../advanced/nominal-and-protected-types); the wo
   without it and the declaration with `protected` (`typeNameIdentifier`). It was removed with no transition
   ([#1302](https://github.com/nanyx-lang/nanyx/issues/1302)).
 - The language server marks each name of a nominal type as a semantic token with the `nominal` modifier, and `private`
-  for a private one (`NominalNames.inModule`, `SemanticTokensHandler`), and hover names the kind and the home module.
-  The extension shows nominal types in italics through a default for `editor.semanticTokenColorCustomizations`.
+  for a private one (`NominalNames.inModule`, `SemanticTokensHandler`). What the editor shows is described in
+  [Nominal types](../standard-tools/vs-code-extension#nominal-types).
 
 # Open
 
