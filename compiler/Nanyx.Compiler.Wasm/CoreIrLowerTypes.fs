@@ -362,3 +362,10 @@ let parameterTypes (names: string list) (fnTy: Ty) (isLambda: bool) : Ty list * 
         | TyOpenRecord(fields, _) when several |> List.forall fields.ContainsKey -> several |> List.map (fun name -> fields.[name]), result
         | _ -> cannot "a function whose parameters are not a tuple"
     | _ -> cannot "a definition whose type is not a function"
+/// The type a cell of type `cellTy` holds a value of type `given` as: the cell's own when both are unions of tags, since
+/// any union holds a tag the same way (`mut found: #some(int) | #none = #none`), so that the cell is counted as a value of
+/// its own type; otherwise `given`, which is the cell's.
+let asCellType (cellTy: IrType) (given: IrType) =
+    match IrType.unfold given, IrType.unfold cellTy with
+    | IrTags _, IrTags _ -> cellTy
+    | _ -> given

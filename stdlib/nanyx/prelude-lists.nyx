@@ -212,11 +212,25 @@ def runOnEach: [c] list(a), ([c] a -> ()) -> () = { xs, f ->
 }
 
 --| The first value `f` yields, running it on the elements in turn as [`list.select`] does, or `#notFound`
-  when it yields none.
+  when it yields none. It stops at the first yield: `f` runs on no element after the one it yields
+  for, and a second value it yields for that element is left out.
 export def list.selectOne: [c] list(a), ([Yield(b), c] a -> ()) -> #some(b) | #notFound = { xs, f ->
-  match list.select(xs, f)
-    | [] -> #notFound
-    | [x, ..._] -> #some(x)
+  memory {
+    mut rest = xs
+    mut found: #some(b) | #notFound = #notFound
+    mut looking = true
+    use Yield(b)(yield = { x -> if found is #notFound then found := #some(x) })
+
+    while looking ->
+      match rest
+        | [x, ...tail] ->
+          rest := tail
+          f(x)
+          if found is #some(_) then looking := false
+        | [] -> looking := false
+
+    found
+  }
 }
 
 --| Whether `test` holds for every element (so `true` for an empty list).

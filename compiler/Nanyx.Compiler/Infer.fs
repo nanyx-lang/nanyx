@@ -1498,7 +1498,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             let scheme, generalizedState =
                                 if WorkflowRests.isRest name then TypeEnv.mono declaredTy, current
                                 // A cell holds values of one type: its own, not one for each use.
-                                elif (match expr.Kind with MutSyntax.Call _ -> true | _ -> false) then TypeEnv.mono declaredTy, MemoryCells.declareCell env' symbol (NumericLiterals.settleWithin [ declaredTy ] current)
+                                elif (match expr.Kind with MutSyntax.Call _ -> true | _ -> false) then TypeEnv.mono declaredTy, MemoryCells.declareCell env' symbol (NumericLiterals.settleWithin [ declaredTy ] (MemoryCells.typeMut expr declaredTy current))
                                 else
                                     let scheme, generalized = ArithmeticInference.generalize (fun state -> generalizeDef env' state declaredTy) ArithmeticInference.LocalDef current
                                     // The parameterised contexts a local def that writes no type requires are part of

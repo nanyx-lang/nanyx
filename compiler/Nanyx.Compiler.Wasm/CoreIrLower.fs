@@ -265,7 +265,15 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             k (CoreIrLowerLoops.whileLoop scope.ForDepth (this.Tail inner condition) (this.Tail inner body))
         // A cell (see `CellSyntax`) no lambda captures is the local its def binds, and one a lambda captures is a box of
         // one field. A read is a copy of what the cell holds then, so that a later `:=` leaves the copy as it is.
-        | MutSyntax.Call value -> this.Complex scope value k
+        // A cell holds values of its own type, which can be a union wider than its first value's (`mut found: #some(int) |
+        // #none = #none`), so the first value is taken as one of the cell's type: a tag is held the same way in any union.
+        | MutSyntax.Call value ->
+            let cellTy = tyOf expr
+            this.Complex scope value (fun lowered ->
+                match lowered.Kind with
+                | _ when asCellType cellTy lowered.Type = lowered.Type -> k lowered
+                | Atom atom -> k (Expr.make (Atom atom) cellTy)
+                | _ -> bindTemp lowered (fun atom -> k (Expr.make (Atom atom) cellTy)))
         | FunctionCall(form, _, [ Kind (IdentifierExpr name) ]) when (form = CellSyntax.read || form = CellSyntax.unbox) && scope.Vars.ContainsKey name ->
             let cell = scope.Vars.[name]
             let value =
@@ -279,8 +287,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             Expr.make (Let(copy, value, body)) body.Type
         | AssignSyntax.Call(Kind (IdentifierExpr name), value) when scope.Vars.ContainsKey name ->
             this.Atoms scope [ value ] (fun atoms -> k (Expr.make (Assign(scope.Vars.[name], atoms.Head)) IrUnit))
+        // The box's node is the `mut`'s, so its type is the cell's.
         | FunctionCall(form, _, [ value ]) when form = CellSyntax.box ->
-            this.Atoms scope [ value ] (fun atoms -> k (Expr.make (MakeRecord [ "0", atoms.Head ]) (IrRecord [ "0", atomType atoms.Head ])))
+            this.Atoms scope [ value ] (fun atoms ->
+                k (Expr.make (MakeRecord [ "0", atoms.Head ]) (IrRecord [ "0", asCellType (tyOf expr) (atomType atoms.Head) ])))
         | FunctionCall(form, _, [ Kind (IdentifierExpr name); value ]) when form = CellSyntax.setBox && scope.Vars.ContainsKey name ->
             this.Atoms scope [ value ] (fun atoms -> k (Expr.make (SetField(scope.Vars.[name], 0, atoms.Head)) IrUnit))
         | CrashSyntax.Call message ->
