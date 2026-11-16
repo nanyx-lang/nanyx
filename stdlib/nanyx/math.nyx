@@ -3,8 +3,9 @@
   [`abs`], [`sign`] and [`pow`] are generic over the `Num(a)` context, so they take an `int` or a
   `float`. `abs`, `sign`, [`min`], [`max`], [`minMax`] and [`clamp`] compare through `Ord(a)`, so the
   last four take a value of any type that has an order, a `string` among them. [`sqrt`], [`exp`],
-  [`ln`], [`floor`], [`ceil`], [`round`] and [`truncate`] take a `float`. [`pi`] and [`e`] are
-  constants.
+  [`ln`], [`floor`], [`ceil`], [`round`] and [`truncate`] take a `float`. [`pi`], [`e`],
+  [`infinity`] and [`nan`] are constants, and [`isNaN`], [`isInfinite`] and [`isFinite`] tell the
+  special floats from the others.
 
   Import it with `import nanyx/math as math` to call `math.abs(x)` as the docs do, or unqualified to
   call `abs(x)`.
@@ -19,6 +20,29 @@ export def pi: float = 3.141592653589793
 
 --| The base of the natural logarithm, as near as a `float` holds it, so `exp(1.0)` is `e`.
 export def e: float = 2.718281828459045
+
+--| Positive infinity, the `float` above every other: what `1.0 / 0.0` gives, and `exp` gives past
+  about 709.8. Minus infinity is `-math.infinity`. It is written `Infinity`.
+export def infinity: float = 1.0 / 0.0
+
+--| Not a number: the `float` that `0.0 / 0.0` and `sqrt(-1.0)` give. It is not equal to anything,
+  itself included, so test for it with [`isNaN`], not `==`. It is written `NaN`.
+export def nan: float = 0.0 / 0.0
+
+--| Whether `x` is NaN, as [`nan`] is: the one `float` not equal to itself.
+export def isNaN: float -> bool = { x ->
+  x != x
+}
+
+--| Whether `x` is infinity or minus infinity.
+export def isInfinite: float -> bool = { x ->
+  x == infinity or x == -infinity
+}
+
+--| Whether `x` is an ordinary number: neither NaN nor infinite.
+export def isFinite: float -> bool = { x ->
+  not isNaN(x) and not isInfinite(x)
+}
 
 --| `n` without its sign. A value that is neither below nor above `0` is `zero`, so `abs(-0.0)` is `0.0`.
 export def abs: [Num(a), Ord(a)] a -> a = { n ->

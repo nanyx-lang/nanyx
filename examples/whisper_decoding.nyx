@@ -1,6 +1,6 @@
 module whisper.decode
 
-import nanyx/math
+import nanyx/math as math
 
 ---
 The decoding loop of a speech-recognition model, reduced to its shape: an
@@ -73,7 +73,7 @@ def argmax: list(float) -> int = { xs ->
 }
 
 def softmax: list(float) -> list(float) = { xs ->
-  def exps = xs \map(Math.exp)
+  def exps = xs \map(math.exp)
   def total = exps \sum
   exps \map { / total }
 }
@@ -113,10 +113,7 @@ def suppressBlank: [Tokenizer] int -> LogitFilter = { sampleBegin ->
 
   { tokens, logits ->
     if tokens.length == sampleBegin then
-      logits \mapIndexed { i, l -> if blank \contains(i) or i == eot
-          then Math.negativeInfinity
-          else l
-      }
+      logits \mapIndexed { i, l -> if blank \contains(i) or i == eot then -math.infinity else l }
     else logits
   }
 }
