@@ -17,6 +17,10 @@ module ShippedPackages =
     /// Where the package `name` would be if the compiler shipped it.
     let directoryOf (name: string) = Path.Combine(directory, name)
 
+    /// The names of the packages the compiler ships, in order.
+    let names () : string list =
+        if Directory.Exists directory then Directory.GetDirectories directory |> Array.map Path.GetFileName |> Array.sort |> List.ofArray else []
+
     let private modules = ConcurrentDictionary<string, PackageModules option>()
 
     /// The public modules of the shipped package `name`, and the packages it depends on, as its manifest lists them: a

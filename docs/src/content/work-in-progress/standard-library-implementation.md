@@ -84,8 +84,13 @@ The reference lists what the file exports, in the order it declares it: each typ
 included, under a heading of its name, with its signature as hover writes it and its doc comment; a context's members
 with theirs; and, on the page of the file named for the module, the module's doc comment first. Names the library
 reserves, those that start with `__`, are left out. It is read from the compile of each module the compiler embeds,
-not from a parse of its own (`StandardLibraryDocs` in `Nanyx.Compiler/StandardLibraryDocs.fs`), and a link in a doc
+and of each public module of the packages it ships beside it (`ShippedPackages`), not from a parse of its own (`StandardLibraryDocs` in `Nanyx.Compiler/StandardLibraryDocs.fs`), and a link in a doc
 comment, `` [`name`] ``, leads to the name's entry, on its page or another.
+
+A shipped package's public module, such as `nanyx.console.core`'s `console` and `env`, has a page in the same section,
+named for its file as a library file's is, and its reference is generated in the same way from the package's files in
+`packages/`. A host's modules (`nanyx.console`'s `console.host` and `console.prelude`) have none: a program doesn't
+import them.
 
 After changing a doc comment, or what the library exports, write the references again from `compiler/`:
 
