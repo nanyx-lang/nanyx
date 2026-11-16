@@ -267,15 +267,12 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
 
 1. **More contexts for the console host**, as they are added: [`Random`](https://github.com/nanyx-lang/nanyx/issues/1237),
    then `Clock` and `FileSystem`.
-2. **Build only the contexts a program uses** ([#1497](https://github.com/nanyx-lang/nanyx/issues/1497)): every program
-   builds the members of the host's `Console` and `Env` and imports what they call, used or not, since `run` passes
-   them all.
-3. **Console in a page**, for the [playground](./playground): the embedder changes in "`ConsoleHost` in a page"
+2. **Console in a page**, for the [playground](./playground): the embedder changes in "`ConsoleHost` in a page"
    above, starting with writing `.wasm` ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).
-4. **The browser host**: `init`, `update` and `view`, with `Dom`, `Clock` and `Log`, and the JavaScript it ships
+3. **The browser host**: `init`, `update` and `view`, with `Dom`, `Clock` and `Log`, and the JavaScript it ships
    beside the module. The [Nim demo](./nim-demo) is its first user.
-5. **The test host**, with [Testing](./testing).
-6. **The HTTP host** ([Serving HTTP](#serving-http)): `nanyx/http`'s `Request` and `Response`, serving from the CLI
+4. **The test host**, with [Testing](./testing).
+5. **The HTTP host** ([Serving HTTP](#serving-http)): `nanyx/http`'s `Request` and `Response`, serving from the CLI
    for local development, then the `wasi:http` world.
 
 # How it's built
@@ -353,8 +350,8 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
   which `__host.run(__script)` names (`Scripts.asDefinition`), so a lambda in a statement captures its members as a
   lambda in any def does. Statements beside an `@entry` are a script entry too, run before the `@entry`'s, as they ran
   at the top level. A value that needs a context in a module with no statements, which nothing would run, is an error
-  at the value. Every script carries the host's `Console`, about 24 KB of WebAssembly text for hello world, as an
-  entry program does.
+  at the value. A script carries only the members of the host's contexts that it calls, as an entry program does
+  (see `Env` below).
 - **`Console` only comes from the host.** `nanyx.console.core/console` declares the context and `print`, `println`, `eprint` and
   `eprintln`, but no instance: the line reading lives in the console host alone. Importing a module whose contexts
   the host provides (those its prelude re-exports) binds the names of its plain contexts' members, `readLine` and the
@@ -372,9 +369,11 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
   `Env`, so its members are ambient names in every module of the program. Its members are functions of the host's own
   over WASI's `args_sizes_get` and `args_get`, `environ_sizes_get` and `environ_get`, and `proc_exit`, declared with
   `@extern`, with their buffers allocated with `nanyx/host.memory` (see
-  [Foreign functions](./foreign-functions#whats-built)). Since `run` passes the members of both contexts to every
-  entry, every program contains them and imports what they call, whether it uses them or not
-  ([#1497](https://github.com/nanyx-lang/nanyx/issues/1497)). `nanyx run` passes what follows the
+  [Foreign functions](./foreign-functions#whats-built)). `run` passes the members of both contexts to every entry,
+  but the inliner inlines `run` and the entry into the start ([#1469](https://github.com/nanyx-lang/nanyx/issues/1469)),
+  so a member nothing calls is never built, and a program contains only the members it calls and imports only what
+  they call ([#1497](https://github.com/nanyx-lang/nanyx/issues/1497)): hello world imports `fd_write` alone. A
+  program that reads `args()` still imports `environ_get`, as `entriesOf` serves both lists. `nanyx run` passes what follows the
   file or package as the arguments, after the program's name, and the process's environment variables (see
   [`nanyx run`](../standard-tools/command-line#nanyx-run)); an `exit(0)` part-way is a clean end, which `--check-memory` doesn't
   count as a leak. A script's entry point requires only the plain contexts that are ambient in its module
