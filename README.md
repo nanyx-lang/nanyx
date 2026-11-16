@@ -83,8 +83,6 @@ If you would rather build it yourself, follow [Working on the language](#working
 Create `hello.nyx`:
 
 ```nanyx
-import nanyx/console
-
 println("Hello, Nanyx!")
 ```
 
