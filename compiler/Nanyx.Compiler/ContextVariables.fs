@@ -75,8 +75,10 @@ let rec private pairs (isVariable: TyVar -> bool) (general: Ty) (specific: Ty) :
                 List.zip gc sc |> List.choose (function TyVar v, s when isVariable v -> Some (v, s) | _ -> None)
             else []
         own @ pairs isVariable ga sa @ pairs isVariable gr sr
+    // A type generic in contexts carries them as a function type's (see `FunctionContexts.carried`).
     | TyApply(_, gs), TyApply(_, ss)
     | TyAlias(_, gs, _), TyAlias(_, ss, _)
+    | TyNominal(_, gs, _, _), TyNominal(_, ss, _, _)
     | TyUnion gs, TyUnion ss -> all gs ss
     | TyRecord gf, TyRecord sf when Set.ofSeq gf.Keys = Set.ofSeq sf.Keys -> all (List.ofSeq gf.Values) (List.ofSeq sf.Values)
     | TyTag(_, Some g), TyTag(_, Some s) -> pairs isVariable g s

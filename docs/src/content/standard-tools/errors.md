@@ -1193,6 +1193,10 @@ def pass: ([Console] int -> int) -> int = { f -> runPure(f) }  -- error NYX0227:
 To fix it, write the contexts the function may require on the type expected, as in `([Console] int -> int)`, or a
 context variable for any, as in `[c] (int -> int)`.
 
+The same goes for a value of a type generic in contexts (see
+[Types generic in contexts](../advanced/contexts#types-generic-in-contexts)): a `[Console] Thunk(int)` given where a
+`Thunk(int)` is expected is an error, as its functions require `Console`.
+
 # NYX0228: Type alias refers to itself outside a tag
 
 A type alias names itself other than in the payload of one of its tags, so the type would have no end.
@@ -1558,7 +1562,9 @@ To fix it, write the context, which the error's fix does: `[Add(a)]` for `` `+` 
 A type declaration writes a context before its kind, `type Cursor = [Tx] protected (...)`, to say that each value of
 the type belongs to the scope of the `Tx` it was made under (see
 [Types in a scope](../advanced/contexts#types-in-a-scope)). That context must be a scoped context, and there can be
-only one.
+only one. A context variable written there instead, `type Thunk(a) = [k] protected (...)`, makes the type generic in
+contexts ([Types generic in contexts](../advanced/contexts#types-generic-in-contexts)); a type has only one, and not a
+scoped context's scope as well.
 
 ```nanyx
 type Cursor = [Console] protected (row: int)  -- error NYX0252: 'Console' isn't a scoped context: a type can only belong to a scoped context's scope
@@ -1569,8 +1575,9 @@ To fix it, name the scoped context whose scope the values belong to, or leave th
 # NYX0253: Contexts written on a type that is not a function
 
 Only a function type carries contexts: `[Console] string -> ()` requires `Console` where it's called. Written on any
-other type, contexts would say nothing, so they're an error. A type whose values belong to a scoped context's scope
-says so on its declaration, not where it's used.
+other type, contexts would say nothing, so they're an error, but on a type generic in contexts, as in
+`[Console] Thunk(int)` for `type Thunk(a) = [k] protected (...)`, whose declaration says it takes them. A type whose
+values belong to a scoped context's scope says so on its declaration, not where it's used.
 
 ```nanyx
 def count: [Console] int = 3  -- error NYX0253: Only a function type carries contexts, and 'int' isn't one: write them on the function that requires them

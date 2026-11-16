@@ -70,6 +70,17 @@ let knownMembers (tools: MemberTools) (scope: Scope) (name: string) (node: NodeI
         knownAmong tools.Input contextParameters arguments memberTys inScope
     | _ -> []
 
+/// Whether the fields of two records, `given` and `wanted`, are the same but for the members their functions take,
+/// at any depth.
+let rec private differInContextsOnly (given: (string * IrType) list) (wanted: (string * IrType) list) =
+    List.map fst given = List.map fst wanted
+    && List.forall2 (fun (_, givenTy) (_, wantedTy) ->
+        match givenTy, wantedTy with
+        | _ when givenTy = wantedTy -> true
+        | IrFunction(input, output, _), IrFunction(input', output', _) -> input = input' && output = output'
+        | IrRecord givenFields, IrRecord wantedFields -> differInContextsOnly givenFields wantedFields
+        | _ -> false) given wanted
+
 /// `atom` as a value of type `expected`. A function value where it requires other contexts' members where it is
 /// called, or takes or returns values boxed where `expected` does not or the other way round, is a closure over an
 /// adapter that holds it and calls it with the members it requires, those `expected` requires passed on, and the
@@ -85,6 +96,17 @@ let rec coerce (tools: MemberTools) (scope: Scope) (atom: Atom) (expected: IrTyp
             let arity = 1 + (adaptedValueTypes givenTy expected).Length + wanted.Length
             tools.BindTemp (Expr.make (MakeClosure(name, arity, atom :: captured)) expected) k)
     | givenTy, _ when CoreIrLowerBoxes.needsConversion givenTy expected -> CoreIrLowerBoxes.convert (boxTools tools scope) atom expected k
+    // A record of the same fields whose functions require other contexts, as a value of a type generic in contexts given
+    // where one that carries more is expected (`FunctionContexts.carried`): a new record of its fields, each adapted.
+    | IrRecord given, IrRecord wanted when given <> wanted && differInContextsOnly given wanted ->
+        // The record is read once for each field, so it waits in a local.
+        tools.Settle (Expr.make (Atom atom) (atomType atom)) (fun record ->
+            let rec fields (index: int) (adapted: Atom list) =
+                if index = given.Length then tools.BindTemp (Expr.make (MakeRecord(List.zip (List.map fst wanted) (List.rev adapted))) expected) k
+                else
+                    tools.BindTemp (Expr.make (Field(record, index)) (snd given.[index])) (fun field ->
+                        coerce tools scope field (snd wanted.[index]) (fun field -> fields (index + 1) (field :: adapted)))
+            fields 0 [])
     | _ -> k atom
 
 /// What converting a value to or from boxes needs, where `scope` is in scope (see `CoreIrLowerBoxes`).

@@ -78,18 +78,39 @@ Still open:
 
 ## A context variable: the type is generic in contexts
 
-([#1525](https://github.com/nanyx-lang/nanyx/issues/1525))
+Done in [#1525](https://github.com/nanyx-lang/nanyx/issues/1525), and described in
+[Types generic in contexts](../advanced/contexts#types-generic-in-contexts): `type Thunk(a) = [k] protected (get: [k]
+() -> a)`, used as `[Console] Thunk(int)`, or `Thunk(int)` for the pure one. [Lazy sequences](./lazy-sequences) is
+built on this.
 
-```nanyx fragment
-type seq(a) = [k] protected (next: [k] () -> #next(a, seq(a)) | #done)
+How it works:
 
-def lines: [FileSystem] string -> [FileSystem] seq(string) = ...
-```
+- The parser reads `[k]` as it reads `[Tx]` (`TypeDefModifier.InScopeOf`); a name that is a type variable
+  (`Names.isTypeVariable`) is a context variable, kept as `TypeDefInfo.ContextVariable`, which the body's function types
+  read as theirs. Two context variables, or one with a scoped context, are NYX0252 (`TypeResolution.typeScopeErrors`).
+- A value carries its contexts as the last argument of its `TyNominal`, after a scope if it has one: a function type
+  that requires them (`FunctionContexts.carried`), so that two of them agree, and one fits another, as function types
+  do (`FunctionContexts.agree`, `fit`). `tyToString` writes them in front. `nominalType` puts them in for the body's
+  variable. A type written without contexts carries none, and `[C] T` in a use is read by `typeExprToTy`; on a value
+  def's annotation they are the type's, not the def's (`Contexts.extractDefContexts`).
+- A constructor's value carries a variable of its own, which the functions it's made with widen, as a function type's
+  variable keeps room for more; given where a value is expected, a variable nothing has settled carries the expected
+  contexts (`Unifier`, the nominal case of assignability), and one left over when a def is generalised carries none
+  (`Unifier.outputOnlyContextVars`). The lambdas a constructor is given are inferred outside a top-level value, as a
+  record's are (`Contexts.outsideValue`).
+- A context variable of a parameter's type binds at a call as a function type's does (`ContextVariables.pairs`), and
+  one only the result writes, as in `([c] Thunk(a)), ([d] a -> b) -> [c, d] Thunk(b)`, isn't required by the call, in
+  the backend too (`CoreIrLower.returnedVariables`).
+- In the backend a value is a record of closures that take the members their contexts require. One given where a value
+  that carries more is expected is a new record of its fields, each adapted (`CoreIrLowerMembers.coerce`): passed as
+  an argument, as a def's result (read from its declared type), and named as a top-level value.
 
-`[k]` makes the type generic in contexts, as `[c]` makes a function type generic. A use writes the contexts in front,
-`[FileSystem] seq(string)`, or none for the pure one. Calling the functions inside requires them, and a type with fewer
-contexts fits where one with more is expected. [Lazy sequences](./lazy-sequences) is built on this.
+Still open:
 
+- A recursive protected type, as `seq(a)`'s `#next(a, seq(a))` needs, doesn't check yet: a nominal type's body can't
+  name the type itself ([#1663](https://github.com/nanyx-lang/nanyx/issues/1663)).
+- A generic def's result is still read from its value's type, so one whose value carries fewer contexts than it
+  declares isn't adapted.
 # No special cases
 
 The standard library uses the same declarations a user would: nothing it does with contexts or scopes is out of a

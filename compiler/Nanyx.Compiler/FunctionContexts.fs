@@ -63,6 +63,21 @@ module FunctionContexts =
         | TyApply(name, [ ScopeType scope ]) -> Some (name, scope)
         | _ -> None
 
+    /// What a type generic in contexts carries them in (see `carried`). No type written in source is it.
+    let private carriedTag = "@contexts"
+
+    /// `contexts` as a type generic in contexts carries them (`type Stream(a) = [k] protected (...)`, see
+    /// `TypeDefInfo.ContextVariable`): the last argument of its nominal type, a function type that requires them, so that
+    /// two such types' contexts agree as two function types' do, and one with fewer fits where one with more is expected.
+    /// A reader writes them in front of the type, `[FileSystem] Stream(string)`.
+    let carried (contexts: Ty list) : Ty = TyFunc(TyPrimitive carriedTag, TyPrimitive "unit", contexts)
+
+    /// The contexts a type generic in contexts carries (see `carried`).
+    let (|Carried|_|) (ty: Ty) : Ty list option =
+        match ty with
+        | TyFunc(TyPrimitive tag, _, contexts) when tag = carriedTag -> Some contexts
+        | _ -> None
+
     /// The name of a context that takes no arguments a reader writes: `Console`, or a scoped context, whose scope is not
     /// one.
     let (|PlainContext|_|) (context: Ty) : string option =
