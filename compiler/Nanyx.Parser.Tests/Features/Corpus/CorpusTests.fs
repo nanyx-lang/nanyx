@@ -45,6 +45,46 @@ let ``The differential test finds a piece two parsers read differently`` () =
     Assert.Contains("t.nyx: differs at line", Differential.describe found.Head)
 
 [<Fact>]
+let ``The lexer's tokens and trivia give back every piece of the corpus exactly`` () =
+    let failures =
+        Corpus.all.Value
+        |> List.filter (fun piece -> Lexer.write piece.Source (Lexer.lex piece.Name piece.Source).Tokens <> piece.Source)
+        |> List.map _.Name
+    Assert.Equal<string list>([], failures)
+
+/// The comments in `lexed`, each with its text without trailing spaces.
+let private lexedComments (source: string) (lexed: Lexer.Lexed) =
+    lexed.Tokens
+    |> Seq.collect (fun token -> Seq.append token.Leading token.Trailing)
+    |> Seq.filter (fun trivia -> trivia.Kind = Lexer.LineComment || trivia.Kind = Lexer.DocComment || trivia.Kind = Lexer.BlockComment)
+    |> Seq.map (fun trivia -> source.Substring(trivia.Start, trivia.End - trivia.Start).TrimEnd())
+    |> List.ofSeq
+
+[<Fact>]
+let ``The lexer reads every piece that parses without an error, and finds the comments the parser does`` () =
+    let parsed =
+        Corpus.all.Value
+        |> List.choose (fun piece ->
+            match parseModuleWithTrivia piece.Name piece.Source with
+            | Result.Ok parsed -> Some(piece.Name, parsed)
+            | Result.Error _ -> None)
+    let failures =
+        parsed
+        |> List.choose (fun (name, parsed) ->
+            let lexed = Lexer.lex name parsed.Source
+            let comments =
+                parsed.Trivia
+                |> List.choose (function
+                    | LineComment(text, _, _)
+                    | DocLineComment(text, _) -> Some(text.TrimEnd())
+                    | BlankLines _ -> None)
+            if not lexed.Errors.IsEmpty then Some $"{name}: %A{lexed.Errors |> List.map _.Message}"
+            elif lexedComments parsed.Source lexed <> comments then Some $"{name}: comments %A{lexedComments parsed.Source lexed}, not %A{comments}"
+            else None)
+    Assert.True(parsed.Length > 3500, $"Only {parsed.Length} pieces parse")
+    Assert.Equal<string list>([], failures)
+
+[<Fact>]
 let ``The parser reads the whole corpus the same way every time`` () =
     let pieces = Corpus.all.Value
     let found = Differential.differences parseModuleWithTrivia parseModuleWithTrivia pieces
