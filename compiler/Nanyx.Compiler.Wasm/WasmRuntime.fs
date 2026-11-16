@@ -110,6 +110,7 @@ module Helpers =
     let stringFromByte = NyxCompiler.Intrinsics.stringFromByte
     let stringFromMemory = NyxCompiler.Intrinsics.stringFromMemory
     let stringJoin = NyxCompiler.Intrinsics.stringJoin
+    let stringShiftBytes = NyxCompiler.Intrinsics.stringShiftBytes
     let listCons = NyxCompiler.Intrinsics.listCons
     let floatSqrt = NyxCompiler.Intrinsics.floatSqrt
     let floatFloor = NyxCompiler.Intrinsics.floatFloor
@@ -569,6 +570,55 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
                 CopyBytes = Helpers.copyBytes
                 CellTail = Word.Bytes }
       )
+      // A copy of `$s` with `$delta` added to each byte from `$low` to `$high`, made in one allocation.
+      Helpers.stringShiftBytes,
+      lines
+          [ $"(func ${Helpers.stringShiftBytes} (param $s i32) (param $low i32) (param $high i32) (param $delta i32) (result i32)"
+            "  (local $len i32)"
+            "  (local $out i32)"
+            "  (local $i i32)"
+            "  (local $byte i32)"
+            "  local.get $s"
+            $"  call ${Helpers.stringLength}"
+            "  local.tee $len"
+            $"  call ${Helpers.stringAlloc}"
+            "  local.set $out"
+            "  block $done"
+            "    loop $each"
+            "      local.get $i"
+            "      local.get $len"
+            "      i32.ge_u"
+            "      br_if $done"
+            "      local.get $s"
+            "      local.get $i"
+            "      i32.add"
+            "      i32.load8_u"
+            "      local.set $byte"
+            "      local.get $out"
+            "      local.get $i"
+            "      i32.add"
+            "      local.get $byte"
+            "      local.get $delta"
+            "      i32.add"
+            "      local.get $byte"
+            "      local.get $byte"
+            "      local.get $low"
+            "      i32.ge_u"
+            "      local.get $byte"
+            "      local.get $high"
+            "      i32.le_u"
+            "      i32.and"
+            "      select"
+            "      i32.store8"
+            "      local.get $i"
+            "      i32.const 1"
+            "      i32.add"
+            "      local.set $i"
+            "      br $each"
+            "    end"
+            "  end"
+            "  local.get $out"
+            ")" ]
       Helpers.stringConcat,
       lines
           [ $"(func ${Helpers.stringConcat} (param $a i32) (param $b i32) (result i32)"
@@ -1118,6 +1168,7 @@ let helperDependencies =
       Helpers.intMul, []
       Helpers.intToIndex, []
       Helpers.stringJoin, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.copyBytes ]
+      Helpers.stringShiftBytes, [ Helpers.stringLength; Helpers.stringAlloc ]
       Helpers.intTextLength, []
       Helpers.intTextWrite, [ Helpers.intTextLength ] ]
     @ (SizedIntegerCode.helpers |> List.map (fun (name, _) -> name, []))

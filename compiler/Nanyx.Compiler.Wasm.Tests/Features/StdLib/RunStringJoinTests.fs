@@ -3,9 +3,10 @@ module TranspilerWasmTests.Features.StdLib.RunStringJoin
 open Xunit
 open TranspilerWasmTestHelpers
 
-// `string.join` copies each piece into its result once (`__nanyx_string_join`), and `concat`, `replace`, `uppercase`,
-// `lowercase` and `reverse` are built on it (#1291). `runSource` checks the memory, so these also show that the join
-// frees nothing it borrows.
+// `string.join` copies each piece into its result once (`__nanyx_string_join`), and `concat`, `replace` and `reverse`
+// are built on it (#1291); `uppercase` and `lowercase` make their result in one allocation
+// (`__nanyx_string_shift_bytes`, #1467). `runSource` checks the memory, so these also show that the helpers free
+// nothing they borrow.
 
 [<Fact>]
 let ``Run - string join puts the separator between each pair, empty pieces included`` () =
@@ -58,3 +59,25 @@ def main = {
 }
 """
     runSource source |> assertRan "699999\n699999\nITEM 1\nITEM 2\n"
+
+[<Fact>]
+let ``Changing case makes one allocation, whatever the length`` () =
+    let source =
+        normalized """import nanyx/text
+
+def made: int -> int = { n -> string.length(string.repeat("abcdefghij", n)) }
+
+def upper: int -> int = { n -> string.length(string.uppercase(string.repeat("abcdefghij", n))) }
+
+def lower: int -> int = { n -> string.length(string.lowercase(string.repeat("ABCDEFGHIJ", n))) }
+"""
+    use program = instantiateWasm source []
+    for n in [ 10; 10000 ] do
+        let made, length = allocationsOf program "made" n
+        let upper, upperLength = allocationsOf program "upper" n
+        let lower, lowerLength = allocationsOf program "lower" n
+        Assert.Equal(10 * n, length)
+        Assert.Equal(length, upperLength)
+        Assert.Equal(length, lowerLength)
+        Assert.Equal(made + 1, upper)
+        Assert.Equal(made + 1, lower)

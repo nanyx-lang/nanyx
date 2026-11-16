@@ -41,6 +41,9 @@ module Intrinsics =
     let stringFromByte = prefix + "string_from_byte"
     /// A new string holding a list's strings with a separator between each pair, each copied once.
     let stringJoin = prefix + "string_join"
+    /// A new string holding a string's bytes, with `delta` added to each from `low` to `high`, in one allocation: what
+    /// changes the case of the ASCII letters.
+    let stringShiftBytes = prefix + "string_shift_bytes"
     /// A list with an element added at the front.
     let listCons = prefix + "list_cons"
     /// The square root of a float (NaN for a negative one).
@@ -181,6 +184,7 @@ module Intrinsics =
           stringSlice, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; intTy ], stringTy, []))
           stringFromByte, TypeEnv.mono (TyFunc(intTy, stringTy, []))
           stringJoin, TypeEnv.mono (TyFunc(tuple [ listOf stringTy; stringTy ], stringTy, []))
+          stringShiftBytes, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; intTy; intTy ], stringTy, []))
           floatSqrt, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
           floatFloor, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
           floatCeil, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
