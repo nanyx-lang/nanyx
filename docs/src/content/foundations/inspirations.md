@@ -23,10 +23,17 @@ Nanyx was meant to support arbitrary unions of types. Roc's design is why it's `
 
 # Contexts
 
-**Haskell's type classes**, **Koka's effects**, and **Scala 3's givens**.
+**Haskell's type classes**, **Koka's** and **Flix's effects**, **Scala 3's givens**, and the wider work on effect
+programming.
 
 A context is a set of operations a function requires, such as `Console`, or `Eq(a)` for a type's equality, that is
 provided where the function is called.
+
+Contexts owe most to the research on **algebraic effects and handlers**: the idea, from Plotkin and Pretnar's work
+and languages such as Eff, Koka, Effekt and Flix, that what a function may do belongs in its type, separately from
+what it computes, and that the code which runs it decides how those effects are carried out. Nanyx's contexts are a
+deliberately simple corner of that design (no resumable handlers), but the shape is the same: a pure function's type
+says it's pure, and an effect is a requirement passed in, not something done behind the program's back.
 
 - From **Haskell**: contexts over types (`Eq(a)`, `Ord(a)`, `Hash(a)`) as type classes, and *coherence*. A type has one
   instance of a context, its own, which nothing can replace, so a set built in one place can't be read with a
@@ -34,6 +41,9 @@ provided where the function is called.
 - From **Koka**: effects tracked in function types (`[Console] string -> ()`), passed through higher-order functions
   with a variable (`[c]`, Koka's effect-row polymorphism), and handlers that are ordinary functions running a block
   under an implementation (`withConsoleLog { ... }`).
+- From **Flix**: effects as part of every function's type in a practical, everyday language, with purity tracked by
+  the compiler and inferred where it isn't written, and effect polymorphism for higher-order functions, so a pure
+  `list.map` stays pure when given a pure function.
 - From **Scala 3**: capabilities passed implicitly to whatever needs them, written once where they're provided.
 
 See [Contexts](../advanced/contexts).
