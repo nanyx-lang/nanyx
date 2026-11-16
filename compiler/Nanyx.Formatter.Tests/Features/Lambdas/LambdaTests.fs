@@ -64,6 +64,8 @@ let ``Shorthand lambdas are printed as written`` () =
     unchanged "def d = { }\n"
     unchanged "def e = { | 0 -> 1 }\n"
     unchanged (lines [ "def f = {"; "  | 0 -> 1"; "  | _ -> 2"; "}" ])
+    // Several cases go one to a line, even where they would fit on one.
+    Assert.Equal(lines [ "def f = {"; "  | 0 -> 1"; "  | _ -> 2"; "}" ], format "def f = { | 0 -> 1 | _ -> 2 }")
     unchanged "def g = items \\filter { % 2 == 0 }\n"
     unchanged "def h = people \\filter { .age > 18 } \\map { .name.length }\n"
     unchanged "def i = xs \\map { * 2 + 1 \\abs }\n"
