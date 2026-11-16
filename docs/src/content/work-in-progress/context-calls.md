@@ -188,9 +188,12 @@ requires contexts on its context members too (`CoreIrLowerKnown.fs`):
 
 Hello world's `println__string__known` calls `string.toString` and `write` directly, and its call passes only the
 value. The cost is code size: a definition called with several instances has a specialisation for each, which is the
-trade monomorphisation already makes for types. A definition that is not generic is still lowered as it is, taking
-all its members, and exported; a specialisation of it on known members is named with `__known`
-(`greet__known`), and is not exported.
+trade monomorphisation already makes for types. A specialisation on known members is named with `__known`
+(`greet__known`). A definition that declares contexts is not exported, since no host could pass it the members, and
+its own form, which takes all its members, is lowered only where a call asks for it: a function value, or a caller
+that does not know the instance (`CoreIrLower.calleeKnowing`). So each such definition is emitted once for each way
+it is called, not as an exported plain copy beside its `__known` one
+([#1269](https://github.com/nanyx-lang/nanyx/issues/1269)).
 
 A def that doesn't write its type and infers an ambient context, such as `def greet = { name -> println(name) }`,
 takes the context's members as one that writes `[Console]` does
