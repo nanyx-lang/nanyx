@@ -51,14 +51,12 @@ def u: Unit = ()
 def e = String.toString("ab")
 def f = List.map
 def m: Map(string, int) = ["a" => 1]
-def s: Set(int) = set.fromList([1])
-def q = { (items: Seq(int)) -> items }"""
+def s: Set(int) = set.fromList([1])"""
     Assert.Equal(TyPrimitive "string", typed.Types.["a"])
     Assert.Equal(TyPrimitive "string", typed.Types.["c"])
     Assert.Equal(TyFunc(TyPrimitive "string", TyPrimitive "string", []), typed.Types.["string.shout"])
     Assert.Equal(TyApply("list", [ TyPrimitive "int" ]), typed.Types.["d"])
     Assert.Equal(TyPrimitive "unit", typed.Types.["u"])
-    Assert.Equal(TyFunc(TyApply("seq", [ TyPrimitive "int" ]), TyApply("seq", [ TyPrimitive "int" ]), []), typed.Types.["q"])
 
 [<Fact>]
 let ``I64, F64 and Boolean are the types int, float and bool name`` () =

@@ -4,7 +4,7 @@ description: Lists, maps, sets, and mutability
 order: 8
 ---
 
-Collections are typically immutable in Nanyx, although [it is possible to use and create mutable versions](../advanced/memory). Mutable versions have an `M` prefix in their name (for example, `MList` vs `list`), and each is a module of its own: [`nanyx/mlist`](../stdlib/mlist), [`nanyx/mstack`](../stdlib/mstack) and [`nanyx/mref`](../stdlib/mref).
+Collections are typically immutable in Nanyx, although [it is possible to use and create mutable versions](../advanced/memory). Mutable versions have an `M` prefix in their name (for example, `MList` vs `list`), and each is a module of its own: [`nanyx/mlist`](../stdlib/mlist), [`nanyx/mstack`](../stdlib/mstack), [`nanyx/marray`](../stdlib/marray), [`nanyx/mslice`](../stdlib/mslice) and [`nanyx/mref`](../stdlib/mref).
 
 # Immutable vs mutable
 
@@ -29,9 +29,29 @@ def addItems = memory {
 
 Use immutable collections by default. Reach for mutable variants when profiling shows a hot path that benefits from in-place updates.
 
-To work on part of an array, or of a string, without copying it, take a slice: `xs \slice(1, 4)` is a [`Slice`](../stdlib/slice) that views the elements from index 1 up to 4 and shares the array's storage. An [`MSlice`](../stdlib/mslice) does the same for a mutable array, so `ys \slice(0, 3) \sort` sorts part of it in place, and a [`StringSlice`](../stdlib/text#stringslice) views part of a string.
-
 An immutable list can be updated in place too, when nothing else can see the change: transforming a list you hold the only reference to, with `list.map` or a function of your own that takes it apart and rebuilds it, reuses its cells. See [Reference counting](../foundations/reference-counting#reuse-in-place).
+
+# Arrays and slices
+
+An `Array(a)` holds its elements in one block, so reading one by its index takes the same time wherever it is, where a list walks to it. It never changes, so it needs no `Memory`. Calling an array reads an element, and gives `#none` past the end rather than stopping the program:
+
+```nanyx
+import nanyx/slice
+
+def xs = Array[10, 20, 30, 40, 50]
+
+println(xs(1))
+println(xs(9))
+println(array.length(xs))
+
+def middle = xs \slice(1, 4)
+
+println(Slice.toArray(middle))
+```
+
+This prints `#some(20)`, `#none`, `5` and `[20, 30, 40]`. To work on part of an array, or of a string, without copying it, take a slice: `xs \slice(1, 4)` is a [`Slice`](../stdlib/slice) that views the elements from index 1 up to but not including 4, and shares the array's storage. Bounds clamp, so a slice past the end is shorter, never an error. `Slice.toArray` copies the run into an array of its own. An [`MSlice`](../stdlib/mslice) does the same for a mutable array, so `ys \slice(0, 3) \sort` sorts part of it in place, and a [`StringSlice`](../stdlib/text#stringslice) views part of a string.
+
+The functions on arrays are on the [array](../stdlib/array) page. For an array whose elements change, see [Memory](../advanced/memory#mutable-collections).
 
 # Common collection abstractions
 
@@ -47,8 +67,7 @@ Most of the time, Nanyx programs don't care very much about the specific impleme
 | `Queue(a)` | - | First in, first out (`import nanyx/queue`) |
 | `Trie(k, v)`, `StringTrie(v)` | - | Lookup by a sequence of keys, and every key that starts with a prefix (`import nanyx/trie`) |
 | `Collection(a)` | - | Any in-memory collection |
-| `Sequence(a)` | `seq(a)` | Finite, deterministic sequences |
-| `Generator(a)` | `gen(a)` | Potentially infinite or non-deterministic sequences |
+| `Seq(a)` | `seq(a)` | Lazy sequences, which may never end, such as the range `0..` ([sequences](../stdlib/prelude-sequences)) |
 
 ```nanyx
 def lookup = ["a" => 1, "b" => 2]

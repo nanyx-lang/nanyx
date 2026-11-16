@@ -4,13 +4,14 @@ description: "What equality is, and which contexts the compiler knows about"
 order: 8
 ---
 
-> **Status: agreed, partly implemented.** `Eq(a)`, `Ord(a)` and `Hash(a)` are in the prelude: `==` and `!=` require
-> `Eq`, `<`, `<=`, `>` and `>=` require `Ord`, functions have no equality or hash, and records and tags have no order.
-> [What is implemented](#what-is-implemented) says what is done and what is left of
-> [#532](https://github.com/nanyx-lang/nanyx/issues/532), [#476](https://github.com/nanyx-lang/nanyx/issues/476) and
-> [#533](https://github.com/nanyx-lang/nanyx/issues/533).
-> The decisions are listed under [Open questions](#open-questions); one small question remains. The code references
-> under [What existed before](#what-existed-before) are at commit `b84acc0`.
+> **Status: agreed and implemented**, but for the gaps listed under each section of
+> [What is implemented](#what-is-implemented) and the question under [Still open](#still-open). The language docs
+> describe [Eq(a)](../advanced/contexts#eqa), [Ord(a)](../advanced/contexts#orda), [Hash(a)](../advanced/contexts#hasha),
+> [ToString(a)](../advanced/contexts#tostringa), [A type's own instance wins](../advanced/contexts#a-types-own-instance-wins)
+> and [Extending a type](../advanced/attached-definitions#extending-a-type). This page keeps how they are built, the
+> design's reasoning and the decisions ([#532](https://github.com/nanyx-lang/nanyx/issues/532),
+> [#476](https://github.com/nanyx-lang/nanyx/issues/476), [#533](https://github.com/nanyx-lang/nanyx/issues/533),
+> [#1501](https://github.com/nanyx-lang/nanyx/issues/1501)).
 
 # What is implemented
 
@@ -164,92 +165,6 @@ Not done yet:
 
 - **Maps and sets keyed by `Hash`** are done in the prelude, but do not use the hash yet; see [Maps and sets](./maps-and-sets).
 
-# What existed before
-
-This design was written when Nanyx mentioned `Eq(a)`, `Ord(a)`, `Sum(a)` and `ToString(a)` in several places, but had
-not decided what equality *is*, or which contexts the compiler knows about. This section records what existed then;
-the rest proposes one design for equality and applies the same pattern to ordering, hashing and printing.
-
-# Contexts: designed and implemented
-
-Contexts are implicit parameters ([docs: Contexts](../advanced/contexts)). Implemented:
-
-- **Declaring** a context as a record type: `context Show(a) = (show: a -> string)`.
-- **Requiring** one in a signature: `def describe: [Show(a)] a -> string`. A function that does not write its type
-  has its requirements inferred.
-- **Loading** an instance: `use Show(Point)(show = ...)` writes the instance out where it is loaded
-  (`useInstance` in `ContextInstances.fs`). The parser reads it as a block that defines it under a made-up name,
-  typed `Show(Point)`, and gives it back (`UseInstanceSyntax`); that is the one place a context is written as a type
-  ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)). The older `use Show(Point) = (...)` is a parse error
-  that says so.
-- **Resolving** an instance at each call (`resolveCallInstances` in `ContextInstances.fs`), first match wins:
-  1. an instance for that exact type loaded with `use` around the call, nearest first (`instanceInScope`), which is
-     never one for a type that has its own: such a `use` is NYX0250 (`ownInstanceErrors`, decision 2);
-  2. the instance the enclosing function's own signature declares (a generic function passes its `[Show(a)]` on);
-  3. an instance **synthesized** from the type's attached definitions, matched by member name: `Point.show` makes
-     a `Show(Point)` (`synthesizeInstance`, [#328](https://github.com/nanyx-lang/nanyx/issues/328)). A missing or
-     ill-typed definition is reported as `MissingContextMembers`, naming it.
-
-Synthesis is **by name only**. Nothing builds an instance for `list(a)` from the instance for `a`, and no instance is
-built from a type's structure (see [structural context synthesis](./type-members-and-reflection#structural-context-synthesis)).
-
-# Equality: implemented as an untyped intrinsic
-
-- **Type checking.** `==` and `!=` unify their two operands and return `bool`; nothing else is checked
-  (`Infer.fs:1381-1382`). In effect `==` has the type `a, a -> bool` for *every* `a`, functions included, and adds
-  no requirement to a generic function. `list.distinct: list(a) -> list(a)` relies on this
-  (`stdlib/nanyx/prelude-lists.nyx`).
-- **Lowering.** After monomorphisation the backend picks an implementation from the operand's concrete type
-  (`CoreIrLower.fs:479-504`): `i64.eq` for int; `i32.eq` for bool and unit; `f64.eq` for float; a byte comparison for strings;
-  `__nanyx_tag_equals` for tags. Anything else, records, tuples, lists and functions, type-checks and then fails in
-  the backend with `NYX0301 UnsupportedByBackend` ([#424](https://github.com/nanyx-lang/nanyx/issues/424)). A generic
-  `def same: a, a -> bool = { x, y -> x == y }` is accepted, and fails only when some caller uses it at a record.
-- **Tags compare their payload word.** `__nanyx_tag_equals` (`WasmRuntime.fs:667-698`) compares the payload with
-  `i32.eq`, so a string or other boxed payload is compared by address: `#some("a" ++ "a") == #some("aa")` is
-  `false` ([#526](https://github.com/nanyx-lang/nanyx/issues/526)).
-- **Open unions.** Because `==` *unifies* its operands, `def isNone = { o -> o == #none }` infers `o: #none`, and
-  `isNone(#some(3))` is a type error.
-
-# Ordering: numbers only
-
-`<`, `<=`, `>` and `>=` constrain both operands to a numeric type (`Infer.fs:1376-1380`). Strings, tuples and type
-variables cannot be ordered ([#476](https://github.com/nanyx-lang/nanyx/issues/476)), which is why `list.sortBy`
-takes `(a -> int)` keys (`prelude-lists.nyx`) and there is no `list.sort`
-([#475](https://github.com/nanyx-lang/nanyx/issues/475), [#191](https://github.com/nanyx-lang/nanyx/issues/191)).
-*Since fixed:* `Ord` exists, and `list.sort` and `list.sortBy` take any ordered type.
-
-# Hashing, maps and sets: nothing
-
-There was no `Hash` context, no map or set type, and no map literal (#191, `groupBy`). Since then `map(k, v)`, map
-literals and `list.groupBy` exist ([#477](https://github.com/nanyx-lang/nanyx/issues/477)), and the `Hash` context
-([#533](https://github.com/nanyx-lang/nanyx/issues/533)): a map's keys, and `groupBy`'s, need `Eq` and `Hash`. See
-[Maps and sets](./maps-and-sets).
-
-# Printing: designed, partly implemented
-
-A printing design proposed a `ToString(a)` context behind interpolation holes, synthesized from an attached
-`toString`, with `dbg` separate and printing anything. The attached `toString` on the built-in types existed
-([#329](https://github.com/nanyx-lang/nanyx/issues/329)); checking holes through the context did not
-([#330](https://github.com/nanyx-lang/nanyx/issues/330), [#331](https://github.com/nanyx-lang/nanyx/issues/331)).
-*Since done:* [ToString(a)](../advanced/contexts#tostringa) describes it.
-
-# Where the docs and the compiler disagree
-
-| The docs say | The compiler does |
-|---|---|
-| Operators on built-in types are attached definitions: `1 + 2` resolves to ``int.`+` `` ([operators.md:45](../tour/operators)). | Each built-in operator is typed directly in `Infer.fs`. The prelude attaches no operators. An operator on a value of a type variable calls the member of that name of a context the function requires. |
-| A user type gets an operator by attaching one: ``def Vector.`+` = ...`` (operators.md:47-51, contexts.md:169-173). | A definition named in backticks did not parse, attached or not, and neither did an operator-named context member ([#527](https://github.com/nanyx-lang/nanyx/issues/527)). *Since fixed:* they parse, and `a + b` on a type that attaches `` `+` `` calls it. |
-| `Eq(a)` is a "common context" with a `` `==` `` member, used as `[Eq(a)]` (contexts.md:106-118). | No `Eq` exists, and `==` never requires one. |
-| `sort: [Ord(a)] list(a) -> list(a)` ([memory.md:14](../advanced/memory)). | No `Ord`, no `sort`. *Since fixed:* both exist. |
-| `list.sortBy: (list(a), (a -> b))` (the old collections page; now [lists](../stdlib/prelude-lists#listsortby)). | `(a -> int)` keys only. *Since fixed:* `[Ord(b)]`, keys of any ordered type. |
-| `use` only changes the instance generic code sees, "never what `1 + 2` means" (operators.md:53). | Consistent then, but the printing design had a `ToString(int)` loaded with `use` changing a concrete `"{total}"`. The two designs disagreed. *Since settled:* a `use` changes concrete holes, as [ToString(a)](../advanced/contexts#tostringa) shows. |
-
-Two backend bugs turned up while checking this: [#526](https://github.com/nanyx-lang/nanyx/issues/526) (above) and
-[#528](https://github.com/nanyx-lang/nanyx/issues/528), where a lambda inside a generic function cannot call a member
-of the context the function requires.
-
-# Proposal
-
 # Well-known contexts
 
 A **well-known context** is a context declared in the prelude that the compiler knows by name. It differs from a user
@@ -261,14 +176,14 @@ context in exactly two ways:
    string))` from `Eq(int)` and `Eq(string)`. User contexts only get synthesis by name.
 
 Everything else is the ordinary context machinery: a generic function requires them in its signature, `use` loads an
-instance, and the resolution order above is unchanged, with structural derivation added as a fourth, last step.
+instance, and instances are found as [How instances are found](#how-instances-are-found) says.
 
-The proposed set is small and closed:
+The set is small and closed:
 
 | Context | Members | Sugar | Derived from structure |
 |---|---|---|---|
 | `Eq(a)` | `` `==`: (a, a) -> bool `` | `==`, `!=` | numbers, bool, unit, string, tuples, records, lists, tags and unions |
-| `Ord(a)` | `compare: (a, a) -> #less \| #equal \| #greater` | `<`, `<=`, `>`, `>=` | numbers, bool, string, tuples, lists (see [Q3](#open-questions)) |
+| `Ord(a)` | `compare: (a, a) -> #less \| #equal \| #greater` | `<`, `<=`, `>`, `>=` | numbers, bool, string, tuples, lists (see [decision 3](#decided)) |
 | `Hash(a)` | `hash: a -> int` | none | the same types as `Eq` |
 | `ToString(a)` | `toString: a -> string` | interpolation holes | tags, tuples, records and lists, as [ToString(a)](../advanced/contexts#tostringa) describes |
 
@@ -282,7 +197,7 @@ exist. Numeric operators are discussed [separately below](#numeric-operators).
 
 # Equality
 
-**Recommendation.**
+**Decided.**
 
 - **Structural by default.** Two values are equal when they have the same shape and their parts are equal: records
   field by field, tuples and lists element by element, tags by name and then payload. Strings compare by content.
@@ -297,10 +212,10 @@ exist. Numeric operators are discussed [separately below](#numeric-operators).
   write `[Eq(a)]`; one that does not has it inferred. Generic code is then checked once, where it is written, not at
   each type it is used with. `list.distinct` becomes `[Eq(a)] list(a) -> list(a)`.
 - **A type overrides equality by attaching `==`.** ``def Email.`==` = { a, b -> lower(a) == lower(b) }`` is found by
-  the existing synthesis step, ahead of structural derivation. Only nominal types may do this. A
+  synthesis, ahead of structural derivation. Only nominal types may do this. A
   structural type built from one uses it: a
-  `list(Email)` compares its elements with `` Email.`==` ``. This needs [#527](https://github.com/nanyx-lang/nanyx/issues/527).
-- ~~**A block overrides it with `use`.**~~ Reversed by decision 2: a `use` can't replace a type's own `==`. A
+  `list(Email)` compares its elements with `` Email.`==` ``.
+- **Not with `use`.** Reversed by decision 2: a `use` can't replace a type's own `==`. A
   case-insensitive comparison is a protected type with its own `==`, or a function given the comparison.
 - **Nominal types** get the structural equality of their underlying type unless they attach `==`.
   Comparing two `UserId`s does not construct one, so it cannot break the type's invariants.
@@ -308,7 +223,7 @@ exist. Numeric operators are discussed [separately below](#numeric-operators).
 **Alternatives.**
 
 - *Implicit equality on every non-function type* (OCaml, F#, Elm): `==` stays `a, a -> bool`, generic code needs no
-  annotation, and the compiler rejects functions when it instantiates. This is today's behaviour plus a
+  annotation, and the compiler rejects functions when it instantiates. This was the behaviour before `Eq` plus a
   check, and it is lighter to write. But errors appear at the instantiation, in library code the user did not write,
   which the [reflection page](./type-members-and-reflection) rules out for
   generic code ("checked once"). F# hides the same rule behind an inferred `equality` constraint, which is the
@@ -369,7 +284,7 @@ per concrete type (fixing [#424](https://github.com/nanyx-lang/nanyx/issues/424)
 
 # Open tag unions
 
-**Recommendation.** `a == b` joins its operands instead of unifying them: each is assignable to a fresh type `t`, and
+**Decided.** `a == b` joins its operands instead of unifying them: each is assignable to a fresh type `t`, and
 the comparison requires `Eq(t)`. So `{ o -> o == #none }` infers `o: #none | r`, and `isNone(#some(3))` checks,
 comparing at `#some(int) | #none`. This is the same join `if` and `match` branches need
 ([#433](https://github.com/nanyx-lang/nanyx/issues/433)).
@@ -380,7 +295,7 @@ call but never passed, so it is not part of the function's type and nobody write
 compiler's own at each type the function is specialised at, as a local function's is. Passing an instance for it
 would make every call to a function that compares with a tag build a closure.
 
-Comparing two closed types with no tag in common, `#red == #some(1)`, is always false; the compiler warns.
+Comparing two closed types with no tag in common, `#red == #some(1)`, is always false; the official linter warns.
 
 # Ordering
 
@@ -394,13 +309,10 @@ defined; this is what Java and Rust do.
 
 **Records and tags get no derived order.** A record's fields have no order in its type (`(x: int, y: int)` is
 `(y: int, x: int)`), and neither do a union's tags, so any derived order would be alphabetical by accident. A type
-that wants one is made nominal and attaches `compare`; otherwise use `sortBy` with a key. See [Q3](#open-questions).
+that wants one is made nominal and attaches `compare`; otherwise use `sortBy` with a key. See [decision 3](#decided).
 
 `Ord` does not require `Eq`; Nanyx contexts have no hierarchy. A type that attaches both should keep them
 consistent, and the docs say so.
-
-This closes [#476](https://github.com/nanyx-lang/nanyx/issues/476) and unblocks `list.sort`, `min`, `max`
-([#475](https://github.com/nanyx-lang/nanyx/issues/475)) and a `sortBy` with `(a -> b)` keys.
 
 # Hashing
 
@@ -417,9 +329,8 @@ design makes hashing the natural choice, since more types have it.
 
 As [ToString(a)](../advanced/contexts#tostringa) describes, `ToString(a)` is a
 well-known context for interpolation holes, synthesized from an attached `toString`, and derived part by part for
-tags with a payload, tuples, records and lists. Today, as with `==`, a `ToString(T)` loaded with `use` changes concrete
-holes in its block. Under decision 2 it can't for a type with its own `toString`, which every built-in type has: a
-different rendering is a function called in the hole, `"{money(total)}"`.
+tags with a payload, tuples, records and lists. Under decision 2 a `use` can't replace a type's own `toString`,
+which every built-in type has: a different rendering is a function called in the hole, `"{money(total)}"`.
 
 # Numeric operators
 
@@ -433,7 +344,7 @@ finds by the member each reads rather than by name ([Operator contexts](./operat
 
 Each is reported by the type checker, with a span; none reaches the backend.
 
-| Situation | Message (draft) |
+| Situation | Message |
 |---|---|
 | `==` on functions | `'(int -> int)' cannot be compared with ==: functions have no equality` |
 | `==` on a type holding a function | `'Button' cannot be compared with ==: its field 'onClick' is a function, and functions have no equality` |
@@ -446,26 +357,6 @@ Each is reported by the type checker, with a span; none reaches the backend.
 | Closed types with nothing in common | warning: `'#red' and '#some(int)' have no tag in common, so this is always false` |
 
 The language server's code action for the third adds the requirement to the signature.
-
-# What changes for existing code
-
-- Generic functions that use `==` without a signature are unaffected: the requirement is inferred.
-- Generic functions with a signature that use `==` on a type variable need `[Eq(a)]` added. In the prelude that is
-  `list.distinct`, `list.contains` and `list.indexOf`.
-- `==` on records, tuples and lists starts working; on functions it moves from a backend error to a type error.
-- The docs' contexts page keeps its `Eq(a)` example, but as the prelude's context rather than one the user declares.
-
-# Order of work
-
-1. **Done.** Parse backtick-named definitions and context members, and call an attached operator
-   ([#527](https://github.com/nanyx-lang/nanyx/issues/527)).
-2. `Eq` in the prelude; `==` and `!=` read through it; structural derivation; per-type equality functions in the
-   backend; the join for open unions. Closes #424 and #526.
-3. `Ord`, `compare` and the four operators; `list.sort`, `min`, `max`, generic `sortBy`. Closes #476.
-4. `Hash` (done, [#533](https://github.com/nanyx-lang/nanyx/issues/533)), then maps and sets keyed by it.
-5. `ToString` (#330, done; see [ToString(a)](../advanced/contexts#tostringa)).
-
-# Open questions
 
 # Decided
 
@@ -480,9 +371,8 @@ The language server's code action for the third adds the requirement to the sign
    use `sortBy`. (Rejected: tags by name, records by field name.)
 4. **First round:** `Eq`, then `Ord`, then `Hash` with maps, each its own piece of work. Numeric operators get
    their own design.
-
-5. **The member is named `` `==` ``**, as the docs have it, so this waits on
-   [#527](https://github.com/nanyx-lang/nanyx/issues/527). (Rejected: `equals`.)
+5. **The member is named `` `==` ``**, which needed backtick-named definitions
+   ([#527](https://github.com/nanyx-lang/nanyx/issues/527)). (Rejected: `equals`.)
 6. **Only nominal types may attach `==`, `compare` or `hash`.** A structural type, including an alias
    such as `type Point = (x: int, y: int)`, always compares structurally, so `(x = 1, y = 2)` compares the same
    whether or not its alias is known. Attaching one of these to a structural type is an error. (Rejected: any named

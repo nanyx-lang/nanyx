@@ -174,6 +174,8 @@ def total = memory { context outer ->
 
 `use m` starts no scope of its own: it only says whose cells a `mut` after it makes.
 
+Which block's `Memory` a type requires is never written. Where a type requires the `Memory` of two different blocks, as a function's type can, hovers and error messages number them in the order they first appear, `([Memory₁] () -> a), ([Memory₂] () -> b) -> b`; with one block's, it is plain `[Memory]`.
+
 This is how Nanyx performs escape analysis. Instead of a separate escape-analysis pass, the compiler tracks which values require which `memory` call's `Memory`. A value that still needs it can only be used inside that call, so it cannot leak into pure code.
 
 # No global mutable state
@@ -215,7 +217,37 @@ def names = memory {
 
 `+=` is a [spare operator](../tour/operators#the-operators) that `MList` attaches, so `items += x` is `MList.add(items, x)`, and gives `()`. It doesn't assign: a `mut` cell changes with `:=`, so `count += 1` on one is an error that says to write `count := count + ...`.
 
-An `MArray` from [`nanyx/marray`](../stdlib/marray) is a fixed-length array whose elements `set` changes in place, laid out in one block as an [`Array`](../stdlib/array) is. It belongs to its block too. Converting between an `Array` and an `MArray` copies, so an `Array` never changes.
+An `MArray` from [`nanyx/marray`](../stdlib/marray) is a fixed-length array whose elements `set` changes in place, laid out in one block as an [`Array`](../stdlib/array) is. It belongs to its block too. Converting between an `Array` and an `MArray` copies, so an `Array` never changes. An `MSlice` from [`nanyx/mslice`](../stdlib/mslice) is a view of part of an `MArray`: setting, sorting, filling or reversing it changes that part of the array, and nothing else.
+
+```nanyx
+import (
+  nanyx/marray
+  nanyx/mslice
+)
+
+def scores = Array[3, 1, 4, 1, 5]
+
+def sorted = memory {
+  def xs = MArray.fromArray(scores)
+  def changed = xs \set(4, 9) -- #ok
+  xs \slice(0, 3) \sort
+  MArray.toArray(xs) -- [1, 3, 4, 1, 9]
+}
+```
+
+An index out of range never traps: `set` gives `#outOfRange` and leaves the array as it was, and `at` gives `#none`. A mutable array or slice has no `==`, order, hash or `toString`, as a reference has none: compare or write the `Array` that `MArray.toArray` gives back.
+
+# Which one to use
+
+| You want | Use |
+|---|---|
+| A local variable that changes, in one function | a `mut` cell |
+| A function that changes its caller's variable | a `mut` parameter, passed with `mut x` |
+| A cell held in a record or a list, or shared | `MRef` |
+| A stack, or a list that grows at the end | `MStack`, `MList` |
+| Elements changed by index | `MArray`, and `MSlice` for part of one |
+
+Each belongs to the `memory` block it was made in, so a function that uses any of them inside a `memory` block can still be pure from the outside: give back an immutable value, a list, an [`Array`](../stdlib/array) or what a cell holds.
 
 # Planned
 

@@ -89,16 +89,26 @@ let internal writtenTypeDefinition (writeShape: Ty -> string) (symbol: Symbol) (
         elif info.IsNominal then "protected"
         else ""
     let scopedKind =
-        match info.ScopedBy with
-        | Some scope -> $"[{scope}] {kind}"
-        | None -> kind
+        match info.ScopedBy, info.ContextVariable |> Option.bind _.Name with
+        | Some scope, _ -> $"[{scope}] {kind}"
+        | None, Some contexts -> $"[{contexts}] {kind}"
+        | None, None -> kind
     let declared = if isHome then "this module" else Unifier.moduleText info.Home
     // A private type's shape is its home module's to know.
     let definition =
         if info.IsPrivate && not isHome then $"{keyword} {symbol.Name}{parameters}"
         elif info.IsNominal then
-            // One that names itself is written with its own name there (see `RecursiveNominals`).
-            let shape = RecursiveNominals.underlying (TyNominal(TypeDefInfo.nominalId info, [], info.Underlying, info.IsPrivate))
+            // One that names itself is written with its own name there (see `RecursiveNominals`), and without the
+            // contexts it carries there, which are its own.
+            let id = TypeDefInfo.nominalId info
+            let rec asWritten (ty: Ty) =
+                match ty with
+                | TyNominal(nominal, args, underlying, isPrivate) when nominal = id ->
+                    let args = args |> List.map (function FunctionContexts.Carried _ -> FunctionContexts.carried [] | arg -> asWritten arg)
+                    TyNominal(nominal, args, underlying, isPrivate)
+                | TyRecursive _ -> ty
+                | _ -> Ty.map asWritten ty
+            let shape = asWritten (RecursiveNominals.underlying (TyNominal(id, [], info.Underlying, info.IsPrivate)))
             $"{keyword} {symbol.Name}{parameters} = {scopedKind} {writeShape shape}"
         else $"{keyword} {symbol.Name}{parameters} = {writeShape info.Underlying}"
     let note =

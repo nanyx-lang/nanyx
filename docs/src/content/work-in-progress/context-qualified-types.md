@@ -8,6 +8,9 @@ Decided by the maintainer in [#1059](https://github.com/nanyx-lang/nanyx/issues/
 when it's a function type, or when its declaration says so.** An earlier draft of this page proposed `[C] T` for any
 type, meaning "a value of `T` requires `C` to be used". That general form is dropped.
 
+All of it is built, and described in [Contexts](../advanced/contexts#contexts-are-part-of-the-type). This page keeps
+how it's built and the two gaps left, under "Still open" in each section.
+
 # Function types
 
 Function types carry their contexts: `[Console] int -> int`, context variables such as `[c]`, the contexts a lambda
@@ -18,24 +21,11 @@ describe them in [Parametric contexts](../tour/lambdas-and-higher-order-function
 
 # A value holding a lambda
 
-A record, tuple, list or tag holding a lambda doesn't take on the lambda's contexts. Each function inside it keeps its
-own, and calling it requires them where it's called:
-
-```nanyx fragment
-def handlers = (log = { m: string -> println(m) }, count = { n: int -> n + 1 })
--- (log: [Console] string -> (), count: int -> int)
-
-def pureCaller: () -> () = {
-  def f = handlers.log
-  f("x")          -- NYX0211: 'f' requires the context 'Console'
-}
-```
-
-Holding, passing or storing `handlers` requires nothing, and `handlers.count` can be called from pure code. A context
-instance is never a value at all ([Contexts are not types](./context-escape#contexts-are-not-types)), so there's no
-`[Console] Log` either. A top-level value that only holds such a lambda needs no context to be computed: a lambda written
-in a value, a named module's or a script's, is inferred outside it (`Contexts.outsideValue`), since building the value
-does not run it ([#1522](https://github.com/nanyx-lang/nanyx/issues/1522)).
+A record, tuple, list or tag holding a lambda doesn't take on the lambda's contexts, as
+[Contexts](../advanced/contexts#contexts-are-part-of-the-type) describes. A context instance is never a value at all
+([Contexts are not types](./context-escape#contexts-are-not-types)), so there's no `[Console] Log` either. A lambda
+written in a top-level value, a named module's or a script's, is inferred outside it (`Contexts.outsideValue`), since
+building the value does not run it ([#1522](https://github.com/nanyx-lang/nanyx/issues/1522)).
 
 # Types whose declaration says so
 
@@ -69,7 +59,7 @@ How it works:
   It counts the hidden scope arguments of the nominal types the body names, but not what a nominal type is made of,
   nor the contexts a function type requires. A type argument given at a use counts for nothing.
 - The standard library declares `MRef`, `MArray`, `MStack` and `MList` this way (`type MRef(a) = [Memory] private box(a)`,
-  [Mutation](./mutation#planned)), with no special case for them.
+  [Mutation](./mutation#mutable-values)), with no special case for them.
 
 Still open:
 
@@ -112,14 +102,14 @@ Still open:
 
 - A generic def's result is still read from its value's type, so one whose value carries fewer contexts than it
   declares isn't adapted.
+
 # No special cases
 
 The standard library uses the same declarations a user would: nothing it does with contexts or scopes is out of a
 user's reach. Only intrinsics stay private to it.
 
-# Open questions
+# Settled
 
-- **Both forms on one declaration,** such as `[Memory, k]`, or two scoped contexts: an error to start with, unless
-  the implementation finds it falls out.
+- **Both forms on one declaration,** such as `[Memory, k]`, or two scoped contexts, are an error (NYX0252).
 - **Separators.** Several contexts are separated by `,` in these declarations, as in every context list
   ([#1531](https://github.com/nanyx-lang/nanyx/issues/1531)).

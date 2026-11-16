@@ -4,44 +4,51 @@ description: "One lazy sequence type, how it is represented, and how a function 
 order: 25
 ---
 
-> **Status: design in progress.** Nothing on this page is implemented. It replaces the `seq`/`gen` split that
-> [Sequences and queries](../advanced/sequences-and-queries) and [Ranges](../tour/ranges) still describe. The runtime work is tracked in
-> [#192](https://github.com/nanyx-lang/nanyx/issues/192).
+> **Status: being built.** `seq(a)` is in the prelude with its core functions, and ranges are values of it
+> ([prelude: sequences](../stdlib/prelude-sequences), [#192](https://github.com/nanyx-lang/nanyx/issues/192), done).
+> Still to do: a `for` loop over a sequence that is not a range written in place
+> ([#1698](https://github.com/nanyx-lang/nanyx/issues/1698)), `Iterable`, and the `seq { }` builder
+> ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)).
 
 # Summary
 
 - There is one lazy sequence type, `seq(a)`, attached to as `seq` or `Seq`, as lists are `list` or `List`; the
-  prelude writes `seq.map`, and the stdlib docs' `Sequence.map` is renamed to it
-  ([#192](https://github.com/nanyx-lang/nanyx/issues/192)). Its runtime form is the pull function below, decided in
-  #192. There is no separate `gen(a)` for sequences that may be infinite.
+  prelude writes `seq.map`, and the stdlib docs' `Sequence.map` is renamed to it. The prelude declares it as `Seq`,
+  a type as a user's is, and `seq` is its alias (`Seqs`, `BuiltinTypeNames`); it is shown as `seq(int)`. Its runtime
+  form is the pull function below ([#192](https://github.com/nanyx-lang/nanyx/issues/192), done). There is no
+  separate `gen(a)` for sequences that may be infinite.
 - A sequence is a value that, when asked, gives back either `#done` or its first element and the rest of the sequence.
   Asking does not change anything, so a sequence is an ordinary immutable value.
 - A sequence whose steps need contexts says so in its type, `[k] seq(a)`: `seq` is declared generic in contexts,
-  `type seq(a) = [k] protected (...)`, as any user's type can be
+  `type Seq(a) = [k] protected (...)`, as any user's type can be
   ([Context-qualified types](./context-qualified-types#a-context-variable-the-type-is-generic-in-contexts),
   [#1525](https://github.com/nanyx-lang/nanyx/issues/1525), done). Its tail, `seq(a)` in its own body, is a
   `[k] seq(a)` too: a protected type can name itself ([#1663](https://github.com/nanyx-lang/nanyx/issues/1663), done).
 - A function that takes "anything that can be iterated" requires a context, `Iterable(c, a)`, which a type gets by
   attaching a `toSeq`. A list is never a sequence by subtyping or by implicit conversion.
-- Sequences are built with `Seq.unfold` or with a `seq { ... }` workflow whose `yield` keyword produces the elements.
+- Sequences are built with `seq.unfold`, from a list with `list.toSeq`, or with a `seq { ... }` workflow whose `yield`
+  keyword produces the elements ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)).
+- A range is a sequence: `a..b` is read as the prelude's `seq.range(a, b)`, and `a..` as `seq.from(a)` (`Infer`,
+  `Seqs`). A `for` loop over a range written in place still counts with its bounds, and doesn't make the sequence
+  (`Loops.inferFor` keeps the range as it is written; `CoreIrLowerLoops`).
 
 # Where we are today
 
-The docs describe several overlapping ideas, and only the type names exist in the compiler:
+Where each idea the docs described stands:
 
 | Idea | Described in | In the compiler |
 |------|--------------|-----------------|
-| `seq(a)`, finite and with a pure iterator | [Sequences and queries](../advanced/sequences-and-queries), [Ranges](../tour/ranges) | The type of a bounded range, `1..10`, which only a `for` loop can walk ([Infer.fs:310](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/Infer.fs#L310)) |
-| `gen(a)`, possibly infinite or impure | the same pages | The type of an unbounded range, `0..` |
-| `Sequence.map`, `Gen.take` | The standard library's `sequence` page, since deleted, as the library has no such module | Nothing. Attached definitions on `seq` are looked up as `Seq` ([BuiltinTypeNames.fs:18](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/BuiltinTypeNames.fs#L18)), not `Sequence` |
+| `seq(a)` | [Sequences and queries](../advanced/sequences-and-queries), [Ranges](../tour/ranges), [prelude: sequences](../stdlib/prelude-sequences) | The prelude's `Seq(a)`, of which ranges are values |
+| `gen(a)` | | Gone: `0..` is a `seq(int)` |
+| `Sequence.map`, `Gen.take` | | `seq.map`, `seq.take` and the rest, in the prelude |
 | `Iter(a)` with `next` and an associated `elem` type | The standard library's `iter` page, since deleted | Nothing; it waits on [associated types](./type-members-and-reflection#associated-types) |
 | `getIterator` | [Sequences and queries](../advanced/sequences-and-queries) | Nothing, and nothing defines it |
-| `seq { yield ... }` | [Workflows](../advanced/workflows), [Ranges](../tour/ranges) | No `seq` builder |
+| `seq { yield ... }` | [Workflows](../advanced/workflows), [Ranges](../tour/ranges) | No `seq` builder ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)) |
 | `Yield(b)` for `list.select` | [Lists](../stdlib/prelude-lists), [Lambdas](../tour/lambdas-and-higher-order-functions#contextual-lambdas) | The prelude's `Yield(b)`, over a `mut` list in a `memory` block ([#478](https://github.com/nanyx-lang/nanyx/issues/478)) |
 
-A `for` loop accepts a `list`, `seq`, `gen`, `map` or `set` by name
-([Infer.fs:325](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/Infer.fs#L325)), and rejects a
-`gen` unless something finite is walked beside it.
+A `for` loop accepts a `list`, `seq`, `map` or `set` by type (`Loops.inferFor`), and rejects a range with no end
+written in place unless something that ends is walked beside it (NYX0217). The backend walks a list and a range written
+in place, but not yet any other sequence ([#1698](https://github.com/nanyx-lang/nanyx/issues/1698)).
 
 # Design
 
@@ -61,14 +68,14 @@ that ends the same way.
 
 A sequence is a function that, when called, gives back the first element and the rest of the sequence, or `#done`:
 
-```nanyx
-type Seq(a) = (moveNext: () -> #done | #some(a, Seq(a)))
+```nanyx fragment
+export type Seq(a) = [k] protected (next: [k] () -> #next(a, Seq(a)) | #done)
 ```
 
-This is the shape, not the declaration. `Seq` must be a nominal type, not a structural alias: attached definitions
-such as `Seq.map` need a type of their own to attach to, the recursion goes through a name, and if the library keeps
-the representation to itself it can change it later (chunking, fusion) without breaking anyone. `Seq` is already a
-built-in type name, so the compiler can declare it.
+`Seq` is a nominal type, not a structural alias: attached definitions such as `seq.map` need a type of their own to
+attach to, the recursion goes through a name, and if the library keeps the representation to itself it can change it
+later (chunking, fusion) without breaking anyone. It is protected, so a sequence is made with the library's functions,
+and read with `s.next()`.
 
 It is a singly linked list whose tails are functions rather than cells. The closest prior art is OCaml's `Seq`
 (`type 'a t = unit -> 'a node`, in the standard library since 4.07), whose functions are a good list to start from:
@@ -78,11 +85,11 @@ Python iterators are the other approach: a `next()` that changes the iterator.
 
 What this representation gives:
 
-- **It is pure.** There is no hidden position. Calling `moveNext` on the same sequence twice gives the same answer,
+- **It is pure.** There is no hidden position. Calling `next` on the same sequence twice gives the same answer,
   when its steps are pure.
-- **Looking ahead and going back cost nothing.** Calling `moveNext` moves nothing; you move on by keeping the rest.
+- **Looking ahead and going back cost nothing.** Calling `next` moves nothing; you move on by keeping the rest.
   A parser can keep a position and come back to it, where a stateful iterator needs a separate peekable wrapper.
-- **It reads like a list.** A function matches on `#some(x, rest)` and recurses; `zip` pulls from both.
+- **It reads like a list.** A function matches on `#next(x, rest)` and recurses; `zip` pulls from both.
 
 What it costs:
 
@@ -90,7 +97,7 @@ What it costs:
   changes one object in place. Reference counting can't reuse these the way it reuses a list held once, since each is
   a new closure. Fusing chains of `map` and `filter` in the compiler is the longer-term answer; it isn't needed to
   start.
-- **`filter` must not grow the stack.** Its `moveNext` keeps pulling until an element passes, so it must do that with
+- **`filter` must not grow the stack.** Its `next` keeps pulling until an element passes, so it must do that with
   a tail call. [Tail calls](./tail-calls) are promised for closures, so a tail-recursive `filter` runs in constant
   stack.
 - **Walking a sequence twice does its work twice.** Tails are not stored once worked out. Storing them would need a
@@ -212,14 +219,15 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
 
 # Plan
 
-1. Settle the open questions above, and bring the
-   [Sequences and queries](../advanced/sequences-and-queries), [Ranges](../tour/ranges) and
-   [Collections](../tour/collections) pages into line: drop `gen`. The standard library's pages follow its modules,
-   so `Seq` and `Iterable` get pages when the library has them.
-2. Type `a..` as a `seq(int)`, and remove `gen` from the type checker.
-3. Give `seq(a)` its runtime representation, with ranges as values and `for` loops over them
+1. Settle the open questions above. Done: the [Sequences and queries](../advanced/sequences-and-queries),
+   [Ranges](../tour/ranges) and [Collections](../tour/collections) pages have no `gen`, and `seq` has its
+   [stdlib page](../stdlib/prelude-sequences). The Ranges page's ranges of other types wait on
+   [#1700](https://github.com/nanyx-lang/nanyx/issues/1700).
+2. ~~Type `a..` as a `seq(int)`, and remove `gen` from the type checker.~~ Done
    ([#192](https://github.com/nanyx-lang/nanyx/issues/192)).
-4. The core functions: `Seq.unfold`, `map`, `filter`, `take`, `skip`, `takeWhile`, `fold`, `zip`, `toList`, and
-   `List.toSeq`, `Set.toSeq`, `Map.toSeq`.
+3. ~~Give `seq(a)` its runtime representation, with ranges as values~~ (done, #192), and `for` loops over any
+   sequence ([#1698](https://github.com/nanyx-lang/nanyx/issues/1698)).
+4. The core functions. Done: `seq.empty`, `range`, `from`, `unfold`, `map`, `filter`, `take`, `skip`, `takeWhile`,
+   `fold`, `toList`, and `list.toSeq`. Still to write: `seq.zip`, `set.toSeq`, `map.toSeq`.
 5. `Iterable(c, a)`, with `for` loops and the `Seq` functions that consume a sequence taking it.
 6. The `seq { }` builder.

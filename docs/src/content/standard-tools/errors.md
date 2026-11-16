@@ -1115,14 +1115,14 @@ To fix it, write the type out.
 
 # NYX0217: Endless for loop
 
-A `for` loop walks only `gen`s, such as the open range `0..`, which never end, so the loop would never end either
+A `for` loop walks only ranges with no end, such as `0..`, which never end, so the loop would never end either
 ([Loops](../tour/loops)).
 
 ```nanyx
-def count = for 0.. | i -> i  -- error NYX0217: A `for` loop over a `gen` alone may never end: ...
+def count = for 0.. | i -> i  -- error NYX0217: A `for` loop over a range with no end alone never ends: ...
 ```
 
-To fix it, walk the `gen` in step with a list or a bounded range, as in `for xs, 0.. | x, i -> ...`.
+To fix it, walk the range in step with a list or a range with an end, as in `for xs, 0.. | x, i -> ...`.
 
 # NYX0218: Named parameter passed by position
 
@@ -1350,7 +1350,7 @@ def same: [Foo(_)] a -> a = { x -> x }  -- error NYX0236: The body of 'same' doe
 
 # NYX0237: Entry point does not fit the host
 
-The definition marked `@entry` does not have the type its [host](../work-in-progress/hosts) runs. The host is a
+The definition marked `@entry` does not have the type its [host](../advanced/hosts) runs. The host is a
 function that takes the entry point, so the entry point must fit the type of its parameter. A command-line program runs
 under the console host, `nanyx.console/console.host`, whose entry point takes nothing and may require `Console`.
 

@@ -4,7 +4,7 @@ description: The privileged layer a host is written on
 order: 14
 ---
 
-Only a host imports `nanyx/host.runtime`, as the console host the compiler ships, `nanyx.console/console.host`, does. How hosts work is described in [Hosts](../work-in-progress/hosts).
+Only a host imports `nanyx/host.runtime`, as the console host the compiler ships, `nanyx.console/console.host`, does. How hosts work, and how to write one, is described in [Hosts](../advanced/hosts).
 
 # Reference
 

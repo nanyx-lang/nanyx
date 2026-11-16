@@ -50,6 +50,16 @@ def names = people \map { .name }
 def increment = numbers \map { + 1 }
 ```
 
+A lambda written with no parameters, `{ ... }`, ignores its argument where a function of one parameter is expected, so it can stand for a function that doesn't need its input:
+
+```nanyx
+def zeros = [1, 2, 3] \map { 0 }
+
+println(zeros)
+```
+
+This prints `[0, 0, 0]`. Where nothing says how many parameters it takes, `{ ... }` is a function of none, `() -> ...`. To say it takes unit, write `{ () -> ... }`.
+
 # Pattern matching in lambdas
 
 Lambdas can use pattern-matching syntax directly, which is useful when transforming tagged unions. This keeps branching logic close to the point where values are mapped.

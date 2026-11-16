@@ -65,6 +65,7 @@ Passing one of these by position is an error that names the parameters to write:
 These exist today:
 
 - `list(a)` for indexed lists ([lists](./prelude-lists))
+- `seq(a)` for lazy sequences, ranges among them ([sequences](./prelude-sequences))
 - `set(a)` for membership checks ([maps and sets](./prelude-maps))
 - `map(k, v)` for key/value lookup ([maps and sets](./prelude-maps))
 - `Array(a)` for fixed-length sequences read by index in constant time ([array](./array))
@@ -77,8 +78,6 @@ These exist today:
 
 These are planned, and not yet in the library:
 
-- `seq(a)` for finite sequences. Today `seq(a)` is only the type of a range in a `for` loop; sequences as values are tracked in [#192](https://github.com/nanyx-lang/nanyx/issues/192), and designed in [Lazy sequences](../work-in-progress/lazy-sequences).
-- `gen(a)` for potentially infinite sequences
 - `lookup(k, v)` for multi-value lookups
 - `stream(a)` for async streams, and `async(a)` for async computations
 

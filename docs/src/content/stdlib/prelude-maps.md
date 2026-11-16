@@ -19,7 +19,7 @@ println(prices("pie"))
 -- #notFound
 ```
 
-A literal whose items are all `key => value` is a `map(k, v)`. A key written twice in a literal holds the value written last. `[]` is always the empty list; the empty map is `map.empty`. `for prices | name, price -> ...` walks a map's entries.
+A literal whose items are all `key => value` is a `map(k, v)`. A key written twice in a literal holds the value written last. `[]` is the empty list unless a map is expected, as in `def none: map(string, int) = []`; `map.empty` is the empty map anywhere. `for prices | name, price -> ...` walks a map's entries.
 
 A map's keys need an [`Eq`](../advanced/contexts#eqa) and a [`Hash`](../advanced/contexts#hasha) of their type, so every function that looks one up requires `[Eq(k), Hash(k)]`. Numbers, strings, tags, records, tuples and lists can all be keys, and so can a nominal type that attaches its own `==` and `hash`; a type that holds a function cannot, and nor can a nominal type that attaches `==` without `hash`. When the keys are tags of different names, write the key type, as in `def lights: map(#red | #green, string) = ...`: inference does not yet join the tags of separate keys. Two maps are `==` when they hold the same keys, each with an equal value, whatever order the keys were added in; the values are compared by their own `Eq`. Maps cannot be ordered with `<`, or be keys themselves, yet.
 

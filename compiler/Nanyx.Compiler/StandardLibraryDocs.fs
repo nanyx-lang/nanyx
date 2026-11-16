@@ -30,8 +30,9 @@ type internal Export =
       Members: (string * string option) list }
 
 /// A name written as source writes it: an operator in backticks, after the type it is attached to if it is, as
-/// `` `==` `` or `` int.`+` ``.
+/// `` `==` `` or `` int.`+` ``, and the prelude's sequence type by its alias, `seq.map` (see `Seqs`).
 let private writtenName (name: string) =
+    let name = Seqs.shownName name
     let at = name.LastIndexOf '.'
     let qualifier, own = if at > 0 then name.Substring(0, at + 1), name.Substring(at + 1) else "", name
     if Regex.IsMatch(own, @"^[A-Za-z_][A-Za-z0-9_]*$") then name else $"{qualifier}`{own}`"

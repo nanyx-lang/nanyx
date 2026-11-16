@@ -254,7 +254,7 @@ module StandardLibrary =
         | _ -> None
 
     /// The module every other module imports without saying so (`nanyx/prelude`): what is in scope with no imports.
-    let preludeModuleName = "prelude"
+    let preludeModuleName = ModuleOrigin.preludeName
 
     /// The name of a module's embedded resource, which is the file its declarations' spans name: `nanyx/list.nyx`.
     let resourceName (moduleName: string) = $"{packageName}/{moduleName}.nyx"

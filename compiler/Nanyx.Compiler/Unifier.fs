@@ -185,11 +185,13 @@ module Unifier =
         // A type in a scoped context's scope is written without the scope, as `mut T` is: `Cursor`, `MRef(int)`.
         // A type generic in contexts is written with them in front, as a function type is: `[FileSystem] Stream(string)`.
         | TyNominal(nominal, args, _, _) ->
+            // The prelude's `Seq` is shown by its alias, as the built-in types are (see `Seqs`).
+            let name = if nominal = Seqs.nominal then Seqs.alias else nominal.Name
             let named =
                 match args |> List.filter (function FunctionContexts.ScopedContext _ | FunctionContexts.Carried _ -> false | _ -> true) with
-                | [] -> nominal.Name
-                | [ arg ] -> $"{nominal.Name}({soleArgument arg})"
-                | args -> $"{nominal.Name}({items args})"
+                | [] -> name
+                | [ arg ] -> $"{name}({soleArgument arg})"
+                | args -> $"{name}({items args})"
             match List.tryLast args with
             | Some (FunctionContexts.Carried contexts) ->
                 match writtenContexts contexts |> List.map (contextAsPrinted p) |> List.distinct with
@@ -831,7 +833,18 @@ module Unifier =
                 // holds the same arguments again (see `RecursiveNominals`).
                 | TyNominal(lNominal, lArgs, lUnderlying, lPrivate), TyNominal(rNominal, rArgs, rUnderlying, rPrivate) ->
                     if lNominal = rNominal && lArgs.Length = rArgs.Length then
-                        let argConstraints = List.map2 (fun lTy rTy -> (lTy, rTy, Equal, origin)) lArgs rArgs
+                        // A value whose contexts nothing has settled yet, as a constructor's, carries the other's, as
+                        // where it is given (see the nominal case of assignability): made the same as another such, the
+                        // two would otherwise share a made-up variable.
+                        let argConstraints =
+                            List.map2
+                                (fun lTy rTy ->
+                                    match lTy, rTy with
+                                    | FunctionContexts.Carried [ TyVar unsettled ], FunctionContexts.Carried other
+                                    | FunctionContexts.Carried other, FunctionContexts.Carried [ TyVar unsettled ] when isPlainVar unsettled ->
+                                        (TyVar unsettled, TyUnion other, Equal, origin)
+                                    | _ -> (lTy, rTy, Equal, origin))
+                                lArgs rArgs
                         match lUnderlying, rUnderlying with
                         | _ when lPrivate || rPrivate -> loop subst (argConstraints @ rest)
                         | TyRecursive _, _

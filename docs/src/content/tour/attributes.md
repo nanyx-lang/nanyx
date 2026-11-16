@@ -65,14 +65,14 @@ See [Workflows](../advanced/workflows).
 
 ## `@extern(...)`
 
-Declares a foreign function: a function the WebAssembly module imports from its embedder, such as a WASI call. Its two arguments are the import's module and name, and the def has a type and no value. The type takes and returns only WebAssembly's value types (`I32`, `I64`, `F32`, `F64`, or `()` for no result), and requires `HostRuntime`, so only a [host](../work-in-progress/hosts) can call it.
+Declares a foreign function: a function the WebAssembly module imports from its embedder, such as a WASI call. Its two arguments are the import's module and name, and the def has a type and no value. The type takes and returns only WebAssembly's value types (`I32`, `I64`, `F32`, `F64`, or `()` for no result), and requires `HostRuntime`, so only a [host](../advanced/hosts) can call it.
 
 ```nanyx fragment
 @extern("wasi_snapshot_preview1", "args_sizes_get")
 def argsSizesGet: [HostRuntime] I32, I32 -> I32
 ```
 
-See [Foreign functions](../work-in-progress/foreign-functions), which is still being built.
+See [Foreign functions](../advanced/hosts#foreign-functions).
 
 ## `@allow(...)`
 
