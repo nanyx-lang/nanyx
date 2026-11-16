@@ -35,5 +35,5 @@ let at (file: string) (source: string) (result: CompileResult) (offset: int) : O
     |> Option.map (fun hint ->
         match hint.Annotation with
         | Some annotation ->
-            Available { Title = $"{title} of `{hint.Name}`"; Kind = RefactoringKind.Rewrite; Edits = [ edit source hint annotation ] }
+            Available { Title = $"{title} of `{hint.Name}`"; Kind = RefactoringKind.Rewrite; Edits = [ edit source hint annotation ]; Rename = None }
         | None -> Refused($"{title} of `{hint.Name}`", RefactoringKind.Rewrite, refusal hint))

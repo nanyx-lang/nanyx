@@ -14,9 +14,10 @@ namespace Nanyx.LanguageServer.Handlers;
 /// offer fixes (removing an unused local, renaming an unused name to <c>_</c>), and the compiler offers the import
 /// an unknown name from the standard library needs (<c>NyxCompiler.ImportFixes</c>). A fix that would edit another
 /// file is not offered. It also offers the refactorings at the range (see <c>NyxCompiler.Refactorings</c>), in a
-/// document whose text type-checked: writing the inferred type of the name at its start, and introducing a local for
-/// the expression it selects, laid out with the document's formatter settings. One the compiler refuses there is
-/// offered disabled, with its reason.
+/// document whose text type-checked: writing the inferred type of the name at its start, and introducing a local or a
+/// function for what it selects, laid out with the document's formatter settings. One the compiler refuses there is
+/// offered disabled, with its reason. One that makes up a name has the <see cref="RenameAtCommand"/> command, which
+/// starts renaming it once its edits are made.
 /// </summary>
 public sealed class CodeActionHandler : CodeActionHandlerBase
 {
@@ -81,8 +82,21 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             {
                 yield return ToAction(uri, document, extract);
             }
+
+            var recompile = Microsoft.FSharp.Core.FuncConvert.FromFunc((string text) =>
+                _documents.Compile(uri, text).Compiled ?? throw new InvalidOperationException("The compiler failed on the refactored text"));
+            foreach (var extract in IntroduceFunction.at(options, document.FileName, document.Text, compiled, selection, recompile))
+            {
+                yield return ToAction(uri, document, extract);
+            }
         }
     }
+
+    /// <summary>
+    /// The client-side command that starts renaming the name at a position of a document, which the editor's extension
+    /// registers: a refactoring that makes up a name runs it after its edits, so the name can be given at once.
+    /// </summary>
+    public const string RenameAtCommand = "nanyx.renameAt";
 
     private static CodeAction ToAction(DocumentUri uri, OpenDocument document, Offer offer) =>
         offer switch
@@ -101,7 +115,8 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
                             NewText = edit.NewText
                         }).ToList()
                     }
-                }
+                },
+                Command = refactoring.Rename?.Value is { } rename ? RenameAt(uri, document, refactoring, rename) : null
             },
             Offer.Refused refused => new CodeAction
             {
@@ -111,6 +126,21 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             },
             _ => throw new ArgumentOutOfRangeException(nameof(offer))
         };
+
+    /// <summary>The command that starts renaming the name at <paramref name="offset"/> of the text <paramref name="refactoring"/> makes.</summary>
+    private static Command RenameAt(DocumentUri uri, OpenDocument document, Refactoring refactoring, int offset)
+    {
+        var text = refactoring.Edits
+            .OrderByDescending(edit => edit.Span.Start)
+            .Aggregate(document.Positions.NormalizedText, (text, edit) => text[..edit.Span.Start] + edit.NewText + text[edit.Span.End..]);
+        var position = new SourcePositions(text).ToPosition(offset);
+        return new Command
+        {
+            Name = RenameAtCommand,
+            Title = "Rename",
+            Arguments = new Newtonsoft.Json.Linq.JArray(uri.ToString(), position.Line, position.Character)
+        };
+    }
 
     private static CodeActionKind KindOf(RefactoringKind kind) =>
         kind.Tag switch
