@@ -366,12 +366,13 @@ let private checkedIntHelper (name: string) (instruction: string) (overflowed: s
 /// which reference counting relies on (see `CoreIrCounting.operands`), except those `Helpers.operandUse` names.
 ///
 /// The allocator hands out 4-byte-aligned blocks, so a pointer is never odd. Every block has its size (the
-/// requested size rounded up to 4 bytes, and at least 4) in the word before it, and `free` puts a block back on the
-/// free list for its size: blocks of up to 32 bytes have a list per size, last in first out, and larger ones share one
-/// list in address order. `free` joins a large block with the free large blocks either side of it, and gives a block
-/// that ends at `$heap_ptr` back to the heap; `alloc` takes the first large block big enough, splitting off the rest
-/// when that is large too. The list heads are a table at `heapBase`, past the string literals (see `heapBaseAfter` and
-/// `freeListHead`), and a free block keeps the next block of its list in its first word. `alloc` takes from a list
+/// requested size rounded up to 4 bytes, and at least 4) in the word before it, with two flags in its low bits (see
+/// `WasmAllocator.SizeWordBits`), and `free` puts a block back on the free list for its size: blocks of up to 256
+/// bytes have a list per size, last in first out, and larger ones share one doubly linked list. `free` joins a large
+/// block with the free large blocks either side of it, found by the size words at both ends of a free large block, and
+/// gives a block that ends at `$heap_ptr` back to the heap; `alloc` takes the first large block big enough, splitting
+/// off the rest when that is large too. The list heads are a table at `heapBase`, past the string literals (see
+/// `heapBaseAfter` and `freeListHead`), and a free block keeps the next block of its list in its first word. `alloc` takes from a list
 /// when it can, and otherwise bumps `$heap_ptr`, which starts after the table, growing the memory when it runs out
 /// and trapping past 4 GB.
 ///
