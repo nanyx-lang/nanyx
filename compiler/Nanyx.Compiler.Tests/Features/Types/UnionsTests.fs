@@ -424,3 +424,19 @@ def load: int -> #some(int) | #error(#notFound | #denied) = {
             []
         )
     Assert.Equal(expected, typed.Types.["load"])
+
+// A union has one rest variable: a second is an error where it is written, not dropped (#680).
+[<Theory>]
+[<InlineData("""def both: (#some(a) | r), (a -> #some(b) | s) -> #some(b) | r | s = { x, f -> bindOption(x, f) }""", "s")>]
+[<InlineData("""def ignore: (#a | r | s) -> int = { _ -> 0 }""", "s")>]
+[<InlineData("""type Wide(r, s) = #a | r | s""", "s")>]
+let ``A union written with two rest variables is an error at the second`` (source: string, second: string) =
+    let code, text = singleError source
+    Assert.Equal(DiagnosticCodes.UnionWithTwoRests.Code, code)
+    Assert.Equal(second, text)
+
+[<Fact>]
+let ``Each rest variable after the first is an error`` () =
+    let result = Compiler.compile "def ignore: (#a | r | s | t) -> int = { _ -> 0 }"
+    Assert.Equal<string list>([ "s"; "t" ], result.Diagnostics |> List.map (fun diagnostic -> textAt "def ignore: (#a | r | s | t) -> int = { _ -> 0 }" diagnostic.Span.Value))
+    Assert.All(result.Diagnostics, fun diagnostic -> Assert.Equal(DiagnosticCodes.UnionWithTwoRests.Code, diagnostic.Code))

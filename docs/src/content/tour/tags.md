@@ -104,6 +104,8 @@ x \mapSome { .length }
 y \mapSome { \Math.abs }
 ```
 
+The variable `r` is the union's *rest*: the tags it has besides those it names. A union has at most one rest, so `#some(b) | r | s` is an error (NYX0259): two rests would stand for the same other tags.
+
 `other` can be returned as an `r` because the arm before it takes every `#some`, so `other` is never one. The same holds for a catch-all inside a pattern, in a list's item, a tuple's field or a tag's payload, when an earlier arm takes every value of a tag there and is a catch-all everywhere else:
 
 ```nanyx
