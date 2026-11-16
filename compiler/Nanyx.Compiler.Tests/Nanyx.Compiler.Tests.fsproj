@@ -31,6 +31,8 @@
     <Compile Include="Features\Contexts\ContextTests.fs" />
     <Compile Include="Features\Contexts\ContextEscapeTests.fs" />
     <Compile Include="Features\Contexts\ScopedContextTests.fs" />
+    <Compile Include="Features\Contexts\ProtectedContextMatchingTests.fs" />
+    <Compile Include="Features\Contexts\ContextAccessTests.fs" />
     <Compile Include="Features\Contexts\AliasedContextTests.fs" />
     <Compile Include="Features\Contexts\OperatorContextTests.fs" />
     <Compile Include="Features\Contexts\StructuralInstanceTests.fs" />
@@ -114,6 +116,7 @@
     <Compile Include="Features\Matches\RecordPatternTests.fs" />
     <Compile Include="Features\Matches\NestedTagPatternTests.fs" />
     <Compile Include="Features\Matches\ScrutineeRestTests.fs" />
+    <Compile Include="Features\Matches\NestedCatchAllTests.fs" />
     <Compile Include="Features\Matches\UnitPatternTests.fs" />
     <Compile Include="Features\Matches\PatternErrorTests.fs" />
     <Compile Include="Features\Ordering\OrderingTests.fs" />

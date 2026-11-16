@@ -63,7 +63,7 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
     /// </summary>
     protected string TempPath(params string[] segments)
     {
-        _tempDirectory ??= Path.Combine(Path.GetTempPath(), "nanyx-lsp-tests", Guid.NewGuid().ToString("N"));
+        _tempDirectory ??= Path.Combine(Path.GetTempPath(), "nanyx-lsp-test-" + Guid.NewGuid().ToString("N"));
         var path = Path.Combine([_tempDirectory, .. segments]);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         return path;

@@ -68,38 +68,38 @@ let private fieldTySoFar (state: InferState) (ty: Ty) (fieldName: string) : (Ty 
 /// rather than it, each of inference's own variables solved to a type with it is constrained to that type without it.
 /// So is every context variable no caller can choose (see `Unifier.outputOnlyContextVars`) solved to no contexts.
 let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeScheme * InferState =
-    match Unifier.unify state.Constraints with
-    | Error _ -> TypeEnv.generalize env ty, state
-    | Ok subst ->
-        let resolved = Unifier.apply subst ty
-        let envVars =
-            TypeEnv.freeEnvVars env
-            |> Seq.map (fun id -> TypeEnv.freeTyVars (Unifier.apply subst (TyVar { Id = id; Name = None })))
-            |> Set.unionMany
-        let closed =
-            Unifier.outputOnlyRestVars resolved @ Unifier.outputOnlyContextVars resolved
-            |> List.filter (fun v -> v.Name.IsNone && not (envVars.Contains v.Id))
-        let bottom = TyUnion []
-        let closing = closed |> List.map (fun v -> v.Id, bottom) |> Map.ofList
-        let closedTy = Unifier.apply closing resolved
-        let madeUp, own = closed |> List.partition Unifier.isMadeUpRest
-        let solvedWithMadeUp =
-            if madeUp.IsEmpty then []
-            else
-                let madeUpIds = madeUp |> List.map (fun v -> v.Id) |> Set.ofList
-                subst
-                |> Map.toList
-                |> List.choose (fun (id, _) ->
-                    let var = { Id = id; Name = None }
-                    let solved = Unifier.apply subst (TyVar var)
-                    if Unifier.isMadeUpRest var || Set.isEmpty (Set.intersect madeUpIds (TypeEnv.freeTyVars solved)) then None
-                    else Some (TyVar var, Unifier.apply closing solved))
-        { Quantified = Set.difference (TypeEnv.freeTyVars closedTy) envVars
-          Type = closedTy
-          Symbol = None
-          ProvidedBy = None },
-        (own |> List.map (fun v -> TyVar v, bottom)) @ solvedWithMadeUp
-        |> List.fold (fun st (var, closedTy) -> addConstraint var closedTy st) state
+    // A conflict among the constraints, in this def or an earlier one, is set aside, so a def after an error is
+    // generalised as it would be without it (#1441).
+    let subst = fst (Unifier.solve state.Constraints)
+    let resolved = Unifier.apply subst ty
+    let envVars =
+        TypeEnv.freeEnvVars env
+        |> Seq.map (fun id -> TypeEnv.freeTyVars (Unifier.apply subst (TyVar { Id = id; Name = None })))
+        |> Set.unionMany
+    let closed =
+        Unifier.outputOnlyRestVars resolved @ Unifier.outputOnlyContextVars resolved
+        |> List.filter (fun v -> v.Name.IsNone && not (envVars.Contains v.Id))
+    let bottom = TyUnion []
+    let closing = closed |> List.map (fun v -> v.Id, bottom) |> Map.ofList
+    let closedTy = Unifier.apply closing resolved
+    let madeUp, own = closed |> List.partition Unifier.isMadeUpRest
+    let solvedWithMadeUp =
+        if madeUp.IsEmpty then []
+        else
+            let madeUpIds = madeUp |> List.map (fun v -> v.Id) |> Set.ofList
+            subst
+            |> Map.toList
+            |> List.choose (fun (id, _) ->
+                let var = { Id = id; Name = None }
+                let solved = Unifier.apply subst (TyVar var)
+                if Unifier.isMadeUpRest var || Set.isEmpty (Set.intersect madeUpIds (TypeEnv.freeTyVars solved)) then None
+                else Some (TyVar var, Unifier.apply closing solved))
+    { Quantified = Set.difference (TypeEnv.freeTyVars closedTy) envVars
+      Type = closedTy
+      Symbol = None
+      ProvidedBy = None },
+    (own |> List.map (fun v -> TyVar v, bottom)) @ solvedWithMadeUp
+    |> List.fold (fun st (var, closedTy) -> addConstraint var closedTy st) state
 
 /// The built-in operators work on `int`, `float` and the sized numbers. An operation is on the type of whichever
 /// operand is already known to be one of the others, and defaults to `int` otherwise. (Ordering is
@@ -781,7 +781,7 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                     | [ single ] -> Some single
                     | remaining -> Some (TyUnion remaining)
             | _ -> None
-        let rowVars =
+        let mutable rowVars =
             scrutineeTypes
             |> List.indexed
             |> List.choose (fun (index, _) -> restRowTy index)
@@ -800,6 +800,9 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                 match inferPatterns expr env current patternPairs with
                 | Error err -> errors <- errors @ err
                 | Ok (env', state', typedPatterns) ->
+                    // So is a name bound by a catch-all inside a pattern (see `NestedCatchAlls`).
+                    let env', nestedRows = NestedCatchAlls.narrow (NestedCatchAlls.tagsHandledBefore arms armIndex) env' state'
+                    rowVars <- Set.union rowVars nestedRows
                     match inferExpr env' state' expr with
                     | Ok (typedExpr, next) ->
                         current <- next
@@ -1103,7 +1106,12 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
             // Only a nominal type's home module can make one: anywhere else it comes from what that module exports.
             | Some info when isNominal info && not (inNominalHome state (TypeDefInfo.nominalId info) calleeSpan) ->
                 let kind = if info.IsPrivate then "private" else "protected"
-                Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan $"The {kind} type '{name}' can only be constructed in the module that defines it; use a function that module exports instead" ]
+                let message =
+                    if info.IsContext then
+                        $"The {kind} context '{name}' can only be constructed in the module that defines it; call a function that module exports to supply it instead"
+                    else
+                        $"The {kind} type '{name}' can only be constructed in the module that defines it; use a function that module exports instead"
+                Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan message ]
             | Some info ->
                 let mutable current = recordConstructorReference expr info state
                 let argResults =
@@ -1248,8 +1256,10 @@ and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression)
     | _ ->
         inferExpr env state expr
         |> Result.map (fun (typed, next) ->
+            // An error earlier in the module is set aside (see `Unifier.agreeing`).
+            let agreeing = Unifier.agreeing next.Constraints
             let isOpen (input: Ty) =
-                match Unifier.unify next.Constraints with
+                match Unifier.unify agreeing with
                 | Ok subst ->
                     match Unifier.unalias (Unifier.apply subst input) with
                     | TyVar _
@@ -1258,7 +1268,7 @@ and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression)
                 | Error _ -> false
             match annotation.AttachedInput, Unifier.unalias typed.Type with
             | Some attached, TyFunc(input, _, _) when
-                isOpen input && Unifier.unify ((input, attached, Equal, expr.Span) :: next.Constraints) |> Result.isOk
+                isOpen input && Unifier.unify ((input, attached, Equal, expr.Span) :: agreeing) |> Result.isOk
                 ->
                 typed, addConstraintAt expr.Span input attached next
             | _ -> typed, next)

@@ -483,7 +483,7 @@ let internal inferredAmbientContexts (env: TypeEnv) (state: InferState) (name: I
 /// of an unannotated top-level def, or of a script's value, is kept to check once its contexts are known. Where the use
 /// is the call `call`, what provides the context of a member it calls is recorded, as is, once known, what provides
 /// each context of the def.
-let internal checkContextUse (call: NodeId option) (env: TypeEnv) (state: InferState) (name: Identifier) (span: SourceSpan) : Result<InferState, Diagnostic list> =
+let private checkMemberContextUse (call: NodeId option) (env: TypeEnv) (state: InferState) (name: Identifier) (span: SourceSpan) : Result<InferState, Diagnostic list> =
     if isAmbientMember env state name then
         let _, ctxName = state.AmbientMembers.[name]
         needAmbientContext state ctxName $"'{name}' is a member of" span
@@ -500,6 +500,29 @@ let internal checkContextUse (call: NodeId option) (env: TypeEnv) (state: InferS
                   Call = call; Providers = if call.IsSome then ambientProviders env state else Map.empty }
             Ok { state with DeferredContextUses = deferred :: state.DeferredContextUses }
         | _ -> Ok (recordMemberCall call env name state)
+
+/// The private context whose member `name`, as `env` binds it, is, by the name `state` knows the context by, where code
+/// at `span` is outside the context's home module: only that module can call a private context's members (#1449).
+let internal privateContextOutsideHome (env: TypeEnv) (state: InferState) (name: Identifier) (span: SourceSpan) : Identifier option =
+    match TypeEnv.tryFind name env |> Option.bind _.Symbol with
+    | Some symbol ->
+        state.TypeDefs
+        |> Map.tryPick (fun ctxName info ->
+            if info.IsContext && info.IsPrivate && info.Members |> Map.exists (fun _ id -> id = symbol) then Some (ctxName, info)
+            else None)
+        |> Option.filter (fun (_, info) -> not (Visibility.inNominalHome state (TypeDefInfo.nominalId info) span))
+        |> Option.map fst
+    | None -> None
+
+/// Checks the context use of naming `name` at `span` (see `checkMemberContextUse`), and that `name` is not a member of
+/// a private context named outside its home module.
+let internal checkContextUse (call: NodeId option) (env: TypeEnv) (state: InferState) (name: Identifier) (span: SourceSpan) : Result<InferState, Diagnostic list> =
+    match privateContextOutsideHome env state name span with
+    | Some ctxName ->
+        let message =
+            $"'{name}' is a member of the private context '{ctxName}', which only its own module can call: call a function that module exports instead"
+        Error [ Diagnostics.at DiagnosticCodes.PrivateContextMember span message ]
+    | None -> checkMemberContextUse call env state name span
 
 /// Checks that `contexts`, which `name` requires, are available at `span`. A context with a member not in scope at all
 /// is an error only when `reportMissing`. Where they are required by the call `call`, what provides each that is not
@@ -557,7 +580,30 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
             match members |> List.filter (fun memberName -> TypeEnv.tryFind memberName env |> Option.isNone) with
             | [] -> None
             | absent -> Some (ctx, absent))
-    if missing.IsEmpty || not reportMissing then
+    // A protected or private context matches only itself: each of its members in scope must be its own, not another
+    // context's of the same name (#1443). A plain one matches any context with its members.
+    let forged =
+        contexts
+        |> List.choose (fun ctx ->
+            match ctx.Kind with
+            | TypeName ctxName ->
+                match state.TypeDefs |> Map.tryFind ctxName with
+                | Some info when info.IsContext && info.IsNominal ->
+                    let members, _ = collectContextMembers state ctx
+                    let isOther (memberName, _, symbol: SymbolId option) =
+                        match TypeEnv.tryFind (inScopeAs ctx memberName) env with
+                        | Some scheme -> symbol.IsSome && scheme.Symbol <> symbol
+                        | None -> false
+                    if members |> List.exists isOther then Some (ctxName, info) else None
+                | _ -> None
+            | _ -> None)
+    if reportMissing && not forged.IsEmpty then
+        let ctxName, info = forged.Head
+        let kind = if info.IsPrivate then "private" else "protected"
+        let message =
+            $"'{name}' requires the context '{ctxName}', which is not available here: '{ctxName}' is {kind}, so only an instance its own module makes serves for it, not another context with the same members"
+        Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
+    elif missing.IsEmpty || not reportMissing then
         // Every member is in scope, but one the ambient instance supplies is only available where its context is.
         requiredMembers
         |> List.fold (fun result (ctx, members) ->

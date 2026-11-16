@@ -17,7 +17,37 @@ context Console = (
 )
 ```
 
-Contexts are structural by default: any record whose members match the declared shape can be loaded as an instance. Declaring it `protected` after its `=`, as the prelude declares `Memory`, makes the context nominal, so that only its home module can create instances; see [Nominal types](./nominal-and-protected-types).
+Contexts are structural by default: any record whose members match the declared shape can be loaded as an instance, and a context serves for any other whose members it has. Declaring it `protected` after its `=`, as the prelude declares `Memory`, makes the context nominal, so that only its home module can create instances; see [Nominal types](./nominal-and-protected-types). A `protected` or `private` context is then supplied only by an instance of itself: a `use` of another context with the same members doesn't serve for it (NYX0205), or any module could forge one. It may still serve for a plain context whose members it has.
+
+```nanyx
+context Tx = protected (commit: () -> ())
+context Plain = (commit: () -> ())
+
+def needsPlain: [Plain] () -> () = { commit() }
+def viaTx: [Tx] () -> () = { needsPlain() }   -- a Tx serves for a Plain
+
+def main = {
+  use Tx(commit = { println("committed") })
+  viaTx()
+}
+```
+
+On a context, `protected` and `private` are about access. Any module can require either in a context list and call the functions that require it, but only the home module can construct an instance in a `use` (NYX0212). Any module can call a protected context's members. Only the home module can call a private context's members (NYX0244), so a private context is a capability: other code can require `[Tx]` and pass it on to the module's functions, but only the module uses what the instance holds.
+
+```nanyx
+module db =
+  export context Tx = private (commit: () -> ())
+  export def query: [Tx] string -> () = { sql -> commit() }
+
+import db
+
+def report: [Tx] () -> () = {
+  query("select 1")   -- fine: query is db's
+  -- commit()         -- NYX0244: only db can call commit
+}
+```
+
+This differs from leaving out `export`, which stops other modules naming the context at all.
 
 The full form of a context definition is `scoped export context Name(params) = protected ...`, where `scoped`, `export` and the parameters are each optional and the modifiers come in that order. A `scoped` context belongs to the scope that supplies it, as the prelude's `Memory` belongs to a `memory` block, and nothing that requires it may leave that scope:
 
@@ -25,7 +55,7 @@ The full form of a context definition is `scoped export context Name(params) = p
 scoped export context Memory = protected ()
 ```
 
-A scoped context must be either `protected` or `private`, so that each of its instances comes from the function its module provides to supply it: `scoped context Tx = (...)` is an error. Any module may declare one. The compiler doesn't yet check that nothing requiring a scoped context leaves its scope ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057)).
+A scoped context must be either `protected` or `private`, so that each of its instances comes from the function its module provides to supply it: `scoped context Tx = (...)` is an error. Any module may declare one. What requires a scoped context leaving its scope is NYX0233.
 
 # Requiring a context
 

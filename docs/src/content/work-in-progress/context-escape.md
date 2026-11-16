@@ -398,9 +398,10 @@ The design draws the line there, and makes every helper a function that takes th
   `collections.md` (`use (yield = ...)` and ``use (`=>` = ...)``) and the examples in
   [Context-qualified types](./context-qualified-types) change with it. The Contexts page's "contexts are structural by
   default", and its `use addInt` loading a record as each context it has the shape of, go.
-- A protected or private context matches only itself ([#1443](https://github.com/nanyx-lang/nanyx/issues/1443)), and
-  a private one's members can be called only in its home module
-  ([#1449](https://github.com/nanyx-lang/nanyx/issues/1449)).
+- ~~A protected or private context matches only itself ([#1443](https://github.com/nanyx-lang/nanyx/issues/1443)),
+  and a private one's members can be called only in its home module
+  ([#1449](https://github.com/nanyx-lang/nanyx/issues/1449)).~~ Done, see
+  [Protected and private contexts](#protected-and-private-contexts).
 
 ## Decided along the way
 
@@ -412,19 +413,30 @@ The design draws the line there, and makes every helper a function that takes th
     given `def f = { + }`, a `g: [Num(a)]` can call `f`. No relation needs declaring.
   - **A `protected` or `private` context matches only itself.** Otherwise any context with the same members could be
     loaded in its place, and the guarantee those words give (only the home module makes an instance) would be
-    forgeable: `use Fake(commit = ...)` would satisfy a function that requires a protected `Tx`. Today it does
-    ([#1443](https://github.com/nanyx-lang/nanyx/issues/1443)).
+    forgeable: `use Fake(commit = ...)` would satisfy a function that requires a protected `Tx`. Done in
+    [#1443](https://github.com/nanyx-lang/nanyx/issues/1443): `Contexts.ensureContextAvailable` requires each member in
+    scope of a protected or private context without parameters to have the context's own symbol, else NYX0205.
+    A context without members is still satisfied by nothing at all
+    ([#1479](https://github.com/nanyx-lang/nanyx/issues/1479)).
   - **A protected context may serve for a plain one** whose members it has, as a protected type may be used as its
     representation: that hands out nothing the plain context didn't already allow.
   - Declaring the relation (`Num` includes `Add`) and having no relation at all were considered. Declaring it would
     need every relation written out, including for users' own contexts, and having none would make `mean` require
     `Add` and `Div` separately.
-- **What `protected` and `private` mean on a context.** Decided: they're about access only, not identity. Other
-  modules can name a `protected` context in a context list and call its members, but only its home module can write
-  its constructor in a `use`. A `private` one can also be named anywhere, but only its home module can call its members
-  as well, so it's a capability token: `[Tx]` can be required everywhere, but only `Tx`'s module uses what it holds.
-  That differs from leaving out `export`, which would stop other modules naming it at all. Decided already: a scoped
-  context must be one or the other (NYX0232), since a scope starts where its supplier makes the instance.
+
+## Protected and private contexts
+
+Done in [#1449](https://github.com/nanyx-lang/nanyx/issues/1449). On a context, `protected` and `private` are about
+access. Any module can name either in a context list and call what requires it, but only the home module can write its
+constructor in a `use`: NYX0212, the check every nominal type's constructor has, which says "context" for one. Other
+modules can call a `protected` context's members. Only the home module can call a `private` one's, or read them as
+values (NYX0244, `Contexts.privateContextOutsideHome`, checked by `Contexts.checkContextUse` wherever a name is read),
+so it's a capability token: `[Tx]` can be required everywhere, but only `Tx`'s module uses what it holds. That differs
+from leaving out `export`, which stops other modules naming it at all. A scoped context must be one or the other
+(NYX0232), since a scope starts where its supplier makes the instance.
+
+Hover hides a private context's members outside its file, as it hides a private type's shape. Within one file, a
+`module name =` block's private type or context still shows its shape everywhere in the file.
 
 # Open questions
 

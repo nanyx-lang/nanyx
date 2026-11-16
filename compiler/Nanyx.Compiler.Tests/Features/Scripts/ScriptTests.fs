@@ -8,12 +8,6 @@ open Nanyx.Compiler.Tests.TestSupport
 
 let private repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", ".."))
 
-/// Where a script with no package around it is compiled from: a new directory under the temporary directory.
-let private scriptPath () =
-    let directory = Path.Combine(Path.GetTempPath(), "nanyx-script-" + Guid.NewGuid().ToString("N"))
-    Directory.CreateDirectory directory |> ignore
-    Path.Combine(directory, "script.nyx")
-
 let private unusedBinding = withFinalNewline """import nanyx/console
 
 export def main: [Console] () -> () = {
@@ -21,7 +15,9 @@ export def main: [Console] () -> () = {
   println("hi")
 }"""
 
-let private compile (source: string) = Script.compileSource (scriptPath ()) source
+/// `source` compiled as a script with no package around it, in a new directory under the temporary directory.
+let private compile (source: string) =
+    withTempDir (fun directory -> Script.compileSource (Path.Combine(directory, "script.nyx")) source)
 
 let private codesOf (result: CompileResult) = result.Diagnostics |> List.map _.Code
 
@@ -105,21 +101,18 @@ let ``A directive after the first line of code is a syntax error saying where di
 
 [<Fact>]
 let ``A directive in a file of a package is an error saying to use the manifest`` () =
-    let root = Path.GetDirectoryName(scriptPath ())
-    let manifest = Path.Combine(root, "demo.nyxp")
-    File.WriteAllText(manifest, """(package = (name = "demo", version = "0.1.0"))""")
-    let main = Path.Combine(root, "main.nyx")
-    File.WriteAllText(main, "::linters.default.unusedBindings = \"error\"\nmodule main\n\n" + unusedBinding)
-    try
+    withTempDir (fun root ->
+        let manifest = Path.Combine(root, "demo.nyxp")
+        File.WriteAllText(manifest, """(package = (name = "demo", version = "0.1.0"))""")
+        let main = Path.Combine(root, "main.nyx")
+        File.WriteAllText(main, "::linters.default.unusedBindings = \"error\"\nmodule main\n\n" + unusedBinding)
         let directives = Script.read main (File.ReadAllText main)
         Assert.Equal(None, directives.Linters)
         let diagnostic = Assert.Single(directives.Diagnostics)
         Assert.Equal(DiagnosticCodes.DirectiveInPackage.Code, diagnostic.Code)
         Assert.Contains(manifest, diagnostic.Message)
         let build = Package.build (match Package.find root with Result.Ok package -> package | Result.Error e -> failwith (String.concat "\n" e))
-        Assert.Equal<string list>([ DiagnosticCodes.DirectiveInPackage.Code ], build.Diagnostics |> List.map _.Code)
-    finally
-        Directory.Delete(root, true)
+        Assert.Equal<string list>([ DiagnosticCodes.DirectiveInPackage.Code ], build.Diagnostics |> List.map _.Code))
 
 [<Fact>]
 let ``The example script runs cleanly`` () =
