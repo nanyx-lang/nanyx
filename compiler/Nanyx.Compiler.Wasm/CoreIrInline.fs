@@ -40,7 +40,7 @@ let private references (e: Expr) : string list =
 /// lambda parameter under a `use` does.
 let private isHandler (f: Function) =
     match snd (Chain.split f.Body) with
-    | { Kind = CallClosure(closure, _) } -> f.Params |> List.exists (fun p -> p.Id = closure.Id)
+    | { Kind = CallClosure(closure, _, _) } -> f.Params |> List.exists (fun p -> p.Id = closure.Id)
     | _ -> false
 
 /// The functions in a cycle of calls (one that calls itself among them), by name: those never inlined.

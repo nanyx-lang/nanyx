@@ -786,9 +786,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                         // A context member's result with values boxed is converted to the type the call has it at.
                         match closure.Type with
                         | IrFunction(_, output, _) when CoreIrLowerBoxes.needsConversion output ty ->
-                            bindTemp (Expr.make (CallClosure(closure, atoms @ memberAtoms)) output) (fun result ->
+                            bindTemp (Expr.make (CallClosure(closure, atoms @ memberAtoms, Borrowing)) output) (fun result ->
                                 CoreIrLowerMembers.coerce this.MemberTools scope result ty (fun atom -> k (Expr.make (Atom atom) ty)))
-                        | _ -> k (Expr.make (CallClosure(closure, atoms @ memberAtoms)) ty)))
+                        | _ -> k (Expr.make (CallClosure(closure, atoms @ memberAtoms, Borrowing)) ty)))
         let elements =
             match closure.Type with
             | IrFunction(input, _, _) -> IrType.tupleElements input

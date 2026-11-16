@@ -247,7 +247,7 @@ shape. A body is an expression with a type on every node:
 | `makeList(atoms)` | builds a list |
 | `callRuntime(helper, atoms)` | calls a runtime helper: an intrinsic, or what `++` and `==` on strings, lists and tags need |
 | `makeClosure(f, atoms)` | allocates a closure block: the lifted function's table slot, then what it captures (one or more) |
-| `callClosure(closure, atoms)` | calls through a function value, passing the closure block as the environment |
+| `callClosure(closure, atoms)` | calls through a function value, passing the closure block as the environment, to its borrowing or its owning entry (see Closures have two entries) |
 | `boxFloat(value)` | boxes a float constant (floats are boxed, and `prim` on floats unboxes its operands) |
 | `forEach(loop)` | a `for` loop over lists and ranges in step, its body run for each step until one of them ends |
 | `crash(messages)` | an error deferred to run time: writes the messages to stderr and ends the program |
@@ -381,9 +381,23 @@ nodes to the IR: `dup x1, ...; e`, `drop x1, ...; e`, and `e then drop x1, ...` 
 - **Matching.** An arm takes a reference to each name its patterns bind that it uses, then drops the scrutinee if
   it does not use it either. Reading a field takes a reference to the value read.
 - **Ownership.** A function called through a closure (a lifted lambda, or the wrapper of a function passed as a
-  value) owns all its parameters, the environment among them: a call through a closure passes it on owned, or a
-  new reference to it if it is used again. Another function borrows a parameter on the heap it never takes over,
-  and owns it otherwise; this is worked out over the whole module at once, until nothing changes.
+  value) borrows its environment and owns its other parameters: a call through a closure passes them on owned, or a
+  new reference to one if it is used again, and keeps its own reference to the closure. Another function borrows a
+  parameter on the heap it never takes over, and owns it otherwise; this is worked out over the whole module at
+  once, until nothing changes. Calling a closure only borrows it, so a function that is given one and only calls it
+  borrows that parameter too.
+- **Closures have two entries** ([#1298](https://github.com/nanyx-lang/nanyx/issues/1298), `CoreIrClosureEntries.fs`).
+  Each function a closure is over is in the closure's table slot, borrowing its environment, and a copy of it that
+  owns its environment, its owning entry (`__lambda_9__owning`), is in the slot after it. A tail call of a closure
+  that dies there calls the owning entry (`CallClosure` with `Owning`, which reads the slot and adds 1), since the
+  caller could not drop the closure after the call; so does a call by name in tail position that passes such a
+  closure as the environment, as the simplifier makes of a call of a closure it knows. Every other call of a closure
+  calls the borrowing entry, and a closure that dies there is dropped after the call. A function whose closures
+  capture nothing has no copy: they are static data, which a drop leaves alone, so it is its own owning entry. Once
+  the module is counted, an
+  owning entry nothing can call is left out: one no call names, and of a type no call through a closure that calls
+  the owning entry has. A closure called in a loop, as `list.fold` calls the function it is given, is then counted
+  neither up nor down at each call.
 - **Runtime helpers borrow.** Every helper, the ones that write to stdout and stderr among them, borrows its
   operands and returns a value of its own, except `list.cons` (which takes both over) and `++` on lists (which
   takes the second over, and copies the first's cells with a reference to each element). Strings handed to the
@@ -468,11 +482,6 @@ On the examples that compile (blocks allocated, and the heap's peak in bytes):
 
 Decided by the maintainer; not built yet.
 
-- **A closure's environment is borrowed** ([#1298](https://github.com/nanyx-lang/nanyx/issues/1298)). Today a
-  function called through a closure owns all its parameters, the environment among them, so a closure called in a
-  loop is counted up and down at every call. Each lifted function gets a second, borrowing entry, used wherever the
-  caller holds the closure past the call; the owning entry stays for a tail call of a closure that dies there, so the
-  tail-call guarantee above holds. Dead-code removal drops the entry nothing calls.
 - **A function that only reads what it matches borrows it** ([#1468](https://github.com/nanyx-lang/nanyx/issues/1468)),
   inferred as Lean 4 does. A matched parameter is borrowed when no arm can reuse its cell (none allocates a block of
   that size) and nothing bound from it is taken over except by a call that borrows it in turn, the function's own

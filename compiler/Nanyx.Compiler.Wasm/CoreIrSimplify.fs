@@ -461,7 +461,7 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
         match e.Kind with
         | Let _
         | Do _ -> this.Sequence facts e
-        | CallClosure(closure, args) ->
+        | CallClosure(closure, args, _) ->
             match facts.TryFind closure.Id with
             | Some(Closure(name, _)) ->
                 match functions.TryGetValue name with
