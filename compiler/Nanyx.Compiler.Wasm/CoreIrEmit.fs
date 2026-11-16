@@ -36,7 +36,10 @@ type EmitContext =
       /// call's, or the other way round.
       Signature: string -> (IrType list * IrType) option
       /// Where the block the module sets aside for its host is (see `WasmRuntime.hostStateSize`).
-      HostState: int }
+      HostState: int
+      /// Whether the module is compiled with memory checks (see `WasmAllocator.MemoryChecks`), which count the records
+      /// updated in place.
+      CheckMemory: bool }
 
 /// A function as WebAssembly text, the runtime helpers (see `WasmRuntime.Helpers`) it calls, and whether its own code
 /// reads or writes linear memory.
@@ -740,7 +743,10 @@ type private FunctionEmitter(context: EmitContext) =
             |> List.filter (fun (slot, (_, fieldTy)) -> CoreIrDrop.isHeapType fieldTy && keep slot)
             |> List.map (fun (slot, (_, fieldTy)) ->
                 $"local.get ${held}\n      {load fieldTy (CoreIrLayout.fieldOffset fields slot)}\n      {code fieldTy}")
-        let inPlace = eachField isUpdated dropValue @ [ $"local.get ${held}" ]
+        let inPlace =
+            eachField isUpdated dropValue
+            @ (if context.CheckMemory then [ WasmAllocator.countReuse "" |> String.concat "\n      " ] else [])
+            @ [ $"local.get ${held}" ]
         let copied =
             $"local.get ${held}\n      i32.const {CoreIrLayout.recordSize fields}\n      call ${helper Helpers.recordCopy}"
             :: eachField (isUpdated >> not) (fun fieldTy -> $"call ${CoreIrDrop.dupName fieldTy}\n      drop")

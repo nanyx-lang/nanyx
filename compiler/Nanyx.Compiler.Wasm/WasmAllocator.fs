@@ -32,7 +32,7 @@ let heapStartOffset (heapBase: int) = heapBase + largestSizeClass + 4
 /// The pages of memory a module starts with: enough to hold everything below `heapStart`, and at least one.
 let initialMemoryPages (heapStart: int) = max 1 ((heapStart + 65535) / 65536)
 
-/// What a module compiled with memory checks adds (see `checkedRuntimeHelpers`): two counters, and the functions that
+/// What a module compiled with memory checks adds (see `checkedRuntimeHelpers`): counters, and the functions that
 /// stop the program when a block is freed twice or an object is counted after it was freed. They write what went
 /// wrong to stderr and exit through WASI `proc_exit` rather than trap, so that a host sees an exit code, not a
 /// hardware exception.
@@ -41,6 +41,18 @@ module MemoryChecks =
     let liveBlocks = "live_blocks"
     /// The global counting every call to `alloc`.
     let allocations = "allocations"
+    /// The `i64` global adding up the size of every block `alloc` handed out (the size in the word before it, not the
+    /// word itself).
+    let bytesAllocated = "bytes_allocated"
+    /// The global adding up the size of the blocks `alloc` handed out that `free` has not taken back.
+    let liveBytes = "live_bytes"
+    /// The most `liveBytes` has been.
+    let peakLiveBytes = "peak_live_bytes"
+    /// The highest `$heap_ptr` has been: the most memory the heap has reached, as an address.
+    let peakHeap = "peak_heap"
+    /// The global counting the objects built in the block of an object given up with a count of one, rather than in a
+    /// new one: a reuse token's (see `CoreIrReuse`), or a record updated in place.
+    let reusedInPlace = "reused_in_place"
     let failDoubleFree = "__nanyx_fail_double_free"
     let failUseAfterFree = "__nanyx_fail_use_after_free"
     let checkLive = "__nanyx_check_live"
@@ -77,9 +89,45 @@ let private freeListHead (heapBase: int) =
 let private bump (name: string) (delta: int) =
     [ $"  global.get ${name}"; $"  i32.const {delta}"; "  i32.add"; $"  global.set ${name}" ]
 
-/// `alloc`, with the free-list heads at `heapBase`. With `checks`, it counts the call and the block it hands out, and
-/// clears the freed mark of a block it takes from a free list.
+/// Adds one to `MemoryChecks.reusedInPlace`, indented by `indent`: what a module compiled with memory checks does where
+/// it builds an object in the block of one it gave up.
+let countReuse (indent: string) =
+    bump MemoryChecks.reusedInPlace 1 |> List.map (fun line -> indent + line.TrimStart())
+
+// Sets the global `peak` to the global `value` when that is higher.
+let private raisePeak (peak: string) (value: string) =
+    [ $"  global.get ${value}"
+      $"  global.get ${peak}"
+      "  i32.gt_u"
+      "  if"
+      $"    global.get ${value}"
+      $"    global.set ${peak}"
+      "  end" ]
+
+// Counts the bytes of the block at `$ptr`, which `alloc` is about to hand out, indented by `indent`.
+let private countBlockBytes (indent: string) =
+    [ "  local.get $ptr"
+      "  i32.const 4"
+      "  i32.sub"
+      "  i32.load"
+      "  local.set $bytes"
+      $"  global.get ${MemoryChecks.bytesAllocated}"
+      "  local.get $bytes"
+      "  i64.extend_i32_u"
+      "  i64.add"
+      $"  global.set ${MemoryChecks.bytesAllocated}"
+      $"  global.get ${MemoryChecks.liveBytes}"
+      "  local.get $bytes"
+      "  i32.add"
+      $"  global.set ${MemoryChecks.liveBytes}"
+      yield! raisePeak MemoryChecks.peakLiveBytes MemoryChecks.liveBytes ]
+    |> List.map (fun line -> indent + line)
+
+/// `alloc`, with the free-list heads at `heapBase`. With `checks`, it counts the call, the block it hands out and its
+/// bytes, and the highest the heap reaches, and clears the freed mark of a block it takes from a free list.
 let allocHelper (checks: bool) (heapBase: int) =
+    // Counts the block at `$ptr` where `alloc` hands it out, indented by `indent`.
+    let handOut (indent: string) = if checks then countBlockBytes indent else []
     lines
         [ yield $"(func ${Names.alloc} (param $size i32) (result i32)"
           yield "  (local $link i32)"
@@ -87,6 +135,7 @@ let allocHelper (checks: bool) (heapBase: int) =
           yield "  (local $found i32)"
           yield "  (local $rest i32)"
           if checks then
+              yield "  (local $bytes i32)"
               yield! bump MemoryChecks.allocations 1
               yield! bump MemoryChecks.liveBlocks 1
           yield "  local.get $size"
@@ -120,6 +169,7 @@ let allocHelper (checks: bool) (heapBase: int) =
           yield "      i32.sub"
           yield "      local.get $size"
           yield "      i32.store"
+          yield! handOut "    "
           yield "      local.get $ptr"
           yield "      return"
           yield "    end"
@@ -187,6 +237,7 @@ let allocHelper (checks: bool) (heapBase: int) =
           yield "          i32.sub"
           yield "          local.get $found"
           yield "          i32.store"
+          yield! handOut "        "
           yield "          local.get $ptr"
           yield "          return"
           yield "        end"
@@ -211,6 +262,8 @@ let allocHelper (checks: bool) (heapBase: int) =
           yield "  end"
           yield "  local.get $rest"
           yield "  global.set $heap_ptr"
+          if checks then
+              yield! raisePeak MemoryChecks.peakHeap "heap_ptr"
           // The pages the heap needs now, worked out in 64 bits so that 4 GB of them does not wrap to 0.
           yield "  global.get $heap_ptr"
           yield "  i64.extend_i32_u"
@@ -238,6 +291,7 @@ let allocHelper (checks: bool) (heapBase: int) =
           yield "  i32.sub"
           yield "  local.get $size"
           yield "  i32.store"
+          yield! handOut ""
           yield "  local.get $ptr"
           yield ")" ]
 
@@ -293,6 +347,10 @@ let freeHelper (checks: bool) (heapBase: int) =
               yield "  i32.or"
               yield "  i32.store"
               yield! bump MemoryChecks.liveBlocks -1
+              yield $"  global.get ${MemoryChecks.liveBytes}"
+              yield "  local.get $size"
+              yield "  i32.sub"
+              yield $"  global.set ${MemoryChecks.liveBytes}"
           yield! freeListHead heapBase
           yield "  local.set $head"
           yield "  local.get $size"
@@ -485,6 +543,11 @@ let memoryCheckFunctions (heapBase: int) (messageOffset: string -> int) =
               ")" ]
     [ $"  (global ${MemoryChecks.liveBlocks} (mut i32) (i32.const 0))"
       $"  (global ${MemoryChecks.allocations} (mut i32) (i32.const 0))"
+      $"  (global ${MemoryChecks.bytesAllocated} (mut i64) (i64.const 0))"
+      $"  (global ${MemoryChecks.liveBytes} (mut i32) (i32.const 0))"
+      $"  (global ${MemoryChecks.peakLiveBytes} (mut i32) (i32.const 0))"
+      $"  (global ${MemoryChecks.peakHeap} (mut i32) (i32.const {heapStartOffset heapBase}))"
+      $"  (global ${MemoryChecks.reusedInPlace} (mut i32) (i32.const 0))"
       fail MemoryChecks.failDoubleFree MemoryChecks.doubleFreeMessage
       fail MemoryChecks.failUseAfterFree MemoryChecks.useAfterFreeMessage
       lines

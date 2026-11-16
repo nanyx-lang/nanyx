@@ -103,6 +103,7 @@
     <Compile Include="Features\Memory\ReferenceCountingTests.fs" />
     <Compile Include="Features\Memory\ExampleMemoryTests.fs" />
     <Compile Include="Features\Memory\MemoryCheckTests.fs" />
+    <Compile Include="Features\Memory\MemoryReportTests.fs" />
     <Compile Include="Features\Memory\ReuseTests.fs" />
     <Compile Include="Features\Memory\RecordUpdateTests.fs" />
     <Compile Include="Features\Memory\MemoryDeclarationTests.fs" />

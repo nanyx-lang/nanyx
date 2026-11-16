@@ -219,10 +219,11 @@ let listConcatFunction (name: string) (copyHead: string list) (storage: Storage)
           yield ")" ]
 
 /// The helpers of `Helpers.storingValues` for values stored as `storage`, keyed by name.
-let private storingHelpers (storage: Storage) =
+let private storingHelpers (checks: bool) (storage: Storage) =
     let bytes = storage.Bytes
     let valueType = storage.ValueType
     let name helper = Helpers.forStorage helper storage
+    let reused = if checks then countReuse "  " else []
     [ // A list with `$head` in front of `$tail`: `head tail -> cell`.
       name Helpers.listCons,
       lines
@@ -251,6 +252,7 @@ let private storingHelpers (storage: Storage) =
             $"    call ${name Helpers.listCons}"
             "    return"
             "  end"
+            yield! reused
             "  local.get $block"
             $"  i32.const {Header.countOnly}"
             "  i32.add"
@@ -290,6 +292,7 @@ let private storingHelpers (storage: Storage) =
             $"    call ${name Helpers.tagBox}"
             "    return"
             "  end"
+            yield! reused
             "  local.get $block"
             $"  i32.const {Header.countOnly}"
             "  i32.add"
@@ -422,6 +425,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             $"    call ${Helpers.newObject}"
             "    return"
             "  end"
+            if checks then yield! countReuse "  "
             "  local.get $block"
             "  local.get $info"
             $"  i32.store offset={Header.infoOffset}"
@@ -430,7 +434,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  i32.add"
             ")" ]
       for storage in Storage.All do
-          yield! storingHelpers storage
+          yield! storingHelpers checks storage
       yield! SizedIntegerCode.helpers
       Helpers.retain, retainHelper checks
       Helpers.copyBytes,

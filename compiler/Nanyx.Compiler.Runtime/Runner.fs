@@ -24,6 +24,10 @@ type ProgramIo =
     /// are `variables`, each a name and its value. Tests use this to run a program in their own process.
     | Redirected of input: string * output: IO.Stream * error: IO.Stream * variables: (string * string) list
 
+/// What a program compiled with memory checks left once it stopped: the values of the exported globals asked for, in
+/// order (0 for one the module does not export), and how big its memory had grown, in bytes (0 with none).
+type HeapCounters = { Globals: int64 array; MemoryBytes: int64 }
+
 /// Runs WebAssembly text emitted by the Nanyx backend on an embedded Wasmtime engine.
 ///
 /// The backend turns top-level expressions into a WebAssembly start function, so instantiating the module
@@ -90,48 +94,94 @@ module WasmRunner =
         | _ -> Trapped ex.Message
 
     /// Instantiates the module described by `wat`, which runs its start function, then calls its export `start` if it
-    /// is given and the module exports it, and gives what `read` makes of the instance afterwards: `None` when the program ended itself,
-    /// through `proc_exit` with exit code 0, so there is no instance or it stopped without freeing what it held.
-    let private execute (io: ProgramIo) (arguments: string list) (wat: string) (start: string option) (read: Instance option -> 'a) : Result<'a, RunError> =
+    /// is given and the module exports it, and gives what `read` makes of the instance afterwards: `None` when the program
+    /// ended itself, through `proc_exit` with exit code 0, so there is no instance or it stopped without freeing what it
+    /// held. Also gives what `inspect` makes of the instance once the program has stopped, however it stopped: `None` only
+    /// when it was never instantiated.
+    let private executeInspecting
+        (io: ProgramIo)
+        (arguments: string list)
+        (wat: string)
+        (start: string option)
+        (read: Instance option -> 'a)
+        (inspect: Instance -> 'b)
+        : Result<'a, RunError> * 'b option =
         use engine = new Engine()
         let moduleResult =
             try Ok (Module.FromText(engine, "nanyx", wat))
             with :? WasmtimeException as ex -> Error (InvalidModule ex.Message)
         match moduleResult with
-        | Error err -> Error err
+        | Error err -> Error err, None
         | Ok module' ->
             use module' = module'
             use linker = new Linker(engine)
             use store = new Store(engine)
             linker.DefineWasi()
             configureIo io arguments linker store
-            try
-                let instance = linker.Instantiate(store, module')
-                // A program with no top-level code has no start function to export.
-                match start |> Option.map instance.GetAction with
-                | Some null
-                | None -> Ok (read (Some instance))
-                | Some action ->
-                    try
-                        action.Invoke()
-                        Ok (read (Some instance))
-                    with :? WasmtimeException as ex when exitedCleanly ex -> Ok (read None)
-            with
-            | :? WasmtimeException as ex when exitedCleanly ex -> Ok (read None)
-            | :? WasmtimeException as ex when ex.ExitCode.HasValue -> Error (Exited ex.ExitCode.Value)
-            | :? WasmtimeException as ex -> Error (trapped ex)
+            let mutable instantiated = None
+            let outcome =
+                try
+                    let instance = linker.Instantiate(store, module')
+                    instantiated <- Some instance
+                    // A program with no top-level code has no start function to export.
+                    match start |> Option.map instance.GetAction with
+                    | Some null
+                    | None -> Ok (read (Some instance))
+                    | Some action ->
+                        try
+                            action.Invoke()
+                            Ok (read (Some instance))
+                        with :? WasmtimeException as ex when exitedCleanly ex -> Ok (read None)
+                with
+                | :? WasmtimeException as ex when exitedCleanly ex -> Ok (read None)
+                | :? WasmtimeException as ex when ex.ExitCode.HasValue -> Error (Exited ex.ExitCode.Value)
+                | :? WasmtimeException as ex -> Error (trapped ex)
+            outcome, instantiated |> Option.map inspect
+
+    let private execute (io: ProgramIo) (arguments: string list) (wat: string) (start: string option) (read: Instance option -> 'a) : Result<'a, RunError> =
+        executeInspecting io arguments wat start read ignore |> fst
+
+    /// The value of the exported global `name` of `instance`, an `i32` or an `i64`: 0 when it does not export it.
+    let private globalValue (instance: Instance) (name: string) : int64 =
+        match instance.GetGlobal name with
+        | null -> 0L
+        | global' ->
+            match global'.GetValue() with
+            | :? int64 as value -> value
+            | value -> int64 (value :?> int)
 
     /// Instantiates (and therefore runs) the module described by `wat`, with its standard streams `io` and its
     /// command-line arguments `arguments`, its name first.
     let run (io: ProgramIo) (arguments: string list) (wat: string) : Result<unit, RunError> = execute io arguments wat None ignore
 
     /// Runs the module described by `wat`, which exports its start function as `start` rather than running it when
+    /// instantiated, and gives the values of its exported `i32` globals `globals` once `start` has returned, as
+    /// `runReading` does, and the `HeapCounters` the program left, with `globals` read from them, however it stopped:
+    /// `None` only when the module was never instantiated.
+    let runCounting
+        (io: ProgramIo)
+        (arguments: string list)
+        (start: string)
+        (globals: string array)
+        (wat: string)
+        : Result<int array, RunError> * HeapCounters option =
+        executeInspecting
+            io
+            arguments
+            wat
+            (Some start)
+            (fun instance ->
+                globals |> Array.map (fun name -> instance |> Option.map (fun instance -> int (globalValue instance name)) |> Option.defaultValue 0))
+            (fun instance ->
+                { Globals = globals |> Array.map (globalValue instance)
+                  MemoryBytes =
+                    match instance.GetMemory "memory" with
+                    | null -> 0L
+                    | memory -> memory.GetSize() * 65536L })
+
+    /// Runs the module described by `wat`, which exports its start function as `start` rather than running it when
     /// instantiated, and gives the values of its exported `i32` globals `globals` once `start` has returned. A global
     /// the module does not export counts as 0: a module that never allocates has no allocation counters. So does every
     /// global of a program that ended itself with exit code 0, which leaves what it allocated as it is.
     let runReading (io: ProgramIo) (arguments: string list) (start: string) (globals: string array) (wat: string) : Result<int array, RunError> =
-        execute io arguments wat (Some start) (fun instance ->
-            globals |> Array.map (fun name ->
-                match instance |> Option.map _.GetGlobal(name) with
-                | Some null | None -> 0
-                | Some global' -> global'.GetValue() :?> int))
+        runCounting io arguments start globals wat |> fst
