@@ -11,9 +11,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``A small function is inlined into its caller`` () =
     let source =
-        normalized """import nanyx/console
-
-def double: int -> int = { n -> n * 2 }
+        normalized """def double: int -> int = { n -> n * 2 }
 
 def sum: int, int -> int = { n, acc -> if n == 0 then acc else sum(n - 1, acc + double(n)) }
 
@@ -28,9 +26,7 @@ println("{sum(3, 0)}")
 [<Fact>]
 let ``A recursive function is not inlined`` () =
     let source =
-        normalized """import nanyx/console
-
-def countdown: int -> int = { n -> if n == 0 then 0 else countdown(n - 1) }
+        normalized """def countdown: int -> int = { n -> if n == 0 then 0 else countdown(n - 1) }
 
 println("{countdown(5)}")
 """
@@ -41,9 +37,7 @@ println("{countdown(5)}")
 let ``A function over the size limit is not inlined`` () =
     let steps = List.init 20 (fun index -> $"  def a{index + 1} = a{index} * 3 + {index}") |> String.concat "\n"
     let template =
-        normalized """import nanyx/console
-
-def long: int -> int = { a0 ->
+        normalized """def long: int -> int = { a0 ->
 STEPS
   a20
 }
@@ -58,9 +52,7 @@ println("{go(2)}")
 [<Fact>]
 let ``A handler and the lambda it is given are inlined`` () =
     let source =
-        normalized """import nanyx/console
-
-def apply: (int -> int), int -> int = { f, x -> f(x) }
+        normalized """def apply: (int -> int), int -> int = { f, x -> f(x) }
 
 def answer: int -> int = { n -> if n == 0 then apply({ m -> m + 1 }, 41) else answer(n - 1) }
 
@@ -76,9 +68,7 @@ println("{answer(2)}")
 [<Fact>]
 let ``A tail call in inlined code stays a tail call`` () =
     let source =
-        normalized """import nanyx/console
-
-def apply: (int -> int), int -> int = { f, x -> f(x) }
+        normalized """def apply: (int -> int), int -> int = { f, x -> f(x) }
 
 def loop: int, int -> int = { n, acc ->
   if n == 0 then acc else apply({ m -> loop(m, acc + 1) }, n - 1)
@@ -101,9 +91,7 @@ def main = {
 [<Fact>]
 let ``A trap in inlined code reports the line it is written on`` () =
     let source =
-        normalized """import nanyx/console
-
-def broken: int -> int = { n -> n + missing }
+        normalized """def broken: int -> int = { n -> n + missing }
 
 def run: int -> int = { n -> if n == 0 then broken(1) else run(n - 1) }
 
@@ -112,14 +100,12 @@ println("{run(2)}")
     Assert.DoesNotContain("call $broken", functionText "run" (transpileWat source))
     let outcome = runSource source
     Assert.NotEqual(0, outcome.ExitCode)
-    Assert.Contains(":3:37: error NYX0101: Unknown identifier 'missing' (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":1:37: error NYX0101: Unknown identifier 'missing' (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``nanyx run --no-inline runs the program without inlining`` () =
     let source =
-        normalized """import nanyx/console
-
-def double: int -> int = { n -> n * 2 }
+        normalized """def double: int -> int = { n -> n * 2 }
 
 println("{double(21)}")
 """

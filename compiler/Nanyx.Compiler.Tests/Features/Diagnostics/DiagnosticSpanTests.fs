@@ -21,7 +21,7 @@ def value = missing"""
 
 [<Fact>]
 let ``A type mismatch in an argument is reported at the argument`` () =
-    let source = "import nanyx/console\n\nwrite(42)"
+    let source = "write(42)"
     let diagnostic = single (Compiler.compile source)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     Assert.Equal("42", textAt source (spanOf diagnostic))

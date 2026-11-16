@@ -83,6 +83,25 @@ type TempPackage(files: (string * string) list) =
     interface IDisposable with
         member _.Dispose() = try Directory.Delete(root, true) with _ -> ()
 
+/// The manifest of an application under the console host that depends on the console's interface package,
+/// `nanyx.console.core`, so that its files can import `nanyx.console.core/console` and `nanyx.console.core/env`.
+let consoleCoreApp =
+    $"""(
+  package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"])
+  dependencies = [(package = "nanyx.console.core", version = "{Toolchain.version}")]
+  {consoleHostEntry}
+)
+"""
+
+/// `source`, a module, compiled with `linters` as the file `src/main.nyx` of an application whose manifest is
+/// `consoleCoreApp`.
+let compileWithConsoleCoreUsing (linters: LinterOptions) (source: string) =
+    use package = new TempPackage([ "app.nyxp", consoleCoreApp; "src/main.nyx", source ])
+    Package.compileSourceWith linters (package.Path "src/main.nyx") source
+
+/// `source`, a module, compiled as the file `src/main.nyx` of an application whose manifest is `consoleCoreApp`.
+let compileWithConsoleCore (source: string) = compileWithConsoleCoreUsing Linters.none source
+
 /// A listener that writes down what it is told, as "file <path>", "start <name>", "end <name>" and "reused <name>".
 type Recording() =
     let events = Collections.Generic.List<string>()

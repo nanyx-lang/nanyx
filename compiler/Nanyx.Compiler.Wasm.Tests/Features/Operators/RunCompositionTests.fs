@@ -7,8 +7,6 @@ open TranspilerWasmTestHelpers
 let ``Run - >> applies the function on its left and then the one on its right, and << the other way round`` () =
     let source =
         """
-import nanyx/console
-
 def inc = { n -> n + 1 }
 def double = { n -> n * 2 }
 def incThenDouble = inc >> double
@@ -26,8 +24,6 @@ let ``Run - an operator read as a call takes another read as one, at the top lev
     // `(2 ** 2) ** 3` at the top level was the call `__pow` with its first operand left as `**`.
     let source =
         """
-import nanyx/console
-
 def inc = { n -> n + 1 }
 def cube = (2 ** 2) ** 3
 def three = (inc >> inc) >> inc
@@ -43,8 +39,6 @@ def main = {
 let ``Run - a composition of functions that print prints when it is called`` () =
     let source =
         """
-import nanyx/console
-
 def shout = { s -> println(s ++ "!") }
 def greet = { name -> "hello " ++ name } >> shout
 @entry
@@ -60,8 +54,6 @@ def main = {
 let ``Run - a spare operator means what a type attaches to it`` () =
     let source =
         """
-import nanyx/console
-
 type Money = (pence: int)
 def Money.`<>`: Money, Money -> Money = { a, b -> Money(pence = a.pence + b.pence) }
 def Money.`^`: Money, int -> Money = { a, times -> Money(pence = a.pence * times) }
@@ -76,8 +68,6 @@ def main = {
 /// Functions that require contexts, and a function that runs one, for the compositions below (#1287).
 let private contextParts =
     """
-import nanyx/console
-
 context Log = (log: string -> ())
 
 def shout: [Console] string -> () = { s -> println(s ++ "!") }
@@ -163,8 +153,6 @@ let ``Run - a composition that does not write its type requires Console, which r
     // `greet` is inferred as `[Console] string -> ()` (#1288), so each call passes it the `Console` in scope there.
     let source =
         """
-import nanyx/console
-
 def shout = { s -> println(s ++ "!") }
 def greet = { name -> "hello " ++ name } >> shout
 

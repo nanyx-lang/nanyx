@@ -18,8 +18,6 @@ let ``A named module's value cannot call a function that requires a context`` ()
         errorsOf """
 module config
 
-import nanyx/console
-
 def greeting = println("Hi")
 
 dbg(0)
@@ -36,8 +34,6 @@ let ``A named module's value cannot call a function whose contexts are inferred`
         errorsOf """
 module config
 
-import nanyx/console
-
 def hello = { () -> println("Hi") }
 def greeting = hello()
 """
@@ -50,8 +46,6 @@ let ``A named module's function may require a context`` () =
     compileClean """
 module config
 
-import nanyx/console
-
 def maxRetries = 3
 def timeout = maxRetries * 10
 def greet = { () -> println("Hi") }
@@ -63,8 +57,6 @@ let ``A lambda in a named module's value may use a context, since building the v
     compileClean """
 module config
 
-import nanyx/console
-
 def handlers = [ { (x: string) -> println(x) } ]
 """
     |> ignore
@@ -75,8 +67,6 @@ let ``A lambda a named module's value passes to a call may be run, so it cannot 
         errorsOf """
 module config
 
-import nanyx/console
-
 def printed = list.map([ "a" ], { x -> println(x) })
 """
     Assert.Equal<(string * string) list>([ undeclared, "println" ], errors |> List.map (fun (code, text, _) -> code, text))
@@ -84,8 +74,6 @@ def printed = list.map([ "a" ], { x -> println(x) })
 [<Fact>]
 let ``A script's value runs where the runtime's Console is`` () =
     compileClean """
-import nanyx/console
-
 def greeting = println("Hi")
 
 dbg(0)

@@ -285,8 +285,7 @@ import "./mod" as h
 
 def value = 1
 """
-    let modSource = withFinalNewline """import nanyx/console
-println("side effect")"""
+    let modSource = withFinalNewline """println("side effect")"""
     Assert.Equal<(string * string) list>([ DiagnosticCodes.EntrypointImported.Code, "\"./mod\" as h" ], importErrors modSource main)
 
 [<Fact>]
@@ -297,7 +296,6 @@ import mod
 def value = 1
 """
     let modSource = withFinalNewline """module mod
-import nanyx/console
 export def helper = 1
 println("side effect")"""
     Assert.Equal<(string * string) list>([ DiagnosticCodes.EntrypointImported.Code, "mod" ], importErrors modSource main)

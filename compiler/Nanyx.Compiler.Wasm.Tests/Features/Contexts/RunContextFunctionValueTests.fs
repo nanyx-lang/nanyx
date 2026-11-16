@@ -7,9 +7,7 @@ open TranspilerWasmTestHelpers
 
 [<Fact>]
 let ``Run - functions that require Console passed as values inside a Console def`` () =
-    let source = """import nanyx/console
-
-def say: [Console] string -> () = { s -> println(s) }
+    let source = """def say: [Console] string -> () = { s -> println(s) }
 
 def apply: [c] ([c] string -> ()), string -> () = { f, s -> f(s) }
 
@@ -25,9 +23,7 @@ main()
 
 [<Fact>]
 let ``Run - a function that requires Console passed as a value at the top level`` () =
-    let source = """import nanyx/console
-
-def say: [Console] string -> () = { s -> println(s) }
+    let source = """def say: [Console] string -> () = { s -> println(s) }
 
 def apply: [c] ([c] string -> ()), string -> () = { f, s -> f(s) }
 
@@ -37,9 +33,7 @@ apply(say, "top")
 
 [<Fact>]
 let ``Run - a def that writes its contexts, defined point-free`` () =
-    let source = """import nanyx/console
-
-def main: [Console] () -> () = {
+    let source = """def main: [Console] () -> () = {
   def h: [Console] string -> () = println
   g(3)
   k(4)
@@ -58,9 +52,7 @@ main()
 
 [<Fact>]
 let ``Run - println passed as a value at int finds ToString of int`` () =
-    let source = """import nanyx/console
-
-def apply: [c] ([c] a -> ()), a -> () = { f, x -> f(x) }
+    let source = """def apply: [c] ([c] a -> ()), a -> () = { f, x -> f(x) }
 
 apply(println, 7)
 apply(println, "seven")
@@ -69,9 +61,7 @@ apply(println, "seven")
 
 [<Fact>]
 let ``Run - println passed as a value at a type variable gets the ToString its def requires`` () =
-    let source = """import nanyx/console
-
-def apply: [c] ([c] a -> ()), a -> () = { f, x -> f(x) }
+    let source = """def apply: [c] ([c] a -> ()), a -> () = { f, x -> f(x) }
 
 def show: [ToString(a) & Console] a -> () = { x -> apply(println, x) }
 
@@ -81,17 +71,13 @@ show(5)
 
 [<Fact>]
 let ``Run - println mapped over a list at the top level`` () =
-    let source = """import nanyx/console
-
-[1, 2] \list.map(println)
+    let source = """[1, 2] \list.map(println)
 """
     runSource source |> assertRan "1\n2\n"
 
 [<Fact>]
 let ``Run - println passed to a function that maps an option`` () =
-    let source = """import nanyx/console
-
-def mapOpt: [c] #some(a) | #none, ([c] a -> b) -> #some(b) | #none = { o, f ->
+    let source = """def mapOpt: [c] #some(a) | #none, ([c] a -> b) -> #some(b) | #none = { o, f ->
   match o
     | #some(x) -> #some(f(x))
     | #none -> #none
@@ -103,9 +89,7 @@ def mapOpt: [c] #some(a) | #none, ([c] a -> b) -> #some(b) | #none = { o, f ->
 
 [<Fact>]
 let ``Run - a function passed as a value captures the members of the use where it is named`` () =
-    let source = """import nanyx/console
-
-def say: [Console] string -> () = { s -> write(s) }
+    let source = """def say: [Console] string -> () = { s -> write(s) }
 
 def apply: [c] ([c] string -> ()), string -> () = { f, s -> f(s) }
 
@@ -121,9 +105,7 @@ apply(say, "loud")
 
 [<Fact>]
 let ``Run - a function that requires a context of the module's own passed as a value`` () =
-    let source = """import nanyx/console
-
-context Greeter = (greet: [Console] string -> ())
+    let source = """context Greeter = (greet: [Console] string -> ())
 
 def hello: [Greeter & Console] string -> () = { name -> greet(name) }
 
@@ -141,8 +123,6 @@ def main = {
 let ``Run - a lambda calls the instance a use inside it loads, and the one in scope where it is called before that`` () =
     let source =
         """
-import nanyx/console
-
 context Log = (log: string -> ())
 
 def greet: [Log] string -> () = { name -> log("hello {name}") }
@@ -176,7 +156,6 @@ let ``Run - a function that requires Ord, named through a module alias, passed t
     // scope and found none (#1136).
     let source =
         """
-import nanyx/console
 import nanyx/math as math
 
 def largest: list(int) -> int = { xs -> xs \fold(0, math.max) }
@@ -193,7 +172,6 @@ println([3, -9, 4] \list.map(math.abs) \fold(0) { a, b -> a + b })
 let ``Run - a function that requires Ord, imported unqualified, passed to fold`` () =
     let source =
         """
-import nanyx/console
 import nanyx/math
 
 def largest: list(int) -> int = { xs -> xs \fold(0, max) }
@@ -206,9 +184,7 @@ println(largest([3, 9, 4]))
 let ``Run - a context-generic function taken as a value passes a continuation that requires no contexts to a body that requires some`` () =
     // The adapter for `each` taken at no contexts gave the body its `next` unadapted, and the body called it with
     // Console's members: an indirect call type mismatch.
-    let source = """import nanyx/console
-
-def each: [c] list(int), ([c] int, ([c] () -> int) -> int), ([c] () -> int) -> int = {
+    let source = """def each: [c] list(int), ([c] int, ([c] () -> int) -> int), ([c] () -> int) -> int = {
   | [], _, rest -> rest()
   | [item, ...others], body, rest -> body(item, { each(others, body, rest) })
 }
@@ -252,9 +228,7 @@ def main = {
 
 [<Fact>]
 let ``Run - a local def whose value is a function that requires a parameterised context, called (#807)`` () =
-    let source = """import nanyx/console
-
-def main: [Console] () -> () = {
+    let source = """def main: [Console] () -> () = {
   def f = println
   f(3)
 }
@@ -281,7 +255,7 @@ def main = {
 
 [<Fact>]
 let ``Run - a top-level def whose value names such a function point-free (#1389)`` () =
-    let source = "import nanyx/console\n" + twice + """type Point = (x: int, y: int)
+    let source = "" + twice + """type Point = (x: int, y: int)
 def Point.show: Point -> string = { p -> "({p.x}, {p.y})" }
 def q = println
 def d = describe

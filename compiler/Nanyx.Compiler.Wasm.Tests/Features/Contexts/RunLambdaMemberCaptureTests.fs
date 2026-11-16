@@ -15,9 +15,7 @@ let private lambdaText (wat: string) =
 
 [<Fact>]
 let ``A lambda in a function that requires a context captures none of its members when it names none`` () =
-    let source = """import nanyx/console
-
-context Greet = (greet: string -> string)
+    let source = """context Greet = (greet: string -> string)
 
 def shout: [Greet] list(string) -> list(string) = { names ->
   names \list.map({ s -> s ++ "!" }) \list.map(greet)
@@ -36,9 +34,7 @@ def main = {
 
 [<Fact>]
 let ``A lambda in a function that requires a context captures the member it names`` () =
-    let source = """import nanyx/console
-
-context Greet = (greet: string -> string)
+    let source = """context Greet = (greet: string -> string)
 
 def shout: [Greet] list(string) -> list(string) = { names ->
   names \list.map({ s -> greet(s) ++ "!" })
@@ -57,9 +53,7 @@ def main = {
 
 [<Fact>]
 let ``A lambda after a use captures none of its members when it names none`` () =
-    let source = """import nanyx/console
-
-context Greet = (greet: string -> string)
+    let source = """context Greet = (greet: string -> string)
 
 def hello = { s -> "hi " ++ s }
 

@@ -8,9 +8,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - list.init applies f to each position in order`` () =
     let source =
-        """import nanyx/console
-
-@entry
+        """@entry
 def main = {
   println(list.init(3, { i -> i * 2 }))
   println(list.init(0, { i -> i }))
@@ -23,9 +21,7 @@ def main = {
 [<Fact>]
 let ``Run - list.init calls f on the positions in order`` () =
     let source =
-        """import nanyx/console
-
-@entry
+        """@entry
 def main = {
   def xs = list.init(3, { i ->
     println("at {i}")
@@ -39,9 +35,7 @@ def main = {
 [<Fact>]
 let ``Run - list.replicate gives count copies`` () =
     let source =
-        """import nanyx/console
-
-@entry
+        """@entry
 def main = {
   println(list.replicate(0, count = 3))
   println(list.replicate("a", count = 0))
@@ -54,9 +48,7 @@ def main = {
 [<Fact>]
 let ``Run - list.init and list.replicate work for a count of 1,000,000`` () =
     let source =
-        """import nanyx/console
-
-@entry
+        """@entry
 def main = {
   def xs = list.init(1000000, { i -> i })
   println("{list.length(xs)} {list.last(xs)}")

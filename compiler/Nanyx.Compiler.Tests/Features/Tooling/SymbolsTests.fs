@@ -254,14 +254,14 @@ def peek = Store(int).get
 
 [<Fact>]
 let ``Context members of an imported context are declared in its module`` () =
-    let source = withFinalNewline """import nanyx/console
-def hello: [Console] () -> () = { write("hi") }"""
-    let consoleSource = (StandardLibrary.tryLoadSource "console").Value.Replace("\r\n", "\n")
+    let source = withFinalNewline """def hello: [Console] () -> () = { write("hi") }"""
+    let consoleFile = Path.Combine(ShippedPackages.directoryOf "nanyx.console.core", "src", "console.nyx")
+    let consoleSource = File.ReadAllText(consoleFile).Replace("\r\n", "\n")
     Assert.Equal(
-        Some (ContextMember, "nanyx/console.nyx", offsetOf consoleSource "write:" 0 0),
+        Some (ContextMember, consoleFile, offsetOf consoleSource "write:" 0 0),
         definitionOf (Compiler.compile source) (offsetOf source "write(" 0 2))
     Assert.Equal(
-        Some (TypeDefinition, "nanyx/console.nyx", offsetOf consoleSource "Console =" 0 0),
+        Some (TypeDefinition, consoleFile, offsetOf consoleSource "Console =" 0 0),
         definitionOf (Compiler.compile source) (offsetOf source "[Console]" 0 2))
 
 /// The text of each name in `source` that refers to what the name at `offset` declares or refers to, with where

@@ -8,8 +8,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - string.codePoints decodes one-, two-, three- and four-byte characters`` () =
     let source =
-        """import nanyx/console
-import nanyx/text
+        """import nanyx/text
 
 @entry
 def main = {
@@ -23,8 +22,7 @@ def main = {
 [<Fact>]
 let ``Run - string.fromCodePoint encodes each code point, and codePoints reads it back`` () =
     let source =
-        """import nanyx/console
-import nanyx/text
+        """import nanyx/text
 
 def roundTrip: int -> string = { c ->
   match string.fromCodePoint(c)
@@ -48,8 +46,7 @@ def main = {
 [<Fact>]
 let ``Run - string.fromCodePoint gives #invalidCodePoint for negatives, surrogates and past 0x10FFFF`` () =
     let source =
-        """import nanyx/console
-import nanyx/text
+        """import nanyx/text
 
 @entry
 def main = {
@@ -62,8 +59,7 @@ def main = {
 [<Fact>]
 let ``Run - string.codePoints works on a string of 20,000 characters`` () =
     let source =
-        """import nanyx/console
-import nanyx/text
+        """import nanyx/text
 
 @entry
 def main = {

@@ -109,7 +109,7 @@ let ``E2E - twentytwo - top-level main call emits start`` () =
     runE2ETest "twentytwo"
 
 [<Fact>]
-let ``E2E - twentythree - println from nanyx/console in a script`` () =
+let ``E2E - twentythree - println from the host's prelude in a script`` () =
     runE2EFileTest "twentythree"
 
 [<Fact>]

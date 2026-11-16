@@ -267,15 +267,39 @@ module Manifest =
     /// The fields of an entry of `dependencies`.
     let private dependencyFields = [ "package"; "path"; "version" ]
 
-    /// The packages the manifest's `dependencies` lists, each in a directory relative to `root`. A version names a
-    /// package to download, which isn't supported yet.
+    /// The packages the manifest's `dependencies` lists, each in a directory relative to `root`, or one the compiler
+    /// ships, named at the compiler's version exactly. Any other version names a package to download, which isn't
+    /// supported yet.
     let private readDependencies (problems: Problems) (root: string) (value: DataValue) : Dependency list =
         let read (value: DataValue) =
             problems.Record "a dependency" dependencyFields value
             |> Option.bind (fun fields ->
                 let name = problems.RequiredText "a dependency" value.Location fields "package" namePattern nameRule
                 let example = $"""path = "../{name |> Option.map (fun name -> name.Substring(name.LastIndexOf '.' + 1)) |> Option.defaultValue "util"}" """.TrimEnd()
+                let shipped = name |> Option.filter (fun name -> Directory.Exists(ShippedPackages.directoryOf name))
                 match DataValue.field "path" fields, DataValue.field "version" fields with
+                | Some _, Some version ->
+                    let named = defaultArg name "here"
+                    problems.Add
+                        DiagnosticCodes.InvalidManifestValue
+                        version.NameSpan
+                        $"the dependency {named} is found by its path, so it has no version: give one or the other"
+                    None
+                | None, Some version when shipped.IsSome ->
+                    match problems.Text "a dependency" fields "version" versionPattern "a semantic version: 1.2.0" with
+                    | Some written when written <> Toolchain.version ->
+                        problems.Add
+                            DiagnosticCodes.VersionNotShipped
+                            version.Value.Location
+                            $"the compiler ships {shipped.Value} {Toolchain.version}, not {written}: a package the compiler ships is named at its version exactly"
+                        None
+                    | Some _ ->
+                        Some
+                            { Name = shipped.Value
+                              Directory = ShippedPackages.directoryOf shipped.Value
+                              NameSpan = (DataValue.field "package" fields).Value.Value.Location
+                              PathSpan = version.Value.Location }
+                    | None -> None
                 | _, Some version ->
                     problems.Add
                         DiagnosticCodes.UnsupportedManifestField

@@ -9,9 +9,7 @@ open TranspilerWasmTestHelpers
 
 [<Fact>]
 let ``A function that passes a known member on passes it as known`` () =
-    let source = """import nanyx/console
-
-context Show(a) = (show: a -> string)
+    let source = """context Show(a) = (show: a -> string)
 
 type Point = (x: int, y: int)
 
@@ -35,9 +33,7 @@ println(label(Point(x = 1, y = 2)))
 
 [<Fact>]
 let ``A definition called with two instances has a specialisation for each`` () =
-    let source = """import nanyx/console
-
-context Show(a) = (show: a -> string)
+    let source = """context Show(a) = (show: a -> string)
 
 type Point = (x: int, y: int)
 
@@ -67,9 +63,7 @@ main()
 
 [<Fact>]
 let ``A known member used as a value is made where it is used`` () =
-    let source = """import nanyx/console
-
-context Show(a) = (show: a -> string)
+    let source = """context Show(a) = (show: a -> string)
 
 type Point = (x: int, y: int)
 
@@ -91,9 +85,7 @@ main()
 
 [<Fact>]
 let ``A use of a lambda that captures a local is still passed as a closure`` () =
-    let source = """import nanyx/console
-
-context Greet = (greet: string -> string)
+    let source = """context Greet = (greet: string -> string)
 
 def shout: [Greet] string -> string = { name -> greet(name) ++ "!" }
 
@@ -113,9 +105,7 @@ main()
 [<Fact>]
 let ``A use of a top-level function and a constant makes both members known`` () =
     let source =
-        normalized """import nanyx/console
-
-context Counter = (
+        normalized """context Counter = (
   bump: int -> int
   limit: int
 )
@@ -149,9 +139,7 @@ def main = {
 [<Fact>]
 let ``Two uses with different constants have a specialisation each`` () =
     let source =
-        normalized """import nanyx/console
-
-context Limit = (limit: int)
+        normalized """context Limit = (limit: int)
 
 def clamp: [Limit] int -> int = { n -> if n > limit then limit else n }
 
@@ -170,9 +158,7 @@ main()
 [<Fact>]
 let ``A use of a cell's value passes the value the cell holds then`` () =
     let source =
-        normalized """import nanyx/console
-
-context Limit = (limit: int)
+        normalized """context Limit = (limit: int)
 
 def clamp: [Limit] int -> int = { n -> if n > limit then limit else n }
 

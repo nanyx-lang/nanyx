@@ -71,9 +71,7 @@ def main = { describe(Point(x = 1, y = 2)) }
 
 [<Fact>]
 let ``A call shows the contexts its callee's type declares, in order, provided by inference or the runtime`` () =
-    let source = """import nanyx/console
-
-def greet = { println("hi") }
+    let source = """def greet = { println("hi") }
 
 println("top")
 """

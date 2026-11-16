@@ -4,14 +4,12 @@ description: A program's arguments, environment variables and exit code
 order: 15
 ---
 
-Import it as `nanyx/env`. The console host provides `Env` to the program's `@entry` and to a script's statements, so
-`args`, `variable` and `exit` can be called there without any setup; any other function that calls them must declare
+`Env` is in the console host's interface package, `nanyx.console.core`, and the console host's prelude brings it into
+every module of a program, so it needs no import. The host provides `Env` to the program's `@entry` and to a
+script's statements, so `args`, `variable` and `exit` can be called there without any setup; any other function that calls them must declare
 `[Env]` in its type. `nanyx run tool.nyx a b` passes `a` and `b` as the arguments.
 
 ```nanyx
-import nanyx/console
-import nanyx/env
-
 def name =
   match args()
     | [] -> "world"
@@ -26,14 +24,15 @@ if name == "nobody" then exit(1) else ()
 
 # Reference
 
-<!-- The reference below is generated from the doc comments in stdlib/ by `nanyx stdlib-docs`: edit those, not this. -->
+<!-- Written by hand from the doc comments in packages/nanyx.console.core until the generator covers the packages the compiler ships (#1505): keep it in step with them. -->
 
 What a program is started with, and how it ends: its command-line arguments, its environment
 variables and its exit code.
 
-[`Env`](#env) is a context the host provides: under the console host (`nanyx.console`), a program that imports this
-module calls `args`, `variable` and `exit` from its entry point, or from any function that
-declares `[Env]`.
+[`Env`](#env) is a context the host provides: under the console host (`nanyx.console`), whose prelude
+brings it into every module of the program, a program calls `args`, `variable` and `exit`
+from its entry point, or from any function that declares `[Env]`. A library depends on
+`nanyx.console.core` and imports `nanyx.console.core/env`.
 
 ## `Env`
 
@@ -54,4 +53,3 @@ what the program was started with.
 - `exit`: Ends the program with the exit code `code`, without running the rest of it. It never returns,
   so its result is `undefined` and a call fits wherever a value of any type is expected.
 
-<!-- End of the generated reference. -->

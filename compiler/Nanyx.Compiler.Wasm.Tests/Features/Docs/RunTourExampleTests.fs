@@ -34,12 +34,12 @@ let tourExamples () : obj array seq = examplesIn "tour"
 
 let standardLibraryExamples () : obj array seq = examplesIn "stdlib"
 
-/// The tour's examples print with `nanyx/console` and work on strings with `nanyx/text` without importing them, as
-/// though each imported them as the Hello world page does: after its directives and its module declaration, if it has
-/// them, and before its first line of code.
+/// The tour's examples work on strings with `nanyx/text` without importing it, as though each imported it: after its
+/// directives and its module declaration, if it has them, and before its first line of code. They print with the
+/// console host's prelude, which every program sees.
 let private withImports (code: string) =
     let imports =
-        [ "nanyx/console"; "nanyx/text" ]
+        [ "nanyx/text" ]
         |> List.filter (fun name -> not (code.Contains $"import {name}"))
         |> List.map (fun name -> $"import {name}")
     let lines = code.Split('\n') |> List.ofArray

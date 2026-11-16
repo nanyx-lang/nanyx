@@ -120,7 +120,7 @@ are the console host's own functions over `fd_write` and `fd_read`, and requirin
   require `HostRuntime`, as `nanyx/host.runtime` does. Reference counting keeps a string alive while a value made
   from its address is used (`CoreIrCounting.addressFlow`, see
   [Memory management](./memory-management#things-that-need-care)), with inlining and without.
-- **The console host.** `nanyx/console.host` declares the WASI functions it calls with `@extern`. It keeps its state
+- **The console host.** `nanyx.console/console.host` declares the WASI functions it calls with `@extern`. It keeps its state
   in the block the module sets aside for its host (`hostState`, 4096 bytes after the data segment, in a module whose
   host uses it, `WasmRuntime.hostStateSize`): where it is in the standard input it has read, an iovec, a count, and a
   buffer of 4032 bytes that standard input is read into, so it allocates nothing to write or read and frees nothing

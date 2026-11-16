@@ -56,9 +56,7 @@ let ``Run - with in place replaces a field on the heap, made from the value it r
     // The new name is read from the old one, which the update then drops. `runSource` checks that nothing is freed
     // twice or left on the heap.
     let source =
-        normalized """import nanyx/console
-
-type Named = (name: string, count: int)
+        normalized """type Named = (name: string, count: int)
 
 def rename: Named, int -> Named = { r, n ->
   if n == 0 then r else rename(r with (name = r.name ++ "!", count = r.count + 1), n - 1)

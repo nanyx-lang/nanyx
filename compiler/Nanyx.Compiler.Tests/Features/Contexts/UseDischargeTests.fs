@@ -7,9 +7,7 @@ open Nanyx.Compiler.Tests.TestSupport
 // A `use` may give a context's member a lambda that needs more contexts than the member's type declares. They are
 // required where the `use` is written (#1054).
 
-let private log = """import nanyx/console
-
-context Log = (log: string -> ())
+let private log = """context Log = (log: string -> ())
 
 def greet: [Log] string -> () = { name ->
   log("hello {name}")
@@ -83,8 +81,6 @@ dbg(0)
 let ``A def's result cannot be a lambda that needs a context its type does not say`` () =
     let source =
         """
-import nanyx/console
-
 def printer: [Console] () -> (string -> ()) = {
   { m: string -> println(m) }
 }

@@ -56,8 +56,9 @@ The manifest is one Nanyx record value. It holds only data: no imports, no defin
   (`NYX0022`), a string where a list is expected (`NYX0023`) or a field that isn't supported yet (`NYX0024`) is an
   error at that field. A module listed twice in `publicModules`, or a package listed twice in `dependencies`, is
   `NYX0023` at the repeat, and so is a `publicModules` entry that no source file of the package declares.
-- **What works today.** A dependency gives a `path`; one with a `version` is `NYX0024` until packages can be
-  downloaded. The only linter is `nanyx.lint`, whose
+- **What works today.** A dependency gives a `path`, or names a package the compiler ships, such as
+  `nanyx.console.core`, at the compiler's version exactly (`NYX0029` otherwise); any other with a `version` is
+  `NYX0024` until packages can be downloaded, and one with both is an error. The only linter is `nanyx.lint`, whose
   `settings` hold `rules`, each set to `#error`, `#warning`, `#info`, `#hint` or `#off`. A host is one the compiler
   ships, `nanyx.console`, named at the compiler's version, or one found by its `path`, with no version. No host takes
   `settings` yet.

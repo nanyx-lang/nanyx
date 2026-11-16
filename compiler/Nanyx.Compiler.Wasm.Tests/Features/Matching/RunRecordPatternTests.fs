@@ -9,8 +9,6 @@ open TranspilerWasmTestHelpers
 let ``Run - a record pattern matches the fields it names`` () =
     let source =
         """
-import nanyx/console
-
 type Request = (id: int, name: string)
 
 def f: Request -> string = { r ->
@@ -30,8 +28,6 @@ let ``Run - the nested patterns example takes requests apart by member name`` ()
     // different tags (#461).
     let source =
         """
-import nanyx/console
-
 type Result =
   | #some(int)
   | #error(string)

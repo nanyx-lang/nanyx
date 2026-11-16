@@ -7,9 +7,7 @@ open TranspilerWasmTestHelpers
 let ``Run - a def that does not write its type adds whatever type it is called with`` () =
     // `def add = { x, y -> x + y }` was `int, int -> int`. It is `[Add(a)] a, a -> a`, and `lerp` `[Num(a)]`.
     let source =
-        normalized """import nanyx/console
-
-type Money = protected (pence: int)
+        normalized """type Money = protected (pence: int)
 def Money.zero: Money = Money(pence = 0)
 def Money.`+`: Money, Money -> Money = { p, q -> Money(pence = p.pence + q.pence) }
 def Money.`-`: Money, Money -> Money = { p, q -> Money(pence = p.pence - q.pence) }
@@ -36,9 +34,7 @@ def main = {
 [<Fact>]
 let ``Run - an operator required by its member is passed the instance of the prelude's context`` () =
     let source =
-        normalized """import nanyx/console
-
-def add: [`+`: a, a -> a] = { + }
+        normalized """def add: [`+`: a, a -> a] = { + }
 def scale: [(`+`: a, a -> a) & (`*`: a, a -> a)] a, a -> a = { x, k -> x * k + x }
 @entry
 def main = {
@@ -52,8 +48,6 @@ let ``Run - a def that compares values of two type variables calls each one's in
     // #690: `same2` is `[Eq(a) & Eq(b)] a, a, b, b -> bool`, and each `==` calls the member of its own instance.
     let source =
         """
-import nanyx/console
-
 def same2 = { x, y, p, q -> x == y and p == q }
 
 @entry
@@ -68,8 +62,6 @@ def main = {
 let ``Run - arithmetic on two type variables calls each one's instance`` () =
     let source =
         """
-import nanyx/console
-
 def both: [Add(a) & Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p - q) }
 def same: [Eq(a) & Eq(b)] a, a, b, b -> bool = { x, y, p, q -> x == y and p != q }
 def r = { x, y, p, q -> (x + y, p * q) }
@@ -92,8 +84,6 @@ def main = {
 let ``Run - ++ on a type variable is read through Append, whose instances join strings, lists and types that attach ++`` () =
     let source =
         """
-import nanyx/console
-
 type Path = protected (parts: list(string))
 def Path.`++`: Path, Path -> Path = { p, q -> Path(parts = p.parts ++ q.parts) }
 

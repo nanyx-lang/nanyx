@@ -223,6 +223,30 @@ let ``A linter or host must be named at the version the compiler ships, exactly`
     )
 
 [<Fact>]
+let ``A dependency the compiler ships is named at its version, and found beside the compiler`` () =
+    let manifest =
+        okOf $"""(package = (name = "demo", version = "0.1.0"), dependencies = [(package = "nanyx.console.core", version = "{Toolchain.version}")])"""
+    Assert.Equal<(string * string) list>(
+        [ "nanyx.console.core", ShippedPackages.directoryOf "nanyx.console.core" ],
+        manifest.Dependencies |> List.map (fun dependency -> dependency.Name, dependency.Directory))
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.VersionNotShipped.Code,
+          $"the compiler ships nanyx.console.core {Toolchain.version}, not 99.0.0: a package the compiler ships is named at its version exactly"
+          DiagnosticCodes.InvalidManifestValue.Code,
+          "the dependency acme.util is found by its path, so it has no version: give one or the other" ],
+        errorsOf
+            """
+(
+  package = (name = "demo", version = "0.1.0")
+  dependencies = [
+    (package = "nanyx.console.core", version = "99.0.0")
+    (package = "acme.util", path = "../util", version = "1.0.0")
+  ]
+)
+"""
+    )
+
+[<Fact>]
 let ``A public module or a dependency listed twice is an error at the repeat`` () =
     let text =
         """

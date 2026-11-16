@@ -7,8 +7,6 @@ open TranspilerWasmTestHelpers
 let ``Run - ?? gives the value inside #some, or else the fallback, which runs only when it is needed`` () =
     let source =
         """
-import nanyx/console
-
 def fallback: [Console] string -> int = { name ->
   println("fallback {name}")
   0
@@ -28,8 +26,6 @@ def main = {
 let ``Run - a chain of ?? tries each option in turn`` () =
     let source =
         """
-import nanyx/console
-
 def lookup: int -> #some(int) | #missing = { k -> if k > 0 then #some(k * 10) else #missing }
 
 @entry

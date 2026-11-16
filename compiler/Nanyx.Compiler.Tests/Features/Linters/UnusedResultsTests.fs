@@ -28,9 +28,7 @@ let private reported (source: string) =
 [<Fact>]
 let ``A call whose result is thrown away is reported at the call`` () =
     let source =
-        """import nanyx/console
-
-def compute: [Console] int -> int = { n ->
+        """def compute: [Console] int -> int = { n ->
   readLine()
   42
 }
@@ -102,9 +100,7 @@ def f: int -> int = { n ->
 [<Fact>]
 let ``A call whose type is unit is not reported`` () =
     let source =
-        """import nanyx/console
-
-def greet: [Console] string -> int = { name ->
+        """def greet: [Console] string -> int = { name ->
   println("hello")
   println(name)
   1
@@ -125,9 +121,7 @@ let ``A block's last expression is not reported`` () =
 [<Fact>]
 let ``A for loop and what its body gives are not reported`` () =
     let source =
-        """import nanyx/console
-
-def f: [Console] list(int) -> int = { xs ->
+        """def f: [Console] list(int) -> int = { xs ->
   for xs | x ->
     println("{x}")
     x * 2
@@ -152,9 +146,7 @@ def both: string, string -> #some(int) | #error(string) = { a, b -> proc {
 [<Fact>]
 let ``A call of the built-in dbg on a line of its own is not reported`` () =
     let source =
-        """import nanyx/console
-
-def total: [Console] list(int) -> int = { xs ->
+        """def total: [Console] list(int) -> int = { xs ->
   dbg(xs)
   xs \dbg
   def counted = dbg(xs \sum)

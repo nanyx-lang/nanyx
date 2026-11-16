@@ -9,9 +9,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - a nominal value over a primitive is made and taken apart with its type's name`` () =
     let source =
-        normalized """import nanyx/console
-
-type Money = private int
+        normalized """type Money = private int
 
 def Money.toString: Money -> string = { m ->
   def Money(pence) = m
@@ -41,9 +39,7 @@ main()
 let ``Run - the constructor of an alias whose shape is not a record makes a value of its shape`` () =
     // Regression: `Pair(1, 2)` and `Meters(5)` type-checked, and the backend could not compile the call (#869).
     let source =
-        normalized """import nanyx/console
-
-type Pair = (int, int)
+        normalized """type Pair = (int, int)
 type Meters = int
 type Name = string
 type Ints = list(int)
@@ -66,9 +62,7 @@ main()
 let ``Run - tuple destructuring with def`` () =
     // Regression: `def (x, y) = point` was a parse error (#41).
     let source =
-        normalized """import nanyx/console
-
-def (a, b) = (1, 2)
+        normalized """def (a, b) = (1, 2)
 @entry
 def main = {
   def point = (10, 20)
@@ -84,9 +78,7 @@ def main = {
 [<Fact>]
 let ``Run - tuple destructuring with def and no brackets`` () =
     let source =
-        normalized """import nanyx/console
-
-def a, b = (1, 2)
+        normalized """def a, b = (1, 2)
 @entry
 def main = {
   def x, (name, age) = (10, ("Ada", 36))
@@ -100,9 +92,7 @@ def main = {
 let ``Run - with record update`` () =
     // Regression: `alice with age = 31` was a parse error (#40).
     let source =
-        normalized """import nanyx/console
-
-type Point = (x: int, y: int)
+        normalized """type Point = (x: int, y: int)
 def shiftedX: Point -> int = { p -> (p with x = p.x + 1).x }
 @entry
 def main = {
@@ -120,8 +110,6 @@ let ``Run - with takes its updates in parentheses, as the records tour writes th
     // Regression: `user with (` read `with` as an identifier (#204).
     let source =
         """
-import nanyx/console
-
 def user = (name = "Alice", age = 30, email = "old@example.com")
 def updatedUser = user with (
   age = 31
@@ -156,9 +144,7 @@ def main = {
 let ``Run - member access on the result of a call`` () =
     // Regression: `shift(...)` returned a Point but `q.x` on it was "Record 'q' has no member 'x'" (#60).
     let source =
-        normalized """import nanyx/console
-
-type Point = (x: int, y: int)
+        normalized """type Point = (x: int, y: int)
 def shift: Point -> Point = { q -> Point(x = q.x + 1, y = q.y + 1) }
 def pair: (string, string) -> (first: string, second: string) = { a, b -> (first = a, second = b) }
 @entry
@@ -176,9 +162,7 @@ def main = {
 let ``Run - nested record field access`` () =
     // Regression: `line.start.x` failed with "cannot determine layout for .x" (#30).
     let source =
-        normalized """import nanyx/console
-
-type Point = (x: int, y: int)
+        normalized """type Point = (x: int, y: int)
 def origin = (x = 0, y = 0)
 def unit = Point(x = 1, y = 1)
 def main = {
@@ -199,9 +183,7 @@ main()
 let ``Run - fields of a record bound by a match pattern`` () =
     // The pattern's `a` shadows the top-level `a`, whose type is a tag rather than a record.
     let source =
-        normalized """import nanyx/console
-
-def a = #some((x = "ax", y = "ay"))
+        normalized """def a = #some((x = "ax", y = "ay"))
 def b: typeof(a) = #some((x = "bx", y = "by"))
 
 match b
@@ -225,9 +207,7 @@ main()
 let ``Run - a function reading fields takes any record that has them`` () =
     // The records' fields are in different places, so each read finds its field from the record's layout.
     let source =
-        normalized """import nanyx/console
-
-def label = { p -> p.name ++ " from " ++ p.city }
+        normalized """def label = { p -> p.name ++ " from " ++ p.city }
 def show = {
   | #some(p), n -> println(p.name ++ " " ++ n)
   | _, _ -> println("none")
@@ -251,9 +231,7 @@ for people \ list.map(label) | s -> println(s)
 let ``Run - records, tuples and nominal values through the core IR`` () =
     // `nOf` is specialised for each record it is given (see CoreIrTests.fs).
     let source =
-        normalized """import nanyx/console
-
-type Person = (name: string, age: int)
+        normalized """type Person = (name: string, age: int)
 
 type Money = private int
 
@@ -291,8 +269,6 @@ let ``Run - a field read on a lambda's parameter uses the record type from the t
     // Regression for #250: the backend had no record layout for `p`.
     let source =
         """
-import nanyx/console
-
 type P = (x: int)
 
 def big: list(P) -> list(P) = { ps -> list.filter(ps, { p -> p.x > 1 }) }
@@ -305,7 +281,6 @@ println("{list.length(big([P(x = 1), P(x = 2)]))}")
 let ``Run - field reads on the parameters of lambdas passed to list functions`` () =
     let source =
         """
-import nanyx/console
 import nanyx/text
 
 type Product = (name: string, price: int, stock: int)
@@ -323,8 +298,6 @@ println(string.join(list.map([1, 2], { n -> "{n}" }), ", "))
 let ``Run - a field read on a for loop's element inside an interpolation`` () =
     let source =
         """
-import nanyx/console
-
 type Product = (name: string, price: int)
 
 for [Product(name = "a", price = 2), Product(name = "b", price = 5)] | p ->
@@ -335,8 +308,6 @@ for [Product(name = "a", price = 2), Product(name = "b", price = 5)] | p ->
 [<Fact>]
 let ``Run - an open record parameter takes a record with more fields, and a named row keeps them`` () =
     let source = """
-import nanyx/console
-
 def g: (x: int, y: int, ...) -> int = { x, y -> x + y }
 
 def moveRight: (x: int, ...r) -> (x: int, ...r) = { p -> p with x = p.x + 1 }
@@ -357,8 +328,6 @@ main()
 let ``Run - a def that sums a field of its argument's records requires Add at the field's type`` () =
     // #958: the def's type has an open record in it, `list((price: b, ...a)) -> b`.
     let source = """
-import nanyx/console
-
 def total = { items -> items \list.map { .price } \list.sum }
 
 def total2 = { items -> list.sum(list.map(items, { x -> x.price })) }

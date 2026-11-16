@@ -10,8 +10,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - string join puts the separator between each pair, empty pieces included`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 @entry
 def main = {
@@ -28,8 +27,7 @@ def main = {
 [<Fact>]
 let ``Run - uppercase, lowercase and reverse change a string's bytes or characters in order`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 @entry
 def main = {
@@ -45,8 +43,7 @@ def main = {
 let ``Run - string join of 100,000 pieces gives every byte of them`` () =
     // Joining with `++` copied the result so far for each piece, and ran out of memory at 20,000 of these.
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 def lines: int, list(string) -> list(string) = { n, acc ->
   if n == 0 then acc else lines(n - 1, ["item {n % 10}", ...acc])

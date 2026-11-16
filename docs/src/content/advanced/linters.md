@@ -67,8 +67,6 @@ A single file run on its own (`nanyx run script.nyx`) has no manifest, so it tur
 ::linters.default.unusedBindings = "error"
 ::linters.default.nonTailRecursion = "off"
 
-import nanyx/console
-
 println("Hello!")
 ```
 

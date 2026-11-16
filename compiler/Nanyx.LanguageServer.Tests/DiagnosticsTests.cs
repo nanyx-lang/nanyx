@@ -37,7 +37,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     {
         var uri = DocumentUri.FromFileSystemPath(TempPath("type-error.nyx"));
 
-        Open(uri, "import nanyx/console\n\nprintln(missing)\n");
+        Open(uri, "println(missing)\n");
 
         var diagnostics = await NextPublished(uri);
         var diagnostic = Assert.Single(diagnostics.Diagnostics!);
@@ -46,7 +46,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
         Assert.Equal("NYX0101", diagnostic.Code?.String);
         Assert.Equal(new Uri("https://nanyx.dev/docs/standard-tools/errors#nyx0101"), diagnostic.CodeDescription?.Href);
         Assert.Contains("missing", diagnostic.Message.String);
-        Assert.Equal(new Range(2, 8, 2, 15), diagnostic.Range);
+        Assert.Equal(new Range(0, 8, 0, 15), diagnostic.Range);
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     {
         // The info view and code actions read them on every move of the cursor.
         var uri = DocumentUri.FromFileSystemPath(TempPath("converted-once.nyx"));
-        const string text = "import nanyx/console\n\nprintln(missing)\n";
+        const string text = "println(missing)\n";
         var document = new OpenDocument(text, "", NyxCompiler.Compiler.compile(text), null);
 
         var first = document.PublishedDiagnostics(uri);
@@ -253,11 +253,11 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     {
         var uri = DocumentUri.FromFileSystemPath(TempPath("fixed.nyx"));
 
-        Open(uri, "import nanyx/console\n\nprintln(missing)\n");
+        Open(uri, "println(missing)\n");
         var withError = await NextPublished(uri);
         Assert.NotEmpty(withError.Diagnostics!);
 
-        Change(uri, version: 2, "import nanyx/console\n\nprintln(\"found\")\n");
+        Change(uri, version: 2, "println(\"found\")\n");
         var fixedResult = await NextPublished(uri);
         Assert.Empty(fixedResult.Diagnostics!);
         Assert.Equal(2, fixedResult.Version);

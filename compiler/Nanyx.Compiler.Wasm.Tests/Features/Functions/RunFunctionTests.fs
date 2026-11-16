@@ -9,9 +9,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - a lambda's parameters may be patterns that take its argument apart`` () =
     let source =
-        normalized """import nanyx/console
-
-type Email = protected string
+        normalized """type Email = protected string
 
 def address: Email -> string = { Email(s) -> s }
 def weigh = { (a, b), c -> a + b * c }
@@ -37,9 +35,7 @@ def main = {
 [<Fact>]
 let ``Run - local defs in a pattern lambda's arms`` () =
     let source =
-        normalized """import nanyx/console
-
-def f: [Console] list(int) -> () = {
+        normalized """def f: [Console] list(int) -> () = {
   | [] ->
     def done = "end"
     println(done)
@@ -70,9 +66,7 @@ def main = {
 [<Fact>]
 let ``Run - a pipe passes its value in front of several arguments`` () =
     let source =
-        normalized """import nanyx/console
-
-def digits: int, int, int -> int = { a, b, c -> a * 100 + b * 10 + c }
+        normalized """def digits: int, int, int -> int = { a, b, c -> a * 100 + b * 10 + c }
 def digitsThen: int, int, int, (int -> int) -> int = { a, b, c, h -> h(digits(a, b, c)) }
 
 println("{1 \digits(2, 3)}")
@@ -84,9 +78,7 @@ println("{1 \digitsThen(2, 3) { + 1000 }}")
 let ``Run - shorthand lambdas filter, map and fold a list`` () =
     // `{ % 2 == 0 }` is `{ x -> x % 2 == 0 }`: the body goes on after the operation on the left-out argument.
     let source =
-        normalized """import nanyx/console
-
-def items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        normalized """def items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 def x = 100
 
 def items2 = items \filter { % 2 == 0 }
@@ -102,9 +94,7 @@ println("{["a", "", "bc"] \filter { != "" } \map { .length } \fold(0) { + }}")
 let ``Run - a shorthand lambda compares a field of its argument`` () =
     // `{ .age > 18 }` is `{ p -> p.age > 18 }`: the field access is the left operand of what follows it.
     let source =
-        normalized """import nanyx/console
-
-type P = (name: string, age: int)
+        normalized """type P = (name: string, age: int)
 
 def ps: list(P) = [P(name = "a", age = 12), P(name = "b", age = 30), P(name = "c", age = 40)]
 
@@ -117,9 +107,7 @@ println("{ps \list.filter { .age * 2 >= 60 } \list.length}")
 [<Fact>]
 let ``Run - a function takes positional and named arguments together, called or piped into`` () =
     let source =
-        normalized """import nanyx/console
-
-def stepped: (int, step: int) -> int = { a, step -> a * 10 + step }
+        normalized """def stepped: (int, step: int) -> int = { a, step -> a * 10 + step }
 def digits: (int, int, last: int) -> int = { a, b, last -> a * 100 + b * 10 + last }
 
 println("{stepped(1, step = 2)}")
@@ -133,9 +121,7 @@ println("{1 \digits(2, last = 3)}")
 let ``Run - multi-argument pattern lambdas`` () =
     // The two-parameter `{ | [], _ -> ... | [head, ...tail], f -> ... }` form from the pattern-matching page (#45).
     let source =
-        normalized """import nanyx/console
-
-def map: (list(int), (int -> int)) -> list(int) = {
+        normalized """def map: (list(int), (int -> int)) -> list(int) = {
   | [], _ -> []
   | [head, ...tail], f -> [f(head), ...map(tail, f)]
 }
@@ -155,9 +141,7 @@ let ``Run - an annotated zero-parameter function returning a tag union`` () =
     // The `() -> ...` annotation names a unit input for a lambda with no parameters; the backend used to
     // crash with a negative padding count instead of compiling it.
     let source =
-        normalized """import nanyx/console
-
-def getMessage: () -> #some(string) | #noMessage = {
+        normalized """def getMessage: () -> #some(string) | #noMessage = {
   def message = "Hello, from Nanyx!"
   #some(message)
 }
@@ -176,9 +160,7 @@ let ``Run - a function annotated as returning a function returns a closure`` () 
     // `int -> (int -> int)` is one parameter returning a function; the backend used to crash with a
     // negative padding count on the annotation, then reported closures as unsupported (#29).
     let source =
-        normalized """import nanyx/console
-
-def makeAdder: int -> (int -> int) = { x -> { y -> x + y } }
+        normalized """def makeAdder: int -> (int -> int) = { x -> { y -> x + y } }
 
 @entry
 def main = {
@@ -193,9 +175,7 @@ let ``Run - a lambda argument's inferred parameter types`` () =
     // A lambda passed to a call is lifted to a function of its own; its parameters' types come from the typed
     // call it was an argument of, so `p.x` has a record layout and `"{n}"` an interpolation type.
     let source =
-        normalized """import nanyx/console
-
-type P = (x: int)
+        normalized """type P = (x: int)
 def apply: P, (P -> int) -> int = { p, f -> f(p) }
 def mapSome
   : (#some(a) | r), (a -> b) -> (#some(b) | r)
@@ -218,9 +198,7 @@ def main = {
 let ``Run - calling a unit function whose lambda takes a parameter`` () =
     // `{ _ -> ... }` has one parameter, the unit, which `getData()` passes.
     let source =
-        normalized """import nanyx/console
-
-def getData: () -> #some(int) | #notFound = { _ -> #some(42) }
+        normalized """def getData: () -> #some(int) | #notFound = { _ -> #some(42) }
 
 @entry
 def main = {
@@ -235,9 +213,7 @@ def main = {
 let ``Run - mutually recursive top-level functions`` () =
     // Regression: a def could not call one declared later in the file (#47).
     let source =
-        normalized """import nanyx/console
-
-def isEven: int -> bool = { n -> if n == 0 then true else isOdd(n - 1) }
+        normalized """def isEven: int -> bool = { n -> if n == 0 then true else isOdd(n - 1) }
 def isOdd: int -> bool = { n -> if n == 0 then false else isEven(n - 1) }
 def show: [Console] bool -> () = { b -> println(if b then "yes" else "no") }
 show(isEven(10))
@@ -252,9 +228,7 @@ def later = { x -> x * 21 }
 let ``Run - functions as values and higher-order calls`` () =
     // #28: a parameter holding a function can be called; a named function or a lambda can be passed.
     let source =
-        normalized """import nanyx/console
-
-def apply: ((int -> int), int) -> int = { f, x -> f(x) }
+        normalized """def apply: ((int -> int), int) -> int = { f, x -> f(x) }
 def twice: ((int -> int), int) -> int = { f, x -> f(f(x)) }
 def double: int -> int = { x -> x * 2 }
 def map: (list(int), (int -> int)) -> list(int) = { xs, f ->
@@ -285,9 +259,7 @@ main()
 let ``Run - an attached function passed as a value`` () =
     // `Point.norm` as an argument is read as a member access on `Point`, not as the name of a function.
     let source =
-        normalized """import nanyx/console
-
-type Point = (x: int, y: int)
+        normalized """type Point = (x: int, y: int)
 def Point.norm: Point -> int = { p -> p.x + p.y }
 def apply: ((Point -> int), Point) -> int = { f, p -> f(p) }
 dbg(apply(Point.norm, (x = 3, y = 4)))
@@ -310,9 +282,7 @@ dbg(main(2))
 let ``Run - closures`` () =
     // Closures capture locals, parameters and other closures; captured strings and records keep their types.
     let source =
-        normalized """import nanyx/console
-
-def makeAdder: int -> (int -> int) = { x -> { y -> x + y } }
+        normalized """def makeAdder: int -> (int -> int) = { x -> { y -> x + y } }
 def twice: ((int -> int), int) -> int = { f, v -> f(f(v)) }
 def greeter: string -> (string -> string) = { greeting -> { name -> greeting ++ ", " ++ name } }
 type Point = (x: int, y: int)
@@ -351,9 +321,7 @@ def main = { }
 let ``Run - a generic function specialised at two types gives each its own result`` () =
     // `orElse` is specialised for ints and for strings, and `main` calls both specialisations (see CoreIrTests.fs).
     let source =
-        normalized """import nanyx/console
-
-def orElse = { o, fallback ->
+        normalized """def orElse = { o, fallback ->
   match o
     | #some(v) -> v
     | #none -> fallback
@@ -380,9 +348,7 @@ main()
 let ``Run - closures through the core IR`` () =
     // `compose`'s lambda is specialised along with `compose` (see CoreIrTests.fs).
     let source =
-        normalized """import nanyx/console
-
-def apply = { f, x -> f(x) }
+        normalized """def apply = { f, x -> f(x) }
 
 def double: int -> int = { n -> n * 2 }
 
@@ -412,9 +378,7 @@ main()
 [<Fact>]
 let ``Run - holes in annotations are filled in by inference`` () =
     let source =
-        normalized """import nanyx/console
-
-def add: (int, _) -> _ = { a, b -> a + b }
+        normalized """def add: (int, _) -> _ = { a, b -> a + b }
 def names: list(_) = ["ada", "grace"]
 def id: _ -> _ = { x -> x }
 def greet = { (name: _) -> "hi {name}" }
@@ -432,8 +396,6 @@ def main = {
 let ``Run - an annotated lambda parameter before a body that starts with a name (#272)`` () =
     let source =
         """
-import nanyx/console
-
 type Point = (x: int, y: int)
 def f = { q: Point -> q }
 def apply = { g: (int -> int), n: int -> g(n) }
@@ -449,9 +411,7 @@ def main = {
 [<Fact>]
 let ``Run - a local lambda of no parameters runs each time it is called (#589)`` () =
     let source =
-        normalized """import nanyx/console
-
-@entry
+        normalized """@entry
 def main = {
   def x = 10
   def block = {
@@ -471,9 +431,7 @@ def main = {
 [<Fact>]
 let ``Run - a lambda of no parameters can be passed as a value (#589)`` () =
     let source =
-        normalized """import nanyx/console
-
-def twice: (() -> int) -> int = { f -> f() + f() }
+        normalized """def twice: (() -> int) -> int = { f -> f() + f() }
 
 @entry
 def main = {
@@ -488,9 +446,7 @@ def main = {
 
 [<Fact>]
 let ``Run - a lambda of no parameters passed as an argument is called later, not run where it is written (#182)`` () =
-    let source = """import nanyx/console
-
-def mk: (() -> b) -> b = { f -> f() }
+    let source = """def mk: (() -> b) -> b = { f -> f() }
 def m = mk({ 7 })
 def lazy: bool, (() -> int) -> int = { run, f -> if run then f() else 0 }
 
@@ -505,9 +461,7 @@ def main = {
 
 [<Fact>]
 let ``Run - a lambda of no parameters checked against a one-parameter type ignores the parameter (#813)`` () =
-    let source = """import nanyx/console
-
-def apply: (int -> string) -> string = { f -> f(1) }
+    let source = """def apply: (int -> string) -> string = { f -> f(1) }
 def top: int -> string = { "top" }
 def run: (() -> a) -> a = { f -> f() }
 
@@ -526,9 +480,7 @@ def main = {
 
 [<Fact>]
 let ``Run - a lambda of no parameters can be stored in a record field or returned from a function (#182)`` () =
-    let source = """import nanyx/console
-
-type Lazy = (get: () -> int)
+    let source = """type Lazy = (get: () -> int)
 def constant: int -> (() -> int) = { n -> { n * 2 } }
 def lookup: () -> int = { 11 }
 
@@ -555,9 +507,7 @@ dbg(adder(2))
 
 [<Fact>]
 let ``Run - a trailing lambda after several arguments is the call's last argument`` () =
-    let source = """import nanyx/console
-
-def combine: int, int, (int, int -> int) -> int = { a, b, g -> g(a, b) }
+    let source = """def combine: int, int, (int, int -> int) -> int = { a, b, g -> g(a, b) }
 def scaled: (int, (int -> int), scale: int) -> int = { a, g, scale -> g(a) * scale }
 
 @entry

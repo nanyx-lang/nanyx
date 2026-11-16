@@ -7,9 +7,7 @@ open Nanyx.Compiler.Tests.TestSupport
 // A lambda passed where its parameter's type requires a context can use that context: the function it is passed to
 // supplies it, as `withLog` supplies `Log` to its block (#1218).
 
-let private withLog = """import nanyx/console
-
-context Log = (log: string -> ())
+let private withLog = """context Log = (log: string -> ())
 
 def withLog: [Console & c] ([Log & c] () -> ()) -> () = { f ->
   use Log(log = { m -> println("[log] {m}") }) in f()
@@ -37,9 +35,7 @@ def main: [Console] () -> () = {
 
 [<Fact>]
 let ``A lambda passed as one of several arguments can use the context its parameter requires`` () =
-    compileClean """import nanyx/console
-
-context Log = (log: string -> ())
+    compileClean """context Log = (log: string -> ())
 
 def withPrefix: [Console & c] string, ([Log & c] () -> ()) -> () = { prefix, f ->
   use Log(log = { m -> println("[{prefix}] {m}") }) in f()
@@ -62,9 +58,7 @@ def main: [Console] () -> () = { run { greet("Ada") } }
 
 [<Fact>]
 let ``A context the lambda uses besides its parameter's is an error where the parameter has no context variable`` () =
-    let source = """import nanyx/console
-
-context Log = (log: string -> ())
+    let source = """context Log = (log: string -> ())
 
 def withLog: ([Log] () -> ()) -> () = { f ->
   use Log(log = { m -> () }) in f()

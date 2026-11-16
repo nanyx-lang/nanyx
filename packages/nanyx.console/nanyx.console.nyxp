@@ -6,4 +6,5 @@
     publicModules = ["console.host", "console.prelude"]
     host = (root = "console.host", prelude = "console.prelude")
   )
+  dependencies = [(package = "nanyx.console.core", version = "0.28.0")]
 )

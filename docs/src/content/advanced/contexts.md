@@ -59,7 +59,7 @@ A scoped context must be either `protected` or `private`, so that each of its in
 
 # Requiring a context
 
-A function can specify required contexts in its type signature. Here, `sayHello` can call `println` because it runs in `Console`. The real `Console`, in `nanyx/console`, has a few more members, and `println` is a function written on top of its `write`:
+A function can specify required contexts in its type signature. Here, `sayHello` can call `println` because it runs in `Console`. The real `Console`, which the console host provides to every program, has a few more members, and `println` is a function written on top of its `write`:
 
 ```nanyx
 def sayHello: [Console] () -> () = {

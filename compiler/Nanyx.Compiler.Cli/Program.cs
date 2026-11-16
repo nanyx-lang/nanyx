@@ -656,8 +656,6 @@ internal static class CliCommands
     }
 
     private const string HelloWorldSource = """
-        import nanyx/console
-
         println("Hello, World!")
         """;
 

@@ -13,7 +13,7 @@ order: 26
 
 The standard library is an ordinary package named `nanyx`, written in Nanyx, with one module per file
 under [`stdlib/nanyx/`](https://github.com/nanyx-lang/nanyx/tree/main/stdlib/nanyx) at the repository root. A
-program imports its modules like any other package's: `import nanyx/console`, `import nanyx/text`, or
+program imports its modules like any other package's: `import nanyx/math`, `import nanyx/text`, or
 `import nanyx/text as t` for qualified access.
 
 It ships inside the compiler. `NanyxCompiler.fsproj` embeds every `stdlib/nanyx/*.nyx` file as a
@@ -55,14 +55,14 @@ list every function a module exports.
 | Module          | What it holds                                                                                     |
 | --------------- | ------------------------------------------------------------------------------------------------- |
 | `nanyx/prelude` | Imported automatically. `proc`, the result workflow: in `proc { ... }`, `try x` continues with the payload of `#some` or gives back any other tag (the block's type collects them), and `return x` is `#some(x)`. The `Result(a, e)` type and its functions ([results and options](../stdlib/prelude-results)), and the helpers for option-like unions, named for the `#some` tag, among them `someOrElse`, which `a ?? b` calls by its reserved name `__someOrElse` ([results and options](../stdlib/prelude-results#options)). The contexts for equality, ordering, hashing and joining. `ToString(a)`, which every interpolation hole goes through (`"{x}"` is a call to `__interpolate(x)`, which requires it), and `FromString(a, e)`, with the `toString` and `fromString` attached to the built-in types. `int` and `float`, the number contexts (`Add`, `Num`) and powers, the sized number types, and conversions between them. Lists ([lists](../stdlib/prelude-lists)), maps and sets ([maps and sets](../stdlib/prelude-maps)) |
-| `nanyx/console` | The `Console` context (`write`, `writeError`, `readLine`, `readToEnd`, `flush`), the `IoError` type, and `print`, `println`, `eprint` and `eprintln`, which write any value with a `ToString` through it ([console](../stdlib/console)) |
 | `nanyx/host.runtime` | The `HostRuntime` context, with no members, which the toolchain provides to hosts; anywhere else, requiring it is an error (`NYX0238`) |
 | `nanyx/host.memory` | A host's access to linear memory, for the foreign functions it calls: blocks, reads and writes, strings' addresses ([host.memory](../stdlib/host-memory)) |
 | `nanyx/math`    | Arithmetic over `Num(a)`, so on `int` and `float`; comparisons over `Ord(a)` (`min`, `max`, `clamp` and the like); square roots, exponentials, logarithms and rounding on `float`; the constants `pi` and `e` ([math](../stdlib/math)) |
 | `nanyx/text`    | Functions attached to `String`: measuring, searching, slicing, case, trimming, padding, splitting and joining, replacing, and characters; called as `string.trim(s)` or `s \trim` ([text](../stdlib/text)) |
 
-`println` comes from `nanyx/console`. A script imports it explicitly; the module that declares `@entry` gets it
-implicitly, because its host, the console host the compiler ships (`nanyx.console/console.host`, see [Built-ins as packages](./built-ins-as-packages)), provides `Console` to the entry point.
+`println`, `Console` and `Env` aren't in the standard library: they are in the console host's interface package,
+`nanyx.console.core`, which the compiler ships beside it, and the console host's prelude brings them into every module
+of a program (see [Built-ins as packages](./built-ins-as-packages)).
 
 Strings are UTF-8 and this first slice of `nanyx/text` works byte by byte: `length` counts bytes,
 indices and widths are byte offsets, `uppercase`/`lowercase` only change ASCII letters and the trimming

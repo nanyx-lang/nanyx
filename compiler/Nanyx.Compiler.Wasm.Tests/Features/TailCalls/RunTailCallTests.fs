@@ -12,9 +12,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - a function calling itself in tail position recurses a million deep`` () =
     let source =
-        normalized """import nanyx/console
-
-def countdown: (int, int) -> int = { n, acc ->
+        normalized """def countdown: (int, int) -> int = { n, acc ->
   if n == 0 then acc else countdown(n - 1, acc + 1)
 }
 
@@ -33,9 +31,7 @@ println("{steps(1000000, 0)}")
 let ``Run - a call in a lambda whose result is annotated is in tail position`` () =
     // The annotated result is a def of the made-up `__result` that the body gives back (see `LambdaResultSyntax`).
     let source =
-        """import nanyx/console
-
-def countdown = { (n: int), (acc: int): int -> if n == 0 then acc else countdown(n - 1, acc + 1) }
+        """def countdown = { (n: int), (acc: int): int -> if n == 0 then acc else countdown(n - 1, acc + 1) }
 
 println("{countdown(1000000, 0)}")
 """
@@ -44,9 +40,7 @@ println("{countdown(1000000, 0)}")
 [<Fact>]
 let ``Run - a local rec function calling itself in tail position recurses a million deep`` () =
     let source =
-        normalized """import nanyx/console
-
-def count: int -> int = { n ->
+        normalized """def count: int -> int = { n ->
   rec loop = { i, acc ->
     if i == 0 then acc else loop(i - 1, acc + 1)
   }
@@ -60,9 +54,7 @@ println("{count(1000000)}")
 [<Fact>]
 let ``Run - functions calling each other in tail position recurse a million deep`` () =
     let source =
-        normalized """import nanyx/console
-
-def isEven: int -> bool = { n -> if n == 0 then true else isOdd(n - 1) }
+        normalized """def isEven: int -> bool = { n -> if n == 0 then true else isOdd(n - 1) }
 def isOdd: int -> bool = { n -> if n == 0 then false else isEven(n - 1) }
 
 println("{isEven(1000000)}")
@@ -72,9 +64,7 @@ println("{isEven(1000000)}")
 [<Fact>]
 let ``Run - a tail call through a closure uses no stack`` () =
     let source =
-        normalized """import nanyx/console
-
-def callBack: (int, (int -> int)) -> int = { n, f ->
+        normalized """def callBack: (int, (int -> int)) -> int = { n, f ->
   match n
   | 0 -> 0
   | _ -> f(n - 1)
@@ -89,9 +79,7 @@ println("{again(1000000)}")
 [<Fact>]
 let ``Run - a tail call that passes contexts on uses no stack`` () =
     let source =
-        normalized """import nanyx/console
-
-context Counter = (
+        normalized """context Counter = (
   next: int -> int
 )
 
@@ -111,9 +99,7 @@ main()
 [<Fact>]
 let ``Run - the body of use ... in is in tail position`` () =
     let source =
-        normalized """import nanyx/console
-
-context Counter = (next: int -> int)
+        normalized """context Counter = (next: int -> int)
 
 def loop: (int, int) -> int = { n, acc ->
   if n == 0 then acc else use Counter(next = { m -> m - 1 }) in loop(next(n), acc + 1)

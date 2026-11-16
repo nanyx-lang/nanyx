@@ -77,13 +77,13 @@ and the module that is the host's prelude, if it has one.
 
 Naming a package as a host when its manifest doesn't declare it one is an error that says so. The host's **prelude**
 is a module of re-exports: every module of a program the host runs sees its exports without importing them, as it
-sees the standard library's prelude. The console host's re-exports `Console` and `println` from `nanyx/console`, and
-`Env` from `nanyx/env`, so a program prints without an import. A library sees no host's prelude, since it has no host,
+sees the standard library's prelude. The console host's re-exports `Console` and `println` from `nanyx.console.core/console`,
+and `Env` from `nanyx.console.core/env`, so a program prints without an import. A library sees no host's prelude, since it has no host,
 and imports what it uses.
 
 # The entry shape is just a type
 
-Each host takes exactly one entry shape. Under `ConsoleHost` the entry is `() -> ()`; a program that wants its arguments or to set its exit code requires the `Env` context from `nanyx/env`, which `ConsoleHost` provides (`args()`, `variable(name)`, `exit(code)`). Under an HTTP host the entry *is* the handler:
+Each host takes exactly one entry shape. Under `ConsoleHost` the entry is `() -> ()`; a program that wants its arguments or to set its exit code requires the `Env` context, which `ConsoleHost` provides (`args()`, `variable(name)`, `exit(code)`). Under an HTTP host the entry *is* the handler:
 
 ```nanyx
 module main
@@ -135,7 +135,7 @@ A host is mostly ordinary Nanyx. Its core is a function that takes the program's
 module console.host
 
 import (
-  nanyx/console as (Console, IoError)
+  nanyx.console.core/console as (Console, IoError)
   nanyx/host.runtime
 )
 
@@ -386,9 +386,9 @@ The composite host runs each part under the right sub-host and coordinates start
    ([#1425](https://github.com/nanyx-lang/nanyx/issues/1425), done), and the console host written on them with no compiler
    intrinsics ([#1426](https://github.com/nanyx-lang/nanyx/issues/1426), done), so it can ship as a package.
 4b. **Any package can be a host** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)): a host's manifest declares
-   it, a host is found by its `path`, and the host's prelude brings what it provides into scope. Done (see
-   [What's built](#whats-built)). Still to do: the interface package `nanyx.console.core`, and the `::host` and
-   `::dependencies` directives for scripts.
+   it, a host is found by its `path`, the host's prelude brings what it provides into scope, and `Console` and `Env`
+   are in the interface package `nanyx.console.core`. Done (see [What's built](#whats-built)). The `::host` and
+   `::dependencies` directives for scripts are [#1504](https://github.com/nanyx-lang/nanyx/issues/1504).
 4c. **Build only the contexts a program uses** ([#1497](https://github.com/nanyx-lang/nanyx/issues/1497)): every program
    builds the members of the host's `Console` and `Env` and imports what they call, used or not, since `run` passes
    them all.
@@ -426,7 +426,7 @@ The composite host runs each part under the right sub-host and coordinates start
   that the module's own imports win over. The contexts the prelude re-exports are those the host provides
   (`providesContexts` in `Library.fs`): importing the module that declares one, as the prelude does, binds the names
   of its members, so they are ambient (see below). An import that selects a context, as the prelude's
-  `export nanyx/console (Console, ...)` does, selects its members too.
+  `export nanyx.console.core/console (Console, ...)` does, selects its members too.
 - **`@entry` calls the host's `run`.** `Attributes.applyAttributes` imports the host under an alias of its own
   (`__host`), so that it can't clash with the program's names, and appends `__host.run(main)` to the module as its
   start. The entry point passed to `run` is at the attribute's span, so a mismatch there is the entry not fitting the
@@ -442,11 +442,11 @@ The composite host runs each part under the right sub-host and coordinates start
   `@entry` makes. A module that calls a host's `run` itself needs `HostRuntime` for it, so that is an error too.
 - **Where the entry's `Console` comes from.** Every entry is passed the members of the `Console` that `run` `use`s, so
   it reads and writes through the host. An entry that doesn't write its type, which is most programs, infers `Console`
-  as an ambient context, because the host's prelude brings `nanyx/console`'s names in. A def that infers an ambient context takes its
+  as an ambient context, because the host's prelude brings `Console`'s names in. A def that infers an ambient context takes its
   members as a def that writes it does: `InferModule` adds the contexts it inferred to the def's annotation for the
   backend (`[Console]` on its own, or after the parameterised contexts it was given), and the backend gives a function
   named as a value the contexts without parameters it requires (`CodeGen.carryPlainContexts`), so `run(main)` passes
-  `main` its members rather than closing it over `nanyx/console`'s. Nothing wires `Console` to the entry by name.
+  `main` its members rather than closing it over the module that declares `Console`. Nothing wires `Console` to the entry by name.
 - **Scripts run under the host.** A module without an `@entry` whose top level has statements is a script, and its
   statements are its entry point: `Scripts.asEntry` makes them the body of a lambda, followed by `()`, and appends
   `__host.run({ ... })` to the module, importing the host (a script sees the host's prelude, as any program's module
@@ -468,7 +468,7 @@ The composite host runs each part under the right sub-host and coordinates start
   at the top level. A value that needs a context in a module with no statements, which nothing would run, is an error
   at the value. Every script carries the host's `Console`, about 24 KB of WebAssembly text for hello world, as an
   entry program does.
-- **`Console` only comes from the host.** `nanyx/console` declares the context and `print`, `println`, `eprint` and
+- **`Console` only comes from the host.** `nanyx.console.core/console` declares the context and `print`, `println`, `eprint` and
   `eprintln`, but no instance: the line reading lives in the console host alone. Importing a module whose contexts
   the host provides (those its prelude re-exports) binds the names of its plain contexts' members, `readLine` and the
   rest, each a symbol of its own (`Library.mergeImport`), so `Console` is still an ambient context: a script's
@@ -478,7 +478,7 @@ The composite host runs each part under the right sub-host and coordinates start
   type (#1288). A def that writes `[c.Console]` for an aliased import is passed the members as `[Console]` is: the
   backend reads the layout of the context's own name (`CodeGen.layoutOf`), and a member called under the alias,
   `c.write`, is written by its own name for the backend (`ModuleLinking.writeMemberAliases`).
-- **`Env`** is declared in `nanyx/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, so its
+- **`Env`** is declared in `nanyx.console.core/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, so its
   parameter is `[Console & Env] () -> a`; an entry that requires fewer contexts fits. The host's prelude re-exports
   `Env`, so its members are ambient names in every module of the program. Its members are functions of the host's own
   over WASI's `args_sizes_get` and `args_get`, `environ_sizes_get` and `environ_get`, and `proc_exit`, declared with

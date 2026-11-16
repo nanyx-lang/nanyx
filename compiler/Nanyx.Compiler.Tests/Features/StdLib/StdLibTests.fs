@@ -8,19 +8,15 @@ open Parser.Program
 open Nanyx.Compiler.Tests.TestSupport
 
 [<Fact>]
-let ``Typecheck accepts the Console context from nanyx/console`` () =
+let ``Typecheck accepts the Console context the console host's prelude brings in`` () =
     let source =
-        normalized """import nanyx/console
-
-def greet: [Console] string -> () = { name -> println(name) }"""
+        normalized """def greet: [Console] string -> () = { name -> println(name) }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
 [<Fact>]
-let ``println comes from nanyx/console and gives unit`` () =
-    let result = Compiler.compile (normalized """import nanyx/console
-
-def result = println("hi")
+let ``println comes from the console host's prelude and gives unit`` () =
+    let result = Compiler.compile (normalized """def result = println("hi")
 
 dbg(0)""")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
@@ -28,9 +24,7 @@ dbg(0)""")
 
 [<Fact>]
 let ``println takes any value with a ToString`` () =
-    let source = """import nanyx/console
-
-type Point = (x: int, y: int)
+    let source = """type Point = (x: int, y: int)
 
 println(42)
 println(1.5)
@@ -42,9 +36,7 @@ println(Point(x = 1, y = 2))
 
 [<Fact>]
 let ``println of a function says that functions have no toString`` () =
-    let source = """import nanyx/console
-
-def inc: int -> int = { n -> n + 1 }
+    let source = """def inc: int -> int = { n -> n + 1 }
 
 println(inc)
 """
@@ -56,9 +48,7 @@ println(inc)
 
 [<Fact>]
 let ``println of a protected type without a toString names what to define`` () =
-    let source = """import nanyx/console
-
-type Id = private int
+    let source = """type Id = private int
 
 println(Id(3))
 """
@@ -73,12 +63,10 @@ let ``println is in scope without an import, from the console host's prelude`` (
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
 [<Fact>]
-let ``Standard library import is resolved without a file`` () =
+let ``A module the host's prelude brings in is resolved without a file`` () =
     withTempDir (fun dir ->
         let mainPath = Path.Combine(dir, "main.nyx")
-        File.WriteAllText(mainPath, (withFinalNewline """import nanyx/console
-
-println("Hello, Nanyx!")"""))
+        File.WriteAllText(mainPath, (withFinalNewline """println("Hello, Nanyx!")"""))
         let result = Compiler.compileFile mainPath
         Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
         // The module is compiled together with the program: the backend sees its definitions, not the import.
@@ -88,10 +76,9 @@ println("Hello, Nanyx!")"""))
         Assert.True(hasPrintln))
 
 [<Fact>]
-let ``nanyx/console declares the Console context`` () =
+let ``The console's interface package declares the Console context`` () =
     let source =
-        normalized """import nanyx/console
-def greet: [Console] string -> () = { name -> println(name) }
+        normalized """def greet: [Console] string -> () = { name -> println(name) }
 def main = { greet("hi") }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
@@ -208,7 +195,7 @@ let ``Unknown standard library module is an error`` () =
         let result = Compiler.compileFile mainPath
         let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
         Assert.Contains("Unknown standard library module 'nanyx/sockets'", message)
-        Assert.Contains("nanyx/console", message))
+        Assert.Contains("nanyx/math", message))
 
 [<Fact>]
 let ``Every module sees the host's prelude without importing it, with an entry point or without`` () =

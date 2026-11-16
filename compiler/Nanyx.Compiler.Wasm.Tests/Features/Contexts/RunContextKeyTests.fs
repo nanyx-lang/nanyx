@@ -22,9 +22,7 @@ let ``Keys whose names differ only in where a _ falls have different text`` () =
 
 [<Fact>]
 let ``Run - a parameterised context whose name and members have _ in them`` () =
-    let source = """import nanyx/console
-
-context To_Text(a) = (to_text: a -> string, text_tag: a -> string)
+    let source = """context To_Text(a) = (to_text: a -> string, text_tag: a -> string)
 type My_Point = (x: int, y: int)
 
 def describe: [To_Text(a)] a -> string = { value -> To_Text(a).to_text(value) ++ "/" ++ To_Text(a).text_tag(value) }
@@ -42,9 +40,7 @@ use show_point in println(twice(My_Point(x = 1, y = 2)))
 [<Fact>]
 let ``Run - two contexts whose keys were once the same text are both passed`` () =
     // `c` of `A_b(a)` and `a_c` of `A(b)` were both `A_b_a_c`, so `both` took two parameters of the same name.
-    let source = """import nanyx/console
-
-context A(x) = (a_c: x -> string)
+    let source = """context A(x) = (a_c: x -> string)
 context A_b(x) = (c: x -> string)
 
 def both: [A_b(a) & A(b)] (a, b) -> string = { v, w -> A_b(a).c(v) ++ " " ++ A(b).a_c(w) }
@@ -62,9 +58,7 @@ println(main())
 
 [<Fact>]
 let ``Run - contexts whose names share what comes before a _ are kept apart`` () =
-    let source = """import nanyx/console
-
-context A_B(x) = (d: x -> string)
+    let source = """context A_B(x) = (d: x -> string)
 context A_C(x) = (d: x -> string)
 
 def one: [A_B(a)] a -> string = { v -> A_B(a).d(v) }
@@ -83,9 +77,7 @@ println(main())
 
 [<Fact>]
 let ``Run - a lambda captures a member with _ in its name, of a plain context and of a parameterised one`` () =
-    let plain = """import nanyx/console
-
-context Log_Line = (log_line: string -> string)
+    let plain = """context Log_Line = (log_line: string -> string)
 
 def shout: [Log_Line] string -> string = { s -> log_line(s) ++ "!" }
 
@@ -97,9 +89,7 @@ def run_twice: [Log_Line] () -> string = {
 use Log_Line(log_line = { s -> "<" ++ s ++ ">" }) in println(run_twice())
 """
     runSource (plain.ReplaceLineEndings "\n") |> assertRan "<a>! <b>!\n"
-    let parameterised = """import nanyx/console
-
-context To_Text(a) = (to_text: a -> string)
+    let parameterised = """context To_Text(a) = (to_text: a -> string)
 type My_Point = (x: int, y: int)
 
 def describe: [To_Text(a)] a -> string = { value -> to_text(value) }

@@ -34,7 +34,7 @@ nanyx hello
 - `run` compiles the file and executes it on the embedded Wasmtime engine. The program's output is the
   only thing written to stdout; diagnostics go to stderr. What follows the file or package is the program's own:
   `nanyx run tool.nyx a b` passes `a` and `b`, which the program reads with `args()` from
-  [`nanyx/env`](../stdlib/env). The program sees the process's environment variables, through `variable`, and
+  [`Env`](../stdlib/env). The program sees the process's environment variables, through `variable`, and
   `exit(code)` ends it with that exit code, which `run` exits with. To pass arguments to the package in the
   current directory, name it: `nanyx run . a b`. An argument that starts with `-` can't be passed yet: the CLI reads it as one of `run`'s options, and `--` doesn't end them.
 - `wasm` writes WebAssembly text next to the input (or to `--out`, making its directory if need be).
@@ -112,7 +112,7 @@ src/greetings.nyx (0.05s of 1.28s)
 └── nanyx/prelude (1.23s)
 src/main.nyx (0.20s of 1.06s)
 ├── nanyx/prelude (cached)
-├── nanyx/console (0.04s)
+├── nanyx/text (0.04s)
 │   └── nanyx/prelude (cached)
 ├── nanyx/list (0.81s)
 │   └── nanyx/prelude (cached)

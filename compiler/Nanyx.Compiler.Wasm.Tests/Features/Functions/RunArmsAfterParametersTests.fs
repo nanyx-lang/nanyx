@@ -6,9 +6,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - a lambda's arms after its parameters match the arguments`` () =
     let source =
-        """import nanyx/console
-
-def `>>=`: #some(a) | #none, (a -> #some(b) | #none) -> #some(b) | #none = { m, f ->
+        """def `>>=`: #some(a) | #none, (a -> #some(b) | #none) -> #some(b) | #none = { m, f ->
   | #some(v), f -> f(v)
   | #none, _ -> #none
 }

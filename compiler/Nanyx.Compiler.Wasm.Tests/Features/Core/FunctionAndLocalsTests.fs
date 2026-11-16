@@ -217,8 +217,6 @@ def main = {
 let ``Run - a local generic function frees what it is given, at each type it is used at`` () =
     // A closure for each type it is used at: the string it is given and ignores is freed, the int left alone (#616).
     """
-import nanyx/console
-
 @entry
 def main = {
   def first = { x, y -> x }

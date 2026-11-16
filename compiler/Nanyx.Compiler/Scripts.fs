@@ -39,7 +39,7 @@ module Scripts =
                   Argument = SourceSpan.none
                   Call = [ call.Id ] }
             let items = module' |> List.filter (fun item -> not (isStatement item) && not (isEntryCall item))
-            // A script imports what it uses itself, `nanyx/console` among them: only the host is imported for it.
+            // A script sees the host's prelude, as any module of a program does: only the host is imported for it.
             let hostImport = if entries.IsEmpty then [ Attributes.hostImport host ] else []
             hostImport @ items @ [ TopLevelItem.synthetic (Expr call) ] @ (module' |> List.filter isEntryCall), Some (entry, lambda.Id)
     /// The name of the def a script's entry point is made into once it is typed (see `asDefinition`). No code can write
@@ -48,8 +48,8 @@ module Scripts =
 
     /// `entryTy`, the type of a script's entry point, requiring of the plain contexts only those that are ambient in the
     /// module (`ambient`, by name): the statements run in those, and in no other. A statement that calls a function whose
-    /// type is an error leaves the entry point's contexts open, to take on all those the host's `run` provides, `Env` among
-    /// them where the script doesn't import `nanyx/env`; the backend would then look for members that nothing supplies.
+    /// type is an error leaves the entry point's contexts open, to take on all those the host's `run` provides, those
+    /// the script's scope doesn't bring in among them; the backend would then look for members that nothing supplies.
     let withAmbientContextsOnly (ambient: Set<Identifier>) (entryTy: Ty) : Ty =
         match entryTy with
         | TyFunc(input, output, own) ->

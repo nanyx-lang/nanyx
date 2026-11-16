@@ -8,9 +8,7 @@ open Nanyx.Compiler.Tests.TestSupport
 
 let private repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", ".."))
 
-let private unusedBinding = withFinalNewline """import nanyx/console
-
-export def main: [Console] () -> () = {
+let private unusedBinding = withFinalNewline """export def main: [Console] () -> () = {
   def unused = 1
   println("hi")
 }"""
@@ -45,7 +43,7 @@ let ``A rule directive sets the rule's severity`` () =
     Assert.Equal("default/unusedBindings", diagnostic.Code)
     Assert.Equal(Severity.Error, diagnostic.Severity)
     // The header does not move the code: the binding is still on its own line.
-    Assert.Equal(5, diagnostic.Span.Value.StartLine)
+    Assert.Equal(3, diagnostic.Span.Value.StartLine)
 
 [<Fact>]
 let ``A rule directive can turn the rule off`` () =
@@ -103,7 +101,7 @@ let ``A directive after the first line of code is a syntax error saying where di
 let ``A directive in a file of a package is an error saying to use the manifest`` () =
     withTempDir (fun root ->
         let manifest = Path.Combine(root, "demo.nyxp")
-        File.WriteAllText(manifest, """(package = (name = "demo", version = "0.1.0"))""")
+        File.WriteAllText(manifest, $"""(package = (name = "demo", version = "0.1.0"), {consoleHostEntry})""")
         let main = Path.Combine(root, "main.nyx")
         File.WriteAllText(main, "::linters.default.unusedBindings = \"error\"\nmodule main\n\n" + unusedBinding)
         let directives = Script.read main (File.ReadAllText main)

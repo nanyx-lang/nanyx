@@ -7,9 +7,7 @@ open TranspilerWasmTestHelpers
 let ``Run - a context member passed as a value to a function, in a hole`` () =
     // #925
     let source =
-        """import nanyx/console
-
-context ToText(a) = (textlen: a -> int)
+        """context ToText(a) = (textlen: a -> int)
 
 def int.textlen: int -> int = { n -> n * 2 }
 
@@ -29,9 +27,7 @@ def main = {
 let ``Run - a context member kept in a local def and called later`` () =
     // #925: the value had no type, and the call through it trapped.
     let source =
-        """import nanyx/console
-
-context ToText(a) = (textlen: a -> int)
+        """context ToText(a) = (textlen: a -> int)
 
 def int.textlen: int -> int = { n -> n * 2 }
 

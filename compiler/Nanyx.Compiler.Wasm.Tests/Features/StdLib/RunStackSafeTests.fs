@@ -10,8 +10,7 @@ open TranspilerWasmTestHelpers
 /// The start of each program: `xs` is the list 1 to 20,000, and `show` gives a list's length, first element and
 /// last element.
 let private withList (body: string) =
-    normalized """import nanyx/console
-import nanyx/text
+    normalized """import nanyx/text
 
 def upTo: int, list(int) -> list(int) = { n, acc -> if n == 0 then acc else upTo(n - 1, [n, ...acc]) }
 def first: list(int) -> int = {
@@ -118,8 +117,7 @@ let ``Run - List.append works on 20,000 elements`` () =
 [<Fact>]
 let ``Run - math.pow works for an exponent of 100,000`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/math as math
+        normalized """import nanyx/math as math
 
 println("{math.pow(1, 100000)} {math.pow(-1, 99999)} {math.pow(3, 4)} {math.pow(2, 0)}")
 """

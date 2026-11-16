@@ -218,9 +218,7 @@ def run: [Memory] ([Memory] () -> b) -> b = { mk -> memory { mk() } }
 
 [<Fact>]
 let ``Only a scoped context is kept in the call that supplies it`` () =
-    compileClean """import nanyx/console
-
-context Log = (log: string -> ())
+    compileClean """context Log = (log: string -> ())
 
 def withConsoleLog: [Console & c] ([Log & c] () -> a) -> a = { body ->
   use Log(log = { m -> println(m) })

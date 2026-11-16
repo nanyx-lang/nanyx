@@ -9,8 +9,6 @@ open TranspilerWasmTestHelpers
 let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
 
 let private tree = """
-import nanyx/console
-
 type Tree(a) = #leaf | #node(Tree(a), a, Tree(a))
 
 def insert: Tree(int), int -> Tree(int) = { t, v ->
@@ -44,8 +42,6 @@ def inOrder: Tree(string) -> string = {
 [<Fact>]
 let ``Run - a recursive alias's values are evaluated by a recursive function`` () =
     let source = """
-import nanyx/console
-
 type Expr = #num(int) | #add(Expr, Expr)
 
 def eval: Expr -> int = {
@@ -82,8 +78,6 @@ println("{size(t)} {sum(t)}")
 [<Fact>]
 let ``Run - values of a recursive alias are compared by their structure`` () =
     let source = """
-import nanyx/console
-
 type Expr = #num(int) | #neg(Expr) | #add(Expr, Expr)
 
 def same: Expr, Expr -> string = { a, b -> if a == b then "same" else "different" }
@@ -110,8 +104,6 @@ println("{total(forest)} {size(forest)}")
 [<Fact>]
 let ``Run - a list of a recursive alias's values`` () =
     let source = """
-import nanyx/console
-
 type Expr = #num(int) | #add(Expr, Expr)
 
 def eval: Expr -> int = {

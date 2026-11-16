@@ -5,8 +5,7 @@ open TranspilerWasmTestHelpers
 
 // `show...` match on the value: `dbg` of a tag returned from a call prints its raw encoding.
 let private header =
-    normalized """import nanyx/console
-import nanyx/text
+    normalized """import nanyx/text
 
 def showInts: [Console] list(int) -> () = { xs ->
   println("[" ++ string.join(xs \list.map(int.toString), ", ") ++ "]")
@@ -132,9 +131,7 @@ def main = {
 
 // #183: two steps that fail with different tags.
 let private steps =
-    normalized """import nanyx/console
-
-def parseDigit: string -> #some(int) | #invalidInt = {
+    normalized """def parseDigit: string -> #some(int) | #invalidInt = {
   | "1" -> #some(1)
   | _ -> #invalidInt
 }

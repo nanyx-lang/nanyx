@@ -68,8 +68,6 @@ def each = { f, xs ->
 let ``A function that prints can be given to a def whose local rec def calls it`` () =
     compileClean (
         """
-import nanyx/console
-
 def each = { f, xs ->
   rec loop = {
     | [] -> ()
@@ -92,8 +90,6 @@ let ``A local rec def that prints requires Console, and so does the def around i
         [ "tickAll", "[Console] list(α) -> ()"; "loop", "[Console] list(β) -> ()" ],
         hints
             """
-import nanyx/console
-
 def tickAll = { items ->
   rec loop = {
     | [] -> ()
@@ -133,8 +129,6 @@ let ``A lambda a local rec def returns that prints requires Console, and nothing
           "next", "[Console] int -> int" ],
         hints
             """
-import nanyx/console
-
 def later = { n ->
   rec loop = { k ->
     { total ->

@@ -6,9 +6,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - a call finds its instance at the type its result is expected to have`` () =
     let source =
-        """import nanyx/console
-
-context Default(a) = (default: string -> a)
+        """context Default(a) = (default: string -> a)
 def int.default: string -> int = { s -> 7 }
 def string.default: string -> string = { s -> "<" ++ s ++ ">" }
 def get: [Default(a)] string -> a = { s -> default(s) }

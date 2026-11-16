@@ -4,8 +4,6 @@
 ::linters.default.unusedBindings = "error"
 ::formatter.lineWidth = 80
 
-import nanyx/console
-
 def greet = { name -> println("Hello, " ++ name ++ "!") }
 
 list.fold(["Ada", "Grace", "Barbara"], (), { _, name -> greet(name) })

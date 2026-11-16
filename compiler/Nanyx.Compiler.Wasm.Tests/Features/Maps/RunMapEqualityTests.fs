@@ -88,9 +88,7 @@ let ``Run - sets with the same elements are equal, whatever order they were adde
 [<Fact>]
 let ``Run - comparing maps and sets built at run time frees everything they hold`` () =
     let source =
-        """import nanyx/console
-
-def build: list(string) -> map(string, list(string)) = { names ->
+        """def build: list(string) -> map(string, list(string)) = { names ->
   list.fold(names, map.empty, { m, name -> map.insert(m, name ++ "!", [name, name ++ name]) })
 }
 

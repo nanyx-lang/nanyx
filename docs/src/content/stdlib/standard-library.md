@@ -13,11 +13,17 @@ The standard library is the modules under `nanyx/`. The [prelude](./prelude) is 
   [conversions](./prelude-conversions), [lists](./prelude-lists), [maps and sets](./prelude-maps) and
   [results and options](./prelude-results)
 - [text](./text) — functions on strings (`nanyx/text`)
-- [console](./console) — reading from and writing to the terminal (`nanyx/console`)
 - [math](./math) — numeric functions and constants (`nanyx/math`)
-- [env](./env) — a program's arguments, environment variables and exit code (`nanyx/env`)
 - [host.runtime](./host-runtime) — the privileged layer a host is written on (`nanyx/host.runtime`)
 - [host.memory](./host-memory) — a host's access to linear memory, for the foreign functions it calls (`nanyx/host.memory`)
+
+# Shipped with the compiler
+
+The console host's interface package, `nanyx.console.core`, isn't part of the standard library, but the compiler
+ships it, and the console host's prelude brings its names into every module of a program:
+
+- [console](./console) — reading from and writing to the terminal (`nanyx.console.core/console`)
+- [env](./env) — a program's arguments, environment variables and exit code (`nanyx.console.core/env`)
 
 # Named parameters
 

@@ -7,8 +7,6 @@ open TranspilerWasmTestHelpers
 let ``Run - sized integers compute, compare and print as their types`` () =
     let source =
         """
-import nanyx/console
-
 def total: [Num(a)] list(a) -> a = {
   | [] -> zero
   | [x, ...rest] -> x + total(rest)
@@ -33,8 +31,6 @@ def main = {
 let ``Run - sized integers are kept in fields, payloads, lists and closures`` () =
     let source =
         """
-import nanyx/console
-
 type Pixel = (r: U8, g: U8, big: U64, n: I16)
 
 @entry
@@ -56,8 +52,6 @@ def main = {
 /// tag payloads and a closure, and reads them back, compares, orders, hashes and copies them there.
 let private narrowStorageSource =
     """
-import nanyx/console
-
 type Colour = (r: U8, g: U8, b: U8, depth: I16, wide: int)
 
 def widen = { (n: I8) -> I8.toInt(n) }
@@ -100,8 +94,6 @@ let ``Transpile - narrow sized integers are stored in 1 and 2 bytes`` () =
 let ``Run - a literal is of the sized type the code around it expects`` () =
     let source =
         """
-import nanyx/console
-
 def classify = { (b: U8) ->
   match b
   | 0 -> "zero"
@@ -139,8 +131,6 @@ def main = {
 let ``Run - sized integer arithmetic that does not fit stops the program`` (expression: string) =
     let source =
         $"""
-import nanyx/console
-
 @entry
 def main = {{
   println("before")
@@ -156,8 +146,6 @@ def main = {{
 let ``Run - sized integer arithmetic that comes close to not fitting does not stop the program`` () =
     let source =
         """
-import nanyx/console
-
 @entry
 def main = {
   println("{I8.fromInt(126) + I8.fromInt(1)} {I8.fromInt(-127) - I8.fromInt(1)} {U8.fromInt(15) * U8.fromInt(17)}")
@@ -172,8 +160,6 @@ def main = {
 let ``Run - the wrapping operations keep the low bits of the result`` () =
     let source =
         """
-import nanyx/console
-
 def fnv: list(U32) -> U32 = {
   | [] -> 2_166_136_261
   | [x, ...rest] -> U32.wrappingMul(fnv(rest), 16_777_619) \U32.wrappingAdd(x)
@@ -195,7 +181,6 @@ def main = {
 let ``Run - a number converts to another type, keeping its value or saying it is out of range`` () =
     let source =
         """
-import nanyx/console
 import nanyx/math as math
 
 @entry
@@ -225,8 +210,6 @@ def main = {
 let ``Run - converting a float that is not a whole int stops the program`` () =
     let source =
         """
-import nanyx/console
-
 @entry
 def main = {
   println("before")
