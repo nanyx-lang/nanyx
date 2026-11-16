@@ -465,7 +465,8 @@ The composite host runs each part under the right sub-host and coordinates start
   (`Contexts.extendEnvForLambdaArgument`): its statements are the top level, and see the script's own names and
   ambient contexts as before. A script's value that needs a context, directly or through the functions and values it
   names (`def line = readLine()`), is inferred in a scope of its own (`ScriptValueScope`) that records what it
-  needs; once the module is inferred, those values (`InferState.ScriptEntryValues`) move into the entry point as local
+  needs. A lambda written in the value is not run by building it, so what it calls is its own type's, not the value's
+  (`def handlers = (log = { m -> println(m) })` needs nothing). Once the module is inferred, those values (`InferState.ScriptEntryValues`) move into the entry point as local
   defs, in the order written, so each is computed once
   ([#1257](https://github.com/nanyx-lang/nanyx/issues/1257)). A value that needs no context stays at the top level,
   where a function can name it, and is built on its first read

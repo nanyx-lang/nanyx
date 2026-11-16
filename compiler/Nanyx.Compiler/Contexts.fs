@@ -405,12 +405,14 @@ let internal valueWithoutEntry (valueName: Identifier) (ctxName: Identifier) (sp
     Diagnostics.at DiagnosticCodes.UndeclaredContext span
         $"'{valueName}' needs the context '{ctxName}' to be computed, which only a script's statements run in: compute it in a statement, or make '{valueName}' a function"
 
-/// `infer` run on `state`, but at the top level's ambient contexts where `state` is in a named module's value: for a
-/// lambda written in the value, which building the value does not run. One passed to a call is not inferred this
-/// way, since the call may run it.
+/// `infer` run on `state`, but at the top level's ambient contexts where `state` is in a top-level value, a named
+/// module's or a script's: for a lambda written in the value, which building the value does not run, so the contexts
+/// it requires are its function type's, not the value's (#1059). One passed to a call is not inferred this way, since
+/// the call may run it.
 let internal outsideValue (infer: InferState -> Result<'T * InferState, Diagnostic list>) (state: InferState) =
     match state.ContextScope with
-    | ValueScope _ as valueScope ->
+    | ValueScope _
+    | ScriptValueScope _ as valueScope ->
         infer { state with ContextScope = AmbientScope } |> Result.map (fun (typed, next) -> typed, { next with ContextScope = valueScope })
     | _ -> infer state
 

@@ -95,3 +95,33 @@ let ``A value that needs a context in a module without statements is an error, a
     Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, code)
     Assert.Equal("'line' needs the context 'Console' to be computed, which only a script's statements run in: compute it in a statement, or make 'line' a function", message)
     Assert.Equal("line", text)
+
+[<Fact>]
+let ``A value that only holds lambdas requiring a context needs none to be computed`` () =
+    // Building the record, the list or the tag calls nothing: each lambda's function type requires the context (#1522).
+    let source =
+        """def handlers = (log = { m: string -> println(m) }, count = { n: int -> n + 1 })
+def inList = [{ m: string -> println(m) }]
+def inTag = #some({ m: string -> println(m) })
+
+def pureCaller: int -> int = { n ->
+  def f = handlers.count
+  f(n)
+}
+"""
+    let typed = compileClean source
+    Assert.Equal("(count: (int -> int), log: ([Console] string -> ()))", Unifier.tyToString typed.Types.["handlers"])
+    Assert.Equal("list([Console] string -> ())", Unifier.tyToString typed.Types.["inList"])
+    Assert.Equal("#some([Console] string -> ())", Unifier.tyToString typed.Types.["inTag"])
+
+[<Fact>]
+let ``Calling a held lambda that requires a context still needs it`` () =
+    let source =
+        """def handlers = (log = { m: string -> println(m) })
+
+def pureCaller: () -> () = {
+  def f = handlers.log
+  f("x")
+}
+"""
+    Assert.Equal((DiagnosticCodes.UndeclaredContext.Code, "f"), singleError source)

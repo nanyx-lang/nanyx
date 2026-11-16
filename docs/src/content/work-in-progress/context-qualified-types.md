@@ -33,10 +33,9 @@ def pureCaller: () -> () = {
 
 Holding, passing or storing `handlers` requires nothing, and `handlers.count` can be called from pure code. A context
 instance is never a value at all ([Contexts are not types](./context-escape#contexts-are-not-types)), so there's no
-`[Console] Log` either.
-
-Not yet: a top-level value that only holds such a lambda is reported as needing the context to be computed
-([#1522](https://github.com/nanyx-lang/nanyx/issues/1522)).
+`[Console] Log` either. A top-level value that only holds such a lambda needs no context to be computed: a lambda written
+in a value, a named module's or a script's, is inferred outside it (`Contexts.outsideValue`), since building the value
+does not run it ([#1522](https://github.com/nanyx-lang/nanyx/issues/1522)).
 
 # Types whose declaration says so
 
