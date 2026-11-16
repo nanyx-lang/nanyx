@@ -69,7 +69,12 @@ context of their own, `type MRef(a) = [Memory] protected (...)`
 1. **`Array(a)`** ([#1490](https://github.com/nanyx-lang/nanyx/issues/1490)): done. An immutable, fixed-length
    sequence with constant-time indexing, in [`nanyx/array`](../stdlib/array). It needs no `Memory`. In the backend
    it's an `IrArray`, a block of its length and then its elements laid out flat (`CoreIrArrays`, and see
-   [Memory management](./memory-management#drop-functions)); four intrinsics make and read one. An array is callable,
+   [Memory management](./memory-management#drop-functions)); intrinsics make and read one. `array.init`, `create` and
+   `map` make the block at its length with `__nanyx_array_new` and write each element once with `__nanyx_array_write`,
+   which gives up nothing, as the slot was never written, so each makes one block; `==` compares the lengths, then
+   the elements by index, and allocates nothing ([#1548](https://github.com/nanyx-lang/nanyx/issues/1548)). A local
+   bound to `__nanyx_array_new` would be generalised, its element type free, so the helper that fills the array takes
+   it as an argument and gives it back. An array is callable,
    `xs(i)` being `array.at(xs, i)`, read as a map's call is (`Infer.inferLookup`,
    [#1516](https://github.com/nanyx-lang/nanyx/issues/1516)); `array.at` is in the prelude for it.
 2. **`MRef(a)`, a cell as a value** ([#1491](https://github.com/nanyx-lang/nanyx/issues/1491)): done, in

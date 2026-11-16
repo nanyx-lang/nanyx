@@ -105,6 +105,12 @@ module Intrinsics =
     let arrayLength = prefix + "array_length"
     /// The element of an array at an index, which the standard library has checked is in range.
     let arrayGet = prefix + "array_get"
+    /// A new array of a length (none for a length of 0 or less) whose elements are not yet written, and its element at an
+    /// index written for the first time, which the array takes over: how the standard library makes an array in one
+    /// block, writing each element once before anything reads the array. The standard library checks each index is in
+    /// range.
+    let arrayNew = prefix + "array_new"
+    let arrayWrite = prefix + "array_write"
     /// A new box holding a value (see `Boxes`), the value a box holds, and a box changed to hold another value, which
     /// gives up the one it held.
     let boxNew = prefix + "box_new"
@@ -227,6 +233,8 @@ module Intrinsics =
           marrayLength, { Quantified = set [ elementVar.Id ]; Type = TyFunc(MutableArrays.ofType element, intTy, []); Symbol = None; ProvidedBy = None }
           marrayGet, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ MutableArrays.ofType element; intTy ], element, []); Symbol = None; ProvidedBy = None }
           marraySet, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ MutableArrays.ofType element; intTy; element ], unitTy, []); Symbol = None; ProvidedBy = None }
+          arrayNew, { Quantified = set [ elementVar.Id ]; Type = TyFunc(intTy, Arrays.ofType element, []); Symbol = None; ProvidedBy = None }
+          arrayWrite, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ Arrays.ofType element; intTy; element ], unitTy, []); Symbol = None; ProvidedBy = None }
           isExclusive, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, TyPrimitive "bool", []); Symbol = None; ProvidedBy = None }
           listSetTail, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ listOf element; listOf element ], unitTy, []); Symbol = None; ProvidedBy = None }
           listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element, []); Symbol = None; ProvidedBy = None }

@@ -19,14 +19,32 @@ export def array.at: array(a), int -> #some(a) | #none = { xs, index ->
 --| Whether the arrays `xs` and `ys` hold equal elements in the same order, as `same` compares two
   elements. The `==` the compiler derives for an array calls it.
 export def __arrayEqualsBy: [c] array(a), array(a), ([c] a, a -> bool) -> bool = { xs, ys, same ->
-  __listEqualsBy(__nanyx_array_to_list(xs), __nanyx_array_to_list(ys), same)
+  __nanyx_array_length(xs) == __nanyx_array_length(ys) and equalFrom(xs, ys, 0, same)
+}
+
+-- Whether `xs` and `ys`, of the same length, hold equal elements from `index` on.
+def equalFrom: [c] array(a), array(a), int, ([c] a, a -> bool) -> bool = { xs, ys, index, same ->
+  if index >= __nanyx_array_length(xs)
+    then true
+    else if same(__nanyx_array_get(xs, index), __nanyx_array_get(ys, index)) then
+      equalFrom(xs, ys, index + 1, same)
+    else false
 }
 
 --| `xs` in square brackets, each element written by `show`, with `, ` between them, as a list is
   written. The `toString` the compiler derives for an array calls it.
 export def __arrayToString: [c] array(a), ([c] a -> string) -> string = { xs, show ->
-  __listToString(__nanyx_array_to_list(xs), show)
+  "[{__nanyx_string_join(shownBefore(xs, __nanyx_array_length(xs), show, []), ", ")}]"
 }
+
+-- `show` of each element of `xs` before `index`, in order, in front of `shown`.
+def shownBefore
+  : [c] array(a), int, ([c] a -> string), list(string) -> list(string)
+  = { xs, index, show, shown ->
+    if index <= 0
+      then shown
+      else shownBefore(xs, index - 1, show, [show(__nanyx_array_get(xs, index - 1)), ...shown])
+  }
 
 --| `xs` itself. What a literal builds an array with, `Array[1, 2]`, or `[1, 2]` where an array is
   expected.

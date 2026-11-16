@@ -587,13 +587,16 @@ type private FunctionEmitter(context: EmitContext) =
         | CallRuntime(name, [ array ], _) when name = Intrinsics.arrayLength ->
             join "\n    " [ atoms [ array ]; touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"; "i64.extend_i32_u" ]
         // A mutable array's element at an index, which the standard library has checked is in range, is given up and
-        // the value, which the array takes over, is stored in its place, as `SetField` does.
-        | CallRuntime(name, [ array; index; value ], _) when name = Intrinsics.marraySet ->
+        // the value, which the array takes over, is stored in its place, as `SetField` does. A new array's element is
+        // written the same way, with nothing to give up, since it was never written.
+        | CallRuntime(name, [ array; index; value ], _) when name = Intrinsics.marraySet || name = Intrinsics.arrayWrite ->
             let element = arrayElement (atomType array)
             let offset = CoreIrLayout.arrayElementOffset element 0
             let slot = freshLocal "__slot" "i32"
             let held = freshLocal "__set" (CoreIrLayout.valueType element)
-            let dropOld = if CoreIrDrop.isHeapType element then $"local.get ${slot}\n    {load element offset}\n    {dropValue element}" else ""
+            let dropOld =
+                if name = Intrinsics.marraySet && CoreIrDrop.isHeapType element then $"local.get ${slot}\n    {load element offset}\n    {dropValue element}"
+                else ""
             join "\n    " [
                 atoms [ array; index ]
                 "i32.wrap_i64"
@@ -606,6 +609,28 @@ type private FunctionEmitter(context: EmitContext) =
                 dropOld
                 $"local.get ${slot}\n    local.get ${held}\n    {store element offset}"
                 "i32.const 0" ]
+        // A new array: a block of its length, none for a length of 0 or less, then room for its elements, which the
+        // standard library writes before anything reads them.
+        | CallRuntime(name, [ count ], _) when name = Intrinsics.arrayNew ->
+            let element = arrayElement expr.Type
+            let requested = freshLocal "__count" "i64"
+            let length = freshLocal "__length" "i32"
+            let array = freshLocal "__array" "i32"
+            join "\n    " [
+                atoms [ count ]
+                $"local.tee ${requested}"
+                "i64.const 0"
+                $"local.get ${requested}\n    i64.const 0\n    i64.gt_s"
+                "select"
+                "i32.wrap_i64"
+                $"local.tee ${length}"
+                $"i32.const {CoreIrLayout.size element}\n    i32.mul"
+                $"i32.const {CoreIrLayout.arrayElementOffset element 0}\n    i32.add"
+                $"call ${helper Helpers.newCell}"
+                $"local.tee ${array}"
+                $"local.get ${length}"
+                touching $"i32.store offset={CoreIrLayout.arrayLengthOffset}"
+                $"local.get ${array}" ]
         // A list cell's tail is given up and the list, which the cell takes over, is stored in its place.
         | CallRuntime(name, [ cell; tail ], _) when name = Intrinsics.listSetTail ->
             let listTy = atomType cell
