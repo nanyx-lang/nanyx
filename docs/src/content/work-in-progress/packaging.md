@@ -4,9 +4,10 @@ description: "How packages are named, resolved, hosted and published"
 order: 32
 ---
 
-> **Status: proposal.** This page frames the packaging workstream and proposes how packages are named, resolved,
-> hosted and published. The manifest format is already described in the docs; the rest is open for discussion
-> until the questions at the end are settled. Work is tracked under the `packaging` label.
+Local packages are built and described in [Packages and projects](../tour/packages): the manifest, path
+dependencies, `export module`, and the packages the compiler ships ([Hosts](../advanced/hosts#packages-the-compiler-ships)).
+This page frames the rest of the packaging workstream, which is a proposal: how packages are named, resolved, hosted
+and published. Work is tracked under the `packaging` label.
 
 # Summary
 
@@ -60,9 +61,9 @@ Local packages work: a package and the packages it depends on by path are built,
   dependency's `version` is refused (`NYX0024`). There is no `.nyxproj`. `nanyx migrate` makes a package of scripts, `nanyx pull` checks and lists its dependencies, and `nanyx install` adds one; for a package named by its version, `pull` and `install` are stubs until downloading exists ([#1471](https://github.com/nanyx-lang/nanyx/issues/1471), [The nanyx command](./command-line#packages)). The formatter
   reads the manifest's `formatter` field itself.
 - **The compiler ships packages as source directories** beside it (`ShippedPackages`): the console host,
-  `packages/nanyx.console`, at the compiler's version, which a manifest's `host` names at that version exactly
-  (`NYX0029`). A program imports nothing from it itself; the host's import resolves in it (see
-  [Built-ins as packages](./built-ins-as-packages#whats-built)).
+  `packages/nanyx.console`, and its interface package, `packages/nanyx.console.core`, at the compiler's version, which
+  a manifest's `host` or `dependencies` names at that version exactly (`NYX0029`) (see
+  [Built-ins as packages](./built-ins-as-packages#how-shipped-packages-are-built)).
 - **A package's imports go through its module table** (`PackageModules.fs`). Every source file the manifest
   selects is keyed by the module name it declares (`PackageModules.ofFiles`), and in those files `import greetings`
   and `import acme.web/greetings` both reach the file that declares `module greetings`, wherever it is
@@ -176,17 +177,12 @@ linter rule that asks for annotations on exported definitions
 
 ## What a package exports
 
-Built ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457)); it replaced the manifest's `publicModules` field:
-
-- **`export module mypackage.main`** in a module's declaration makes it public (`ModuleDecl`'s `isExport`, read
-  into `PackageModules.PublicModules` by `PackageModules.ofFiles`; a module split across files is public when one
-  of them exports it). Any other module is internal to its package: importing it from another package is `NYX0025`.
-- **Re-exports** use the syntax that already works, `export mypackage.stuff (memberA, memberB)`, so an author
-  controls exactly what's visible.
-- **A library must export something.** A package with no `host`, no `@entry` and no exported module is `NYX0033`
-  at its manifest's `package`. An application needn't export anything, nor need a package with an `@entry` that
-  runs with `--host`.
-- **No default module.** `import somepackage/main`; there's no `import somepackage`.
+Built ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457)), and described in
+[Public modules](../tour/packages#public-modules): `export module` in a module's declaration makes it public, and
+re-exports choose what of an internal module it shows. The compiler reads it into `PackageModules.PublicModules`
+(`ModuleDecl`'s `isExport`, by `PackageModules.ofFiles`; a module split across files is public when one of them
+exports it). These public modules' exports, with their types, are the API that `api.json` and the
+[semantic version check](#enforced-semantic-versioning) compare.
 
 ## What a package is
 
@@ -310,9 +306,9 @@ Local packages first (items 3a to 3c), then remote packages. Each produces somet
    - ~~**3a. Path dependencies** ([#862](https://github.com/nanyx-lang/nanyx/issues/862)): a dependency on a package in
      a directory, importing its public modules as `acme.util/strings`, one version of each package per build, only
      direct dependencies importable, with an error for each rule.~~ Done.
-   - **3b. Packages shipped with the compiler** ([#1342](https://github.com/nanyx-lang/nanyx/issues/1342)): source
-     directories in the distribution, named with an exact version.
-   - **3c. The console host as a shipped package** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)), then the
+   - ~~**3b. Packages shipped with the compiler** ([#1342](https://github.com/nanyx-lang/nanyx/issues/1342)): source
+     directories in the distribution, named with an exact version.~~ Done.
+   - **3c. The console host as a shipped package** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344), done), then the
      official linter once its contract exists ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)).
    - Projects (`.nyxproj`) later ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
 4. **The lockfile and the cache.** `nanyx.lock`, the `.nyxpkg` format, verification and the per-user cache, tested
