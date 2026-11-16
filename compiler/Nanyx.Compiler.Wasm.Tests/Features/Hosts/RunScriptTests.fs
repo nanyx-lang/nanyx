@@ -89,3 +89,18 @@ def main = {
 }
 """
     runSource source |> assertRan "mine: x\n"
+[<Fact>]
+let ``A script value that holds a lambda requiring Console runs it where a statement calls it`` () =
+    // Building `handlers` calls nothing, so it needs no context; calling `log` does (#1522).
+    let source =
+        """def handlers = (log = { m: string -> println(m) }, count = { n: int -> n + 1 })
+
+def pureCaller: int -> int = { n ->
+  def f = handlers.count
+  f(n)
+}
+
+def log = handlers.log
+log("count {pureCaller(1)}")
+"""
+    runSource source |> assertRan "count 2\n"
