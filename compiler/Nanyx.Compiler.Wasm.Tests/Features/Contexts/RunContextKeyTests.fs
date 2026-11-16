@@ -32,8 +32,9 @@ def My_Point.to_text: My_Point -> string = { p -> "p{p.x}" }
 def My_Point.text_tag: My_Point -> string = { p -> "t" }
 
 println(twice(My_Point(x = 1, y = 2)))
-def show_point: To_Text(My_Point) = (to_text = { p -> "q" }, text_tag = { p -> "u" })
-use show_point in println(twice(My_Point(x = 1, y = 2)))
+type My_Size = (w: int, h: int)
+def show_size: To_Text(My_Size) = (to_text = { s -> "q" }, text_tag = { s -> "u" })
+use show_size in println(twice(My_Size(w = 1, h = 2)))
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "p1/t p1/t\nq/u q/u\n"
 

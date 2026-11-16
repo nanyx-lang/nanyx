@@ -239,40 +239,15 @@ let ``Run - a concrete comparison uses the == attached to a nominal type`` () =
     |> assertRan "T\nF\nF\n"
 
 [<Fact>]
-let ``Run - an Eq loaded with use changes a concrete comparison in its block`` () =
-    comparing
-        [ "def always: Eq(string) = (`==` = { a, b -> true })"
-          "def loose = { a, b ->"
-          "  use always"
-          "  a == b"
-          "}"
-          "def literal = { a, b ->"
-          "  use (`==` = { x, y -> false })"
-          "  a == b"
-          "}" ]
-        [ """loose("ab", "cd")"""
-          """loose("ab", "ab")"""
-          """literal("ab", "ab")"""
-          "\"ab\" == \"cd\"" ]
-    |> runSource
-    |> assertRan "T\nT\nF\nF\n"
-
-[<Fact>]
 let ``Run - a list of a type with its own == is compared through it, element by element`` () =
     comparing
         [ "type Email = protected string"
           "def Email.`==`: Email, Email -> bool = { a, b -> true }"
-          "def always: Eq(string) = (`==` = { a, b -> true })"
-          "def loose: list(string), list(string) -> bool = { xs, ys ->"
-          "  use always"
-          "  xs == ys"
-          "}"
           "def same: [Eq(a)] list(a), list(a) -> bool = { xs, ys -> xs == ys }" ]
         [ """[Email("a")] == [Email("b")]"""
           """[Email("a")] != [Email("b")]"""
           """[Email("a")] == [Email("a"), Email("b")]"""
           """same([Email("a")], [Email("b")])"""
-          """loose(["a"], ["b"])"""
           """["a"] == ["b"]""" ]
     |> runSource
-    |> assertRan "T\nF\nF\nT\nT\nF\n"
+    |> assertRan "T\nF\nF\nT\nF\n"

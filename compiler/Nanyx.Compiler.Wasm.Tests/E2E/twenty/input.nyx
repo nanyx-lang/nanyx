@@ -1,19 +1,19 @@
 -- Test 20: Parameterized context instances
--- Tests that [ToString(a) & ToString(b)] works with qualified access ToString(a).f
+-- Tests that [Describe(a) & Describe(b)] works with qualified access Describe(a).f
 
-context ToString(a) = (toString: a -> String)
+context Describe(a) = (describe: a -> String)
 
-def compareStrings: [ToString(a) & ToString(b)] a, b -> bool = { x, y ->
-  def xString = ToString(a).toString(x)
-  def yString = ToString(b).toString(y)
+def compareStrings: [Describe(a) & Describe(b)] a, b -> bool = { x, y ->
+  def xString = Describe(a).describe(x)
+  def yString = Describe(b).describe(y)
   dbg("xString: " ++ xString ++ ", yString: " ++ yString)
   xString == yString
 }
 
 def main = {
-  def fakeInt: ToString(int) = (toString = { i -> "fake" })
+  def fakeInt: Describe(int) = (describe = { i -> "fake" })
   use fakeInt
-  def plainString: ToString(string) = (toString = { s -> s })
+  def plainString: Describe(string) = (describe = { s -> s })
   use plainString
 
   compareStrings(42, "fake")

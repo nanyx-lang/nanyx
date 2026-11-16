@@ -100,15 +100,18 @@ def b = list.sort([v(2), v(1)])""")
     Assert.Contains(InstanceSynthesized [ "compare", "Version.compare" ], instancesOf typed)
 
 [<Fact>]
-let ``An Ord loaded with use orders a built-in type in its block`` () =
-    let typed =
-        compileClean (
-            "def backwards: Ord(string) = (compare = { a, b -> string.compare(b, a) })\n" +
-            "def a = {\n  use backwards\n  \"a\" < \"b\"\n}\n" +
-            "def b = \"a\" < \"b\"\n")
-    match instancesOf typed with
-    | [ InstanceInScope({ Kind = TypeApply("Ord", _) }, _) ] -> ()
-    | other -> failwith $"Unexpected instances: %A{other}"
+let ``An Ord loaded with use can't replace a built-in type's order`` () =
+    let source =
+        """
+def backwards: Ord(string) = (compare = { a, b -> string.compare(b, a) })
+def a = {
+  use backwards
+  "a" < "b"
+}
+"""
+    let code, at = singleError (normalized source)
+    Assert.Equal(DiagnosticCodes.OwnInstanceReplaced.Code, code)
+    Assert.Equal("backwards", at)
 
 [<Fact>]
 let ``List.sortBy takes a key of any type with an order`` () =

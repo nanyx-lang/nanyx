@@ -296,7 +296,11 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         match inferExpr env (state |> UseDischarge.mark value |> LambdaContexts.enterUse value) value with
         | Error err -> Error err
         | Ok (typedValue, nextState) ->
-            let envWithUse, nextState = useInstance (extendEnvWithRecordFields (FromUse value.Id) nextState env typedValue.Type) nextState value typedValue.Type
+            let withFields = extendEnvWithRecordFields (FromUse value.Id) nextState env typedValue.Type
+            let envWithUse, nextState = useInstance withFields nextState value typedValue.Type
+            match ownInstanceErrors withFields envWithUse nextState value with
+            | _ :: _ as errors -> Error errors
+            | [] ->
             match inferExpr envWithUse nextState body with
             | Ok (typedBody, finalState) ->
                 Ok (mkTypedExpr expr typedBody.Type (Some typedBody) None None, finalState)
@@ -1459,10 +1463,14 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                 if errors.IsEmpty then
                     match inferExpr env' (current |> UseDischarge.mark value |> LambdaContexts.enterUse value) value with
                     | Ok (typedExpr, next) ->
-                        let withUse, next = useInstance (extendEnvWithRecordFields (FromUse value.Id) next env' typedExpr.Type) next value typedExpr.Type
-                        current <- next
-                        env' <- withUse
-                        typedStatements <- typedStatements @ [ TypedUseStatement typedExpr ]
+                        let withFields = extendEnvWithRecordFields (FromUse value.Id) next env' typedExpr.Type
+                        let withUse, next = useInstance withFields next value typedExpr.Type
+                        match ownInstanceErrors withFields withUse next value with
+                        | _ :: _ as replaced -> errors <- replaced
+                        | [] ->
+                            current <- next
+                            env' <- withUse
+                            typedStatements <- typedStatements @ [ TypedUseStatement typedExpr ]
                     | Error err -> errors <- err
             | ExprStatement expr ->
                 if errors.IsEmpty then

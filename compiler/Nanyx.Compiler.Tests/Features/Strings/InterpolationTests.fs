@@ -29,17 +29,18 @@ let ``A hole uses the ToString synthesized from a type's attached toString`` () 
     Assert.Contains(InstanceSynthesized [ "toString", "Point.toString" ], instancesOf typed)
 
 [<Fact>]
-let ``A hole uses an instance loaded with use ahead of the compiler's own`` () =
+let ``A hole uses an instance loaded with use for a type with no ToString of its own`` () =
     let typed =
         compileClean (
-            withFinalNewline """def s = {
-  def hashInt: ToString(int) = ( toString = { n -> "#{n}" } )
-  use hashInt
-  "{1}"
+            withFinalNewline """type Cents = protected int
+def s = {
+  def hashCents: ToString(Cents) = ( toString = { n -> "#" } )
+  use hashCents
+  "{Cents(1)}"
 }""")
     let loaded =
         instancesOf typed
-        |> List.choose (function InstanceInScope(Kind (TypeApply("ToString", [ Kind (TypeName "int") ])), _) -> Some () | _ -> None)
+        |> List.choose (function InstanceInScope(Kind (TypeApply("ToString", [ Kind (TypeName "Cents") ])), _) -> Some () | _ -> None)
     Assert.Equal(1, loaded.Length)
 
 [<Fact>]

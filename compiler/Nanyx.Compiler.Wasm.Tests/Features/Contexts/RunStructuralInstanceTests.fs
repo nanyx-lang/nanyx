@@ -152,23 +152,19 @@ let ``Run - a generic call compares maps and sets through the Eq the function wa
     |> assertRan "2\ntrue\nfalse\n"
 
 [<Fact>]
-let ``Run - a part of a structure is written and compared through an instance loaded with use in its block`` () =
+let ``Run - a part of a structure is written through an instance loaded with use in its block`` () =
     printing
-        [ """def pounds: ToString(int) = (toString = { p -> "£{p}" })"""
-          "def always: Eq(string) = (`==` = { a, b -> true })"
+        // `Cents`, a protected type, has no `ToString` of its own for a `use` to replace.
+        [ "type Cents = protected int"
+          """def pounds: ToString(Cents) = (toString = { p -> "£" })"""
           """def show: [ToString(a)] a -> string = { x -> "{x}" }"""
-          "def same: [Eq(a)] a, a -> bool = { x, y -> x == y }"
-          "def priced: int -> string = { n ->"
+          "def priced: Cents -> string = { n ->"
           "  use pounds"
           """  "{[n, n]} {#some(n)} " ++ show((n, 1))"""
-          "}"
-          "def loose: string, string -> string = { a, b ->"
-          "  use always"
-          "  \"{#some(a) == #some(b)} {same((a, 1), (b, 1))}\""
           "}" ]
-        [ "priced(5)"; """loose("a", "b")"""; "[5]"; """#some("a") == #some("b")""" ]
+        [ "priced(Cents(5))"; "[5]" ]
     |> runSource
-    |> assertRan "[£5, £5] #some(£5) (£5, £1)\ntrue true\n[5]\nfalse\n"
+    |> assertRan "[£, £] #some(£) (£, 1)\n[5]\n"
 
 [<Fact>]
 let ``Run - a local function writes a structure of a variable it is generic in, and an empty list is written`` () =

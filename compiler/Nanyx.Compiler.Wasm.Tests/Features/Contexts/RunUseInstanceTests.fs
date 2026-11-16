@@ -36,7 +36,9 @@ let ``Run - use C(T)(members) in body loads the instance for the body`` () =
     let source =
         point
         + """
-def shown = use ToString(Point)(toString = { p -> "<{p.x}, {p.y}>" }) in "{Point(x = 9, y = 8)}"
+type Spot = protected (x: int, y: int)
+
+def shown = use ToString(Spot)(toString = { p -> "<{p.x}, {p.y}>" }) in "{Spot(x = 9, y = 8)}"
 
 println(shown)
 """

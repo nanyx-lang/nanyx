@@ -18,16 +18,17 @@ def My_Point.to_text: My_Point -> string = { p -> "p" }
 def My_Point.text_tag: My_Point -> string = { p -> "t" }
 
 def synthesized = describe(My_Point(x = 1, y = 2))
-def show_point: To_Text(My_Point) = (to_text = { p -> "q" }, text_tag = { p -> "u" })
+type My_Size = (w: int, h: int)
+def show_size: To_Text(My_Size) = (to_text = { s -> "q" }, text_tag = { s -> "u" })
 def loaded = {
-  use show_point
-  describe(My_Point(x = 1, y = 2))
+  use show_size
+  describe(My_Size(w = 1, h = 2))
 }
 """
     let typed = compileClean (source.ReplaceLineEndings "\n")
     match ownContextInstances typed |> Map.toList |> List.sortBy fst |> List.map snd |> List.filter ((<>) [ Some InstanceBuiltIn ]) with
     | [ [ Some (InstanceSynthesized members) ]
-        [ Some (InstanceInScope(Kind (TypeApply ("To_Text", [ Kind (TypeName "My_Point") ])), _)) ] ] ->
+        [ Some (InstanceInScope(Kind (TypeApply ("To_Text", [ Kind (TypeName "My_Size") ])), _)) ] ] ->
         Assert.Equal<(string * string) list>([ "text_tag", "My_Point.text_tag"; "to_text", "My_Point.to_text" ], List.sort members)
     | other -> failwith $"Unexpected instances: %A{other}"
 

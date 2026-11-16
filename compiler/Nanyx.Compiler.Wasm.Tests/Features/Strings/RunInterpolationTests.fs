@@ -36,17 +36,18 @@ def main = {
     runSource source |> assertRan "p is (1, 2), costing £2.50\n"
 
 [<Fact>]
-let ``Run - a use changes how a hole writes its type`` () =
+let ``Run - a use gives a hole an instance for a type with no ToString of its own`` () =
     let source =
-        normalized """@entry
+        normalized """type Cents = protected int
+
+@entry
 def main = {
-  println("before {1}")
-  def bracketed: ToString(int) = ( toString = { n -> "<{int.toString(n)}>" } )
+  def bracketed: ToString(Cents) = ( toString = { c -> "<cents>" } )
   use bracketed
-  println("after {1}")
+  println("after {Cents(1)}")
 }
 """
-    runSource source |> assertRan "before 1\nafter <1>\n"
+    runSource source |> assertRan "after <cents>\n"
 
 [<Fact>]
 let ``Run - a generic function that interpolates its parameter writes each type it is called with`` () =
