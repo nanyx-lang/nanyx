@@ -19,10 +19,7 @@ def r = "one" <> "two"
 An operator takes exactly two arguments, its left and right operands, so the lambda that defines one takes two parameters ([NYX0255](../standard-tools/errors#nyx0255)). An operand can be a tuple or a record, to pass more than one value on a side:
 
 ```nanyx
-def `<+>`: int, (int, int) -> int = { a, pair ->
-  def (b, c) = pair
-  a + b * c
-}
+def `<+>` = { a, (b, c) -> a + b * c }
 
 def r = 1 <+> (2, 3)
 ```
