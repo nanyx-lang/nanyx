@@ -87,7 +87,9 @@ def main = {
   ([#1218](https://github.com/nanyx-lang/nanyx/issues/1218)). `RunLambdaSuppliedContextTests.fs` runs this example.
   A context a function type carries is named as it is declared: a `module db =` block's `Tx`, which the module that
   imports the block calls `Tx` too, is `db.Tx` in both function types (`WrittenContexts.canonical`), so the lambda's
-  requirement meets the parameter's ([#1486](https://github.com/nanyx-lang/nanyx/issues/1486)).
+  requirement meets the parameter's ([#1486](https://github.com/nanyx-lang/nanyx/issues/1486)). A def's type that
+  writes `[Tx]` is written `[db.Tx]` for the backend too (`ModuleLinking.writeBlockAliases`), which finds the members
+  by the layout of the block's own type definition ([#1606](https://github.com/nanyx-lang/nanyx/issues/1606)).
 
 - **The backend needs nothing new.** `CoreIrLowerMembers.coerce` already adapts a function value given where one that
   passes fewer members is expected, capturing the members it needs where it is given. A `use` binding goes through it.
