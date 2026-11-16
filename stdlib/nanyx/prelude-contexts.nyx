@@ -258,17 +258,9 @@ export def __toString: a -> string = { value ->
 }
 
 --| What the derived `toString` of a list calls: `xs` in square brackets, each element written by
-  `show`, with `, ` between them.
+  `show`, with `, ` between them. The elements' texts are joined once, so each is copied once.
 export def __listToString: [c] list(a), ([c] a -> string) -> string = { xs, show ->
-  match xs
-    | [] -> "[]"
-    | [first, ...rest] -> "[{__listRestToString(rest, show, show(first))}]"
-}
-
-def __listRestToString: [c] list(a), ([c] a -> string), string -> string = { xs, show, text ->
-  match xs
-    | [] -> text
-    | [first, ...rest] -> __listRestToString(rest, show, "{text}, {show(first)}")
+  "[{__nanyx_string_join(list.map(xs, show), ", ")}]"
 }
 
 -- Each built-in type has an attached `toString`, so a value can be turned into text by a function
