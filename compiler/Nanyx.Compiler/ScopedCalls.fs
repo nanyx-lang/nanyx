@@ -75,6 +75,69 @@ let enter (env: TypeEnv) (state: InferState) (call: Expression) (callee: Identif
             SupplyingCalls = state.SupplyingCalls |> Map.add call.Id (supplied, written)
             OpenScopes = List.map snd supplied @ state.OpenScopes }
 
+/// Whether the def `defName`, where it writes its type, has the scoped context `context` in its body: the type writes
+/// it, or the def supplies it to a function it is given, as `memory` does, or it takes a cell, for `Memory`.
+let private declares (state: InferState) (defName: Identifier) (context: Identifier) =
+    let names (contexts: TypeExpr list) = contexts |> List.exists (fun ctx -> ctx.Kind = TypeName context)
+    let inParameters (signature: TypeExpr) =
+        match signature.Kind with
+        | TypeFunc(input, _) ->
+            TypeExpr.within input
+            |> List.exists (fun typeExpr ->
+                match typeExpr.Kind with
+                | TypeWithContext(contexts, _) -> names contexts
+                | TypeApply(name, [ _ ]) -> name = CellPassingSyntax.typeName && context = MemoryCells.context
+                | _ -> false)
+        | _ -> false
+    match state.WrittenTypes |> Map.tryFind defName with
+    | Some { Kind = TypeWithContext(contexts, signature) } -> names contexts || inParameters signature
+    | Some { Kind = TypeContext contexts } -> names contexts
+    | Some signature -> inParameters signature
+    | None -> false
+
+/// The error for `subject` (`'open'`, which `instead` says how to move: `call 'open'`) at `span` requiring the scoped
+/// context `context` where nothing supplies it. Something does in a lambda, which requires the context where it is
+/// called, and in a def's body, where the def writes the context or, writing no type, is inferred to require it (see
+/// `LambdaContexts.record`). A top-level value and a script's statements never have one: only a call that supplies the
+/// context, as `memory { ... }` does `Memory`.
+let private unsuppliedAt (state: InferState) (subject: string) (instead: string) (context: Identifier) (span: SourceSpan) =
+    let supplier = if context = MemoryCells.context then "a `memory { ... }` block" else "a call that supplies it"
+    if LambdaContexts.withinLambda state then None
+    else
+        match state.ContextScope with
+        | DefScope(_, true) -> None
+        | DefScope(defName, false) when declares state defName context -> None
+        | DefScope(defName, false) ->
+            Diagnostics.at DiagnosticCodes.UndeclaredContext span
+                $"{subject} requires the scoped context '{context}', which '{defName}' does not declare: add [{context}] to the type of '{defName}', or {instead} inside {supplier}"
+            |> ContextFixes.withAddToType state defName context
+            |> Some
+        | ValueScope valueName ->
+            Diagnostics.at DiagnosticCodes.UndeclaredContext span
+                $"{subject} requires the scoped context '{context}', which the value '{valueName}' cannot have: {instead} inside {supplier}"
+            |> Some
+        | AmbientScope
+        | ScriptValueScope _ ->
+            Diagnostics.at DiagnosticCodes.MissingContextMembers span
+                $"{subject} requires the scoped context '{context}', which is not available here: {instead} inside {supplier}"
+            |> Some
+
+/// The error for the call to `callee` at `span`, which requires the scoped context `context`, where nothing supplies it
+/// (see `unsuppliedAt`).
+let unsupplied (state: InferState) (callee: Identifier) (context: Identifier) (span: SourceSpan) : Diagnostic option =
+    unsuppliedAt state $"'{callee}'" $"call '{callee}'" context span
+
+/// The errors for a loop at `span` whose body, of the type `bodyTy`, runs where it is written and requires scoped
+/// contexts nothing supplies there.
+let unsuppliedToLoop (state: InferState) (bodyTy: Ty) (span: SourceSpan) : Diagnostic list =
+    match Unifier.unalias bodyTy with
+    | TyFunc(_, _, contexts) ->
+        contexts
+        |> List.choose (function FunctionContexts.ScopedContext(name, _) -> Some name | _ -> None)
+        |> List.distinct
+        |> List.choose (fun context -> unsuppliedAt state "This loop's body" "write the loop" context span)
+    | _ -> []
+
 /// Whether `ty` mentions the scope `scope`.
 let private mentions (scope: Ty) (ty: Ty) =
     match scope with

@@ -525,8 +525,8 @@ let internal checkContextUse (call: NodeId option) (env: TypeEnv) (state: InferS
         Error [ Diagnostics.at DiagnosticCodes.PrivateContextMember span message ]
     | None -> checkMemberContextUse call env state name span
 
-/// Checks that `contexts`, which `name` requires, are available at `span`. A context with a member not in scope at all
-/// is an error only when `reportMissing`. Where they are required by the call `call`, what provides each that is not
+/// Checks that `contexts`, which `name` requires, are available at `span`. A context with a member not in scope at all,
+/// or a scoped context nothing supplies, is an error only when `reportMissing`. Where they are required by the call `call`, what provides each that is not
 /// parameterised is recorded.
 let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) (env: TypeEnv) (state: InferState) (name: Identifier) (contexts: TypeExpr list) (span: SourceSpan) : Result<InferState, Diagnostic list> =
     // A function imported under an alias (`c.println`), or a context named under one (`c.Console`), finds the
@@ -598,7 +598,16 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
                     if members |> List.exists isOther then Some (ctxName, info) else None
                 | _ -> None
             | _ -> None)
-    if reportMissing && not forged.IsEmpty then
+    // A scoped context has no members to find: it is available where something supplies it (see `ScopedCalls`).
+    let unsupplied =
+        contexts
+        |> List.choose (fun ctx ->
+            match ctx.Kind with
+            | TypeName ctxName when WrittenContexts.isScoped state ctxName -> ScopedCalls.unsupplied state name ctxName span
+            | _ -> None)
+    if reportMissing && not unsupplied.IsEmpty then
+        Error [ unsupplied.Head ]
+    elif reportMissing && not forged.IsEmpty then
         let ctxName, info = forged.Head
         let kind = if info.IsPrivate then "private" else "protected"
         let message =
