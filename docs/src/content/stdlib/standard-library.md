@@ -13,6 +13,7 @@ The standard library is the modules under `nanyx/`. The [prelude](./prelude) is 
   [conversions](./prelude-conversions), [lists](./prelude-lists), [maps and sets](./prelude-maps) and
   [results and options](./prelude-results)
 - [array](./array) — immutable arrays with constant-time indexing (`nanyx/array`)
+- [marray](./marray) — mutable arrays, fixed-length and changed in place (`nanyx/marray`)
 - [mref](./mref) — mutable references, cells that are values (`nanyx/mref`)
 - [mstack](./mstack) — mutable stacks (`nanyx/mstack`)
 - [mlist](./mlist) — mutable lists that grow at the end (`nanyx/mlist`)
@@ -64,6 +65,7 @@ These exist today:
 - `Array(a)` for fixed-length sequences read by index in constant time ([array](./array))
 - `MRef(a)` for a cell that is a value, inside a `memory` block ([mref](./mref))
 - `MStack(a)` and `MList(a)` for a stack and a list changed in place, inside a `memory` block ([mstack](./mstack), [mlist](./mlist))
+- `MArray(a)` for a fixed-length array changed in place, inside a `memory` block ([marray](./marray))
 
 These are planned, and not yet in the library:
 

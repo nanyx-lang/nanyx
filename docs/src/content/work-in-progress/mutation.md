@@ -75,9 +75,16 @@ context of their own, `type MRef(a) = [Memory] protected (...)`
    holds would read it without `Memory`. A def's type is not generalised over the variables in a box its value holds,
    through the types its nominal types stand for, though it is over those of a box a function it holds makes
    (`Boxes.heldVariables`, used by `Infer.generalizeDef`): this is the value restriction, for boxes only.
-3. **`MArray(a)`** ([#1492](https://github.com/nanyx-lang/nanyx/issues/1492)): fixed length, each slot changed in place.
-   It behaves as an `Array(MRef(a))` whose cells are all distinct, but is laid out flat, as an `Array` is. Converting
-   between `Array` and `MArray` copies, so an `Array` stays immutable.
+3. **`MArray(a)`** ([#1492](https://github.com/nanyx-lang/nanyx/issues/1492)): done, in
+   [`nanyx/marray`](../stdlib/marray). Fixed length, each slot changed in place: it behaves as an `Array(MRef(a))`
+   whose cells are all distinct, but is laid out flat, as an `Array` is. It is declared
+   `type MArray(a) = [Memory] private marray(a)`. `marray(a)` is a built-in type of its own (`MutableArrays` in
+   `Arrays.fs`), not an `array`, so that it has no `Eq`, `Ord`, `Hash` or `ToString`, and a def's type is not
+   generalised over its elements (`Boxes.heldVariables`). The backend holds it as an `IrArray`: four of its five
+   intrinsics are the array's (`Intrinsics.asArrayIntrinsic`, applied where they are lowered), and `__nanyx_marray_set`
+   stores an element in place, giving up the one it replaces as `SetField` does, and takes the value over
+   (`Helpers.operandUse`). Converting between `Array` and `MArray` copies, through a list, so an `Array` stays
+   immutable. `set` and `swap` give `#ok | #outOfRange`, never a trap.
 4. **`MStack(a)` and `MList(a)`** ([#1493](https://github.com/nanyx-lang/nanyx/issues/1493)): done, in
    [`nanyx/mstack`](../stdlib/mstack) and [`nanyx/mlist`](../stdlib/mlist), written in Nanyx over `MRef` as private
    types, so they needed nothing new in the compiler. Neither writes `[Memory]` in its declaration: each carries its

@@ -107,6 +107,23 @@ module Intrinsics =
     let boxNew = prefix + "box_new"
     let boxGet = prefix + "box_get"
     let boxSet = prefix + "box_set"
+    /// A new mutable array of a list's elements (see `MutableArrays`), its elements as a list, its length and its
+    /// element at an index, as for an array, and its element at an index changed, which gives up the one it held. The
+    /// standard library checks each index is in range.
+    let marrayOfList = prefix + "marray_of_list"
+    let marrayToList = prefix + "marray_to_list"
+    let marrayLength = prefix + "marray_length"
+    let marrayGet = prefix + "marray_get"
+    let marraySet = prefix + "marray_set"
+
+    /// The array intrinsic a mutable array's is, since the backend holds the two the same way: a mutable array's
+    /// elements are read as an array's are.
+    let asArrayIntrinsic (name: string) =
+        if name = marrayOfList then arrayOfList
+        elif name = marrayToList then arrayToList
+        elif name = marrayLength then arrayLength
+        elif name = marrayGet then arrayGet
+        else name
 
     /// Ends the program with an exit code. It never returns, so its result is `undefined`.
     let exit = prefix + "exit"
@@ -194,6 +211,11 @@ module Intrinsics =
           boxNew, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, Boxes.ofType element, []); Symbol = None; ProvidedBy = None }
           boxGet, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Boxes.ofType element, element, []); Symbol = None; ProvidedBy = None }
           boxSet, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ Boxes.ofType element; element ], unitTy, []); Symbol = None; ProvidedBy = None }
+          marrayOfList, { Quantified = set [ elementVar.Id ]; Type = TyFunc(listOf element, MutableArrays.ofType element, []); Symbol = None; ProvidedBy = None }
+          marrayToList, { Quantified = set [ elementVar.Id ]; Type = TyFunc(MutableArrays.ofType element, listOf element, []); Symbol = None; ProvidedBy = None }
+          marrayLength, { Quantified = set [ elementVar.Id ]; Type = TyFunc(MutableArrays.ofType element, intTy, []); Symbol = None; ProvidedBy = None }
+          marrayGet, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ MutableArrays.ofType element; intTy ], element, []); Symbol = None; ProvidedBy = None }
+          marraySet, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ MutableArrays.ofType element; intTy; element ], unitTy, []); Symbol = None; ProvidedBy = None }
           listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element, []); Symbol = None; ProvidedBy = None }
           compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy, []); Symbol = None; ProvidedBy = None }
           hash, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, intTy, []); Symbol = None; ProvidedBy = None } ]
