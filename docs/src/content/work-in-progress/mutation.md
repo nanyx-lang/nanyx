@@ -78,9 +78,14 @@ context of their own, `type MRef(a) = [Memory] protected (...)`
 3. **`MArray(a)`** ([#1492](https://github.com/nanyx-lang/nanyx/issues/1492)): fixed length, each slot changed in place.
    It behaves as an `Array(MRef(a))` whose cells are all distinct, but is laid out flat, as an `Array` is. Converting
    between `Array` and `MArray` copies, so an `Array` stays immutable.
-4. **`MStack(a)` and `MList(a)`** ([#1493](https://github.com/nanyx-lang/nanyx/issues/1493)): written in Nanyx over
-   `MRef`, as protected types, so they need nothing new in the compiler. `MList` has `+=` attached to append. It can
-   move onto a growable `MArray` later without changing its interface.
+4. **`MStack(a)` and `MList(a)`** ([#1493](https://github.com/nanyx-lang/nanyx/issues/1493)): done, in
+   [`nanyx/mstack`](../stdlib/mstack) and [`nanyx/mlist`](../stdlib/mlist), written in Nanyx over `MRef` as private
+   types, so they needed nothing new in the compiler. Neither writes `[Memory]` in its declaration: each carries its
+   block's scope through the `MRef` it holds. `MStack` is an `MRef(list(a))`, the top first. `MList` is an `MRef` of its
+   elements last first, and their count, so `add` is constant-time and `at` and `set` walk to the element; `set` gives
+   `#ok | #outOfRange`. It can move onto a growable `MArray` later without changing its interface. `+=` to append
+   isn't on Nanyx's list of operators, so whether and how it joins it is
+   [#1564](https://github.com/nanyx-lang/nanyx/issues/1564).
 5. **Slices** ([#1545](https://github.com/nanyx-lang/nanyx/issues/1545)): views that share storage instead of copying.
    `Slice(a)` is an immutable view of an `Array` that holds a counted reference to it, so it needs no lifetime rules;
    `MSlice(a)` is a mutable view of an `MArray`, carrying its block's scope; and a string slice is for parsers. Each is

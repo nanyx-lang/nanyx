@@ -14,6 +14,8 @@ The standard library is the modules under `nanyx/`. The [prelude](./prelude) is 
   [results and options](./prelude-results)
 - [array](./array) — immutable arrays with constant-time indexing (`nanyx/array`)
 - [mref](./mref) — mutable references, cells that are values (`nanyx/mref`)
+- [mstack](./mstack) — mutable stacks (`nanyx/mstack`)
+- [mlist](./mlist) — mutable lists that grow at the end (`nanyx/mlist`)
 - [text](./text) — functions on strings (`nanyx/text`)
 - [math](./math) — numeric functions and constants (`nanyx/math`)
 - [host.runtime](./host-runtime) — the privileged layer a host is written on (`nanyx/host.runtime`)
@@ -61,6 +63,7 @@ These exist today:
 - `map(k, v)` for key/value lookup ([maps and sets](./prelude-maps))
 - `Array(a)` for fixed-length sequences read by index in constant time ([array](./array))
 - `MRef(a)` for a cell that is a value, inside a `memory` block ([mref](./mref))
+- `MStack(a)` and `MList(a)` for a stack and a list changed in place, inside a `memory` block ([mstack](./mstack), [mlist](./mlist))
 
 These are planned, and not yet in the library:
 

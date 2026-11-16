@@ -119,6 +119,7 @@
     <Compile Include="Features\Memory\MemoryInstanceTests.fs" />
     <Compile Include="Features\Memory\CellParameterTests.fs" />
     <Compile Include="Features\Memory\MRefTests.fs" />
+    <Compile Include="Features\Memory\MutableCollectionTests.fs" />
     <Compile Include="Features\Matches\ExhaustivenessTests.fs" />
     <Compile Include="Features\Matches\MissingArmFixTests.fs" />
     <Compile Include="Features\Matches\AndPatternTests.fs" />
