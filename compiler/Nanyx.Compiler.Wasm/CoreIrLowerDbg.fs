@@ -72,6 +72,7 @@ let rec private mangle (ty: Ty) : string =
         "tags_" + (tagsOf ty |> List.map tag |> String.concat "_")
     | TyRecord(fields, _) -> "rec_" + (fields |> Map.toList |> List.map (fun (name, fieldTy) -> $"{name}_{mangle fieldTy}") |> String.concat "_")
     | TyApply(name, args) -> $"{name}_{all args}"
+    | TyScope scope -> $"scope_{mangle scope}"
     | TyFunc(input, output, _) -> $"fn_{mangle input}_to_{mangle output}"
     | TyVar _
     | TyOpenRecord _ -> "unit"

@@ -42,8 +42,10 @@ These features mostly read tables the server already has in `TypedModule` (see `
 | Every export in the library | the export index `ImportFixes` builds once, to offer missing imports |
 | Doc comments | attached by `DocComments.attach`, read for a symbol by `Documentation.Reader` |
 
-The library's exports and their types are read from each module's own compile, made once per process
-(`LibraryCatalog.compiledExports`), as the browser and search by type need them.
+The library's exports and their types are read from each module's compile as an import checks it, from the checked
+library the compiler embeds (`Compiler.compileStandardLibraryModuleReporting`), and listed with their signatures once per
+process (`LibraryCatalog.moduleExports`), as the browser and search by type need them. Search keeps its candidates for
+the process too, and reads a doc comment only for a match ([#1462](https://github.com/nanyx-lang/nanyx/issues/1462)).
 
 # 1. Info view
 

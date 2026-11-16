@@ -68,6 +68,7 @@ let rec private varsIn (keyOf: TyVar -> 'key option) (general: Ty) (specific: Ty
     | TyVar v, _ -> keyOf v |> Option.map (fun key -> Map.ofList [ key, specific ]) |> Option.defaultValue Map.empty
     | TyFunc(ga, gr, _), TyFunc(sa, sr, _) -> all [ ga, sa; gr, sr ]
     | TyApply(_, gs), TyApply(_, ss) when gs.Length = ss.Length -> all (List.zip gs ss)
+    | TyScope g, TyScope s -> recur g s
     | TyAlias(_, gs, gu), TyAlias(_, ss, su) when gs.Length = ss.Length -> all ((gu, su) :: List.zip gs ss)
     | TyNominal(_, _, gu, _), TyNominal(_, _, su, _) -> recur gu su
     | TyRecord(gf, _), TyRecord(sf, _) -> all (fieldPairs gf sf)

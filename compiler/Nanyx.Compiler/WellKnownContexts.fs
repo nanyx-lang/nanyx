@@ -63,6 +63,7 @@ module internal WellKnownContexts =
             | TyTag(name, payload) -> payload |> Option.bind (inPart $"the payload of '#{name}'" false)
             | Lists.ListType element -> inPart "its elements" true element
             | TyApply _
+            | TyScope _
             | TyRecursive _
             | TySelf _ -> Ty.children ty |> List.tryPick (inPart "a value it holds" false)
             | TyUnion items -> items |> List.tryPick (offendingPart kindOf)
@@ -207,6 +208,7 @@ module internal WellKnownContexts =
                     | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.tryPick (snd >> find)
                     | TyTag(_, payload) -> payload |> Option.bind find
                     | TyApply _
+                    | TyScope _
                     | TyRecursive _
                     | TySelf _
                     | TyUnion _ -> Ty.children ty |> List.tryPick find
@@ -235,6 +237,7 @@ module internal WellKnownContexts =
             | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
             | TyApply _
+            | TyScope _
             | TyRecursive _
             | TySelf _ -> Ty.children ty |> List.collect collect
             | TyUnion items ->

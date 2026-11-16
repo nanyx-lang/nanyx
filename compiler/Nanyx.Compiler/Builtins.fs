@@ -25,7 +25,7 @@ module Intrinsics =
     let private tuple (items: Ty list) =
         TyRecord(items |> List.mapi (fun index ty -> string index, ty) |> Map.ofList, FieldOrder.none)
 
-    let private elementVar = { Id = -1; Name = Some "a" }
+    let private elementVar = TyVar.ordinary (-1) (Some "a")
     let private element = TyVar elementVar
     let private listOf = Lists.ofType
 
@@ -118,6 +118,13 @@ module Intrinsics =
     let marrayLength = prefix + "marray_length"
     let marrayGet = prefix + "marray_get"
     let marraySet = prefix + "marray_set"
+    /// Whether a value is held exclusively: it takes over a reference to the value and gives it up, and says whether that
+    /// was the only one, as Lean's `isExclusive` does. A caller that holds the only reference can hand over what the value
+    /// holds instead of copying it, as `MList.toList` does. The value is one that is always on the heap, such as a box.
+    let isExclusive = prefix + "is_exclusive"
+    /// A list's first cell changed in place to have another list as its tail, giving up the tail it had: how the standard
+    /// library builds a list front to back, in cells nothing outside it can see yet.
+    let listSetTail = prefix + "list_set_tail"
 
     /// The array intrinsic a mutable array's is, since the backend holds the two the same way: a mutable array's
     /// elements are read as an array's are.
@@ -156,8 +163,8 @@ module Intrinsics =
     /// The intrinsics that give back their argument as a value of another type, which the backend holds the same way.
     let reinterpretations : Set<string> = set [ mapOfEntries; mapEntries; setOfElements; setElements ]
 
-    let private keyVar = { Id = -2; Name = Some "k" }
-    let private valueVar = { Id = -3; Name = Some "v" }
+    let private keyVar = TyVar.ordinary (-2) (Some "k")
+    let private valueVar = TyVar.ordinary (-3) (Some "v")
     let private entries = listOf (tuple [ TyVar keyVar; TyVar valueVar ])
     let private map = Maps.ofTypes (TyVar keyVar) (TyVar valueVar)
     let private overEntries (ty: Ty) = { Quantified = set [ keyVar.Id; valueVar.Id ]; Type = ty; Symbol = None; ProvidedBy = None }
@@ -220,6 +227,8 @@ module Intrinsics =
           marrayLength, { Quantified = set [ elementVar.Id ]; Type = TyFunc(MutableArrays.ofType element, intTy, []); Symbol = None; ProvidedBy = None }
           marrayGet, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ MutableArrays.ofType element; intTy ], element, []); Symbol = None; ProvidedBy = None }
           marraySet, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ MutableArrays.ofType element; intTy; element ], unitTy, []); Symbol = None; ProvidedBy = None }
+          isExclusive, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, TyPrimitive "bool", []); Symbol = None; ProvidedBy = None }
+          listSetTail, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ listOf element; listOf element ], unitTy, []); Symbol = None; ProvidedBy = None }
           listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element, []); Symbol = None; ProvidedBy = None }
           compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy, []); Symbol = None; ProvidedBy = None }
           hash, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, intTy, []); Symbol = None; ProvidedBy = None } ]

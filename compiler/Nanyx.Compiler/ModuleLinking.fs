@@ -265,7 +265,7 @@ module internal ModuleLinking =
             let contextVariables = FunctionContexts.variablesIn ty
             let renumbered =
                 TypeEnv.freeTyVars ty
-                |> Seq.mapi (fun index id -> id, TyVar { Id = -(index + 1); Name = contextVariables |> Map.tryFind id |> Option.flatten })
+                |> Seq.mapi (fun index id -> id, TyVar (TyVar.ordinary (-(index + 1)) (contextVariables |> Map.tryFind id |> Option.flatten)))
                 |> Map.ofSeq
             TypeEnv.generalize TypeEnv.empty (Unifier.apply renumbered ty)
         types

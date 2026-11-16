@@ -183,12 +183,32 @@ export def list.find: [c] list(a), ([c] a -> bool) -> #some(a) | #notFound = {
   [`Yield`] whose `yield` adds a value to the list. `items \list.select { item -> if item is #other(v)
   then yield(v) }` gives the payload of each `#other`.
 export def list.select: [c] list(a), ([Yield(b), c] a -> ()) -> list(b) = { xs, f ->
+  -- Built front to back: each value yielded goes in a new cell that becomes the tail of the last
+  -- one. Nothing else sees the cells until the list is given back.
   memory {
-    mut found = []
-    use Yield(b)(yield = { x -> found := [x, ...found] })
-    list.fold(xs, (), { _, x -> f(x) })
-    list.reverse(found)
+    mut first = []
+    mut last = []
+
+    use Yield(b)(
+      yield = { x ->
+        def cell = [x]
+
+        match last
+          | [] -> (first := cell)
+          | previous -> __nanyx_list_set_tail(previous, cell)
+
+        last := cell
+      }
+    )
+
+    runOnEach(xs, f)
+    first
   }
+}
+
+-- Runs `f` on each element of `xs` in turn.
+def runOnEach: [c] list(a), ([c] a -> ()) -> () = { xs, f ->
+  for xs | x -> f(x)
 }
 
 --| The first value `f` yields, running it on the elements in turn as [`list.select`] does, or `#notFound`

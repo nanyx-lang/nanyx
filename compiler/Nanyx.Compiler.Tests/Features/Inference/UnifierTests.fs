@@ -9,7 +9,7 @@ open Nanyx.Compiler.Tests.TestSupport
 
 [<Fact>]
 let ``Unifier binds type variables`` () =
-    let tvar = TyVar { Id = 1; Name = None }
+    let tvar = TyVar (TyVar.ordinary 1 None)
     let constraints: ConstraintSet = [ (tvar, TyPrimitive "string", Equal, SourceSpan.none) ]
     let result = Unifier.unify constraints
     match result with
@@ -20,15 +20,15 @@ let ``Unifier binds type variables`` () =
 let ``Applying a definition's parameters replaces each once, even by a variable with another parameter's id`` () =
     // An imported context's parameters are numbered by its own module: here `e` is applied to this module's variable 1,
     // which has the id of the parameter `a`. It must not then be replaced by what `a` is.
-    let a = { Id = 1; Name = Some "a" }
-    let e = { Id = 2; Name = Some "e" }
-    let local = TyVar { Id = 1; Name = None }
+    let a = TyVar.ordinary 1 (Some "a")
+    let e = TyVar.ordinary 2 (Some "e")
+    let local = TyVar (TyVar.ordinary 1 None)
     let applied = Unifier.applyToParameters [ a; e ] [ TyPrimitive "int"; local ] (TyFunc(TyVar a, TyVar e, []))
     Assert.Equal(TyFunc(TyPrimitive "int", local, []), applied)
 
 [<Fact>]
 let ``Unifier rejects occurs check`` () =
-    let tvar = TyVar { Id = 2; Name = None }
+    let tvar = TyVar (TyVar.ordinary 2 None)
     let constraintSet: ConstraintSet = [ (tvar, TyFunc(tvar, TyPrimitive "int", []), Equal, SourceSpan.none) ]
     let result = Unifier.unify constraintSet
     match result with
@@ -47,7 +47,7 @@ let ``Unifier rejects closed records with different fields, either way round`` (
 
 [<Fact>]
 let ``Unifier gives an open record's row the other fields of a closed one`` () =
-    let row = { Id = 9; Name = None }
+    let row = TyVar.ordinary 9 None
     let opened = TyOpenRecord (Map.ofList [ ("a", TyPrimitive "int") ], row)
     let wide = TyRecord(Map.ofList [ ("a", TyPrimitive "int"); ("b", TyPrimitive "string") ], FieldOrder.none)
     match Unifier.unify [ (wide, opened, Assignable, SourceSpan.none) ] with
@@ -56,8 +56,8 @@ let ``Unifier gives an open record's row the other fields of a closed one`` () =
 
 [<Fact>]
 let ``A lone tag equal to an open union that names it leaves the union's rest empty`` () =
-    let rest = { Id = 7; Name = None }
-    let named = { Id = 8; Name = Some "r" }
+    let rest = TyVar.ordinary 7 None
+    let named = TyVar.ordinary 8 (Some "r")
     let notFound = TyTag("notFound", None)
     match Unifier.unify [ (notFound, TyUnion [ notFound; TyVar rest ], Equal, SourceSpan.none) ] with
     | Ok subst -> Assert.Equal(Some (TyUnion []), subst |> Map.tryFind rest.Id)
@@ -72,8 +72,8 @@ let ``A lone tag equal to an open union that names it leaves the union's rest em
 
 [<Fact>]
 let ``A union leaves out a tag whose payload has no values, and a tag its rest repeats`` () =
-    let payload = { Id = 9; Name = None }
-    let rest = { Id = 10; Name = None }
+    let payload = TyVar.ordinary 9 None
+    let rest = TyVar.ordinary 10 None
     let some = TyTag("some", Some (TyPrimitive "int"))
     let subst = Map.ofList [ payload.Id, TyUnion []; rest.Id, some ]
     Assert.Equal(some, Unifier.apply subst (TyUnion [ some; TyTag("error", Some (TyVar payload)); TyVar rest ]))
@@ -95,8 +95,8 @@ let ``Unifier matches unions by set and width`` () =
 [<Fact>]
 let ``Solving carries on past a conflict to find the next`` () =
     let spanAt start = { SourceSpan.none with Start = start; End = start + 1 }
-    let a = TyVar { Id = 1; Name = None }
-    let b = TyVar { Id = 2; Name = None }
+    let a = TyVar (TyVar.ordinary 1 None)
+    let b = TyVar (TyVar.ordinary 2 None)
     let constraints: ConstraintSet =
         [ (a, TyPrimitive "int", Equal, spanAt 0)
           (a, TyPrimitive "string", Equal, spanAt 10)
@@ -110,7 +110,7 @@ let ``Solving carries on past a conflict to find the next`` () =
 
 [<Fact>]
 let ``Solving constraints that agree gives what unify gives`` () =
-    let a = TyVar { Id = 1; Name = None }
+    let a = TyVar (TyVar.ordinary 1 None)
     let constraints: ConstraintSet = [ (a, TyFunc(TyPrimitive "int", TyPrimitive "string", []), Equal, SourceSpan.none) ]
     let subst, failures = Unifier.solve constraints
     Assert.Empty(failures)
@@ -125,14 +125,14 @@ let private solvedOnTopAndAfresh (newer: ConstraintSet) (older: ConstraintSet) =
 [<Fact>]
 let ``Constraints in front of a list whose union was put off give what solving them afresh does`` () =
     // `#a` given where `v` is expected is put off to the end (see `AssignableLater`).
-    let v = TyVar { Id = 1; Name = None }
+    let v = TyVar (TyVar.ordinary 1 None)
     let older: ConstraintSet = [ (TyTag("a", None), v, Assignable, SourceSpan.none) ]
     // Constraints that share no variable with it.
-    let onTop, afresh = solvedOnTopAndAfresh [ (TyVar { Id = 5; Name = None }, TyPrimitive "int", Equal, SourceSpan.none) ] older
+    let onTop, afresh = solvedOnTopAndAfresh [ (TyVar (TyVar.ordinary 5 None), TyPrimitive "int", Equal, SourceSpan.none) ] older
     Assert.Equal(afresh, onTop)
     // Constraints on its variable, solved first when solved afresh: `v` is `#b | r`, and `#a` widens it into `r`.
     let onTop, afresh =
-        solvedOnTopAndAfresh [ (v, TyUnion [ TyTag("b", None); TyVar { Id = 3; Name = None } ], Equal, SourceSpan.none) ] older
+        solvedOnTopAndAfresh [ (v, TyUnion [ TyTag("b", None); TyVar (TyVar.ordinary 3 None) ], Equal, SourceSpan.none) ] older
     Assert.DoesNotContain("Error", afresh)
     Assert.Equal(afresh, onTop)
 
@@ -141,7 +141,7 @@ let ``Constraints in front of a list whose union was put off give what solving t
 let private onCheckpointAndAfresh (vars: int list) (newer: ConstraintSet) (older: ConstraintSet) =
     let shown result =
         match result with
-        | Ok subst -> vars |> List.map (fun id -> Unifier.tyToString (Unifier.apply subst (TyVar { Id = id; Name = None }))) |> String.concat "; "
+        | Ok subst -> vars |> List.map (fun id -> Unifier.tyToString (Unifier.apply subst (TyVar (TyVar.ordinary id None)))) |> String.concat "; "
         | Error (message: string, span: SourceSpan) -> $"{message} at {span.Start}"
     Unifier.checkpoint older
     shown (Unifier.unify (newer @ older)), shown (Unifier.unify (newer @ List.map id older))
@@ -149,7 +149,7 @@ let private onCheckpointAndAfresh (vars: int list) (newer: ConstraintSet) (older
 [<Fact>]
 let ``Constraints in front of a checkpoint give what solving them afresh does`` () =
     let spanAt start = { SourceSpan.none with Start = start; End = start + 1 }
-    let v, w = TyVar { Id = 1; Name = None }, TyVar { Id = 2; Name = None }
+    let v, w = TyVar (TyVar.ordinary 1 None), TyVar (TyVar.ordinary 2 None)
     // `#a` and `#b` given where `v` is expected: a union whose tags come in the order the constraints are solved.
     let older: ConstraintSet = [ (TyTag("a", None), v, Assignable, spanAt 0); (TyTag("b", None), v, Assignable, spanAt 1) ]
     // Constraints that share no variable with it.

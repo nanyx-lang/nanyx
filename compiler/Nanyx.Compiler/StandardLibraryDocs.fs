@@ -77,9 +77,10 @@ let private typeSignature (typed: TypedModule) (symbol: Symbol) (info: TypeDefIn
         | _ -> Unifier.tyToDisplayString Source shape
     fst (Definition.writtenTypeDefinition writeShape symbol info true)
 
-/// The compile of the standard-library module `moduleName`, as an import of it checks it.
+/// The compile of the standard-library module `moduleName`, as an import of it checks it: from the checked library (see
+/// `Compiler.compileStandardLibraryModuleReporting`).
 let internal compile (moduleName: string) : CompileResult =
-    Compiler.compileFrom Linters.none (StandardLibraryModule moduleName) (StandardLibrary.tryLoadSource moduleName).Value
+    Compiler.compileStandardLibraryModuleReporting CompileListener.none moduleName
 
 /// The names the module `moduleName`, compiled as `typed`, exports, by the file of it that declares each, in the order
 /// the file declares them, with their doc comments as `docOf` writes them. The names it reserves are left out.

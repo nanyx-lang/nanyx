@@ -1124,6 +1124,17 @@ module Compiler =
     let compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
         compileFromReporting CompileListener.none File.ReadAllText options origin source
 
+    /// The compile of the standard-library module `moduleName` as an import of it checks it (see `typecheckImport`):
+    /// from the checked library when its source is the same, else as this process checked it, once. So the tools that
+    /// read the library's modules, its reference and its search, check none of them again. Each module's check, or
+    /// its reuse, is reported to `listener`.
+    let compileStandardLibraryModuleReporting (listener: CompileListener) (moduleName: string) : CompileResult =
+        let origin = StandardLibraryModule moduleName
+        let source = (StandardLibrary.tryLoadSource moduleName).Value
+        let checkedModules = CheckedModules(None, None, listener, File.ReadAllText)
+        Nanyx.LargeStack.run (fun () ->
+            compileChecked checkedModules Linters.none origin source (typecheckImport checkedModules origin (fun () -> source) Set.empty))
+
     /// `compileSourceWith` for a source file of the package `package`, whose imports name its modules, with each
     /// module's check reported to `listener`, and the package's other files it needs read by `readFile`.
     let compileSourceInReporting (listener: CompileListener) (readFile: string -> string) (package: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =

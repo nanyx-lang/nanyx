@@ -111,6 +111,7 @@
     <Compile Include="Features\Memory\CellTests.fs" />
     <Compile Include="Features\Memory\RunMRefTests.fs" />
     <Compile Include="Features\Memory\RunMutableCollectionTests.fs" />
+    <Compile Include="Features\Memory\MListHandOverTests.fs" />
     <Compile Include="Features\Memory\RunMArrayTests.fs" />
     <Compile Include="Features\Memory\StaticClosureTests.fs" />
     <Compile Include="Features\Memory\ClosureEntryTests.fs" />
