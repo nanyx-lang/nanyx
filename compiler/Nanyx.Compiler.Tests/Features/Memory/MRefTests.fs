@@ -24,6 +24,39 @@ def total = memory {
     Assert.Equal("int", Unifier.tyToString typed.Types.["total"])
 
 [<Fact>]
+let ``An MRef holds values of one type, so a def of one is not generalised`` () =
+    let source =
+        """
+import nanyx/mref
+def strings = memory {
+  def r = MRef.new([])
+  MRef.set(r, [5])
+  def read: list(string) = MRef.get(r)
+  read
+}
+"""
+    let code, text = singleError (normalized source)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    Assert.Equal("r, [5]", text)
+
+[<Fact>]
+let ``A function that makes an MRef is still generalised`` () =
+    let source =
+        """
+import nanyx/mref
+def lengths = memory {
+  def make = { () -> MRef.new([]) }
+  def numbers = make()
+  def words = make()
+  MRef.set(numbers, [1])
+  MRef.set(words, ["a", "b"])
+  list.length(MRef.get(numbers)) + list.length(MRef.get(words))
+}
+"""
+    let typed = compileClean (normalized source)
+    Assert.Equal("int", Unifier.tyToString typed.Types.["lengths"])
+
+[<Fact>]
 let ``An MRef can't leave its memory block`` () =
     let source =
         """

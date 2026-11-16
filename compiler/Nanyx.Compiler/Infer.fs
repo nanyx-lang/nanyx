@@ -67,6 +67,7 @@ let private fieldTySoFar (state: InferState) (ty: Ty) (fieldName: string) : (Ty 
 /// given where an open one is expected, may be numbered differently the next time the constraints are solved, so
 /// rather than it, each of inference's own variables solved to a type with it is constrained to that type without it.
 /// So is every context variable no caller can choose (see `Unifier.outputOnlyContextVars`) solved to no contexts.
+/// A variable in a box the value holds is never generalised (see `Boxes.heldVariables`).
 let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeScheme * InferState =
     // A conflict among the constraints, in this def or an earlier one, is set aside, so a def after an error is
     // generalised as it would be without it (#1441).
@@ -95,7 +96,7 @@ let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSch
                 let solved = Unifier.apply subst (TyVar var)
                 if Unifier.isMadeUpRest var || Set.isEmpty (Set.intersect madeUpIds (TypeEnv.freeTyVars solved)) then None
                 else Some (TyVar var, Unifier.apply closing solved))
-    { Quantified = Set.difference (TypeEnv.freeTyVars closedTy) envVars
+    { Quantified = Set.difference (TypeEnv.freeTyVars closedTy) (Set.union envVars (Boxes.heldVariables closedTy))
       Type = closedTy
       Symbol = None
       ProvidedBy = None },
