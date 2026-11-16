@@ -880,7 +880,8 @@ module Compiler =
                           ImportedFiles = merged.ImportedFiles
                           // Filled in for the root module only, by `compileChecked`.
                           InlinedExprTypes = Map.empty
-                          InlinedCalleeTypes = Map.empty }
+                          InlinedCalleeTypes = Map.empty
+                          ScriptEntryValues = state.ScriptEntryValues }
                      Errors = moduleErrors
                      Undeferred = undeferred
                      Own = own

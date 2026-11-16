@@ -22,6 +22,9 @@ nanyx run [--timings] [--check-memory] [--no-inline] [--host <host>] [<directory
 nanyx check [<directory or .nyxp>] [--timings] [--host <host>]
 nanyx build [<directory or .nyxp>] [--out <path>] [--timings] [--host <host>] [--no-inline]
 nanyx new <name> [<directory>]
+nanyx migrate [<file.nyx> | <directory>] [--name <name>]
+nanyx pull [<directory or .nyxp>]
+nanyx install <package> [--path <directory> | --version <version>]
 nanyx manifest --json [<directory or .nyxp>]
 nanyx format [--check | --write] <files or directories>
 nanyx format [--check] --stdin
@@ -215,6 +218,31 @@ since a script names its host with a `::host` directive.
 is given: `acme.demo.nyxp`, with the official linter on and the console host, both at the compiler's version, and
 `src/main.nyx`, whose `@entry` prints "Hello, World!". The name must be one the manifest accepts, and the directory
 must be new or empty.
+
+`nanyx migrate` turns a script, or every `.nyx` file under a directory (the current one by default), into a package
+(`Migration.fs`). It writes `<name>.nyxp` beside them, named by `--name` or the directory's name, at version
+`0.1.0`, whose `sources` select the files it migrated. Each `::` directive becomes the manifest entry it stands for
+(see [Files and projects](../getting-started/files-and-projects#directives)), a `path` made relative to the manifest,
+and is removed from its file, with the `#!` line. Two directives that set one thing differently are an error naming
+both lines. A script with top-level statements becomes `module main`, and its statements, with the values that run
+with them because they need a context, move into an `@entry` def in the order written; the manifest gets the console
+host unless a `::host` names another. Any other file becomes a module named for the file, which a library, a package
+with no entry, exports with `export module`. An import of a migrated file by its path becomes an import of its module.
+The files are written with the formatter. It refuses a directory that is already a package, and one where more than
+one script has statements: migrate those one at a time. A dependency named by its version is written to the manifest,
+with a note that it can't be downloaded yet.
+
+`nanyx pull` makes the dependencies of the package a directory is in available to build (`PackageDependencies.pull`),
+and lists them: `acme.util 0.3.0 (../util)`. For a dependency found by its path, or a package the compiler ships,
+that means checking it is there, as a build does. **Stub:** a dependency named by its version can't be downloaded yet,
+so `pull` says so and exits with 1; resolving versions, `nanyx.lock` and the cache come with
+[#863](https://github.com/nanyx-lang/nanyx/issues/863) and [#864](https://github.com/nanyx-lang/nanyx/issues/864).
+
+`nanyx install acme.util --path ../util` adds a dependency to the manifest of the package the current directory is in
+(`PackageDependencies.install`), after its last one and laid out as its list is, or as a new `dependencies` after
+`package`. The directory must hold a package of that name. A package the compiler ships needs no `--path`: it is
+added at the compiler's version. A package already listed is an error naming its entry. **Stub:** with `--version`,
+the entry is written, then `install` says the package can't be downloaded yet and exits with 1.
 
 `nanyx manifest --json` checks the manifest of the package a directory is in (the current one by default), or the
 `.nyxp` it is given, and prints it as JSON, for scripts and CI outside the compiler. A manifest with problems prints

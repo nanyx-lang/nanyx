@@ -52,7 +52,7 @@ println("Hello!")
 | `::dependencies.acme.json = { path = "../json" }` | Depends on the package in a directory, so the script can import its public modules, `import acme.json/parse` | `dependencies = [(package = "acme.json", path = "../json")]` |
 | `::dependencies.nanyx.console.core = "0.28.0"` | Depends on a package the compiler ships, at the compiler's version | `dependencies = [(package = "nanyx.console.core", version = "0.28.0")]` |
 
-As in a manifest, only the linters a script's `::linters` directives name run, so a script without one runs none. A wrong `::host` or `::dependencies` is the error a manifest's entry would be, at the directive. A directive the compiler does not understand, or one after the first line of code, is an error naming its line. A file that belongs to a package cannot have directives: its manifest is the one place a package says these things.
+As in a manifest, only the linters a script's `::linters` directives name run, so a script without one runs none. A wrong `::host` or `::dependencies` is the error a manifest's entry would be, at the directive. A directive the compiler does not understand, or one after the first line of code, is an error naming its line. A file that belongs to a package cannot have directives: its manifest is the one place a package says these things. When a script grows into a package, `nanyx migrate` writes its manifest from its directives and makes the script the package's `@entry` (see [The nanyx command](../work-in-progress/command-line#packages)).
 
 # Importing by file path
 

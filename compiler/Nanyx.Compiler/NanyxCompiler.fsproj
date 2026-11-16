@@ -117,6 +117,8 @@
     <Compile Include="Package.fs" />
     <Compile Include="NewPackage.fs" />
     <Compile Include="Script.fs" />
+    <Compile Include="Migration.fs" />
+    <Compile Include="PackageDependencies.fs" />
     <Compile Include="Hover.fs" />
     <Compile Include="Definition.fs" />
     <Compile Include="NominalNames.fs" />
