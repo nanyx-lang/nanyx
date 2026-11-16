@@ -329,10 +329,14 @@ the lines from the first such item's to the last's are replaced with the same it
 (`RangeFormatting.formatRange`). The comments and blank lines around them are left as they are. When formatting
 changes how many top-level items there are, as joining imports does, the whole document is replaced.
 
-Planned ([#705](https://github.com/nanyx-lang/nanyx/issues/705), decided): the language server highlights where a
-document differs from its formatted text, as one Hint diagnostic per changed block of whole lines, each with a quick fix
-that applies it. It runs the formatter itself rather than through a linter, so it works on a module with type errors.
-It's on by default, with an extension setting to turn it off; `nanyx format --check` stays the command-line check.
+The language server highlights where a document differs from its formatted text
+([#705](https://github.com/nanyx-lang/nanyx/issues/705)), as one Hint diagnostic, with the code `format`, per block of
+whole lines that formatting changes (`FormattingHints`, from the blocks `LineDiff` finds by Myers' algorithm). Each has
+a quick fix that formats its lines, and another that formats the document. It runs the formatter itself rather than
+through a linter, so it works on a module with type errors; the hints and **Format Document** both read
+`FormattingHandler.FormattedText`, so they never disagree. A document that does not parse, or that the safety check
+refuses, has none. It's on by default; the extension's `nanyx.formattingHints` setting turns it off by starting the
+server with `nanyx lsp --no-format-hints`. `nanyx format --check` stays the command-line check.
 
 # Plan
 

@@ -29,6 +29,10 @@ namespace Nanyx.LanguageServer;
 /// tree of the modules each one imported (<c>nanyx lsp --timings</c>; the VS Code extension passes it in development
 /// mode).
 /// </param>
+/// <param name="FormattingHints">
+/// Whether to show where a document differs from its formatted text, as Hint diagnostics with quick fixes (see
+/// <see cref="Nanyx.LanguageServer.FormattingHints"/>).
+/// </param>
 public sealed record ServerSettings(
     TypeNotation TypeNotation,
     TopLevelTypeHints TopLevelTypeHints = TopLevelTypeHints.Lens,
@@ -39,7 +43,8 @@ public sealed record ServerSettings(
     bool PatternVariableTypeHints = true,
     TimeSpan? CompileDelay = null,
     Action<OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri>? CompileStarted = null,
-    bool Timings = false)
+    bool Timings = false,
+    bool FormattingHints = true)
 {
     public static ServerSettings Default { get; } = new(TypeNotation.Unicode);
 

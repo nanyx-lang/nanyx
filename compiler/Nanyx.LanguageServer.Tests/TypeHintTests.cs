@@ -73,7 +73,7 @@ public sealed class TypeHintTests : LanguageServerTestBase
     [Fact]
     public async Task Top_level_inlay_hints_show_top_level_defs_types_as_inlay_hints_instead_of_lenses()
     {
-        await RestartWithAsync(ServerSettings.Default with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
+        await RestartWithAsync(TestSettings with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
         var uri = DocumentUri.FromFileSystemPath(TempPath("top-level-hints.nyx"));
 
         Open(uri, "def id = { x -> x }\r\ndef answer: int = 42\r\ndef (p, q) = (1, \"s\")\r\n");
@@ -98,7 +98,7 @@ public sealed class TypeHintTests : LanguageServerTestBase
     [Fact]
     public async Task Top_level_inlay_hint_of_a_def_that_writes_only_its_contexts_follows_them()
     {
-        await RestartWithAsync(ServerSettings.Default with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
+        await RestartWithAsync(TestSettings with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
         var uri = DocumentUri.Parse("untitled:Untitled-10");
 
         Open(uri, "context Log = (log: string -> ())\ndef greet: [Log] = { name -> log(name) }\n");
@@ -116,7 +116,7 @@ public sealed class TypeHintTests : LanguageServerTestBase
     [Fact]
     public async Task Top_level_type_hints_off_shows_no_lenses_and_only_the_locals_inlay_hints()
     {
-        await RestartWithAsync(ServerSettings.Default with { TopLevelTypeHints = TopLevelTypeHints.Off });
+        await RestartWithAsync(TestSettings with { TopLevelTypeHints = TopLevelTypeHints.Off });
         var uri = DocumentUri.FromFileSystemPath(TempPath("top-level-hints-off.nyx"));
 
         Open(uri, "def id = { x -> x }\r\n");
@@ -140,7 +140,7 @@ public sealed class TypeHintTests : LanguageServerTestBase
     public async Task Inlay_hints_for_each_kind_of_declaration_can_be_turned_off(
         bool locals, bool parameters, bool patternVariables, string[] shown)
     {
-        await RestartWithAsync(ServerSettings.Default with
+        await RestartWithAsync(TestSettings with
         {
             TopLevelTypeHints = TopLevelTypeHints.Inlay,
             LocalTypeHints = locals,
@@ -170,7 +170,7 @@ public sealed class TypeHintTests : LanguageServerTestBase
     [Fact]
     public async Task Inlay_hints_insert_their_type_as_an_annotation()
     {
-        await RestartWithAsync(ServerSettings.Default with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
+        await RestartWithAsync(TestSettings with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
         var uri = DocumentUri.Parse("untitled:Untitled-12");
 
         Open(uri, """
@@ -198,7 +198,7 @@ public sealed class TypeHintTests : LanguageServerTestBase
     [Fact]
     public async Task Inlay_hints_that_source_cannot_write_as_an_annotation_insert_nothing()
     {
-        await RestartWithAsync(ServerSettings.Default with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
+        await RestartWithAsync(TestSettings with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
         var uri = DocumentUri.Parse("untitled:Untitled-13");
 
         // A name a destructuring def binds and a pattern variable can't be annotated, nor can a type that failed to
@@ -266,7 +266,7 @@ public sealed class TypeHintTests : LanguageServerTestBase
         """)]
     public async Task Inserting_every_inlay_hint_gives_a_program_with_the_same_types(string source)
     {
-        await RestartWithAsync(ServerSettings.Default with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
+        await RestartWithAsync(TestSettings with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
         var uri = DocumentUri.Parse("untitled:Untitled-14");
         source = source.ReplaceLineEndings("\n");
 

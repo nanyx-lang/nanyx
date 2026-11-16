@@ -289,7 +289,8 @@ where solving bound one to a made-up variable (`Unifier.keepWrittenNames`), and 
 `nanyx lsp --ascii` writes types in ASCII only. `--top-level-type-hints inlay` shows the top-level defs' types as
 inlay hints after their names instead of lenses, and `--top-level-type-hints off` shows neither (the default is
 `lens`). `--no-local-type-hints`, `--no-parameter-type-hints` and `--no-pattern-variable-type-hints` turn off the
-inlay hints for each of the other kinds of declaration.
+inlay hints for each of the other kinds of declaration. `--no-format-hints` turns off the hints that mark the lines
+formatting would change ([Formatter](./formatter#the-editor)).
 
 Each compile of a document is logged to the client as `window/logMessage`, which VS Code shows in the Nanyx output
 channel: `Compiled file:///…/main.nyx in 0.240s`. With `nanyx lsp --timings`, the line goes on with the tree of how
