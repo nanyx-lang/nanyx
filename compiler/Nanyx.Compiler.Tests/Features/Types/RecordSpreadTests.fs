@@ -15,7 +15,7 @@ def env = (port = 9000)
 def config = (...defaults, protocol = "https", ...env, port = "none")
 """
     let expected =
-        TyRecord(Map.ofList [ "host", TyPrimitive "string"; "port", TyPrimitive "string"; "protocol", TyPrimitive "string" ])
+        TyRecord(Map.ofList [ "host", TyPrimitive "string"; "port", TyPrimitive "string"; "protocol", TyPrimitive "string" ], FieldOrder.none)
     Assert.Equal(expected, typed.Types["config"])
 
 [<Fact>]
@@ -27,7 +27,7 @@ type Point = (x: int, y: int)
 def p = Point(x = 1, y = 2)
 def labelled = (...p, label = "origin")
 """
-    let expected = TyRecord(Map.ofList [ "label", TyPrimitive "string"; "x", TyPrimitive "int"; "y", TyPrimitive "int" ])
+    let expected = TyRecord(Map.ofList [ "label", TyPrimitive "string"; "x", TyPrimitive "int"; "y", TyPrimitive "int" ], FieldOrder.none)
     Assert.Equal(expected, typed.Types["labelled"])
 
 [<Fact>]

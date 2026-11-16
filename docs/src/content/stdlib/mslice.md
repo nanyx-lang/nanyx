@@ -44,7 +44,7 @@ Each function is attached to `MSlice`, so with `import nanyx/mslice` it is calle
 ## `MSlice`
 
 ```nanyx fragment
-type MSlice(a) = [Memory] private (items: MArray(a), length: int, start: int)
+type MSlice(a) = [Memory] private (items: MArray(a), start: int, length: int)
 ```
 
 ## `MArray.slice`

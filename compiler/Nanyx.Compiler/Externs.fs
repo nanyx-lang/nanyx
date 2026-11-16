@@ -131,7 +131,7 @@ module Externs =
             let parameters =
                 match Unifier.unalias input with
                 | TyPrimitive "unit" -> Some []
-                | TyRecord fields when fields |> Map.forall (fun key _ -> fst (System.Int32.TryParse key)) ->
+                | TyRecord(fields, _) when fields |> Map.forall (fun key _ -> fst (System.Int32.TryParse key)) ->
                     let values = fields |> Map.toList |> List.sortBy (fst >> int) |> List.map (snd >> valueOf)
                     if values |> List.forall Option.isSome then Some (List.choose id values) else None
                 | single -> valueOf single |> Option.map List.singleton

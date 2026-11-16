@@ -34,7 +34,7 @@ let private isPositional (name: string) = name |> Seq.forall System.Char.IsDigit
 let recordOf (ty: Ty) : Record =
     match Unifier.unalias ty with
     | TyNominal(id, _, _, _) -> Nominal id
-    | TyRecord fields -> Shape(fields.Keys |> Seq.filter (isPositional >> not) |> Set.ofSeq)
+    | TyRecord(fields, _) -> Shape(fields.Keys |> Seq.filter (isPositional >> not) |> Set.ofSeq)
     | TyOpenRecord _
     | TyVar _ -> Open
     | _ -> NotARecord
@@ -43,7 +43,7 @@ let recordOf (ty: Ty) : Record =
 let rec private fieldTypes (ty: Ty) : Map<string, Ty> option =
     match Unifier.unalias ty with
     | TyNominal(_, _, underlying, _) -> fieldTypes underlying
-    | TyRecord fields
+    | TyRecord(fields, _)
     | TyOpenRecord(fields, _) -> Some fields
     | _ -> None
 

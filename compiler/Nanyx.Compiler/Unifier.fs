@@ -103,7 +103,7 @@ module Unifier =
             (writtenContexts contexts |> List.choose (function FunctionContexts.ScopedContext(name, scope) -> Some (name, scope) | _ -> None))
             @ scopedContextsInPrintOrder arg
             @ scopedContextsInPrintOrder ret
-        | TyRecord fields
+        | TyRecord(fields, _)
         | TyOpenRecord(fields, _) -> all (List.ofSeq fields.Values)
         | TyTag(_, Some payload) -> scopedContextsInPrintOrder payload
         | TyNominal(_, args, _, _)
@@ -155,7 +155,7 @@ module Unifier =
         let items tys = tys |> List.map grouped |> String.concat ", "
         let bareTuple ty =
             match ty with
-            | TyRecord fields ->
+            | TyRecord(fields, _) ->
                 match tryTupleLikeRecord fields with
                 | Some tupleItems, [] -> Some (items tupleItems)
                 | _ -> None
@@ -165,7 +165,7 @@ module Unifier =
         // more arguments.
         let soleArgument ty =
             match ty with
-            | TyRecord fields
+            | TyRecord(fields, _)
             | TyOpenRecord(fields, _) when not fields.IsEmpty && (fst (tryTupleLikeRecord fields)).IsNone ->
                 let written = printTy p false ty
                 written.Substring(1, written.Length - 2)
@@ -214,13 +214,17 @@ module Unifier =
             | [] -> $"{argText} -> {retText}"
             | written ->
                 $"""[{written |> List.map (printTy p false) |> String.concat ", "}] {argText} -> {retText}"""
-        | TyRecord fields ->
+        | TyRecord(fields, order) ->
+            // Named fields in the order they are written, any the order doesn't name after them by name.
+            let inOrder (named: (string * Ty) list) =
+                let rank name = List.tryFindIndex ((=) name) order.Names |> Option.defaultValue order.Names.Length
+                named |> List.sortBy (fun (name, _) -> rank name, name)
             match tryTupleLikeRecord fields with
             | Some tupleItems, namedFields ->
                 let tupleText = items tupleItems
                 let namedText =
                     namedFields
-                    |> List.sortBy fst
+                    |> inOrder
                     |> List.map (fun (name, fieldTy) -> $"{name}: {grouped fieldTy}")
                     |> String.concat ", "
                 if namedText = "" then
@@ -232,6 +236,7 @@ module Unifier =
             | None, _ ->
                 fields
                 |> Map.toList
+                |> inOrder
                 |> List.map (fun (name, fieldTy) -> $"{name}: {grouped fieldTy}")
                 |> String.concat ", "
                 |> fun inner -> $"({inner})"
@@ -239,14 +244,14 @@ module Unifier =
         // nothing (see `displayRenaming`) is written as a bare spread: `(name: string, ...)`.
         | TyOpenRecord(fields, row) ->
             let rowText = $"{p.Spread}{printTy p false (TyVar row)}"
-            match printTy p false (TyRecord fields) with
+            match printTy p false (TyRecord(fields, FieldOrder.none)) with
             | "()" -> $"({rowText})"
             | closed -> $"{closed.Substring(0, closed.Length - 1)}, {rowText})"
         // Tags are written with their `#`, as in source: `#some(int) | #notFound`. A record payload's fields are
         // in the tag's own brackets: `#pair(int, string)`, `#authenticated(username: string)`.
         | TyTag(name, payloadOpt) ->
             match payloadOpt with
-            | Some (TyRecord fields as payload) when not fields.IsEmpty ->
+            | Some (TyRecord(fields, _) as payload) when not fields.IsEmpty ->
                 let written = printTy p false payload
                 $"#{name}{written}"
             // The unit value is written as no payload in the brackets, as in source: `#some()`.
@@ -289,12 +294,12 @@ module Unifier =
             | TySelf args -> args |> List.collect collect
             | TyFunc(arg, ret, contexts) ->
                 (writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect) @ collect arg @ collect ret
-            | TyRecord fields ->
+            | TyRecord(fields, _) ->
                 match tryTupleLikeRecord fields with
                 | Some tupleItems, namedFields ->
                     (tupleItems |> List.collect collect) @ (namedFields |> List.sortBy fst |> List.collect (snd >> collect))
                 | None, _ -> fields |> Map.toList |> List.collect (snd >> collect)
-            | TyOpenRecord(fields, row) -> collect (TyRecord fields) @ [ row ]
+            | TyOpenRecord(fields, row) -> collect (TyRecord(fields, FieldOrder.none)) @ [ row ]
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
             | FunctionContexts.ScopedContext _ -> []
             | FunctionContexts.CellType(held, _) -> collect held
@@ -446,7 +451,7 @@ module Unifier =
             let withFields more = more |> Map.fold (fun acc key fieldTy -> acc |> Map.add key fieldTy) applied
             match unalias (apply (TyVar row)) with
             | TyVar solved -> TyOpenRecord(applied, solved)
-            | TyRecord more -> TyRecord (withFields more)
+            | TyRecord(more, order) -> TyRecord(withFields more, order)
             | TyOpenRecord(more, rest) -> TyOpenRecord(withFields more, rest)
             // Renamed for a reader (see `displayRenaming`): the row takes the name.
             | TyPrimitive name -> TyOpenRecord(applied, { row with Name = Some name })
@@ -531,7 +536,7 @@ module Unifier =
             | TyPrimitive _ -> Set.empty
             | TyNominal(_, args, _, _)
             | TyAlias(_, args, _) -> args |> List.map collect |> Set.unionMany
-            | TyOpenRecord(fields, row) -> collect (TyRecord fields) |> Set.add row.Id
+            | TyOpenRecord(fields, row) -> collect (TyRecord(fields, FieldOrder.none)) |> Set.add row.Id
             | TyUnion items ->
                 let rests =
                     if ofUnions then items |> List.choose (function TyVar v -> Some v.Id | _ -> None) |> Set.ofList
@@ -652,7 +657,7 @@ module Unifier =
             | TyAlias(_, _, underlying) -> collect input underlying
             | TyFunc(arg, ret, contexts) -> collect (not input) arg @ collect input ret @ List.collect (collect input) contexts
             // A record's row is not a union's rest: it is never solved to the empty union.
-            | TyOpenRecord(fields, row) -> collect input (TyRecord fields) @ [ row, false, input ]
+            | TyOpenRecord(fields, row) -> collect input (TyRecord(fields, FieldOrder.none)) @ [ row, false, input ]
             | TyUnion items ->
                 items
                 |> List.collect (function
@@ -687,7 +692,7 @@ module Unifier =
             | TyNominal(_, _, underlying, _) -> collect true underlying
             | TyAlias(_, args, underlying) -> List.collect (collect inInput) (underlying :: args)
             | TyFunc(arg, ret, contexts) -> collect true arg @ collect inInput ret @ List.collect ofContext contexts
-            | TyOpenRecord(fields, row) -> collect inInput (TyRecord fields) @ [ row, false, inInput ]
+            | TyOpenRecord(fields, row) -> collect inInput (TyRecord(fields, FieldOrder.none)) @ [ row, false, inInput ]
             | _ -> Ty.children ty |> List.collect (collect inInput)
         let occurrences = collect false ty
         let inInput = occurrences |> List.choose (fun (v, _, input) -> if input then Some v.Id else None) |> Set.ofList
@@ -842,17 +847,17 @@ module Unifier =
                     match FunctionContexts.agree freshRest origin (FunctionContexts.withCellMemory lArg lContexts) (FunctionContexts.withCellMemory rArg rContexts) with
                     | Ok contexts -> loop subst ((lArg, rArg, Equal, origin) :: (lRet, rRet, Equal, origin) :: contexts @ rest)
                     | Error (onlyLeft, onlyRight) -> Error (contextsMessage onlyLeft onlyRight l r, origin, TypesDiffer)
-                | TyRecord lFields, TyRecord rFields ->
+                | TyRecord(lFields, _), TyRecord(rFields, _) ->
                     unifyRecordFields origin lFields rFields rest l r
                 // An open record is a record with at least its fields: the record must have each of them, and the
                 // row is the fields it has besides.
-                | TyOpenRecord(openFields, row), TyRecord fields
-                | TyRecord fields, TyOpenRecord(openFields, row) ->
+                | TyOpenRecord(openFields, row), TyRecord(fields, order)
+                | TyRecord(fields, order), TyOpenRecord(openFields, row) ->
                     let openKeys = keySet openFields
                     if Set.isSubset openKeys (keySet fields) then
                         let pairs = openKeys |> Seq.map (fun key -> (openFields.[key], fields.[key], Equal, origin)) |> Seq.toList
                         let others = fields |> Map.filter (fun key _ -> not (openKeys.Contains key))
-                        loop subst (pairs @ [ (TyVar row, TyRecord others, Equal, origin) ] @ rest)
+                        loop subst (pairs @ [ (TyVar row, TyRecord(others, FieldOrder.within others order), Equal, origin) ] @ rest)
                     else
                         Error (recordKeyMessage openKeys (keySet fields) l r, origin, TypesDiffer)
                 // Two open records: each row is the other's extra fields and a row they share, as with two open unions.
@@ -1076,7 +1081,7 @@ module Unifier =
                             | TyUnion items when items |> List.exists (function TyVar v -> isMadeUpRest v | _ -> false) ->
                                 loop subst ((lPayload, rPayload, Assignable, origin) :: rest)
                             | _ -> loop subst ((lPayload, rPayload, Equal, origin) :: rest)
-                        | TyRecord lFields, TyRecord rFields when keySet lFields = keySet rFields ->
+                        | TyRecord(lFields, _), TyRecord(rFields, _) when keySet lFields = keySet rFields ->
                             let pairs = keySet lFields |> Seq.map (fun key -> (lFields.[key], rFields.[key], Assignable, origin)) |> Seq.toList
                             loop subst (pairs @ rest)
                         | TyApply(lName, lArgs), TyApply(rName, rArgs) when lName = rName && lArgs.Length = rArgs.Length ->

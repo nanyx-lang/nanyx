@@ -182,6 +182,7 @@
     <Compile Include="Features\Types\NominalsTests.fs" />
     <Compile Include="Features\Types\OpenRecordsTests.fs" />
     <Compile Include="Features\Types\RecordsTests.fs" />
+    <Compile Include="Features\Types\RecordFieldOrderTests.fs" />
     <Compile Include="Features\Types\RecordSpreadTests.fs" />
     <Compile Include="Features\Types\RecursiveAliasesTests.fs" />
     <Compile Include="Features\Types\RecursiveNominalsTests.fs" />

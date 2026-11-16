@@ -651,10 +651,10 @@ let internal inferAsCall (infer: InferState -> Expression -> Result<'Typed * Inf
 /// The fields of a record type, looking through aliases and a nominal wrapper.
 let internal recordFieldsOf (ty: Ty) : Map<string, Ty> option =
     match Unifier.unalias ty with
-    | TyRecord fields -> Some fields
+    | TyRecord(fields, _) -> Some fields
     | RecursiveNominals.Nominal(_, _, underlying, _) ->
         match Unifier.unalias underlying with
-        | TyRecord fields -> Some fields
+        | TyRecord(fields, _) -> Some fields
         | _ -> None
     | _ -> None
 

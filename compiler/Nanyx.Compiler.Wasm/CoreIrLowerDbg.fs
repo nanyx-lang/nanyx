@@ -35,7 +35,7 @@ type PrinterTools =
 let private constantText (ty: Ty) : string option =
     match Unifier.unalias ty with
     | TyPrimitive "unit" -> Some "()"
-    | TyRecord fields when fields.IsEmpty -> Some "()"
+    | TyRecord(fields, _) when fields.IsEmpty -> Some "()"
     | TyPrimitive "?error" -> Some "???"
     | TyFunc _ -> Some $"<function {Unifier.tyToDisplayString Ascii ty}>"
     | _ -> None
@@ -70,7 +70,7 @@ let rec private mangle (ty: Ty) : string =
     | TyUnion _ ->
         let tag (name: string, payload: Ty option) = payload |> Option.map (fun payload -> $"{name}_{mangle payload}") |> Option.defaultValue name
         "tags_" + (tagsOf ty |> List.map tag |> String.concat "_")
-    | TyRecord fields -> "rec_" + (fields |> Map.toList |> List.map (fun (name, fieldTy) -> $"{name}_{mangle fieldTy}") |> String.concat "_")
+    | TyRecord(fields, _) -> "rec_" + (fields |> Map.toList |> List.map (fun (name, fieldTy) -> $"{name}_{mangle fieldTy}") |> String.concat "_")
     | TyApply(name, args) -> $"{name}_{all args}"
     | TyFunc(input, output, _) -> $"fn_{mangle input}_to_{mangle output}"
     | TyVar _
@@ -174,7 +174,7 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
         let element (k: InterpolationPart list -> Expr) =
             if entries then
                 match Unifier.unalias elementTy with
-                | TyRecord fields -> entryText head fields.["0"] fields.["1"] k
+                | TyRecord(fields, _) -> entryText head fields.["0"] fields.["1"] k
                 | _ -> internalError "a map's entry that is not a tuple"
             else showElement elementTy head k
         let next =
@@ -216,10 +216,10 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
                 // A union of no tags has no values.
                 | [] -> Expr.make (Atom(AString "undefined")) IrString
                 | tags -> matching value (tags |> List.map arm) IrString
-            | TyRecord fields when Set.ofSeq fields.Keys = Set.ofList (List.init fields.Count string) ->
+            | TyRecord(fields, _) when Set.ofSeq fields.Keys = Set.ofList (List.init fields.Count string) ->
                 let items = List.init fields.Count (fun index -> string index, fields.[string index])
                 showFields value items (fun parts -> text (Text "(" :: separated (parts |> List.map List.singleton) @ [ Text ")" ]))
-            | TyRecord fields ->
+            | TyRecord(fields, _) ->
                 let named = Map.toList fields
                 showFields value named (fun parts ->
                     let written = List.map2 (fun (fieldName, _) part -> [ Text $"{fieldName} = "; part ]) named parts
@@ -228,7 +228,7 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
                 listText value elementTy "" (showElement elementTy) (ShowingRest(elementTy, false))
             // A map and a set are written as a list of their entries or elements, after their type's name.
             | Maps.MapType(keyTy, valueTy) ->
-                let entryTy = TyRecord(Map.ofList [ "0", keyTy; "1", valueTy ])
+                let entryTy = TyRecord(Map.ofList [ "0", keyTy; "1", valueTy ], FieldOrder.none)
                 listText value entryTy "Map" (fun entry k -> entryText entry keyTy valueTy k) (ShowingRest(entryTy, true))
             | Sets.SetType elementTy -> listText value elementTy "Set" (showElement elementTy) (ShowingRest(elementTy, false))
             // An array is written as the list of its elements is, after its type's name.

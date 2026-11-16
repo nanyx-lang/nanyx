@@ -41,7 +41,7 @@ module internal OrderingOperators =
         match ty with
         | TyAlias(_, _, underlying)
         | RecursiveNominals.Nominal(_, _, underlying, _) -> isRecordOrTag underlying
-        | TyRecord fields -> not (isTuple fields)
+        | TyRecord(fields, _) -> not (isTuple fields)
         | TyOpenRecord _
         | TyTag _
         | TyUnion _ -> true

@@ -512,7 +512,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     let input' =
                         match argumentTys with
                         | [ single ] -> single
-                        | several -> TyRecord(several |> List.mapi (fun index ty -> string index, ty) |> Map.ofList)
+                        | several -> TyRecord(several |> List.mapi (fun index ty -> string index, ty) |> Map.ofList, FieldOrder.none)
                     match input.ExprTypes |> Map.tryFind expr.Id with
                     | Some output -> TyFunc(input', output, [])
                     | None -> cannot $"a call to '{name}' whose type is not known"
@@ -726,7 +726,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     match parameterTys with
                     | [] -> TyPrimitive "unit"
                     | [ single ] -> single
-                    | several -> TyRecord(several |> List.mapi (fun index ty -> string index, ty) |> Map.ofList)
+                    | several -> TyRecord(several |> List.mapi (fun index ty -> string index, ty) |> Map.ofList, FieldOrder.none)
                 toIrType (substitute subst (TyFunc(inputTy, resultTy, requiredContexts lambdaTy)))
             | None -> tyOf expr
         let arity = IrType.closureArity (parameterNames target) ty

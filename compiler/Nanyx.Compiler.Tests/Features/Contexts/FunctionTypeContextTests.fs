@@ -53,7 +53,7 @@ def handle: [Console] Handler, string -> () = { h, s -> h(s) }
     let typed = compileClean source
     Assert.Equal("Handler, string -> ()", Unifier.tyToString typed.Types.["handle"])
     match Unifier.unalias typed.Types.["handle"] with
-    | TyFunc(TyRecord fields, _, []) -> Assert.Equal("[Console] string -> ()", Unifier.tyToString (Unifier.unalias fields.["0"]))
+    | TyFunc(TyRecord(fields, _), _, []) -> Assert.Equal("[Console] string -> ()", Unifier.tyToString (Unifier.unalias fields.["0"]))
     | other -> failwith $"Unexpected type: {Unifier.tyToString other}"
 
 [<Fact>]

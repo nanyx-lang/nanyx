@@ -54,7 +54,7 @@ let rec typeKeyOfType (ty: NyxCompiler.Ty) : TypeKey option =
     | NyxCompiler.TyNominal(nominal, _, _, _) -> Some (TypeKey(nominal.Name, []))
     | NyxCompiler.TyAlias(name, args, _)
     | NyxCompiler.TyApply(name, args) -> all args |> Option.map (fun args -> TypeKey(name, args))
-    | NyxCompiler.TyRecord fields ->
+    | NyxCompiler.TyRecord(fields, _) ->
         let names, tys = fields |> Map.toList |> List.unzip
         let isTuple = names |> List.forall (fun name -> fst (Int32.TryParse name))
         let tys = if isTuple then names |> List.sortBy int |> List.map (fun name -> fields.[name]) else tys

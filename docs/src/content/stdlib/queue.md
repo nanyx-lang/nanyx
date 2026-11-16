@@ -39,7 +39,7 @@ Each function is attached to `Queue`, so with `import nanyx/queue` it is called 
 ## `Queue`
 
 ```nanyx fragment
-type Queue(a) = protected (back: list(a), count: int, front: list(a))
+type Queue(a) = protected (front: list(a), back: list(a), count: int)
 ```
 
 ## `Queue.empty`

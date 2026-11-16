@@ -235,7 +235,7 @@ module PatternSpace =
         | HFields names ->
             let fields =
                 match shape with
-                | Some (TyRecord fields)
+                | Some (TyRecord(fields, _))
                 | Some (TyOpenRecord(fields, _)) -> fields
                 | _ -> Map.empty
             names |> List.map fields.TryFind
@@ -456,7 +456,7 @@ module PatternSpace =
         | TyApply(_, items) -> items |> List.map tagsWithPayloads |> Set.unionMany
         | TyRecursive _
         | TySelf _ as closed -> Ty.children closed |> List.map tagsWithPayloads |> Set.unionMany
-        | TyRecord fields
+        | TyRecord(fields, _)
         | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.map (snd >> tagsWithPayloads) |> Set.unionMany
         | _ -> Set.empty
 

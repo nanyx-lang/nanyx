@@ -71,10 +71,10 @@ let internal extendEnvWithRecordFields (provider: ContextProvider) (state: Infer
             TypeEnv.extend name { TypeEnv.mono fieldTy with Quantified = quantified; Symbol = symbol; ProvidedBy = Some provider } acc) env
     let env = context |> Option.fold (fun acc info -> withSupplied info acc) env
     match Unifier.unalias ty with
-    | TyRecord fields -> addFields fields
+    | TyRecord(fields, _) -> addFields fields
     | RecursiveNominals.Nominal(_, _, underlying, _) ->
         match Unifier.unalias underlying with
-        | TyRecord fields -> addFields fields
+        | TyRecord(fields, _) -> addFields fields
         | _ -> env
     | _ -> env
 
@@ -122,7 +122,7 @@ let rec private collectContextMembers (state: InferState) (ctxExpr: TypeExpr) : 
         // imported context's own variables are another module's, and mean nothing in this one.
         let appliedMembers (info: TypeDefInfo) =
             match Unifier.unalias info.Underlying with
-            | TyRecord fields ->
+            | TyRecord(fields, _) ->
                 let argTys, state =
                     match ctxExpr.Kind with
                     | TypeApply(_, args) when args.Length = info.Parameters.Length -> args |> List.mapFold typeExprToTy state
@@ -153,7 +153,7 @@ let internal memberType (state: InferState) (ctxExpr: TypeExpr) (memberName: Ide
         match tryFindTypeDef name state with
         | Some info when info.IsContext && args.Length = info.Parameters.Length ->
             match Unifier.unalias info.Underlying with
-            | TyRecord fields ->
+            | TyRecord(fields, _) ->
                 fields
                 |> Map.tryFind memberName
                 |> Option.map (fun ty ->
@@ -223,7 +223,7 @@ let private extendEnvWithInstance (provider: ContextProvider) (env: TypeEnv) (na
     let fixedVars = argTys |> List.map TypeEnv.freeTyVars |> Set.unionMany
     let members =
         match Unifier.unalias info.Underlying with
-        | TyRecord fields -> fields |> Map.toList |> List.map (fun (name, ty) -> name, Unifier.applyToParameters info.Parameters argTys ty)
+        | TyRecord(fields, _) -> fields |> Map.toList |> List.map (fun (name, ty) -> name, Unifier.applyToParameters info.Parameters argTys ty)
         | _ -> []
     let env = TypeEnv.withInstance { Context = TyApply(name, argTys); Written = written; Provider = provider } env
     members

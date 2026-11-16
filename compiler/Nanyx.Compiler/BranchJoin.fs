@@ -139,7 +139,7 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
         else
             let recordFields ty =
                 match Unifier.unalias ty with
-                | TyRecord fields -> Some fields
+                | TyRecord(fields, _) -> Some fields
                 | _ -> None
             let branchFields = branchTypes |> List.map recordFields
             // A named record's fields have the types its declaration gives them, so there is nothing to join, and
@@ -156,6 +156,6 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
                     |> Map.fold (fun (acc: Map<string, Ty>, st) key _ ->
                         let fieldTy, next = joinBranchTypes rowVars st (allFields |> List.map (fun fields -> fields.[key]))
                         acc |> Map.add key fieldTy, next) (Map.empty, state)
-                TyRecord joined, nextState
+                TyRecord(joined, (match Unifier.unalias head with TyRecord(_, order) -> order | _ -> FieldOrder.none)), nextState
             | _ ->
                 head, tail |> List.fold (fun st ty -> addConstraint head ty st) state

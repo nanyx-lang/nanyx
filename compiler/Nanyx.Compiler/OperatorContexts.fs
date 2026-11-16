@@ -25,7 +25,7 @@ module internal OperatorContexts =
             match state.TypeDefs |> Map.tryFind name with
             | Some info when info.IsContext && info.Parameters.Length = 1 ->
                 match Unifier.unalias info.Underlying with
-                | TyRecord fields -> Some (name, Set.ofSeq fields.Keys)
+                | TyRecord(fields, _) -> Some (name, Set.ofSeq fields.Keys)
                 | _ -> None
             | _ -> None)
 
@@ -34,7 +34,7 @@ module internal OperatorContexts =
         match state.TypeDefs |> Map.tryFind context with
         | Some info when info.IsContext ->
             match Unifier.unalias info.Underlying with
-            | TyRecord fields -> Set.ofSeq fields.Keys
+            | TyRecord(fields, _) -> Set.ofSeq fields.Keys
             | _ -> Set.empty
         | _ -> Set.empty
 

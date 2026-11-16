@@ -22,7 +22,7 @@ module internal OperatorCalls =
     let private compares (state: InferState) (operandTy: Ty) (input: Ty) (scheme: TypeScheme) =
         let parameter =
             match Unifier.unalias (resolveSoFar state scheme.Type) with
-            | TyFunc(TyRecord fields, _, _) -> fields |> Map.tryFind "0"
+            | TyFunc(TyRecord(fields, _), _, _) -> fields |> Map.tryFind "0"
             | _ -> None
         match parameter, operandTy with
         | Some (TyVar v), TyVar _ when not (scheme.Quantified.Contains v.Id) -> true
@@ -91,10 +91,10 @@ module internal OperatorCalls =
         let contexts = match Unifier.unalias funcTy with TyFunc(_, _, contexts) -> contexts | _ -> []
         let next =
             match Unifier.unalias funcTy, input with
-            | TyFunc(TyRecord parameters, _, _), TyRecord operands when Set.ofSeq parameters.Keys = Set.ofSeq operands.Keys ->
+            | TyFunc(TyRecord(parameters, order), _, _), TyRecord(operands, _) when Set.ofSeq parameters.Keys = Set.ofSeq operands.Keys ->
                 operands
                 |> Map.fold (fun current field operandTy -> addAssignableConstraint operandTy parameters.[field] current)
-                    (addConstraint funcTy (TyFunc(TyRecord parameters, resultTy, contexts)) next)
+                    (addConstraint funcTy (TyFunc(TyRecord(parameters, order), resultTy, contexts)) next)
             | _ -> addConstraint funcTy (TyFunc(input, resultTy, contexts)) next
         resultTy,
         { next with

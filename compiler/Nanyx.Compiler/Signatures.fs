@@ -48,7 +48,7 @@ let writable (typeDefs: Map<string, TypeDefInfo>) (symbols: Map<SymbolId, Symbol
         | TyAlias(name, args, underlying) -> TyAlias(written (fun info -> not info.IsNominal && info.Name = name) name, List.map rename args, underlying)
         | TyApply(name, args) -> TyApply(written (fun info -> info.IsContext && info.Name = name) name, List.map rename args)
         | TyFunc(arg, ret, contexts) -> TyFunc(rename arg, rename ret, List.map rename contexts)
-        | TyRecord fields -> TyRecord(Map.map (fun _ field -> rename field) fields)
+        | TyRecord(fields, order) -> TyRecord(Map.map (fun _ field -> rename field) fields, order)
         | TyOpenRecord(fields, row) -> TyOpenRecord(Map.map (fun _ field -> rename field) fields, row)
         | TyTag(name, payload) -> TyTag(name, Option.map rename payload)
         | TyUnion items -> TyUnion(List.map rename items)
