@@ -212,7 +212,9 @@ let private matchType (query: Ty) (exported: Ty) : (MatchRank * Substitution) op
 type private Candidate =
     { Name: string
       Signature: string
-      Doc: string option
+      /// The module whose doc comments document it, and the symbol whose doc comment is its own, if it has one: its doc
+      /// is read only when it matches, since its links depend on who searches.
+      Documented: string * Symbol option
       Import: string option
       Declaration: SourceSpan
       Type: Ty option
@@ -234,13 +236,13 @@ let private requiredContexts (declared: Ty list) (ty: Ty) =
     |> List.distinctBy canonical
 
 /// The candidates a module's compiled exports give: each export, and each member of each context it exports.
-let private candidatesOf (compiled: LibraryCatalog.CompiledExports) : Candidate list =
+let private candidatesOf (compiled: LibraryCatalog.ModuleExports) : Candidate list =
     compiled.Exports
     |> List.collect (fun (export, symbol) ->
         let asExport ty contexts =
             { Name = export.Name
               Signature = export.Signature
-              Doc = export.Doc
+              Documented = compiled.ModuleName, Some symbol
               Import = export.Import
               Declaration = export.Declaration
               Type = ty
@@ -261,7 +263,7 @@ let private candidatesOf (compiled: LibraryCatalog.CompiledExports) : Candidate 
                             let memberSymbol = info.Members |> Map.tryFind memberName |> Option.bind compiled.Typed.Symbols.TryFind
                             { Name = $"{written}.{memberName}"
                               Signature = $"{memberName}: [{written}] {Unifier.tyToDisplayString Ascii memberType}"
-                              Doc = memberSymbol |> Option.bind compiled.Reader.ForSymbol
+                              Documented = compiled.ModuleName, memberSymbol
                               Import = export.Import
                               Declaration = memberSymbol |> Option.map _.Declaration |> Option.defaultValue export.Declaration
                               Type = Some memberType
@@ -310,20 +312,38 @@ let private fixedQueryVariables (subst: Substitution) (query: Ty) =
 /// What in the standard library matches `query`, best first: by rank, then by how few of the query's variables the
 /// match fixes, then by how well the name matches, then shorter names first. Doc comments' links lead where `linkTo`
 /// says.
+/// What a search reads of the library: every candidate, the names the library exports, and the members of each context
+/// it has, by the context's name. Made by the first search, since none of it can change while the process runs.
+let private index =
+    lazy
+        (let modules = LibraryCatalog.moduleNames () |> List.map LibraryCatalog.moduleExports
+         let candidates = modules |> List.collect candidatesOf |> List.filter (fun candidate -> not (isReserved candidate.Name))
+         let exportedNames = modules |> Seq.collect (fun compiled -> compiled.Exports |> Seq.map (fun (export, _) -> export.Name)) |> Set.ofSeq
+         let contextMembers =
+             modules
+             |> Seq.collect (fun compiled -> compiled.Typed.TypeDefs |> Map.values)
+             |> Seq.filter _.IsContext
+             |> Seq.map (fun info ->
+                 info.Name,
+                 match Unifier.unalias info.Underlying with
+                 | TyRecord(fields, _) -> List.ofSeq fields.Keys
+                 | _ -> [])
+             |> Map.ofSeq
+         candidates, exportedNames, contextMembers)
+
 let search (linkTo: Func<SourceSpan, string>) (query: Query) : SearchMatch list =
-    let modules = LibraryCatalog.importPaths () |> List.choose (LibraryCatalog.compiledExports linkTo)
-    let candidates = modules |> List.collect candidatesOf |> List.filter (fun candidate -> not (isReserved candidate.Name))
-    let exportedNames = modules |> Seq.collect (fun compiled -> compiled.Exports |> Seq.map (fun (export, _) -> export.Name)) |> Set.ofSeq
-    let contextMembers =
-        modules
-        |> Seq.collect (fun compiled -> compiled.Typed.TypeDefs |> Map.values)
-        |> Seq.filter _.IsContext
-        |> Seq.map (fun info ->
-            info.Name,
-            match Unifier.unalias info.Underlying with
-            | TyRecord(fields, _) -> List.ofSeq fields.Keys
-            | _ -> [])
-        |> Map.ofSeq
+    let candidates, exportedNames, contextMembers = index.Value
+    // The doc comments of the matches, each module's read with one reader.
+    let readers = Collections.Generic.Dictionary<string, Documentation.Reader>()
+    let docOf (moduleName: string, symbol: Symbol option) =
+        symbol
+        |> Option.bind (fun symbol ->
+            match readers.TryGetValue moduleName with
+            | true, reader -> reader.ForSymbol symbol
+            | false, _ ->
+                let reader = LibraryCatalog.readerOf moduleName linkTo
+                readers.[moduleName] <- reader
+                reader.ForSymbol symbol)
     let needsOf (subst: Substitution) (contexts: Ty list) =
         contexts
         |> List.choose (fun context ->
@@ -356,7 +376,7 @@ let search (linkTo: Func<SourceSpan, string>) (query: Query) : SearchMatch list 
                 (rank, fixedVariables, score |> Option.flatten |> Option.defaultValue 0, candidate.Name.Length, candidate.Name),
                 { Name = candidate.Name
                   Signature = candidate.Signature
-                  Doc = candidate.Doc
+                  Doc = docOf candidate.Documented
                   Import = candidate.Import
                   Declaration = candidate.Declaration
                   Rank = rank

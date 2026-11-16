@@ -43,10 +43,10 @@ let private compileOf (moduleName: string) =
     compiled.GetOrAdd(moduleName, fun name -> lazy (StandardLibraryDocs.compile name)).Value
 
 /// Every module's name, the prelude first.
-let private moduleNames () = StandardLibrary.preludeModuleName :: StandardLibrary.moduleNames
+let internal moduleNames () = StandardLibrary.preludeModuleName :: StandardLibrary.moduleNames
 
 /// The reader of the doc comments of the module `moduleName`, with each link's target as `linkTo` gives it.
-let private readerOf (moduleName: string) (linkTo: Func<SourceSpan, string>) =
+let internal readerOf (moduleName: string) (linkTo: Func<SourceSpan, string>) =
     let result = compileOf moduleName
     Documentation.Reader(StandardLibrary.resourceName moduleName, result.DocComments.Value, result, 0, linkTo)
 
@@ -68,44 +68,49 @@ let private kindOf (typed: TypedModule) (symbol: Symbol) =
         | Some (ty, _) when (match Unifier.unalias ty with TyFunc _ -> true | _ -> false) -> Function
         | _ -> Value
 
-/// A module's exports as `exports` lists them, each with its symbol, together with the module's compile and the
-/// reader of its doc comments, for searching them (see `LibrarySearch`).
-type internal CompiledExports =
-    { Typed: TypedModule
-      Reader: Documentation.Reader
+/// A module's exports as `exports` lists them, each with its symbol but without its doc comment, together with the
+/// module's name and compile, for searching them (see `LibrarySearch`). Made once per process (see `moduleExports`),
+/// since nothing in them can change while it runs; the doc comments, whose links depend on who reads them, are read
+/// with `readerOf`.
+type internal ModuleExports =
+    { ModuleName: string
+      Typed: TypedModule
       Exports: (LibraryExport * Symbol) list }
 
-/// The exports of the module at `importPath`, as `exports` lists them, each with its symbol.
-let internal compiledExports (linkTo: Func<SourceSpan, string>) (importPath: string) : CompiledExports option =
-    let moduleName =
-        if importPath.StartsWith(StandardLibrary.importPrefix, StringComparison.Ordinal) then
-            Some (importPath.Substring StandardLibrary.importPrefix.Length)
-        else
-            None
-    match moduleName with
-    | Some moduleName when List.contains moduleName (moduleNames ()) ->
-        let typed = (compileOf moduleName).Typed.Value
-        let reader = readerOf moduleName linkTo
-        let byFile = StandardLibraryDocs.exportsOf moduleName typed reader.ForSymbol
-        let import = if moduleName = StandardLibrary.preludeModuleName then None else Some $"import {importPath}"
-        let exports =
-            StandardLibrary.moduleFiles moduleName
-            |> List.collect (fun file -> byFile |> Map.tryFind file |> Option.defaultValue [])
-            |> List.map (fun export ->
-                { Name = export.Symbol.Name
-                  Kind = kindOf typed export.Symbol
-                  Signature = export.Written
-                  Doc = export.Doc
-                  Import = import
-                  Declaration = export.Symbol.Declaration },
-                export.Symbol)
-        Some { Typed = typed; Reader = reader; Exports = exports }
-    | _ -> None
+/// The module name of the import path `importPath` (`nanyx/text`), when the library has that module.
+let private moduleNameOf (importPath: string) =
+    if importPath.StartsWith(StandardLibrary.importPrefix, StringComparison.Ordinal) then
+        Some (importPath.Substring StandardLibrary.importPrefix.Length) |> Option.filter (fun name -> List.contains name (moduleNames ()))
+    else
+        None
 
-/// Every module's import path, the prelude first.
-let internal importPaths () = moduleNames () |> List.map (fun moduleName -> StandardLibrary.importPrefix + moduleName)
+/// The exports of each module, by its name, made the first time they are asked for.
+let private indexed = ConcurrentDictionary<string, Lazy<ModuleExports>>()
+
+/// The exports of the module `moduleName` (see `ModuleExports`).
+let internal moduleExports (moduleName: string) : ModuleExports =
+    indexed.GetOrAdd(moduleName, fun moduleName ->
+        lazy
+            (let typed = (compileOf moduleName).Typed.Value
+             let byFile = StandardLibraryDocs.exportsOf moduleName typed (fun _ -> None)
+             let import = if moduleName = StandardLibrary.preludeModuleName then None else Some $"import {StandardLibrary.importPrefix}{moduleName}"
+             let exports =
+                 StandardLibrary.moduleFiles moduleName
+                 |> List.collect (fun file -> byFile |> Map.tryFind file |> Option.defaultValue [])
+                 |> List.map (fun export ->
+                     { Name = export.Symbol.Name
+                       Kind = kindOf typed export.Symbol
+                       Signature = export.Written
+                       Doc = None
+                       Import = import
+                       Declaration = export.Symbol.Declaration },
+                     export.Symbol)
+             { ModuleName = moduleName; Typed = typed; Exports = exports })).Value
 
 /// What the module at `importPath` (`nanyx/text`) exports, in the order its files declare them, without the names it
 /// reserves, with doc comments whose links lead where `linkTo` says. `None` when no module has that path.
 let exports (linkTo: Func<SourceSpan, string>) (importPath: string) : LibraryExport list option =
-    compiledExports linkTo importPath |> Option.map (fun compiled -> compiled.Exports |> List.map fst)
+    moduleNameOf importPath
+    |> Option.map (fun moduleName ->
+        let reader = readerOf moduleName linkTo
+        (moduleExports moduleName).Exports |> List.map (fun (export, symbol) -> { export with Doc = reader.ForSymbol symbol }))
