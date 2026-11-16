@@ -233,10 +233,11 @@ public sealed class DocumentStore
     /// <summary>
     /// Compiles every source file of the package the file at the full path <paramref name="file"/> is a source file
     /// of, as <c>nanyx build</c> checks them, with the editor's text of each open one (see
-    /// <c>Package.compilePackageReading</c>): what find references and rename search. <c>null</c> for a file in no
-    /// package, and if the compiler throws.
+    /// <c>Package.compilePackageReading</c>), or with the texts <paramref name="edited"/> gives for some of them: what
+    /// find references and rename search. Each file comes with its full path and the text compiled. <c>null</c> for a
+    /// file in no package, and if the compiler throws.
     /// </summary>
-    public IReadOnlyList<CompileResult>? CompilePackage(string file)
+    public IReadOnlyList<NyxCompiler.Refactorings.Rename.ModuleFile>? CompilePackage(string file, IReadOnlyDictionary<string, string>? edited = null)
     {
         if (file.Length == 0)
         {
@@ -247,14 +248,19 @@ public sealed class DocumentStore
         {
             var read = new Dictionary<string, string>(FilePaths);
             var stopwatch = Stopwatch.StartNew();
-            var results = PackageModule.compilePackageReading(Microsoft.FSharp.Core.FuncConvert.FromFunc((string other) => ReadFile(other, read)), file);
+            var results = PackageModule.compilePackageReading(
+                Microsoft.FSharp.Core.FuncConvert.FromFunc((string other) =>
+                    edited is not null && edited.TryGetValue(other, out var text) ? read[other] = text : ReadFile(other, read)),
+                file);
             if (results is null)
             {
                 return null;
             }
 
             _logger.LogInformation("Compiled the package of {File} ({Count} files) in {Seconds:0.000}s", file, results.Value.Length, stopwatch.Elapsed.TotalSeconds);
-            return results.Value.Select(result => result.Item2).ToList();
+            return results.Value
+                .Select(result => new NyxCompiler.Refactorings.Rename.ModuleFile(Path.GetFullPath(result.Item1), read[result.Item1], result.Item2))
+                .ToList();
         }
         catch (Exception ex)
         {

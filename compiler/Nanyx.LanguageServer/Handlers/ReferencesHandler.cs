@@ -53,7 +53,7 @@ public sealed class ReferencesHandler : ReferencesHandlerBase
         if (_documents.CompilePackage(document.FileName) is { } package)
         {
             locations.AddRange(
-                Definition.referencesAcross(ListModule.OfSeq(package), symbol.Value)
+                Definition.referencesAcross(ListModule.OfSeq(package.Select(file => file.Result)), symbol.Value)
                     .Select(span => SourceLocations.Of(span, _documents, _standardLibrary))
                     .OfType<Location>());
         }

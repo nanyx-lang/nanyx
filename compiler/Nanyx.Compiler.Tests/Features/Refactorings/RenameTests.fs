@@ -166,7 +166,7 @@ let ``A standard library name can't be renamed`` () =
     let source, offset = unmark "def n = [1, 2] \\su$$m\n"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    match Rename.prepare "" source result offset with
+    match Rename.prepare Rename.Module "" source result offset with
     | Some (Error reason) -> Assert.StartsWith("It is declared in another module", reason)
     | other -> failwithf "expected a refusal, got %A" other
 
@@ -174,6 +174,6 @@ let ``A standard library name can't be renamed`` () =
 let ``Prepare gives the name's own part`` () =
     let source, offset = unmark "def string.sh$$out = { (s: string) -> s }\n"
     let result = Compiler.compile source
-    match Rename.prepare "" source result offset with
+    match Rename.prepare Rename.Module "" source result offset with
     | Some (Ok target) -> Assert.Equal(("shout", "shout"), (target.Name, source.Substring(target.Span.Start, target.Span.End - target.Span.Start)))
     | other -> failwithf "expected a target, got %A" other

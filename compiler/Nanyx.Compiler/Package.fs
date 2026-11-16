@@ -391,6 +391,13 @@ module Package =
             Some (compileAll CompileListener.none readFile modules Linters.none sources)
         | _ -> None
 
+    /// The full path of every source file of the package the file at `filePath` is a source file of, as
+    /// `compilePackageReading` compiles them, without compiling them. `None` as for `compilePackageReading`.
+    let sourceFilesOf (filePath: string) : string list option =
+        match modulesFor filePath with
+        | Result.Ok (Some modules) -> Some (modules.Files |> List.map Path.GetFullPath)
+        | _ -> None
+
     /// `compileSourceReading`, with the other source files read from disk.
     let compileSourceReporting (listener: CompileListener) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
         compileSourceReading listener File.ReadAllText options filePath source
