@@ -158,6 +158,7 @@
     <Compile Include="Features\Refactorings\IntroduceFunctionTests.fs" />
     <Compile Include="Features\Refactorings\IntroduceLocalTests.fs" />
     <Compile Include="Features\Refactorings\OrganiseImportsTests.fs" />
+    <Compile Include="Features\Refactorings\PackageRenameTests.fs" />
     <Compile Include="Features\Refactorings\RenameTests.fs" />
     <Compile Include="Features\Refactorings\SelectionRangeTests.fs" />
     <Compile Include="Features\Refactorings\WriteInferredTypeTests.fs" />
@@ -168,6 +169,7 @@
     <Compile Include="Features\Tooling\InfoViewCallTests.fs" />
     <Compile Include="Features\Tooling\LibrarySearchTests.fs" />
     <Compile Include="Features\Tooling\OutlineTests.fs" />
+    <Compile Include="Features\Tooling\PackageReferencesTests.fs" />
     <Compile Include="Features\Tooling\SymbolsTests.fs" />
     <Compile Include="Features\Tooling\TypeHintsTests.fs" />
     <Compile Include="Features\Types\AnnotationsTests.fs" />
@@ -198,5 +200,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Nanyx.Compiler\NanyxCompiler.fsproj" />
   </ItemGroup>
+
+  <Import Project="..\CheckedLibrary.targets" />
 
 </Project>

@@ -12,10 +12,10 @@ and inline, and the small rewrites that save typing. Its issues carry the
 
 # Where we are
 
-The language server offers go to definition, find references within a document, hover, inlay hints, completion,
+The language server offers go to definition, find references across a package, hover, inlay hints, completion,
 semantic tokens, formatting, and quick fixes from diagnostics ([Language server and editor](./language-server)).
 Expand and shrink selection, writing the inferred type, introducing a local or a function, inlining, converting
-between a call and a pipe and organising imports are done, and rename within a module.
+between a call and a pipe and organising imports are done, and rename across the files of a package.
 
 Refactorings live in the compiler's `Refactorings/` folder, one file each, after the editor features they build on
 (`Outline.fs`), in the namespace `NyxCompiler.Refactorings`. Their tests are in `Features/Refactorings/` of the
@@ -154,23 +154,29 @@ for it, and as a quick fix of each `unusedImports` diagnostic. The handler compu
 ## Rename
 
 `Rename.prepare` finds the name at a position (or just before it, where an editor's cursor often is) and its own part,
-`shout` in `string.shout`, or refuses it with a reason; `Rename.edits` renames its declaration and every use of it
-in the module (`Definition.referencesTo`). An attached definition keeps its type's part. A local, a parameter, a
-pattern variable, a top-level def and a type can be renamed. The new name must be a name, not a keyword, not one of
-the compiler's (`__`), and, for a type, not a one-letter lowercase name, which would be a type variable.
+`shout` in `string.shout`, or refuses it with a reason; `Rename.editsIn` renames its declaration and every use of it
+in its scope (`Rename.Scope`): every source file of the package, for a file in one, or else the module alone. Uses in
+other files are found as find references finds them ([#1556](https://github.com/nanyx-lang/nanyx/issues/1556)): each
+file's compile is searched for the same symbol (`Definition.sameSymbol`). An attached definition keeps its type's part,
+and renaming a type renames that part of its attached definitions' names (`Point` in `def Point.show` and in
+`Point.show(p)`). A local, a parameter, a pattern variable, a top-level def (exported or not, in a package), a type and
+an import's alias (also where a type is written under it, `s.Point`) can be renamed. An import with no alias is
+refused, as is an exported name in a file in no package, since other files may import it by path. The new name must
+be a name, not a keyword, not one of the compiler's (`__`), and, for a type, not a one-letter lowercase name, which
+would be a type variable.
 
-It never changes what the program means: the renamed text is compiled (the server compiles it as it compiles the
-document), and the rename is refused if that has more errors, such as a name defined twice, or if any name in it refers
-to something other than it did before (`Definition.referenceSites`, compared with each offset moved by the edits).
-That covers a new name that would hide another at a use and one that another would hide, and names the use.
+It never changes what the program means: the renamed files are compiled (the server compiles them as it compiles the
+document, or the package), and the rename is refused if one has more errors, such as a name defined twice, or if any
+name in them refers to something other than it did before (`Definition.referenceSites`, compared with each offset moved
+by the edits in its file). That covers a new name that would hide another at a use and one that another would hide,
+and names the use, with its file when it is in another one.
 
 The server answers `textDocument/prepareRename` and `textDocument/rename`; a refusal is a `RequestFailed` error
-whose message is the reason, which VS Code shows.
+whose message is the reason, which VS Code shows. The edit is a `WorkspaceEdit` with the changes to each file.
 
-Not yet: names declared in another module, exported names (other modules may use them, and the server can't find
-those uses until it can search the workspace, [#877](https://github.com/nanyx-lang/nanyx/issues/877)), an import's
-alias, a context's members, record fields, and modules. Renaming a type does not yet rename its attached definitions'
-prefixes.
+Not yet: a context's members and record fields, whose names are also written where they are provided or built
+(`use Log(log = ...)`, `(x = 1)`), and modules (the file and every import of it); see
+[#1639](https://github.com/nanyx-lang/nanyx/issues/1639).
 
 # How a refactoring is built
 
@@ -194,7 +200,8 @@ prefixes.
 
 | Refactoring | Issue |
 |---|---|
-| Rename a symbol (within a module) | [#1534](https://github.com/nanyx-lang/nanyx/issues/1534) |
+| Rename a symbol (done) | [#1534](https://github.com/nanyx-lang/nanyx/issues/1534) |
+| Rename a context's members, record fields and modules | [#1639](https://github.com/nanyx-lang/nanyx/issues/1639) |
 | Expand and shrink selection (done) | [#1535](https://github.com/nanyx-lang/nanyx/issues/1535) |
 | Introduce local (done) | [#1536](https://github.com/nanyx-lang/nanyx/issues/1536) |
 | Introduce function (done) | [#1537](https://github.com/nanyx-lang/nanyx/issues/1537) |
@@ -202,10 +209,6 @@ prefixes.
 | Write the inferred type (done) | [#1539](https://github.com/nanyx-lang/nanyx/issues/1539) |
 | Convert between a call and a pipe (done) | [#1540](https://github.com/nanyx-lang/nanyx/issues/1540) |
 | Organise imports (done) | [#1541](https://github.com/nanyx-lang/nanyx/issues/1541) |
-
-Rename across files depends on finding references across the package's files
-([#1556](https://github.com/nanyx-lang/nanyx/issues/1556)), which can be built now: the language server already
-compiles a local package as `nanyx build` does.
 
 # Ideas for later
 

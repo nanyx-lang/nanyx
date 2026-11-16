@@ -175,4 +175,6 @@
     <ProjectReference Include="..\Nanyx.Parser\Nanyx.Parser.fsproj" />
   </ItemGroup>
 
+  <Import Project="..\CheckedLibrary.targets" />
+
 </Project>

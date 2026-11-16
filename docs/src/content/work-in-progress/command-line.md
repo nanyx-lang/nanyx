@@ -106,7 +106,9 @@ The compiler reports to the CLI through a `CompileListener` (`CompileListener.fs
 it is on, and every compile says when each module's check starts and ends, by the module's full path or
 `nanyx/<module>` for the standard library. `Package.buildReporting`, `Script.compileFileReporting` and the other
 `…Reporting` functions take a listener; the functions without the suffix tell nobody. A standard-library module is
-checked once per process, so only the first compile that needs it reports its check, and later ones report it reused.
+read from the library the build checked (see [the standard library](standard-library-implementation)), so a compile
+reports it reused; one the build did not check is checked once per process, so only the first compile that needs it
+reports its check, and later ones report it reused.
 
 ## Timings
 
@@ -115,14 +117,13 @@ them to stderr as a tree after the stopwatch's final line, whether or not stderr
 is also shown while the compile runs: see [the live view](#the-live-view)):
 
 ```
-src/greetings.nyx (0.05s of 1.28s)
-└── nanyx/prelude (1.23s)
-src/main.nyx (0.20s of 1.06s)
+src/greetings.nyx (0.05s of 0.21s)
+└── src/format.nyx (0.16s)
+    └── nanyx/prelude (cached)
+src/main.nyx (0.20s of 0.25s)
 ├── nanyx/prelude (cached)
-├── nanyx/text (0.04s)
-│   └── nanyx/prelude (cached)
-├── nanyx/list (0.81s)
-│   └── nanyx/prelude (cached)
+├── nanyx/text (cached)
+├── src/format.nyx (cached)
 └── src/greetings.nyx (cached)
 Emitted the program in 0.031s
 ```
@@ -132,9 +133,9 @@ check, so they are under it, in the order they were checked: the total is from t
 imports included, and self is what is left once the imports' own totals are taken off, the module's own parsing,
 desugaring and type checking (`CompileTimings`, `ModuleCheck.tree`). When the two are the same as written, to two
 decimals, the line has one time, `name (0.04s)`, as most modules that import nothing unchecked do. A package build has a line at the left for each
-source file, in the order it compiles them. A module is checked once per build, and a standard-library module once
-per process, so where one is needed again it is `name (cached)`, with nothing under it: the compiler tells the
-listener `ModuleReused` there. Emitting the program to WebAssembly happens per file after checking, not per module, so
+source file, in the order it compiles them. A module is checked once per build, and a standard-library module is
+read from the library the build of the compiler checked, so where one is needed again, or is the library's, it is
+`name (cached)`, with nothing under it: the compiler tells the listener `ModuleReused` there. Emitting the program to WebAssembly happens per file after checking, not per module, so
 it is one line of its own after the tree.
 
 ### The live view
@@ -143,10 +144,10 @@ When stderr is a terminal, `--timings` also replaces the stopwatch's line with t
 on the same tick:
 
 ```
-src/catalogue.nyx (0.09s of 1.24s)
+src/catalogue.nyx (0.09s of 0.24s)
 src/logging.nyx (0.1s…)
 ├── nanyx/prelude (cached)
-└── nanyx/text (0.1s…)
+└── src/format.nyx (0.1s…)
     └── nanyx/prelude (cached)
 ```
 

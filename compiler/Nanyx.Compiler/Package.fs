@@ -345,8 +345,8 @@ module Package =
     /// again for a later file that imports it, nor for its own file. One that failed to check is checked again where it
     /// is needed, since an import cycle is reported where the file being compiled enters it. `listener` is told each
     /// file's path as its compile starts, each module's check as it starts and ends, and each module already checked
-    /// where it is needed again, its own file's included.
-    let private compileAll (listener: CompileListener) (modules: PackageModules) (options: LinterOptions) (files: (string * string) list) : (string * CompileResult) list =
+    /// where it is needed again, its own file's included. A file that is not among `files` is read by `readFile`.
+    let private compileAll (listener: CompileListener) (readFile: string -> string) (modules: PackageModules) (options: LinterOptions) (files: (string * string) list) : (string * CompileResult) list =
         let checkedOnce = Collections.Generic.Dictionary<string, CheckedModule>()
         Nanyx.LargeStack.run <| fun () ->
         files
@@ -354,7 +354,7 @@ module Package =
             listener.FileStarted file
             let origin = SourceFile (Path.GetFullPath file)
             let key = Compiler.originKey origin
-            let checkedModules = Compiler.CheckedModules(Some modules, None, listener)
+            let checkedModules = Compiler.CheckedModules(Some modules, None, listener, readFile)
             for KeyValue(checkedKey, checkedModule) in checkedOnce do
                 checkedModules.[checkedKey] <- Result.Ok checkedModule
             let checkedModule =
@@ -380,6 +380,24 @@ module Package =
         | Result.Ok None -> Compiler.compileFromReporting listener readFile options (SourceFile (Path.GetFullPath filePath)) source
         | Result.Error problems -> { notCompiled with Diagnostics = problems }
 
+    /// Every source file of the package the file at `filePath` is a source file of, each compiled as `buildReporting`
+    /// compiles it but with no linters, and each read by `readFile`, given its full path, as `compileSourceReading`
+    /// reads them; what an editor searches for the uses of a name. `None` for a file in no package, or under a manifest
+    /// that does not read.
+    let compilePackageReading (readFile: string -> string) (filePath: string) : (string * CompileResult) list option =
+        match modulesFor filePath with
+        | Result.Ok (Some modules) ->
+            let sources = modules.Files |> List.map (fun file -> file, readFile file)
+            Some (compileAll CompileListener.none readFile modules Linters.none sources)
+        | _ -> None
+
+    /// The full path of every source file of the package the file at `filePath` is a source file of, as
+    /// `compilePackageReading` compiles them, without compiling them. `None` as for `compilePackageReading`.
+    let sourceFilesOf (filePath: string) : string list option =
+        match modulesFor filePath with
+        | Result.Ok (Some modules) -> Some (modules.Files |> List.map Path.GetFullPath)
+        | _ -> None
+
     /// `compileSourceReading`, with the other source files read from disk.
     let compileSourceReporting (listener: CompileListener) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
         compileSourceReading listener File.ReadAllText options filePath source
@@ -395,7 +413,7 @@ module Package =
         let modules = modules package
         let sources = package.Sources |> List.map (fun file -> file, File.ReadAllText file)
         let results =
-            compileAll listener modules package.Manifest.Linters sources
+            compileAll listener File.ReadAllText modules package.Manifest.Linters sources
             |> List.map2 (fun (_, source) (file, result) ->
                 let directives = directiveErrors package.Manifest.Path file source
                 file,
