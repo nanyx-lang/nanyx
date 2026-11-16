@@ -245,7 +245,7 @@ Some errors can't be deferred, and with any of them nothing runs: a syntax error
 | Command | With deferrable errors |
 |---------|------------------------|
 | `nanyx run` | Reports them, says `Running with 2 deferred errors`, and runs the program |
-| `nanyx build`, `nanyx wasm` | Reports them, and writes a program that stops where they are, saying so: `WASM (WAT) emitted with 2 deferred errors` |
+| `nanyx build`, `nanyx wasm` | Reports them, and writes a program that stops where they are, saying so: `WebAssembly written with 2 deferred errors` |
 | `nanyx build --release`, `nanyx wasm --release` | Reports them and writes nothing |
 | `nanyx check` | Reports them and runs nothing |
 

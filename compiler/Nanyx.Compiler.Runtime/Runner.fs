@@ -28,6 +28,11 @@ type ProgramIo =
 /// order (0 for one the module does not export), and how big its memory had grown, in bytes (0 with none).
 type HeapCounters = { Globals: int64 array; MemoryBytes: int64 }
 
+/// A module to run: WebAssembly text, or the binary format.
+type Program =
+    | Text of string
+    | Binary of byte array
+
 /// Runs WebAssembly text emitted by the Nanyx backend on an embedded Wasmtime engine.
 ///
 /// The backend turns top-level expressions into a WebAssembly start function, so instantiating the module
@@ -101,14 +106,17 @@ module WasmRunner =
     let private executeInspecting
         (io: ProgramIo)
         (arguments: string list)
-        (wat: string)
+        (program: Program)
         (start: string option)
         (read: Instance option -> 'a)
         (inspect: Instance -> 'b)
         : Result<'a, RunError> * 'b option =
         use engine = new Engine()
         let moduleResult =
-            try Ok (Module.FromText(engine, "nanyx", wat))
+            try
+                match program with
+                | Text wat -> Ok (Module.FromText(engine, "nanyx", wat))
+                | Binary bytes -> Ok (Module.FromBytes(engine, "nanyx", bytes))
             with :? WasmtimeException as ex -> Error (InvalidModule ex.Message)
         match moduleResult with
         | Error err -> Error err, None
@@ -138,8 +146,8 @@ module WasmRunner =
                 | :? WasmtimeException as ex -> Error (trapped ex)
             outcome, instantiated |> Option.map inspect
 
-    let private execute (io: ProgramIo) (arguments: string list) (wat: string) (start: string option) (read: Instance option -> 'a) : Result<'a, RunError> =
-        executeInspecting io arguments wat start read ignore |> fst
+    let private execute (io: ProgramIo) (arguments: string list) (program: Program) (start: string option) (read: Instance option -> 'a) : Result<'a, RunError> =
+        executeInspecting io arguments program start read ignore |> fst
 
     /// The value of the exported global `name` of `instance`, an `i32` or an `i64`: 0 when it does not export it.
     let private globalValue (instance: Instance) (name: string) : int64 =
@@ -152,7 +160,27 @@ module WasmRunner =
 
     /// Instantiates (and therefore runs) the module described by `wat`, with its standard streams `io` and its
     /// command-line arguments `arguments`, its name first.
-    let run (io: ProgramIo) (arguments: string list) (wat: string) : Result<unit, RunError> = execute io arguments wat None ignore
+    let run (io: ProgramIo) (arguments: string list) (wat: string) : Result<unit, RunError> = execute io arguments (Text wat) None ignore
+
+    /// `run` for a module in the binary format, `wasm`.
+    let runBinary (io: ProgramIo) (arguments: string list) (wasm: byte array) : Result<unit, RunError> =
+        execute io arguments (Binary wasm) None ignore
+
+    /// What `runCounting` gives, for any `Program`.
+    let private counting (io: ProgramIo) (arguments: string list) (start: string) (globals: string array) (program: Program) =
+        executeInspecting
+            io
+            arguments
+            program
+            (Some start)
+            (fun instance ->
+                globals |> Array.map (fun name -> instance |> Option.map (fun instance -> int (globalValue instance name)) |> Option.defaultValue 0))
+            (fun instance ->
+                { Globals = globals |> Array.map (globalValue instance)
+                  MemoryBytes =
+                    match instance.GetMemory "memory" with
+                    | null -> 0L
+                    | memory -> memory.GetSize() * 65536L })
 
     /// Runs the module described by `wat`, which exports its start function as `start` rather than running it when
     /// instantiated, and gives the values of its exported `i32` globals `globals` once `start` has returned, as
@@ -165,19 +193,7 @@ module WasmRunner =
         (globals: string array)
         (wat: string)
         : Result<int array, RunError> * HeapCounters option =
-        executeInspecting
-            io
-            arguments
-            wat
-            (Some start)
-            (fun instance ->
-                globals |> Array.map (fun name -> instance |> Option.map (fun instance -> int (globalValue instance name)) |> Option.defaultValue 0))
-            (fun instance ->
-                { Globals = globals |> Array.map (globalValue instance)
-                  MemoryBytes =
-                    match instance.GetMemory "memory" with
-                    | null -> 0L
-                    | memory -> memory.GetSize() * 65536L })
+        counting io arguments start globals (Text wat)
 
     /// Runs the module described by `wat`, which exports its start function as `start` rather than running it when
     /// instantiated, and gives the values of its exported `i32` globals `globals` once `start` has returned. A global
@@ -185,3 +201,7 @@ module WasmRunner =
     /// global of a program that ended itself with exit code 0, which leaves what it allocated as it is.
     let runReading (io: ProgramIo) (arguments: string list) (start: string) (globals: string array) (wat: string) : Result<int array, RunError> =
         runCounting io arguments start globals wat |> fst
+
+    /// `runReading` for a module in the binary format, `wasm`.
+    let runBinaryReading (io: ProgramIo) (arguments: string list) (start: string) (globals: string array) (wasm: byte array) : Result<int array, RunError> =
+        counting io arguments start globals (Binary wasm) |> fst

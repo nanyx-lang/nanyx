@@ -84,7 +84,7 @@ let ``Check - a package, however it is named, reports what build does and writes
         let lines = (normalizeOutput outcome.StandardOutput).Split('\n')
         lines[.. lines.Length - 2]
     let checks = [ [ "check" ]; [ "check"; "." ]; [ "check"; "greeter.nyxp" ] ] |> List.map (nanyxIn directory.Path)
-    let built = nanyxIn directory.Path [ "build"; "--out"; Path.Combine(directory.Path, "elsewhere", "greeter.wat") ]
+    let built = nanyxIn directory.Path [ "build"; "--out"; Path.Combine(directory.Path, "elsewhere", "greeter.wasm") ]
     assertSucceeded built
     for check in checks do
         assertSucceeded check

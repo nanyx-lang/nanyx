@@ -158,12 +158,12 @@ let ``Build - an error that cannot be deferred fails a debug build`` () =
 [<Fact>]
 let ``Wasm - a release build of a file refuses a deferred error`` () =
     let inputPath = Path.Combine(Path.GetTempPath(), $"nanyx-wasm-{Guid.NewGuid():N}.nyx")
-    let outputPath = Path.ChangeExtension(inputPath, ".wat")
+    let outputPath = Path.ChangeExtension(inputPath, ".wasm")
     File.WriteAllText(inputPath, "def broken = { x -> missing(x) }\n")
     try
         let debug = nanyxWithInput "" [ "wasm"; inputPath; "-o"; outputPath ]
         Assert.Equal(0, debug.ExitCode)
-        Assert.Contains("WASM (WAT) emitted with 1 deferred error", debug.StandardOutput)
+        Assert.Contains("WebAssembly written with 1 deferred error", debug.StandardOutput)
         File.Delete outputPath
         let release = nanyxWithInput "" [ "wasm"; inputPath; "-o"; outputPath; "--release" ]
         Assert.Equal(1, release.ExitCode)
