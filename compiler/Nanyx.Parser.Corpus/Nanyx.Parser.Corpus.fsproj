@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Every piece of Nanyx in the repository, for the tests that check a parser, a lexer or the formatter against all
+       of it. Not shipped: only the test projects reference it. -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <WarningsAsErrors>0025</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Corpus.fs" />
+    <Compile Include="SyntaxDump.fs" />
+    <Compile Include="Differential.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Nanyx.Parser\Nanyx.Parser.fsproj" />
+  </ItemGroup>
+
+</Project>

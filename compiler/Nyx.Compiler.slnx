@@ -16,6 +16,7 @@
   <Project Path="Nanyx.Formatter/Nanyx.Formatter.fsproj" />
   <Project Path="Nanyx.LanguageServer/Nanyx.LanguageServer.csproj" />
   <Project Path="Nanyx.LanguageServer.Tests/Nanyx.LanguageServer.Tests.csproj" />
+  <Project Path="Nanyx.Parser.Corpus/Nanyx.Parser.Corpus.fsproj" />
   <Project Path="Nanyx.Parser.Tests/Nanyx.Parser.Tests.fsproj" />
   <Project Path="Nanyx.Parser/Nanyx.Parser.fsproj" />
 </Solution>

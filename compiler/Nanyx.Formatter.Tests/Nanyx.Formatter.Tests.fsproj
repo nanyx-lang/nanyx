@@ -50,6 +50,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Nanyx.Parser\Nanyx.Parser.fsproj" />
     <ProjectReference Include="..\Nanyx.Formatter\Nanyx.Formatter.fsproj" />
+    <ProjectReference Include="..\Nanyx.Parser.Corpus\Nanyx.Parser.Corpus.fsproj" />
   </ItemGroup>
 
 </Project>

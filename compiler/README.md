@@ -16,6 +16,7 @@ compiler/
 │   ├── TopLevel.fs            # Statements and a module's top-level items
 │   └── Api.fs                 # The public parse functions
 ├── Nanyx.Parser.Tests/        # Parser unit and fixture tests
+├── Nanyx.Parser.Corpus/       # Every piece of Nanyx in the repository, for the corpus and differential tests
 ├── Nanyx.Compiler/            # Type checker (F#)
 ├── Nanyx.Compiler.Tests/      # Compiler-level unit/integration tests
 ├── Nanyx.Compiler.CheckedLibrary/ # Checks the standard library at build time (CheckedLibrary.targets copies it)

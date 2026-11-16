@@ -18,6 +18,7 @@
     <Compile Include="Features\Comments\DocCommentTests.fs" />
     <Compile Include="Features\Contexts\ContextTests.fs" />
     <Compile Include="Features\Contexts\ContextNameTests.fs" />
+    <Compile Include="Features\Corpus\CorpusTests.fs" />
     <Compile Include="Features\Directives\DirectiveTests.fs" />
     <Compile Include="Features\Errors\BracketErrorTests.fs" />
     <Compile Include="Features\Except\ExceptTests.fs" />
@@ -86,6 +87,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Nanyx.Parser\Nanyx.Parser.fsproj" />
+    <ProjectReference Include="..\Nanyx.Parser.Corpus\Nanyx.Parser.Corpus.fsproj" />
   </ItemGroup>
 
 </Project>
