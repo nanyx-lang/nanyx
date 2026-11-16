@@ -166,11 +166,13 @@ let private recordExprType (result: Result<TypedExpr * InferState, Diagnostic li
 /// with whatever its surroundings make of it, so checking carries on around it and this never gives `Error`. What
 /// inferring it did before it failed is dropped. The smallest expression that fails is the one recorded: one whose
 /// parts check but that does not itself (a call with the wrong number of arguments) is recorded whole.
-/// Whether a value of the type `ty` is a map, as far as `state` knows yet.
-let private isMap (state: InferState) (ty: Ty) =
+/// The function a call of a value of the type `ty` is read as, when the value is a map or an array, as far as `state`
+/// knows yet: `m(k)` is `map.get(m, k)` and `xs(i)` is `array.at(xs, i)`.
+let private lookupOf (state: InferState) (ty: Ty) =
     match Unifier.unalias (resolveSoFar state ty) with
-    | Maps.MapType _ -> true
-    | _ -> false
+    | Maps.MapType _ -> Some Maps.lookup
+    | Arrays.ArrayType _ -> Some Arrays.lookup
+    | _ -> None
 
 let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression) : Result<TypedExpr * InferState, Diagnostic list> =
     let outer = state.Origin
@@ -966,7 +968,8 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
             state |> LambdaContexts.recordWritten env written |> LambdaContexts.recordUnsupplied env ofMember
         match TypeEnv.tryFind name env with
         | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
-        | Some scheme when isMap state scheme.Type -> inferMapLookup env state expr (Expression.from expr (IdentifierExpr name)) spanOpt args
+        | Some scheme when (lookupOf state scheme.Type).IsSome ->
+            inferLookup env state expr (lookupOf state scheme.Type).Value (Expression.from expr (IdentifierExpr name)) spanOpt args
         | Some scheme ->
             let mutable current = state
             let funcTy, nextState = instantiate (recordReference expr scheme current) scheme
@@ -1181,11 +1184,12 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                 let receiver = if dot > 0 then name.Substring(0, dot) else ""
                 let field = name.Substring(dot + 1)
                 match TypeEnv.tryFind receiver env with
-                // `machine.inventory(name)`, where the field is a map, is a lookup in it.
+                // `machine.inventory(name)`, where the field is a map or an array, is a lookup in it.
                 | Some scheme when dot > 0 && not (receiver.Contains '.')
-                                   && recordFieldsOf (resolveSoFar state scheme.Type) |> Option.bind (Map.tryFind field) |> Option.exists (isMap state) ->
-                    let map = Expression.from expr (MemberAccess(Expression.from expr (IdentifierExpr receiver), field, spanOpt))
-                    inferMapLookup env state expr map spanOpt args
+                                   && recordFieldsOf (resolveSoFar state scheme.Type) |> Option.bind (Map.tryFind field) |> Option.bind (lookupOf state) |> Option.isSome ->
+                    let lookup = recordFieldsOf (resolveSoFar state scheme.Type) |> Option.bind (Map.tryFind field) |> Option.bind (lookupOf state)
+                    let collection = Expression.from expr (MemberAccess(Expression.from expr (IdentifierExpr receiver), field, spanOpt))
+                    inferLookup env state expr lookup.Value collection spanOpt args
                 // `statement.setInt(position, value)`, where the field holds a function, calls it (see `FieldCalls`).
                 | Some scheme when dot > 0 && not (receiver.Contains '.') && FieldCalls.holdsFunction state scheme.Type field ->
                     FieldCalls.infer (inferExpr env) state expr receiver field spanOpt args
@@ -1200,11 +1204,11 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message ]
                 | _ -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" env.Names.Keys name ]
 
-/// `expr`, a call of the map `map` with `args`: a lookup, read as the call `map.get(map, args...)` (see `Maps`) and
-/// recorded in `ReadAs` to be written as it. The call keeps the node of `expr`, which is what its types and the
-/// instances it finds are recorded by.
-and private inferMapLookup (env: TypeEnv) (state: InferState) (expr: Expression) (map: Expression) (spanOpt: SourceSpan option) (args: Expression list) =
-    let lookup = { expr with Kind = FunctionCall(Maps.lookup, spanOpt, map :: args) }
+/// `expr`, a call of the map or array `collection` with `args`: a lookup, read as the call of `lookupName`,
+/// `map.get(m, args...)` or `array.at(xs, args...)` (see `lookupOf`), and recorded in `ReadAs` to be written as it. The
+/// call keeps the node of `expr`, which is what its types and the instances it finds are recorded by.
+and private inferLookup (env: TypeEnv) (state: InferState) (expr: Expression) (lookupName: Identifier) (collection: Expression) (spanOpt: SourceSpan option) (args: Expression list) =
+    let lookup = { expr with Kind = FunctionCall(lookupName, spanOpt, collection :: args) }
     inferExpr env state lookup
     |> Result.map (fun (typed, next) -> { typed with Expr = expr }, { next with ReadAs = next.ReadAs |> Map.add expr.Id lookup })
 

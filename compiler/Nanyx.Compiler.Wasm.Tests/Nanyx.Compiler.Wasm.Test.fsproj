@@ -123,6 +123,7 @@
     <Compile Include="Features\Records\RunFunctionFieldTests.fs" />
     <Compile Include="Features\Sets\RunSetTests.fs" />
     <Compile Include="Features\Arrays\RunArrayTests.fs" />
+    <Compile Include="Features\Arrays\RunArrayCallTests.fs" />
     <Compile Include="Features\StdLib\RunIgnoreTests.fs" />
     <Compile Include="Features\StdLib\RunOptionResultTests.fs" />
     <Compile Include="Features\StdLib\RunStdLibTests.fs" />

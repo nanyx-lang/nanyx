@@ -40,7 +40,7 @@ Most of the time, Nanyx programs don't care very much about the specific impleme
 | `list(a)` | - | Indexable collections |
 | `set(a)` | - | Membership checks |
 | `map(k, v)` | - | Key/value lookup (a map is callable: `m(k)` gives `#some(v) \| #notFound`) |
-| `Array(a)` | - | Fixed length, read by index in constant time (`import nanyx/array`) |
+| `Array(a)` | - | Fixed length, read by index in constant time (`import nanyx/array`; an array is callable: `xs(i)` gives `#some(a) \| #none`) |
 | `Collection(a)` | - | Any in-memory collection |
 | `Sequence(a)` | `seq(a)` | Finite, deterministic sequences |
 | `Generator(a)` | `gen(a)` | Potentially infinite or non-deterministic sequences |
