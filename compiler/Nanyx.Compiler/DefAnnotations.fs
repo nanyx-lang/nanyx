@@ -105,6 +105,43 @@ let internal read
           Checked = checkedState },
         state)
 
+/// `typeOpt`, the annotation of the def `name`, with each `_` its contexts are applied to written as the type the def's
+/// value made it, as `a` in `[Foo(_)] a, a -> a` whose body calls `Foo`'s members with `a`s: a call reads a context's
+/// arguments from the annotation, so each `_` must stand for a type the annotation can write, with the variables it
+/// names. One the value left as a variable of its own, or made a type an annotation cannot write, is an error at the `_`.
+let internal settleContextHoles (state: InferState) (name: Identifier) (typeOpt: TypeExpr option) : Result<TypeExpr option, Diagnostic list> =
+    match typeOpt with
+    | Some ({ Kind = TypeWithContext(contexts, inner) } as annotation) when contexts |> List.exists TypeHoles.hasHoles ->
+        let names =
+            state.TypeVars
+            |> Map.toList
+            |> List.choose (fun (varName, var) ->
+                match resolveSoFar state (TyVar var) with
+                | TyVar resolved -> Some (resolved.Id, varName)
+                | _ -> None)
+            |> Map.ofList
+        let holes =
+            contexts
+            |> List.collect TypeExpr.holes
+            |> List.map (fun hole ->
+                let written = state.ExprTypes |> Map.tryFind hole.Id |> Option.bind (resolveSoFar state >> ContextInference.typeExprOf names)
+                hole, written |> Option.map (fun written -> { written with Span = hole.Span }))
+        let errors =
+            holes
+            |> List.choose (function
+                | hole, None ->
+                    Some (Diagnostics.at DiagnosticCodes.UndeterminedContextType hole.Span
+                              $"The body of '{name}' does not make this '_' a type its parameters or result name, so no call can supply the context: write the type in place of '_'")
+                | _, Some _ -> None)
+        let settled = holes |> List.choose (fun (hole, written) -> written |> Option.map (fun e -> hole.Id, e)) |> Map.ofList
+        let rec settle (typeExpr: TypeExpr) =
+            match settled |> Map.tryFind typeExpr.Id with
+            | Some written -> written
+            | None -> TypeExpr.mapChildren settle typeExpr
+        if errors.IsEmpty then Ok (Some { annotation with Kind = TypeWithContext(List.map settle contexts, inner) })
+        else Error errors
+    | _ -> Ok typeOpt
+
 /// The errors in the type definition `name`, checked once it is registered in `state`, so that it can name itself: a
 /// `typeof` or `_` in it, or else a scoped context that is not nominal, a scope it cannot belong to, a type it names
 /// that does not exist, and a reference to itself that nothing guards.

@@ -304,7 +304,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         |> recordSymbolType symbol declaredTy
                         |> recordAnnotated symbol expectedDeclaredOpt.IsSome
                     // Each `_` the def's contexts are applied to is the type its value made it.
-                    let settledType = TypeHoles.settleInContexts finalState name typeOpt
+                    let settledType = DefAnnotations.settleContextHoles finalState name typeOpt
                     let typeOpt, contextOpt =
                         match settledType with
                         | Ok settled when settled <> typeOpt ->
