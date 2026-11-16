@@ -56,14 +56,23 @@ module Migration =
 
     /// The entry the package a `::host`, `::dependency` or `::linter` directive names is in the manifest:
     /// `(package = "<name>", path = "<directory>")`, its directory, relative to the script, made relative to the package's
-    /// `root`. A package the compiler ships, named with neither, is at the compiler's version, `toolVersion`.
+    /// `root`. A package the compiler ships, named with neither, is at the compiler's version, `toolVersion`. One on
+    /// GitHub is `(package = "<name>", github = "<repository>", rev = "<commit>")`, and a file on GitHub the same with
+    /// `module` for `package`.
     let private packageEntry (toolVersion: string) (scriptDirectory: string) (root: string) (package: DirectiveWord) (place: DirectivePlace) =
-        let where =
-            match place with
-            | AtVersion version -> $"version = {quoted version.Text}"
-            | AtPath path -> $"path = {quoted (relative root (Path.GetFullPath(path.Text, scriptDirectory)))}"
-            | Shipped -> $"version = {quoted toolVersion}"
-        $"(package = {quoted package.Text}, {where})"
+        match place with
+        | AtGitHub place ->
+            let github, rev, isFile = Script.gitHubPlace place
+            let rev = rev |> Option.map (fun rev -> $", rev = {quoted rev}") |> Option.defaultValue ""
+            $"""({(if isFile then "module" else "package")} = {quoted package.Text}, github = {quoted github}{rev})"""
+        | _ ->
+            let where =
+                match place with
+                | AtVersion version -> $"version = {quoted version.Text}"
+                | AtPath path -> $"path = {quoted (relative root (Path.GetFullPath(path.Text, scriptDirectory)))}"
+                | Shipped
+                | AtGitHub _ -> $"version = {quoted toolVersion}"
+            $"(package = {quoted package.Text}, {where})"
 
     /// What a directive says, as the manifest writes it: the key it sets, which two files must agree on, and the value.
     type private Setting =

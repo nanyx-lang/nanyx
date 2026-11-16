@@ -25,6 +25,9 @@ type DirectivePlace =
     | AtVersion of DirectiveWord
     /// In a directory, relative to the script, a word that starts with `.` or `/`: `../util`.
     | AtPath of DirectiveWord
+    /// In a GitHub repository, at a commit, a word that starts with `github:`: `github:acme/web@<commit>` for a
+    /// package, or `github:acme/snippets/retry.nyx@<commit>` for a file, which is a module of the script's build.
+    | AtGitHub of DirectiveWord
     /// Neither: a package the compiler ships, at the compiler's version.
     | Shipped
 
@@ -32,7 +35,8 @@ type DirectivePlace =
 type DirectiveSetting =
     /// `::host nanyx.console`: the host the script runs under.
     | HostSetting of package: DirectiveWord * DirectivePlace
-    /// `::dependency acme.util ../util`: a package the script imports from.
+    /// `::dependency acme.util ../util`: a package the script imports from; or `::dependency retry
+    /// github:acme/snippets/retry.nyx@<commit>`, a file from GitHub it imports as the module `retry`.
     | DependencySetting of package: DirectiveWord * DirectivePlace
     /// `::linter nanyx.lint`: a linter to run.
     | LinterSetting of package: DirectiveWord * DirectivePlace
@@ -51,15 +55,30 @@ module Script =
     let private usage (name: string) =
         match name with
         | "host" -> $"::host takes a host and where it is found: ::host {Hosts.consolePackage}, or ::host acme.server ../server"
-        | "dependency" -> "::dependency takes a package and where it is found: ::dependency acme.util ../util, or ::dependency nanyx.console.core"
+        | "dependency" ->
+            "::dependency takes a package and where it is found: ::dependency acme.util ../util, or ::dependency nanyx.console.core, or ::dependency acme.web github:acme/web@<commit>; or a module name and a file on GitHub: ::dependency retry github:acme/snippets/retry.nyx@<commit>"
         | "linter" -> "::linter takes a linter: ::linter nanyx.lint"
         | "lint" -> "::lint takes a rule of the linter above it and a severity: ::lint unusedBindings #error"
         | _ -> "::format takes a setting and its value: ::format lineWidth 100"
 
-    /// Where the word after a package's name says it is found: a version, which starts with a digit, or a directory,
-    /// which starts with `.` or `/` (or is rooted, `C:\util`).
+    /// What a word that names a place on GitHub starts with.
+    let private gitHubPrefix = "github:"
+
+    /// The reference a `github:` word makes, `github:acme/snippets/retry.nyx@<commit>`: what a manifest's `github` would
+    /// say, the commit or the tag or branch after its `@`, if it has one, and whether it is a file, which names a module.
+    let internal gitHubPlace (place: DirectiveWord) : string * string option * bool =
+        let reference = place.Text.Substring gitHubPrefix.Length
+        let github, rev =
+            match reference.LastIndexOf '@' with
+            | -1 -> reference, None
+            | at -> reference.Substring(0, at), Some(reference.Substring(at + 1))
+        github, rev, github.Split('/').Length > 2
+
+    /// Where the word after a package's name says it is found: a version, which starts with a digit, a directory,
+    /// which starts with `.` or `/` (or is rooted, `C:\util`), or a GitHub repository, which starts with `github:`.
     let private placeOf (word: DirectiveWord) : Result<DirectivePlace, Diagnostic> =
-        if Char.IsDigit word.Text[0] then Result.Ok(AtVersion word)
+        if word.Text.StartsWith gitHubPrefix then Result.Ok(AtGitHub word)
+        elif Char.IsDigit word.Text[0] then Result.Ok(AtVersion word)
         elif word.Text[0] = '.' || word.Text[0] = '/' || word.Text[0] = '\\' || Path.IsPathRooted word.Text then Result.Ok(AtPath word)
         else Result.Error(invalid word.Span $"'{word.Text}' is neither a version, which starts with a digit, 1.2.0, nor a directory, which starts with . or /, ../util")
 
@@ -149,12 +168,17 @@ module Script =
                 let setting, linter =
                     match directive.Name with
                     | _ when directive.IsOldForm -> Result.Error(oldFormError linterAbove directive), linter
-                    | "host" -> packageOf directive |> Result.map HostSetting, linter
+                    | "host" ->
+                        match packageOf directive with
+                        | Result.Ok (_, AtGitHub place) -> Result.Error(invalid place.Span "a host can't be found on GitHub yet: give the directory it is in, ::host acme.server ../server"), linter
+                        | setting -> setting |> Result.map HostSetting, linter
                     | "dependency" -> packageOf directive |> Result.map DependencySetting, linter
                     | "linter" ->
                         match packageOf directive with
                         | Result.Ok (_, AtPath path) ->
                             Result.Error(invalid path.Span "a linter can't be found by its directory yet: the linters are the ones the compiler ships, ::linter nanyx.lint"), linter
+                        | Result.Ok (_, AtGitHub place) ->
+                            Result.Error(invalid place.Span "a linter can't be found on GitHub: the linters are the ones the compiler ships, ::linter nanyx.lint"), linter
                         | Result.Ok (package, place) -> Result.Ok(LinterSetting(package, place)), Some package
                         | Result.Error error -> Result.Error error, linter
                     | "lint" ->
@@ -178,12 +202,18 @@ module Script =
     /// named with neither, is named at the compiler's version.
     let private entryOf (span: SourceSpan) (package: DirectiveWord) (place: DirectivePlace) (fields: DataField list) : DataValue =
         let field name (word: DirectiveWord) = { Name = name; NameSpan = word.Span; Value = { Data = DataString word.Text; Location = word.Span } }
-        let where =
+        let named, where =
             match place with
-            | AtVersion version -> field "version" version
-            | AtPath path -> field "path" path
-            | Shipped -> field "version" { Text = Toolchain.version; Span = package.Span }
-        { Data = DataRecord([ field "package" package; where ] @ fields); Location = span }
+            | AtVersion version -> field "package" package, [ field "version" version ]
+            | AtPath path -> field "package" package, [ field "path" path ]
+            | Shipped -> field "package" package, [ field "version" { Text = Toolchain.version; Span = package.Span } ]
+            // `github:acme/snippets/retry.nyx@<commit>` is `github = "acme/snippets/retry.nyx", rev = "<commit>"`, and
+            // names a module, since it is a file.
+            | AtGitHub place ->
+                let github, rev, isFile = gitHubPlace place
+                field (if isFile then "module" else "package") package,
+                [ field "github" { place with Text = github } ] @ (rev |> Option.map (fun rev -> field "rev" { place with Text = rev }) |> Option.toList)
+        { Data = DataRecord([ named ] @ where @ fields); Location = span }
 
     /// The linter options the `::linter` and `::lint` directives of `settings` make, as the manifest's `linters` their
     /// entries stand for would, with what is wrong with them; none when there is no `::linter`.
@@ -208,9 +238,9 @@ module Script =
             Some options, errors
 
     /// The build the `::host` and `::dependency` directives of `settings` make, if there are any, for the script at
-    /// `filePath`, whose imports by path, and the directories its directives give, are relative to its directory; or
-    /// what is wrong with them.
-    let private build (filePath: string) (settings: (Directive * DirectiveSetting) list) : Result<PackageModules option, Diagnostic list> =
+    /// `filePath`, whose imports by path, and the directories its directives give, are relative to its directory, with
+    /// what is on GitHub fetched by `fetcher`; or what is wrong with them.
+    let private build (fetcher: GitHubFetcher) (filePath: string) (settings: (Directive * DirectiveSetting) list) : Result<PackageModules option, Diagnostic list> =
         let root = if filePath = "" then Directory.GetCurrentDirectory() else Path.GetDirectoryName filePath
         let notShipped (package: DirectiveWord) place =
             match place with
@@ -236,18 +266,19 @@ module Script =
                     | Result.Ok host -> Some host, []
                     | Result.Error errors -> None, errors
                 | _ -> None, []
-            let dependencies, dependencyErrors =
+            let dependencies, files, dependencyErrors =
                 if unshipped.IsEmpty then
                     Manifest.dependencyEntries root { Data = DataList(dependencies |> List.map (fun (directive, package, place) -> entryOf directive.Span package place [])); Location = first.Span }
                 else
-                    [], []
+                    [], [], []
             match twice @ unshipped @ hostErrors @ dependencyErrors with
-            | [] -> Package.scriptModules filePath first.Span host dependencies |> Result.map Some
+            | [] -> Package.scriptModules fetcher filePath first.Span host dependencies files |> Result.map Some
             | errors -> Result.Error errors
 
-    /// The directives at the top of `source`, the text of the file at `filePath` (empty for one not on disk). In a
-    /// file of a package each is an error, since the package's manifest says these things, and they give no linters.
-    let read (filePath: string) (source: string) : ScriptDirectives =
+    /// The directives at the top of `source`, the text of the file at `filePath` (empty for one not on disk), with what
+    /// they name on GitHub fetched by `fetcher`. In a file of a package each is an error, since the package's manifest
+    /// says these things, and they give no linters.
+    let readFetching (fetcher: GitHubFetcher) (filePath: string) (source: string) : ScriptDirectives =
         let filePath = if filePath = "" then "" else Path.GetFullPath filePath
         let directives = Directives.read filePath source
         let manifest =
@@ -263,12 +294,16 @@ module Script =
             let read = results |> List.choose (function directive, Result.Ok setting -> Some (directive, setting) | _, Result.Error _ -> None)
             let linters, linterErrors = linters read
             let build, buildErrors =
-                match build filePath read with
+                match build fetcher filePath read with
                 | Result.Ok build -> build, []
                 | Result.Error errors -> None, errors
             { Linters = linters
               Build = build
               Diagnostics = (results |> List.choose (function _, Result.Error diagnostic -> Some diagnostic | _, Result.Ok _ -> None)) @ linterErrors @ buildErrors }
+
+    /// `readFetching`, with nothing to fetch with: a reference to GitHub is an error, since downloading from it isn't
+    /// supported yet.
+    let read (filePath: string) (source: string) : ScriptDirectives = readFetching GitHub.unsupported filePath source
 
     /// `result` with the problems with `directives` before its own diagnostics. An error in a directive is not
     /// deferred: it stops a debug run too.

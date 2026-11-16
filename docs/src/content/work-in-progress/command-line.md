@@ -69,6 +69,10 @@ and the live view is drawn inside the box.
 - **Stub:** `nanyx pull` says so for such a dependency and exits with 1, and `nanyx install --version` writes the
   entry, then says so and exits with 1. Resolving versions, `nanyx.lock` and the cache come with
   [#863](https://github.com/nanyx-lang/nanyx/issues/863) and [#864](https://github.com/nanyx-lang/nanyx/issues/864).
+- A dependency on GitHub (`github =` in the manifest, `github:` in a script's `::dependency`) is read and checked, and
+  resolved through `GitHubFetcher` (`GitHub.fs`), whose real implementation is `GitHub.unsupported` for now: every
+  command that builds such a package reports that downloading from GitHub isn't supported yet, at the entry, and exits
+  with 1. Fetching into the cache replaces it with [#863](https://github.com/nanyx-lang/nanyx/issues/863).
 - `nanyx manifest` has only `--json` so far.
 
 `nanyx test` is proposed on [Testing](./testing).
