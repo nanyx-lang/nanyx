@@ -1158,11 +1158,11 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                             match LambdaArguments.namedFields arg underlying with
                             | Some (names, values, memberTys) ->
                                 // A constructor does not run the lambdas it is given, so in a value they are inferred
-                                // outside it, as a record's are (see `Contexts.outsideValue`).
-                                let inferLambda state lambda lambdaArgs lambdaBody expectedInput _ =
+                                // outside it, as a record's are (see `Contexts.asConstructorField`).
+                                let inferLambda state lambda lambdaArgs lambdaBody expectedInput fieldTy =
                                     match expectedInput with
                                     | Some expectedInput ->
-                                        state |> Contexts.outsideValue (fun state -> inferLambdaWithExpected env state lambda lambdaArgs lambdaBody (Some expectedInput) None)
+                                        state |> Contexts.asConstructorField fieldTy (fun state -> inferLambdaWithExpected env state lambda lambdaArgs lambdaBody (Some expectedInput) None)
                                     | None -> inferExpr env state lambda
                                 LambdaArguments.inferTupleItems (fun state item _ -> inferExpr env state item) inferLambda current values memberTys
                                 |> Result.map (fun (typedValues, next) ->

@@ -87,7 +87,9 @@ How it works:
   variable keeps room for more; given where a value is expected, a variable nothing has settled carries the expected
   contexts (`Unifier`, the nominal case of assignability), and one left over when a def is generalised carries none
   (`Unifier.outputOnlyContextVars`). The lambdas a constructor is given are inferred outside a top-level value, as a
-  record's are (`Contexts.outsideValue`).
+  record's are, and outside a function's body when the field's type requires contexts, so the value made carries what
+  they use, not the function that makes it (`Contexts.asConstructorField`,
+  [#1676](https://github.com/nanyx-lang/nanyx/issues/1676)).
 - A context variable of a parameter's type binds at a call as a function type's does (`ContextVariables.pairs`), and
   one only the result writes, as in `([c] Thunk(a)), ([d] a -> b) -> [c, d] Thunk(b)`, isn't required by the call, in
   the backend too (`CoreIrLower.returnedVariables`).
