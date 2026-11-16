@@ -37,11 +37,24 @@ import app/shapes as s
 def far: s.Point = s.origin
 def near: s.Point = (x = s.origin.x + 1, y = 0)"""
 
+let private logging =
+    withFinalNewline """module logging
 
-/// Renaming the name at the `occurrence`th `text` (plus `within`) in the file `file` of a package of `shapes`, `main`
-/// and `report` to `newName`: each file's text after it, by name, or why it is refused.
-let private renamed (file: string) (text: string) (occurrence: int) (within: int) (newName: string) =
-    use package = new TempPackage([ "app.nyxp", manifest; "src/shapes.nyx", shapes; "src/main.nyx", main; "src/report.nyx", report ])
+export context Log = (log: string -> ())
+
+export def hello: [Log] () -> () = { () -> log("hi") }"""
+
+let private quiet =
+    withFinalNewline """module quiet
+
+import logging
+
+def run = use Log(log = { m -> () }) in hello()"""
+
+/// Renaming in a package of `files`: the full path of each file, and the text of each after the edits, by name, with
+/// the files renamed, by name; or why it is refused.
+let private renamedIn (files: (string * string) list) (file: string) (text: string) (occurrence: int) (within: int) (newName: string) =
+    use package = new TempPackage(("app.nyxp", manifest) :: (files |> List.map (fun (name, text) -> $"src/{name}", text)))
     let path = Path.GetFullPath(package.Path $"src/{file}")
     let compile (readFile: string -> string) =
         (Package.compilePackageReading readFile path).Value
@@ -56,12 +69,19 @@ let private renamed (file: string) (text: string) (occurrence: int) (within: int
     let scope = Rename.Package(files |> List.map (fun file -> file.Path))
     let source = File.ReadAllText path
     Rename.editsIn scope files path (offsetOf source text occurrence within) newName recompile
-    |> Result.map (fun edits ->
-        files
-        |> List.map (fun file ->
-            Path.GetFileName file.Path,
-            edits |> List.tryFind (fst >> (=) file.Path) |> Option.map snd |> Option.defaultValue [] |> applyEdits file.Source)
-        |> Map.ofList)
+    |> Result.map (fun renaming ->
+        let texts =
+            files
+            |> List.map (fun file ->
+                Path.GetFileName file.Path,
+                renaming.Edits |> List.tryFind (fst >> (=) file.Path) |> Option.map snd |> Option.defaultValue [] |> applyEdits file.Source)
+            |> Map.ofList
+        texts, renaming.Files |> List.map (fun (old, renamed) -> Path.GetFileName old, Path.GetFileName renamed))
+
+/// Renaming the name at the `occurrence`th `text` (plus `within`) in the file `file` of a package of `shapes`, `main`
+/// and `report` to `newName`: each file's text after it, by name, or why it is refused.
+let private renamed (file: string) (text: string) (occurrence: int) (within: int) (newName: string) =
+    renamedIn [ "shapes.nyx", shapes; "main.nyx", main; "report.nyx", report ] file text occurrence within newName |> Result.map fst
 
 let private renamedTo file text occurrence within newName =
     match renamed file text occurrence within newName with
@@ -100,11 +120,46 @@ let ``An import's alias is renamed where the names it brings in are written`` ()
     Assert.Equal(main, after.["main.nyx"])
 
 [<Fact>]
-let ``An import with no alias is refused`` () =
-    Assert.StartsWith("It is imported without an alias", refusedBecause "main.nyx" "app/shapes" 0 4 "geo")
+let ``An import with no alias is refused at its package's name`` () =
+    Assert.StartsWith("It is imported without an alias", refusedBecause "main.nyx" "app/shapes" 0 1 "geo")
 
 [<Fact>]
 let ``A rename that would change what a name means in another file is refused, naming the file`` () =
     Assert.Equal(
         "`zero.x` on line 8 of main.nyx would refer to something else",
         refusedBecause "shapes.nyx" "def origin" 0 4 "zero")
+
+[<Fact>]
+let ``A context's member is renamed in the files that write an instance of its context`` () =
+    match renamedIn [ "logging.nyx", logging; "quiet.nyx", quiet ] "quiet.nyx" "log =" 0 1 "write" with
+    | Ok (after, _) ->
+        Assert.Equal(logging.Replace("(log:", "(write:").Replace("log(", "write("), after.["logging.nyx"])
+        Assert.Equal(quiet.Replace("log =", "write ="), after.["quiet.nyx"])
+    | Error reason -> failwithf "expected the rename, got: %s" reason
+
+[<Fact>]
+let ``A record's field is renamed in every file of the package that writes it`` () =
+    let after = renamedTo "shapes.nyx" "x: int" 0 0 "across"
+    Assert.Equal(shapes.Replace("x: int", "across: int").Replace("x = 0", "across = 0"), after.["shapes.nyx"])
+    Assert.Equal(main.Replace(".x", ".across"), after.["main.nyx"])
+    Assert.Equal(report.Replace("(x = s.origin.x", "(across = s.origin.across"), after.["report.nyx"])
+
+[<Fact>]
+let ``A module is renamed in its module line and every import of it, and its file with it`` () =
+    match renamedIn [ "shapes.nyx", shapes; "main.nyx", main; "report.nyx", report ] "shapes.nyx" "shapes" 0 2 "geometry" with
+    | Ok (after, files) ->
+        Assert.Equal(shapes.Replace("module shapes", "module geometry"), after.["shapes.nyx"])
+        Assert.Equal(main.Replace("app/shapes", "app/geometry"), after.["main.nyx"])
+        Assert.Equal(report.Replace("app/shapes", "app/geometry"), after.["report.nyx"])
+        Assert.Equal<(string * string) list>([ "shapes.nyx", "geometry.nyx" ], files)
+    | Error reason -> failwithf "expected the rename, got: %s" reason
+
+[<Fact>]
+let ``A module is renamed from an import of it`` () =
+    let after = renamedTo "report.nyx" "app/shapes" 0 6 "geometry"
+    Assert.Equal(shapes.Replace("module shapes", "module geometry"), after.["shapes.nyx"])
+    Assert.Equal(main.Replace("app/shapes", "app/geometry"), after.["main.nyx"])
+
+[<Fact>]
+let ``A module renamed to the name of another module of the package is refused`` () =
+    Assert.StartsWith("The renamed package would not compile", refusedBecause "shapes.nyx" "shapes" 0 0 "main")

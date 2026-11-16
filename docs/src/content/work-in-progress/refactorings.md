@@ -15,7 +15,8 @@ and inline, and the small rewrites that save typing. Its issues carry the
 The language server offers go to definition, find references across a package, hover, inlay hints, completion,
 semantic tokens, formatting, and quick fixes from diagnostics ([Language server and editor](./language-server)).
 Expand and shrink selection, writing the inferred type, introducing a local or a function, inlining, converting
-between a call and a pipe and organising imports are done, and rename across the files of a package.
+between a call and a pipe and organising imports are done, and rename across the files of a package, of a context's
+members, records' fields and modules too.
 
 Refactorings live in the compiler's `Refactorings/` folder, one file each, after the editor features they build on
 (`Outline.fs`), in the namespace `NyxCompiler.Refactorings`. Their tests are in `Features/Refactorings/` of the
@@ -159,8 +160,9 @@ in its scope (`Rename.Scope`): every source file of the package, for a file in o
 other files are found as find references finds them ([#1556](https://github.com/nanyx-lang/nanyx/issues/1556)): each
 file's compile is searched for the same symbol (`Definition.sameSymbol`). An attached definition keeps its type's part,
 and renaming a type renames that part of its attached definitions' names (`Point` in `def Point.show` and in
-`Point.show(p)`). A local, a parameter, a pattern variable, a top-level def (exported or not, in a package), a type and
-an import's alias (also where a type is written under it, `s.Point`) can be renamed. An import with no alias is
+`Point.show(p)`). A local, a parameter, a pattern variable, a top-level def (exported or not, in a package), a type,
+an import's alias (also where a type is written under it, `s.Point`), and, as below, a context's member, a record's
+field and a module can be renamed. An import with no alias is
 refused, as is an exported name in a file in no package, since other files may import it by path. The new name must
 be a name, not a keyword, not one of the compiler's (`__`), and, for a type, not a one-letter lowercase name, which
 would be a type variable.
@@ -171,12 +173,32 @@ name in them refers to something other than it did before (`Definition.reference
 by the edits in its file). That covers a new name that would hide another at a use and one that another would hide,
 and names the use, with its file when it is in another one.
 
-The server answers `textDocument/prepareRename` and `textDocument/rename`; a refusal is a `RequestFailed` error
-whose message is the reason, which VS Code shows. The edit is a `WorkspaceEdit` with the changes to each file.
+Three kinds of name are written in more places than the checker records as references
+([#1639](https://github.com/nanyx-lang/nanyx/issues/1639)); `FieldSites` and `ModuleSites` find them:
 
-Not yet: a context's members and record fields, whose names are also written where they are provided or built
-(`use Log(log = ...)`, `(x = 1)`), and modules (the file and every import of it); see
-[#1639](https://github.com/nanyx-lang/nanyx/issues/1639).
+- **A context's member** is a symbol, renamed at its declaration and uses as any other, and also where an instance of
+  its context is written: the named arguments of a call of the context's constructor (`use Log(log = ...)`) and the
+  record a def typed as the context gives (`use Show(int)(show = ...)`). A rename can start at any of them.
+- **A record's field** has no symbol. Its sites are each record type's fields (not a context's), each record written in
+  an expression (a constructor's arguments, a call's named arguments, the fields `with` updates and those beside a
+  spread are the whole record's), each field read, and the patterns of `match` and `except`. Each site's record comes
+  from the types the checker inferred there (`FieldSites.recordOf`): a protected or private type's by its identity, any
+  other by the names of its fields, since two structural records with the same names are one type. The field is renamed
+  at every site of the same record and nowhere else. A field of that name read from a record whose type is not known,
+  an open record or a type variable (`{ r -> r.x }`), refuses the rename, naming the line, since it may be either; so
+  does starting at one. A tuple pattern that takes the field apart by name alone, `(x, y)`, is written by member,
+  `(across = x, y = y)`, as the two can't be mixed.
+- **A module** is renamed from its `module` line or from an import of it (`import shapes`, `import app/shapes`): its
+  `module` line, each import of it in the package and each import of its file by path. Its file is renamed with it
+  where the file is named for the module and no file of the new name is there (`Renaming.Files`). It is refused for a
+  file in no package. To compile the renamed package, `Package.compilePackageReading` reads the module each file
+  declares from the text it is given (`PackageModules.reading`), not from disk.
+
+The server answers `textDocument/prepareRename` and `textDocument/rename`; a refusal is a `RequestFailed` error
+whose message is the reason, which VS Code shows. The edit is a `WorkspaceEdit` with the changes to each file, and the
+files a module's rename renames as `RenameFile` operations after them, where the client can rename files.
+
+Not yet: a `module name =` block can't be renamed.
 
 # How a refactoring is built
 
@@ -201,7 +223,7 @@ Not yet: a context's members and record fields, whose names are also written whe
 | Refactoring | Issue |
 |---|---|
 | Rename a symbol (done) | [#1534](https://github.com/nanyx-lang/nanyx/issues/1534) |
-| Rename a context's members, record fields and modules | [#1639](https://github.com/nanyx-lang/nanyx/issues/1639) |
+| Rename a context's members, record fields and modules (done) | [#1639](https://github.com/nanyx-lang/nanyx/issues/1639) |
 | Expand and shrink selection (done) | [#1535](https://github.com/nanyx-lang/nanyx/issues/1535) |
 | Introduce local (done) | [#1536](https://github.com/nanyx-lang/nanyx/issues/1536) |
 | Introduce function (done) | [#1537](https://github.com/nanyx-lang/nanyx/issues/1537) |
@@ -216,4 +238,4 @@ Not yet: a context's members and record fields, whose names are also written whe
 - Move a def to another module, updating imports.
 - Convert a match to an `if` and back; add the missing arms of a match.
 - Extract a type alias from a written type; turn a structural type into a protected one.
-- Rename a module or file and update every import.
+- Move a file and update the imports of it by path.

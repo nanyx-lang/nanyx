@@ -109,6 +109,12 @@ Nanyx is cautious about implementing compiler optimizations that can make progra
 
 Having said that, in the interests of productivity and the approachability of the language we do want to allow users to "not care" about performance in individual cases and just let the language decide. As a compromise between these two viewpoints, we prefer to provide clear, explicit tools for performance when needed, while keeping the common case straightforward and efficient.
 
+## Functional but in place
+
+Code that looks like it builds a new value should cost no more than code that changes the old one in place, when nothing else can see the old one. Reference counting makes this possible: when a value is held only once at the point it's rebuilt, the compiler and the standard library update it where it is instead of copying it, as Koka and Lean 4 do. Mapping over an array nothing else refers to writes into the same block; a list taken apart and put back together reuses its cells; turning an `MList` into a `list` at its last use hands over the cells it already has.
+
+This is how Nanyx keeps values immutable without making immutability expensive. It is never a matter of correctness: a value that is still shared is copied, so the program means the same either way, and only its speed changes. The standard library's functions on collections are written to take advantage of it, and say so in their documentation where it matters.
+
 # Developer productivity
 
 Nanyx is designed to be a real-world, productive language for developers. It should be easy to write, read, and maintain code in Nanyx. The language should provide features that help developers be productive, such as powerful type inference, a rich standard library, and good tooling support, rather than chasing academic interest.

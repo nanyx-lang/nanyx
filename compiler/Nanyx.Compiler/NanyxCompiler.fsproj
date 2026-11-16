@@ -141,6 +141,8 @@
     <Compile Include="Refactorings/Inline.fs" />
     <Compile Include="Refactorings/CallAndPipe.fs" />
     <Compile Include="Refactorings/OrganiseImports.fs" />
+    <Compile Include="Refactorings/FieldSites.fs" />
+    <Compile Include="Refactorings/ModuleSites.fs" />
     <Compile Include="Refactorings/Rename.fs" />
     <Compile Include="Documentation.fs" />
     <Compile Include="StandardLibraryDocs.fs" />

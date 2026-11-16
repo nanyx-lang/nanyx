@@ -150,6 +150,9 @@
     <Compile Include="Features\StdLib\RunListZipWithChunksTests.fs" />
     <Compile Include="Features\StdLib\RunStringCodePointTests.fs" />
     <Compile Include="Features\StdLib\RunBitwiseTests.fs" />
+    <Compile Include="Features\StdLib\RunStackTests.fs" />
+    <Compile Include="Features\StdLib\RunQueueTests.fs" />
+    <Compile Include="Features\StdLib\RunTrieTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />
     <Compile Include="Features\Strings\RunInterpolationTests.fs" />
     <Compile Include="Features\Tags\RunTagTests.fs" />

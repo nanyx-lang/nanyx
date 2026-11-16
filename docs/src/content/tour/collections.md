@@ -43,6 +43,9 @@ Most of the time, Nanyx programs don't care very much about the specific impleme
 | `set(a)` | - | Membership checks |
 | `map(k, v)` | - | Key/value lookup (a map is callable: `m(k)` gives `#some(v) \| #notFound`) |
 | `Array(a)` | - | Fixed length, read by index in constant time (`import nanyx/array`; an array is callable: `xs(i)` gives `#some(a) \| #none`) |
+| `Stack(a)` | - | Last in, first out (`import nanyx/stack`) |
+| `Queue(a)` | - | First in, first out (`import nanyx/queue`) |
+| `Trie(k, v)`, `StringTrie(v)` | - | Lookup by a sequence of keys, and every key that starts with a prefix (`import nanyx/trie`) |
 | `Collection(a)` | - | Any in-memory collection |
 | `Sequence(a)` | `seq(a)` | Finite, deterministic sequences |
 | `Generator(a)` | `gen(a)` | Potentially infinite or non-deterministic sequences |
@@ -53,7 +56,21 @@ def lookup = ["a" => 1, "b" => 2]
 def unique: set(int) = [1, 2, 2, 3]
 ```
 
-The functions on them are on the standard library's [lists](../stdlib/prelude-lists), [maps and sets](../stdlib/prelude-maps) and [array](../stdlib/array) pages.
+The functions on them are on the standard library's [lists](../stdlib/prelude-lists), [maps and sets](../stdlib/prelude-maps), [array](../stdlib/array), [stack](../stdlib/stack), [queue](../stdlib/queue) and [trie](../stdlib/trie) pages. A stack, a queue and a trie are immutable, as a list is: each operation that adds or takes away gives back a new one, and the old one still holds what it held.
+
+```nanyx
+import (
+  nanyx/queue
+  nanyx/trie
+)
+
+def jobs = Queue["build", "test"] \enqueue("deploy")
+def commands = StringTrie["git" => 1, "git push" => 2, "go" => 3]
+
+println(Queue.toList(jobs))
+println(StringTrie.keys(commands))
+println("{StringTrie.withPrefix(commands, "gi")}")
+```
 
 ## Literal types
 
@@ -92,5 +109,5 @@ def other = Bag[3, 4]
 println(list.length(bag.items))
 ```
 
-The standard library's `list`, `set`, `map`, `Array` and mutable collections get their literals the same way, with nothing special about them. A `fromArray` that requires a context makes the literal require it: `MStack[1, 2]` needs `Memory`, so it is written inside a `memory` block. A list or an array can be spread into a literal, `Array[...xs, 4]`; spreading anything else, such as a set, is an error (NYX0258). A literal of a type with no `fromArray` is an error too (NYX0257).
+The standard library's `list`, `set`, `map`, `Array`, `Stack`, `Queue`, `Trie` and mutable collections get their literals the same way, with nothing special about them. A `fromArray` that requires a context makes the literal require it: `MStack[1, 2]` needs `Memory`, so it is written inside a `memory` block. A list or an array can be spread into a literal, `Array[...xs, 4]`; spreading anything else, such as a set, is an error (NYX0258). A literal of a type with no `fromArray` is an error too (NYX0257).
 For iteration constructs, see [Loops](./loops). For query-style collection programming, see [Sequences and queries](../advanced/sequences-and-queries).
