@@ -411,8 +411,8 @@ The design draws the line there, and makes every helper a function that takes th
 - [#1137](https://github.com/nanyx-lang/nanyx/issues/1137) (the backend can't compile `use f()` or `use x`) is no
   longer needed: both become type errors, except `use x` of a name a lambda bound with `context x`
   ([#1448](https://github.com/nanyx-lang/nanyx/issues/1448), after #1445 and #1447).
-- [#1059](https://github.com/nanyx-lang/nanyx/issues/1059) is settled for context instances, which never carry
-  contexts because they are never values. It stays open for records.
+- [#1059](https://github.com/nanyx-lang/nanyx/issues/1059) is settled: context instances are never values, and a
+  record holding a lambda doesn't take on its contexts ([Context-qualified types](./context-qualified-types)).
 - A `use` of a record written out becomes a declared context and its constructor (#1448). The tour's collection builders in
   `collections.md` (`use (yield = ...)` and ``use (`=>` = ...)``) and the examples in
   [Context-qualified types](./context-qualified-types) change with it. The Contexts page's "contexts are structural by
@@ -456,15 +456,6 @@ from leaving out `export`, which stops other modules naming it at all. A scoped 
 
 Hover hides a private context's members outside its file, as it hides a private type's shape. Within one file, a
 `module name =` block's private type or context still shows its shape everywhere in the file.
-
-# Open questions
-
-- **Whether a record holding a lambda takes on its contexts**
-  ([#1059](https://github.com/nanyx-lang/nanyx/issues/1059)). `(f = { m: string -> println(m) })` would be
-  `[Console] (f: string -> ())`, and `Log(log = { m -> println(m) })` would be `[Console] Log`, which `use` would
-  require. That is the general design in [Context-qualified types](./context-qualified-types), and it would let an
-  instance built as a value discharge a context, as one written at a `use` can. Since contexts are not types, context
-  instances are never values, and this is about records only.
 
 # Plan
 
