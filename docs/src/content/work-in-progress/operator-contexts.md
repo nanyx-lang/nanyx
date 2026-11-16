@@ -129,6 +129,12 @@ that name.
 
 # Requiring an operator by its member
 
+**Going** ([#1531](https://github.com/nanyx-lang/nanyx/issues/1531)), decided by the maintainer: a context list will
+hold only contexts and context variables. This form was only ever another way of writing the prelude's context that
+has the member, which inference already finds, so writing one becomes an error whose fix writes the context's name.
+Where a body's operators don't fit one context, the contexts are written out, `[Ord(a), Add(a)]`. What follows is how
+it works until then.
+
 A function's type can require an operator by the member it reads, rather than by the context's name:
 
 ```nanyx
