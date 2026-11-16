@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Checks the standard library once, when the compiler is built, and writes it to checked-library.bin beside this
-    program, for every project that uses the compiler to have beside it (see CheckedLibrary.targets and
-    CheckedLibrary.fs in Nanyx.Compiler).
+    Checks the standard library and the packages the compiler ships once, when the compiler is built, and writes them to
+    checked-library.bin beside this program, for every project that uses the compiler to have beside it (see
+    CheckedLibrary.targets and CheckedLibrary.fs in Nanyx.Compiler).
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -20,12 +20,17 @@
     <ProjectReference Include="..\Nanyx.Compiler\NanyxCompiler.fsproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ShippedPackageFile Include="..\..\packages\**\*" />
+  </ItemGroup>
+
   <!--
-    Written again whenever this program or the compiler it runs changes, and the library is part of the compiler. It
-    runs after CoreBuild, inside Build, not after Build: a project that asks for Build while this project is building
-    is given the result as soon as Build is done, before the targets that run after it, and would not find the file.
+    Written again whenever this program, the compiler it runs, or a file of a shipped package changes; the library is
+    part of the compiler. It runs after CoreBuild, inside Build, not after Build: a project that asks for Build while
+    this project is building is given the result as soon as Build is done, before the targets that run after it, and
+    would not find the file.
   -->
-  <Target Name="WriteCheckedLibrary" AfterTargets="CoreBuild" Inputs="$(TargetPath);@(ReferenceCopyLocalPaths)" Outputs="$(OutDir)checked-library.bin">
+  <Target Name="WriteCheckedLibrary" AfterTargets="CoreBuild" Inputs="$(TargetPath);@(ReferenceCopyLocalPaths);@(ShippedPackageFile)" Outputs="$(OutDir)checked-library.bin">
     <Exec Command="dotnet &quot;$(TargetPath)&quot; &quot;$(OutDir)checked-library.bin&quot;" />
   </Target>
 

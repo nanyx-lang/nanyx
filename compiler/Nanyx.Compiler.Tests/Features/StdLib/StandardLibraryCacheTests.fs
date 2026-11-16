@@ -74,7 +74,10 @@ let private preludeSource = StandardLibrary.tryLoadSource StandardLibrary.prelud
 [<Fact>]
 let ``The build puts the checked library beside the compiler`` () =
     Assert.True(File.Exists CheckedLibrary.path, $"{CheckedLibrary.path} is missing")
-    Assert.NotEmpty(CheckedLibrary.read CheckedLibrary.path CheckedLibrary.libraryHash.Value)
+    let file = CheckedLibrary.read CheckedLibrary.path CheckedLibrary.libraryHash.Value
+    Assert.True(file.IsSome, "the checked library was not read")
+    Assert.NotEmpty(file.Value.Modules)
+    Assert.NotEmpty(file.Value.Shipped)
 
 [<Fact>]
 let ``A compile takes the prelude from the checked library and does not check it`` () =
@@ -91,4 +94,33 @@ let ``A library module whose source has changed is not taken from the checked li
 
 [<Fact>]
 let ``A checked library checked from another library is not read`` () =
-    Assert.Empty(CheckedLibrary.read CheckedLibrary.path (CheckedLibrary.libraryHash.Value + "0"))
+    Assert.True((CheckedLibrary.read CheckedLibrary.path (CheckedLibrary.libraryHash.Value + "0")).IsNone)
+
+// The build checks the packages the compiler ships too (#1637), so a loose script does not check the console host.
+
+let private consoleFile = Path.Combine(ShippedPackages.directoryOf "nanyx.console.core", "src", "console.nyx")
+
+[<Fact>]
+let ``The checked library has the shipped packages' modules, with paths beside this compiler`` () =
+    let shipped = (CheckedLibrary.read CheckedLibrary.path CheckedLibrary.libraryHash.Value).Value.Shipped
+    Assert.Equal<string list>(
+        [ "nanyx.console.core/src/console.nyx"; "nanyx.console.core/src/env.nyx"; "nanyx.console/src/console.host.nyx"; "nanyx.console/src/console.prelude.nyx" ],
+        shipped |> List.choose (fun entry -> ShippedPackages.tryDisplay entry.Key) |> List.sort)
+    for entry in shipped do
+        for file, _ in entry.Read do
+            Assert.True(File.Exists file, $"{file} is missing")
+
+[<Fact>]
+let ``A compile of a loose script takes the console host's modules from the checked library`` () =
+    let recording = Recording()
+    let result = Compiler.compileReporting recording Linters.none """dbg("hello")"""
+    Assert.True(result.TypeChecked, sprintf "%A" result.Diagnostics)
+    Assert.Equal<string list>([ "start <source>" ], recording.Events |> Seq.filter (fun event -> event.StartsWith "start ") |> List.ofSeq)
+    Assert.Contains($"reused {consoleHostFile}", recording.Events)
+
+[<Fact>]
+let ``A shipped module whose files have changed is not taken from the checked library`` () =
+    Assert.True((CheckedLibrary.tryFindShipped consoleFile File.ReadAllText).IsSome)
+    let changed (path: string) =
+        if path = consoleFile then File.ReadAllText path + "\ndef changed = 1\n" else File.ReadAllText path
+    Assert.True((CheckedLibrary.tryFindShipped consoleFile changed).IsNone)

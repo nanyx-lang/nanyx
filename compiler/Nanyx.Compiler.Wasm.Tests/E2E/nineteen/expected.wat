@@ -587,7 +587,6 @@
     i32.load
     return_call_indirect (type $ctx_fn_3_i32_i64_i64_to_i64)
   )
-  (export "f" (func $f))
 
   (func $main (result i64) (local $x__in3_i64 i64) (local $__owned_0 i32) (local $__owned_1 i32)
     i32.const 264

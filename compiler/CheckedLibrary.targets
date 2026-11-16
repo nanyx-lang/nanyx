@@ -4,13 +4,22 @@
     Puts the checked standard library, checked-library.bin, beside a program that uses the compiler, and beside the
     published program too, so that it does not check the library on every compile (see CheckedLibrary.fs in
     Nanyx.Compiler). Nanyx.Compiler.CheckedLibrary writes it when it is built. It runs on the machine that builds, so it
-    is built for that machine, whatever runtime the program is built for; it is built with the program's other
-    properties, so that the compiler it references is the same build as the program's.
+    is built for that machine, whatever runtime the program is built for, and without the publish properties that
+    would make the SDK pick a runtime for it (PublishSingleFile, PublishReadyToRun, PublishTrimmed, PublishAot); it is
+    built with the program's other properties, so that the compiler it references is the same build as the program's.
   -->
+  <!--
+    The task below builds the writer, which is no reference of the program, so restoring the program alone would not
+    restore it (a build or publish of one project, as CI's are). While restoring, and only then, it is a reference.
+  -->
+  <ItemGroup Condition="'$(MSBuildIsRestoring)' == 'true'">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Nanyx.Compiler.CheckedLibrary\Nanyx.Compiler.CheckedLibrary.fsproj" />
+  </ItemGroup>
+
   <Target Name="IncludeCheckedLibrary" AfterTargets="ResolveProjectReferences" BeforeTargets="AssignTargetPaths">
     <MSBuild Projects="$(MSBuildThisFileDirectory)Nanyx.Compiler.CheckedLibrary\Nanyx.Compiler.CheckedLibrary.fsproj"
              Targets="Build"
-             RemoveProperties="RuntimeIdentifier;SelfContained">
+             RemoveProperties="RuntimeIdentifier;SelfContained;PublishSingleFile;PublishReadyToRun;PublishTrimmed;PublishAot">
       <Output TaskParameter="TargetOutputs" ItemName="_CheckedLibraryWriter" />
     </MSBuild>
     <ItemGroup>

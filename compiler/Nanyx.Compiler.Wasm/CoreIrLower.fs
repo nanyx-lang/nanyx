@@ -142,7 +142,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     /// The name to call `name` by at the instance type `instanceTy`, given the members known where it is called: its
     /// own, or a specialisation's. A definition with context variables is specialised on the members of the contexts
-    /// they stand for, unless they stand for none.
+    /// they stand for, unless they stand for none. A definition that declares contexts is lowered in its own form only
+    /// where a call asks for it (see `CoreIrLowerModule.lowerModule`).
     let calleeKnowing (name: string) (instanceTy: Ty) (knownMembers: (ContextMemberKey * KnownMember) list) =
         let scheme =
             match input.DefinitionTypes |> Map.tryFind name with
@@ -150,7 +151,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | None -> cannot $"a call to '{name}', whose type is not known"
         let typeVars = freeVars scheme |> List.distinct |> List.sort
         let contextVars = contextVariables name
-        if typeVars.IsEmpty && contextVars.IsEmpty && knownMembers.IsEmpty then sanitizeIdentifier name
+        let own () =
+            if input.ContextParameters.ContainsKey name then request (SpecKey.plain name []) Map.empty AsDefined
+            else sanitizeIdentifier name
+        if typeVars.IsEmpty && contextVars.IsEmpty && knownMembers.IsEmpty then own ()
         else
             let bindings = bindingsAt name instanceTy
             let typeArguments =
@@ -166,7 +170,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let typeArguments =
                 if contextArguments |> List.forall List.isEmpty then typeArguments
                 else typeArguments @ (contextArguments |> List.map (fun members -> IrFunction(IrUnit, IrUnit, members)))
-            if typeArguments.IsEmpty && knownMembers.IsEmpty then sanitizeIdentifier name
+            if typeArguments.IsEmpty && knownMembers.IsEmpty then own ()
             else request { Definition = name; TypeArguments = typeArguments; Known = knownMembers } bindings AsDefined
 
     let callee (name: string) (instanceTy: Ty) = calleeKnowing name instanceTy []
@@ -805,9 +809,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                         // A context member's result with values boxed is converted to the type the call has it at.
                         match closure.Type with
                         | IrFunction(_, output, _) when CoreIrLowerBoxes.needsConversion output ty ->
-                            bindTemp (Expr.make (CallClosure(closure, atoms @ memberAtoms)) output) (fun result ->
+                            bindTemp (Expr.make (CallClosure(closure, atoms @ memberAtoms, Borrowing)) output) (fun result ->
                                 CoreIrLowerMembers.coerce this.MemberTools scope result ty (fun atom -> k (Expr.make (Atom atom) ty)))
-                        | _ -> k (Expr.make (CallClosure(closure, atoms @ memberAtoms)) ty)))
+                        | _ -> k (Expr.make (CallClosure(closure, atoms @ memberAtoms, Borrowing)) ty)))
         let elements =
             match closure.Type with
             | IrFunction(input, _, _) -> IrType.tupleElements input

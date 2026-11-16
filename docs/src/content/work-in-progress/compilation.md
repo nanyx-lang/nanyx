@@ -64,7 +64,7 @@ The parser, type checker, WebAssembly backend and runtime are libraries; the `na
 (see [The `nanyx` command](./command-line)). The backend writes WebAssembly text from the core IR (see
 [Memory management](./memory-management#core-ir)) and today covers:
 
-- top-level `def` values exported as wasm functions; top-level expressions (and the `@entry` definition) run from a
+- top-level `def` values exported as wasm functions, except one that declares contexts (see [Context calls](./context-calls)); top-level expressions (and the `@entry` definition) run from a
   WebAssembly start function. A module with a start function emits only the functions the start reaches, through
   calls and closures, and binds no static closure that nothing reads, such as a member of a `use` that no call
   needs (`CoreIrReach.fs`); a module without one emits every definition

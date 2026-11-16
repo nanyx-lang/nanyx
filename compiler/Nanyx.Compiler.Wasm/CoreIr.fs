@@ -97,6 +97,16 @@ type Atom =
     /// the same block every time, so it lives in the data segment, as a string literal does.
     | AStaticClosure of string * arity: int * IrType
 
+/// Which entry of the function a closure holds a call through it calls (see "Closures" in
+/// `docs/src/content/work-in-progress/memory-management.md`). Every function a closure is over has two, which differ
+/// only in whether they own their environment, the closure itself.
+type ClosureEntry =
+    /// The entry in the closure's table slot, which borrows the closure: the caller keeps its reference for the call.
+    | Borrowing
+    /// The entry in the slot after it (`CoreIrClosureEntries.owningName`), which takes the caller's reference over: a
+    /// tail call of a closure that dies there, which the caller could not drop after the call.
+    | Owning
+
 type PrimOp =
     /// An operator on ints or booleans: `+`, `==`, `and`, ...
     | Binary of string
@@ -156,8 +166,10 @@ and ExprKind =
     /// takes, the environment included) over the values it captures, one or more (see `closureOver`).
     | MakeClosure of string * arity: int * Atom list
     /// A call through a function value: the closure block is passed first, as the environment, and its first slot is
-    /// the function's table slot. The closure is read twice, so it is a parameter or a local, never a temporary.
-    | CallClosure of Var * Atom list
+    /// the function's table slot. The closure is read twice, so it is a parameter or a local, never a temporary. The
+    /// lowering calls the borrowing entry, and reference counting picks the owning one where the closure dies at a tail
+    /// call (see `CoreIrCounting`).
+    | CallClosure of Var * Atom list * ClosureEntry
     /// Builds an interpolated string from its text and its holes, which are already evaluated into their locals.
     | Interpolate of InterpolationPart list
     /// What `dbg(value)` prints: the string, the value's text (see `CoreIrLowerDbg`), after `dbg: `. It is unit.
@@ -704,7 +716,8 @@ module Print =
         | CallRuntime(name, args, _) -> $"{name}({atoms args})"
         | CallImport(declared, args) -> $"import {declared.Module}.{declared.Name}({atoms args})"
         | MakeClosure(name, _, captured) -> $"closure {name}({atoms captured})"
-        | CallClosure(v, args) -> $"{v.Name}({atoms args})"
+        | CallClosure(v, args, Borrowing) -> $"{v.Name}({atoms args})"
+        | CallClosure(v, args, Owning) -> $"owning {v.Name}({atoms args})"
         | Interpolate parts ->
             parts
             |> List.map (function

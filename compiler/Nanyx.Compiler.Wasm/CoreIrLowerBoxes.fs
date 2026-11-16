@@ -82,7 +82,7 @@ let rec convert (tools: BoxTools) (atom: Atom) (expected: IrType) (k: Atom -> Ex
     | IrBox, _ ->
         // A closure is read twice to call it, so the box is in a local.
         bindLocal tools "__boxed" (Expr.make (Atom atom) IrBox) (fun box ->
-            bindLocal tools "__unboxed" (Expr.make (CallClosure(box, [])) expected) (AVar >> k))
+            bindLocal tools "__unboxed" (Expr.make (CallClosure(box, [], Borrowing)) expected) (AVar >> k))
     | IrTags givenTags, IrTags expectedTags ->
         // Each tag whose payload needs converting is made again around the converted payload; any other is the value.
         bindLocal tools "__converting" (Expr.make (Atom atom) given) (fun value ->
