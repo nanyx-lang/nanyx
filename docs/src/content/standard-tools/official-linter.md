@@ -65,7 +65,7 @@ import (
 def x = m.sqrt(16.0)
 ```
 
-The rule (`unusedImports`) reports an import that nothing in the module uses. A value, type or context it brings in counts as a use, whether it is written through the import's alias (`m.sqrt`, `m.Shape`) or unqualified, and a type named only in an annotation counts too. The prelude, which every module imports, is never reported, and neither is the import `@entry` adds for you, nor an alias starting with `_`. Its fix removes the import: the whole `import` line when it is the only one there, or just that module's line from an `import (...)` group.
+The rule (`unusedImports`) reports an import that nothing in the module uses. A value, type or context it brings in counts as a use, whether it is written through the import's alias (`m.sqrt`, `m.Shape`) or unqualified, and a type named only in an annotation counts too. The prelude, which every module imports, is never reported, and neither is the import `@entry` adds for you, nor an alias starting with `_`. Its fix removes the import: the whole `import` line when it is the only one there, or just that module's line from an `import (...)` group. In an editor, **Organise imports** is offered as a fix too: it removes every import nothing uses at once, and writes the rest as one sorted import.
 
 ## Unused private definition
 

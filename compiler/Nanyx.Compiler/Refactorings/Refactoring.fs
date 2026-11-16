@@ -14,6 +14,8 @@ type RefactoringKind =
     | Rewrite
     /// `refactor.inline`: inline a local or a function.
     | Inline
+    /// `source.organizeImports`: organise imports.
+    | OrganiseImports
 
 /// A refactoring that can be made at a selection: its title, as an editor's menu shows it, and the edits that make it.
 /// `Rename` is where, in the text the edits make, a name the refactoring made up starts, for an editor to start

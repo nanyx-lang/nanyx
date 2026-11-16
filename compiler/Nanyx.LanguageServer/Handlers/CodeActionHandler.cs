@@ -15,7 +15,9 @@ namespace Nanyx.LanguageServer.Handlers;
 /// an unknown name from the standard library needs (<c>NyxCompiler.ImportFixes</c>). A fix that would edit another
 /// file is not offered. It also offers the refactorings at the range (see <c>NyxCompiler.Refactorings</c>), in a
 /// document whose text type-checked: writing the inferred type of the name at its start, inlining the def it names,
-/// converting the call or pipe it names to the other, and introducing a local or a function for what it selects, laid out with the document's formatter settings. One the compiler refuses there is
+/// converting the call or pipe it names to the other, and introducing a local or a function for what it selects; and
+/// organising the document's imports, which is also a quick fix of an unused import. Each is laid out with the
+/// document's formatter settings, and only the kinds a request asks for are computed. One the compiler refuses there is
 /// offered disabled, with its reason. One that makes up a name has the <see cref="RenameAtCommand"/> command, which
 /// starts renaming it once its edits are made.
 /// </summary>
@@ -55,16 +57,69 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             .Where(pair => pair.First.Span.Value.File == document.FileName && Overlaps(pair.First.Span.Value, start, end))
             .SelectMany(pair => pair.First.Fixes.Select((fix, index) => ToAction(uri, document, fix, pair.Second, isPreferred: index == 0)))
             .OfType<CodeAction>()
-            .Concat(Refactorings(uri, document, compiled, start, end))
-            .Select(action => new CommandOrCodeAction(action));
+            .ToList();
+        var only = request.Context?.Only?.ToList();
+        var refactorings = Refactorings(uri, document, compiled, start, end, only).ToList();
 
-        return new CommandOrCodeActionContainer(actions);
+        // Organising imports is a fix for an unused import, too.
+        var unusedImports = compiled.Diagnostics
+            .Zip(published)
+            .Where(pair => FSharpOption<Parser.Program.SourceSpan>.get_IsSome(pair.First.Span) && Overlaps(pair.First.Span.Value, start, end))
+            .Select(pair => pair.Second)
+            .Where(diagnostic => diagnostic.Code?.String?.EndsWith("/" + NyxCompiler.UnusedImports.rule.Id) == true)
+            .ToList();
+        if (unusedImports.Count > 0 && Wanted(only, CodeActionKind.QuickFix) && document.Typed)
+        {
+            foreach (var organise in OrganiseImports.at(OptionsFor(document, uri), document.FileName, document.Text, compiled, Recompile(uri)))
+            {
+                if (organise is Offer.Available)
+                {
+                    actions.Add(ToAction(uri, document, organise) with
+                    {
+                        Kind = CodeActionKind.QuickFix,
+                        Diagnostics = new Container<Diagnostic>(unusedImports)
+                    });
+                }
+            }
+        }
+
+        return new CommandOrCodeActionContainer(actions.Concat(refactorings).Select(action => new CommandOrCodeAction(action)));
     }
 
-    /// <summary>The refactorings at the range from <paramref name="start"/> to <paramref name="end"/>, if the document's text type-checked.</summary>
-    private IEnumerable<CodeAction> Refactorings(DocumentUri uri, OpenDocument document, NyxCompiler.CompileResult compiled, int start, int end)
+    /// <summary>Whether a request for the kinds <paramref name="only"/> (all, when null) wants actions of <paramref name="kind"/>.</summary>
+    private static bool Wanted(List<CodeActionKind>? only, CodeActionKind kind) =>
+        only is null || only.Any(wanted => kind.ToString() == wanted.ToString() || kind.ToString().StartsWith(wanted + "."));
+
+    private Nanyx.Formatter.Formatter.Options OptionsFor(OpenDocument document, DocumentUri uri) =>
+        FormattingHandler.SettingsFor(document, uri, _logger) ?? Nanyx.Formatter.Formatter.OptionsModule.defaults;
+
+    /// <summary>Compiles a text of the document at <paramref name="uri"/>, as a refactoring checks what it would make.</summary>
+    private Microsoft.FSharp.Core.FSharpFunc<string, NyxCompiler.CompileResult> Recompile(DocumentUri uri) =>
+        Microsoft.FSharp.Core.FuncConvert.FromFunc((string text) =>
+            _documents.Compile(uri, text).Compiled ?? throw new InvalidOperationException("The compiler failed on the refactored text"));
+
+    /// <summary>
+    /// The refactorings at the range from <paramref name="start"/> to <paramref name="end"/> of the kinds
+    /// <paramref name="only"/> (all, when null), if the document's text type-checked.
+    /// </summary>
+    private IEnumerable<CodeAction> Refactorings(DocumentUri uri, OpenDocument document, NyxCompiler.CompileResult compiled, int start, int end, List<CodeActionKind>? only)
     {
         if (!document.Typed)
+        {
+            yield break;
+        }
+
+        var options = OptionsFor(document, uri);
+        var recompile = Recompile(uri);
+        if (Wanted(only, CodeActionKind.SourceOrganizeImports))
+        {
+            foreach (var organise in OrganiseImports.at(options, document.FileName, document.Text, compiled, recompile))
+            {
+                yield return ToAction(uri, document, organise);
+            }
+        }
+
+        if (!Wanted(only, CodeActionKind.Refactor))
         {
             yield break;
         }
@@ -74,9 +129,6 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             yield return ToAction(uri, document, offer);
         }
 
-        var options = FormattingHandler.SettingsFor(document, uri, _logger) ?? Nanyx.Formatter.Formatter.OptionsModule.defaults;
-        var recompile = Microsoft.FSharp.Core.FuncConvert.FromFunc((string text) =>
-            _documents.Compile(uri, text).Compiled ?? throw new InvalidOperationException("The compiler failed on the refactored text"));
         foreach (var inline in Inline.at(options, document.FileName, document.Text, compiled, start, recompile))
         {
             yield return ToAction(uri, document, inline);
@@ -94,7 +146,6 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             {
                 yield return ToAction(uri, document, extract);
             }
-
 
             foreach (var extract in IntroduceFunction.at(options, document.FileName, document.Text, compiled, selection, recompile))
             {
@@ -159,6 +210,7 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             RefactoringKind.Tags.Extract => CodeActionKind.RefactorExtract,
             RefactoringKind.Tags.Rewrite => CodeActionKind.RefactorRewrite,
             RefactoringKind.Tags.Inline => CodeActionKind.RefactorInline,
+            RefactoringKind.Tags.OrganiseImports => CodeActionKind.SourceOrganizeImports,
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };
 
@@ -198,5 +250,5 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
     protected override CodeActionRegistrationOptions CreateRegistrationOptions(
         CodeActionCapability capability,
         ClientCapabilities clientCapabilities) =>
-        new() { DocumentSelector = TextDocumentSyncHandler.Selector, CodeActionKinds = new Container<CodeActionKind>(CodeActionKind.QuickFix, CodeActionKind.RefactorExtract, CodeActionKind.RefactorInline, CodeActionKind.RefactorRewrite) };
+        new() { DocumentSelector = TextDocumentSyncHandler.Selector, CodeActionKinds = new Container<CodeActionKind>(CodeActionKind.QuickFix, CodeActionKind.RefactorExtract, CodeActionKind.RefactorInline, CodeActionKind.RefactorRewrite, CodeActionKind.SourceOrganizeImports) };
 }
