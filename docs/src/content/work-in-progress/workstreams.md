@@ -14,7 +14,7 @@ There are no tracking issues. The
 Its Stream field places an issue in the workstream it mostly serves. Its Stage field, set on each issue, orders
 the backlog:
 
-- **Working set:** being worked now, and taken first.
+- **Working set:** being worked now, and taken first. An issue whose Status is In Progress is always in the Working set: claiming an issue moves it there.
 - **Ready:** fully specified, with a "done when" and nothing left to decide, so anyone can pick it up.
 - **Planning:** still has open questions, or is a draft with no "done when". It isn't worked until its questions
   are settled and it moves to Ready.
