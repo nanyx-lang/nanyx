@@ -84,14 +84,37 @@ formatter and the language server need no change until the parser underneath the
   the parser out of `Program.fs` (done: `Expressions.fs`, `TopLevel.fs`, `Api.fs` and the files before them,
   [#366](https://github.com/nanyx-lang/nanyx/issues/366)).
 
-## Stage 1: a lexer, used alongside the parser
+## Stage 1: a lexer, used alongside the parser (done)
 
-Write `Lexer.fs`: text in, tokens out, each with its span and its leading and trailing trivia (comments, whitespace,
-line breaks). The FParsec parser keeps parsing characters and doesn't use it yet.
+`Lexer.fs`: text in, tokens out, each with its offsets and its leading and trailing trivia. The FParsec parser keeps
+parsing characters and doesn't use it yet.
 
-- **Done when** the lexer is lossless: joining every token and its trivia gives back the source exactly, for every
-  file in the corpus. Its tests cover each kind of token, including string escapes, interpolation, digit separators
-  and `---` block comments.
+- **Tokens.** A name, a keyword (one of `Keywords.reserved`), a name in backticks, a number (without its sign), a
+  string, a binary operator written with symbols (from `Operators.binaryOperators`, so the operators are still one
+  list), and each piece of punctuation as its own kind. A string with holes is a `StringStart` (`"total: {`), the
+  hole's tokens, a `StringMiddle` (`} of {`) between holes and a `StringEnd` (`} items"`); the lexer counts the braces
+  in a hole, so a lambda in one is the hole's own. Of the symbols, the longest the language has is read, so `x =-1`
+  is `=`, `-`, `1`.
+- **Trivia.** Spaces and tabs, a line break (`\n`, `\r\n` or `\r`), a `--` comment, a doc comment, a block comment, and
+  a directive or `#!` line at the top of a file. A token's trailing trivia is what follows it on its line, up to and
+  including the line break; everything else before the next token is that token's leading trivia, and the trivia
+  after the last token belongs to an `EndOfFile` token.
+- **Lossless, whatever the text.** A character that is no part of the syntax is an `Unknown` token, and a string or
+  block comment that is never closed runs to the end of the text; each reports an error with a span beside the
+  tokens.
+- **Checked** (`LexerTests.fs`, and `CorpusTests.fs` in the parser's tests): every kind of token and trivia, including
+  string escapes, holes, digit separators and block comments; every piece of the corpus written back exactly from its
+  tokens; and every piece the parser reads lexed with no error, finding exactly the comments the parser finds.
+
+Where the lexer reads the text differently from the FParsec parser, which stage 3 has to settle:
+
+- `true` and `false` are names, as they are not reserved words. The parser takes them as literals where an expression
+  or a pattern goes.
+- A number has no sign: `-1` is `-` and `1`. The parser reads a sign as part of a literal in some places.
+- A `.` is part of a number only when a digit follows it, so `1.` is `1` and `.`. The parser's float literal reads
+  `1.` as a float.
+- A `{` in any double-quoted string opens a hole. The parser reads a string literal with no holes, as an import's
+  path or a pattern's, with `{` as text.
 - **Useful at once:** the language server's "am I in code, a string or a comment?" check, doc comments and the
   reserved-word list can use tokens instead of their own scanning.
 
