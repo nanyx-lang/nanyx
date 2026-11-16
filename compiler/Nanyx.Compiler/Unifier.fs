@@ -716,6 +716,12 @@ module Unifier =
             let var = TyVar { Id = nextRestId; Name = None }
             nextRestId <- nextRestId + 1
             var
+        // A tag's payload that is a closed union, open to more tags through a rest made up for it (#679).
+        let openedPayload (payload: Ty) =
+            match payload, parseTagsOf payload with
+            | TyUnion items, Ok (_, None) -> Some (TyUnion(items @ [ freshRest () ]))
+            | TyTag _, Ok (_, None) -> Some (TyUnion [ payload; freshRest () ])
+            | _ -> None
         // Where to report that none of a union's members could be the type given for it, at the constraint from
         // `origin`, given how trying each one failed, in the order tried. A member is tried against the constraints
         // after it too, so one whose failure is elsewhere fitted here, and what failed is a constraint further on,
@@ -989,10 +995,18 @@ module Unifier =
                                 let pairs =
                                     lMap
                                     |> Map.toList
-                                    |> List.choose (fun (key, lTy) -> rMap |> Map.tryFind key |> Option.map (fun rTy -> (lTy, rTy, Equal, origin)))
+                                    |> List.choose (fun (key, lTy) -> rMap |> Map.tryFind key |> Option.map (fun rTy -> (lTy, rTy, Assignable, origin)))
                                 let extraTags = lMap |> Map.toList |> List.filter (fun (key, _) -> not (rMap.ContainsKey key)) |> List.map snd
+                                // A tag the rest takes whose payload is a closed union takes it open to more, as a
+                                // payload variable given one does (see below), so that a `try` on a step failing with
+                                // `#error(#notFound)` and one on a step failing with `#error(#invalidInt)` fail with
+                                // `#error(#notFound | #invalidInt)` (#679).
+                                let opened (tag: Ty) =
+                                    match tag with
+                                    | TyTag(name, Some payload) -> openedPayload payload |> Option.map (fun payload -> TyTag(name, Some payload)) |> Option.defaultValue tag
+                                    | _ -> tag
                                 let restConstraints =
-                                    if extraTags.IsEmpty then [] else [ (TyVar restVar, TyUnion(extraTags @ [ freshRest () ]), Equal, origin) ]
+                                    if extraTags.IsEmpty then [] else [ (TyVar restVar, TyUnion((extraTags |> List.map opened) @ [ freshRest () ]), Equal, origin) ]
                                 loop subst (pairs @ restConstraints @ rest)
                             | _ -> unifyEqual false origin l r rest
                         // A union is assignable to a closed union or a tag only if the expected type names each of its
@@ -1007,7 +1021,7 @@ module Unifier =
                              | _ -> false) ->
                             match parseTagUnion lItems, parseTagsOf r with
                             | Ok (lMap, lRest), Ok (rMap, _) when lMap |> Map.forall (fun key _ -> rMap.ContainsKey key) ->
-                                let pairs = lMap |> Map.toList |> List.map (fun (key, lTy) -> (lTy, rMap.[key], Equal, origin))
+                                let pairs = lMap |> Map.toList |> List.map (fun (key, lTy) -> (lTy, rMap.[key], Assignable, origin))
                                 let extraTags = rMap |> Map.toList |> List.filter (fun (key, _) -> not (lMap.ContainsKey key)) |> List.map snd
                                 let restConstraints =
                                     match lRest with
@@ -1024,6 +1038,21 @@ module Unifier =
                         // the arguments of `f(a, b)` are one tuple, each item given where its parameter is
                         // expected. A function's argument is contravariant, since the function is given values of
                         // the type it expects.
+                        // A closed union given for a tag's payload that is a variable inference made up makes it that
+                        // union open to more, through a rest made up for it, so that another closed union given for it
+                        // later widens it to their join, as a union's rest is widened (#679): `Result.bind` chains a
+                        // step that fails with `#notFound` and one that fails with `#invalidInt`, and its error is
+                        // `#notFound | #invalidInt`. The rest is closed where the def is generalised (see
+                        // `outputOnlyRestVars`). A payload opened so is given what comes for it; any other payload is
+                        // the same type as the one given, as a match's arms need: they close the rest their union
+                        // has for a payload.
+                        | TyTag(lName, Some lPayload), TyTag(rName, Some rPayload) when lName = rName ->
+                            match rPayload with
+                            | TyVar v when isPlainVar v ->
+                                loop subst ((rPayload, openedPayload lPayload |> Option.defaultValue lPayload, Equal, origin) :: rest)
+                            | TyUnion items when items |> List.exists (function TyVar v -> isMadeUpRest v | _ -> false) ->
+                                loop subst ((lPayload, rPayload, Assignable, origin) :: rest)
+                            | _ -> loop subst ((lPayload, rPayload, Equal, origin) :: rest)
                         | TyRecord lFields, TyRecord rFields when keySet lFields = keySet rFields ->
                             let pairs = keySet lFields |> Seq.map (fun key -> (lFields.[key], rFields.[key], Assignable, origin)) |> Seq.toList
                             loop subst (pairs @ rest)
