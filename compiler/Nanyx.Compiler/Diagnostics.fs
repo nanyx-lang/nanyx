@@ -154,6 +154,8 @@ module DiagnosticCodes =
     let InstanceOutsideUse = code 248 "Context instance written outside a use" Severity.Error
     let UseOfNonInstance = code 249 "use of something other than a context instance" Severity.Error
     let OwnInstanceReplaced = code 250 "Use of an instance for a type that has its own" Severity.Error
+    let InvalidTypeScope = code 251 "Type in the scope of something other than one scoped context" Severity.Error
+    let ContextsOnValueType = code 252 "Contexts written on a type that is not a function" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -180,7 +182,7 @@ module DiagnosticCodes =
           LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotProtected; ScopedContextEscapes
           NotACellArgument; MisplacedCellType; UndeterminedContextType; EntryDoesNotFitHost; HostRuntimeOutsideHost; ScriptRunValue; ContextsWithoutType
           InvalidExtern; ExternWithoutHostRuntime; ConflictingExterns; PrivateContextMember; ContextNameAsValue; UnknownContextName
-          ContextAsType; InstanceOutsideUse; UseOfNonInstance; OwnInstanceReplaced
+          ContextAsType; InstanceOutsideUse; UseOfNonInstance; OwnInstanceReplaced; InvalidTypeScope; ContextsOnValueType
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

@@ -54,7 +54,7 @@ Decided by the maintainer: mutable values carry their `memory` block's scope in 
 `mut T` does. The scope is never written or shown, each operation requires `Memory` of it, and NYX0233 keeps the
 value, and anything holding it, inside its block. The types are declared with the feature any user has for a scoped
 context of their own, `type MRef(a) = [Memory] protected (...)`
-([Context-qualified types](./context-qualified-types#a-scoped-context-the-type-belongs-to-its-scope),
+([Types in a scope](../advanced/contexts#types-in-a-scope), done in
 [#1521](https://github.com/nanyx-lang/nanyx/issues/1521)), not by a special case in the compiler.
 
 1. **`Array(a)`** ([#1490](https://github.com/nanyx-lang/nanyx/issues/1490)): done. An immutable, fixed-length
@@ -63,8 +63,8 @@ context of their own, `type MRef(a) = [Memory] protected (...)`
    [Memory management](./memory-management#drop-functions)); four intrinsics make and read one.
 2. **`MRef(a)`, a cell as a value** ([#1491](https://github.com/nanyx-lang/nanyx/issues/1491)): held in a record, a list
    or another cell, passed without `mut`, or returned from a function, all inside its block. In the backend it's the
-   box a captured cell already is. Declared `type MRef(a) = [Memory] protected (...)`, after
-   [#1521](https://github.com/nanyx-lang/nanyx/issues/1521).
+   box a captured cell already is. Declared `type MRef(a) = [Memory] protected (...)`, which
+   [#1521](https://github.com/nanyx-lang/nanyx/issues/1521) made possible.
 3. **`MArray(a)`** ([#1492](https://github.com/nanyx-lang/nanyx/issues/1492)): fixed length, each slot changed in place.
    It behaves as an `Array(MRef(a))` whose cells are all distinct, but is laid out flat, as an `Array` is. Converting
    between `Array` and `MArray` copies, so an `Array` stays immutable.
