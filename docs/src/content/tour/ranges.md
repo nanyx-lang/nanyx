@@ -19,6 +19,14 @@ println(naturalNumbers \seq.take(3) \seq.toList)
 
 A range is a value like any other: it can be passed around, stored, and pulled with the `seq` functions. A `for` loop over a range written in place counts through it without making the sequence.
 
+A `for` loop walks any other sequence too, pulling one element each time round, just before the body runs with it:
+
+```nanyx
+def evens = (1..10) \seq.filter { x -> x % 2 == 0 }
+
+for evens | n -> println(n)
+```
+
 An unbounded range such as `0..` counts up forever, so a `for` loop can only walk it [in step with something that ends](./loops#enumerating-with-indexes):
 
 ```nanyx

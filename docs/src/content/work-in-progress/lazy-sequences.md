@@ -6,8 +6,8 @@ order: 25
 
 > **Status: being built.** `seq(a)` is in the prelude with its core functions, and ranges are values of it
 > ([prelude: sequences](../stdlib/prelude-sequences), [#192](https://github.com/nanyx-lang/nanyx/issues/192), done).
-> Still to do: a `for` loop over a sequence that is not a range written in place
-> ([#1698](https://github.com/nanyx-lang/nanyx/issues/1698)), `Iterable`, and the `seq { }` builder
+> A `for` loop walks any sequence ([#1698](https://github.com/nanyx-lang/nanyx/issues/1698), done).
+> Still to do: `Iterable`, and the `seq { }` builder
 > ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)).
 
 # Summary
@@ -48,7 +48,11 @@ Where each idea the docs described stands:
 
 A `for` loop accepts a `list`, `seq`, `map` or `set` by type (`Loops.inferFor`), and rejects a range with no end
 written in place unless something that ends is walked beside it (NYX0217). The backend walks a list and a range written
-in place, but not yet any other sequence ([#1698](https://github.com/nanyx-lang/nanyx/issues/1698)).
+in place with the core IR's `ForEach`. A loop over a sequence value is a `while` loop instead
+(`CoreIrLowerLoops.forEachPulling`): each time round it pulls the sequence, calling its function with the members of
+the contexts it carries, binds the element and holds the rest for the next time round, so the body runs between pulls.
+A list or a range walked beside it is walked in the same loop, and the loop ends when the first of them does
+([#1698](https://github.com/nanyx-lang/nanyx/issues/1698), done).
 
 # Design
 
@@ -225,8 +229,8 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
    [#1700](https://github.com/nanyx-lang/nanyx/issues/1700).
 2. ~~Type `a..` as a `seq(int)`, and remove `gen` from the type checker.~~ Done
    ([#192](https://github.com/nanyx-lang/nanyx/issues/192)).
-3. ~~Give `seq(a)` its runtime representation, with ranges as values~~ (done, #192), and `for` loops over any
-   sequence ([#1698](https://github.com/nanyx-lang/nanyx/issues/1698)).
+3. ~~Give `seq(a)` its runtime representation, with ranges as values, and `for` loops over any sequence.~~ Done
+   ([#192](https://github.com/nanyx-lang/nanyx/issues/192), [#1698](https://github.com/nanyx-lang/nanyx/issues/1698)).
 4. The core functions. Done: `seq.empty`, `range`, `from`, `unfold`, `map`, `filter`, `take`, `skip`, `takeWhile`,
    `fold`, `toList`, and `list.toSeq`. Still to write: `seq.zip`, `set.toSeq`, `map.toSeq`.
 5. `Iterable(c, a)`, with `for` loops and the `Seq` functions that consume a sequence taking it.
