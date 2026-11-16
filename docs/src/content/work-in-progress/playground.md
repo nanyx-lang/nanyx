@@ -34,8 +34,9 @@ program keeps its `Console` and its `@entry`, and only the embedder changes. The
 imports just `fd_write`, `fd_read` and `proc_exit`, which a page can provide in a few lines of JavaScript. The Hosts
 page lists what stands in the way, and each of those is a step of the plan below:
 
-- **The toolchain writes WebAssembly text.** A browser loads only the binary format, so the compiler needs to write
-  `.wasm`. That is useful outside the playground too: `nanyx build` could write `.wasm` for every embedder.
+- Done: **the toolchain writes `.wasm`.** A browser loads only the binary format. The compiler assembles its
+  WebAssembly text itself (`WasmBinary.fs`), without Wasmtime, so a browser build of the compiler can do it too, and
+  `nanyx build` and `nanyx wasm` write `.wasm` for every embedder.
 - **The program runs in the module's start function**, before the page can reach the module's memory. For the page,
   the module exports its entry for the page to call, or imports its memory.
 - **`proc_exit` has to unwind.** The page's `proc_exit` throws, and the code that called the entry catches it and
@@ -97,7 +98,7 @@ The first version has no input: a program that reads it gets an end of input, an
 1. **Measure the compiler in the browser.** Publish the CLI's compile path for `browser-wasm`, trimmed, and measure
    the download, the start-up and the compile time of a few tour examples. This decides "Where the compiler runs"
    ([#1234](https://github.com/nanyx-lang/nanyx/issues/1234)).
-2. **Write `.wasm`.** The compiler writes the binary format, for `nanyx build` too, with tests that the binary runs as
+2. Done: **Write `.wasm`.** The compiler writes the binary format, for `nanyx build` too, with tests that the binary runs as
    the text does ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).
 3. **An entry the page can call.** The module exports its entry, or imports its memory, and `proc_exit` unwinds. A
    runner script, in a worker, provides `fd_write`, `fd_read` and `proc_exit` and runs a module end to end in a

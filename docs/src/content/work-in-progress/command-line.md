@@ -17,7 +17,8 @@ and the streams it runs with, so the Wasm tests run commands in their own proces
 `run --check-memory` sets `WasmOptions.CheckMemory` (see [Memory management](./memory-management)), and the Wasm tests
 run every program this way, so a leak anywhere fails a test. `run --memory` does too, and then writes the report of
 `MemoryReport.cs` from the checked allocator's counters; the two are `MemoryCheck.Check` and `MemoryCheck.Report`, which
-`RunIn` and `RunScript` take. `run --no-inline` and `build --no-inline` clear
+`RunIn` and `RunScript` take. `build` and `wasm` write the program as a `ProgramFormat`, the binary format unless `--wat`
+asks for text; `WriteProgram` assembles it (see [the binary format](./compilation#the-binary-format)). `run --no-inline` and `build --no-inline` clear
 `WasmOptions.Inline` (see [Inlining](./inlining)); the tour examples are run both ways, and must print the same.
 
 # The stopwatch

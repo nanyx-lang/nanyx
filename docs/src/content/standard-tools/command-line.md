@@ -10,8 +10,8 @@ and is the language server for editors. `nanyx --help` lists its commands, and `
 ```text
 nanyx run [--check-memory | --memory] [--timings] [--host <host>] [<file.nyx | package>] [--] [<arguments>]
 nanyx check [--timings] [--host <host>] [<file.nyx | package>]
-nanyx build [--out <path>] [--release] [--timings] [--host <host>] [<package>]
-nanyx wasm <file.nyx> [--out <path>] [--release]
+nanyx build [--out <path>] [--release] [--wat] [--timings] [--host <host>] [<package>]
+nanyx wasm <file.nyx> [--out <path>] [--release] [--wat]
 nanyx format [--check | --write] [<files or directories>]
 nanyx format [--check] --stdin
 nanyx new <name> [<directory>]
@@ -110,19 +110,21 @@ nothing else.
 ## `nanyx build`
 
 `nanyx build` checks every source file of a package, with the linters its manifest turns on, and writes the program
-of its `@entry` as WebAssembly text, to `out/<package name>.wat` beside the manifest. A package with no `@entry` is
-only checked.
+of its `@entry` as a WebAssembly module, to `out/<package name>.wasm` beside the manifest: the binary format, which
+browsers, Wasmtime and other WebAssembly runtimes load. A package with no `@entry` is only checked.
 
 | Option | What it does |
 |--------|--------------|
 | `--out <path>`, `-o <path>` | Writes the program to another file, making its directory if need be. |
 | `--release` | Refuses any error. Without it, a build is a debug build: type and name errors are deferred, and the program is written all the same. |
+| `--wat` | Writes WebAssembly text, to `out/<package name>.wat`, rather than the binary format: the same program, for reading. |
 | `--timings`, `--host <host>` | As for `run`. |
 
 ## `nanyx wasm`
 
-`nanyx wasm file.nyx` compiles a script to WebAssembly text, written beside it as `file.wat`, or to `--out <path>`
-(`-o`). Like `build`, it is a debug build unless you pass `--release`.
+`nanyx wasm file.nyx` compiles a script to a WebAssembly module, written beside it as `file.wasm`, or to `--out <path>`
+(`-o`). With `--wat` it writes WebAssembly text, `file.wat`, instead. Like `build`, it is a debug build unless you pass
+`--release`.
 
 ## Exit codes
 

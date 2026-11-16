@@ -62,7 +62,8 @@ Out of scope here, with their own workstreams:
 
 The parser, type checker, WebAssembly backend and runtime are libraries; the `nanyx` CLI is the only executable
 (see [The `nanyx` command](../standard-tools/command-line)). The backend writes WebAssembly text from the core IR (see
-[Memory management](./memory-management#core-ir)) and today covers:
+[Memory management](./memory-management#core-ir)), which `WasmBinary.fs` assembles to the binary format for `nanyx build`
+and `nanyx wasm` (below), and today covers:
 
 - top-level `def` values exported as wasm functions, except one that declares contexts (see [Context calls](./context-calls)); top-level expressions (and the `@entry` definition) run from a
   WebAssembly start function. A module with a start function emits only the functions the start reaches, through
@@ -92,6 +93,23 @@ written (see [Memory management](./memory-management#core-ir)). A broken invaria
 member the type checker found but the backend cannot, is a bug in the compiler, not a missing feature. It is reported
 as a `BackendInternalError` (`NYX0302`) that asks for a bug report. The backend raises one with
 `CoreIr.internalError`, never a bare `failwith`.
+
+## The binary format
+
+`nanyx build` and `nanyx wasm` write `.wasm` ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)); `--wat`
+writes the text instead, and `nanyx run` runs the text on Wasmtime as before. `WasmBinary.assemble` is an assembler of
+the compiler's own, so a browser build of the compiler, which has no Wasmtime, writes `.wasm` too. `WatSyntax.fs` reads
+the text as s-expressions, and `WasmBinary.fs` numbers the module's definitions (imports first in each index space,
+the types a type use or a block writes inline added after the declared ones) and writes the sections. It reads what the
+backend writes, flat or folded: WebAssembly 2.0's numeric, variable, memory and control instructions, with
+`return_call` and `return_call_indirect`, and no passive segments, SIMD or reference instructions. Functions keep their
+names in the `name` section, so a trap's backtrace, and the runner's out-of-memory check, see them as they do for the
+text. A form it doesn't read is a `WasmAssemblyError`, which the CLI reports as a compiler bug.
+
+The tests run programs that print, trap, make a million tail calls, and use closures, records and tags from the binary
+and the text and compare what they do (`Features/Binary/WasmBinaryTests.fs`), assemble every end-to-end test's module
+and validate it, and run the memory-checked examples from both. Every module a test compiles with `transpileWatWith` is
+assembled too.
 
 ## Tour examples
 

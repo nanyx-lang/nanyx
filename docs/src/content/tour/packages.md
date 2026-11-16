@@ -213,7 +213,7 @@ The entrypoint runs under the package's host, which loads the contexts it may us
 
 # Building and running a package
 
-In a package's directory (or any directory under it), `nanyx build` checks every source file the manifest selects and writes the program to `out/<package name>.wat`, and `nanyx run` checks them and runs the package's `@entry`. Both also take the package's directory or manifest:
+In a package's directory (or any directory under it), `nanyx build` checks every source file the manifest selects and writes the program to `out/<package name>.wasm`, and `nanyx run` checks them and runs the package's `@entry`. Both also take the package's directory or manifest:
 
 ```text
 nanyx run examples/greeter

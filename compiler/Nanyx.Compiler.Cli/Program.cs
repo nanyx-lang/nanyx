@@ -6,6 +6,16 @@ using NyxCompiler;
 using System.Reflection;
 using Transpiler.Wasm;
 
+/// <summary>The form <c>nanyx build</c> and <c>nanyx wasm</c> write a program in.</summary>
+enum ProgramFormat
+{
+    /// <summary>The binary format, <c>.wasm</c>, which browsers and other embedders load.</summary>
+    Binary,
+
+    /// <summary>WebAssembly text, <c>.wat</c>, for reading.</summary>
+    Text
+}
+
 enum Target
 {
     Parse,
@@ -164,23 +174,25 @@ internal static partial class CliCommands
     }
 
     /// <summary>
-    /// Compile a Nanyx source file to WebAssembly text.
+    /// Compile a Nanyx source file to WebAssembly: a .wasm module, or WebAssembly text with --wat.
     /// </summary>
     /// <param name="inputFile">The .nyx file to compile.</param>
-    /// <param name="outputPath">Where to write the WebAssembly text; the default is the input's name with .wat, beside it.</param>
+    /// <param name="outputPath">Where to write the program; the default is the input's name with .wasm (or .wat), beside it.</param>
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
+    /// <param name="wat">Write WebAssembly text (.wat) rather than the binary format (.wasm).</param>
     [Consolo("wasm")]
     public static int Wasm(
         string inputFile,
         [Consolo("out", Alias = "o")] string? outputPath = null,
-        [Consolo("release")] bool release = false)
+        [Consolo("release")] bool release = false,
+        [Consolo("wat")] bool wat = false)
     {
-        return WasmIn(Shell.Process, inputFile, outputPath, release);
+        return WasmIn(Shell.Process, inputFile, outputPath, release, wat ? ProgramFormat.Text : ProgramFormat.Binary);
     }
 
     /// <summary>What <c>nanyx wasm</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int WasmIn(Shell shell, string inputFile, string? outputPath, bool release) =>
-        Execute(shell, inputFile, Target.Wasm, outputPath, release);
+    internal static int WasmIn(Shell shell, string inputFile, string? outputPath, bool release, ProgramFormat format = ProgramFormat.Binary) =>
+        Execute(shell, inputFile, Target.Wasm, outputPath, release, format: format);
 
     /// <summary>
     /// Run a Nanyx program: a .nyx file, or the @entry of a package.
@@ -247,10 +259,11 @@ internal static partial class CliCommands
     }
 
     /// <summary>
-    /// Build a Nanyx package: check every source file the manifest selects, and write its @entry program as WebAssembly text.
+    /// Build a Nanyx package: check every source file the manifest selects, and write its @entry program as a WebAssembly module (.wasm), or as WebAssembly text with --wat.
     /// </summary>
     /// <param name="path">The package's directory or .nyxp manifest; none means the package the current directory is in.</param>
-    /// <param name="outputPath">Where to write the program; the default is out/&lt;package name&gt;.wat beside the manifest.</param>
+    /// <param name="outputPath">Where to write the program; the default is out/&lt;package name&gt;.wasm (or .wat) beside the manifest.</param>
+    /// <param name="wat">Write WebAssembly text (.wat) rather than the binary format (.wasm).</param>
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
     /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script names its host with a ::host directive.</param>
@@ -262,13 +275,14 @@ internal static partial class CliCommands
         [Consolo("timings")] bool timings = false,
         [Consolo("host")] string? host = null,
         [Consolo("no-inline")] bool noInline = false,
+        [Consolo("wat")] bool wat = false,
         params string[] path)
     {
-        return BuildIn(Shell.Process, outputPath, release, path, timings, host, !noInline);
+        return BuildIn(Shell.Process, outputPath, release, path, timings, host, !noInline, wat ? ProgramFormat.Text : ProgramFormat.Binary);
     }
 
     /// <summary>What <c>nanyx build</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int BuildIn(Shell shell, string? outputPath, bool release, string[] path, bool timings = false, string? host = null, bool inlineCalls = true)
+    internal static int BuildIn(Shell shell, string? outputPath, bool release, string[] path, bool timings = false, string? host = null, bool inlineCalls = true, ProgramFormat format = ProgramFormat.Binary)
     {
         if (!TrySinglePath(shell, path, out var single))
         {
@@ -301,9 +315,14 @@ internal static partial class CliCommands
             return 1;
         }
 
-        var written = WriteProgram(shell, wat, string.IsNullOrWhiteSpace(outputPath)
-            ? Path.Combine(package.Manifest.Root, "out", package.Manifest.Name + ".wat")
+        var written = WriteProgram(shell, wat, format, string.IsNullOrWhiteSpace(outputPath)
+            ? Path.Combine(package.Manifest.Root, "out", package.Manifest.Name + Extension(format))
             : outputPath!);
+        if (written is null)
+        {
+            return 1;
+        }
+
         shell.Out.WriteLine($"Built {package.Manifest.Name} ({FileCount(package)}){WithDeferred(deferred, build.Diagnostics)}: {written}");
         return 0;
     }
@@ -315,16 +334,42 @@ internal static partial class CliCommands
     private const int UsageError = 2;
 
     /// <summary>
-    /// Writes <paramref name="wat"/> to <paramref name="outputPath"/>, making its directory if need be, and gives the path
-    /// as the shell shows it.
+    /// Writes the program <paramref name="wat"/> to <paramref name="outputPath"/> in <paramref name="format"/>, making its
+    /// directory if need be, and gives the path as the shell shows it; <c>null</c>, said on the shell's stderr, when the
+    /// text can't be assembled, which is a bug in the compiler.
     /// </summary>
-    private static string WriteProgram(Shell shell, string wat, string outputPath)
+    private static string? WriteProgram(Shell shell, string wat, ProgramFormat format, string outputPath)
     {
+        byte[]? wasm = null;
+        if (format == ProgramFormat.Binary)
+        {
+            try
+            {
+                wasm = WasmBinary.assemble(wat);
+            }
+            catch (Exception ex) when (ex is WasmBinary.WasmAssemblyError or WatSyntax.WatSyntaxError)
+            {
+                shell.Error.WriteLine($"Internal compiler error: the generated WebAssembly can't be assembled: {ex.Message}");
+                return null;
+            }
+        }
+
         var fullPath = shell.FullPath(outputPath);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-        File.WriteAllText(fullPath, wat);
+        if (wasm is null)
+        {
+            File.WriteAllText(fullPath, wat);
+        }
+        else
+        {
+            File.WriteAllBytes(fullPath, wasm);
+        }
+
         return shell.DisplayPath(fullPath);
     }
+
+    /// <summary>The extension of a program written in <paramref name="format"/>: <c>.wasm</c> or <c>.wat</c>.</summary>
+    private static string Extension(ProgramFormat format) => format == ProgramFormat.Binary ? ".wasm" : ".wat";
 
     /// <summary>"Checked greeter (3 files)": what a package build that wrote nothing says.</summary>
     private static string Checked(Package package) => $"Checked {package.Manifest.Name} ({FileCount(package)})";
@@ -760,7 +805,7 @@ internal static partial class CliCommands
         return $"{count} deferred error{(count == 1 ? "" : "s")}";
     }
 
-    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? programArguments = null, bool inlineCalls = true)
+    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, ProgramFormat format = ProgramFormat.Binary)
     {
         if (string.IsNullOrWhiteSpace(inputFile))
         {
@@ -793,7 +838,7 @@ internal static partial class CliCommands
         return target switch
         {
             Target.Check => RunCheck(shell, result, inputFile),
-            Target.Wasm => RunWasm(shell, result, inputFile, outputPath, release),
+            Target.Wasm => RunWasm(shell, result, inputFile, outputPath, release, format),
             _ => UnsupportedTarget(shell, target.ToString())
         };
     }
@@ -945,7 +990,7 @@ internal static partial class CliCommands
         return HasErrors(result.Diagnostics) ? 1 : 0;
     }
 
-    private static int RunWasm(Shell shell, CompileResult result, string inputFile, string? outputPath, bool release)
+    private static int RunWasm(Shell shell, CompileResult result, string inputFile, string? outputPath, bool release, ProgramFormat format)
     {
         var deferred = !release && ErrorsDeferred(result);
         if (!TryEmitWat(shell, result, shell.Out, out var wat, CodeGen.WasmOptions.Default, deferred))
@@ -953,8 +998,14 @@ internal static partial class CliCommands
             return 1;
         }
 
-        var written = WriteProgram(shell, wat, string.IsNullOrWhiteSpace(outputPath) ? DefaultWasmOutputPath(inputFile) : outputPath!);
-        shell.Out.WriteLine($"WASM (WAT) emitted{WithDeferred(deferred, result.Diagnostics)}: {written}");
+        var written = WriteProgram(shell, wat, format, string.IsNullOrWhiteSpace(outputPath) ? DefaultWasmOutputPath(inputFile, format) : outputPath!);
+        if (written is null)
+        {
+            return 1;
+        }
+
+        var what = format == ProgramFormat.Binary ? "WebAssembly" : "WebAssembly text";
+        shell.Out.WriteLine($"{what} written{WithDeferred(deferred, result.Diagnostics)}: {written}");
         return 0;
     }
 
@@ -1079,11 +1130,11 @@ internal static partial class CliCommands
         return diagnostics.Any(Diagnostics.isError);
     }
 
-    private static string DefaultWasmOutputPath(string inputFile)
+    private static string DefaultWasmOutputPath(string inputFile, ProgramFormat format)
     {
         var directory = Path.GetDirectoryName(inputFile) ?? string.Empty;
         var stem = Path.GetFileNameWithoutExtension(inputFile);
-        return Path.Combine(directory, stem + ".wat");
+        return Path.Combine(directory, stem + Extension(format));
     }
 
     private static int UnsupportedTarget(Shell shell, string target)

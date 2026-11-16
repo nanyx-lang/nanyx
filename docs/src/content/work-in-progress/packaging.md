@@ -55,7 +55,7 @@ Local packages work: a package and the packages it depends on by path are built,
   (`Package.exportErrors`) and in the editor. `nanyx build`, `nanyx check` and `nanyx run` without a file (or with a
   directory or manifest) check every source file, each module once however many files import it (`Package.build`,
   [#698](https://github.com/nanyx-lang/nanyx/issues/698)), and `run` runs the one `@entry`; `build` writes it to
-  `out/<name>.wat`. `nanyx new` makes a package (`NewPackage.fs`). The language server reads the manifest's linter
+  `out/<name>.wasm`. `nanyx new` makes a package (`NewPackage.fs`). The language server reads the manifest's linter
   configuration too. Path dependencies work (`Package.dependenciesIn`): each is read with its own, and a directory without a manifest, a
   name that doesn't match, a cycle (`NYX0027`) or a package reached by two paths (`NYX0028`) is an error; a
   dependency's `version` is the version `nanyx.lock` locks, unpacked in the cache, which `nanyx pull` downloads into ([#863](https://github.com/nanyx-lang/nanyx/issues/863)); one the lockfile doesn't lock is `NYX0024` until versions can be chosen ([#864](https://github.com/nanyx-lang/nanyx/issues/864)). There is no `.nyxproj`. `nanyx migrate` makes a package of scripts, `nanyx pull` downloads and lists its dependencies, `nanyx install` adds one, and `nanyx pack` packs it; for a package named by its version that the lockfile doesn't lock, `pull` and `install` are stubs ([#1471](https://github.com/nanyx-lang/nanyx/issues/1471), [The nanyx command](./command-line#packages)). The formatter
