@@ -72,8 +72,9 @@ let internal typeDefinitionOf (typed: TypedModule) (symbol: Symbol) : TypeDefInf
 
 /// The definition of the type `symbol` names, `info`, as `type Name(params) = <the type it stands for>` (or
 /// `context Name = ...` or `scoped context Name = ...`), with `protected` or `private` before the type a nominal one
-/// stands for, written by `writeShape`, and a note for a nominal type that says its kind and the module that declares
-/// it. `isHome` says whether it is read in that module: a private type's shape is left out anywhere else.
+/// stands for, written by `writeShape`, after the scoped context whose scope it belongs to, if any (`[Memory] private
+/// box(a)`), and a note for a nominal type that says its kind and the module that declares it. `isHome` says whether it
+/// is read in that module: a private type's shape is left out anywhere else.
 let internal writtenTypeDefinition (writeShape: Ty -> string) (symbol: Symbol) (info: TypeDefInfo) (isHome: bool) : string * string option =
     let keyword =
         if info.IsScoped then "scoped context"
@@ -87,11 +88,15 @@ let internal writtenTypeDefinition (writeShape: Ty -> string) (symbol: Symbol) (
         if info.IsPrivate then "private"
         elif info.IsNominal then "protected"
         else ""
+    let scopedKind =
+        match info.ScopedBy with
+        | Some scope -> $"[{scope}] {kind}"
+        | None -> kind
     let declared = if isHome then "this module" else Unifier.moduleText info.Home
     // A private type's shape is its home module's to know.
     let definition =
         if info.IsPrivate && not isHome then $"{keyword} {symbol.Name}{parameters}"
-        elif info.IsNominal then $"{keyword} {symbol.Name}{parameters} = {kind} {writeShape info.Underlying}"
+        elif info.IsNominal then $"{keyword} {symbol.Name}{parameters} = {scopedKind} {writeShape info.Underlying}"
         else $"{keyword} {symbol.Name}{parameters} = {writeShape info.Underlying}"
     let note =
         let what = if info.IsContext then keyword else "type"

@@ -54,6 +54,11 @@ let ``A query's variables stand for any type, but the same one each time`` () =
     Assert.False(isFound "a -> a" "int.toString")
 
 [<Fact>]
+let ``A variable never stands for a generic nominal type that holds it`` () =
+    // `MRef.new: a -> MRef(a)` against `a -> a` would bind `a` to `MRef(a)`.
+    Assert.False(isFound "a -> a" "MRef.new")
+
+[<Fact>]
 let ``A function's inputs may come in any order`` () =
     let _, filter = find "(a -> bool), list(a) -> list(a)" "list.filter"
     Assert.Equal(Reordered, filter.Rank)

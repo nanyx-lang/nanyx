@@ -107,6 +107,13 @@ let rec private variablesOf (ty: Ty) : int list =
     | TyAlias(_, args, _) -> args |> List.collect variablesOf
     | _ -> Ty.children ty |> List.collect variablesOf
 
+/// Whether the variable `id` is anywhere in `ty`, a nominal type's arguments too: binding it to such a type would make
+/// it hold itself.
+let rec private occurs (id: int) (ty: Ty) =
+    match ty with
+    | TyVar var -> var.Id = id
+    | _ -> Ty.children ty |> List.exists (occurs id)
+
 /// The tags of a union in order of their names, so that two unions of the same tags line up.
 let private byTagName (items: Ty list) =
     items |> List.sortBy (function TyTag(name, _) -> name | _ -> "")
@@ -121,7 +128,7 @@ let rec private unify (subst: Substitution) (left: Ty) (right: Ty) : Substitutio
     | TyVar a, TyVar b when a.Id = b.Id -> Some subst
     | TyVar var, other
     | other, TyVar var ->
-        if List.contains var.Id (variablesOf (substitute subst other)) then None else Some (subst |> Map.add var.Id other)
+        if occurs var.Id (substitute subst other) then None else Some (subst |> Map.add var.Id other)
     | left, right ->
         match headOf left, headOf right with
         | Some (leftName, leftArgs), Some (rightName, rightArgs) when leftName = rightName && leftArgs.Length = rightArgs.Length ->

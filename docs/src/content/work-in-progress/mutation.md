@@ -47,6 +47,8 @@ is planned.
   where a host module is imported) neither passes `Memory` on nor reports it: a call in a `memory` block is not a
   requirement of the def around the block ([#1473](https://github.com/nanyx-lang/nanyx/issues/1473)). Not yet: a def that writes no type and only calls a function that requires
   `Memory`, outside any `memory` block, is not inferred to require it, since nothing tracks `Memory` by name there.
+  Nor is such a call reported where a def writes its type without `Memory`, so an `MRef` can be made outside any block
+  ([#1561](https://github.com/nanyx-lang/nanyx/issues/1561)).
 
 # Planned
 
@@ -61,10 +63,16 @@ context of their own, `type MRef(a) = [Memory] protected (...)`
    sequence with constant-time indexing, in [`nanyx/array`](../stdlib/array). It needs no `Memory`. In the backend
    it's an `IrArray`, a block of its length and then its elements laid out flat (`CoreIrArrays`, and see
    [Memory management](./memory-management#drop-functions)); four intrinsics make and read one.
-2. **`MRef(a)`, a cell as a value** ([#1491](https://github.com/nanyx-lang/nanyx/issues/1491)): held in a record, a list
-   or another cell, passed without `mut`, or returned from a function, all inside its block. In the backend it's the
-   box a captured cell already is. Declared `type MRef(a) = [Memory] protected (...)`, which
-   [#1521](https://github.com/nanyx-lang/nanyx/issues/1521) made possible.
+2. **`MRef(a)`, a cell as a value** ([#1491](https://github.com/nanyx-lang/nanyx/issues/1491)): done, in
+   [`nanyx/mref`](../stdlib/mref), and described on [Memory](../advanced/memory#references). It is declared
+   `type MRef(a) = [Memory] private box(a)`. `box(a)` is a built-in type (`Boxes.fs`) that only the standard library
+   can make, read or change, through three intrinsics, `__nanyx_box_new`, `__nanyx_box_get` and `__nanyx_box_set`. In
+   the backend a box is the box a captured cell is, a record of one field (`CoreIrLowerTypes`): `box_new` is a
+   `MakeRecord`, `box_get` a `Field` copied into a local of its own, as a read of a cell is, and `box_set` a `SetField`,
+   which gives up the value it replaces; its drop is the record's. The optimiser folds no record's field (only a
+   closure's), so a box changed in place is safe there. A box has no `Eq`, `Ord` or `Hash`
+   (`WellKnownContexts`, "mutable references have no equality"), and an `MRef` no `ToString`, since writing what it
+   holds would read it without `Memory`.
 3. **`MArray(a)`** ([#1492](https://github.com/nanyx-lang/nanyx/issues/1492)): fixed length, each slot changed in place.
    It behaves as an `Array(MRef(a))` whose cells are all distinct, but is laid out flat, as an `Array` is. Converting
    between `Array` and `MArray` copies, so an `Array` stays immutable.

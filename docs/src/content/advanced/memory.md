@@ -90,7 +90,27 @@ A function that takes a cell can only be called where the cell's block is, so a 
 
 `mut x` passes only a cell, a name declared with `mut` or a `mut` parameter: anything else is an error (NYX0234). A plain value where `mut T` is expected, or `mut x` where a plain `T` is, is a type error. A `mut` parameter takes one name, never a pattern.
 
-A cell can be passed to a function, but nothing else can hold one yet: `mut T` anywhere but a function's parameter, as in `list(mut int)`, is an error (NYX0235). A lambda over a cell parameter needs the `Memory` of the block the cell is in, so it cannot leave that block, as a lambda over the cell itself cannot.
+A cell can be passed to a function, but nothing else can hold one: `mut T` anywhere but a function's parameter, as in `list(mut int)`, is an error (NYX0235). To hold one, use a reference (below). A lambda over a cell parameter needs the `Memory` of the block the cell is in, so it cannot leave that block, as a lambda over the cell itself cannot.
+
+# References
+
+A reference, `MRef(a)` from [`nanyx/mref`](../stdlib/mref), is a cell that is a value. It can be held in a record, a list or another reference, passed without `mut`, and returned from a function, and every holder sees what `MRef.set` changes:
+
+```nanyx
+import nanyx/mref
+
+def bump: [Memory] MRef(int) -> () = { r -> MRef.update(r, { n -> n + 1 }) }
+
+def total = memory {
+  def count = MRef.new(0)
+  def holder = (counter = count, name = "clicks")
+  bump(holder.counter)
+  bump(count)
+  MRef.get(count) -- 2
+}
+```
+
+A reference belongs to the `memory` block it was made in, as a cell does. `MRef` is declared `type MRef(a) = [Memory] private box(a)`, a type in `Memory`'s scope ([Types in a scope](./contexts#types-in-a-scope)), so making, reading or changing one requires the block's `Memory`, and neither it nor anything holding it can leave the block (NYX0233). A reference has no `==`, order or hash, since what it holds changes, and no `toString`, since writing what it holds would read it without `Memory`: compare or write what `MRef.get` gives instead.
 
 # Values cannot escape memory scope
 
@@ -157,11 +177,11 @@ Because `memory` is scoped, global mutable state is effectively impossible. Top-
 
 # How cells are compiled
 
-A cell that no lambda captures is a WebAssembly local, and `:=` sets it. A cell a lambda captures, or one passed with `mut`, is a box on the heap, shared by the block, every lambda that captures it and every function it is passed to, and reference counted like any other value, so it is freed when the last of them is done with it.
+A cell that no lambda captures is a WebAssembly local, and `:=` sets it. A cell a lambda captures, or one passed with `mut`, is a box on the heap, shared by the block, every lambda that captures it and every function it is passed to, and reference counted like any other value, so it is freed when the last of them is done with it. A reference is the same box: `MRef.set` gives up the value it held, and the box gives up the value it holds when it is freed.
 
 # Planned
 
-Mutable collections, cells as values of their own, and `mut` record fields are planned; see [Work in progress: Mutation](../work-in-progress/mutation). For example, a mutable list will be an ordinary value with attached operators that update it in place, where `+=` is an attached definition on `MList`, not a second kind of assignment:
+Mutable collections and `mut` record fields are planned; see [Work in progress: Mutation](../work-in-progress/mutation). For example, a mutable list will be an ordinary value with attached operators that update it in place, where `+=` is an attached definition on `MList`, not a second kind of assignment:
 
 ```nanyx
 memory {
