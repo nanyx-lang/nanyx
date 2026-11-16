@@ -27,6 +27,15 @@ internal static class SourceLocations
     }
 
     /// <summary>
+    /// The location of <paramref name="span"/>, a name in any file: in the open document of its file, if the editor has
+    /// one, at its place in the editor's text, or else as <see cref="InFile"/> finds it.
+    /// </summary>
+    public static Location? Of(Parser.Program.SourceSpan span, DocumentStore documents, StandardLibrarySource standardLibrary) =>
+        documents.TryGetFile(span.File) is (var uri, var document)
+            ? new Location { Uri = uri, Range = document.Positions.ToRange(span.Start, span.End) }
+            : InFile(span, standardLibrary);
+
+    /// <summary>
     /// The location of <paramref name="span"/>, a name in a source file on disk, or in the standard library, opened
     /// from the copy of its source on disk. Null when the span is in no file the editor can open.
     /// </summary>

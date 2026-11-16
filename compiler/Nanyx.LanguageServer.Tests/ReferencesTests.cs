@@ -51,6 +51,67 @@ public sealed class ReferencesTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task References_in_a_package_are_found_in_each_of_its_files_with_the_editors_text_of_an_open_one()
+    {
+        File.WriteAllText(TempPath("app.nyxp"), """
+            (package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]))
+            """.ReplaceLineEndings("\n"));
+        var shapes = TempPath("src", "shapes.nyx");
+        File.WriteAllText(shapes, """
+            module shapes
+
+            export def origin: int = 0
+            """.ReplaceLineEndings("\n"));
+        var report = TempPath("src", "report.nyx");
+        File.WriteAllText(report, """
+            module report
+
+            import app/shapes
+
+            def far = origin + 1
+            """.ReplaceLineEndings("\n"));
+        var mainText = """
+            module main
+
+            import app/shapes
+
+            def here = origin
+            """.ReplaceLineEndings("\n");
+        File.WriteAllText(TempPath("src", "main.nyx"), mainText);
+        File.WriteAllText(TempPath("src", "other.nyx"), """
+            module other
+
+            def there = 1
+            """.ReplaceLineEndings("\n"));
+        var main = DocumentUri.FromFileSystemPath(TempPath("src", "main.nyx"));
+        var other = DocumentUri.FromFileSystemPath(TempPath("src", "other.nyx"));
+
+        Open(main, mainText);
+        Assert.Empty((await NextPublished(main)).Diagnostics!);
+        // A file whose changes are not saved is searched as the editor has it.
+        Open(other, """
+            module other
+
+            import app/shapes
+
+            def there = (origin, origin)
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(other)).Diagnostics!);
+
+        var references = await ReferencesAt(main, 4, 12, includeDeclaration: true);
+        // The declaration comes first, in a file that is not open.
+        Assert.Equal((DocumentUri.FromFileSystemPath(shapes), new Range(2, 11, 2, 17)), (references[0].Uri, references[0].Range));
+        Assert.Equal(
+            [
+                (main, new Range(4, 11, 4, 17)),
+                (other, new Range(4, 13, 4, 19)),
+                (other, new Range(4, 21, 4, 27)),
+                (DocumentUri.FromFileSystemPath(report), new Range(4, 10, 4, 16))
+            ],
+            references.Skip(1).Select(location => (location.Uri, location.Range)).OrderBy(location => location.Uri.ToString()).ThenBy(location => location.Range.Start.Character));
+    }
+
+    [Fact]
     public async Task References_hover_and_definition_on_a_user_defined_operator_point_at_the_operator()
     {
         var uri = DocumentUri.FromFileSystemPath(TempPath("user-operator.nyx"));

@@ -167,9 +167,10 @@ That covers a new name that would hide another at a use and one that another wou
 The server answers `textDocument/prepareRename` and `textDocument/rename`; a refusal is a `RequestFailed` error
 whose message is the reason, which VS Code shows.
 
-Not yet: names declared in another module, exported names (other modules may use them, and the server can't find
-those uses until it can search the workspace, [#877](https://github.com/nanyx-lang/nanyx/issues/877)), an import's
-alias, a context's members, record fields, and modules. Renaming a type does not yet rename its attached definitions'
+Not yet: names declared in another module, exported names (other modules may use them; find references now finds
+those uses across the package's files, [#1556](https://github.com/nanyx-lang/nanyx/issues/1556), and rename is to use
+it, [#1534](https://github.com/nanyx-lang/nanyx/issues/1534)), an import's alias, a context's members, record fields,
+and modules. Renaming a type does not yet rename its attached definitions'
 prefixes.
 
 # How a refactoring is built
@@ -203,9 +204,9 @@ prefixes.
 | Convert between a call and a pipe (done) | [#1540](https://github.com/nanyx-lang/nanyx/issues/1540) |
 | Organise imports (done) | [#1541](https://github.com/nanyx-lang/nanyx/issues/1541) |
 
-Rename across files depends on finding references across the package's files
-([#1556](https://github.com/nanyx-lang/nanyx/issues/1556)), which can be built now: the language server already
-compiles a local package as `nanyx build` does.
+Rename across files builds on finding references across the package's files, which is done
+([#1556](https://github.com/nanyx-lang/nanyx/issues/1556), see
+[Language server and editor](./language-server)).
 
 # Ideas for later
 
