@@ -13,8 +13,24 @@ and inline, and the small rewrites that save typing. Its issues carry the
 # Where we are
 
 The language server offers go to definition, find references within a document, hover, inlay hints, completion,
-semantic tokens, formatting, and quick fixes from diagnostics ([Language server and editor](./language-server)). There
-are no refactorings yet: no rename, no selection ranges, and code actions are quick fixes only.
+semantic tokens, formatting, and quick fixes from diagnostics ([Language server and editor](./language-server)).
+Expand and shrink selection is done. There is no rename yet, and code actions are quick fixes only.
+
+Refactorings live in the compiler's `Refactorings/` folder, one file each, after the editor features they build on
+(`Outline.fs`), in the namespace `NyxCompiler.Refactorings`. Their tests are in `Features/Refactorings/` of the
+compiler's tests, and the language server's handler for each in `Handlers/`.
+
+## Expand and shrink selection
+
+`SelectionRanges.at` parses the text and gives the spans around a position, smallest first, and the server's
+`textDocument/selectionRange` links them up. The chain is every node whose span holds the position, together with
+the groups of nodes that are not nodes of their own: a call's arguments, a lambda's parameters, a record's fields, a
+named field (`x = 0`, from its name, which the parser records as a declared name, to its value), a match arm (from its
+first pattern to its body) and its patterns, and the call a pipe makes (`map(f)` in `xs \map(f)`). The spans are
+sorted by size and each is kept only if it holds the one before and is larger, so a node that spans exactly what its
+child spans is left out, and nodes the compiler made up, whose spans can overlap, never break the chain. Module
+blocks come from the parser's list of them, and the whole file ends the chain. Comments and whitespace belong to no
+node, so at one the chain starts at the smallest node around it.
 
 # How a refactoring is built
 
@@ -39,7 +55,7 @@ are no refactorings yet: no rename, no selection ranges, and code actions are qu
 | Refactoring | Issue |
 |---|---|
 | Rename a symbol | [#1534](https://github.com/nanyx-lang/nanyx/issues/1534) |
-| Expand and shrink selection | [#1535](https://github.com/nanyx-lang/nanyx/issues/1535) |
+| Expand and shrink selection (done) | [#1535](https://github.com/nanyx-lang/nanyx/issues/1535) |
 | Introduce local | [#1536](https://github.com/nanyx-lang/nanyx/issues/1536) |
 | Introduce function | [#1537](https://github.com/nanyx-lang/nanyx/issues/1537) |
 | Inline a local or a function | [#1538](https://github.com/nanyx-lang/nanyx/issues/1538) |
@@ -47,7 +63,7 @@ are no refactorings yet: no rename, no selection ranges, and code actions are qu
 | Convert between a call and a pipe | [#1540](https://github.com/nanyx-lang/nanyx/issues/1540) |
 | Organise imports | [#1541](https://github.com/nanyx-lang/nanyx/issues/1541) |
 
-Expand and shrink selection needs only the syntax tree, so it's the natural first one. Rename across files depends on
+Rename across files depends on
 finding uses across the workspace ([#877](https://github.com/nanyx-lang/nanyx/issues/877), which needs a decision).
 
 # Ideas for later
