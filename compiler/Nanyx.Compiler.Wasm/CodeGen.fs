@@ -736,9 +736,12 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         parameters, contextMemberAliases name |> Map.ofList
 
     // A specialisation is only called by the functions compiled with it; a definition that is not generic is exported,
-    // unless the function is one of its specialisations on known context members (see `CoreIrLowerKnown`).
+    // unless the function is one of its specialisations on known context members (see `CoreIrLowerKnown`), or the
+    // definition declares contexts, whose members no host could pass.
     let exportNameOf (specialisations: Set<string>) (func: CoreIr.Function) =
-        if func.TypeArguments.IsEmpty && not (specialisations.Contains func.Name) then Some func.Source else None
+        if func.TypeArguments.IsEmpty && not (specialisations.Contains func.Name) && not (functionContextRequirements.ContainsKey func.Source) then
+            Some func.Source
+        else None
 
     let emitFromCoreIr (context: CoreIrEmit.EmitContext) (specialisations: Set<string>) (func: CoreIr.Function) =
         CoreIrEmit.emitFunction context func (exportNameOf specialisations func)

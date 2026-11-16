@@ -583,7 +583,6 @@
     local.get $y_i64
     call $__nanyx_int_add
   )
-  (export "f" (func $f))
 
   (func $main (result i64) (local $x__in1_i64 i64) (local $y__in1_i64 i64) (local $__owned_0 i32) (local $__owned_1 i32)
     i64.const 3

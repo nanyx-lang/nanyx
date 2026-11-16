@@ -102,9 +102,11 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
         lowerWithRequests (SpecKey.plain startFunctionName []) Map.empty AsStart startFunctionName
 
     // A generic definition is only lowered at the type arguments it is used at, and a lifted function where a closure
-    // over it is made: what it captures is known there.
+    // over it is made: what it captures is known there. A definition that declares contexts is lowered in its own form
+    // only where a call asks for it (a function value, or a caller that does not know the instance), since a caller that
+    // knows the instance calls a specialisation on it instead.
     for (name, _) in input.Definitions do
-        if not (input.Lifted.ContainsKey name) && not (isGeneric name) then
+        if not (input.Lifted.ContainsKey name) && not (isGeneric name) && not (input.ContextParameters.ContainsKey name) then
             lowerWithRequests (SpecKey.plain name []) Map.empty AsDefined (sanitizeIdentifier name)
 
     // A definition may be generic only because an error left its type open. Unless it was specialised, it is lowered
