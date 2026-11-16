@@ -150,3 +150,15 @@ let ``A pattern variable's type can't be written`` () =
 [<Fact>]
 let ``Nothing is offered on a def that writes its type`` () =
     Assert.True((fst (offerAt [] "def one$$: int = 1\n")).IsNone)
+
+[<Fact>]
+let ``A type that requires a scoped context at two scopes can't be written`` () =
+    let marked = """def run2$$ = { f, g ->
+  def a = memory { f() }
+  memory { g() }
+}
+"""
+    match offerAt [] marked with
+    | Some (Refused(_, RefactoringKind.Rewrite, reason)), _ ->
+        Assert.Equal("Its type requires a scoped context at two scopes, which a type can't be written with yet", reason)
+    | offer, _ -> failwithf "expected a refusal, got %A" offer
