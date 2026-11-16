@@ -95,6 +95,7 @@ module DiagnosticCodes =
     let GitHubReferenceNotPinned = code 38 "GitHub reference not pinned to a commit" Severity.Error
     let GitHubReferenceNotPublishable = code 39 "GitHub reference in a package to publish" Severity.Error
     let InvalidReferencedFile = code 40 "File referenced from GitHub that breaks a file's rules" Severity.Error
+    let PackageNotDownloaded = code 41 "Locked package not in the package cache" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -174,6 +175,7 @@ module DiagnosticCodes =
     let NoFromArray = code 257 "Square-bracket literal of a type with no fromArray" Severity.Error
     let InvalidCollectionSpread = code 258 "Spread of something other than a list or an array" Severity.Error
     let UnionWithTwoRests = code 259 "Union with more than one rest variable" Severity.Error
+    let ProtectedShape = code 260 "Value of a nominal type's shape outside its module" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -188,7 +190,7 @@ module DiagnosticCodes =
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
           ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped; DefinitionWithoutValue; EntryInLibrary; ContextsJoined
-          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
+          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; PackageNotDownloaded; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField; UnknownPattern; AmbiguousPattern
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
@@ -201,7 +203,7 @@ module DiagnosticCodes =
           NotACellArgument; MisplacedCellType; UndeterminedContextType; EntryDoesNotFitHost; HostRuntimeOutsideHost; ScriptRunValue; ContextsWithoutType
           InvalidExtern; ExternWithoutHostRuntime; ConflictingExterns; PrivateContextMember; ContextNameAsValue; UnknownContextName
           ContextAsType; InstanceOutsideUse; UseOfNonInstance; OwnInstanceReplaced; OperatorRequiredByMember; InvalidTypeScope; ContextsOnValueType; AttachedDefinitionInScope; OperatorArity
-          UndeclaredTypeScope; NoFromArray; InvalidCollectionSpread; UnionWithTwoRests
+          UndeclaredTypeScope; NoFromArray; InvalidCollectionSpread; UnionWithTwoRests; ProtectedShape
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

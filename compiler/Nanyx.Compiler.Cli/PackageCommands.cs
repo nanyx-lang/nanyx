@@ -3,9 +3,10 @@ using Microsoft.FSharp.Core;
 using NyxCompiler;
 
 /// <summary>
-/// The commands that make a package and manage its dependencies: <c>nanyx migrate</c>, <c>nanyx pull</c> and
-/// <c>nanyx install</c>. What they do is in the compiler (<see cref="MigrationModule"/>, <see cref="PackageDependencies"/>);
-/// these parse their arguments, write what they make and say what happened.
+/// The commands that make a package and manage its dependencies: <c>nanyx migrate</c>, <c>nanyx pull</c>,
+/// <c>nanyx install</c> and <c>nanyx pack</c>. What they do is in the compiler (<see cref="MigrationModule"/>,
+/// <see cref="PackageDependencies"/>, <see cref="PackageArchive"/>); these parse their arguments, write what they make
+/// and say what happened.
 /// </summary>
 internal static partial class CliCommands
 {
@@ -64,7 +65,7 @@ internal static partial class CliCommands
     }
 
     /// <summary>
-    /// Make a package's dependencies available to build: check that each is there, and list them. A dependency named by its version can't be downloaded yet.
+    /// Make a package's dependencies available to build: download into the package cache each package nanyx.lock locks that isn't there yet, check that each dependency is there, and list them. Choosing the version of a package that nanyx.lock doesn't lock isn't supported yet.
     /// </summary>
     /// <param name="path">A package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     [Consolo("pull")]
@@ -83,7 +84,7 @@ internal static partial class CliCommands
             return failed;
         }
 
-        var pulled = PackageDependencies.pull(manifestPath);
+        var pulled = PackageDependencies.pull(shell.Packages, manifestPath);
         if (pulled.IsError)
         {
             foreach (var error in pulled.ErrorValue)
@@ -99,6 +100,43 @@ internal static partial class CliCommands
             shell.Out.WriteLine(line);
         }
 
+        return 0;
+    }
+
+    /// <summary>
+    /// Pack a package as a .nyxpkg, the file a release of it carries: a zip of its manifest and its source files. A package with a dependency found by its path, or on GitHub, can't be packed.
+    /// </summary>
+    /// <param name="output">The directory to write it to; the package's own by default. Its name is &lt;name&gt;-&lt;version&gt;.nyxpkg.</param>
+    /// <param name="path">A package's directory or .nyxp manifest; none means the package the current directory is in.</param>
+    [Consolo("pack")]
+    public static int Pack([Consolo("out", Alias = "o")] string? output = null, params string[] path) => PackIn(Shell.Process, output, path);
+
+    /// <summary>What <c>nanyx pack</c> does, run in <paramref name="shell"/>.</summary>
+    internal static int PackIn(Shell shell, string? output, string[] path)
+    {
+        if (!TrySinglePath(shell, path, out var single))
+        {
+            return UsageError;
+        }
+
+        if (!TryFindPackage(shell, single, out var package, out var failed))
+        {
+            return failed;
+        }
+
+        var packed = PackageArchive.pack(package);
+        if (packed.IsError)
+        {
+            PrintDiagnostics(shell, packed.ErrorValue, shell.Error);
+            return 1;
+        }
+
+        var directory = output is null ? package.Manifest.Root : shell.FullPath(output);
+        System.IO.Directory.CreateDirectory(directory);
+        var file = Path.Combine(directory, PackageArchive.fileName(package.Manifest));
+        File.WriteAllBytes(file, packed.ResultValue);
+        shell.Out.WriteLine($"Packed {package.Manifest.Name} {package.Manifest.Version}: {shell.DisplayPath(file)}");
+        shell.Out.WriteLine($"sha256 {PackageArchive.sha256(packed.ResultValue)}");
         return 0;
     }
 

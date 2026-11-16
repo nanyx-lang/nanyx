@@ -16,11 +16,14 @@ enum Target
 
 /// <summary>
 /// Where a command runs: the directory it reads relative paths from and shows paths relative to, the writers it reports
-/// to, and the standard streams of a program it runs. The CLI's is the process's own (see <see cref="Process"/>); the
-/// Wasm tests give their own, to run commands in their process.
+/// to, the standard streams of a program it runs, and the package cache and index it finds packages in. The CLI's is the
+/// process's own (see <see cref="Process"/>); the Wasm tests give their own, to run commands in their process.
 /// </summary>
 internal sealed record Shell(string Directory, TextWriter Out, TextWriter Error, ProgramIo Io)
 {
+    /// <summary>The package cache, the index and GitHub, as a build reads them: the user's (see <c>PackageStore.user</c>).</summary>
+    public PackageStore Packages { get; init; } = PackageStoreModule.user();
+
     /// <summary>The process's current directory and its standard streams.</summary>
     public static Shell Process => new(System.IO.Directory.GetCurrentDirectory(), Console.Out, Console.Error, ProgramIo.Inherited);
 
@@ -471,7 +474,7 @@ internal static partial class CliCommands
             return false;
         }
 
-        var found = PackageModule.find(path is null ? shell.Directory : shell.FullPath(path));
+        var found = PackageModule.findIn(shell.Packages, path is null ? shell.Directory : shell.FullPath(path));
         if (found.IsError)
         {
             foreach (var error in found.ErrorValue)
@@ -1006,6 +1009,9 @@ internal static partial class CliCommands
                 return 1;
             case RunError.Trapped trapped:
                 errors.WriteLine($"Runtime error: {trapped.Item}");
+                return 1;
+            case var _ when error.IsOutOfMemory:
+                errors.WriteLine("Runtime error: out of memory");
                 return 1;
             // The program said why it stopped (a deferred error writes itself to stderr) before it exited.
             case RunError.Exited exited:

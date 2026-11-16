@@ -132,10 +132,37 @@ module Package =
                 | None -> Result.Ok(file.Module, path))
         |> all
 
-    /// The package `manifest` describes, with the packages it depends on, fetching what is on GitHub with `fetcher`.
-    /// `chain` is the manifests of the packages that led to it, nearest first, each with its package's name, and
-    /// `reached` every package the build has read so far.
-    let rec private ofManifestIn (fetcher: GitHubFetcher) (reached: Reached) (chain: (string * string) list) (manifest: Manifest) : Result<Package, Problem list> =
+    /// What a build reads the packages it depends on from: the store, and the lockfile of the package it builds, which
+    /// every package of the build shares, since a build has one version of each package.
+    type private Lookup = { Store: PackageStore; Locked: Lockfile }
+
+    /// `dependency`, which accepts the versions `requirement` gives, in the directory of the version the lockfile locks,
+    /// in the cache; or why it can't be: it isn't locked, the version locked isn't one it accepts, or that version isn't
+    /// in the cache, which `nanyx pull` fills.
+    let private locked (lookup: Lookup) (dependency: Dependency) (requirement: VersionRequirement) : Result<Dependency, Problem list> =
+        let error code message = Result.Error [ AtManifest(Diagnostics.at code dependency.PathSpan message) ]
+        match Lockfile.tryFind dependency.Name lookup.Locked with
+        | None ->
+            error
+                DiagnosticCodes.UnsupportedManifestField
+                $"the dependency {dependency.Name} {requirement} is not locked in {Lockfile.fileName}, and choosing a version to lock isn't supported yet: give the directory the package is in, with path"
+        | Some locked when not (VersionRequirement.accepts requirement locked.Version) ->
+            error
+                DiagnosticCodes.InvalidManifestValue
+                $"{Lockfile.fileName} locks {dependency.Name} {locked.Version}, which this dependency doesn't accept: it accepts {requirement} and the versions compatible with it"
+        | Some locked ->
+            let directory = PackageStore.directoryOf lookup.Store dependency.Name locked.Version
+            if Directory.Exists directory then
+                Result.Ok { dependency with Directory = directory }
+            else
+                error
+                    DiagnosticCodes.PackageNotDownloaded
+                    $"{Lockfile.fileName} locks {dependency.Name} {locked.Version}, but it isn't in the package cache, {lookup.Store.Cache}: run nanyx pull to download it"
+
+    /// The package `manifest` describes, with the packages it depends on, found through `lookup`. `chain` is the manifests
+    /// of the packages that led to it, nearest first, each with its package's name, and `reached` every package the
+    /// build has read so far.
+    let rec private ofManifestIn (lookup: Lookup) (reached: Reached) (chain: (string * string) list) (manifest: Manifest) : Result<Package, Problem list> =
         let files = sources manifest
         let display (file: string) = Path.GetRelativePath(manifest.Root, file)
         let entry =
@@ -148,8 +175,8 @@ module Package =
                 | several ->
                     Result.Error [ AboutPackage $"""{manifest.Path}: a package can have one @entry, but these files each declare one: {several |> List.map display |> String.concat ", "}""" ]
         let exports = exportErrors manifest files |> List.map AtManifest
-        let referenced = referencedFiles fetcher (PackageModules.ofFiles manifest.Name manifest.Root None files).Modules manifest.Files
-        match entry, dependenciesIn fetcher reached ((manifest.Path, manifest.Name) :: chain) manifest.Dependencies, hostIn fetcher reached manifest.Host with
+        let referenced = referencedFiles lookup.Store.GitHub (PackageModules.ofFiles manifest.Name manifest.Root None files).Modules manifest.Files
+        match entry, dependenciesIn lookup reached ((manifest.Path, manifest.Name) :: chain) manifest.Dependencies, hostIn lookup reached manifest.Host with
         | Result.Ok entry, Result.Ok dependencies, Result.Ok host when exports.IsEmpty && referenced.IsOk ->
             Result.Ok
                 { Manifest = manifest
@@ -165,7 +192,7 @@ module Package =
 
     /// The host `entry` names, if there is one, read from the manifest of its package, which must declare it a host (see
     /// `HostPackages`), with that package: one the compiler ships, or one in the directory the entry gives.
-    and private hostIn (fetcher: GitHubFetcher) (reached: Reached) (entry: HostEntry option) : Result<(Host * Package) option, Problem list> =
+    and private hostIn (lookup: Lookup) (reached: Reached) (entry: HostEntry option) : Result<(Host * Package) option, Problem list> =
         match entry with
         | None -> Result.Ok None
         | Some entry ->
@@ -184,21 +211,22 @@ module Package =
                     | None -> error (HostPackages.notAHost entry.Package)
                     | Some host ->
                         reached.[found.Name] <- path
-                        ofManifestIn fetcher reached [] found |> Result.map (fun package -> Some (host, package))
+                        ofManifestIn lookup reached [] found |> Result.map (fun package -> Some (host, package))
 
-    /// The packages `dependencies` lists, each read with its own dependencies, those on GitHub fetched by `fetcher`
-    /// first, or what is wrong: a directory with no manifest, a package named other than its dependant names it, one
-    /// that depends on itself through others, or one reached by two paths. `chain` holds the manifest that lists them
-    /// first, if one does.
-    and private dependenciesIn (fetcher: GitHubFetcher) (reached: Reached) (chain: (string * string) list) (dependencies: Dependency list) : Result<Package list, Problem list> =
+    /// The packages `dependencies` lists, each read with its own dependencies, or what is wrong: a directory with no
+    /// manifest, a package named other than its dependant names it, one that depends on itself through others, or one
+    /// reached by two paths. One on GitHub is fetched first, and one named by its version is the version the lockfile
+    /// locks, unpacked in the cache. `chain` holds the manifest that lists them first, if one does.
+    and private dependenciesIn (lookup: Lookup) (reached: Reached) (chain: (string * string) list) (dependencies: Dependency list) : Result<Package list, Problem list> =
         let error code span message = Result.Error [ AtManifest(Diagnostics.at code span message) ]
         let fetched (dependency: Dependency) =
-            match dependency.GitHub with
-            | Some reference ->
-                fetcher.FetchTree reference.Repository reference.Commit
+            match dependency.GitHub, dependency.Version with
+            | Some reference, _ ->
+                lookup.Store.GitHub.FetchTree reference.Repository reference.Commit
                 |> Result.map (fun directory -> { dependency with Directory = directory })
                 |> Result.mapError (fun failure -> [ notFetched dependency.PathSpan $"the dependency {dependency.Name}" failure ])
-            | None -> Result.Ok dependency
+            | None, Some requirement -> locked lookup dependency requirement
+            | None, None -> Result.Ok dependency
         let read (dependency: Dependency) =
             match manifestIn dependency.Directory with
             | Result.Error message -> error DiagnosticCodes.InvalidManifestValue dependency.PathSpan $"the dependency {dependency.Name} can't be read: {message}"
@@ -222,7 +250,7 @@ module Package =
                             $"the build reaches the package {found.Name} by two paths, {Path.GetDirectoryName other} and {dependency.Directory}; a build has one of each package"
                     | _ ->
                         reached.[found.Name] <- path
-                        ofManifestIn fetcher reached chain found
+                        ofManifestIn lookup reached chain found
         dependencies |> List.map (fetched >> Result.bind read) |> all
 
     /// The packages of a build whose root is `manifest`: none read yet but the root.
@@ -231,16 +259,23 @@ module Package =
         reached.[manifest.Name] <- manifest.Path
         reached
 
-    /// The package whose manifest is at `manifestPath`, with the packages it depends on, those on GitHub fetched by
-    /// `fetcher`, or what is wrong with them.
-    let ofManifestFetching (fetcher: GitHubFetcher) (manifestPath: string) : Result<Package, string list> =
+    /// What the build of the package whose manifest is `manifest` reads packages from: `store`, and the lockfile beside
+    /// the manifest, if it has one; or what is wrong with the lockfile.
+    let private lookupFor (store: PackageStore) (manifest: Manifest) : Result<Lookup, string list> =
+        Lockfile.read (Lockfile.pathIn manifest.Root)
+        |> Result.map (fun locked -> { Store = store; Locked = defaultArg locked Lockfile.empty })
+
+    /// The package whose manifest is at `manifestPath`, with the packages it depends on, found in `store` and its
+    /// lockfile, or what is wrong with them.
+    let ofManifestFrom (store: PackageStore) (manifestPath: string) : Result<Package, string list> =
         Manifest.read manifestPath
         |> Result.mapError (List.map Manifest.describe)
-        |> Result.bind (fun manifest -> ofManifestIn fetcher (reachedFrom manifest) [] manifest |> Result.mapError (List.map describe))
+        |> Result.bind (fun manifest ->
+            lookupFor store manifest
+            |> Result.bind (fun lookup -> ofManifestIn lookup (reachedFrom manifest) [] manifest |> Result.mapError (List.map describe)))
 
-    /// The package whose manifest is at `manifestPath`, with the packages it depends on, or what is wrong with them.
-    /// Nothing can be downloaded from GitHub yet, so a reference to it is an error.
-    let ofManifest (manifestPath: string) : Result<Package, string list> = ofManifestFetching GitHub.unsupported manifestPath
+    /// `ofManifestFrom` the user's store.
+    let ofManifest (manifestPath: string) : Result<Package, string list> = ofManifestFrom (PackageStore.user ()) manifestPath
 
     /// A compile of nothing, with no diagnostics: what the compile of a file that can't be compiled has, with its errors.
     let private notCompiled : CompileResult =
@@ -256,20 +291,26 @@ module Package =
 
     /// The manifest at `path`, whose text is `text`, as the editor shows it: a compile whose diagnostics are the problems
     /// with it (see `Manifest.checkPinning`), with a library that exports no module, and with the packages and files it
-    /// depends on, those on GitHub fetched by `fetcher`; nothing compiled, since a manifest is data. A GitHub reference
-    /// that is not pinned to a commit has a fix that pins it to the one `fetcher` finds its tag or branch points at.
-    let compileManifestFetching (fetcher: GitHubFetcher) (path: string) (text: string) : CompileResult =
-        let pin repository rev = fetcher.Resolve repository rev |> Result.toOption
+    /// depends on, found in `store` and the lockfile beside it; nothing compiled, since a manifest is data. A GitHub
+    /// reference that is not pinned to a commit has a fix that pins it to the one the store finds its tag or branch
+    /// points at.
+    let compileManifestFrom (store: PackageStore) (path: string) (text: string) : CompileResult =
+        let pin repository rev = store.GitHub.Resolve repository rev |> Result.toOption
         let diagnostics =
             match Manifest.checkPinning pin path text with
             | Result.Error problems -> problems
             | Result.Ok manifest ->
                 let reached = reachedFrom manifest
                 let errorsOf = function Result.Error problems -> problems | Result.Ok _ -> []
+                let lookup, lockfileErrors =
+                    match lookupFor store manifest with
+                    | Result.Ok lookup -> lookup, []
+                    | Result.Error messages -> { Store = store; Locked = Lockfile.empty }, messages |> List.map AboutPackage
                 let problems =
-                    errorsOf (referencedFiles fetcher (PackageModules.ofFiles manifest.Name manifest.Root None (sources manifest)).Modules manifest.Files)
-                    @ errorsOf (dependenciesIn fetcher reached [ manifest.Path, manifest.Name ] manifest.Dependencies)
-                    @ errorsOf (hostIn fetcher reached manifest.Host)
+                    lockfileErrors
+                    @ errorsOf (referencedFiles store.GitHub (PackageModules.ofFiles manifest.Name manifest.Root None (sources manifest)).Modules manifest.Files)
+                    @ errorsOf (dependenciesIn lookup reached [ manifest.Path, manifest.Name ] manifest.Dependencies)
+                    @ errorsOf (hostIn lookup reached manifest.Host)
                 let dependencyErrors =
                     problems
                     |> List.map (function
@@ -278,9 +319,8 @@ module Package =
                 exportErrors manifest (sources manifest) @ dependencyErrors
         { notCompiled with Diagnostics = diagnostics }
 
-    /// `compileManifestFetching` with nothing to fetch with: a reference to GitHub is an error, since downloading from it
-    /// isn't supported yet.
-    let compileManifest (path: string) (text: string) : CompileResult = compileManifestFetching GitHub.unsupported path text
+    /// `compileManifestFrom` the user's store.
+    let compileManifest (path: string) (text: string) : CompileResult = compileManifestFrom (PackageStore.user ()) path text
 
     /// `package` run under the host `name` names in place of its manifest's, as `--host` chooses: a directory, relative to
     /// `directory`, that holds a host's package, or the name of a host the compiler ships. An error says why it isn't one.
@@ -292,22 +332,26 @@ module Package =
                 { Package = packageName; Path = Some full; Span = SourceSpan.none }
             else
                 { Package = name; Path = None; Span = SourceSpan.none }
-        match hostIn GitHub.unsupported (Reached()) (Some entry) with
+        match hostIn { Store = PackageStore.user (); Locked = Lockfile.empty } (Reached()) (Some entry) with
         | Result.Ok host -> Result.Ok { package with Host = host |> Option.map fst; HostPackage = host |> Option.map snd }
         | Result.Error problems -> Result.Error(problems |> List.map describe |> String.concat "; ")
 
-    /// The package `path` names: a manifest, or a directory in or under the package. An error says why there is none.
-    let find (path: string) : Result<Package, string list> =
+    /// The package `path` names: a manifest, or a directory in or under the package, with the packages it depends on,
+    /// found in `store`. An error says why there is none.
+    let findIn (store: PackageStore) (path: string) : Result<Package, string list> =
         let full = Path.GetFullPath path
         if File.Exists full && full.EndsWith(Manifest.extension, StringComparison.OrdinalIgnoreCase) then
-            ofManifest full
+            ofManifestFrom store full
         elif Directory.Exists full then
             match Manifest.tryFind full with
-            | Result.Ok (Some manifest) -> ofManifest manifest
+            | Result.Ok (Some manifest) -> ofManifestFrom store manifest
             | Result.Ok None -> Result.Error [ $"No {Manifest.extension} manifest in {full} or any directory above it" ]
             | Result.Error message -> Result.Error [ message ]
         else
             Result.Error [ $"Not a directory or a {Manifest.extension} manifest: {path}" ]
+
+    /// `findIn` the user's store.
+    let find (path: string) : Result<Package, string list> = findIn (PackageStore.user ()) path
 
     /// The linter options for a file: those of the package manifest it is under, if it has one that reads.
     let lintersFor (filePath: string) : LinterOptions option =
@@ -350,12 +394,13 @@ module Package =
             | Result.Error problems -> Result.Error problems
             | Result.Ok manifest when selects manifest filePath ->
                 let reached = reachedFrom manifest
-                let fetcher = GitHub.unsupported
+                let store = PackageStore.user ()
+                let lookup = lookupFor store manifest |> Result.defaultValue { Store = store; Locked = Lockfile.empty }
                 let dependencies =
-                    match dependenciesIn fetcher reached [ manifest.Path, manifest.Name ] manifest.Dependencies with
+                    match dependenciesIn lookup reached [ manifest.Path, manifest.Name ] manifest.Dependencies with
                     | Result.Ok dependencies -> dependencies
                     | Result.Error _ -> []
-                let host = match hostIn fetcher reached manifest.Host with Result.Ok host -> host | Result.Error _ -> None
+                let host = match hostIn lookup reached manifest.Host with Result.Ok host -> host | Result.Error _ -> None
                 let files = sources manifest
                 let modules =
                     modules
@@ -364,7 +409,7 @@ module Package =
                           Entry = None
                           Dependencies = dependencies
                           ReferencedFiles =
-                            referencedFiles fetcher (PackageModules.ofFiles manifest.Name manifest.Root None files).Modules manifest.Files
+                            referencedFiles store.GitHub (PackageModules.ofFiles manifest.Name manifest.Root None files).Modules manifest.Files
                             |> Result.defaultValue []
                           Host = host |> Option.map fst
                           HostPackage = host |> Option.map snd }
@@ -374,10 +419,11 @@ module Package =
 
     /// The build of the script at `filePath`, which runs under the host `host` names, the console host the compiler ships
     /// if it names none, and imports from the packages `dependencies` lists and the files from GitHub `files` lists, as
-    /// its `::host` and `::dependency` directives say (see `Script`), fetching what is on GitHub with `fetcher`; or what is
-    /// wrong with them, each at the directive it is about, or at `span` for what is about a package as a whole.
+    /// its `::host` and `::dependency` directives say (see `Script`), found in `store`; or what is wrong with them, each
+    /// at the directive it is about, or at `span` for what is about a package as a whole. A script has no lockfile yet,
+    /// so a dependency named by its version is an error.
     let scriptModules
-        (fetcher: GitHubFetcher)
+        (store: PackageStore)
         (filePath: string)
         (span: SourceSpan)
         (host: HostEntry option)
@@ -386,9 +432,10 @@ module Package =
         : Result<PackageModules, Diagnostic list> =
         let host = host |> Option.defaultValue { Package = Hosts.consolePackage; Path = None; Span = span }
         let reached = Reached()
+        let lookup = { Store = store; Locked = Lockfile.empty }
         let diagnostics problems =
             problems |> List.map (function AtManifest diagnostic -> diagnostic | AboutPackage message -> Diagnostics.at DiagnosticCodes.InvalidManifestValue span message)
-        match hostIn fetcher reached (Some host), dependenciesIn fetcher reached [] dependencies, referencedFiles fetcher Map.empty files with
+        match hostIn lookup reached (Some host), dependenciesIn lookup reached [] dependencies, referencedFiles store.GitHub Map.empty files with
         | Result.Ok (Some (host, hostPackage)), Result.Ok dependencies, Result.Ok referenced ->
             Result.Ok(
                 { PackageModules.ofFiles "" (Path.GetDirectoryName(Path.GetFullPath filePath)) (Some host) [] with

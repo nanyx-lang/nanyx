@@ -11,6 +11,8 @@ type Subst = Map<int, Ty>
 type MismatchKind =
     | TypesDiffer
     | ContextsNotAllowed
+    /// A value of the shape of the nominal type it is given for: the type, whether it is private, and its shape.
+    | NominalShape of NominalId * isPrivate: bool * shape: Ty
 
 /// A constraint that cannot be satisfied: what is wrong, where (the constraint's span), and what kind of failure it is.
 type Mismatch = string * SourceSpan * MismatchKind
@@ -223,7 +225,12 @@ module Unifier =
                 named |> List.sortBy (fun (name, _) -> rank name, name)
             match tryTupleLikeRecord fields with
             | Some tupleItems, namedFields ->
-                let tupleText = items tupleItems
+                // In a tuple's own brackets, contexts in front of the first item are its own (#1728).
+                let tupleText =
+                    match tupleItems with
+                    | (TyNominal _ as first) :: rest when namedFields.IsEmpty && not rest.IsEmpty ->
+                        String.concat ", " (printTy p false first :: List.map grouped rest)
+                    | _ -> items tupleItems
                 let namedText =
                     namedFields
                     |> inOrder
@@ -1144,6 +1151,18 @@ module Unifier =
                                 | Ok contexts -> loop subst (arguments @ contexts @ rest)
                                 | Error extra -> Error (carriedNotAllowedMessage extra l r, origin, ContextsNotAllowed)
                             | _ -> loop subst (arguments @ rest)
+                        // A value of a nominal type's shape is no value of it, but the mismatch says which type's shape
+                        // it has, so that the error can say why (see `ProtectedShapes`). Trying the shape changes
+                        // nothing the solving goes on with.
+                        | other, RecursiveNominals.Nominal(nominal, _, underlying, isPrivate) when
+                            not (match other with TyNominal _ -> true | _ -> false)
+                            && (let taken, putOffBefore, nextBefore = restTaken, putOff, nextRestId
+                                let fits = (loop subst [ (other, underlying, Assignable, origin) ]).IsOk
+                                restTaken <- taken
+                                putOff <- putOffBefore
+                                nextRestId <- nextBefore
+                                fits) ->
+                            Error (mismatchMessage l r, origin, NominalShape(nominal, isPrivate, underlying))
                         | TyNominal(_, _, _, true), _
                         | _, TyNominal(_, _, _, true) ->
                             Error (mismatchMessage l r, origin, TypesDiffer)

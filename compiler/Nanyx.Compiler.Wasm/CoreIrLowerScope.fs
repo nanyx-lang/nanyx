@@ -19,6 +19,9 @@ type internal Lowering =
     /// As a function value of the second type that calls one of the first, which its closure holds, with the members
     /// the first requires: each passed to it, or captured after the value where it was made (see `CoreIrLowerMembers.coerce`).
     | Adapting of IrType * IrType
+    /// As the function that makes a value of the first type, a recursive one, a value of the second, which differs from
+    /// it in the contexts its functions require (see `CoreIrLowerMembers.coerce`).
+    | ValueAdapting of IrType * IrType
     /// As the function a box of a value of this type is a closure over (see `CoreIrLowerBoxes`).
     | BoxReading of IrType
     /// As the function that converts a list of values of the first type to one of the second, element by element (see

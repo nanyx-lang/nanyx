@@ -70,44 +70,90 @@ let knownMembers (tools: MemberTools) (scope: Scope) (name: string) (node: NodeI
         knownAmong tools.Input contextParameters arguments memberTys inScope
     | _ -> []
 
-/// Whether the fields of two records, `given` and `wanted`, are the same but for the members their functions take,
-/// at any depth.
-let rec private differInContextsOnly (given: (string * IrType) list) (wanted: (string * IrType) list) =
-    List.map fst given = List.map fst wanted
-    && List.forall2 (fun (_, givenTy) (_, wantedTy) ->
-        match givenTy, wantedTy with
-        | _ when givenTy = wantedTy -> true
-        | IrFunction(input, output, _), IrFunction(input', output', _) -> input = input' && output = output'
-        | IrRecord givenFields, IrRecord wantedFields -> differInContextsOnly givenFields wantedFields
-        | _ -> false) given wanted
+/// Whether a value of `given` must be adapted to be a value of `wanted` because, somewhere in it, a function requires
+/// other contexts' members: in a record's fields, a tag's payload, a function's input or result, or the body of a
+/// recursive type, as a value of a type generic in contexts given where one that carries more is expected
+/// (`FunctionContexts.carried`) has.
+let rec differInContexts (given: IrType) (wanted: IrType) : bool =
+    match given, wanted with
+    | _ when given = wanted -> false
+    | IrFunction(input, output, members), IrFunction(input', output', members') ->
+        members <> members' || differInContexts input' input || differInContexts output output'
+    | IrRecord givenFields, IrRecord wantedFields when List.map fst givenFields = List.map fst wantedFields ->
+        List.exists2 (fun (_, givenTy) (_, wantedTy) -> differInContexts givenTy wantedTy) givenFields wantedFields
+    | IrTags givenTags, IrTags wantedTags ->
+        givenTags
+        |> List.exists (fun (name, payload) ->
+            match payload, wantedTags |> List.tryFind (fst >> (=) name) |> Option.bind snd with
+            | Some givenPayload, Some wantedPayload -> differInContexts givenPayload wantedPayload
+            | _ -> false)
+    | IrRecursive givenBody, IrRecursive wantedBody -> differInContexts givenBody wantedBody
+    | _ -> false
 
 /// `atom` as a value of type `expected`. A function value where it requires other contexts' members where it is
-/// called, or takes or returns values boxed where `expected` does not or the other way round, is a closure over an
-/// adapter that holds it and calls it with the members it requires, those `expected` requires passed on, and the
-/// others captured here, converting its arguments and its result. Any other value with values boxed where `expected`
-/// does not, or the other way round, is converted (see `CoreIrLowerBoxes`). A value of `expected`'s layout is left as
-/// it is.
+/// called, takes or returns values boxed where `expected` does not or the other way round, or takes or returns values
+/// that need adapting, is a closure over an adapter that holds it and calls it with the members it requires, those
+/// `expected` requires passed on, and the others captured here, converting its arguments and its result. Any other
+/// value with values boxed where `expected` does not, or the other way round, is converted (see `CoreIrLowerBoxes`).
+/// A value with a function in it that needs adapting (see `differInContexts`) is made again around its parts, each
+/// adapted (see `adaptParts`): one of a recursive type through a function of its own (`ValueAdapting`), which calls
+/// itself for the parts that are of the type again. A value of `expected`'s layout is left as it is.
 let rec coerce (tools: MemberTools) (scope: Scope) (atom: Atom) (expected: IrType) (k: Atom -> Expr) : Expr =
     match atomType atom, expected with
-    | IrFunction(_, _, given) as givenTy, IrFunction(_, _, wanted) when given <> wanted || CoreIrLowerBoxes.needsConversion givenTy expected ->
+    | IrFunction(_, _, given) as givenTy, IrFunction(_, _, wanted) when differInContexts givenTy expected || CoreIrLowerBoxes.needsConversion givenTy expected ->
         let missing = given |> List.filter (fun (key, _) -> not (wanted |> List.exists (fst >> (=) key)))
         memberAtoms tools scope None missing (fun captured ->
             let name = tools.Request (SpecKey.plain $"__adapt_{IrType.mangle givenTy}_to_{IrType.mangle expected}" []) (tools.Subst ()) (Adapting(givenTy, expected))
             let arity = 1 + (adaptedValueTypes givenTy expected).Length + wanted.Length
             tools.BindTemp (Expr.make (MakeClosure(name, arity, atom :: captured)) expected) k)
     | givenTy, _ when CoreIrLowerBoxes.needsConversion givenTy expected -> CoreIrLowerBoxes.convert (boxTools tools scope) atom expected k
-    // A record of the same fields whose functions require other contexts, as a value of a type generic in contexts given
-    // where one that carries more is expected (`FunctionContexts.carried`): a new record of its fields, each adapted.
-    | IrRecord given, IrRecord wanted when given <> wanted && differInContextsOnly given wanted ->
+    | IrRecursive _ as givenTy, IrRecursive _ when differInContexts givenTy expected ->
+        let name = tools.Request (SpecKey.plain $"__adapt_{IrType.mangle givenTy}_to_{IrType.mangle expected}" []) (tools.Subst ()) (ValueAdapting(givenTy, expected))
+        tools.BindTemp (Expr.make (Call(name, [ atom ])) expected) k
+    | givenTy, _ when differInContexts givenTy expected -> adaptParts tools scope atom givenTy expected k
+    | _ -> k atom
+
+/// `atom`, a record or a tag union of type `given` (the body of its type, if that is recursive), as a value of
+/// `expected`: a new record of its fields, or the tag made again around its payload, each adapted (see `coerce`).
+/// A tag whose payload needs nothing is the value as it is.
+and adaptParts (tools: MemberTools) (scope: Scope) (atom: Atom) (given: IrType) (expected: IrType) (k: Atom -> Expr) : Expr =
+    match given, expected with
+    | IrRecord givenFields, IrRecord wantedFields ->
         // The record is read once for each field, so it waits in a local.
         tools.Settle (Expr.make (Atom atom) (atomType atom)) (fun record ->
             let rec fields (index: int) (adapted: Atom list) =
-                if index = given.Length then tools.BindTemp (Expr.make (MakeRecord(List.zip (List.map fst wanted) (List.rev adapted))) expected) k
+                if index = givenFields.Length then tools.BindTemp (Expr.make (MakeRecord(List.zip (List.map fst wantedFields) (List.rev adapted))) expected) k
                 else
-                    tools.BindTemp (Expr.make (Field(record, index)) (snd given.[index])) (fun field ->
-                        coerce tools scope field (snd wanted.[index]) (fun field -> fields (index + 1) (field :: adapted)))
+                    tools.BindTemp (Expr.make (Field(record, index)) (snd givenFields.[index])) (fun field ->
+                        coerce tools scope field (snd wantedFields.[index]) (fun field -> fields (index + 1) (field :: adapted)))
             fields 0 [])
-    | _ -> k atom
+    | IrTags givenTags, IrTags wantedTags ->
+        let value = tools.NewVar (tools.UniqueName "__adapting") Local (atomType atom)
+        let arms =
+            givenTags
+            |> List.choose (fun (name, payload) ->
+                match payload, wantedTags |> List.tryFind (fst >> (=) name) |> Option.bind snd with
+                | Some givenPayload, Some wantedPayload when differInContexts givenPayload wantedPayload ->
+                    let bound = tools.NewVar (tools.UniqueName "__payload") Local givenPayload
+                    let body = coerce tools scope (AVar bound) wantedPayload (fun payload -> Expr.make (MakeTag(name, payload)) expected)
+                    Some { Patterns = [ PTag(name, Some (PBind bound)) ]; Body = body }
+                | _ -> None)
+        let others = { Patterns = [ PWildcard ]; Body = Expr.make (Atom(AVar value)) expected }
+        let adapted = Expr.make (Match([ value ], arms @ [ others ])) expected
+        let body = tools.BindTemp adapted k
+        Expr.make (Let(value, Expr.make (Atom atom) value.Type, body)) body.Type
+    | _ -> internalError $"an adaptation from {IrType.show given} to {IrType.show expected}"
+
+/// The function `functionName` that makes a value of the recursive type `given` a value of `expected` (see `coerce`):
+/// its parts, each adapted.
+and valueAdapter (tools: MemberTools) (scope: Scope) (functionName: string) (given: IrType) (expected: IrType) : Function =
+    let value = tools.NewVar "__value" Param given
+    { Name = functionName
+      Source = functionName
+      TypeArguments = []
+      Params = [ value ]
+      Result = expected
+      Body = adaptParts tools scope (AVar value) (IrType.unfold given) (IrType.unfold expected) (fun atom -> Expr.make (Atom atom) expected) }
 
 /// What converting a value to or from boxes needs, where `scope` is in scope (see `CoreIrLowerBoxes`).
 and boxTools (tools: MemberTools) (scope: Scope) : CoreIrLowerBoxes.BoxTools =

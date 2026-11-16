@@ -216,7 +216,10 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
   by `++` needs: each copy is freed after the next is made, the copies before it join into a block the one after
   fits in, so the heap holds about two copies of the string, not every copy there was.
 - **Out of memory.** Past 4 GB, the end of a new block wraps around; `alloc` checks for that, and for `memory.grow`
-  failing, and traps with `unreachable`.
+  failing, and traps with `unreachable`. It writes no message itself, so a module that never prints imports nothing
+  for it; `nanyx run` reports an `unreachable` in `__nanyx_alloc` as `Runtime error: out of memory`
+  ([#1349](https://github.com/nanyx-lang/nanyx/issues/1349), done). A host other than the CLI does the same in its
+  own runtime.
 
 Small free blocks are never joined, with each other or with large ones, and the heap never shrinks: memory once
 grown is not given back to the host. Many blocks of more than 256 bytes freed apart still walk the large list:

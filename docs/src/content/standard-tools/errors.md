@@ -365,19 +365,23 @@ To fix it, write the value the message asks for: `sources = ["*.nyx"]`.
 
 # NYX0024: Manifest field not supported yet
 
-The manifest uses a field the compiler knows, but does not support yet: a dependency's `version`, which names a
-package to download, or `settings` for a host.
+The manifest uses a field the compiler knows, but does not support yet: a dependency named by its version that
+`nanyx.lock` doesn't lock, since choosing a version to lock isn't supported yet, a dependency on GitHub, which can't be
+downloaded yet, or `settings` for a host.
 
 ```nanyx
 -- file: demo.nyxp
 (
   package = (name = "demo", version = "0.1.0")
-  dependencies = [(package = "acme.util", version = "1.2")]  -- error NYX0024: a dependency's version names a package to download, ...
+  dependencies = [(package = "acme.util", version = "1.2")]  -- error NYX0024: the dependency acme.util 1.2 is not locked in nanyx.lock, ...
 )
+-- file: demo.nyx
+export module demo
+
+export def one = 1
 ```
 
-To fix it, give the directory the package is in instead, `path = "../util"`. Packages can't be downloaded yet.
-
+To fix it, give the directory the package is in instead, `path = "../util"`.
 # NYX0025: Module not public
 
 A module imports a module of a package it depends on that the package does not make public. Another package can import
@@ -686,6 +690,31 @@ what it depends on.
 
 To fix it, depend on a version of the file without its `module` line or its other imports, or, if it needs more than
 the standard library, on the package it comes from.
+# NYX0041: Locked package not in the package cache
+
+A dependency named by its version is the version `nanyx.lock` locks, unpacked in the package cache, and that version
+isn't there: the lockfile is new, or the cache was cleared.
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "demo", version = "0.1.0")
+  dependencies = [(package = "acme.util", version = "1.2")]  -- error NYX0041: nanyx.lock locks acme.util 1.2.0, but it isn't in the package cache, ...
+)
+-- file: nanyx.lock
+(
+  version = 1
+  packages = [
+    (package = "acme.util", version = "1.2.0", sha256 = "9f2c41aa9f2c41aa9f2c41aa9f2c41aa9f2c41aa9f2c41aa9f2c41aa9f2c41aa", dependencies = [])
+  ]
+)
+-- file: demo.nyx
+export module demo
+
+export def one = 1
+```
+
+To fix it, run `nanyx pull`, which downloads each package the lockfile locks into the cache.
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which
@@ -1120,7 +1149,9 @@ import money
 def price = Money(pence = 250)  -- error NYX0212: The nominal type 'Money' can only be constructed in the module that defines it; ...
 ```
 
-To fix it, make the value with a function the module exports, such as `Money.new`.
+To fix it, make the value with a function the module exports, such as `Money.new`. The message names the definitions
+attached to the type that make one, when there are any: `Make one with 'Money.new'.` A value of the type's shape given
+where the type is expected, without the constructor, is NYX0260.
 
 # NYX0213: Wrong number of patterns
 
@@ -1763,6 +1794,31 @@ def both: (#some(a) | r), (a -> #some(b) | s) -> #some(b) | r | s = { x, f -> bi
 ```
 
 To fix it, write one rest, and let the unions it is joined from share it: `(#some(a) | r), (a -> #some(b) | r) -> #some(b) | r`.
+
+# NYX0260: Value of a nominal type's shape outside its module
+
+A value of a protected or private type's shape is given where the type is expected, outside the module that defines
+the type. Only that module makes values of it ([Nominal types](../advanced/nominal-and-protected-types)), so a record
+with the same fields is still not one. The message names the definitions attached to the type that make one.
+
+```nanyx
+module Points =
+  export type Point = protected (x: int, y: int)
+
+  export def Point.new: int, int -> #error(string) | #some(Points.Point) = { x, y ->
+    if x < 0 or y < 0
+      then #error("Coordinates must be non-negative")
+      else #some(Point(x = x, y = y))
+  }
+
+import Points
+
+def p: Point = (x = 3, y = 4)  -- error NYX0260: 'Point' is protected: only the module 'Points' makes values of it, so a record of its shape isn't a 'Point' here. Make one with 'Point.new'.
+```
+
+To fix it, make the value with one of the definitions the message names. When there is one, it takes the fields in
+order, and it returns the type itself, an editor offers to rewrite the record as a call to it: `Point.at(3, 4)`. A value
+of another shape is an ordinary type mismatch (NYX0201).
 
 # NYX0301: Not supported by the WebAssembly backend
 

@@ -1,5 +1,5 @@
-/// `nanyx pull`: a package's dependencies made available to build (#1471). Only a dependency found by its path, or a
-/// package the compiler ships, can be had until packages can be downloaded.
+/// `nanyx pull`: a package's dependencies made available to build (#1471): a dependency found by its path, a package
+/// the compiler ships, or one `nanyx.lock` locks, downloaded from the index into the cache (#863).
 module TranspilerWasmTests.Features.Commands.Pull
 
 open System.IO
@@ -50,7 +50,7 @@ let ``A dependency named by its version can't be downloaded yet`` () =
     let app = appWith directory """(package = "acme.json", version = "1.2.0")"""
     let outcome = nanyxIn app [ "pull" ]
     Assert.Equal(
-        "error: acme.json 1.2.0 is named by its version, but packages can't be downloaded yet: give the directory it is in, with path\n",
+        "error: acme.json 1.2.0 is named by its version, but it isn't locked in nanyx.lock, and choosing a version to lock isn't supported yet: give the directory it is in, with path\n",
         outcome.StandardError.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
 
@@ -62,3 +62,28 @@ let ``A dependency whose directory holds a package of another name is an error, 
     Assert.Contains("error NYX0023: the package in", outcome.StandardError)
     Assert.Contains("is named acme.util, not acme.tools: the names must match", outcome.StandardError)
     Assert.Equal(1, outcome.ExitCode)
+
+[<Fact>]
+let ``A locked dependency is downloaded from the index into the cache, and the package runs with it`` () =
+    use directory = new TempDirectory()
+    let app = appWith directory """(package = "acme.util", version = "0.3")"""
+    File.WriteAllText(Path.Combine(app, "main.nyx"), "module main\n\nimport acme.util/strings\n\n@entry\ndef main = { println(shout(\"hi\")) }\n")
+    let index = Path.Combine(directory.Path, "index")
+    let store = { Cache = Path.Combine(directory.Path, "cache"); Index = index; GitHub = GitHub.unsupported }
+    let packed = nanyxInStore store directory.Path [ "pack"; "util"; "--out"; Path.Combine(index, "artifacts") ]
+    Assert.Equal(0, packed.ExitCode)
+    let hash = packed.StandardOutput.ReplaceLineEndings("\n").Split('\n') |> Array.find (fun line -> line.StartsWith "sha256 ") |> fun line -> line.Substring 7
+    File.WriteAllText(Path.Combine(index, "config.json"), """{ "format": 1, "index": "index/" }""")
+    Directory.CreateDirectory(Path.Combine(index, "index", "acme")) |> ignore
+    File.WriteAllText(
+        Path.Combine(index, "index", "acme", "acme.util.json"),
+        $$"""{ "name": "acme.util", "versions": [{ "version": "0.3.0", "url": "../../artifacts/acme.util-0.3.0.nyxpkg", "sha256": "{{hash}}", "yanked": false, "available": true }] }"""
+    )
+    File.WriteAllText(
+        Path.Combine(app, "nanyx.lock"),
+        Lockfile.write { Packages = [ { Name = "acme.util"; Version = (SemanticVersion.tryParse "0.3.0").Value; Sha256 = hash; Dependencies = [] } ] }
+    )
+    let pulled = nanyxInStore store app [ "pull" ]
+    Assert.Equal("", pulled.StandardError)
+    Assert.Equal("acme.util 0.3.0 (downloaded)\n", pulled.StandardOutput.ReplaceLineEndings "\n")
+    assertRan "hi!\n" (nanyxInStore store app [ "run" ])

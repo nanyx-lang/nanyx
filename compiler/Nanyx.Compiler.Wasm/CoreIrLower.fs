@@ -797,9 +797,17 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             |> HoleTag
         | other -> cannot $"interpolating a value of type {IrType.show other}"
 
-    /// Allocates a record of `fields` (name and value, in the order they are stored), of type `ty`.
+    /// Allocates a record of `fields` (name and value, in the order they are stored), of type `ty`. Each value is
+    /// adapted to its field's type (see `CoreIrLowerMembers.coerce`): a pure lambda given for a field of a value of a
+    /// type generic in contexts that carries some takes their members (#1725).
     member this.Record (scope: Scope) (fields: (string * Expression) list) (ty: IrType) (k: Expr -> Expr) : Expr =
-        this.Atoms scope (List.map snd fields) (fun atoms -> k (Expr.make (MakeRecord(List.zip (List.map fst fields) atoms)) ty))
+        let fieldTys =
+            match IrType.unfold ty with
+            | IrRecord stored when List.map fst stored = List.map fst fields -> List.map snd stored
+            | _ -> []
+        this.Atoms scope (List.map snd fields) (fun atoms ->
+            CoreIrLowerMembers.coerceAll this.MemberTools scope atoms fieldTys (fun atoms ->
+                k (Expr.make (MakeRecord(List.zip (List.map fst fields) atoms)) ty)))
 
     /// A call through the function value `closure`, whose result is of type `ty`. A function whose input is a tuple
     /// takes the tuple's elements (see `IrType.tupleElements`): a tuple passed whole has them read from it. A function
@@ -1113,6 +1121,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         match lowering with
         | AsStart -> this.StartFunction ()
         | Adapting(givenTy, expectedTy) -> CoreIrLowerLifted.adapter this.LiftedTools functionName givenTy expectedTy
+        | ValueAdapting(givenTy, expectedTy) -> CoreIrLowerMembers.valueAdapter this.MemberTools emptyScope functionName givenTy expectedTy
         | BoxReading ty -> CoreIrLowerBoxes.readerFunction newVar functionName ty
         | StandingIn ty -> CoreIrLowerInstances.standInFunction newVar functionName ty
         | ListConverting(given, expected) -> CoreIrLowerBoxes.listConverterFunction (CoreIrLowerMembers.boxTools this.MemberTools emptyScope) newVar functionName given expected
@@ -1182,6 +1191,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | WrapperCalling(wrapped, instanceTy, captured) ->
             CoreIrLowerLifted.wrapperCalling this.LiftedTools wrapped instanceTy captured parameterNames make
         | Adapting _ -> internalError "an adapter lowered as a definition"
+        | ValueAdapting _ -> internalError "a value's adapter lowered as a definition"
         | BoxReading _ -> internalError "a box's function lowered as a definition"
         | StandingIn _ -> internalError "a stand-in lowered as a definition"
         | ListConverting _ -> internalError "a list's conversion lowered as a definition"

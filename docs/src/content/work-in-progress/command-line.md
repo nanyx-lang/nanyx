@@ -62,17 +62,19 @@ and the live view is drawn inside the box.
 
 # Packages
 
-`nanyx migrate` is `Migration.fs`, `nanyx pull` is `PackageDependencies.pull` and `nanyx install` is
-`PackageDependencies.install`. A dependency named by its version is written to the manifest by `migrate` and
-`install`, but can't be downloaded yet:
+`nanyx migrate` is `Migration.fs`, `nanyx pull` is `PackageDependencies.pull`, `nanyx install` is
+`PackageDependencies.install` and `nanyx pack` is `PackageArchive.pack`. The cache and the index a command uses are the
+`Shell`'s `Packages`, `PackageStore.user ()` (`NANYX_PACKAGES`, `NANYX_INDEX`); the Wasm tests give their own.
+`nanyx pull` downloads what `nanyx.lock` locks (`PackageIndex.download`), but nothing writes the lockfile yet:
 
-- **Stub:** `nanyx pull` says so for such a dependency and exits with 1, and `nanyx install --version` writes the
-  entry, then says so and exits with 1. Resolving versions, `nanyx.lock` and the cache come with
-  [#863](https://github.com/nanyx-lang/nanyx/issues/863) and [#864](https://github.com/nanyx-lang/nanyx/issues/864).
+- **Stub:** a dependency named by its version that `nanyx.lock` doesn't lock is an error: `nanyx pull` says so and
+  exits with 1, and `nanyx install --version` writes the entry, then says so and exits with 1. Choosing versions and
+  writing the lockfile come with [#864](https://github.com/nanyx-lang/nanyx/issues/864), and so do `--locked` and
+  `--offline`.
 - A dependency on GitHub (`github =` in the manifest, `github:` in a script's `::dependency`) is read and checked, and
   resolved through `GitHubFetcher` (`GitHub.fs`), whose real implementation is `GitHub.unsupported` for now: every
   command that builds such a package reports that downloading from GitHub isn't supported yet, at the entry, and exits
-  with 1. Fetching into the cache replaces it with [#863](https://github.com/nanyx-lang/nanyx/issues/863).
+  with 1. Fetching from GitHub into the cache is still to do.
 - `nanyx manifest` has only `--json` so far.
 
 `nanyx test` is proposed on [Testing](./testing).

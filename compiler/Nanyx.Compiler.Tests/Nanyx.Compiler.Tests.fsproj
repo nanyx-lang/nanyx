@@ -145,6 +145,7 @@
     <Compile Include="Features\Ordering\OrderingTests.fs" />
     <Compile Include="Features\Packages\GitHubReferenceTests.fs" />
     <Compile Include="Features\Packages\KeptModuleTests.fs" />
+    <Compile Include="Features\Packages\LockfileAndCacheTests.fs" />
     <Compile Include="Features\Packages\ManifestTests.fs" />
     <Compile Include="Features\Packages\PackageTests.fs" />
     <Compile Include="Features\Packages\PathDependencyTests.fs" />
@@ -183,6 +184,7 @@
     <Compile Include="Features\Types\BottomTypeTests.fs" />
     <Compile Include="Features\Types\GenericNominalsTests.fs" />
     <Compile Include="Features\Types\NominalsTests.fs" />
+    <Compile Include="Features\Types\ProtectedShapesTests.fs" />
     <Compile Include="Features\Types\OpenRecordsTests.fs" />
     <Compile Include="Features\Types\RecordsTests.fs" />
     <Compile Include="Features\Types\RecordFieldOrderTests.fs" />

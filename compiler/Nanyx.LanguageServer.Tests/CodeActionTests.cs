@@ -89,6 +89,51 @@ public sealed class CodeActionTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task A_record_of_a_protected_types_shape_is_made_with_its_one_maker()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-protected-shape");
+        const string text = """
+            module Points =
+              export type Point = protected (x: int, y: int)
+
+              export def Point.at: int, int -> Points.Point = { x, y -> Point(x = x, y = y) }
+
+            import Points
+
+            def p: Point = (x = 3, y = 4)
+
+            """;
+
+        Open(uri, text);
+        Assert.Equal("NYX0260", Assert.Single((await NextPublished(uri)).Diagnostics!).Code?.String);
+
+        var make = Assert.Single(await CodeActionsIn(uri, new Range(7, 16, 7, 16)), action => action.Kind == CodeActionKind.QuickFix);
+        Assert.Equal(("Make it with `Point.at`", CodeActionKind.QuickFix), (make.Title, make.Kind));
+        Assert.EndsWith("def p: Point = Point.at(3, 4)\n", Applied(text, Assert.Single(make.Edit!.Changes![uri])));
+    }
+
+    [Fact]
+    public async Task A_record_of_a_protected_types_shape_is_not_made_with_a_maker_whose_result_does_not_fit()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-protected-shape-option");
+        const string text = """
+            module Points =
+              export type Point = protected (x: int, y: int)
+
+              export def Point.new: int, int -> #none | #some(Points.Point) = { x, y -> #some(Point(x = x, y = y)) }
+
+            import Points
+
+            def p: Point = (x = 3, y = 4)
+
+            """;
+
+        Open(uri, text);
+        Assert.Equal("NYX0260", Assert.Single((await NextPublished(uri)).Diagnostics!).Code?.String);
+        Assert.DoesNotContain(await CodeActionsIn(uri, new Range(7, 16, 7, 16)), action => action.Kind == CodeActionKind.QuickFix);
+    }
+
+    [Fact]
     public async Task An_unused_import_has_a_quick_fix_that_removes_it()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-13");
