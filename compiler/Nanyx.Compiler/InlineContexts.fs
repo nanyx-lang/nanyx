@@ -27,6 +27,7 @@ module internal InlineContexts =
         | TyFunc(ga, gr, _), TyFunc(sa, sr, _) -> inAll [ ga, sa; gr, sr ]
         | TyRecord(gf, _), TyRecord(sf, _) -> inAll [ for KeyValue(name, g) in gf do match sf |> Map.tryFind name with Some s -> yield g, s | None -> () ]
         | TyApply(_, gs), TyApply(_, ss) when gs.Length = ss.Length -> inAll (List.zip gs ss)
+        | TyScope g, TyScope s -> bindingOf parameter g s
         | TyTag(_, Some g), TyTag(_, Some s) -> bindingOf parameter g s
         | _ -> None
 

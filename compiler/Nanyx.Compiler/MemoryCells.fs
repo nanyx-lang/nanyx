@@ -13,11 +13,6 @@ let context = FunctionContexts.cellContext
 /// The function that provides `Memory` for the block it is given, as the prelude declares it.
 let memoryFunction = "memory"
 
-/// The name the environment binds while a `memory` block is checked, to the block's scope (see
-/// `FunctionContexts.scoped`): what tells a `mut` declaration that `Memory` is there, and which scope its cell belongs
-/// to. No code can write it.
-let private scopeKey = "@memory"
-
 /// Whether a call to `name` is a call to the prelude's `memory`, rather than to a definition of the same name: one
 /// declared in the file that declares `Memory`.
 let isMemoryCall (env: TypeEnv) (state: InferState) (name: Identifier) =
@@ -27,10 +22,11 @@ let isMemoryCall (env: TypeEnv) (state: InferState) (name: Identifier) =
        | Some file, Some contextFile -> file = contextFile
        | _ -> false
 
-/// `env` where a `mut` makes a cell of `scope`: a `memory` block's, or after `use m`, `m` being a block's `Memory`
-/// named with `context m`, which may be an outer block's. That `use` starts no scope of its own.
+/// `env` where a `mut` makes a cell of `scope` (see `TypeEnv.BlockScope`): a `memory` block's, or after `use m`, `m`
+/// being a block's `Memory` named with `context m`, which may be an outer block's. That `use` starts no scope of its
+/// own. It is what tells a `mut` declaration that `Memory` is there, and which scope its cell belongs to.
 let withBlockScope (scope: Ty) (env: TypeEnv) : TypeEnv =
-    TypeEnv.extend scopeKey (TypeEnv.mono scope) env
+    { env with BlockScope = Some scope }
 
 /// The environment the arguments of a call to `name` are checked in, where the call supplies `Memory` of `scope`: one
 /// where cells can be made, of that scope, for the prelude's `memory`.
@@ -39,7 +35,7 @@ let aroundCall (env: TypeEnv) (state: InferState) (name: Identifier) (scope: Ty)
 
 /// The scope of the `memory` block `env` is in, whose cell a `mut` there makes: none outside a block.
 let blockScope (env: TypeEnv) : Ty option =
-    TypeEnv.tryFind scopeKey env |> Option.map _.Type
+    env.BlockScope
 
 /// The scope of the cell `name`, as `env` binds it, if it is one.
 let private scopeOf (env: TypeEnv) (state: InferState) (name: Identifier) : Ty option =
@@ -58,8 +54,8 @@ let recordUse (env: TypeEnv) (state: InferState) (name: Identifier) : InferState
 /// Records that the local def `symbol` is a cell, of the scope of the `memory` block `env` is in. One made outside a
 /// block, which is an error, has a scope of its own.
 let declareCell (env: TypeEnv) (symbol: SymbolId option) (state: InferState) =
-    match symbol, TypeEnv.tryFind scopeKey env with
-    | Some symbol, Some scope -> { state with Cells = state.Cells |> Map.add symbol scope.Type }
+    match symbol, env.BlockScope with
+    | Some symbol, Some scope -> { state with Cells = state.Cells |> Map.add symbol scope }
     | Some symbol, None ->
         let scope, next = freshVar state
         { next with Cells = next.Cells |> Map.add symbol scope }
@@ -67,7 +63,7 @@ let declareCell (env: TypeEnv) (symbol: SymbolId option) (state: InferState) =
 
 /// The value of a cell's declaration, `mut x = value`, at `expr`: a cell holding `value`, of its type. It needs `Memory`.
 let inferMut (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>) (env: TypeEnv) (state: InferState) (expr: Expression) (value: Expression) =
-    if env.Names.ContainsKey scopeKey then
+    if env.BlockScope.IsSome then
         infer env state value |> Result.map (fun (typedValue, next) -> mkTypedExpr expr typedValue.Type None None None, next)
     else
         let message = $"`mut` needs the context '{context}', which only a `memory {{ ... }}` block provides: make the cell inside one"

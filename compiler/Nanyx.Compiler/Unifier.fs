@@ -285,6 +285,8 @@ module Unifier =
         | TySelf [] -> "self"
         | TySelf args -> $"self({items args})"
         | TyParam index -> $"${index}"
+        // Only where a scoped context's scope is printed on its own, which a reader never sees.
+        | TyScope scope -> $"scope({soleArgument scope})"
 
     /// `ty` as it would be written in a def's annotation: see `printTy`.
     let tyToString (ty: Ty) : string = printTy (printingFor "..." ty) true ty
@@ -314,6 +316,7 @@ module Unifier =
             | FunctionContexts.CellType(held, _) -> collect held
             | TyApply(_, args) -> args |> List.collect collect
             | TyUnion items -> items |> List.collect collect
+            | TyScope scope -> collect scope
         collect ty
 
     /// The type variables of `ty` in the order `tyToString` prints them, each once.
@@ -759,7 +762,7 @@ module Unifier =
         // constraints, and far past where inference numbers its own, so that they are new to both.
         let mutable nextRestId = max restFrom (max firstMadeUpRest (highestVarId constraints + 1))
         let freshRest () =
-            let var = TyVar { Id = nextRestId; Name = None }
+            let var = TyVar (TyVar.ordinary nextRestId None)
             nextRestId <- nextRestId + 1
             var
         // A tag's payload that is a closed union, open to more tags through a rest made up for it (#679).
@@ -845,6 +848,7 @@ module Unifier =
                     let pairs = List.zip lArgs rArgs
                     let pairConstraints = pairs |> List.map (fun (lTy, rTy) -> (lTy, rTy, Equal, origin))
                     loop subst (pairConstraints @ rest)
+                | TyScope lScope, TyScope rScope -> loop subst ((lScope, rScope, Equal, origin) :: rest)
                 // One nominal type is the same as another when their arguments are, whether its parameters are used
                 // in what it is made from or not; that is then the same too. What one that names itself is made from
                 // holds the same arguments again (see `RecursiveNominals`).
@@ -1126,6 +1130,7 @@ module Unifier =
                             loop subst (pairs @ rest)
                         | TyApply(lName, lArgs), TyApply(rName, rArgs) when lName = rName && lArgs.Length = rArgs.Length ->
                             loop subst ((List.map2 (fun lTy rTy -> (lTy, rTy, Assignable, origin)) lArgs rArgs) @ rest)
+                        | TyScope lScope, TyScope rScope -> loop subst ((lScope, rScope, Assignable, origin) :: rest)
                         // A function that requires fewer contexts fits where one that requires more is expected.
                         | TyFunc(lArg, lRet, lContexts), TyFunc(rArg, rRet, rContexts) ->
                             match FunctionContexts.fit freshRest origin (FunctionContexts.withCellMemory lArg lContexts) (FunctionContexts.withCellMemory rArg rContexts) with

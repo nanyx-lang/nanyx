@@ -85,7 +85,7 @@ let ``No other type is assignable to undefined, nor equal to it`` () =
 
 [<Fact>]
 let ``undefined given where a variable is expected binds nothing, so the variable takes the other value's type`` () =
-    let var = { Id = 1; Name = None }
+    let var = TyVar.ordinary 1 None
     let int = TyPrimitive "int"
     let bottom = (Unifier.bottomType, TyVar var, Assignable, SourceSpan.none)
     let given = (int, TyVar var, Assignable, SourceSpan.none)

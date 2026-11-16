@@ -158,10 +158,10 @@ let private canonical (ty: Ty) : Ty =
     let numbers = variablesOf ty |> List.distinct |> List.mapi (fun index id -> id, index) |> Map.ofList
     let rec rewrite ty =
         match ty with
-        | TyVar var -> TyVar { Id = numbers.[var.Id]; Name = None }
+        | TyVar var -> TyVar (TyVar.ordinary (numbers.[var.Id]) None)
         | TyFunc(input, output, _) -> TyFunc(rewrite input, rewrite output, [])
         | TyRecord(fields, order) -> TyRecord(Map.map (fun _ field -> rewrite field) fields, order)
-        | TyOpenRecord(fields, row) -> TyOpenRecord(Map.map (fun _ field -> rewrite field) fields, { Id = numbers.[row.Id]; Name = None })
+        | TyOpenRecord(fields, row) -> TyOpenRecord(Map.map (fun _ field -> rewrite field) fields, (TyVar.ordinary (numbers.[row.Id]) None))
         | TyTag(name, payload) -> TyTag(name, Option.map rewrite payload)
         | TyUnion items -> TyUnion(byTagName items |> List.map rewrite)
         | _ ->
@@ -304,7 +304,7 @@ let private nameScore (asked: string) (name: string) =
 let private fixedQueryVariables (subst: Substitution) (query: Ty) =
     variablesOf query
     |> List.distinct
-    |> List.filter (fun id -> match substitute subst (TyVar { Id = id; Name = None }) with TyVar _ -> false | _ -> true)
+    |> List.filter (fun id -> match substitute subst (TyVar (TyVar.ordinary id None)) with TyVar _ -> false | _ -> true)
     |> List.length
 
 /// What in the standard library matches `query`, best first: by rank, then by how few of the query's variables the

@@ -20,7 +20,7 @@ open NyxCompiler.Infer
 let private checkAnnotationIsRigid (state: InferState) (name: Identifier) (span: SourceSpan) (typeExpr: TypeExpr) : Result<unit, Diagnostic list> =
     let vars =
         annotationVarNames typeExpr
-        |> List.choose (fun varName -> state.TypeVars |> Map.tryFind varName |> Option.map (fun var -> varName, var))
+        |> List.choose (fun varName -> state.TypeVars |> Map.tryFind (WrittenVar varName) |> Option.map (fun var -> varName, var))
     if vars.IsEmpty then
         Ok ()
     else

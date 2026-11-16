@@ -7,22 +7,15 @@ open Parser.Program
 /// require fewer: a pure function fits where one requiring `Console` is expected. A context variable takes the contexts
 /// the other list has and its own does not, as a union's rest takes the tags it does not name.
 module FunctionContexts =
-    /// What a scoped context's scope is wrapped in (see `scoped`). No name written in source can be it.
-    let private scopeTag = "@scope"
-
     /// The scope `scope`, a type variable, as a scoped context holds it: the argument of the context, and of a cell's
     /// type (see `cellType`).
-    let scopeType (scope: Ty) : Ty = TyApply(scopeTag, [ scope ])
+    let scopeType (scope: Ty) : Ty = TyScope scope
 
     /// The scope a scope type holds (see `scopeType`).
     let (|ScopeType|_|) (ty: Ty) : Ty option =
         match ty with
-        | TyApply(tag, [ scope ]) when tag = scopeTag -> Some scope
+        | TyScope scope -> Some scope
         | _ -> None
-
-    /// The name of the type variable a signature's scope of the scoped context `context` is, shared by every scoped
-    /// context of that name the signature writes. No variable written in source has it.
-    let scopeVariableName (context: string) = $"@{context}"
 
     /// The context a cell's type is of (see `cellType`): `Memory`, as the prelude declares it.
     let cellContext = "Memory"
@@ -37,13 +30,10 @@ module FunctionContexts =
         | TyApply(name, [ held; ScopeType scope ]) when name = CellPassingSyntax.typeName -> Some (held, scope)
         | _ -> None
 
-    /// The name of the variable a call's scope is (see `ScopedCalls.enter`). No variable written in source has it.
-    let callScopeName = "@call"
-
-    /// Whether `scope` is the scope a call starts, rather than one that may become any (see `callScopeName`).
+    /// Whether `scope` is the scope a call starts, rather than one that may become any (see `TyVarKind.CallScope`).
     let isCallScope (scope: Ty) =
         match scope with
-        | TyVar { Name = Some name } -> name = callScopeName
+        | TyVar { Kind = CallScope } -> true
         | _ -> false
 
     /// Whether `left` and `right` are scoped contexts of two scopes that calls start, which are never the same.

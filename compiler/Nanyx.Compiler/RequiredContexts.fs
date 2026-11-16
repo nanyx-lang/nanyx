@@ -21,7 +21,13 @@ let ofDefs (state: InferState) (subst: Subst) (topLevel: Symbol list) : Map<Symb
         | Some contexts, Some defTy ->
             let inferred = state.InferredContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue []
             let byName ty =
-                ContextInference.varsInOrder ty |> List.choose (fun var -> var.Name |> Option.map (fun name -> name, var))
+                ContextInference.varsInOrder ty
+                |> List.choose (fun var ->
+                    match var.Kind, var.Name with
+                    | SignatureScope context, _ -> Some (ScopeOf context, var)
+                    | CallScope, _ -> None
+                    | _, Some name -> Some (WrittenVar name, var)
+                    | _, None -> None)
             // `subst` can bind a named variable to an unnamed one, so the names are read before it too.
             let named = byName (Unifier.apply subst defTy) @ byName defTy |> Map.ofList
             let written =
@@ -47,7 +53,7 @@ let ofImport (subst: Subst) (contextTypes: Map<SymbolId, Ty list>) (symbolTypes:
             let renumbered =
                 TypeEnv.freeTyVars resolved
                 |> Seq.mapi (fun index varId ->
-                    varId, TyVar { Id = -(index + 1); Name = names |> Map.tryFind varId |> Option.flatten })
+                    varId, TyVar (TyVar.ordinary (-(index + 1)) (names |> Map.tryFind varId |> Option.flatten)))
                 |> Map.ofSeq
             match Unifier.apply renumbered resolved with
             | TyApply(_, general :: contexts) -> Some (id, (general, contexts))

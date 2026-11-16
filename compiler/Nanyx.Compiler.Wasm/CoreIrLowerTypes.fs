@@ -159,6 +159,7 @@ and private bindSchemeWith (rests: bool) (bindings: Map<int, Ty>) (scheme: Ty) (
         | _ -> cannot "a union with more than one rest"
     | TyApply(name, args), TyApply(name', args') when name = name' && args.Length = args'.Length ->
         List.fold2 bindScheme bindings args args'
+    | TyScope scope, TyScope scope' -> bindScheme bindings scope scope'
     | TyNominal(nominal, _, underlying, _), TyNominal(nominal', _, underlying', _) when nominal = nominal' ->
         bindScheme bindings underlying underlying'
     | _ -> cannot "a generic definition's type does not fit how it is used"
@@ -224,7 +225,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | TyPrimitive "?error" -> IrError
     | BoxedType -> IrBox
     // A scoped context's scope means nothing at run time: a value of the context's type is unit.
-    | FunctionContexts.ScopeType _ -> IrUnit
+    | TyScope _ -> IrUnit
     // A cell passed to a function is the box it is held in (see `CellSyntax`).
     | FunctionContexts.CellType(held, _) -> IrRecord [ "0", toIrType held ]
     // So is a `box`, which the standard library's `MRef` is (see `Boxes`).

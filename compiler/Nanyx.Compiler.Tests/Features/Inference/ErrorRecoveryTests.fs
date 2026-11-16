@@ -105,7 +105,7 @@ let ``The error type is written as the hole ???`` () =
 
 [<Fact>]
 let ``The error type agrees with every type`` () =
-    let a = TyVar { Id = 1; Name = None }
+    let a = TyVar (TyVar.ordinary 1 None)
     let constraints: ConstraintSet =
         [ (Unifier.errorType, TyPrimitive "int", Equal, SourceSpan.none)
           (TyFunc(Unifier.errorType, TyPrimitive "int", []), TyFunc(TyPrimitive "string", TyPrimitive "int", []), Assignable, SourceSpan.none)
