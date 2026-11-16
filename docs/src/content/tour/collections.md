@@ -55,68 +55,36 @@ The functions on them are on the standard library's [lists](../stdlib/prelude-li
 
 ## Literal types
 
-Today a square-bracket literal of plain items, `[1, 2, 3]`, is always a `list(a)`, and one of `key => value` entries, `["a" => 1]`, is always a `map(k, v)`. There is no set literal or array literal: a set is made from a list with `set.fromList`, and an array with `array.fromList`. Literals that take their type from an annotation, such as `def unique: set(int) = [1, 2, 2, 3]`, are planned, with the builders described under [Syntax](#syntax).
+Today a square-bracket literal of plain items, `[1, 2, 3]`, is always a `list(a)`, and one of `key => value` entries, `["a" => 1]`, is always a `map(k, v)`. There is no set literal or array literal: a set is made from a list with `set.fromList`, and an array with `array.fromList`. Literals of any collection type, such as `def unique: set(int) = [1, 2, 2, 3]` or `Array[1, 2, 3]`, are planned, as described under [Syntax](#syntax).
 
 Associated types for constrained collection capabilities are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
 
 # Syntax
 
-> **Planned.** Builders are not implemented yet: a literal is a `list(a)` or a `map(k, v)`, as described above. See [Maps and sets](../work-in-progress/maps-and-sets#open-questions).
+> **Planned** ([#1543](https://github.com/nanyx-lang/nanyx/issues/1543)). Today a literal is a `list(a)` or a `map(k, v)`, as described above.
 
-Nanyx is to support a generalisable literal syntax for all collection types; the square bracket form will be available to any target type that implements the correct builder context:
-
-```nanyx fragment
-context ListBuilder(a) = (
-  yield: a -> ()
-)
-
-def MyList.apply: ([ListBuilder(a)] () -> ()) -> MyList(a) = { f ->
-  memory {
-    mut listRef = MyList()
-
-    use ListBuilder(a)(
-      yield = { element -> listRef := listRef \add(element) }
-    ) in f()
-
-    listRef
-  }
-}
-
--- The square bracket literal syntax is now available for type MyList
-def myList: MyList(int) = [1, 2, 3]
-```
+The square-bracket literal is to work for any collection type that says how to be built from one. There are two ways to say which type a literal is:
 
 ```nanyx fragment
-context MapBuilder(k, v) = (
-  `=>`: (k, v) -> ()
-)
-
-def MyMap.apply: ([MapBuilder(k, v)] () -> ()) -> MyMap(k, v) = { f ->
-  memory {
-    mut mapRef = MyMap()
-
-    use MapBuilder(k, v)(
-      `=>` = { k, v -> mapRef := mapRef \add(k, v) }
-    ) in f()
-
-    mapRef
-  }
-}
-
--- The square bracket literal syntax is now available for type MyMap
-def myMap: MyMap(string, int) = ["a" => 1, "b" => 2]
+def a: Array(int) = [1, 2, 3]     -- from the expected type
+def b = Array[1, 2, 3]            -- from the type's name before the brackets
+def s = set[1, 2, 2, 3]           -- a set of 1, 2 and 3
+def e: set(int) = []              -- an empty set
 ```
 
-This works because the square bracket syntax desugars to a call to the `apply` function on the target type, which provides the builder context that defines how the literal should be constructed:
+Writing the type's name before the brackets is like writing a record's type before its fields, `Point(x = 1, y = 2)`. With neither, plain items make a `list(a)` and `key => value` entries a `map(k, v)`, as today.
+
+A type has literals when it has an attached `fromArray`. The compiler collects the items into an `Array`, which knows its length, and passes it in; a map-like type is given an `Array` of `(key, value)` tuples:
 
 ```nanyx fragment
-def myList: MyList(int) = [1, 2, 3]
--- Desugars to:
-def myList: MyList(int) = MyList.apply {
-  yield(1)
-  yield(2)
-  yield(3)
-}
+type Bag(a) = protected (items: list(a))
+
+def Bag.fromArray: Array(a) -> Bag(a) = { xs -> Bag(items = array.toList(xs)) }
+
+def bag: Bag(int) = [1, 2, 2]
+def other = Bag[3, 4]
 ```
+
+The standard library's `set`, `map`, `Array` and mutable collections get their literals the same way, with nothing special about them. A `fromArray` that requires a context makes the literal require it: `MStack[1, 2]` needs `Memory`, so it is written inside a `memory` block. A list or an array can be spread into a literal, `Array[...xs, 4]`.
 
 For iteration constructs, see [Loops](./loops). For query-style collection programming, see [Sequences and queries](../advanced/sequences-and-queries).
