@@ -36,6 +36,44 @@ def mapped = map(loud, { x -> x + 1 })
     Assert.Equal("[Console] Thunk(int)", shown "mapped")
 
 [<Fact>]
+let ``A function's result carries the contexts of a lambda it is made with, not the function`` () =
+    // #1676: `println` in the lambda is required where `get` is called, not where `mk` is.
+    let source =
+        thunk
+        + """
+def mk: int -> [Console] Thunk(int) = { n ->
+  Thunk(get = {
+    println("x")
+    n
+  })
+}
+def inferred = { n ->
+  Thunk(get = {
+    println("x")
+    n
+  })
+}
+"""
+    let typed = compileClean (normalized source)
+    Assert.Equal("int -> [Console] Thunk(int)", Unifier.tyToDisplayString Ascii typed.Types.["mk"])
+    Assert.Equal("a -> [Console] Thunk(a)", Unifier.tyToDisplayString Ascii typed.Types.["inferred"])
+
+[<Fact>]
+let ``A function whose result is pure, made with a lambda that requires a context, is NYX0227`` () =
+    let source =
+        thunk
+        + """
+def mk: int -> Thunk(int) = { n ->
+  Thunk(get = {
+    println("x")
+    n
+  })
+}
+"""
+    let code, _ = singleError (normalized source)
+    Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)
+
+[<Fact>]
 let ``A value with fewer contexts fits where one with more is expected`` () =
     let source =
         thunk

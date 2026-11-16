@@ -477,6 +477,16 @@ let internal outsideValue (infer: InferState -> Result<'T * InferState, Diagnost
         infer { state with ContextScope = AmbientScope } |> Result.map (fun (typed, next) -> typed, { next with ContextScope = valueScope })
     | _ -> infer state
 
+/// `infer` run on `state` for a lambda given to a constructor as the field of type `fieldTy`, which the constructor does
+/// not run: outside a top-level value, as `outsideValue` does, and in a function's body too where the field's type
+/// requires contexts, as a field of a type generic in contexts does (`get: [k] () -> a`). Such a lambda requires what
+/// it uses where the field is called, and the value made carries it, not the function that makes it (#1676).
+let internal asConstructorField (fieldTy: Ty) (infer: InferState -> Result<'T * InferState, Diagnostic list>) (state: InferState) =
+    match state.ContextScope, Unifier.unalias (resolveSoFar state fieldTy) with
+    | DefScope _ as defScope, TyFunc(_, _, _ :: _) ->
+        infer { state with ContextScope = AmbientScope } |> Result.map (fun (typed, next) -> typed, { next with ContextScope = defScope })
+    | _ -> outsideValue infer state
+
 /// `what` needs the ambient context `ctxName` where nothing nearer supplies it: fine at the top level, inferred for
 /// an unannotated def or a script's value, and an error in a def whose type does not declare it or in a named module's
 /// value.

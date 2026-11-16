@@ -55,6 +55,46 @@ def main = {
     runSource (normalized source) |> assertRan "got\n3\nlabelling\n1!\nlocal\n10\n"
 
 [<Fact>]
+let ``Run - a function returns a value made with a lambda that requires its contexts`` () =
+    // #1676: the lambda's `Console` is the value's, required where `get` is called.
+    let source =
+        thunk
+        + """
+def mk: int -> [Console] Thunk(int) = { n ->
+  Thunk(get = {
+    println("x")
+    n
+  })
+}
+
+def t = mk(1)
+println(t.get())
+"""
+    runSource (normalized source) |> assertRan "x\n1\n"
+
+[<Fact>]
+let ``Run - a function returns a recursive value built from its argument with lambdas that require its contexts`` () =
+    let source =
+        """type Stream(a) = [k] protected (next: [k] () -> #next(a, Stream(a)) | #done)
+
+def countdown: int -> [Console] Stream(int) = { n ->
+  Stream(next = {
+    println("at {n}")
+    if n == 0 then #done else #next(n, countdown(n - 1))
+  })
+}
+
+def drain: [Console] ([Console] Stream(int)) -> int = { s ->
+  match s.next()
+    | #next(x, rest) -> x + drain(rest)
+    | #done -> 0
+}
+
+println(drain(countdown(3)))
+"""
+    runSource (normalized source) |> assertRan "at 3\nat 2\nat 1\nat 0\n6\n"
+
+[<Fact>]
 let ``Run - a value with fewer contexts is given where one with more is expected`` () =
     let source =
         thunk
