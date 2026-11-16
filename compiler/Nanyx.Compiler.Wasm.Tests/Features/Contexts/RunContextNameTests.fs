@@ -4,9 +4,7 @@ module TranspilerWasmTests.Features.Contexts.ContextNames
 open Xunit
 open TranspilerWasmTestHelpers
 
-let private log = """import nanyx/console
-
-context Log = (log: string -> ())
+let private log = """context Log = (log: string -> ())
 
 def inner: [Log] () -> () = { log("from inner") }
 """

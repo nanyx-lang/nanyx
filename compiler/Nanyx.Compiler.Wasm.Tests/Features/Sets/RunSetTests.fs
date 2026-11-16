@@ -6,9 +6,7 @@ open TranspilerWasmTestHelpers
 /// A program that runs `lines` in its entry point, after the definitions in `definitions`. `show` writes a bool as `T`
 /// or `F`, and `ints` writes a set of ints in order.
 let private program (definitions: string list) (lines: string list) =
-    [ "import nanyx/console"
-      ""
-      """def show = { b -> if b then "T" else "F" }"""
+    [ """def show = { b -> if b then "T" else "F" }"""
       """def ints = { (s: set(int)) -> set.toList(s) \list.map(int.toString) \list.fold("", { acc, n -> acc ++ n }) }"""
       yield! definitions
       ""

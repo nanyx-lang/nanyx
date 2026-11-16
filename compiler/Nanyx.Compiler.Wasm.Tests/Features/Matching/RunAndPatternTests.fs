@@ -7,9 +7,7 @@ open TranspilerWasmTestHelpers
 let ``Run - the documented guard with an and-pattern`` () =
     // The pattern-matching page's "Guards" example (#427).
     let source =
-        normalized """import nanyx/console
-
-def describeNumber: int -> string = { n ->
+        normalized """def describeNumber: int -> string = { n ->
   match n
     | { < 0 } -> "negative"
     | 0 -> "zero"
@@ -30,9 +28,7 @@ def main = {
 let ``Run - the documented and-patterns, the name after the guard`` () =
     // The pattern-matching page's "And patterns" example (#427).
     let source =
-        normalized """import nanyx/console
-
-def show: int -> string = { value ->
+        normalized """def show: int -> string = { value ->
   match value
     | { < 0 } & n -> "Negative: {n}"
     | { > 100 } & n -> "Large: {n}"
@@ -51,9 +47,7 @@ def main = {
 let ``Run - and-patterns nested in a tag and a tuple`` () =
     // Inside another pattern, every part matches the same part of the value, and binds what it binds.
     let source =
-        normalized """import nanyx/console
-
-def size: #some(int) | #none -> string = { value ->
+        normalized """def size: #some(int) | #none -> string = { value ->
   match value
     | #some(n & { > 10 }) -> "big {n}"
     | #some(n) -> "small {n}"
@@ -82,9 +76,7 @@ def main = {
 let ``Run - an and-pattern tests its parts left to right`` () =
     // `#some(_) & { ... }`: the predicate runs only once the tag matches, so it can take the payload apart.
     let source =
-        normalized """import nanyx/console
-
-def payload: #some(int) | #none -> int = { value ->
+        normalized """def payload: #some(int) | #none -> int = { value ->
   match value
     | #some(n) -> n
     | #none -> 0

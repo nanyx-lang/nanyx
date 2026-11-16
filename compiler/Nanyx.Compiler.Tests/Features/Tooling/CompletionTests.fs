@@ -80,7 +80,8 @@ let ``A qualified import is in scope by its alias, an unqualified one by the nam
         let namesWith (mainSource: string) =
             File.WriteAllText(mainPath, mainSource)
             namesIn (Compiler.compileFile mainPath) (offsetOf mainSource "def value" 0 0)
-            |> List.filter (fun (_, (_, file)) -> not (file.StartsWith "nanyx/"))
+            // The names the preludes bring in are declared elsewhere.
+            |> List.filter (fun (_, (_, file)) -> file.StartsWith dir)
         Assert.Equal<(string * (SymbolKind * string)) list>(
             [ "m", (ImportedModule, mainPath); "value", (TopLevelValue, mainPath) ],
             namesWith "module main\nimport mod as m\ndef value = m.foo")
@@ -248,7 +249,6 @@ let private reserved (names: string list) = names |> List.filter (fun name -> na
 let ``The standard library's reserved names are never offered, at the start of an expression, after a pipe or after a dot`` () =
     let written =
         """import nanyx/text
-import nanyx/console
 import nanyx/math
 def s = "abc"
 def r = s

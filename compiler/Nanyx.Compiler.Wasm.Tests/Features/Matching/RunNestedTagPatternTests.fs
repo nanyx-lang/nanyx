@@ -6,9 +6,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - arms that name one tag with different tags in its payload`` () =
     let source =
-        normalized """import nanyx/console
-
-type ParseError = #helpRequested | #missingArgument(string)
+        normalized """type ParseError = #helpRequested | #missingArgument(string)
 
 def describe: #some(int) | #error(ParseError) -> string = { parsed ->
   match parsed

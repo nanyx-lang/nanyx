@@ -202,10 +202,10 @@ module Intrinsics =
 module StandardLibrary =
     let packageName = "nanyx"
 
-    /// The prefix of an import path that refers to the standard library, e.g. `import nanyx/console`.
+    /// The prefix of an import path that refers to the standard library, e.g. `import nanyx/text`.
     let importPrefix = packageName + "/"
 
-    /// The name of the standard-library module an import refers to (`console` for `nanyx/console`), if any.
+    /// The name of the standard-library module an import refers to (`text` for `nanyx/text`), if any.
     let tryModuleName (item: ImportItem) : string option =
         match item.Source with
         | ModuleImport name when name.StartsWith importPrefix -> Some (name.Substring importPrefix.Length)

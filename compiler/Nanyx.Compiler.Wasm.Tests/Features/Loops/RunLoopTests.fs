@@ -10,9 +10,7 @@ open TranspilerWasmTestHelpers
 let ``Run - for loops over ranges and lists`` () =
     // Regression: `for 1..3 | i -> println("{i}")` was a parse error (#37).
     let source =
-        normalized """import nanyx/console
-
-def shout: [Console] list(string) -> () = { names ->
+        normalized """def shout: [Console] list(string) -> () = { names ->
   for names | name -> println(name ++ "!")
 }
 @entry
@@ -34,9 +32,7 @@ def main = {
 let ``Run - for loops over several iterables walk them in step`` () =
     // The program from the loops page: a list zipped with a range that has no end counts its elements.
     let source =
-        normalized """import nanyx/console
-
-def things = [
+        normalized """def things = [
   "Alex"
   "Sam"
   "Jo"
@@ -84,9 +80,7 @@ tick
 let ``Run - rec local loops`` () =
     // Regression: `rec loop = { ... }` was a parse error (#38).
     let source =
-        normalized """import nanyx/console
-
-def countdown: int -> int = { n ->
+        normalized """def countdown: int -> int = { n ->
   rec loop = { i, acc -> if i > 0 then loop(i - 1, acc + i) else acc }
   loop(n, 0)
 }
@@ -108,8 +102,6 @@ let ``Run - while loops run while their condition holds`` () =
     // The program from the loops page (#957), and loops whose condition and body read a list held in a cell: each time
     // round they borrow it, so the memory checks find nothing left over.
     let source = """
-import nanyx/console
-
 def countdown = {
   memory {
     mut remaining = 3
@@ -157,9 +149,7 @@ def main = {
 [<Fact>]
 let ``Run - loops, floats, pipes and guards through the core IR`` () =
     let source =
-        normalized """import nanyx/console
-
-def area: float -> float = { r -> r * r * 2.0 }
+        normalized """def area: float -> float = { r -> r * r * 2.0 }
 
 def size = { n ->
   match n
@@ -184,9 +174,7 @@ main()
 let ``Run - a loop body goes on after a match whose arms are on the lines that follow`` () =
     // The match's arms ended the loop body, so `println(s)` fell outside the loop (#1311).
     let source =
-        normalized """import nanyx/console
-
-def main = {
+        normalized """def main = {
   for [1, 2] | x ->
     def s = match x
       | 1 -> "one"

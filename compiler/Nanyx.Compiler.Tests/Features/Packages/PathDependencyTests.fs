@@ -95,13 +95,13 @@ let ``A dependency without a path is an error`` () =
 
 [<Fact>]
 let ``A dependency must be a directory with a manifest`` () =
-    use package = new TempPackage([ app [ "acme.util", "missing" ]; mainImporting "nanyx/console" "println(1)" ])
+    use package = new TempPackage([ app [ "acme.util", "missing" ]; mainImporting "nanyx/math" "println(abs(1))" ])
     let error = Assert.Single(errorsOf (Package.find (package.Path "app")))
     Assert.EndsWith($"""error NYX0023: the dependency acme.util can't be read: {Path.GetFullPath(package.Path "missing")} is not a directory""", error)
 
 [<Fact>]
 let ``A dependency's package must have the name the dependant gives it`` () =
-    use package = new TempPackage(util @ [ app [ "acme.tools", "util" ]; mainImporting "nanyx/console" "println(1)" ])
+    use package = new TempPackage(util @ [ app [ "acme.tools", "util" ]; mainImporting "nanyx/math" "println(abs(1))" ])
     let error = Assert.Single(errorsOf (Package.find (package.Path "app")))
     Assert.EndsWith(
         $"""error NYX0023: the package in {Path.GetFullPath(package.Path "util")} is named acme.util, not acme.tools: the names must match""",
@@ -177,7 +177,7 @@ export def louder = { s: string -> s }""" ]
         new TempPackage(
             util @ copy @ middle
             @ [ app [ "acme.util", "util"; "acme.middle", "middle" ]
-                mainImporting "nanyx/console" "println(1)" ])
+                mainImporting "nanyx/math" "println(abs(1))" ])
     let error = Assert.Single(errorsOf (Package.find (package.Path "app")))
     Assert.Contains(
         $"""error NYX0028: the build reaches the package acme.util by two paths, {Path.GetFullPath(package.Path "util")} and {Path.GetFullPath(package.Path "copy")}""",

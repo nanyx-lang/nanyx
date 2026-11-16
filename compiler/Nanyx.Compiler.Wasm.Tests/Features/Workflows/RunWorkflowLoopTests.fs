@@ -5,9 +5,7 @@ open Xunit
 open TranspilerWasmTestHelpers
 
 let private parse =
-    """import nanyx/console
-
-def parse: string -> #some(int) | #error(string) = { s ->
+    """def parse: string -> #some(int) | #error(string) = { s ->
   if s == "bad" then #error("bad input") else #some(s.length)
 }
 

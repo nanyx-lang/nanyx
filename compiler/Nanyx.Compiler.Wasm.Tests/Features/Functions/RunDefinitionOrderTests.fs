@@ -6,8 +6,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - a pipe on the result of a function defined later in the file`` () =
     let source =
-        """import nanyx/console
-import nanyx/text
+        """import nanyx/text
 
 @entry
 def main = {

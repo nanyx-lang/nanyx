@@ -210,7 +210,7 @@ module Compiler =
     let private preludeSources = System.Collections.Concurrent.ConcurrentDictionary<string, Set<string>>()
 
     /// Whether a module, by its origin, declares contexts that `host` provides: those its prelude re-exports from, as
-    /// the console host's re-exports `nanyx/console`'s `Console`. Importing one binds the names of its contexts' members,
+    /// the console host's re-exports `nanyx.console.core/console`'s `Console`. Importing one binds the names of its contexts' members,
     /// so that the contexts are ambient. A module with no host, a library's, sees no context as a host's.
     let private providesContexts (host: Host option) (hostModules: PackageModules option) : ModuleOrigin -> bool =
         let sources =
@@ -257,7 +257,7 @@ module Compiler =
         let state = merged.State
         let importedKey = originKey importedOrigin
         let qualifier = ModuleLinking.importQualifier item
-        // The members of each context a host provides, `nanyx/console`'s `Console`, are brought in as the module's
+        // The members of each context a host provides, `Console`, are brought in as the module's
         // exports would be, each a name of its own, so that the context is an ambient one (see `InferModule`): code at a
         // script's top level, or in a def that infers the context, calls `readLine()`. The host supplies the instance.
         let hostMembers =
@@ -517,14 +517,15 @@ module Compiler =
             match checkedModules.Package with
             | Some package -> package.Host, package.HostPackage
             | None -> Some HostPackages.console.Value, ShippedPackages.tryModules Hosts.consolePackage
-        let inHostPackage (path: string) = hostModules |> Option.exists (fun modules -> PackageModules.contains modules path)
+        // A file of the host's package, or of a package it depends on, such as the interface package it implements.
+        let inHostPackage (path: string) = hostModules |> Option.exists (fun modules -> (PackageModules.ownerOf modules path).IsSome)
         let isHost (path: string) =
             Option.map2 (fun (host: Host) (modules: PackageModules) -> modules.Modules |> Map.tryFind host.Module) buildHost hostModules
             |> Option.flatten
             |> Option.exists (List.exists (PackageModules.samePath path))
         // The module's own host: the build's, for a module of the program itself, which sees the host's prelude and may
-        // declare its `@entry`. A file of a package the program depends on, or of the host's package, is a library's, and
-        // a module of the standard library is the standard library's: none.
+        // declare its `@entry`. A file of a package the program depends on, or of the host's package or one it depends on,
+        // is a library's, and a module of the standard library is the standard library's: none.
         let host =
             match origin with
             | StandardLibraryModule _ -> None
@@ -627,15 +628,17 @@ module Compiler =
                             | Ok imported when not imported.Errors.IsEmpty -> Error (Typed, throughThis imported.Errors)
                             | Error (phase, diagnostics) -> Error (phase, throughThis diagnostics)
                             | checkedImport -> checkedImport
-                    // The import of the host, and an import in one of the host package's own files, are of its modules.
+                    // The import of the host is of its package's modules, and an import in a file of the host's package, or
+                    // of a package it depends on, is resolved in that package.
                     let inHostPackage =
                         match hostModules, item.Source, origin with
-                        | Some modules, ModuleImport name, _ when name.StartsWith(modules.Package + "/") -> Some (modules, name)
-                        | Some modules, ModuleImport name, SourceFile path when PackageModules.contains modules path && StandardLibrary.tryModuleName item = None -> Some (modules, name)
+                        | Some modules, ModuleImport name, _ when name.StartsWith(modules.Package + "/") -> Some (PackageModules.resolveWithin modules item name)
+                        | Some modules, ModuleImport _, SourceFile path when inHostPackage path && StandardLibrary.tryModuleName item = None ->
+                            Some (PackageModules.resolveImport (Some modules) path item)
                         | _ -> None
                     match StandardLibrary.tryModuleName item, inHostPackage with
-                    | None, Some (modules, name) ->
-                        match PackageModules.resolveWithin modules item name with
+                    | None, Some resolved ->
+                        match resolved with
                         | Error diag -> fail [ diag ]
                         | Ok importPath ->
                             match checkImport (SourceFile importPath) (fun () -> checkedModules.ReadFile importPath) with

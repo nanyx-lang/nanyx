@@ -7,8 +7,6 @@ open TranspilerWasmTestHelpers
 let ``Run - a record spread takes every field of its parts, a later part's replacing an earlier one's`` () =
     let source =
         """
-import nanyx/console
-
 def defaults = (host = "localhost", port = 8080)
 def env = (port = 9000)
 def cli = (logLevel = "debug")
@@ -34,8 +32,6 @@ main()
 let ``Run - a record spread evaluates its parts once each, in the order written`` () =
     let source =
         """
-import nanyx/console
-
 def made = { name, value ->
   println(name)
   (field = value, other = name)

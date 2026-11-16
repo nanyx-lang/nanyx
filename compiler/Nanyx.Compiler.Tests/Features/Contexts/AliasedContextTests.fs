@@ -5,12 +5,18 @@ open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
 // A def can declare a context from a module imported under an alias (`[c.Console]`), and its callers supply it from
-// the ambient instance, whose members are in scope under the alias (#736).
+// the ambient instance, whose members are in scope under the alias (#736). An application imports the console's
+// interface package, `nanyx.console.core`, once it lists it in its dependencies.
+
+/// `source`, compiled as a file of an application that depends on `nanyx.console.core`, with no errors.
+let private compileClean (source: string) =
+    let result = compileWithConsoleCore source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
 [<Fact>]
 let ``A def that declares an aliased Console can be called from the entry point`` () =
     compileClean """module main
-import nanyx/console as c
+import nanyx.console.core/console as c
 
 def g: [c.Console] () -> () = { c.println("5") }
 
@@ -22,8 +28,6 @@ def main = { g() }
 [<Fact>]
 let ``A def that declares Console from an unaliased import can be called from the entry point`` () =
     compileClean """module main
-import nanyx/console
-
 def g: [Console] () -> () = { println("5") }
 
 @entry
@@ -34,7 +38,7 @@ def main = { g() }
 [<Fact>]
 let ``An aliased Console passes from one def that declares it to another`` () =
     compileClean """module main
-import nanyx/console as c
+import nanyx.console.core/console as c
 
 def g: [c.Console] () -> () = {
   c.write("a")
@@ -54,13 +58,13 @@ def main = { h([1]) }
 [<Fact>]
 let ``A def that does not declare an aliased Console cannot call one that does`` () =
     let source = """module main
-import nanyx/console as c
+import nanyx.console.core/console as c
 
 def g: [c.Console] () -> () = { c.println("5") }
 
 def k: () -> () = { g() }
 """
-    match (Compiler.compile source).Diagnostics with
+    match (compileWithConsoleCore source).Diagnostics with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, diagnostic.Code)
         Assert.Equal(

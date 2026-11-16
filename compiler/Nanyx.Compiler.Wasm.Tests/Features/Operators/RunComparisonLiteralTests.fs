@@ -8,7 +8,6 @@ let ``Run - generic code compares with integer literals, at ints and floats`` ()
     // #678: a literal beside a comparison was an `int`, so none of these compiled.
     let source =
         """
-import nanyx/console
 import nanyx/math as math
 
 def isNegative: [Num(a) & Ord(a)] a -> bool = { n -> n < 0 }

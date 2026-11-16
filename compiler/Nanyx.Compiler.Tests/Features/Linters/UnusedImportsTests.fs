@@ -57,8 +57,11 @@ let ``An import used only through a name the module re-exports is not reported``
 
 [<Fact>]
 let ``An import used only in a type is not reported`` () =
-    Assert.Empty(reported "import nanyx/console as c\ndef e: c.IoError = #endOfInput\n")
-    Assert.Empty(reported "import nanyx/console\ndef e: IoError = #endOfInput\n")
+    let aliased = "module main\nimport nanyx.console.core/console as c\ndef e: c.IoError = #endOfInput\n"
+    Assert.Empty(
+        (compileWithConsoleCoreUsing Linters.everyLinter aliased).Diagnostics
+        |> List.filter (fun diagnostic -> diagnostic.Code = "default/unusedImports"))
+    Assert.Empty(reported "def e: IoError = #endOfInput\n")
 
 [<Fact>]
 let ``A module imported by the file and by a module block is used by each where it is used`` () =
@@ -83,10 +86,10 @@ def b = string.trim(" y ")"""
 
 [<Fact>]
 let ``An unused import is reported at the import, under its alias or its module`` () =
-    let source = "import (\n  nanyx/math as m\n  nanyx/text as s\n  nanyx/console\n)\ndef x = m.abs(3)\n"
+    let source = "import (\n  nanyx/math as m\n  nanyx/text as s\n  nanyx/host.memory\n)\ndef x = m.abs(3)\n"
     Assert.Equal<(string * string) list>(
         [ "`s` is imported but never used", "nanyx/text as s"
-          "`nanyx/console` is imported but never used", "nanyx/console" ],
+          "`nanyx/host.memory` is imported but never used", "nanyx/host.memory" ],
         reported source)
 
 [<Fact>]

@@ -68,21 +68,19 @@ public sealed class InfoViewTests : LanguageServerTestBase
         var uri = DocumentUri.Parse("untitled:InfoView-3");
 
         Open(uri, """
-            import nanyx/console
-
             def hello = { println("hi") }
             println("top")
 
             """.ReplaceLineEndings("\n"));
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        var inDef = Assert.Single(Section(await InfoViewAt(uri, 2, 16), "function", "contexts"));
-        Assert.Equal(("Console", "inferred", new Range(2, 4, 2, 9)), (inDef.Text, inDef.Detail, inDef.Location?.Range));
+        var inDef = Assert.Single(Section(await InfoViewAt(uri, 0, 16), "function", "contexts"));
+        Assert.Equal(("Console", "inferred", new Range(0, 4, 0, 9)), (inDef.Text, inDef.Detail, inDef.Location?.Range));
         // The runtime supplies every context of the host's prelude at the top level.
-        var topLevel = Section(await InfoViewAt(uri, 3, 2), "module", "contexts");
+        var topLevel = Section(await InfoViewAt(uri, 1, 2), "module", "contexts");
         Assert.Equal([("Console", "runtime", null), ("Env", "runtime", null)], topLevel.Select(item => (item.Text, item.Detail, item.Location)));
         var atTopLevel = topLevel.First();
-        // A standard-library context shows its doc comment.
+        // A context of the host's prelude shows its doc comment.
         Assert.StartsWith("The terminal: standard output", atTopLevel.Documentation);
     }
 
@@ -92,18 +90,16 @@ public sealed class InfoViewTests : LanguageServerTestBase
         var uri = DocumentUri.Parse("untitled:InfoView-4");
 
         Open(uri, """
-            import nanyx/console
-
             println(missing)
 
             """.ReplaceLineEndings("\n"));
         Assert.Single((await NextPublished(uri)).Diagnostics!);
 
-        var message = Assert.Single(Section(await InfoViewAt(uri, 2, 0), "cursor", "messages"));
+        var message = Assert.Single(Section(await InfoViewAt(uri, 0, 0), "cursor", "messages"));
         Assert.Equal("error NYX0101", message.Detail);
         Assert.Contains("missing", message.Text);
-        Assert.Equal(new Range(2, 8, 2, 15), message.Location?.Range);
-        Assert.Empty(Section(await InfoViewAt(uri, 0, 0), "cursor", "messages"));
+        Assert.Equal(new Range(0, 8, 0, 15), message.Location?.Range);
+        Assert.Empty(Section(await InfoViewAt(uri, 1, 0), "cursor", "messages"));
     }
 
     [Fact]
@@ -180,7 +176,6 @@ public sealed class InfoViewTests : LanguageServerTestBase
         var uri = DocumentUri.Parse("untitled:InfoView-8");
 
         Open(uri, """
-            import nanyx/console
             def apply: [c] ([c] a -> b), a -> b = { f, x -> f(x) }
             def n = apply({ x -> x + 1 }, 1)
             def say = { apply({ x -> println(x) }, "hi") }
@@ -195,14 +190,14 @@ public sealed class InfoViewTests : LanguageServerTestBase
                 ("def apply: (int -> int), int -> int", "at this use"),
                 ("a = int, b = int", "type variables")
             ],
-            Section(await InfoViewAt(uri, 2, 10), "cursor", "expression").Select(item => (item.Text, item.Detail)));
+            Section(await InfoViewAt(uri, 1, 10), "cursor", "expression").Select(item => (item.Text, item.Detail)));
         Assert.Equal(
             [
                 ("def apply: [c] ([c] a -> b), a -> b", "declared"),
                 ("def apply: [Console] ([Console] string -> ()), string -> ()", "at this use"),
                 ("c = Console, a = string, b = ()", "type variables")
             ],
-            Section(await InfoViewAt(uri, 3, 14), "cursor", "expression").Select(item => (item.Text, item.Detail)));
+            Section(await InfoViewAt(uri, 2, 14), "cursor", "expression").Select(item => (item.Text, item.Detail)));
     }
 
     [Fact]

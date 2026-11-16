@@ -6,9 +6,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - names in backticks are defined, called and read as any other name`` () =
     let source =
-        normalized """import nanyx/console
-
-def `add points`: (int, int) -> int = { a, b -> a + b }
+        normalized """def `add points`: (int, int) -> int = { a, b -> a + b }
 def `is it empty?`: string -> bool = { s -> s == "" }
 def `match` = 7
 
@@ -23,9 +21,7 @@ def main = {
 [<Fact>]
 let ``Run - names that differ only in characters an identifier cannot hold stay apart`` () =
     let source =
-        normalized """import nanyx/console
-
-def `add points`: (int, int) -> int = { a, b -> a + b }
+        normalized """def `add points`: (int, int) -> int = { a, b -> a + b }
 def add_points: (int, int) -> int = { a, b -> a * b }
 def `<+>`: (int, int) -> int = { a, b -> a - b }
 def `<*>`: (int, int) -> int = { a, b -> b - a }

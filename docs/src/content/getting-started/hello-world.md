@@ -15,8 +15,6 @@ touch hello.nyx
 Open `hello.nyx` in your code editor and add the following code:
 
 ```nanyx
-import nanyx/console
-
 println("Hello, Nanyx!")
 ```
 

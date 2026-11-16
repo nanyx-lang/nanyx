@@ -7,9 +7,7 @@ open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
 let private shout =
-    """import nanyx/console
-
-def shout = { s -> println(s ++ "!") }
+    """def shout = { s -> println(s ++ "!") }
 
 def asked: ([c] string -> ()) -> [c] string -> () = { f -> { s: string -> s ++ "?" } >> f }
 """

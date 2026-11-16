@@ -9,8 +9,6 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - a cell is summed in a loop, and changed in an if, a match and a nested loop`` () =
     let source = """
-import nanyx/console
-
 def sum: list(int) -> int = { xs ->
   memory {
     mut total = 0
@@ -63,8 +61,6 @@ def main = {
 [<Fact>]
 let ``Run - a cell read into a def keeps the value it had`` () =
     let source = """
-import nanyx/console
-
 @entry
 def main = {
   def (before, after) = memory {
@@ -81,8 +77,6 @@ def main = {
 [<Fact>]
 let ``Run - lambdas that capture a cell share it`` () =
     let source = """
-import nanyx/console
-
 def tally = { words ->
   memory {
     mut seen = []
@@ -158,8 +152,6 @@ def build: int -> string = { n ->
 [<Fact>]
 let ``Run - a cell made through use of an outer block's instance outlives the inner block`` () =
     let source = """
-import nanyx/console
-
 def total = memory { m1 ->
   def get = memory {
     use m1
@@ -180,8 +172,6 @@ def main = {
 [<Fact>]
 let ``Run - a cell passed to a function is changed by it, passed on, and passed twice`` () =
     let source = """
-import nanyx/console
-
 def inc = { mut cell ->
   cell := cell + 1
 }
@@ -232,10 +222,8 @@ def main = {
 """
     runSource source |> assertRan "10 21 6\n"
 [<Fact>]
-let ``Run - a function whose Memory is inferred changes a cell it is given in a block, with nanyx/console imported`` () =
+let ``Run - a function whose Memory is inferred changes a cell it is given in a block, with the host's contexts in scope`` () =
     let source = """
-import nanyx/console
-
 def bump = { mut n -> n := n + 1 }
 
 def f: () -> int = {

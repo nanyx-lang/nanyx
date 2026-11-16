@@ -8,9 +8,7 @@ open TranspilerWasmTestHelpers
 
 /// `describe` tells apart the empty list, lists of one, two and three, and longer lists.
 let private describe =
-    normalized """import nanyx/console
-
-def describe: list(int) -> string = {
+    normalized """def describe: list(int) -> string = {
   | [] -> "empty"
   | [a] -> "one {a}"
   | [a, b] -> "two {a} {b}"
@@ -22,9 +20,7 @@ def describe: list(int) -> string = {
 [<Fact>]
 let ``Run - an empty list pattern matches only the empty list`` () =
     let source =
-        normalized """import nanyx/console
-
-def isEmpty: list(int) -> bool = {
+        normalized """def isEmpty: list(int) -> bool = {
   | [] -> true
   | _ -> false
 }
@@ -48,9 +44,7 @@ println(describe([1, 2, 3, 4]))
 let ``Run - an exact list pattern tests its elements only on a list of its length`` () =
     // `[1, 2]` must not match `[1, 2, 3]`, nor `[1]` (whose second cell does not exist).
     let source =
-        normalized """import nanyx/console
-
-def check: list(int) -> string = {
+        normalized """def check: list(int) -> string = {
   | [1, 2] -> "pair"
   | [1, ..._] -> "starts with 1"
   | _ -> "other"
@@ -66,9 +60,7 @@ println(check([2, 2]))
 [<Fact>]
 let ``Run - a rest pattern matches lists at least as long as its elements`` () =
     let source =
-        normalized """import nanyx/console
-
-def check: list(int) -> string = {
+        normalized """def check: list(int) -> string = {
   | [...all] -> "any {list.length(all)}"
 }
 def atLeastTwo: list(int) -> string = {
@@ -88,9 +80,7 @@ println(atLeastTwo([1, 2, 3, 4]))
 let ``Run - list.fold walks a list of 1,000,000 elements`` () =
     // Each step matches `[]` and `[x, ...rest]`; when a match counted the whole list this took hours.
     let source =
-        normalized """import nanyx/console
-
-def upTo: int, list(int) -> list(int) = { n, acc -> if n == 0 then acc else upTo(n - 1, [n, ...acc]) }
+        normalized """def upTo: int, list(int) -> list(int) = { n, acc -> if n == 0 then acc else upTo(n - 1, [n, ...acc]) }
 def xs = upTo(1000000, [])
 println("{list.length(xs)} {list.fold(xs, 0, { total, x -> total + x % 10 })}")
 """
@@ -100,9 +90,7 @@ println("{list.length(xs)} {list.fold(xs, 0, { total, x -> total + x % 10 })}")
 let ``Run - a catch-all in a list pattern, after an arm that takes a tag there, is returned as the rest`` () =
     // #1455: `other` is never a `#some`, so it is returned where the result's rest is expected.
     let source =
-        normalized """import nanyx/console
-
-def allSomeOnto: list(#some(a) | r), list(a) -> #some(list(a)) | r = {
+        normalized """def allSomeOnto: list(#some(a) | r), list(a) -> #some(list(a)) | r = {
   | [], acc -> #some(list.reverse(acc))
   | [#some(x), ...rest], acc -> allSomeOnto(rest, [x, ...acc])
   | [other, ...rest], acc -> other

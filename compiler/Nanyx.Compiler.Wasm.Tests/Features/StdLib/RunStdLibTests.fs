@@ -9,8 +9,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - text upper-cases and prints`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 println(string.uppercase("hello, nanyx!"))
 "shout" \uppercase \println
@@ -20,8 +19,7 @@ println(string.uppercase("hello, nanyx!"))
 [<Fact>]
 let ``Run - text length, lowercase, trim, repeat and substring`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 dbg(string.length(""))
 dbg(string.length("hello"))
@@ -38,8 +36,7 @@ println(string.substring("nanyx", start = 3, length = 10))
 [<Fact>]
 let ``Run - text startsWith, endsWith and contains`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 def show: [Console] bool -> () = { b -> println(if b then "yes" else "no") }
 show(string.startsWith("nanyx", "nan"))
@@ -57,8 +54,7 @@ show(string.contains("hello", ""))
 let ``Run - text indexOf, lastIndexOf and count`` () =
     // `show` matches on the result: `dbg` of a tag returned from a call prints its raw encoding.
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 def show: [Console] (#some(int) | #notFound) -> () = {
   | #some(i) -> println("#some({i})")
@@ -97,8 +93,7 @@ dbg: 0""")
 [<Fact>]
 let ``Run - text replace, removePrefix, removeSuffix, padStart and padEnd`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 println(string.replace("hello world", pattern = "o", replacement = "0"))
 println(string.replace("a-b-c", pattern = "-", replacement = " - "))
@@ -115,7 +110,7 @@ println(string.padStart("long", width = 2, fill = "0"))
 [<Fact>]
 let ``Run - text trimStart, trimEnd, isEmpty and isBlank`` () =
     let source =
-        "import nanyx/console\n" +
+        "" +
         "import nanyx/text\n" +
         "\n" +
         "def show: [Console] bool -> () = { b -> println(if b then \"yes\" else \"no\") }\n" +
@@ -130,7 +125,7 @@ let ``Run - text trimStart, trimEnd, isEmpty and isBlank`` () =
 [<Fact>]
 let ``Run - text lines and words`` () =
     let source =
-        "import nanyx/console\n" +
+        "" +
         "import nanyx/text\n" +
         "\n" +
         "println(string.join(string.lines(\"a\nb\r\nc\n\"), \"|\"))\n" +
@@ -142,8 +137,7 @@ let ``Run - text lines and words`` () =
 
 [<Fact>]
 let ``Run - text chars takes a string apart by code point`` () =
-    let source = """import nanyx/console
-import nanyx/text
+    let source = """import nanyx/text
 
 println(string.join("abc" \chars, "|"))
 println(string.join(string.chars("héllo"), "|"))
@@ -156,8 +150,7 @@ println("{string.concat(string.chars("a€b😀c")) == "a€b😀c"}")
 
 [<Fact>]
 let ``Run - text reverse turns a string around by code point`` () =
-    let source = """import nanyx/console
-import nanyx/text
+    let source = """import nanyx/text
 
 println(string.reverse("abc"))
 println("héllo" \reverse)
@@ -171,8 +164,7 @@ println(string.reverse("x"))
 [<Fact>]
 let ``Run - text split, join and concat`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 def parts = string.split("a,b,,c", on = ",")
 println(string.join(parts, " | "))
@@ -188,7 +180,6 @@ println(string.join(string.split("x", on = ""), "?"))
 let ``Run - text splitOnce cuts a string at the first separator only`` () =
     let source =
         """
-import nanyx/console
 import nanyx/text
 
 def show: string, string -> string = { s, on ->
@@ -210,8 +201,7 @@ println(show("abc", ""))
 [<Fact>]
 let ``Run - text split, substring, padStart, padEnd and replace take their named arguments when piped`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 println(string.join("a,b" \split(on = ","), "|"))
 println("nanyx" \substring(start = 1, length = 3))
@@ -225,9 +215,7 @@ println("hello world" \replace(pattern = "o", replacement = "0"))
 let ``Run - a string's and a list's built-in length`` () =
     // No `import nanyx/text`: a string's length is a property of the string, not an attached definition.
     let source =
-        normalized """import nanyx/console
-
-def size: string -> int = { s -> s.length }
+        normalized """def size: string -> int = { s -> s.length }
 @entry
 def main = {
   def words = ["nan", "yx", "lang"]
@@ -242,8 +230,7 @@ def main = {
 [<Fact>]
 let ``Run - a string's length on a lambda parameter typed by the call`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 def ap: string, (string -> int) -> int = { x, f -> f(x) }
 @entry
@@ -260,9 +247,7 @@ def main = {
 [<Fact>]
 let ``Run - Int.fromString reads decimal integers and rejects anything else`` () =
     let source =
-        normalized """import nanyx/console
-
-def show: [Console] (#some(int) | #invalidInt) -> () = {
+        normalized """def show: [Console] (#some(int) | #invalidInt) -> () = {
   | #some(n) -> println("#some({n})")
   | #invalidInt -> println("#invalidInt")
 }
@@ -285,8 +270,6 @@ show("12" \ int.fromString)
 let ``Run - Int.fromString reads the whole range of int and rejects a number past it`` () =
     // A number past the range stopped the program with an overflow, as did the smallest int (#1015).
     let source = """
-import nanyx/console
-
 def show: [Console] string -> () = { s ->
   match int.fromString(s)
     | #some(n) -> println("#some({n})")
@@ -307,9 +290,7 @@ println("still running")
 [<Fact>]
 let ``Run - Bool.fromString reads true and false and rejects anything else`` () =
     let source =
-        normalized """import nanyx/console
-
-def show: [Console] (#some(bool) | #invalidBool) -> () = {
+        normalized """def show: [Console] (#some(bool) | #invalidBool) -> () = {
   | #some(b) -> println("#some({b})")
   | #invalidBool -> println("#invalidBool")
 }
@@ -331,9 +312,7 @@ let ``Run - Float.fromString reads decimals and rejects anything else`` () =
           "1e400"; "1e-400"; "NaN"; "Infinity"; "-Infinity"
           ""; "-"; "abc"; "1.2.3"; "."; "e5"; "1e"; "1e+"; " 1.5"; "1.5 "; "1,5"; "--1"; "1x" ]
     let source =
-        normalized """import nanyx/console
-
-def show: [Console] (#some(float) | #invalidFloat) -> () = {
+        normalized """def show: [Console] (#some(float) | #invalidFloat) -> () = {
   | #some(x) -> println("#some({x})")
   | #invalidFloat -> println("#invalidFloat")
 }
@@ -352,9 +331,7 @@ def show: [Console] (#some(float) | #invalidFloat) -> () = {
 [<Fact>]
 let ``Run - Float.fromString reads back the floats Float.toString writes`` () =
     let source =
-        normalized """import nanyx/console
-
-def check: [Console] float -> () = { x ->
+        normalized """def check: [Console] float -> () = { x ->
   match float.fromString(float.toString(x))
     | #some(y) -> println(if y == x then "{x} reads back" else "{x} reads back as {y}")
     | #invalidFloat -> println("{x} does not read back")
@@ -382,9 +359,7 @@ check(5.0)
 
 /// `readAll`, generic in the prelude's `FromString`, and a function of each result type that sums or counts what was read.
 let private readAllSource =
-    normalized """import nanyx/console
-
-def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { xs -> xs \list.map(fromString) }
+    normalized """def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { xs -> xs \list.map(fromString) }
 
 def total: list(#some(int) | #invalidInt) -> int = { results ->
   results \somes \list.fold(0, { sum, n -> sum + n })
@@ -447,9 +422,7 @@ println("{sumYs(["4", "nope", "5"])}")
 [<Fact>]
 let ``Run - Int.toFloat turns an int into a float, called and piped`` () =
     let source =
-        normalized """import nanyx/console
-
-def n = 3
+        normalized """def n = 3
 def x: float = int.toFloat(n) * 1.5
 println("{x}")
 println("{int.toFloat(-7)}")
@@ -461,9 +434,7 @@ println("{(7 \toFloat) / (2 \toFloat)}")
 [<Fact>]
 let ``Run - toString of an int, a float, a bool and a string, called and piped`` () =
     let source =
-        normalized """import nanyx/console
-
-println(int.toString(42))
+        normalized """println(int.toString(42))
 println(int.toString(-17))
 println(float.toString(1.5))
 println(bool.toString(true))
@@ -479,8 +450,7 @@ println("text" \toString)
 [<Fact>]
 let ``Run - toString of each built-in type passed as a function`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 println(string.join([1, 2, 3] \list.map(int.toString), ", "))
 println(string.join([0.5, 2.0] \list.map(float.toString), ", "))
@@ -494,9 +464,7 @@ println(string.join([4, 5] \map(int.toString), "+"))
 let ``Run - a ToString of each built-in type is synthesized from the prelude's toString`` () =
     // Nothing names `Int.toString` here: the instance the type checker builds from it must still be compiled.
     let source =
-        normalized """import nanyx/console
-
-context ToString(a) = (toString: a -> string)
+        normalized """context ToString(a) = (toString: a -> string)
 def label: [ToString(a)] a -> string = { x -> "<" ++ toString(x) ++ ">" }
 println(label(42))
 println(label(true))
@@ -508,8 +476,7 @@ println(label("s"))
 [<Fact>]
 let ``Run - nanyx/math abs, min, max, clamp and pow`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/math as math
+        normalized """import nanyx/math as math
 
 def a = math.abs(-42)
 def b = math.min(3, 7)
@@ -526,8 +493,7 @@ println("{a} {b} {c} {d} {e} {f} {g}")
 let ``Run - nanyx/math abs takes an int or a float`` () =
     // #610: `abs` is `[Num(a) & Ord(a)] a -> a`; it took an `int` only.
     let source =
-        normalized """import nanyx/console
-import nanyx/math as math
+        normalized """import nanyx/math as math
 
 println("{math.abs(-2.5)} {math.abs(2.5)} {math.abs(-42)} {math.abs(42)} {math.abs(0)} {math.abs(-0.0)}")
 """
@@ -537,8 +503,7 @@ println("{math.abs(-2.5)} {math.abs(2.5)} {math.abs(-42)} {math.abs(42)} {math.a
 let ``Run - nanyx/math min and max take any type with an order`` () =
     // #610: `min` and `max` are `[Ord(a)] a, a -> a`.
     let source =
-        normalized """import nanyx/console
-import nanyx/math as math
+        normalized """import nanyx/math as math
 
 println("{math.max(1.5, 2.0)} {math.max(3, 7)} {math.max("pear", "apple")}")
 println("{math.min(1.5, 2.0)} {math.min(3, 7)} {math.min("pear", "apple")}")
@@ -551,7 +516,6 @@ let ``Run - nanyx/math minMax puts two values in ascending order`` () =
     // #489
     let source =
         """
-import nanyx/console
 import nanyx/math as math
 
 def a, b = math.minMax(7, 3)
@@ -572,8 +536,7 @@ println("{spread(9, 4)} {spread(0.25, 0.5)}")
 let ``Run - nanyx/math clamp takes an int or a float`` () =
     // #610: `clamp` is `[Ord(a)] (a, min: a, max: a) -> a`.
     let source =
-        normalized """import nanyx/console
-import nanyx/math as math
+        normalized """import nanyx/math as math
 
 println("{math.clamp(120, min = 0, max = 100)} {math.clamp(-5, min = 0, max = 100)} {math.clamp(5, min = 0, max = 100)}")
 println("{math.clamp(1.5, min = 0.0, max = 1.0)} {math.clamp(-0.5, min = 0.0, max = 1.0)} {math.clamp(0.25, min = 0.0, max = 1.0)}")
@@ -585,8 +548,7 @@ println("{2.5 \math.clamp(min = 0.0, max = 1.0)} {"m" \math.clamp(min = "a", max
 let ``Run - nanyx/math abs, min and max are called from generic functions`` () =
     // #610: a function that requires `Num` and `Ord` passes them on, and `x * 2` runs at `int` and at `float`.
     let source =
-        normalized """import nanyx/console
-import nanyx/math as math
+        normalized """import nanyx/math as math
 
 def double: [Num(a)] a -> a = { x -> x * 2 }
 def distance: [Num(a) & Ord(a)] a, a -> a = { p, q -> math.abs(p - q) }
@@ -600,8 +562,7 @@ println("{widest(3, 9, 4)} {widest(0.5, 0.25, 0.75)} {widest("b", "c", "a")}")
 [<Fact>]
 let ``Run - nanyx/math clamp takes its named arguments when piped`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/math as math
+        normalized """import nanyx/math as math
 
 def x = 50
 println("{x \math.clamp(min = 0, max = 10)} {x \math.clamp(min = 60, max = 70)} {x \math.clamp(min = 0, max = 99)}")
@@ -611,8 +572,7 @@ println("{x \math.clamp(min = 0, max = 10)} {x \math.clamp(min = 60, max = 70)} 
 [<Fact>]
 let ``Run - nanyx/math sqrt, floor, ceil and round`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/math as math
+        normalized """import nanyx/math as math
 
 def s = math.sqrt(81.0)
 def t = math.sqrt(2.0)
@@ -626,8 +586,7 @@ println("{math.round(3.5)} {math.round(2.5)} {math.round(-2.5)} {math.round(2.49
 [<Fact>]
 let ``Run - nanyx/math truncate drops the fraction towards zero`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/math as math
+        normalized """import nanyx/math as math
 
 println("{math.truncate(3.9)} {math.truncate(-3.9)} {math.truncate(4.0)} {math.truncate(-0.5)}")
 println("{math.truncate(int.toFloat(10) / 4.0)}")
@@ -649,8 +608,7 @@ dbg(math.truncate(1.0 / 0.0))
 [<Fact>]
 let ``Run - nanyx/math floor of a float out of the range of int stops the program`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/math as math
+        normalized """import nanyx/math as math
 
 println("before")
 def n = math.floor(1.0e19)

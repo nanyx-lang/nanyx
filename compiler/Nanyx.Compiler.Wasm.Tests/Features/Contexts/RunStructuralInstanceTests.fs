@@ -5,9 +5,7 @@ open TranspilerWasmTestHelpers
 
 /// A program that prints each of `values` on a line of its own, after the definitions in `definitions`.
 let private printing (definitions: string list) (values: string list) =
-    [ "import nanyx/console"
-      ""
-      yield! definitions
+    [ yield! definitions
       ""
       "@entry"
       "def main = {"

@@ -29,9 +29,9 @@ let ``The fix is for the unknown function's diagnostic`` () =
 
 [<Fact>]
 let ``The import goes after the last import`` () =
-    let source = "import nanyx/console\nimport nanyx/text\n\ndef n = abs(1)\n"
+    let source = "import nanyx/text\n\ndef n = abs(1)\n"
     Assert.Equal<(string * string) list>(
-        [ "Add `import nanyx/math`", "import nanyx/console\nimport nanyx/text\nimport nanyx/math\n\ndef n = abs(1)\n" ],
+        [ "Add `import nanyx/math`", "import nanyx/text\nimport nanyx/math\n\ndef n = abs(1)\n" ],
         fixesFor source)
 
 [<Fact>]
@@ -50,9 +50,9 @@ let ``The import goes after the directives when there are no imports, since dire
 
 [<Fact>]
 let ``The edit is an insertion where the import goes`` () =
-    let source = "import nanyx/console\n\ndef n = abs(1)\n"
+    let source = "import nanyx/host.memory\n\ndef n = abs(1)\n"
     let edit = (single (Compiler.compile source)).Fixes |> List.exactlyOne |> _.Edits |> List.exactlyOne
-    Assert.Equal((21, 21, 1, 0, "import nanyx/math\n"), (edit.Span.Start, edit.Span.End, edit.Span.StartLine, edit.Span.StartColumn, edit.NewText))
+    Assert.Equal((25, 25, 1, 0, "import nanyx/math\n"), (edit.Span.Start, edit.Span.End, edit.Span.StartLine, edit.Span.StartColumn, edit.NewText))
 
 [<Fact>]
 let ``A name qualified by a module's name offers that module imported under its name`` () =
@@ -75,13 +75,13 @@ let ``An unknown identifier offers its import too`` () =
 
 [<Fact>]
 let ``A name several modules export offers one fix for each`` () =
-    let source = "import nanyx/console\n\ndef n = frobnicate(1)\n"
+    let source = "import nanyx/host.memory\n\ndef n = frobnicate(1)\n"
     let result = Compiler.compile source
     let exports = Map.ofList [ "frobnicate", [ "nanyx/alpha"; "nanyx/beta" ] ]
     let diagnostic = ImportFixes.addWith exports source result.Syntax.Value result.Diagnostics |> List.exactlyOne
     Assert.Equal<(string * string) list>(
-        [ "Add `import nanyx/alpha`", "import nanyx/console\nimport nanyx/alpha\n\ndef n = frobnicate(1)\n"
-          "Add `import nanyx/beta`", "import nanyx/console\nimport nanyx/beta\n\ndef n = frobnicate(1)\n" ],
+        [ "Add `import nanyx/alpha`", "import nanyx/host.memory\nimport nanyx/alpha\n\ndef n = frobnicate(1)\n"
+          "Add `import nanyx/beta`", "import nanyx/host.memory\nimport nanyx/beta\n\ndef n = frobnicate(1)\n" ],
         diagnostic.Fixes |> List.map (fun fix -> fix.Title, applied source fix))
 
 [<Fact>]

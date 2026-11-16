@@ -6,9 +6,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - except replaces the tag it names and passes the others through`` () =
     let source =
-        normalized """import nanyx/console
-
-def parseNumber = { s -> int.fromString(s) except #invalidInt -> #invalidVersionNumber }
+        normalized """def parseNumber = { s -> int.fromString(s) except #invalidInt -> #invalidVersionNumber }
 
 def show = {
   | #some(n) -> "number {n}"
@@ -26,8 +24,7 @@ def main = {
 [<Fact>]
 let ``Run - except with several arms, a nested tag and a binding`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 type Loaded = #some(int) | #error(#notFound | #io(string) | #denied)
 
@@ -57,9 +54,7 @@ def main = {
 [<Fact>]
 let ``Run - except leaves a single case for a destructuring def`` () =
     let source =
-        normalized """import nanyx/console
-
-def find: (list(int), int) -> #some(int) | #notFound = { xs, target ->
+        normalized """def find: (list(int), int) -> #some(int) | #notFound = { xs, target ->
   match xs
     | [] -> #notFound
     | [x, ...rest] -> if x == target then #some(x) else find(rest, target)

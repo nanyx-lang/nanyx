@@ -4,11 +4,11 @@ description: Reading from and writing to the terminal
 order: 11
 ---
 
-Import it as `nanyx/console`. The program's `@entry` function runs in `Console`, so `print` and the rest are available in `main` without any setup; any other function that calls them must declare `[Console]` in its type.
+`Console` is in the console host's interface package, `nanyx.console.core`, and the console host's prelude brings it, with
+`print`, `println`, `eprint` and `eprintln`, into every module of a program, so it needs no import. A library
+lists `nanyx.console.core` in its dependencies and imports `nanyx.console.core/console`. The program's `@entry` function runs in `Console`, so `print` and the rest are available in `main` without any setup; any other function that calls them must declare `[Console]` in its type.
 
 ```nanyx
-import nanyx/console
-
 match readLine()
   | #some(line) -> println("You said: {line}")
   | #error(#endOfInput) -> println("No input")
@@ -50,14 +50,16 @@ A record's fields are printed in alphabetical order. A map's entries and a set's
 
 # Reference
 
-<!-- The reference below is generated from the doc comments in stdlib/ by `nanyx stdlib-docs`: edit those, not this. -->
+<!-- Written by hand from the doc comments in packages/nanyx.console.core until the generator covers the packages the compiler ships (#1505): keep it in step with them. -->
 
 How a program talks to the terminal.
 
 [`Console`](#console) is a context. Code that needs the terminal declares `[Console]` and calls its members,
 which come from whichever `Console` instance its caller supplies. The members are primitives that
 take text as it is: [`print`](#print), [`println`](#println), [`eprint`](#eprint) and [`eprintln`](#eprintln) are written on top of them,
-so an instance supplies `write` and `writeError` and gets all four.
+so an instance supplies `write` and `writeError` and gets all four. The console host's prelude
+brings them into every module of a program; a library depends on `nanyx.console.core` and imports
+`nanyx.console.core/console`.
 
 ## `IoError`
 
@@ -125,4 +127,3 @@ def eprintln: [Console & ToString(a)] a -> ()
 
 Writes `value` followed by a line break to standard error, as `print` writes it.
 
-<!-- End of the generated reference. -->

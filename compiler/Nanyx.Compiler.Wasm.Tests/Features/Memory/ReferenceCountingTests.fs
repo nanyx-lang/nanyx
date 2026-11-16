@@ -122,7 +122,7 @@ def withASquare: float -> float = { z ->
 }
 println("{withItself(1.0)} {withASquare(1.0)}")
 """
-    runSource ("import nanyx/console\n" + series + callers) |> assertRan "0.6487212707001281 0.14872127070012814\n"
+    runSource ("" + series + callers) |> assertRan "0.6487212707001281 0.14872127070012814\n"
 
 [<Fact>]
 let ``Counting - a variable passed to a borrowed and an owned parameter is freed`` () =

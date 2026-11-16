@@ -229,8 +229,6 @@ import "./setup" as setup  -- error NYX0016: './setup' has top-level statements,
 
 def total = setup.one
 -- file: setup.nyx
-import nanyx/console
-
 export def one = 1
 
 println("setting up")
@@ -934,8 +932,6 @@ A definition's body needs a context that its type does not declare: it calls a f
 `println`, which requires `Console`. An editor offers to add the context to the type.
 
 ```nanyx
-import nanyx/console
-
 def greet: string -> () = { name -> println("Hello, {name}") }  -- error NYX0211: 'println' requires the context 'Console', which 'greet' does not declare: ...
 ```
 
@@ -1116,8 +1112,6 @@ A function that requires a context is given where a function that requires none 
 whose parameter type writes no contexts, or returned from a definition whose result type writes none.
 
 ```nanyx
-import nanyx/console
-
 def runPure: (int -> int) -> int = { g -> g(5) }
 
 def pass: ([Console] int -> int) -> int = { f -> runPure(f) }  -- error NYX0227: A function that requires the context 'Console' is given where 'int -> int' is expected, ...
@@ -1269,8 +1263,6 @@ its statements are written, so that it reads its line once. A function can't nam
 called where the value doesn't exist, and a statement can't read it before its def.
 
 ```nanyx
-import nanyx/console
-
 def line = readLine()
 
 def greet = { name -> println("{name} said {line}") }  -- error NYX0239: 'line' is computed when the script runs, so a function can't name it: pass it as an argument
@@ -1288,8 +1280,6 @@ not a lambda doesn't run: a function written point-free, such as a composition, 
 called, so they belong on its function type.
 
 ```nanyx
-import nanyx/console
-
 def shout: [Console] string -> () = { s -> println(s ++ "!") }
 
 def greet: [Console] = { name -> "hello " ++ name } >> shout  -- error NYX0240: 'greet' is not a lambda, so it does not run in the contexts its annotation writes: write them on its function type, as in '[Console] string -> ()'

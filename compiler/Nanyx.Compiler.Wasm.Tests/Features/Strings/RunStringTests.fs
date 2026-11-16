@@ -11,9 +11,7 @@ let ``Run - an interpolated value of a type only the type checker knows`` () =
     // The backend works a hole's type out from what it sees, and asks the type checker when that is not enough
     // (#193): a generic call's result, a for loop's element, a value bound by a match at the top of a script.
     let source =
-        normalized """import nanyx/console
-
-def xs = [1, 2, 3]
+        normalized """def xs = [1, 2, 3]
 def total = list.fold(xs, 0, { acc, x -> acc + x })
 println("{total} [{list.fold(xs, 1, { acc, x -> acc * x })}]")
 for ["a", "b"] | s ->
@@ -30,8 +28,7 @@ let ``Run - an interpolated string inside a hole leaves the holes around it alon
     // Each hole is evaluated before the string is written; a string inside a later hole used to overwrite the
     // earlier holes' values (#326), printing them empty or trapping.
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 def pad: string, int -> string = { text, width -> string.padStart(text, width = width, fill = " ") }
 
@@ -56,9 +53,7 @@ def main = { show("tea", 2) }
 let ``Run - escapes in double-quoted strings`` () =
     // A line break, a quote, a backslash, a brace and a code point can be written in a double-quoted string (#247);
     // a single-quoted string is raw.
-    let source = """import nanyx/console
-
-def n = 5
+    let source = """def n = 5
 println("a\nb")
 println("say \"hi\"")
 println("\{n} = {n}|\\|\u{e9}")
@@ -81,9 +76,7 @@ let ``Run - string literals larger than the space below the heap`` () =
     let literals = [ literal 'a' 1500; literal 'b' 1500; literal 'c' 1500; literal 'd' 70000 ]
     let names = [ "a"; "b"; "c"; "d" ]
     let source =
-        [ "import nanyx/console"
-          ""
-          yield! List.map2 (fun name value -> $"def {name} = \"{value}\"") names literals
+        [ yield! List.map2 (fun name value -> $"def {name} = \"{value}\"") names literals
           ""
           "@entry"
           "def main = {"
@@ -101,9 +94,7 @@ let ``Run - string literals larger than the space below the heap`` () =
 [<Fact>]
 let ``Run - string concatenation and equality`` () =
     let source =
-        normalized """import nanyx/console
-
-def name = "Nanyx"
+        normalized """def name = "Nanyx"
 println("Hello, " ++ name ++ "!")
 println(if name == "Nanyx" then "same" else "different")
 println(if name != "Nanyx" then "different" else "same")
@@ -116,9 +107,7 @@ let ``Run - interpolating variables bound by match patterns`` () =
     // Regression: the backend did not know the type of a pattern-bound name, so `"{n}"` inside a
     // match arm failed with "Unable to determine interpolated value type" (#35).
     let source =
-        normalized """import nanyx/console
-
-def describe: #some(int) | #none -> string = { v ->
+        normalized """def describe: #some(int) | #none -> string = { v ->
   match v
     | #some(n) -> "some {n}"
     | #none -> "none"
@@ -143,9 +132,7 @@ println(first([7, 8]) ++ ", " ++ first([]))
 let ``Run - interpolation at the top level of a script`` () =
     // Regression: the script start function used to omit the interpolation scratch locals (#48).
     let source =
-        normalized """import nanyx/console
-
-def x = 1 + 1
+        normalized """def x = 1 + 1
 println("script {x}")
 println("{x * 10} again")
 """
@@ -155,8 +142,7 @@ println("{x * 10} again")
 let ``Run - string literals inside interpolation holes`` () =
     // Regression: literals nested in `{...}` were not collected into the data section (#49).
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 def main = {
   println("len {string.length("abc")} and {string.uppercase("x")}")
@@ -171,8 +157,7 @@ let ``Run - interpolation holes that allocate or have effects run once`` () =
     // Regression: holes used to be evaluated twice, and an allocating hole in the second pass
     // overwrote the output buffer, so `"a {s ++ "!"} c"` printed just `b!`.
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 def s = "b"
 def shout: [Console] string -> string = { v ->
@@ -187,9 +172,7 @@ println("[{shout("x")}]")
 [<Fact>]
 let ``Run - strings and lists through the core IR`` () =
     let source =
-        normalized """import nanyx/console
-
-def greet: string -> string = { name -> "Hello, " ++ name }
+        normalized """def greet: string -> string = { name -> "Hello, " ++ name }
 
 def heads: list(int) -> int = { xs ->
   match xs
@@ -223,9 +206,7 @@ main()
 [<Fact>]
 let ``Run - interpolated strings and dbg through the core IR`` () =
     let source =
-        normalized """import nanyx/console
-
-def pick = { n -> if n > 0 then #yes else #no }
+        normalized """def pick = { n -> if n > 0 then #yes else #no }
 
 def describe: int -> string = { n -> "n is {n}, positive {n > 0}, pick {pick(n)}" }
 
@@ -254,8 +235,7 @@ main()
 let ``Run - strings are copied with memory.copy, not a byte at a time`` () =
     // The runtime's byte copy and an interpolated string's string holes use one `memory.copy` each (#1300).
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 def word = "nanyx"
 def empty = ""

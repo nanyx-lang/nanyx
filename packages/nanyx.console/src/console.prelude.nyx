@@ -3,5 +3,5 @@
   `variable` and `exit`.
 module console.prelude
 
-export nanyx/console (Console, IoError, print, println, eprint, eprintln)
-export nanyx/env (Env)
+export nanyx.console.core/console (Console, IoError, print, println, eprint, eprintln)
+export nanyx.console.core/env (Env)

@@ -7,7 +7,6 @@ order: 12
 The arguments of a function generic over `Num(a)` or `Ord(a)` must all be of the same type: `math.max(1, 2.5)` is a type error. To put more than two values in order, use [`list.sort`](prelude-lists#listsort). `int.toFloat`, in the [prelude](prelude-numbers#inttofloat), turns an `int` into a `float`, and `floor`, `ceil`, `round` and `truncate` go the other way. A float that is NaN, infinite or out of the range of `int` has no `int` to give, and stops the program.
 
 ```nanyx
-import nanyx/console
 import nanyx/math as math
 
 def area: float -> float = { r -> math.pi * r * r }

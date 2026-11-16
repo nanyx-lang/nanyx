@@ -183,7 +183,7 @@ public sealed class CompletionTests : LanguageServerTestBase
         var uri = DocumentUri.Parse("untitled:Untitled-reserved");
         var text = """
             import nanyx/text
-            import nanyx/console
+            import nanyx/math
             def s = "abc"
             def r = s
             def m = Result.map
@@ -217,13 +217,13 @@ public sealed class CompletionTests : LanguageServerTestBase
         // The rest of the path is asked for at once.
         Assert.Equal("editor.action.triggerSuggest", package.Command?.Name);
 
-        Change(uri, version: 2, "import nanyx/co\n");
+        Change(uri, version: 2, "import nanyx/ma\n");
         await NextPublished(uri);
         var modules = await CompletionsAt(uri, 0, 15);
-        Assert.Equal(["console", "env", "host", "math", "text"], modules.Select(item => item.Label));
-        var console = modules[0];
-        Assert.Equal(new Range(0, 13, 0, 15), console.TextEdit?.TextEdit?.Range);
-        Assert.StartsWith("How a program talks to the terminal.\n", console.Documentation?.MarkupContent?.Value);
+        Assert.Equal(["host", "math", "text"], modules.Select(item => item.Label));
+        var math = modules[1];
+        Assert.Equal(new Range(0, 13, 0, 15), math.TextEdit?.TextEdit?.Range);
+        Assert.StartsWith("Numeric utilities.\n", math.Documentation?.MarkupContent?.Value);
     }
 
     [Fact]

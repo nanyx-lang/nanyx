@@ -70,13 +70,13 @@ public sealed class LibraryRequestTests : LanguageServerTestBase
     public async Task Adding_an_import_puts_it_after_the_last_import_and_not_twice()
     {
         var uri = DocumentUri.From("untitled:imports.nyx");
-        Open(uri, "import nanyx/console\n\nprintln(\"hi\")\n");
+        Open(uri, "import nanyx/math\n\nprintln(\"hi\")\n");
         await NextPublished(uri);
 
         var edit = Assert.Single((await AddImport(uri, "nanyx/text"))!);
         Assert.Equal(new Range(1, 0, 1, 0), edit.Range);
         Assert.Equal("import nanyx/text\n", edit.NewText);
-        Assert.Empty((await AddImport(uri, "nanyx/console"))!);
+        Assert.Empty((await AddImport(uri, "nanyx/math"))!);
     }
 
     [Fact]

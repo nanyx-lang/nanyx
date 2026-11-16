@@ -84,9 +84,7 @@ def main: [Log] () -> () = {
 
 [<Fact>]
 let ``The runtime's Console is provided by inference in an unannotated def, and by the runtime at the top level`` () =
-    let source = """import nanyx/console
-
-def greet = { println("hi") }
+    let source = """def greet = { println("hi") }
 
 println("top")
 """
@@ -97,9 +95,7 @@ println("top")
 
 [<Fact>]
 let ``A call of an unannotated def records its contexts once they are inferred`` () =
-    let source = """import nanyx/console
-
-def shout = { println("hi") }
+    let source = """def shout = { println("hi") }
 
 def loud: [Console] () -> () = { shout() }
 

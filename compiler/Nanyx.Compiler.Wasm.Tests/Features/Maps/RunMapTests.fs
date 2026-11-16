@@ -6,9 +6,7 @@ open TranspilerWasmTestHelpers
 /// A program that runs `lines` in its entry point, after the definitions in `definitions`. `found` prints what a
 /// lookup of an int found.
 let private program (definitions: string list) (lines: string list) =
-    [ "import nanyx/console"
-      ""
-      "def found = {"
+    [ "def found = {"
       """  | #some(n) -> println("{n}")"""
       """  | #notFound -> println("not found")"""
       "}"

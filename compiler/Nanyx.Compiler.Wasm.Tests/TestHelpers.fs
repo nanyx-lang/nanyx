@@ -180,15 +180,29 @@ type TempDirectory() =
 /// `@entry` writes.
 let consoleHostEntry = $"host = (package = \"{Hosts.consolePackage}\", version = \"{Toolchain.version}\")"
 
-let nanyxOnPackage (files: (string * string) list) (arguments: string list) : RunOutcome * bool =
+/// What `nanyx` printed for `arguments` (`{package}` standing for the package's directory) on an application under the
+/// console host whose source files, in `src`, are `files`, with `dependencies` as its manifest's `dependencies`; and
+/// whether it wrote `out/app.wat`.
+let private nanyxOnPackageWith (dependencies: string) (files: (string * string) list) (arguments: string list) : RunOutcome * bool =
     use directory = new TempDirectory()
     let root = directory.Path
     Directory.CreateDirectory(Path.Combine(root, "src")) |> ignore
-    File.WriteAllText(Path.Combine(root, "app.nyxp"), $"(package = (name = \"app\", version = \"0.1.0\", sources = [\"src/**/*.nyx\"]), {consoleHostEntry})")
+    File.WriteAllText(
+        Path.Combine(root, "app.nyxp"),
+        $"(package = (name = \"app\", version = \"0.1.0\", sources = [\"src/**/*.nyx\"]), dependencies = {dependencies}, {consoleHostEntry})")
     for path, text in files do
         File.WriteAllText(Path.Combine(root, "src", path), text)
     let outcome = nanyxWithInput "" (arguments |> List.map (fun argument -> argument.Replace("{package}", root)))
     outcome, File.Exists(Path.Combine(root, "out", "app.wat"))
+
+/// `nanyxOnPackageWith` an application with no dependencies.
+let nanyxOnPackage (files: (string * string) list) (arguments: string list) : RunOutcome * bool =
+    nanyxOnPackageWith "[]" files arguments
+
+/// `nanyxOnPackageWith` an application that depends on the console host's interface package, `nanyx.console.core`, so
+/// that its files can import `nanyx.console.core/console`.
+let nanyxOnPackageWithConsoleCore (files: (string * string) list) (arguments: string list) : RunOutcome * bool =
+    nanyxOnPackageWith $"[(package = \"nanyx.console.core\", version = \"{Toolchain.version}\")]" files arguments
 
 /// What `nanyx check` printed for a script holding `source`, saved as `main.nyx` in a directory of its own.
 let checkScript (source: string) =
@@ -261,9 +275,7 @@ let runSource (source: string) : RunOutcome = runSourceWithInput "" source
 /// A program that prints `T` or `F` for each of `comparisons`, one per line, after the definitions in `definitions`.
 /// The comparisons can use `s`, the string "aa" made at run time.
 let comparing (definitions: string list) (comparisons: string list) =
-    [ "import nanyx/console"
-      ""
-      "def show = { b -> if b then \"T\" else \"F\" }"
+    [ "def show = { b -> if b then \"T\" else \"F\" }"
       yield! definitions
       ""
       "@entry"

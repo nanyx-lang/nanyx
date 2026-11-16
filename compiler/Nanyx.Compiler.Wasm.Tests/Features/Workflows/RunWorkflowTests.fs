@@ -9,9 +9,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - a builder block that uses no workflow keyword is an ordinary call of the builder`` () =
     let source =
-        normalized """import nanyx/console
-
-def total = proc {
+        normalized """def total = proc {
   def a = 20
   #some(a + 22)
 }
@@ -32,9 +30,7 @@ def main = {
 let ``Run - a builder takes parameters before its block`` () =
     // `retrying(3) { ... }` is `retrying(3, { ... })`: the builder runs the block up to three times, under its context.
     let source =
-        normalized """import nanyx/console
-
-context Retry = (
+        normalized """context Retry = (
   try: [c] ((#some(a) | #failed), ([c] a -> #some(b) | #failed)) -> #some(b) | #failed
   return: a -> #some(a) | #failed
 )
@@ -77,8 +73,7 @@ def main = {
 let ``Run - a builder may require contexts of its own`` () =
     // `logged` requires `Log`, which its caller supplies, and the block's keywords call `Steps`'s members.
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 context Log = (log: [Console] string -> ())
 
@@ -114,9 +109,7 @@ def main = {
 [<Fact>]
 let ``Run - workflow keywords in the branches of an if or match end or continue the whole block`` () =
     let source =
-        normalized """import nanyx/console
-
-def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+        normalized """def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
 
 def check: int -> #some(int) | #negative | #odd = { n -> proc {
   if n < 0 then try #negative
@@ -178,8 +171,6 @@ unknown""")
 let ``Run - an if or match with a keyword in a branch, nested in a statement, ends or continues the whole block`` () =
     // The value of a destructuring def, and an operand of `+`, are not statements of their own.
     let source = """
-import nanyx/console
-
 def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
 
 def pair: int -> #some(int) = { n -> proc {
@@ -209,8 +200,6 @@ let ``Run - the branches' values that go on to the rest of the block are joined,
     // `except #error(#notFound) -> return 0` passes `#some(n)` on and returns from the `#error`: the value the rest of
     // the block gets is the union of what each branch gives, not the first branch's type.
     let source = """
-import nanyx/console
-
 def f: int -> #some(int) | #error(#notFound) = { n -> if n > 0 then #some(n) else #error(#notFound) }
 
 def destructured = { n -> proc {
@@ -244,9 +233,7 @@ let ``Run - a proc block continues past each #some and stops at the first #error
     // `run(7)` fails at its first `try`, so nothing after it runs; `run(3)` fails at its second. `sum` binds two
     // `try`s nested in its `return`.
     let source =
-        normalized """import nanyx/console
-
-def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }
+        normalized """def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }
 def g: int -> #some(string) | #error(#tooBig) = { n -> if n == 3 then #error(#tooBig) else #some("n = {n}") }
 
 def run: int -> #some(string) | #error(#tooBig) = { x -> proc {
@@ -282,9 +269,7 @@ showInt(sum(5))
 [<Fact>]
 let ``Run - a proc block gives back whichever failure stopped it`` () =
     let source =
-        normalized """import nanyx/console
-
-def name: int -> #some(string) | #nil = { n -> if n > 5 then #nil else #some("n{n}") }
+        normalized """def name: int -> #some(string) | #nil = { n -> if n > 5 then #nil else #some("n{n}") }
 def find: string -> #some(int) | #notFound = { s -> if s == "n3" then #notFound else #some(7) }
 
 def run = { x -> proc {
@@ -308,9 +293,7 @@ show(run(7))
 [<Fact>]
 let ``Run - the prelude's proc, Result and Option helpers need no import`` () =
     let source =
-        normalized """import nanyx/console
-
-def half: int -> Result(int, string) = { n -> if n % 2 == 0 then #some(n / 2) else #error("odd") }
+        normalized """def half: int -> Result(int, string) = { n -> if n % 2 == 0 then #some(n / 2) else #error("odd") }
 def quarter = { n -> proc {
   def h = try half(n)
   return try half(h)
@@ -340,9 +323,7 @@ println("{seven} {three}")
 [<Fact>]
 let ``Run - a proc block that ends without return runs for what it does and is #some()`` () =
     let source =
-        normalized """import nanyx/console
-
-def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+        normalized """def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
 
 def show: [Console] int -> #some() | #odd = { n -> proc {
   def h = try halve(n)

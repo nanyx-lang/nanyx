@@ -11,8 +11,6 @@ Functions on `map(k, v)` and `set(a)`, and `list.groupBy`, which gives a map. Th
 A `map(k, v)` holds one value of type `v` for each of its keys, of type `k`. It is written with the square-bracket literal syntax and `=>`, and calling a map looks a key up:
 
 ```nanyx
-import nanyx/console
-
 def prices = ["tea" => 3, "cake" => 4]
 
 println(prices("tea"))
@@ -36,8 +34,6 @@ A map can be printed and interpolated when its keys and values can: it is writte
 A `set(a)` holds each of its elements once. There is no set literal yet: a set is made from a list with `set.fromList`, or from `set.empty` with `set.insert`. Literals that build any collection type, through the target type's builder, are planned; see [Collections](../tour/collections#literal-types). `for s | x -> ...` walks a set's elements.
 
 ```nanyx
-import nanyx/console
-
 def seen = set.fromList([3, 1, 3, 2])
 
 println(set.contains(seen, 2))

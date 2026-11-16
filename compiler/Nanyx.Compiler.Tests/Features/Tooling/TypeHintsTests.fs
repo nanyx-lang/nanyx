@@ -112,8 +112,7 @@ def describe: [Show(a)] a -> string = { value -> Show(a).show(value) }
 
 [<Fact>]
 let ``A def's lens shows a plain context it was inferred to require`` () =
-    let source = withFinalNewline """import nanyx/console
-def greet = { println("hi") }"""
+    let source = withFinalNewline """def greet = { println("hi") }"""
     let expected = [ "greet", "[Console] () -> ()", offsetOf source "greet" 0 0 ]
     Assert.Equal<(string * string * int) list>(expected, typeHints TypeHints.typeLenses source)
     Assert.Equal<(string * string * int) list>(expected, typeHints TypeHints.inlayHintsWithTopLevel source)
@@ -131,7 +130,7 @@ let ``A def's lens shows a parameterised context it was inferred to require, nam
 
 [<Fact>]
 let ``A def's lens shows both kinds of context it was inferred to require, as hover does`` () =
-    let source = ("import nanyx/console\n" + showSource + "def loud = { v -> println(describe(v)) }\n").ReplaceLineEndings "\n"
+    let source = ("" + showSource + "def loud = { v -> println(describe(v)) }\n").ReplaceLineEndings "\n"
     let expected = "[Show(α) & Console] α -> ()"
     Assert.Equal<(string * string * int) list>(
         [ "loud", expected, offsetOf source "loud" 0 0 ], typeHints TypeHints.typeLenses source)
@@ -242,8 +241,6 @@ def firstName = { c -> rename(c).name }
 let private typesAfterAnError (failing: string) =
     let source =
         normalized $"""module parametric.contexts
-
-import nanyx/console
 
 context Foo = (bar: string -> string)
 

@@ -57,7 +57,7 @@ def main = {
 """
     let wat = transpileWatNotInlined source
     // `main` takes the members of `Console`, which `run` passes from its `use`: it is not closed over
-    // `nanyx/console`'s instance and adapted to the type `run` takes.
+    // the instance of the module that declares `Console` and adapted to the type `run` takes.
     Assert.Contains("(func $main (param $__ctx_flush i32)", wat)
     Assert.DoesNotContain("$__adapt_fn_unit_to_unit_to_fn_unit_to_unit_ctx", wat)
     runSourceWithInput "Ada\n" source |> assertRan "hello Ada\n"

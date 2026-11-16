@@ -113,7 +113,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     let mutable errors: Diagnostic list = duplicateErrors @ InitialisationCycles.check initialState.Declared module'
 
     // An imported context whose every member is also an imported definition of that name is an ambient instance:
-    // the one the runtime supplies, as `nanyx/console`'s definitions are its `Console`. The top level of the module
+    // the one the runtime supplies, as the host's prelude's definitions are its `Console`. The top level of the module
     // runs in it; a def runs in it only if it declares the context, or does not write its type and so infers it.
     state <-
         { state with

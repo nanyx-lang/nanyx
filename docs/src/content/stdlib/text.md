@@ -7,7 +7,6 @@ order: 10
 Import it as `nanyx/text`. `string.length` is also a built-in property of strings and lists, so `s.length` is the string's length, as `string.length(s)` is. `string.toString`, which gives back the string itself, is in the prelude rather than in this module, with the `toString` of the other built-in types: see [Converting to text](prelude-contexts#converting-to-text).
 
 ```nanyx
-import nanyx/console
 import nanyx/text
 
 println("a,b,c" \split(on = ","))

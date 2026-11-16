@@ -67,7 +67,7 @@ The parser, type checker, WebAssembly backend and runtime are libraries; the `na
   reference counting), so an object is freed once nothing refers to it, and one a `match` takes apart and holds
   the only reference to is rewritten in place into a new one of the same size (see
   [Memory management](./memory-management))
-- `dbg(...)` of a value of any type, and `nanyx/console`, write to stdout through WASI `fd_write`; `dbg` writes the
+- `dbg(...)` of a value of any type, and the console host's `Console`, write to stdout through WASI `fd_write`; `dbg` writes the
   value through a printer function generated for its type (`CoreIrLowerDbg.fs`)
 - a function that requires a context (`[Console]`) takes its members as function-table slots; a
   `use` binding supplies them, otherwise a module-level function of the member's name does (as
@@ -104,9 +104,8 @@ A whole program is checked further by what its comments say:
 - **Output.** A block that prints something and ends with comment lines prints those lines, without their `--`.
   Comments that give a value, such as `def result = add5(10)  -- 15`, are not checked.
 
-The tour's examples print and use strings without importing `nanyx/console` or `nanyx/text`, as though they had
-the imports the [Hello world](../getting-started/hello-world) page shows, so the test adds those two imports to
-every block that doesn't have them. Anything else a block uses, such as `nanyx/math`, it imports itself.
+The tour's examples print with the console host's prelude, which every program sees, and use strings without
+importing `nanyx/text`, so the test adds that import to every block that doesn't have it. Anything else a block uses, such as `nanyx/math`, it imports itself.
 
 # Goals
 

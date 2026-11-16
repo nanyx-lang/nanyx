@@ -9,8 +9,7 @@ open TranspilerWasmTestHelpers
 /// The start of each program: four people, two of each age, and `nameOf`, which names the person a `minBy` or
 /// `maxBy` found.
 let private withPeople (body: string) =
-    """import nanyx/console
-import nanyx/text
+    """import nanyx/text
 
 type Person = (name: string, age: int)
 

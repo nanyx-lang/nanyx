@@ -3,7 +3,9 @@
   [`Console`] is a context. Code that needs the terminal declares `[Console]` and calls its members,
   which come from whichever `Console` instance its caller supplies. The members are primitives that
   take text as it is: [`print`], [`println`], [`eprint`] and [`eprintln`] are written on top of them,
-  so an instance supplies [`write`] and [`writeError`] and gets all four.
+  so an instance supplies [`write`] and [`writeError`] and gets all four. The console host's prelude
+  brings them into every module of a program; a library depends on `nanyx.console.core` and imports
+  `nanyx.console.core/console`.
 module console
 
 --| Why reading from standard input gave no line: the input has ended.

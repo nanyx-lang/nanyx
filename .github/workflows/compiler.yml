@@ -146,7 +146,7 @@ jobs:
         run: |
           chmod +x publish/linux-x64/nanyx
           ./publish/linux-x64/nanyx --help
-          printf 'import nanyx/console\n\nprintln("Hello, Nanyx!")\n' > hello.nyx
+          printf 'println("Hello, Nanyx!")\n' > hello.nyx
           output="$(./publish/linux-x64/nanyx run hello.nyx)"
           echo "$output"
           [ "$output" = "Hello, Nanyx!" ]

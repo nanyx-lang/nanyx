@@ -7,9 +7,7 @@ open TranspilerWasmTestHelpers
 
 [<Fact>]
 let ``Run - a closure passed to a function calls the instance of the use around its call`` () =
-    let source = """import nanyx/console
-
-context Foo = (bar: string -> string)
+    let source = """context Foo = (bar: string -> string)
 
 def run: [c] ([c] () -> string) -> string = { f ->
   use Foo(bar = { s -> "inner " ++ s }) in f()
@@ -23,9 +21,7 @@ use Foo(bar = { s -> "outer " ++ s }) in println(main())
 
 [<Fact>]
 let ``Run - a closure made under one use of a context and called under another uses the second`` () =
-    let source = """import nanyx/console
-
-context Foo = (bar: string -> string)
+    let source = """context Foo = (bar: string -> string)
 
 def show: [Foo & Console] () -> () = {
   def f = { bar("x") }
@@ -39,9 +35,7 @@ use Foo(bar = { s -> "first " ++ s }) in show()
 
 [<Fact>]
 let ``Run - closures stored in a list use the instance where each is called`` () =
-    let source = """import nanyx/console
-
-context Foo = (bar: string -> string)
+    let source = """context Foo = (bar: string -> string)
 
 def show: [Foo & Console] () -> () = {
   def fs = [{ bar("a") }, { bar("b") }]
@@ -56,9 +50,7 @@ use Foo(bar = { s -> "first " ++ s }) in show()
 
 [<Fact>]
 let ``Run - a function that requires a context passed as a value uses the instance where it is called`` () =
-    let source = """import nanyx/console
-
-context Foo = (bar: string -> string)
+    let source = """context Foo = (bar: string -> string)
 
 def greet: [Foo] string -> string = { s -> bar(s) }
 
@@ -74,9 +66,7 @@ use Foo(bar = { s -> "outer " ++ s }) in main()
 
 [<Fact>]
 let ``Run - a pure lambda given where a function that requires a context is expected`` () =
-    let source = """import nanyx/console
-
-context Foo = (bar: string -> string)
+    let source = """context Foo = (bar: string -> string)
 
 def apply: [Foo] ([Foo] string -> string), string -> string = { f, s -> f(s) }
 
@@ -88,9 +78,7 @@ use Foo(bar = { s -> s }) in main()
 
 [<Fact>]
 let ``Run - a lambda returned out of the use it was made under uses the instance where it is called`` () =
-    let source = """import nanyx/console
-
-context Foo = (bar: string -> string)
+    let source = """context Foo = (bar: string -> string)
 
 def make: [Foo] string -> ([Foo] () -> string) = { s -> { bar(s) } }
 
@@ -105,9 +93,7 @@ main()
 
 [<Fact>]
 let ``Run - a lambda written inside a use and called under another uses the second`` () =
-    let source = """import nanyx/console
-
-context Foo = (bar: string -> string)
+    let source = """context Foo = (bar: string -> string)
 
 def main = {
   def f = use Foo(bar = { s -> s ++ "?" }) in { bar("x") }
@@ -120,9 +106,7 @@ main()
 
 [<Fact>]
 let ``Run - a lambda written after a use statement and returned out of its block uses the instance where it is called`` () =
-    let source = """import nanyx/console
-
-context Foo = (bar: string -> string)
+    let source = """context Foo = (bar: string -> string)
 
 def make = {
   use Foo(bar = { s -> "first " ++ s })
@@ -142,9 +126,7 @@ main()
 
 [<Fact>]
 let ``Run - a function named as a value where its context is not available, and called where it is`` () =
-    let source = """import nanyx/console
-
-context Foo = (bar: string -> string)
+    let source = """context Foo = (bar: string -> string)
 
 def needsFoo: [Foo] string -> string = { s -> bar(s) }
 
@@ -159,9 +141,7 @@ main()
 
 [<Fact>]
 let ``Run - a use member that prints calls the write in scope where the use is`` () =
-    let source = """import nanyx/console
-
-def main = {
+    let source = """def main = {
   use (write = { s -> write("[" ++ s ++ "]") })
   write("hi")
 }
