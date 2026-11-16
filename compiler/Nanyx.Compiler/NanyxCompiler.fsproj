@@ -40,6 +40,7 @@
     <Compile Include="TypeHoles.fs" />
     <Compile Include="ArmUnion.fs" />
     <Compile Include="ScrutineeRests.fs" />
+    <Compile Include="NestedCatchAlls.fs" />
     <Compile Include="InterpolationHoles.fs" />
     <Compile Include="WellKnownContexts.fs" />
     <Compile Include="EqualityOperators.fs" />
@@ -75,6 +76,7 @@
     <Compile Include="PipeLookups.fs" />
     <Compile Include="Contexts.fs" />
     <Compile Include="ContextInstances.fs" />
+    <Compile Include="ContextNames.fs" />
     <Compile Include="WorkflowRests.fs" />
     <Compile Include="WorkflowMembers.fs" />
     <Compile Include="DefAnnotations.fs" />
@@ -97,6 +99,7 @@
     <Compile Include="FileImports.fs" />
     <Compile Include="PackageModules.fs" />
     <Compile Include="ShippedPackages.fs" />
+    <Compile Include="HostPackages.fs" />
     <Compile Include="PartialModules.fs" />
     <Compile Include="WorkflowDesugaring.fs" />
     <Compile Include="DeferredErrors.fs" />

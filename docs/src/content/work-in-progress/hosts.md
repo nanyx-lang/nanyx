@@ -51,14 +51,39 @@ A program's host is a deployment concern. It decides which runtime gets linked, 
 )
 ```
 
-`host` names the host's package and its version, and its `settings` are the host's configuration, passed to the host at startup. The CLI can override the host, for example `nanyx run --host nanyx.console/console.host`. Until any package can be a host, the only host a manifest can name is `nanyx.console`, the package the compiler ships with `nanyx.console/console.host` in it, and it takes no `settings` yet (`NYX0024`).
+`host` names the host's package and its version, and its `settings` are the host's configuration, passed to the host at startup. A host the compiler ships, such as `nanyx.console`, is named at the compiler's version; any other is found by its `path`, as a dependency is, and has no version: `host = (package = "acme.host", path = "../acme.host")`. No host takes `settings` yet (`NYX0024`). The CLI can override the host for one command: `nanyx run --host nanyx.console`, or `--host ../acme.host` for the directory of one.
 
 There is no default host: a package whose manifest names no `host` is a library, an `@entry` in it is an error (`NYX0031`) from `nanyx check`, `nanyx run` and `nanyx build` alike, and running it is an error that says it has no entry point. `nanyx new` writes a `host` ([Built-ins as packages](./built-ins-as-packages#the-manifest)).
-Loose script files, which run top-level statements without a manifest, always run under `ConsoleHost`.
+Loose script files, which run top-level statements without a manifest, run under `nanyx.console`. A script will name
+another host, and the packages it depends on, with directives at its top (`::host`, `::dependencies`), found as a
+manifest's are.
+
+## A host package
+
+A package is a host because its own manifest says so, in its `package`'s `host` field: the module that exports `run`,
+and the module that is the host's prelude, if it has one.
+
+```nanyx fragment
+(
+  package = (
+    name = "nanyx.console"
+    version = "0.28.0"
+    sources = ["src/**/*.nyx"]
+    publicModules = ["console.host", "console.prelude"]
+    host = (root = "console.host", prelude = "console.prelude")
+  )
+)
+```
+
+Naming a package as a host when its manifest doesn't declare it one is an error that says so. The host's **prelude**
+is a module of re-exports: every module of a program the host runs sees its exports without importing them, as it
+sees the standard library's prelude. The console host's re-exports `Console` and `println` from `nanyx.console.core/console`,
+and `Env` from `nanyx.console.core/env`, so a program prints without an import. A library sees no host's prelude, since it has no host,
+and imports what it uses.
 
 # The entry shape is just a type
 
-Each host takes exactly one entry shape. Under `ConsoleHost` the entry is `() -> ()`; a program that wants its arguments or to set its exit code requires the `Env` context from `nanyx/env`, which `ConsoleHost` provides (`args()`, `variable(name)`, `exit(code)`). Under an HTTP host the entry *is* the handler:
+Each host takes exactly one entry shape. Under `ConsoleHost` the entry is `() -> ()`; a program that wants its arguments or to set its exit code requires the `Env` context, which `ConsoleHost` provides (`args()`, `variable(name)`, `exit(code)`). Under an HTTP host the entry *is* the handler:
 
 ```nanyx
 module main
@@ -110,7 +135,7 @@ A host is mostly ordinary Nanyx. Its core is a function that takes the program's
 module console.host
 
 import (
-  nanyx/console as (Console, IoError)
+  nanyx.console.core/console as (Console, IoError)
   nanyx/host.runtime
 )
 
@@ -326,9 +351,21 @@ The composite host runs each part under the right sub-host and coordinates start
   can be built without async. Async is a separate design, for later.
 - **Hosts are ordinary packages** that the compiler ships but doesn't treat specially
   ([Built-ins as packages](./built-ins-as-packages)): `nanyx.console`, with its module `console.host`, first, then a
-  browser host. They are chosen with the manifest's `host` field or `--host` on the CLI. The console host ships with
-  the compiler as a source directory already; the compiler still keeps a table of hosts until any package can be one
-  ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)).
+  browser host. They are chosen with the manifest's `host` field or `--host` on the CLI
+  ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)):
+  - A host package's own manifest declares that it is one, with its root module and, optionally, its prelude
+    ([A host package](#a-host-package)).
+  - A host the compiler doesn't ship is found by a `path` on the `host` entry, and a script's `::host` directive works
+    the same way.
+  - `Console` and `Env` go in an interface package, `nanyx.console.core`, that the host `nanyx.console` depends on. The
+    host's prelude brings them and `println` into scope in every module of the application and in scripts, so
+    `import nanyx/console` goes from programs. A library depends on `nanyx.console.core` and imports from it.
+  - A script lists the packages it depends on with `::dependencies` directives, and runs under
+    `::host nanyx.console "<the compiler's version>"` unless it names another host.
+  - A package with a manifest but no `host` is a library: an `@entry` in it is an error from `check`, `run` and
+    `build`, and running it is a fatal "no entry point" error.
+
+  `nanyx.console` and `nanyx.console.core` are working names (see [Open questions](#open-questions)).
 - **ConsoleHost written in Nanyx comes first.** It replaces the compiler's hard-coded entry wiring with no change for
   users, and builds what every other host needs.
 
@@ -348,6 +385,13 @@ The composite host runs each part under the right sub-host and coordinates start
    `HostRuntime` can call ([#1424](https://github.com/nanyx-lang/nanyx/issues/1424), done), host access to linear memory
    ([#1425](https://github.com/nanyx-lang/nanyx/issues/1425), done), and the console host written on them with no compiler
    intrinsics ([#1426](https://github.com/nanyx-lang/nanyx/issues/1426), done), so it can ship as a package.
+4b. **Any package can be a host** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)): a host's manifest declares
+   it, a host is found by its `path`, the host's prelude brings what it provides into scope, and `Console` and `Env`
+   are in the interface package `nanyx.console.core`. Done (see [What's built](#whats-built)). The `::host` and
+   `::dependencies` directives for scripts are [#1504](https://github.com/nanyx-lang/nanyx/issues/1504).
+4c. **Build only the contexts a program uses** ([#1497](https://github.com/nanyx-lang/nanyx/issues/1497)): every program
+   builds the members of the host's `Console` and `Env` and imports what they call, used or not, since `run` passes
+   them all.
 5. **Console in a page**, for the [playground](./playground): the embedder changes in "`ConsoleHost` in a page"
    above, starting with writing `.wasm` ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).
 6. **The browser host**: `init`, `update` and `view`, with `Dom`, `Clock` and `Log`, and the JavaScript it ships
@@ -358,23 +402,35 @@ The composite host runs each part under the right sub-host and coordinates start
 
 # What's built
 
-- **The host is a module the compiler resolves.** `Hosts.fs` describes each host the compiler ships (`Host`: the
-  package a manifest names it by, `nanyx.console`, its module, `console.host`, and the modules of the contexts it
-  provides) and names the default, `Hosts.console`. The package is a source directory beside the compiler
-  (`ShippedPackages`, see [Built-ins as packages](./built-ins-as-packages#whats-built)), and the host is imported from
-  it as `nanyx.console/console.host` (`Host.Import`). Choosing another host is choosing another `Host` there:
-  `Hosts.tryFind` gives the one an import (`nanyx.console/console.host`) is, or an error that names it.
+- **A host declares itself.** A host package's manifest has `host = (root = "...", prelude = "...")` in its `package`
+  (`Manifest.checkHostDeclaration` checks it, `HostPackages.ofManifest` reads it into `Manifest.Declares`). `Host`
+  (`Hosts.fs`) is what the compiler knows of one: its package, its root module, its prelude and its directory. The
+  compiler keeps no table of hosts: `HostPackages.tryShipped` reads the manifest of one it ships, from its directory
+  beside the compiler (`ShippedPackages`, see [Built-ins as packages](./built-ins-as-packages#whats-built)), and
+  `HostPackages.console` is the console host, which a loose script runs under. The host is imported as
+  `nanyx.console/console.host` (`Host.Import`), and its prelude as `nanyx.console/console.prelude` (`Host.PreludeImport`).
 - **A package chooses its host.** `Manifest.check` reads the manifest's `host`, `(package = "nanyx.console", version
-  = "0.28.0")`, into `Manifest.Host` (none without a `host` field: a library, whose `@entry` `Attributes.applyAttributes` reports as `NYX0031`). A package that isn't a host is
-  `NYX0023`, and `settings` is `NYX0024`, since no host takes configuration yet.
-  `--host` on `run`, `build` and `check` replaces it (`Package.withHost`); on a script it is a usage error. The host
-  travels with the package's module table (`PackageModules.Host`), so every compile of a package's file, the language
-  server's included, passes `@entry` to that host's `run`; a file in no package runs under the console host.
+  = "0.28.0")` or `(package = "acme.host", path = "../acme.host")`, into `Manifest.Host` (a `HostEntry`; none without a
+  `host` field: a library, whose `@entry` `Attributes.applyAttributes` reports as `NYX0031`). A host the compiler
+  doesn't ship, named without a path, is `NYX0023`, saying how to give its path; a host with both a path and a version
+  is an error, and `settings` is `NYX0024`, since no host takes configuration yet. `Package.ofManifest` reads the host's
+  own manifest (`Package.hostIn`): its name must match, and it must declare itself a host. The host's package travels
+  with the package's module table (`PackageModules.Host` and `PackageModules.HostPackage`), so every compile of a
+  package's file, the language server's included, passes `@entry` to that host's `run`, and the host's imports resolve
+  in its own package. `--host` on `run`, `build` and `check` replaces it with a host the compiler ships or the
+  directory of one (`Package.withHost`); on a script it is a usage error.
+- **Which modules see the host.** A module of the program itself runs under the build's host: it sees the host's
+  prelude and may declare the `@entry`. A module of a package the program depends on, of the host's own package, or
+  of the standard library has no host (`checkModule` in `Library.fs`).
+- **The host's prelude.** A module with a host imports its prelude after the standard library's, as an implicit import
+  that the module's own imports win over. The contexts the prelude re-exports are those the host provides
+  (`providesContexts` in `Library.fs`): importing the module that declares one, as the prelude does, binds the names
+  of its members, so they are ambient (see below). An import that selects a context, as the prelude's
+  `export nanyx.console.core/console (Console, ...)` does, selects its members too.
 - **`@entry` calls the host's `run`.** `Attributes.applyAttributes` imports the host under an alias of its own
-  (`__host`), so that it can't clash with the program's names, imports the modules of the contexts the host provides
-  (`nanyx/console`, so that `println` is in scope), and appends `__host.run(main)` to the module as its start. The
-  entry point passed to `run` is at the attribute's span, so a mismatch there is the entry not fitting the host:
-  `NYX0237`, reported at `@entry`, with the type the host expects and the one the entry has.
+  (`__host`), so that it can't clash with the program's names, and appends `__host.run(main)` to the module as its
+  start. The entry point passed to `run` is at the attribute's span, so a mismatch there is the entry not fitting the
+  host: `NYX0237`, reported at `@entry`, with the type the host expects and the one the entry has.
 - **`run` ignores what the entry returns.** Its parameter is `[Console] () -> a`, not `() -> ()`, because an entry
   whose block ends in an expression (`dbg(x)`) returned a value that the old `main()` call dropped.
 - **`HostRuntime`** is declared in `nanyx/host.runtime`, a context with no members: the capability that lets code
@@ -386,14 +442,15 @@ The composite host runs each part under the right sub-host and coordinates start
   `@entry` makes. A module that calls a host's `run` itself needs `HostRuntime` for it, so that is an error too.
 - **Where the entry's `Console` comes from.** Every entry is passed the members of the `Console` that `run` `use`s, so
   it reads and writes through the host. An entry that doesn't write its type, which is most programs, infers `Console`
-  as an ambient context, because the module imports `nanyx/console`. A def that infers an ambient context takes its
+  as an ambient context, because the host's prelude brings `Console`'s names in. A def that infers an ambient context takes its
   members as a def that writes it does: `InferModule` adds the contexts it inferred to the def's annotation for the
   backend (`[Console]` on its own, or after the parameterised contexts it was given), and the backend gives a function
   named as a value the contexts without parameters it requires (`CodeGen.carryPlainContexts`), so `run(main)` passes
-  `main` its members rather than closing it over `nanyx/console`'s. Nothing wires `Console` to the entry by name.
+  `main` its members rather than closing it over the module that declares `Console`. Nothing wires `Console` to the entry by name.
 - **Scripts run under the host.** A module without an `@entry` whose top level has statements is a script, and its
   statements are its entry point: `Scripts.asEntry` makes them the body of a lambda, followed by `()`, and appends
-  `__host.run({ ... })` to the module, importing only the host (a script imports `nanyx/console` itself if it prints).
+  `__host.run({ ... })` to the module, importing the host (a script sees the host's prelude, as any program's module
+  does).
   The lambda is not given `Console`'s members as a lambda passed to `run` would be
   (`Contexts.extendEnvForLambdaArgument`): its statements are the top level, and see the script's own names and
   ambient contexts as before. A script's value that needs a context, directly or through the functions and values it
@@ -411,22 +468,24 @@ The composite host runs each part under the right sub-host and coordinates start
   at the top level. A value that needs a context in a module with no statements, which nothing would run, is an error
   at the value. Every script carries the host's `Console`, about 24 KB of WebAssembly text for hello world, as an
   entry program does.
-- **`Console` only comes from the host.** `nanyx/console` declares the context and `print`, `println`, `eprint` and
-  `eprintln`, but no instance: the line reading lives in the console host alone. Importing a module a host
-  provides (`Hosts.providesContexts`) binds the names of its plain contexts' members, `readLine` and the rest, each a
-  symbol of its own (`Library.mergeImport`), so `Console` is still an ambient context: a script's statements and an
-  unannotated def can call `readLine()`, and the def infers `Console`. A function named as a value carries it in its
+- **`Console` only comes from the host.** `nanyx.console.core/console` declares the context and `print`, `println`, `eprint` and
+  `eprintln`, but no instance: the line reading lives in the console host alone. Importing a module whose contexts
+  the host provides (those its prelude re-exports) binds the names of its plain contexts' members, `readLine` and the
+  rest, each a symbol of its own (`Library.mergeImport`), so `Console` is still an ambient context: a script's
+  statements and an unannotated def can call `readLine()`, and the def infers `Console`. A member of a context a def
+  declares, or a `use` loads, shadows an imported function of the same name, and takes none of its contexts
+  (`Contexts.contextRequirementsOf`): a def's own `println` member is not the prelude's `println`. A function named as a value carries it in its
   type (#1288). A def that writes `[c.Console]` for an aliased import is passed the members as `[Console]` is: the
   backend reads the layout of the context's own name (`CodeGen.layoutOf`), and a member called under the alias,
   `c.write`, is written by its own name for the backend (`ModuleLinking.writeMemberAliases`).
-- **`Env`** is declared in `nanyx/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, so its
-  parameter is `[Console & Env] () -> a`; an entry that requires fewer contexts fits. `nanyx/env` is one of the
-  host's `ProvidedModules`, so its members are ambient names where it is imported, but not one of its
-  `ImplicitModules`: a program imports it itself. Its members are functions of the host's own over WASI's
-  `args_sizes_get` and `args_get`, `environ_sizes_get` and `environ_get`, and `proc_exit`, declared with `@extern`, with
-  their buffers allocated with `nanyx/host.memory` (see [Foreign functions](./foreign-functions#the-console-host)). A
-  program that doesn't call them doesn't contain them, since a module emits only the functions its
-  start reaches ([#1329](https://github.com/nanyx-lang/nanyx/issues/1329)). `nanyx run` passes what follows the
+- **`Env`** is declared in `nanyx.console.core/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, so its
+  parameter is `[Console & Env] () -> a`; an entry that requires fewer contexts fits. The host's prelude re-exports
+  `Env`, so its members are ambient names in every module of the program. Its members are functions of the host's own
+  over WASI's `args_sizes_get` and `args_get`, `environ_sizes_get` and `environ_get`, and `proc_exit`, declared with
+  `@extern`, with their buffers allocated with `nanyx/host.memory` (see
+  [Foreign functions](./foreign-functions#the-console-host)). Since `run` passes the members of both contexts to every
+  entry, every program contains them and imports what they call, whether it uses them or not
+  ([#1497](https://github.com/nanyx-lang/nanyx/issues/1497)). `nanyx run` passes what follows the
   file or package as the arguments, after the program's name, and the process's environment variables (see
   [The `nanyx` command](./command-line#usage)); an `exit(0)` part-way is a clean end, which `--check-memory` doesn't
   count as a leak. A script's entry point requires only the plain contexts that are ambient in its module
@@ -439,8 +498,8 @@ The composite host runs each part under the right sub-host and coordinates start
 - **Async and workflows.** Can a host change how the entry runs, for example by running it as a [workflow](../advanced/workflows) or on an event loop, without changing the entry's written type?
 - **Naming a host and its interface.** Does the host take the short name (`nanyx.console`, with `nanyx.console.core` for
   the interface), or the interface (`nanyx.http`, with `nanyx.http.host`)? See
-  [Libraries for a host](#libraries-for-a-host).
+  [Libraries for a host](#libraries-for-a-host). The console's are `nanyx.console` and `nanyx.console.core` for now:
+  `Hosts.consolePackage` names the host, so that a rename is a small change.
 - **Host code in another language.** A browser host needs JavaScript beside the module. How does a host package carry it, and how does the build write it out?
 - **Calls that can't block, later.** The browser host starts Elm-style, with effects as messages. Whether contexts may
   one day suspend the program, so that a `fetch` reads like an ordinary call, is the async question above.
-- **Running scripts under another host.** Should a loose script be able to pick a non-default host, for example with a directive at the top of the file?

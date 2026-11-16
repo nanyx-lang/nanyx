@@ -8,8 +8,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - string take and skip cut at a byte count, clamped to the string`` () =
     let source =
-        """import nanyx/console
-import nanyx/text
+        """import nanyx/text
 
 @entry
 def main = {

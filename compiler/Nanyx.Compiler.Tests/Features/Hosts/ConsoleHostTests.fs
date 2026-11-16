@@ -94,10 +94,11 @@ h.run({ () })
     Assert.StartsWith("'h.run' requires the context 'HostRuntime'", message)
 
 [<Fact>]
-let ``The console host, nanyx/env and nanyx/host.runtime call no compiler intrinsic`` () =
-    for moduleName in [ "env"; "host.runtime" ] do
-        Assert.DoesNotContain(Intrinsics.prefix, (StandardLibrary.tryLoadSource moduleName).Value)
-    Assert.DoesNotContain(Intrinsics.prefix, File.ReadAllText consoleHostFile)
+let ``The console host, its interface package and nanyx/host.runtime call no compiler intrinsic`` () =
+    Assert.DoesNotContain(Intrinsics.prefix, (StandardLibrary.tryLoadSource "host.runtime").Value)
+    for name in [ Hosts.consolePackage; "nanyx.console.core" ] do
+        for file in Directory.GetFiles(Path.Combine(ShippedPackages.directoryOf name, "src"), "*.nyx") do
+            Assert.DoesNotContain(Intrinsics.prefix, File.ReadAllText file)
 
 [<Fact>]
 let ``The console host requires HostRuntime, and checks`` () =

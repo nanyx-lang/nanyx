@@ -60,7 +60,7 @@ internal static class CliCommands
     /// </summary>
     /// <param name="path">A .nyx file, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported. On a terminal, the tree is shown live while the compile runs.</param>
-    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a module such as nanyx.console/console.host. A script always runs under nanyx.console/console.host.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script always runs under nanyx.console.</param>
     [Consolo("check")]
     public static int Check(
         [Consolo("timings")] bool timings = false,
@@ -209,7 +209,7 @@ internal static class CliCommands
     /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest, followed by the program's arguments; none means the package the current directory is in. Put -- before arguments that start with -, so that they are not read as run's options.</param>
     /// <param name="checkMemory">Check the program's reference counting as it runs: stop at a block freed twice or an object used after it was freed, and fail if anything is left on the heap at the end.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
-    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a module such as nanyx.console/console.host. A script always runs under nanyx.console/console.host.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script always runs under nanyx.console.</param>
     /// <param name="noInline">Compile every call as a call, without inlining: for working on the compiler, to tell whether a misbehaving program is the inliner's doing.</param>
     [Consolo("run")]
     public static int Run(
@@ -254,8 +254,8 @@ internal static class CliCommands
         var entry = PackageModule.entryResult(build);
         if (entry is null)
         {
-            compiling.Error.WriteLine(package.Manifest.Host is null
-                ? $"error: no entry point: {package.Manifest.Name} names no host, so it is a library, which can't be run. An application names the host its @entry runs under in its manifest: host = (package = \"{Hosts.console.Package}\", version = \"{Toolchain.version}\")."
+            compiling.Error.WriteLine(package.Host is null
+                ? $"error: no entry point: {package.Manifest.Name} names no host, so it is a library, which can't be run. An application names the host its @entry runs under in its manifest: host = (package = \"{Hosts.consolePackage}\", version = \"{Toolchain.version}\")."
                 : $"error: no entry point: the package {package.Manifest.Name} has no @entry, so there is nothing to run.");
             return 1;
         }
@@ -271,7 +271,7 @@ internal static class CliCommands
     /// <param name="outputPath">Where to write the program; the default is out/&lt;package name&gt;.wat beside the manifest.</param>
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
-    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a module such as nanyx.console/console.host. A script always runs under nanyx.console/console.host.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script always runs under nanyx.console.</param>
     /// <param name="noInline">Compile every call as a call, without inlining: for working on the compiler, to tell whether a misbehaving program is the inliner's doing.</param>
     [Consolo("build")]
     public static int Build(
@@ -406,7 +406,7 @@ internal static class CliCommands
             return null;
         }
 
-        shell.Error.WriteLine($"--host chooses a package's host: a script always runs under {Hosts.console.Import}.");
+        shell.Error.WriteLine($"--host chooses a package's host: a script always runs under {Hosts.consolePackage}.");
         return UsageError;
     }
 
@@ -427,7 +427,7 @@ internal static class CliCommands
             return true;
         }
 
-        var chosen = Hosts.tryFind(host);
+        var chosen = PackageModule.withHost(shell.Directory, host, package);
         if (chosen.IsError)
         {
             shell.Error.WriteLine($"--host: {chosen.ErrorValue}");
@@ -435,7 +435,7 @@ internal static class CliCommands
             return false;
         }
 
-        package = PackageModule.withHost(chosen.ResultValue, package);
+        package = chosen.ResultValue;
         return true;
     }
 
@@ -656,8 +656,6 @@ internal static class CliCommands
     }
 
     private const string HelloWorldSource = """
-        import nanyx/console
-
         println("Hello, World!")
         """;
 

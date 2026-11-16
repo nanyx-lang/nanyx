@@ -439,13 +439,19 @@ let internal canonicalName (env: TypeEnv) (state: InferState) (name: Identifier)
 let private symbolNamed (env: TypeEnv) (state: InferState) (name: Identifier) =
     TypeEnv.tryFind name env |> Option.bind _.Symbol |> Option.bind (fun id -> state.Symbols |> Map.tryFind id)
 
+/// Whether `name` is, where `env` is the environment, the member of a context an instance provides: a def's declared
+/// context's, or a `use`'s.
+let private isProvidedMember (env: TypeEnv) (name: Identifier) =
+    TypeEnv.tryFind name env |> Option.exists (fun scheme -> scheme.ProvidedBy.IsSome)
+
 /// The contexts the function `name` names where `env` is the environment requires, as written or inferred. A local
-/// def's are its own, by its symbol, and a parameter or a pattern's variable has none: neither takes those of a
-/// top-level def it shadows, which `ContextRequirements` holds under the same name.
+/// def's are its own, by its symbol, and a parameter, a pattern's variable or a context's member has none: none takes
+/// those of a top-level or imported def it shadows, which `ContextRequirements` holds under the same name.
 let internal contextRequirementsOf (env: TypeEnv) (state: InferState) (name: Identifier) : TypeExpr list option =
     match symbolNamed env state name with
     | Some symbol when symbol.Kind = LocalValue -> state.LocalContextRequirements |> Map.tryFind symbol.Id
     | Some symbol when symbol.Kind = Parameter || symbol.Kind = PatternVariable -> None
+    | _ when isProvidedMember env name -> None
     | _ -> state.ContextRequirements |> Map.tryFind (canonicalName env state name)
 
 /// The type the function `name` names where `env` is the environment declares without its contexts, where it writes
@@ -454,6 +460,7 @@ let internal contextSignatureOf (env: TypeEnv) (state: InferState) (name: Identi
     match symbolNamed env state name with
     | Some symbol when symbol.Kind = LocalValue -> state.LocalContextSignatures |> Map.tryFind symbol.Id
     | Some symbol when symbol.Kind = Parameter || symbol.Kind = PatternVariable -> None
+    | _ when isProvidedMember env name -> None
     | _ -> state.ContextSignatures |> Map.tryFind (canonicalName env state name)
 
 /// The ambient contexts the unannotated top-level function `name`, as `env` binds it, was inferred to require, once its
@@ -476,7 +483,7 @@ let internal inferredAmbientContexts (env: TypeEnv) (state: InferState) (name: I
 /// of an unannotated top-level def, or of a script's value, is kept to check once its contexts are known. Where the use
 /// is the call `call`, what provides the context of a member it calls is recorded, as is, once known, what provides
 /// each context of the def.
-let internal checkContextUse (call: NodeId option) (env: TypeEnv) (state: InferState) (name: Identifier) (span: SourceSpan) : Result<InferState, Diagnostic list> =
+let private checkMemberContextUse (call: NodeId option) (env: TypeEnv) (state: InferState) (name: Identifier) (span: SourceSpan) : Result<InferState, Diagnostic list> =
     if isAmbientMember env state name then
         let _, ctxName = state.AmbientMembers.[name]
         needAmbientContext state ctxName $"'{name}' is a member of" span
@@ -493,6 +500,29 @@ let internal checkContextUse (call: NodeId option) (env: TypeEnv) (state: InferS
                   Call = call; Providers = if call.IsSome then ambientProviders env state else Map.empty }
             Ok { state with DeferredContextUses = deferred :: state.DeferredContextUses }
         | _ -> Ok (recordMemberCall call env name state)
+
+/// The private context whose member `name`, as `env` binds it, is, by the name `state` knows the context by, where code
+/// at `span` is outside the context's home module: only that module can call a private context's members (#1449).
+let internal privateContextOutsideHome (env: TypeEnv) (state: InferState) (name: Identifier) (span: SourceSpan) : Identifier option =
+    match TypeEnv.tryFind name env |> Option.bind _.Symbol with
+    | Some symbol ->
+        state.TypeDefs
+        |> Map.tryPick (fun ctxName info ->
+            if info.IsContext && info.IsPrivate && info.Members |> Map.exists (fun _ id -> id = symbol) then Some (ctxName, info)
+            else None)
+        |> Option.filter (fun (_, info) -> not (Visibility.inNominalHome state (TypeDefInfo.nominalId info) span))
+        |> Option.map fst
+    | None -> None
+
+/// Checks the context use of naming `name` at `span` (see `checkMemberContextUse`), and that `name` is not a member of
+/// a private context named outside its home module.
+let internal checkContextUse (call: NodeId option) (env: TypeEnv) (state: InferState) (name: Identifier) (span: SourceSpan) : Result<InferState, Diagnostic list> =
+    match privateContextOutsideHome env state name span with
+    | Some ctxName ->
+        let message =
+            $"'{name}' is a member of the private context '{ctxName}', which only its own module can call: call a function that module exports instead"
+        Error [ Diagnostics.at DiagnosticCodes.PrivateContextMember span message ]
+    | None -> checkMemberContextUse call env state name span
 
 /// Checks that `contexts`, which `name` requires, are available at `span`. A context with a member not in scope at all
 /// is an error only when `reportMissing`. Where they are required by the call `call`, what provides each that is not

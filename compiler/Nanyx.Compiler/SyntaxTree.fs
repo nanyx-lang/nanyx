@@ -17,7 +17,8 @@ module SyntaxTree =
         | ContextMemberCall(_, _, args)
         | TupleExpr args
         | ListExpr args -> args, []
-        | Lambda(_, body, _) -> [ body ], []
+        | Lambda(_, body, _)
+        | ContextNames(_, body) -> [ body ], []
         | BinaryOp(_, _, left, right) -> [ left; right ], []
         | Pipe(value, _, _, args) -> value :: args, []
         | Block statements -> [], statements
@@ -69,6 +70,7 @@ module SyntaxTree =
         | TupleExpr items -> rebuild (TupleExpr(List.map f items))
         | ListExpr items -> rebuild (ListExpr(List.map f items))
         | Lambda(parameters, body, takesUnit) -> rebuild (Lambda(parameters, f body, takesUnit))
+        | ContextNames(names, body) -> rebuild (ContextNames(names, f body))
         | BinaryOp(op, opSpan, left, right) -> rebuild (BinaryOp(op, opSpan, f left, f right))
         | Pipe(value, name, range, args) -> rebuild (Pipe(f value, name, range, List.map f args))
         | Block statements -> rebuild (Block(List.map inStatement statements))
@@ -123,6 +125,7 @@ module SyntaxTree =
     let expressionTypes (expr: Expression) : TypeExpr list =
         match expr.Kind with
         | Lambda(parameters, _, _) -> parameters |> List.choose snd
+        | ContextNames(names, _) -> names |> List.choose (fun (_, context, _) -> context)
         | Block statements ->
             statements
             |> List.collect (fun statement ->
@@ -199,7 +202,8 @@ module SyntaxTree =
         | IdentifierExpr name -> [ name ]
         | FunctionCall(name, _, args) -> name :: (args |> List.collect referencedNames)
         | Pipe(value, name, _, args) -> name :: referencedNames value @ (args |> List.collect referencedNames)
-        | Lambda(_, body, _) -> referencedNames body
+        | Lambda(_, body, _)
+        | ContextNames(_, body) -> referencedNames body
         | BinaryOp(op, _, left, right) -> Option.toList (operatorFunction op) @ referencedNames left @ referencedNames right
         | IfExpr(cond, thenExpr, elseExpr) -> referencedNames cond @ referencedNames thenExpr @ referencedNames elseExpr
         | Block statements -> statements |> List.collect referencedNamesInStatement

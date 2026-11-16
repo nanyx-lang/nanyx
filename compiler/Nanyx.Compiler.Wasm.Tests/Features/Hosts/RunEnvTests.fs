@@ -19,8 +19,6 @@ let ``An entry point reads the arguments after the program`` () =
     let source =
         """module main
 
-import nanyx/env
-
 @entry
 def main = {
   println(args())
@@ -36,8 +34,6 @@ let ``Arguments after -- reach the program as they are, even ones that start wit
     let source =
         """module main
 
-import nanyx/env
-
 @entry
 def main = {
   println(args())
@@ -51,10 +47,7 @@ def main = {
 [<Fact>]
 let ``A program run with no arguments has none`` () =
     let source =
-        """import nanyx/console
-import nanyx/env
-
-println(args())
+        """println(args())
 """
     let outcome = runWith [] [] source
     Assert.Equal("[]\n", outcome.StandardOutput.ReplaceLineEndings "\n")
@@ -63,8 +56,6 @@ println(args())
 let ``A variable that is set gives its value, and one that is not gives notSet`` () =
     let source =
         """module main
-
-import nanyx/env
 
 def show: [Env & Console] string -> () = { name ->
   match variable(name)
@@ -95,8 +86,6 @@ let ``exit ends the program with its exit code`` () =
     let source =
         """module main
 
-import nanyx/env
-
 @entry
 def main = {
   println("before")
@@ -114,14 +103,11 @@ def main = {
 [<Fact>]
 let ``exit with code 0 ends the program cleanly, with its memory checked`` () =
     let source =
-        """import nanyx/console
-import nanyx/env
-
-println(args())
+        """println(args())
 exit(0)
 println("after")
 """
-    let path = Path.GetTempFileName() + ".nyx"
+    let path = Path.Combine(Path.GetTempPath(), $"nanyx-env-{System.Guid.NewGuid():N}.nyx")
     File.WriteAllText(path, source)
     try
         let outcome = runFile path
@@ -130,10 +116,3 @@ println("after")
         Assert.Equal(0, outcome.ExitCode)
     finally
         File.Delete path
-
-[<Fact>]
-let ``A program that does not use Env imports nothing for it`` () =
-    let wat = transpileWat (withFinalNewline """@entry
-def main = { println("hi") }""")
-    Assert.DoesNotContain("args_get", wat)
-    Assert.DoesNotContain("environ_get", wat)

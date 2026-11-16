@@ -5,8 +5,7 @@ open TranspilerWasmTestHelpers
 
 /// A program that prints each of `holes`, a float expression, interpolated on a line of its own.
 let private printing (holes: string list) =
-    [ "import nanyx/console"
-      "import nanyx/math as math"
+    [ "import nanyx/math as math"
       ""
       "def zero = 0.0"
       ""
@@ -54,9 +53,7 @@ let ``Run - NaN, the infinities and the zeros are written as themselves`` () =
 [<Fact>]
 let ``Run - Float.toString and dbg write a float as interpolation does`` () =
     let source =
-        normalized """import nanyx/console
-
-@entry
+        normalized """@entry
 def main = {
   println(float.toString(0.1 + 0.2))
   dbg(1.0e-7)

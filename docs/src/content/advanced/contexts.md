@@ -32,6 +32,23 @@ def main = {
 }
 ```
 
+On a context, `protected` and `private` are about access. Any module can require either in a context list and call the functions that require it, but only the home module can construct an instance in a `use` (NYX0212). Any module can call a protected context's members. Only the home module can call a private context's members (NYX0244), so a private context is a capability: other code can require `[Tx]` and pass it on to the module's functions, but only the module uses what the instance holds.
+
+```nanyx
+module db =
+  export context Tx = private (commit: () -> ())
+  export def query: [Tx] string -> () = { sql -> commit() }
+
+import db
+
+def report: [Tx] () -> () = {
+  query("select 1")   -- fine: query is db's
+  -- commit()         -- NYX0244: only db can call commit
+}
+```
+
+This differs from leaving out `export`, which stops other modules naming the context at all.
+
 The full form of a context definition is `scoped export context Name(params) = protected ...`, where `scoped`, `export` and the parameters are each optional and the modifiers come in that order. A `scoped` context belongs to the scope that supplies it, as the prelude's `Memory` belongs to a `memory` block, and nothing that requires it may leave that scope:
 
 ```nanyx fragment
@@ -42,7 +59,7 @@ A scoped context must be either `protected` or `private`, so that each of its in
 
 # Requiring a context
 
-A function can specify required contexts in its type signature. Here, `sayHello` can call `println` because it runs in `Console`. The real `Console`, in `nanyx/console`, has a few more members, and `println` is a function written on top of its `write`:
+A function can specify required contexts in its type signature. Here, `sayHello` can call `println` because it runs in `Console`. The real `Console`, which the console host provides to every program, has a few more members, and `println` is a function written on top of its `write`:
 
 ```nanyx
 def sayHello: [Console] () -> () = {
@@ -111,6 +128,25 @@ def main = {
 ```
 
 Don't put the block in braces: `{ ... }` is a function of no arguments, so `use Counter(...) in { ... }` makes a function instead of running the statements. If the function uses the context, that is an error, as the next section says; if it doesn't, the official linter's [`useInBraces`](../standard-tools/official-linter#use--in-with-a-body-in-braces) rule warns about it.
+
+## Naming the instance a lambda is given
+
+A lambda can name the instance of a context it is given by writing `context` and a name before its parameters. The name can only be loaded again, with `use l` or `use l in ...`, which brings back the members as the lambda was given them, for instance after a `use` inside it has shadowed them:
+
+```nanyx
+context Log = (log: string -> ())
+
+def inner: [Log] () -> () = { log("from inner") }
+
+def run: [Log] () -> () = { context l ->
+  use Log(log = { m -> log("[shadowed] {m}") })
+  inner()   -- [shadowed] from inner
+  use l
+  inner()   -- from inner, through run's own Log
+}
+```
+
+The name isn't a parameter: the lambda's type and the number of arguments it takes are the same as without it. When the lambda is given several contexts, the name says which, as in `{ context m: Memory, context l: Log, x -> ... }`, and a name that matches none, or could match more than one, is an error (`NYX0246`). A lambda is given the contexts its def's type declares, or that the type it is checked against requires, as a handler's lambda is given the context the handler supplies. An instance is never a value, so using the name any other way, passing it, returning it or storing it, is an error (`NYX0245`). An inner lambda may still capture the name, to `use` it.
 
 `use` loads the value of any expression. An instance of a parameterised context is a value whose type is the context applied to a type, so define it with `def` and load it by name:
 

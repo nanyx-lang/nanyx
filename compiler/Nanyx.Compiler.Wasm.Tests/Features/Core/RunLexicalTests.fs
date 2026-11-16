@@ -5,9 +5,7 @@ open TranspilerWasmTestHelpers
 
 [<Fact>]
 let ``Run - numbers grouped with underscores have their value, and block comments are skipped`` () =
-    """import nanyx/console
-
----
+    """---
 This is a multi-line comment.
 println("not code")
 ---

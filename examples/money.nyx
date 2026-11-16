@@ -1,7 +1,5 @@
 -- A module block imported by the rest of its file: only `money` can make a `Money`, so the file goes through
 -- `Money.new`, as it would if `money` were a file of its own.
-import nanyx/console
-
 module money =
   -- Prices are whole pence, so no rounding ever creeps in.
   export type Money = protected (pence: int)

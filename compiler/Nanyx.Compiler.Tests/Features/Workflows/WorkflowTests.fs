@@ -215,8 +215,7 @@ let ``A builder takes parameters, and its block requires contexts of its own`` (
     // `retrying(3) { ... }` passes `3` before the block, and the block's `println` requires `Console`, which the
     // builder's context variable carries to where the builder is called.
     let source =
-        normalized """import nanyx/console
-context Retry = (
+        normalized """context Retry = (
   try: [c] ((#some(a) | #failed), ([c] a -> #some(b) | #failed)) -> #some(b) | #failed
   return: a -> #some(a) | #failed
 )

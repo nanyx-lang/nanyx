@@ -9,9 +9,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - list literals and patterns`` () =
     let source =
-        normalized """import nanyx/console
-
-def describe: list(int) -> string = { xs ->
+        normalized """def describe: list(int) -> string = { xs ->
   match xs
   | [] -> "empty"
   | [_x] -> "one"
@@ -35,8 +33,6 @@ dbg(sum([1, 2, 3, 4]))
 let ``Run - a list literal's ] may go on a line of its own`` () =
     // #248: the `]` had to be on the same line as the last item.
     let source = """
-import nanyx/console
-
 def xs = [
   1,
   2
@@ -59,9 +55,7 @@ println("{list.length(xs)} {count(1)}")
 let ``Run - an unnamed rest matches a longer list`` () =
     // `[x, ...]` binds the head and ignores the rest, whatever its length.
     let source =
-        normalized """import nanyx/console
-
-def first: list(int) -> int = { xs ->
+        normalized """def first: list(int) -> int = { xs ->
   match xs
   | [x, ...] -> x
   | [] -> 0
@@ -76,8 +70,7 @@ dbg(first([]))
 let ``Run - list spread in expressions`` () =
     // Regression: `[1, ...rest]` worked as a pattern but not as an expression (#44).
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 def sum: list(int) -> int = {
   | [] -> 0
@@ -96,8 +89,7 @@ def main = {
 [<Fact>]
 let ``Run - ++ joins lists`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 def front = ["a", "b"]
 println(string.join(front ++ ["c"] ++ [], "-"))
@@ -111,9 +103,7 @@ let ``Run - ++ on a long list does not overflow the stack`` () =
     // `++` copied its first list by calling itself once per cell, which ran out of stack (#558). The list of strings
     // goes through the copy that takes a reference to each element.
     let source =
-        """import nanyx/console
-
-def build: int, list(int) -> list(int) = { n, acc -> if n == 0 then acc else build(n - 1, [n, ...acc]) }
+        """def build: int, list(int) -> list(int) = { n, acc -> if n == 0 then acc else build(n - 1, [n, ...acc]) }
 def words: int, list(string) -> list(string) = { n, acc ->
   if n == 0 then acc else words(n - 1, ["w{n}", ...acc])
 }
@@ -135,9 +125,7 @@ def main = {
 [<Fact>]
 let ``Run - the prelude's List functions`` () =
     let source =
-        normalized """import nanyx/console
-
-def show: list(int) -> string = {
+        normalized """def show: list(int) -> string = {
   | [] -> "[]"
   | [y, ...rest] -> "{y} " ++ show(rest)
 }
@@ -182,8 +170,7 @@ empty""")
 
 /// Prints a list of ints, for the tests of the prelude's List functions below.
 let private showInts =
-    normalized """import nanyx/console
-import nanyx/text
+    normalized """import nanyx/text
 
 def show: list(int) -> string = {
   | [] -> "[]"

@@ -1,0 +1,8 @@
+(
+  package = (
+    name = "nanyx.console.core"
+    version = "0.28.0"
+    sources = ["src/**/*.nyx"]
+    publicModules = ["console", "env"]
+  )
+)

@@ -284,6 +284,14 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     | CoalesceOperator.Call(left, right) -> CoalesceOperator.infer (inferExpr env) state expr left right
     | BinaryOp(_, _, left, right) -> inferOperator env state expr left right
     | Pipe(value, name, spanOpt, args) -> inferPipe env state expr value name spanOpt args
+    // The names a lambda gives its contexts are bound with its parameters (see `inferLambdaAfterTypeOfs`).
+    | ContextNames(_, body) ->
+        inferExpr env state body
+        |> Result.map (fun (typedBody, next) -> mkTypedExpr expr typedBody.Type (Some typedBody) None None, next)
+    | UseIn(value, body) when (ContextNames.loaded env state value).IsSome ->
+        let scheme, instance = (ContextNames.loaded env state value).Value
+        inferExpr (ContextNames.load env instance) (ContextNames.recordLoad value scheme state) body
+        |> Result.map (fun (typedBody, next) -> mkTypedExpr expr typedBody.Type (Some typedBody) None None, next)
     | UseIn(value, body) ->
         match inferExpr env (state |> UseDischarge.mark value |> LambdaContexts.enterUse value) value with
         | Error err -> Error err
@@ -781,7 +789,7 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                     | [ single ] -> Some single
                     | remaining -> Some (TyUnion remaining)
             | _ -> None
-        let rowVars =
+        let mutable rowVars =
             scrutineeTypes
             |> List.indexed
             |> List.choose (fun (index, _) -> restRowTy index)
@@ -800,6 +808,9 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                 match inferPatterns expr env current patternPairs with
                 | Error err -> errors <- errors @ err
                 | Ok (env', state', typedPatterns) ->
+                    // So is a name bound by a catch-all inside a pattern (see `NestedCatchAlls`).
+                    let env', nestedRows = NestedCatchAlls.narrow (NestedCatchAlls.tagsHandledBefore arms armIndex) env' state'
+                    rowVars <- Set.union rowVars nestedRows
                     match inferExpr env' state' expr with
                     | Ok (typedExpr, next) ->
                         current <- next
@@ -1103,7 +1114,12 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
             // Only a nominal type's home module can make one: anywhere else it comes from what that module exports.
             | Some info when isNominal info && not (inNominalHome state (TypeDefInfo.nominalId info) calleeSpan) ->
                 let kind = if info.IsPrivate then "private" else "protected"
-                Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan $"The {kind} type '{name}' can only be constructed in the module that defines it; use a function that module exports instead" ]
+                let message =
+                    if info.IsContext then
+                        $"The {kind} context '{name}' can only be constructed in the module that defines it; call a function that module exports to supply it instead"
+                    else
+                        $"The {kind} type '{name}' can only be constructed in the module that defines it; use a function that module exports instead"
+                Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan message ]
             | Some info ->
                 let mutable current = recordConstructorReference expr info state
                 let argResults =
@@ -1304,7 +1320,14 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
         let bound, next = next |> recordSymbolType symbol ty |> recordAnnotated symbol typeOpt.IsSome |> MemoryCells.bindParameter symbol typeOpt ty
         current <- next
         env' <- TypeEnv.declare name symbol (TypeEnv.mono bound) env'
-    match inferExpr env' (LambdaContexts.enter lambda current) body with
+    // `context l` names the instance of a context the lambda is given, for its body to load with `use l`.
+    let named =
+        match body.Kind with
+        | ContextNames(names, _) -> ContextNames.bind env' current lambda body names
+        | _ -> Ok (env', current)
+    named
+    |> Result.bind (fun (env', current) -> inferExpr env' (LambdaContexts.enter lambda current) body)
+    |> function
     | Ok (bodyExpr, next) ->
         let used, next = LambdaContexts.leave lambda next ||> fun used next -> MemoryCells.parameterContexts next lambda args |> fun (cells, next) -> used @ cells |> List.distinct, next
         let withReturnConstraint =
@@ -1428,6 +1451,11 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                 current <- registerTypeDef current name modifiers parameters body
                 if errors.IsEmpty then errors <- DefAnnotations.typeDefErrors current name modifiers parameters body
                 typedStatements <- typedStatements @ [ TypedTypeDefStatement(name, modifiers, parameters, body) ]
+            | UseStatement value when errors.IsEmpty && (ContextNames.loaded env' current value).IsSome ->
+                let scheme, instance = (ContextNames.loaded env' current value).Value
+                current <- ContextNames.recordLoad value scheme current
+                env' <- ContextNames.load env' instance
+                typedStatements <- typedStatements @ [ TypedUseStatement (mkTypedExpr value scheme.Type None None None) ]
             | UseStatement value ->
                 if errors.IsEmpty then
                     match inferExpr env' (current |> UseDischarge.mark value |> LambdaContexts.enterUse value) value with

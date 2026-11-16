@@ -9,8 +9,6 @@ open Nanyx.Compiler.Tests.TestSupport
 
 let private apply =
     """
-import nanyx/console
-
 def apply: [c] ([c] int -> int), int -> int = { f, x -> f(x) }
 """
 
@@ -117,8 +115,6 @@ let ``A value that is not a lambda cannot write only contexts`` () =
     let code, message, text =
         onlyDiagnostic
             """
-import nanyx/console
-
 def shout: [Console] string -> () = { s -> println(s ++ "!") }
 
 def greet: [Console] = { name -> "hello " ++ name } >> shout

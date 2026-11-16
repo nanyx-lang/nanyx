@@ -18,9 +18,9 @@ nanyx run [--timings] [--check-memory] [--no-inline] <file.nyx> [--] [<arguments
 nanyx check <file.nyx> [--timings]
 nanyx parse <file.nyx>
 nanyx wasm <file.nyx> [--out <path>]
-nanyx run [--timings] [--check-memory] [--no-inline] [--host <module>] [<directory or .nyxp> [--] [<arguments>]]
-nanyx check [<directory or .nyxp>] [--timings] [--host <module>]
-nanyx build [<directory or .nyxp>] [--out <path>] [--timings] [--host <module>] [--no-inline]
+nanyx run [--timings] [--check-memory] [--no-inline] [--host <host>] [<directory or .nyxp> [--] [<arguments>]]
+nanyx check [<directory or .nyxp>] [--timings] [--host <host>]
+nanyx build [<directory or .nyxp>] [--out <path>] [--timings] [--host <host>] [--no-inline]
 nanyx new <name> [<directory>]
 nanyx manifest --json [<directory or .nyxp>]
 nanyx format [--check | --write] <files or directories>
@@ -34,7 +34,7 @@ nanyx hello
 - `run` compiles the file and executes it on the embedded Wasmtime engine. The program's output is the
   only thing written to stdout; diagnostics go to stderr. What follows the file or package is the program's own:
   `nanyx run tool.nyx a b` passes `a` and `b`, which the program reads with `args()` from
-  [`nanyx/env`](../stdlib/env). The program sees the process's environment variables, through `variable`, and
+  [`Env`](../stdlib/env). The program sees the process's environment variables, through `variable`, and
   `exit(code)` ends it with that exit code, which `run` exits with. To pass arguments to the package in the
   current directory, name it: `nanyx run . a b`. An argument that starts with `-` would be read as one of `run`'s
   options, so put `--` before the program's arguments: `nanyx run tool.nyx -- -v --all` passes `-v` and `--all`.
@@ -114,7 +114,7 @@ src/greetings.nyx (0.05s of 1.28s)
 └── nanyx/prelude (1.23s)
 src/main.nyx (0.20s of 1.06s)
 ├── nanyx/prelude (cached)
-├── nanyx/console (0.04s)
+├── nanyx/text (0.04s)
 │   └── nanyx/prelude (cached)
 ├── nanyx/list (0.81s)
 │   └── nanyx/prelude (cached)
@@ -205,10 +205,11 @@ above it.
 
 The package's `@entry` runs under the host its manifest's `host` names,
 `(package = "nanyx.console", version = "0.28.0")`; a package without one is a library, which can't be run (see
-[Hosts](./hosts#choosing-a-host)). `--host <module>` chooses another for one command, in place of the manifest's. A
-`--host` that isn't one the compiler ships, or a module that isn't a host, is an error that names it, and so
-is a manifest's `host` package other than `nanyx.console`, or `settings` for it; `--host` on a single `.nyx` file is a
-usage error, since a script always runs under the console host.
+[Hosts](./hosts#choosing-a-host)). `--host <host>` chooses another for one command, in place of the manifest's: a
+host package the compiler ships, `--host nanyx.console`, or the directory of one, `--host ../acme.host`. A `--host`
+that the compiler doesn't ship, or whose manifest doesn't declare it a host, is a usage error that names it, as a
+manifest's `host` is an error, and so is `settings` for a host; `--host` on a single `.nyx` file is a usage error,
+since a script always runs under the console host.
 
 `nanyx new acme.demo` makes a package in a new directory, `demo` (the name's last segment) unless another
 is given: `acme.demo.nyxp`, with the official linter on and the console host, both at the compiler's version, and

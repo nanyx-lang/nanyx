@@ -22,6 +22,9 @@ type PackageModules =
       /// The host the package's `@entry` runs under: its manifest's `host`, or `--host`. None for a library, which can
       /// have no `@entry`.
       Host: Host option
+      /// The modules of the host's package, which the host's import, and the host's own imports, resolve in; none for a
+      /// library.
+      HostPackage: PackageModules option
       /// The modules a package that depends on this one may import: its manifest's `publicModules`.
       PublicModules: string list
       /// The packages it depends on directly, each with its own dependencies.
@@ -59,6 +62,7 @@ module PackageModules =
     let ofFiles (name: string) (root: string) (host: Host option) (files: string list) : PackageModules =
         { Package = name
           Host = host
+          HostPackage = None
           Root = root
           Files = files
           PublicModules = []

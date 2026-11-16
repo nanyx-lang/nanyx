@@ -9,9 +9,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - an unannotated function whose branches return different tags`` () =
     let source =
-        normalized """import nanyx/console
-
-def getMessage = { flag ->
+        normalized """def getMessage = { flag ->
   def message = "Hello, from Nanyx!"
   if flag then #some(message)
   else #noMessage
@@ -33,9 +31,7 @@ let ``Run - a piped lambda can match only the tags left of a union's rest`` () =
     // The rest `ω` is `#invalidInt` from the piped value, and the lambda's input is `#invalidInt` from its pattern:
     // one type, a tag alone and a union of one (#457).
     let source =
-        normalized """import nanyx/console
-
-def mapError = {
+        normalized """def mapError = {
   | #some(x), _ -> #some(x)
   | other, f -> f(other)
 }
@@ -53,9 +49,7 @@ println(show(int.fromString("zz") \mapError({ #invalidInt -> #bad("bad") })))
 [<Fact>]
 let ``Run - a tag union rest passes the tags a match does not name through`` () =
     let source =
-        normalized """import nanyx/console
-
-def mapSome
+        normalized """def mapSome
   : (#some(a) | r), (a -> b) -> (#some(b) | r)
   = { | #some(a), f -> #some(f(a))
       | other, _ -> other }
@@ -90,9 +84,7 @@ def main = {
 [<Fact>]
 let ``Run - interpolating a tag whose type names a tag no expression writes`` () =
     let source =
-        normalized """import nanyx/console
-
-def show: (#red | #green) -> string = { c -> "colour {c}" }
+        normalized """def show: (#red | #green) -> string = { c -> "colour {c}" }
 
 println(show(#red))
 """
@@ -101,9 +93,7 @@ println(show(#red))
 [<Fact>]
 let ``Run - a tag keeps a payload that does not fit in 16 bits`` () =
     let source =
-        normalized """import nanyx/console
-
-def show: [Console] (#some(int) | #none) -> () = {
+        normalized """def show: [Console] (#some(int) | #none) -> () = {
   | #some(70000) -> println("seventy thousand")
   | #some(n) -> println("#some({n})")
   | #none -> println("#none")
@@ -121,9 +111,7 @@ dbg(#some(-17))
 [<Fact>]
 let ``Run - a tag's string payload allocated past 64 KB of heap`` () =
     let source =
-        normalized """import nanyx/console
-
-def grow: (string, int) -> string = { s, n -> if n == 0 then s else grow(s ++ "x", n - 1) }
+        normalized """def grow: (string, int) -> string = { s, n -> if n == 0 then s else grow(s ++ "x", n - 1) }
 
 def show: [Console] (#name(string) | #anon) -> () = {
   | #name(s) -> println("name {s}")
@@ -144,8 +132,6 @@ def main = {
 let ``Run - a list literal of different tags, and branches whose tags hold different tags`` () =
     let source =
         """
-import nanyx/console
-
 type Color = #red | #green
 
 def name: Color -> string = {
@@ -183,8 +169,6 @@ let ``Run - a union's rest bound to a type with a tag the union names`` () =
     // the input alone leaves `z` no tags (#1027).
     let source =
         """
-import nanyx/console
-
 def bind = {
   | #some(v), f -> f(v)
   | other, _ -> other

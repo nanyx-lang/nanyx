@@ -7,8 +7,6 @@ open TranspilerWasmTestHelpers
 let ``Run - an F32 computes as an f32 and prints the shortest digits that read back as it`` () =
     let source =
         """
-import nanyx/console
-
 def total: [Num(a)] list(a) -> a = {
   | [] -> zero
   | [x, ...rest] -> x + total(rest)
@@ -34,8 +32,6 @@ def main = {
 let ``Run - an F32 is kept in fields, payloads, lists and closures`` () =
     let source =
         """
-import nanyx/console
-
 type Sample = (x: F32, n: int)
 
 @entry

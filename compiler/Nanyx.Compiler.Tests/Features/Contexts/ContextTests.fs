@@ -10,8 +10,8 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``Typecheck allows context members with annotation`` () =
     let source =
-        normalized """context Console = (println: string -> ())
-def sayHello: [Console] () -> () = { println("hi") }"""
+        normalized """context Log = (log: string -> ())
+def sayHello: [Log] () -> () = { log("hi") }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
 
@@ -38,8 +38,8 @@ let ``Typecheck rejects an unknown context in a local signature`` () =
 [<Fact>]
 let ``Typecheck rejects missing context members`` () =
     let source =
-        normalized """context Console = (println: string -> ())
-def sayHello = { println("hi") }"""
+        normalized """context Log = (log: string -> ())
+def sayHello = { log("hi") }"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.UnknownFunction result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
@@ -48,10 +48,10 @@ def sayHello = { println("hi") }"""
 [<Fact>]
 let ``Typecheck allows use statement to bring members into scope`` () =
     let source =
-        normalized """context Console = (println: string -> string)
+        normalized """context Log = (log: string -> string)
 def main = {
-  use Console(println = { msg -> msg })
-  println("hi")
+  use Log(log = { msg -> msg })
+  log("hi")
 }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
@@ -77,15 +77,15 @@ let ``Typecheck supports unit literal`` () =
 [<Fact>]
 let ``Typecheck rejects missing context on call`` () =
     let source =
-        normalized """context Console = (println: string -> ())
-def g: [Console] () -> () = { println("hi") }
+        normalized """context Log = (log: string -> ())
+def g: [Log] () -> () = { log("hi") }
 def h = { g() }"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.MissingContextMembers result
     let diagnostic = result.Diagnostics |> List.head
     // The context is named, as a type alias is, not listed by its members.
     Assert.Equal("Missing context", diagnostic.Title)
-    Assert.Equal("'g' requires the context 'Console', which is not available here", diagnostic.Message)
+    Assert.Equal("'g' requires the context 'Log', which is not available here", diagnostic.Message)
 
 [<Fact>]
 let ``Missing contexts are named, not listed by their members`` () =

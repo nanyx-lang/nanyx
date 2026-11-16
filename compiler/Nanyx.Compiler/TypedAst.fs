@@ -206,7 +206,7 @@ module TypeDefInfo =
     /// The identity of the nominal type `info` defines.
     let nominalId (info: TypeDefInfo) : NominalId = { Home = info.Home; Name = info.Name }
 
-/// A member of an ambient context (one the runtime supplies, as `nanyx/console`'s definitions are its `Console`) and the
+/// A member of an ambient context (one the runtime supplies, as the host's prelude's definitions are its `Console`) and the
 /// top-level definition that stands in for it (see `TypedModule.AmbientMembers`).
 type AmbientMember =
     { Context: string
@@ -313,12 +313,12 @@ type ImportedFile = { File: string; Name: string option }
 /// over: resolved as the module that declares it resolved them, and with variables of their own that keep the names its
 /// annotation gives them. A def that requires no contexts has none.
 ///
-/// `AmbientContexts` are the names of the imported contexts the runtime supplies, as `nanyx/console`'s definitions are
+/// `AmbientContexts` are the names of the imported contexts the runtime supplies, as the host's prelude's definitions are
 /// its `Console`, in order: the top level of the module runs in them.
 ///
 /// `AmbientMembers` holds the definition in `Module` that stands in for each member of an ambient context: of those in
 /// `AmbientContexts`, and of those carried in with the imported functions that require them, which the module cannot
-/// name (a module that imports a function requiring `Console` without importing `nanyx/console`). The backend passes
+/// name (a module that imports a function requiring `Console` without importing `nanyx.console.core/console`, and that sees no host's prelude). The backend passes
 /// these where nothing else supplies the context.
 ///
 /// `ImportedFiles` holds the module each of the module's imports brings in, by the import's symbol (see `ImportedFile`).

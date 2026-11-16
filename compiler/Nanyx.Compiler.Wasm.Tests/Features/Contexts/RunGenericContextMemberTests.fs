@@ -10,9 +10,7 @@ open TranspilerWasmTestHelpers
 /// A program whose context `Proc` has the member types `members`, which a function loads with `use` and a block calls
 /// through it, as a workflow builder's are (#1152).
 let private procProgram (members: string) =
-    """import nanyx/console
-
-context Proc = (
+    """context Proc = (
 MEMBERS
 )
 
@@ -71,7 +69,7 @@ let ``Run - the same context member written at int runs`` () =
 [<Fact>]
 let ``Run - a context member is called at a string payload and then an int one`` () =
     // #1304: each call has the member's own type variables at its own types.
-    let source = "import nanyx/console\nimport nanyx/text\n\n" + genericProc + """
+    let source = "import nanyx/text\n\n" + genericProc + """
 def name: int -> #some(string) | #missing = { i -> if i < 0 then #missing else #some("item {i}") }
 def size: string -> #some(int) | #missing = { s -> #some(string.length(s)) }
 
@@ -103,7 +101,7 @@ def main = {
 
 [<Fact>]
 let ``Run - a context member's boxed values may be records, strings and unit`` () =
-    let source = "import nanyx/console\n\n" + genericProc + """
+    let source = "" + genericProc + """
 def pair: [Proc] string -> #some((name: string, size: int)) | #missing = { s ->
   bind(ret(s), { t -> bind(ret(()), { _ -> ret((name = t, size = 2)) }) })
 }
@@ -126,9 +124,7 @@ def main = {
 
 [<Fact>]
 let ``Run - a context member's boxed values may be lists, converted element by element`` () =
-    let source = """import nanyx/console
-
-context Lists = (
+    let source = """context Lists = (
   reversed: list(a) -> list(a)
   firstOr: (list(a), a) -> a
 )

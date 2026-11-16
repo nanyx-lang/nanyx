@@ -8,8 +8,6 @@ let ``Run - an int is 64 bits, in locals, fields, payloads, lists and closures``
     // #342: an int was an `i32`, so each of these wrapped past about 2.1 billion.
     let source =
         """
-import nanyx/console
-
 type Point = (x: int, label: string, y: int)
 
 def sum = { xs: list(int) ->
@@ -47,8 +45,6 @@ def main = {
 let ``Run - int arithmetic that overflows stops the program`` (expression: string) =
     let source =
         $"""
-import nanyx/console
-
 @entry
 def main = {{
   println("before")
@@ -64,8 +60,6 @@ def main = {{
 let ``Run - int arithmetic that comes close to overflowing does not stop the program`` () =
     let source =
         """
-import nanyx/console
-
 @entry
 def main = {
   println("{9_223_372_036_854_775_806 + 1}")

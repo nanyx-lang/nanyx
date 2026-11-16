@@ -122,9 +122,7 @@ def main = {
 
 [<Fact>]
 let ``The top level of a module runs in the runtime's Console`` () =
-    Assert.Empty(undeclaredContexts (withFinalNewline """import nanyx/console
-
-println("hi")
+    Assert.Empty(undeclaredContexts (withFinalNewline """println("hi")
 def x = println("value")"""))
 
 [<Fact>]
@@ -134,7 +132,6 @@ let ``A function imported from another module requires its contexts where it is 
         File.WriteAllText(
             Path.Combine(dir, "mod.nyx"),
             (normalized """module mod
-import nanyx/console
 export def greet: [Console] () -> () = { println("hi") }
 export def loud = { println("LOUD") }"""))
         File.WriteAllText(mainPath, "module main\nimport mod\ndef g: () -> () = { loud() }\n@entry\ndef main = {\n  greet()\n  g()\n}")
@@ -150,7 +147,6 @@ let private undeclaredContextsWithMod (main: string) =
         File.WriteAllText(
             Path.Combine(dir, "mod.nyx"),
             (withFinalNewline """module mod
-import nanyx/console
 export def greet: [Console] () -> () = { println("hi") }"""))
         File.WriteAllText(mainPath, main)
         result <-
@@ -158,6 +154,13 @@ export def greet: [Console] () -> () = { println("hi") }"""))
             |> List.filter (fun diagnostic -> diagnostic.Code = DiagnosticCodes.UndeclaredContext.Code)
             |> List.map (fun diagnostic -> textAt main (spanOf diagnostic)))
     result
+
+/// The undeclared-context diagnostics compiling `main` as a file of an application that depends on the console's
+/// interface package, `nanyx.console.core`.
+let private undeclaredContextsWithConsoleCore (main: string) =
+    (compileWithConsoleCore main).Diagnostics
+    |> List.filter (fun diagnostic -> diagnostic.Code = DiagnosticCodes.UndeclaredContext.Code)
+    |> List.map (fun diagnostic -> textAt main (spanOf diagnostic))
 
 [<Fact>]
 let ``An aliased import's function still requires its contexts where it is called`` () =
@@ -170,13 +173,13 @@ let ``An imported function requires its contexts in a module that does not have 
     Assert.Equal<string list>([ "greet" ], undeclaredContextsWithMod main)
 
 [<Fact>]
-let ``A standard-library function imported under an alias still requires its context`` () =
+let ``A context member imported under an alias still requires its context`` () =
     let main = withFinalNewline """module main
-import nanyx/console as c
+import nanyx.console.core/console as c
 def g: () -> () = { c.write("hi") }
 @entry
 def main = { g() }"""
-    Assert.Equal<string list>([ "c.write" ], undeclaredContextsWithMod main)
+    Assert.Equal<string list>([ "c.write" ], undeclaredContextsWithConsoleCore main)
 [<Fact>]
 let ``An imported function's context needs nothing more where the module cannot name it, at the top level or in a def that infers it`` () =
     let main = "module main\nimport mod\ngreet()\ndef h = { greet() }\ndef k: () -> () = { h() }\n"
@@ -185,18 +188,16 @@ let ``An imported function's context needs nothing more where the module cannot 
 [<Fact>]
 let ``A def that declares an aliased context can use its members under the alias`` () =
     let main = withFinalNewline """module main
-import nanyx/console as c
+import nanyx.console.core/console as c
 def g: [c.Console] () -> () = { c.println("hi") }
 @entry
 def main = { g() }"""
-    Assert.Equal<string list>([], undeclaredContextsWithMod main)
+    Assert.Equal<string list>([], undeclaredContextsWithConsoleCore main)
 
 [<Fact>]
 let ``A def whose type says with [] that it requires no contexts cannot call a function that requires one`` () =
     let source =
         """
-import nanyx/console
-
 def write: [] string -> () = { s -> println(s) }
 """
     let result = Compiler.compile source

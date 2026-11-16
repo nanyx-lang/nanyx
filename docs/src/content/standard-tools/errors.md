@@ -229,8 +229,6 @@ import "./setup" as setup  -- error NYX0016: './setup' has top-level statements,
 
 def total = setup.one
 -- file: setup.nyx
-import nanyx/console
-
 export def one = 1
 
 println("setting up")
@@ -571,7 +569,7 @@ offers to add it. A name qualified by the module's own name is imported under th
 exports lists each of them.
 
 ```nanyx
-def greet = println("hi")  -- error NYX0102: Unknown function 'println'. 'println' is defined in 'nanyx/console': add `import nanyx/console`
+def larger = max(1, 2)  -- error NYX0102: Unknown function 'max'. 'max' is defined in 'nanyx/math': add `import nanyx/math`
 def found = string.contains("nanyx", "x")  -- error NYX0102: Unknown function 'string.contains'. 'string.contains' is defined in 'nanyx/text': add `import nanyx/text`
 def size = math.abs(-1)  -- error NYX0102: Unknown function 'math.abs'. 'abs' is defined in 'nanyx/math': add `import nanyx/math as math`
 ```
@@ -667,8 +665,8 @@ has.
 def greet: [Telegraph] () -> () = { () }  -- error NYX0108: Unknown context 'Telegraph' in the signature of 'greet'
 ```
 
-When a standard library module exports the context, as `nanyx/console` does `Console`, the message says which import
-brings it in, and an editor offers to add it.
+When a standard library module exports the context, the message says which import brings it in, and an editor offers
+to add it.
 
 To fix it, correct the context's name, define it, or import the module that exports it.
 
@@ -934,8 +932,6 @@ A definition's body needs a context that its type does not declare: it calls a f
 `println`, which requires `Console`. An editor offers to add the context to the type.
 
 ```nanyx
-import nanyx/console
-
 def greet: string -> () = { name -> println("Hello, {name}") }  -- error NYX0211: 'println' requires the context 'Console', which 'greet' does not declare: ...
 ```
 
@@ -1116,8 +1112,6 @@ A function that requires a context is given where a function that requires none 
 whose parameter type writes no contexts, or returned from a definition whose result type writes none.
 
 ```nanyx
-import nanyx/console
-
 def runPure: (int -> int) -> int = { g -> g(5) }
 
 def pass: ([Console] int -> int) -> int = { f -> runPure(f) }  -- error NYX0227: A function that requires the context 'Console' is given where 'int -> int' is expected, ...
@@ -1269,8 +1263,6 @@ its statements are written, so that it reads its line once. A function can't nam
 called where the value doesn't exist, and a statement can't read it before its def.
 
 ```nanyx
-import nanyx/console
-
 def line = readLine()
 
 def greet = { name -> println("{name} said {line}") }  -- error NYX0239: 'line' is computed when the script runs, so a function can't name it: pass it as an argument
@@ -1288,8 +1280,6 @@ not a lambda doesn't run: a function written point-free, such as a composition, 
 called, so they belong on its function type.
 
 ```nanyx
-import nanyx/console
-
 def shout: [Console] string -> () = { s -> println(s ++ "!") }
 
 def greet: [Console] = { name -> "hello " ++ name } >> shout  -- error NYX0240: 'greet' is not a lambda, so it does not run in the contexts its annotation writes: write them on its function type, as in '[Console] string -> ()'
@@ -1346,6 +1336,60 @@ def exitWith: [HostRuntime] I64 -> ()  -- error NYX0243: 'exitWith' imports "pro
 ```
 
 To fix it, declare the import once, with the type the embedder gives it, and call that one.
+
+# NYX0244: Private context's member called outside its module
+
+A member of a `private` context is called, or read, outside the module that declares the context. Any module can
+require a private context and call the functions that require it, but only its own module can use what an instance
+holds ([Contexts](../advanced/contexts)).
+
+```nanyx
+module db =
+  export context Tx = private (commit: () -> ())
+  export def query: [Tx] string -> () = { sql -> commit() }
+
+import db
+
+def f: [Tx] () -> () = {
+  query("select 1")
+  commit()  -- error NYX0244: 'commit' is a member of the private context 'Tx', which only its own module can call: call a function that module exports instead
+}
+```
+
+To fix it, call a function the context's module exports, as `query` here, or declare the context `protected`, whose
+members any module can call.
+
+# NYX0245: Context instance used as a value
+
+A name a lambda gives a context with `context l` is used other than by `use l` or `use l in ...`. It names the
+instance whoever calls the lambda supplies, which is never a value: it can't be passed, returned, stored or compared
+([Contexts](../advanced/contexts)).
+
+```nanyx
+context Log = (log: string -> ())
+
+def keep: [Log] () -> () = { context l ->
+  def saved = l  -- error NYX0245: 'l' names a context instance, which can only be loaded with `use l`
+  ()
+}
+```
+
+To fix it, load the instance with `use l` where its members are needed. To run code under a context elsewhere, pass
+that code a lambda, or call a function that requires the context.
+
+# NYX0246: Context name that names no context the lambda is given
+
+A lambda's `context l` doesn't name exactly one context its type requires: the lambda is given none, it is given
+several and `l` doesn't say which, or `context l: C` names a context the lambda isn't given.
+
+```nanyx
+context Log = (log: string -> ())
+context Tick = (tick: () -> ())
+
+def run: [Log & Tick] () -> () = { context l -> () }  -- error NYX0246: 'l' could name any of 'Log' and 'Tick', which this lambda is given: say which, as in `context l: Log`
+```
+
+To fix it, say which context the name is for, `context l: Log`, or name one the lambda's type requires.
 
 # NYX0301: Not supported by the WebAssembly backend
 

@@ -328,6 +328,10 @@ and ExpressionKind =
     /// parameters, `{ ... }`, which ignores a parameter the type it is checked against gives it (both have no
     /// parameters here).
     | Lambda of parameters: (Identifier * TypeExpr option) list * body: Expression * takesUnit: bool
+    /// A lambda's body, `body`, under the names `{ context l: Log, x -> ... }` writes before its parameters for the
+    /// instances of contexts the lambda is given. Each is the name, the context it names if written, and the span of
+    /// the name. Only the lambda's body is one of these: it is not a parameter, and a `use` is all a name can do.
+    | ContextNames of names: (Identifier * TypeExpr option * SourceSpan) list * body: Expression
     | BinaryOp of string * SourceSpan option * Expression * Expression  // left op right
     | Pipe of Expression * Identifier * SourceSpan option * Expression list  // expr \func or expr \func(args)
     | Block of Statement list

@@ -623,7 +623,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // The ambient context instance: the definition the type checker found for each member of an ambient context
     // (`TypedModule.AmbientMembers`) stands in for that member whenever a callee requires the context and the caller
     // has nothing else to supply.
-    // This is how the runtime-provided `Console` (the functions `nanyx/console` exports) reaches the top level of a
+    // This is how the runtime-provided `Console` (the members of the `Console` the host's prelude brings in) reaches the top level of a
     // module. A function that requires the context, as its type writes or as it was inferred to, is passed the members
     // of the instance where it is called: an `@entry` is passed its host's.
     // Closure conversion made a wrapper for each such function, so the member is a closure over it.

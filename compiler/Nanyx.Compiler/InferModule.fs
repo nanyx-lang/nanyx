@@ -113,7 +113,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     let mutable errors: Diagnostic list = duplicateErrors @ InitialisationCycles.check initialState.Declared module'
 
     // An imported context whose every member is also an imported definition of that name is an ambient instance:
-    // the one the runtime supplies, as `nanyx/console`'s definitions are its `Console`. The top level of the module
+    // the one the runtime supplies, as the host's prelude's definitions are its `Console`. The top level of the module
     // runs in it; a def runs in it only if it declares the context, or does not write its type and so infers it.
     state <-
         { state with
@@ -417,6 +417,11 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         // functions it uses need that nothing nearer supplies, until no more are found. So for a script's values, which
         // need the contexts of the functions and values they use too; a function that names such a value is an error.
         let uses = List.rev state.DeferredContextUses
+        // What a use needs that is not available where it is. A scoped context, Memory, is not among them: a call is
+        // given the one of the cell it passes, by the block the cell is in or the parameter it came from, and that is
+        // checked at the call (see `ScopedCalls`).
+        let neededAt (required: Map<Identifier, Set<Identifier>>) (used: DeferredContextUse) =
+            Set.difference required.[used.Callee] used.Available |> Set.filter (WrittenContexts.isScoped state >> not)
         let isScriptValue name = state.ScriptValues.ContainsKey name
         let mutable required =
             Seq.append state.UnannotatedDefs.Keys state.ScriptValues.Keys
@@ -429,7 +434,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 match used.Caller with
                 | DefScope(caller, true)
                 | ScriptValueScope caller when required.ContainsKey caller && (isScriptValue caller || not (isScriptValue used.Callee)) ->
-                    let needed = Set.difference required.[used.Callee] used.Available
+                    let needed = neededAt required used
                     if not (Set.isSubset needed required.[caller]) then
                         required <- required |> Map.add caller (Set.union required.[caller] needed)
                         changed <- true
@@ -455,10 +460,10 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         for used in uses do
             match used.Caller with
             | DefScope(caller, false) ->
-                for ctxName in Set.difference required.[used.Callee] used.Available do
+                for ctxName in neededAt required used do
                     errors <- errors @ [ undeclaredContext state caller ctxName $"'{used.Callee}' requires" used.Span |> ContextFixes.withAddToType state caller ctxName ]
             | ValueScope caller ->
-                for ctxName in Set.difference required.[used.Callee] used.Available do
+                for ctxName in neededAt required used do
                     errors <- errors @ [ contextInValue caller ctxName $"'{used.Callee}' requires" used.Span ]
             | _ -> ()
         state <- recordDeferredProviders required uses state |> recordInstanceProviders

@@ -1,10 +1,11 @@
-/// The compiler ships the console host as a source directory beside it, at its own version (#1342, see
-/// docs/src/content/work-in-progress/built-ins-as-packages.md).
+/// The compiler ships the console host and its interface package as source directories beside it, at its own version
+/// (#1342 and #1344, see docs/src/content/work-in-progress/built-ins-as-packages.md).
 module Nanyx.Compiler.Tests.Features.Packages.ShippedPackages
 
 open System.IO
 open Xunit
 open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
 
 /// The manifest of the shipped package `name`, read.
 let private manifestOf (name: string) =
@@ -15,17 +16,50 @@ let private manifestOf (name: string) =
 
 [<Fact>]
 let ``The console host is shipped beside the compiler, at the compiler's version`` () =
-    let manifest = manifestOf Hosts.console.Package
-    Assert.Equal(Hosts.console.Package, manifest.Name)
+    let manifest = manifestOf Hosts.consolePackage
+    Assert.Equal(Hosts.consolePackage, manifest.Name)
     Assert.Equal(Toolchain.version, manifest.Version)
     // `ShippedPackages` reads a shipped package's sources from its `src` directory.
     Assert.Equal<string list>([ "src/**/*.nyx" ], manifest.Sources)
-    Assert.Equal<string list>([ Hosts.console.Module ], manifest.PublicModules |> List.map fst)
+    Assert.Equal<string list>([ "console.host"; "console.prelude" ], manifest.PublicModules |> List.map fst)
+    // It declares that it is a host, with its root module and its prelude.
+    let host = manifest.Declares.Value
+    Assert.Equal(("console.host", Some "console.prelude"), (host.Module, host.Prelude))
+    Assert.Equal(host, HostPackages.console.Value)
+
+[<Fact>]
+let ``The console's interface package is shipped beside the compiler, and the console host depends on it`` () =
+    let core = manifestOf "nanyx.console.core"
+    Assert.Equal(("nanyx.console.core", Toolchain.version), (core.Name, core.Version))
+    Assert.Equal<string list>([ "console"; "env" ], core.PublicModules |> List.map fst)
+    Assert.Equal(None, core.Declares)
+    let host = manifestOf Hosts.consolePackage
+    Assert.Equal<string list>([ "nanyx.console.core" ], host.Dependencies |> List.map _.Name)
+    // A script's build reads the host's package with the shipped packages it depends on.
+    let modules = (ShippedPackages.tryModules Hosts.consolePackage).Value
+    Assert.Equal<string list>([ "nanyx.console.core" ], modules.Dependencies |> List.map _.Package)
+    Assert.Equal<string list>([ "console"; "env" ], modules.Dependencies.Head.PublicModules)
+
+[<Fact>]
+let ``A library uses Console by depending on the console's interface package and importing it`` () =
+    let library (dependencies: string) =
+        [ "acme.greet.nyxp",
+          $"""(package = (name = "acme.greet", version = "0.1.0", sources = ["src/**/*.nyx"]), dependencies = {dependencies})"""
+          "src/greet.nyx",
+          "module greet\n\nimport nanyx.console.core/console\n\nexport def greet: [Console] string -> () = { name -> println(\"hello {name}\") }\n" ]
+    let diagnosticsOf (dependencies: string) =
+        use package = new TempPackage(library dependencies)
+        let file = package.Path "src/greet.nyx"
+        (Package.compileSourceWith Linters.none file (File.ReadAllText file)).Diagnostics
+    Assert.Empty(diagnosticsOf $"""[(package = "nanyx.console.core", version = "{Toolchain.version}")]""")
+    // A library sees no host's prelude, so without the dependency it can't name the package.
+    let diagnostic = Assert.Single(diagnosticsOf "[]")
+    Assert.Equal(DiagnosticCodes.ImportNotFound.Code, diagnostic.Code)
 
 [<Fact>]
 let ``The console host's module is one of the shipped package's`` () =
-    let modules = (ShippedPackages.tryModules Hosts.console.Package).Value
-    Assert.True(modules.Modules.ContainsKey Hosts.console.Module, $"%A{modules.Modules}")
+    let modules = (ShippedPackages.tryModules Hosts.consolePackage).Value
+    Assert.True(modules.Modules.ContainsKey HostPackages.console.Value.Module, $"%A{modules.Modules}")
 
 [<Fact>]
 let ``A package the compiler doesn't ship has no modules`` () =
@@ -33,6 +67,6 @@ let ``A package the compiler doesn't ship has no modules`` () =
 
 [<Fact>]
 let ``A shipped package's file is named after its package, wherever the compiler is`` () =
-    let file = Path.Combine(ShippedPackages.directoryOf Hosts.console.Package, "src", "console.host.nyx")
+    let file = Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "src", "console.host.nyx")
     Assert.Equal(Some "nanyx.console/src/console.host.nyx", ShippedPackages.tryDisplay file)
     Assert.Equal(None, ShippedPackages.tryDisplay (Path.GetFullPath "main.nyx"))

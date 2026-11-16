@@ -215,6 +215,8 @@ let rec private expressionsOfKind (kind: ExpressionKind) : Expression list =
     | FunctionCall (_, _, args) -> args |> List.collect expressions
     | Lambda (parameters, body, _) ->
         (parameters |> List.collect (snd >> Option.toList >> List.collect expressionsOfType)) @ expressions body
+    | ContextNames (names, body) ->
+        (names |> List.collect (fun (_, context, _) -> context |> Option.toList |> List.collect expressionsOfType)) @ expressions body
     | BinaryOp (_, _, left, right) -> expressions left @ expressions right
     | Pipe (value, _, _, args) -> expressions value @ (args |> List.collect expressions)
     | Block statements -> statements |> List.collect expressionsOfStatement

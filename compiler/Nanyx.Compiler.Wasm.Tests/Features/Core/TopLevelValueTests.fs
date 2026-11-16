@@ -8,9 +8,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``A top-level value is built once however often it is read`` () =
     let source =
-        """import nanyx/console
-
-def x = dbg(1)
+        """def x = dbg(1)
 
 println(x)
 println(x + 1)
@@ -20,9 +18,7 @@ println(x + 1)
 [<Fact>]
 let ``A top-level value a function reads is built once across calls`` () =
     let source =
-        """import nanyx/console
-
-def x = dbg(10)
+        """def x = dbg(10)
 
 def next = { n -> n + x }
 
@@ -34,9 +30,7 @@ println(next(2))
 [<Fact>]
 let ``A generic top-level value is built once for each type it is read at`` () =
     let source =
-        """import nanyx/console
-
-def nothing = dbg([])
+        """def nothing = dbg([])
 
 def ints: list(int) = nothing
 def moreInts: list(int) = nothing
@@ -51,9 +45,7 @@ println(strings == [])
 [<Fact>]
 let ``A generic record value read again and again at one type is allocated once`` () =
     let source =
-        """import nanyx/console
-
-def box = (items = [], size = 0)
+        """def box = (items = [], size = 0)
 
 def sizes = { n: int ->
   def b: (items: list(int), size: int) = box
@@ -75,9 +67,7 @@ println(sizes(1) + sizes(2) + sizes(3))
 [<Fact>]
 let ``A top-level value on the heap is freed once the program has run`` () =
     let source =
-        """import nanyx/console
-
-def greeting = "hello" ++ ", world"
+        """def greeting = "hello" ++ ", world"
 
 println(greeting)
 println(greeting)
@@ -87,9 +77,7 @@ println(greeting)
 [<Fact>]
 let ``A value read through its getter is not inlined`` () =
     let source =
-        """import nanyx/console
-
-def x = dbg(1)
+        """def x = dbg(1)
 
 println(x)
 """
@@ -101,9 +89,7 @@ println(x)
 [<Fact>]
 let ``A constant top-level value is inlined, with no getter`` () =
     let source =
-        """import nanyx/console
-
-def limit = 10
+        """def limit = 10
 
 println(limit)
 """

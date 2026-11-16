@@ -14,8 +14,6 @@ let private typeOf (source: string) (name: string) =
 let ``A parameter's function type keeps the contexts written on it`` () =
     let source =
         """
-import nanyx/console
-
 def apply: [Console] ([Console] int -> int), int -> int = { f, x -> f(x) }
 """
     Assert.Equal("([Console] int -> int), int -> int", typeOf source "apply")
@@ -24,8 +22,6 @@ def apply: [Console] ([Console] int -> int), int -> int = { f, x -> f(x) }
 let ``A def whose value names a function point-free is a function that requires the contexts it writes`` () =
     let source =
         """
-import nanyx/console
-
 def g: [Console] int -> () = println
 
 def main: [Console] () -> () = {
@@ -35,15 +31,13 @@ def main: [Console] () -> () = {
 }
 """
     Assert.Equal("[Console] int -> ()", typeOf source "g")
-    let diagnostic = Assert.Single((Compiler.compile "import nanyx/console\ndef g: [Console] int -> () = println\ndef f: int -> () = { x -> g(x) }\n").Diagnostics)
+    let diagnostic = Assert.Single((Compiler.compile "def g: [Console] int -> () = println\ndef f: int -> () = { x -> g(x) }\n").Diagnostics)
     Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, diagnostic.Code)
 
 [<Fact>]
 let ``A result's function type keeps the contexts written on it`` () =
     let source =
         """
-import nanyx/console
-
 def adder: int -> ([Console] int -> int) = { n -> { x -> x + n } }
 """
     Assert.Equal("int -> ([Console] int -> int)", typeOf source "adder")
@@ -52,8 +46,6 @@ def adder: int -> ([Console] int -> int) = { n -> { x -> x + n } }
 let ``A type alias of a function type keeps its contexts`` () =
     let source =
         """
-import nanyx/console
-
 type Handler = [Console] string -> ()
 
 def handle: [Console] Handler, string -> () = { h, s -> h(s) }
@@ -68,8 +60,6 @@ def handle: [Console] Handler, string -> () = { h, s -> h(s) }
 let ``A record field's function type keeps its contexts`` () =
     let source =
         """
-import nanyx/console
-
 def run: (log: [Console] string -> ()) -> int = { r -> 1 }
 """
     Assert.Equal("(log: ([Console] string -> ())) -> int", typeOf source "run")
@@ -87,8 +77,6 @@ def apply: [c] ([c] a -> b), a -> b = { f, x -> f(x) }
 let ``A pure function fits where one that requires contexts is expected`` () =
     compileClean
         """
-import nanyx/console
-
 def twice: [Console] ([Console] int -> int), int -> int = { f, x -> f(f(x)) }
 
 def double: int -> int = { x -> x * 2 }
@@ -105,8 +93,6 @@ dbg(0)
 let ``A function that requires a context does not fit where a pure one is expected`` () =
     let source =
         """
-import nanyx/console
-
 def runPure: (int -> int) -> int = { g -> g(5) }
 
 def pass: ([Console] int -> int) -> int = { f -> runPure(f) }

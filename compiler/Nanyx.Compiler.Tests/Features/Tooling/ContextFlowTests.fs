@@ -69,9 +69,7 @@ let ``The flow view lists the signature's contexts and each use, with the calls 
 
 [<Fact>]
 let ``The flow view shows what an unannotated def was inferred to require`` () =
-    let source = withFinalNewline """import nanyx/console
-
-def greet = {
+    let source = withFinalNewline """def greet = {
   println("a")
   println("b")
 }"""
@@ -79,7 +77,7 @@ def greet = {
 
 [<Fact>]
 let ``There is no flow outside a def`` () =
-    Assert.Equal(None, flowAt "import nanyx/console\n\nprintln(\"top\")\n" "println" 0)
+    Assert.Equal(None, flowAt "println(\"top\")\n" "println" 0)
 
 [<Fact>]
 let ``On a use, the calls it serves are highlighted`` () =

@@ -9,8 +9,6 @@ open Nanyx.Compiler.Tests.TestSupport
 /// A function whose memory block has the cell `remaining` and then a `while` loop with this condition.
 let private countdown (condition: string) =
     let source = $"""
-import nanyx/console
-
 def f = {{
   memory {{
     mut remaining = 3

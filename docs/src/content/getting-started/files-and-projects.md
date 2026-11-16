@@ -39,8 +39,6 @@ A directive is a dotted key after `::`. A key on its own turns something on. A k
 ::linters.default.unusedBindings = "error"
 ::formatter.lineWidth = 80
 
-import nanyx/console
-
 println("Hello!")
 ```
 

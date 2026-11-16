@@ -1,0 +1,7 @@
+--| What every module of a program the console host runs sees without importing it: the terminal,
+  `Console`, with `print`, `println`, `eprint` and `eprintln`, and the process, `Env`, with `args`,
+  `variable` and `exit`.
+module console.prelude
+
+export nanyx.console.core/console (Console, IoError, print, println, eprint, eprintln)
+export nanyx.console.core/env (Env)

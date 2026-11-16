@@ -10,8 +10,6 @@ open TranspilerWasmTestHelpers
 let ``Run - a function value of unit is called the same way however its lambda and the call are written`` () =
     let source =
         """
-import nanyx/console
-
 def run: (() -> int) -> int = { rest -> rest() + rest(()) }
 
 def wrapped: () -> int = { _ -> 100 }
@@ -30,8 +28,6 @@ def main = {
 let ``Run - an argument of unit that does something is still worked out`` () =
     let source =
         """
-import nanyx/console
-
 def run: [Console] (() -> int) -> int = { f -> f(println("before")) }
 
 @entry

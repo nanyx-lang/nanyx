@@ -7,11 +7,11 @@
 module console.host
 
 import (
-  nanyx/console as (Console, IoError)
-  nanyx/env as (Env)
   nanyx/host.memory
   nanyx/host.runtime
   nanyx/text
+  nanyx.console.core/console as (Console, IoError)
+  nanyx.console.core/env as (Env)
 )
 
 @extern("wasi_snapshot_preview1", "fd_write")

@@ -5,9 +5,7 @@ module TranspilerWasmTests.Features.Contexts.LambdaSuppliedContexts
 open Xunit
 open TranspilerWasmTestHelpers
 
-let private withPrefix = """import nanyx/console
-
-context Log = (log: string -> ())
+let private withPrefix = """context Log = (log: string -> ())
 
 def withPrefix: [Console & c] string, ([Log & c] () -> ()) -> () = { prefix, f ->
   use Log(log = { m -> println("[{prefix}] {m}") }) in f()
@@ -47,9 +45,7 @@ withPrefix("app", { log("started") })
 
 [<Fact>]
 let ``Run - the Context escape page's reusable handler`` () =
-    let source = """import nanyx/console
-
-context Log = (log: string -> ())
+    let source = """context Log = (log: string -> ())
 
 def greet: [Log] string -> () = { name ->
   log("hello {name}")

@@ -86,9 +86,7 @@ def total = shapes.area(2, 3)
 [<Fact>]
 let ``Annotated, private and destructuring defs are not reported`` () =
     let source =
-        """import nanyx/console
-
-export def add: int, int -> int = { a, b -> a + b }
+        """export def add: int, int -> int = { a, b -> a + b }
 export def shown: [Console] = { println("hi") }
 def helper = { x: int -> x }
 export def (low, high) = (1, 2)

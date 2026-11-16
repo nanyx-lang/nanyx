@@ -114,7 +114,7 @@ def main = {
 
 [<Fact>]
 let ``Run - a local function with an inferred context that runs in Console, in a def that writes its type (#807)`` () =
-    let source = "import nanyx/console\n" + showContext + """def main: [Console] () -> () = {
+    let source = "" + showContext + """def main: [Console] () -> () = {
   def f = { x -> println(describe(x)) }
   f(Point(x = 1, y = 2))
   def g = { x -> println(x) }
@@ -138,7 +138,7 @@ def main = {
 
 [<Fact>]
 let ``Run - a local function with an inferred context passed as a value, once the call settles its type (#1390)`` () =
-    let source = "import nanyx/console\n" + showContext + """def apply = { g, v -> g(v) }
+    let source = "" + showContext + """def apply = { g, v -> g(v) }
 def main: [Console] () -> () = {
   def p = { x -> println(x) }
   [1, 2] \list.map(p)

@@ -16,6 +16,10 @@ def f: [C] (x, y) -> z
 
 To support values like `MArray` and `MRef` safely, context requirements need to be expressible for value types as well.
 
+For `Memory`, that's being built without the general syntax: `MRef`, `MArray`, `MStack` and `MList` carry their
+block's scope in their types, as `mut T` does ([Mutation](./mutation#planned)). The general `[C] T` below waits for a
+context other than `Memory` that needs it.
+
 # Syntax
 
 Use the same syntax form already used by function signatures:

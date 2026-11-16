@@ -17,9 +17,7 @@ let ``Run - project hello world runs the entry point`` () =
 [<Fact>]
 let ``Run - dbg prints integers, strings and tags in order`` () =
     let source =
-        normalized """import nanyx/console
-
-def main = {
+        normalized """def main = {
   dbg(42)
   dbg(-7)
   dbg("text")
@@ -40,9 +38,7 @@ done""")
 [<Fact>]
 let ``Run - dbg prints a tag-typed value by its tag and payload`` () =
     let source =
-        normalized """import nanyx/console
-
-def pick = { n ->
+        normalized """def pick = { n ->
   if n == 0 then #some("first")
   else if n == 1 then #none
   else #err
@@ -69,9 +65,7 @@ done""")
 [<Fact>]
 let ``Run - console print and println write to stdout`` () =
     let source =
-        normalized """import nanyx/console
-
-print("a")
+        normalized """print("a")
 print("b")
 println("")
 println("c")
@@ -122,7 +116,7 @@ def main = {
 let ``Run - println imported under an alias writes through the runtime's Console`` () =
     let source = """module main
 
-import nanyx/console as c
+import nanyx.console.core/console as c
 
 @entry
 def main = {
@@ -130,13 +124,14 @@ def main = {
   c.println([1, 2])
 }
 """
-    runSource source |> assertRan "hi\n[1, 2]\n"
+    // An application that lists the console's interface package in its dependencies imports it.
+    fst (nanyxOnPackageWithConsoleCore [ "main.nyx", normalized source ] [ "run"; "{package}" ]) |> assertRan "hi\n[1, 2]\n"
 
 [<Fact>]
 let ``Run - a def that declares the Console of an aliased import writes through the runtime's Console`` () =
     let source = """module main
 
-import nanyx/console as c
+import nanyx.console.core/console as c
 
 def g: [c.Console] () -> () = { c.println("5") }
 
@@ -152,7 +147,8 @@ def main = {
   h([1, 2])
 }
 """
-    runSource source |> assertRan "5\n5\nvalue: [1, 2]\n"
+    // An application that lists the console's interface package in its dependencies imports it.
+    fst (nanyxOnPackageWithConsoleCore [ "main.nyx", normalized source ] [ "run"; "{package}" ]) |> assertRan "5\n5\nvalue: [1, 2]\n"
 
 [<Fact>]
 let ``Run - eprint and eprintln write to stderr`` () =

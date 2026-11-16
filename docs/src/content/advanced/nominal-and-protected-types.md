@@ -10,7 +10,7 @@ Nominal types have an identity that is distinct from their shape, which helps pr
 
 There are two kinds, named by their keywords. A _protected_ type has a name that matters and a shape anyone can use. A _private_ type has a name and nothing else outside its module.
 
-`protected` applies to `context` declarations as well as to `type` declarations. A nominal context can only be instantiated by its home module; the standard library's `Memory` context is the main example, which is why `memory { ... }` is the only way to obtain one (see [Memory](./memory)).
+`protected` and `private` apply to `context` declarations as well as to `type` declarations, where they are about access. Any module can require either kind of context in a context list, but only its home module can construct an instance in a `use`. The standard library's `Memory` context is the main example, which is why `memory { ... }` is the only way to obtain one (see [Memory](./memory)). Any module can call a protected context's members, but only the home module can call a private one's: elsewhere, `[Tx]` can be required and passed on to the module's functions, but what the instance holds is the module's to use (see [Contexts](./contexts)). A nominal context also serves only for itself, not for another context with the same members.
 
 A nominal type's name is written like any other type's, so plain text doesn't show which types are nominal. The editor does: the VS Code extension shows nominal types in italics, and hovering a type's name says which kind it is and where it is declared (see [VS Code extension](../standard-tools/vs-code-extension#nominal-types)).
 

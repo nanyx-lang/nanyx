@@ -9,9 +9,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - ignore gives back () for a value of any type`` () =
     let source =
-        """import nanyx/console
-
-@entry
+        """@entry
 def main = {
   def fromInt: () = ignore(42)
   def fromString: () = ignore("text")
@@ -31,9 +29,7 @@ def main = {
 [<Fact>]
 let ``Run - ignore at the end of a pipeline throws the pipeline's result away`` () =
     let source =
-        """import nanyx/console
-
-def shout: [Console] int -> int = { n ->
+        """def shout: [Console] int -> int = { n ->
   println("{n}!")
   n * 2
 }

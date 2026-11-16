@@ -135,9 +135,40 @@ def f = memory {
 
 [<Fact>]
 let ``A def that writes contexts without Memory and takes a cell is an error that says to add it`` () =
-    let source = "import nanyx/console\n\ndef inc: [Console] mut int -> () = { mut cell -> cell := cell + 1 }\n"
+    let source = "def inc: [Console] mut int -> () = { mut cell -> cell := cell + 1 }\n"
     let result = Compiler.compile source
     Assert.Equal<string list>([ DiagnosticCodes.UndeclaredContext.Code ], result.Diagnostics |> List.map _.Code)
     let diagnostic = result.Diagnostics.Head
     Assert.Contains("'[Console & Memory]'", diagnostic.Message)
     Assert.Equal("Console", source.Substring(diagnostic.Span.Value.Start, diagnostic.Span.Value.End - diagnostic.Span.Value.Start))
+/// The issue's example (#1473): `bump`'s `[Memory]` is inferred and it is called in `f`'s block, with `import`, and `f`
+/// annotated or not.
+let private bumpInABlock (import: string) (annotation: string) =
+    $"""
+{import}
+
+def bump = {{ mut n -> n := n + 1 }}
+
+def f{annotation} = {{
+  memory {{
+    mut s = 0
+    bump(mut s)
+    s
+  }}
+}}
+"""
+
+[<Fact>]
+let ``A block's Memory is given to a function whose Memory is inferred, with the host's contexts in scope and a module imported`` () =
+    for import in [ ""; "import nanyx/text" ] do
+        let typed = compileClean (bumpInABlock import ": () -> int")
+        Assert.Equal("() -> int", Unifier.tyToString typed.Types.["f"])
+
+[<Fact>]
+let ``A block's Memory does not leak into the type of a def that does not write its type`` () =
+    for import in [ ""; "import nanyx/text" ] do
+        let result = Compiler.compile (bumpInABlock import "")
+        Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics with '{import}': %A{result.Diagnostics}")
+        Assert.Equal<(string * string) list>(
+            [ "bump", "[Memory] mut int -> ()"; "f", "() -> int" ],
+            TypeHints.topLevelTypes Ascii "" result |> List.map (fun hint -> hint.Name, hint.Type))

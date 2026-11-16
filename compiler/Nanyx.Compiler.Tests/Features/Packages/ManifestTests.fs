@@ -53,7 +53,7 @@ let ``A manifest is read with comments, its sources, public modules, formatter, 
 """
     Assert.Equal("acme.demo", manifest.Name)
     Assert.Equal<string list>([ "src/**/*.nyx" ], manifest.Sources)
-    Assert.Equal(Some Hosts.console, manifest.Host)
+    Assert.Equal(Some Hosts.consolePackage, manifest.Host |> Option.map _.Package)
 
 [<Fact>]
 let ``Linters turn on the linters they name, with the severities their settings set`` () =
@@ -124,7 +124,7 @@ let ``An unknown field is an error at its name`` () =
     Assert.Equal<string list>([ DiagnosticCodes.UnknownManifestField.Code; DiagnosticCodes.UnknownManifestField.Code ], errors |> List.map _.Code)
     Assert.Equal<string list>(
         [ "the manifest has no field 'extras'; its fields are 'package', 'dependencies', 'linters', 'host', 'formatter'"
-          "package has no field 'colour'; its fields are 'name', 'version', 'sources', 'publicModules'" ],
+          "package has no field 'colour'; its fields are 'name', 'version', 'sources', 'publicModules', 'host'" ],
         errors |> List.map _.Message
     )
     let extras = errors.[0].Span.Value
@@ -177,7 +177,7 @@ let ``An unknown linter, rule, severity or host is an error`` () =
           DiagnosticCodes.UnknownManifestField.Code,
           "the rules of nanyx.lint has no field 'noSuchRule'; its fields are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'plusBetweenContexts', 'unannotatedExports', 'unusedResults', 'shadowedPreludeNames', 'semicolons', 'linterFailed'"
           DiagnosticCodes.InvalidManifestValue.Code, "the rule unusedBindings must be #error, #warning, #info, #hint, #off, not the string \"error\""
-          DiagnosticCodes.InvalidManifestValue.Code, "there is no host 'acme.host'; the hosts are 'nanyx.console'" ],
+          DiagnosticCodes.InvalidManifestValue.Code, "the compiler ships no package 'acme.host': a host the compiler doesn't ship is found by its path, as host = (package = \"acme.host\", path = \"../acme.host\")" ],
         errorsOf
             $"""
 (
@@ -194,7 +194,7 @@ let ``An unknown linter, rule, severity or host is an error`` () =
 [<Fact>]
 let ``A host's settings are not supported yet`` () =
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.UnsupportedManifestField.Code, "nanyx.console takes no settings" ],
+        [ DiagnosticCodes.UnsupportedManifestField.Code, "a host takes no settings yet" ],
         errorsOf
             $"""
 (
@@ -218,6 +218,30 @@ let ``A linter or host must be named at the version the compiler ships, exactly`
   package = (name = "demo", version = "0.1.0")
   linters = [(package = "nanyx.lint", version = "0.1.0")]
   host = (package = "nanyx.console", version = "99.0.0")
+)
+"""
+    )
+
+[<Fact>]
+let ``A dependency the compiler ships is named at its version, and found beside the compiler`` () =
+    let manifest =
+        okOf $"""(package = (name = "demo", version = "0.1.0"), dependencies = [(package = "nanyx.console.core", version = "{Toolchain.version}")])"""
+    Assert.Equal<(string * string) list>(
+        [ "nanyx.console.core", ShippedPackages.directoryOf "nanyx.console.core" ],
+        manifest.Dependencies |> List.map (fun dependency -> dependency.Name, dependency.Directory))
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.VersionNotShipped.Code,
+          $"the compiler ships nanyx.console.core {Toolchain.version}, not 99.0.0: a package the compiler ships is named at its version exactly"
+          DiagnosticCodes.InvalidManifestValue.Code,
+          "the dependency acme.util is found by its path, so it has no version: give one or the other" ],
+        errorsOf
+            """
+(
+  package = (name = "demo", version = "0.1.0")
+  dependencies = [
+    (package = "nanyx.console.core", version = "99.0.0")
+    (package = "acme.util", path = "../util", version = "1.0.0")
+  ]
 )
 """
     )

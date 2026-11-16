@@ -11,8 +11,6 @@ The `Result(a, e)` type and its functions, the `proc` workflow, and the helpers 
 `Result(a, e)` is `#some(a) | #error(e)`: a success or an error. Its functions are attached to `Result`, and called as `Result.map(r, f)` or `r \Result.map(f)`.
 
 ```nanyx
-import nanyx/console
-
 def parse: string -> Result(int, string) = { s ->
   int.fromString(s) \someToResult("not a number: {s}")
 }
@@ -32,8 +30,6 @@ println(parse("7") \Result.bind(half))
 There is no `Option` type. Any union that includes `#some(a)` is [option-like](../advanced/option-like-types): `#some(a) | #none` is the most common, and `int.fromString` gives a `#some(int) | #invalidInt`. These helpers keep every tag but `#some` as it is, whatever it is. They are plain functions rather than definitions attached to a type, because there is no `Option` type for them to be attached to, and they are named for the `#some` tag they act on, as `mapSome`, `someOr` and `somes` are.
 
 ```nanyx
-import nanyx/console
-
 println(["1", "x", "3"] \list.map(int.fromString) \somes)
 println(int.fromString("x") \mapSome { * 2 } \someOr(0))
 -- [1, 3]

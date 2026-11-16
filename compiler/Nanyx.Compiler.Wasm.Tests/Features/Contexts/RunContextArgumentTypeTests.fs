@@ -7,9 +7,7 @@ open TranspilerWasmTestHelpers
 
 [<Fact>]
 let ``Run - a function that requires a context applied to a type the module defines`` () =
-    let source = """import nanyx/console
-
-context ToText(a) = (textlen: a -> int)
+    let source = """context ToText(a) = (textlen: a -> int)
 
 type Word = (text: string)
 
@@ -26,9 +24,7 @@ def main = {
 
 [<Fact>]
 let ``Run - a function that requires a context applied to an applied type`` () =
-    let source = """import nanyx/console
-
-context Size(a) = (size: a -> int)
+    let source = """context Size(a) = (size: a -> int)
 
 def list.size: list(int) -> int = { xs -> 3 }
 
@@ -43,9 +39,7 @@ def main = {
 
 [<Fact>]
 let ``Run - a function that requires a context applied to a tag union`` () =
-    let source = """import nanyx/console
-
-def f: [ToString(#x(a) | #y)] (#x(a) | #y) -> string = { v -> "{v}" }
+    let source = """def f: [ToString(#x(a) | #y)] (#x(a) | #y) -> string = { v -> "{v}" }
 
 @entry
 def main = {
@@ -57,9 +51,7 @@ def main = {
 [<Fact>]
 let ``Run - a function that requires one context applied to two structural types`` () =
     // Each instance's members are known by a key of their own, not both by `ToString_unknown_toString`.
-    let source = """import nanyx/console
-
-def f: [ToString(#x(a) | #y) & ToString((int, bool))] (#x(a) | #y), (int, bool) -> string = { v, p -> "{v} {p}" }
+    let source = """def f: [ToString(#x(a) | #y) & ToString((int, bool))] (#x(a) | #y), (int, bool) -> string = { v, p -> "{v} {p}" }
 
 @entry
 def main = {

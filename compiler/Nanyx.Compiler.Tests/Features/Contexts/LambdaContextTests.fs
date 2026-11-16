@@ -12,8 +12,6 @@ let private typeOf (source: string) (name: string) =
 
 let private mk =
     """
-import nanyx/console
-
 def mk: [Console] () -> ([Console] int -> int) = {
   { n ->
     println("side effect {n}")
@@ -60,8 +58,6 @@ let ``Calling a function value requires the contexts its type says`` () =
     let code, text =
         singleError
             """
-import nanyx/console
-
 def call: ([Console] int -> int) -> int = { g -> g(5) }
 """
     Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, code)
@@ -72,8 +68,6 @@ let ``A lambda that returns a function requiring a context must say so`` () =
     let code, _ =
         singleError
             """
-import nanyx/console
-
 def mk: [Console] () -> (int -> int) = {
   { n ->
     println("side effect {n}")
@@ -96,8 +90,6 @@ def describe = { n: int -> "{n}" }
 let ``A function named as a value has its contexts in its type`` () =
     let source =
         """
-import nanyx/console
-
 def show: [Console] int -> () = { n -> println(n) }
 
 def main: [Console] () -> () = {
@@ -111,8 +103,6 @@ def main: [Console] () -> () = {
 let ``println passes to list.map in a def that declares Console`` () =
     compileClean
         """
-import nanyx/console
-
 def main: [Console] list(int) -> list(()) = { xs -> xs \list.map(println) }
 
 def each: [Console] list(int) -> list(int) = { xs ->
@@ -129,8 +119,6 @@ let ``A lambda that requires Console cannot be mapped in a def that does not dec
     let code, text =
         singleError
             """
-import nanyx/console
-
 def each: list(int) -> list(int) = { xs ->
   xs \list.map { n ->
     println(n)
@@ -146,8 +134,6 @@ let ``A function value that requires Console makes list.map require it`` () =
     let code, text =
         singleError
             """
-import nanyx/console
-
 def each: ([Console] int -> ()) -> list(()) = { g -> [1, 2] \list.map(g) }
 """
     Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, code)
@@ -182,8 +168,6 @@ def cell = memory { 1 }
 let ``An unannotated higher-order function infers a context variable`` () =
     let source =
         """
-import nanyx/console
-
 def apply = { f, x -> f(x) }
 
 def twice = { f, xs -> list.map(xs, f) }
@@ -198,8 +182,6 @@ let ``Calling an inferred higher-order function with a function that requires Co
     let code, text =
         singleError
             """
-import nanyx/console
-
 def apply = { f, x -> f(x) }
 
 def run: ([Console] int -> ()) -> () = { g -> apply(g, 1) }
@@ -211,8 +193,6 @@ def run: ([Console] int -> ()) -> () = { g -> apply(g, 1) }
 let ``Calling a member that declares a context requires it`` () =
     let source =
         """
-import nanyx/console
-
 context Log = (log: [Console] string -> ())
 
 def heading: [Log] string -> () = { title -> log(title) }

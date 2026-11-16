@@ -21,7 +21,7 @@ def value = missing"""
 
 [<Fact>]
 let ``A type mismatch in an argument is reported at the argument`` () =
-    let source = "import nanyx/console\n\nwrite(42)"
+    let source = "write(42)"
     let diagnostic = single (Compiler.compile source)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     Assert.Equal("42", textAt source (spanOf diagnostic))
@@ -110,15 +110,16 @@ let ``A parse error has a code and the position where parsing failed`` () =
 [<Fact>]
 let ``A parse error's message leaves out the file however long its path is`` () =
     // FParsec wraps the line naming the file and position when the path is long.
-    let directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "nanyx-diagnostics-tests", String.replicate 6 "a-rather-long-directory-name-", System.Guid.NewGuid().ToString("N"))
-    System.IO.Directory.CreateDirectory directory |> ignore
-    let file = System.IO.Path.Combine(directory, "broken.nyx")
-    System.IO.File.WriteAllText(file, "def = 2")
-    let diagnostic = single (Compiler.compileFile file)
-    Assert.Equal(DiagnosticCodes.SyntaxError.Code, diagnostic.Code)
-    Assert.DoesNotContain("a-rather-long", diagnostic.Message)
-    Assert.DoesNotContain("Ln:", diagnostic.Message)
-    Assert.StartsWith("def = 2", diagnostic.Message)
+    withTempDir (fun root ->
+        let directory = Path.Combine(root, String.replicate 6 "a-rather-long-directory-name-")
+        Directory.CreateDirectory directory |> ignore
+        let file = Path.Combine(directory, "broken.nyx")
+        File.WriteAllText(file, "def = 2")
+        let diagnostic = single (Compiler.compileFile file)
+        Assert.Equal(DiagnosticCodes.SyntaxError.Code, diagnostic.Code)
+        Assert.DoesNotContain("a-rather-long", diagnostic.Message)
+        Assert.DoesNotContain("Ln:", diagnostic.Message)
+        Assert.StartsWith("def = 2", diagnostic.Message))
 
 [<Fact>]
 let ``An unknown standard library module is reported at the import`` () =

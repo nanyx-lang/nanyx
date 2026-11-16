@@ -6,9 +6,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - a hole of a built-in type writes it as it always has`` () =
     let source =
-        normalized """import nanyx/console
-
-@entry
+        normalized """@entry
 def main = {
   def n = -42
   println("{n} {0} {1.5} {true} {false} {"text"} {#red} {n > 0}")
@@ -20,9 +18,7 @@ def main = {
 [<Fact>]
 let ``Run - a hole writes a value through its type's attached toString`` () =
     let source =
-        normalized """import nanyx/console
-
-type Point = (x: int, y: int)
+        normalized """type Point = (x: int, y: int)
 def Point.toString = { p -> "({p.x}, {p.y})" }
 
 type Money = private int
@@ -42,9 +38,7 @@ def main = {
 [<Fact>]
 let ``Run - a use changes how a hole writes its type`` () =
     let source =
-        normalized """import nanyx/console
-
-@entry
+        normalized """@entry
 def main = {
   println("before {1}")
   def bracketed: ToString(int) = ( toString = { n -> "<{int.toString(n)}>" } )
@@ -57,8 +51,7 @@ def main = {
 [<Fact>]
 let ``Run - a generic function that interpolates its parameter writes each type it is called with`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 type Point = (x: int, y: int)
 def Point.toString = { p -> "({p.x}, {p.y})" }
@@ -78,8 +71,7 @@ def main = {
 [<Fact>]
 let ``Run - a function that requires ToString writes a tag passed to it by its name`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 def angled = { value -> "<{value}>" }
 def labelled: [ToString(a)] (string, a) -> string = { name, value -> "{name}: {value}" }
@@ -98,9 +90,7 @@ def main = {
 let ``Run - a user's own ToString context and the prelude's agree`` () =
     // The program declares a `ToString` of its own, as code written before the prelude had one does.
     let source =
-        normalized """import nanyx/console
-
-context ToString(a) = (toString: a -> string)
+        normalized """context ToString(a) = (toString: a -> string)
 type Point = (x: int, y: int)
 def Point.toString = { p -> "({p.x}, {p.y})" }
 
@@ -119,8 +109,6 @@ def main = {
 let ``Run - a hole prints the result of a context's member`` () =
     let source =
         """
-import nanyx/console
-
 context Describe(a) = (size: a -> int, label: a -> string, parts: a -> (x: int, y: int))
 type Point = (x: int, y: int)
 
@@ -143,9 +131,7 @@ def main = {
 let ``Run - an int hole writes every number of digits, either sign, and the ints at the ends`` () =
     // The text between holes is copied from its string literal, and each int written by one helper (#1268).
     let source =
-        normalized """import nanyx/console
-
-@entry
+        normalized """@entry
 def main = {
   def smallest = -9_223_372_036_854_775_807 - 1
   println("{0},{9},{10},{99},{100},{-1},{-10},{1234567890}")

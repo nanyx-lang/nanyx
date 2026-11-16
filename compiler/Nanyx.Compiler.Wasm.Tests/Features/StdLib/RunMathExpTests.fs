@@ -8,8 +8,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - nanyx/math exp and ln are inverses, and exp(1.0) is e`` () =
     let source =
-        """import nanyx/console
-import nanyx/math as math
+        """import nanyx/math as math
 
 println("{math.exp(1.0) == math.e} {math.exp(1.0)} {math.ln(math.e)}")
 println("{math.exp(0.0)} {math.ln(1.0)}")
@@ -22,8 +21,7 @@ println("{math.exp(2.0)} {math.exp(-1.0)} {math.ln(math.exp(2.0))}")
 [<Fact>]
 let ``Run - nanyx/math ln is NaN below zero and minus infinity at zero`` () =
     let source =
-        """import nanyx/console
-import nanyx/math as math
+        """import nanyx/math as math
 
 println("{math.ln(-1.0)} {math.ln(0.0)}")
 """
@@ -33,8 +31,7 @@ println("{math.ln(-1.0)} {math.ln(0.0)}")
 [<Fact>]
 let ``Run - nanyx/math sign gives -1, 0 or 1 of the argument's type`` () =
     let source =
-        """import nanyx/console
-import nanyx/math as math
+        """import nanyx/math as math
 
 def direction: [Num(a) & Ord(a)] a, a -> a = { from, to -> math.sign(to - from) }
 
@@ -48,8 +45,7 @@ println("{direction(5, 2)} {direction(1.5, 4.0)}")
 [<Fact>]
 let ``Run - nanyx/math pi and e`` () =
     let source =
-        """import nanyx/console
-import nanyx/math as math
+        """import nanyx/math as math
 
 def area: float -> float = { r -> math.pi * r * r }
 

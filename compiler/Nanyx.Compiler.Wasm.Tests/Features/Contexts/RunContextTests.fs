@@ -9,9 +9,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - a function requiring Console gets the runtime's instance`` () =
     let source =
-        normalized """import nanyx/console
-
-def greet: [Console] string -> () = { name -> println("Hello, " ++ name) }
+        normalized """def greet: [Console] string -> () = { name -> println("Hello, " ++ name) }
 
 greet("Nanyx")
 """
@@ -20,9 +18,7 @@ greet("Nanyx")
 [<Fact>]
 let ``Run - a use binding overrides the runtime's Console`` () =
     let source =
-        normalized """import nanyx/console
-
-def greet: [Console] string -> () = { name -> println(name) }
+        normalized """def greet: [Console] string -> () = { name -> println(name) }
 
 def main = {
   use (write = { s -> write("[" ++ s ++ "]") })
@@ -37,9 +33,7 @@ greet("loud")
 
 /// A context with one member, and a function that requires it, for the tests of what a `use` can bind (#88).
 let private myConsolePrelude =
-    normalized """import nanyx/console
-
-context MyConsole = (p: [Console] string -> ())
+    normalized """context MyConsole = (p: [Console] string -> ())
 
 def greet: [MyConsole & Console] string -> () = { name -> p(name) }
 
@@ -95,9 +89,7 @@ def main = {
 [<Fact>]
 let ``Run - use bindings of parameterised contexts and records`` () =
     let source =
-        normalized """import nanyx/console
-
-context Show(a) = (show: a -> string)
+        normalized """context Show(a) = (show: a -> string)
 context Ask = (ask: () -> int)
 
 def describe: [Show(a) & Show(b)] (a, b) -> string = { x, y -> Show(a).show(x) ++ " & " ++ Show(b).show(y) }
@@ -122,9 +114,7 @@ def main = {
 let ``Run - a use of a record value of a parameterised context's shape loads it as the instance`` () =
     // `int` has its own `+`, which an instance found by the record's shape is nearer than (#581).
     let source =
-        normalized """import nanyx/console
-
-context Add(a) = (`+`: (a, a) -> a)
+        normalized """context Add(a) = (`+`: (a, a) -> a)
 
 def add: [Add(a)] a, a -> a = { x, y -> `+`(x, y) }
 
@@ -147,9 +137,7 @@ def main = { println("{named()} {written()}") }
 [<Fact>]
 let ``Run - use loads a named instance of a parameterised context: a def, a local, a parameter or a call's result (#581)`` () =
     let source =
-        normalized """import nanyx/console
-
-context Combine(a) = (combine: (a, a) -> a)
+        normalized """context Combine(a) = (combine: (a, a) -> a)
 
 def double: [Combine(a)] a -> a = { x -> Combine(a).combine(x, x) }
 def timesInt: Combine(int) = (combine = { a, b -> a * b })
@@ -176,9 +164,7 @@ def main = {
 [<Fact>]
 let ``Run - use loads a top-level instance of a parameterised context (#587)`` () =
     let source =
-        normalized """import nanyx/console
-
-context Add(a) = (
+        normalized """context Add(a) = (
   `+`: (a, a) -> a
 )
 
@@ -199,9 +185,7 @@ def main = {
 [<Fact>]
 let ``Run - use loads a top-level record of a plain context (#587)`` () =
     let source =
-        normalized """import nanyx/console
-
-context Greeter = (greet: string -> string)
+        normalized """context Greeter = (greet: string -> string)
 
 def hello: [Greeter] string -> string = { name -> greet(name) }
 
@@ -221,9 +205,7 @@ def main = {
 [<Fact>]
 let ``Run - use ... in loads an instance for its body only (#320)`` () =
     let source =
-        normalized """import nanyx/console
-
-context Counter = (next: int -> int)
+        normalized """context Counter = (next: int -> int)
 context Combine(a) = (combine: (a, a) -> a)
 
 def counted: [Counter] int -> int = { n -> next(n) }
@@ -248,9 +230,7 @@ def main = {
 [<Fact>]
 let ``Run - use ... in runs an indented block after in with the context loaded (#673)`` () =
     let source =
-        """import nanyx/console
-
-context Counter = (next: int -> int)
+        """context Counter = (next: int -> int)
 
 def counted: [Counter] int -> int = { n -> next(n) }
 
@@ -271,9 +251,7 @@ def main = {
 [<Fact>]
 let ``Run - a call synthesizes a context's instance from attached definitions, and a use wins over it`` () =
     let source =
-        normalized """import nanyx/console
-
-context Show(a) = (show: a -> string)
+        normalized """context Show(a) = (show: a -> string)
 
 type Point = (x: int, y: int)
 def Point.show: Point -> string = { p -> "({p.x}, {p.y})" }
@@ -311,9 +289,7 @@ let ``Run - contexts through the core IR, with arguments that store on the way``
     // A context member called with an argument that interpolates, and a record whose field is computed through a
     // match, after another computed by a call: each operand that stores to a local is computed where it is used.
     let source =
-        normalized """import nanyx/console
-
-context Ask = (ask: () -> int)
+        normalized """context Ask = (ask: () -> int)
 
 def twice: [Ask] () -> int = { ask() + ask() }
 
@@ -336,9 +312,7 @@ main()
 [<Fact>]
 let ``Run - a context member named by an operator is synthesized from an attached operator`` () =
     let source =
-        normalized """import nanyx/console
-
-context Eq(a) = (`==`: (a, a) -> bool)
+        normalized """context Eq(a) = (`==`: (a, a) -> bool)
 
 type Point = protected (x: int, y: int)
 def Point.`==`: Point, Point -> bool = { p, q -> p.x == q.x }
@@ -359,9 +333,7 @@ def main = {
 [<Fact>]
 let ``Run - a lambda in a generic function calls the members of the context the function requires, and passes it on`` () =
     let source =
-        normalized """import nanyx/console
-
-context Show(a) = (show: a -> string)
+        normalized """context Show(a) = (show: a -> string)
 
 type Point = (x: int, y: int)
 def Point.show: Point -> string = { p -> "({p.x}, {p.y})" }
@@ -388,9 +360,7 @@ def main = {
 /// A parameterised context, two types with instances of it, and a function that requires it, for the tests of the
 /// contexts a function that does not write its type requires (#544).
 let private inferredShowPrelude =
-    normalized """import nanyx/console
-
-context Show(a) = (show: a -> string)
+    normalized """context Show(a) = (show: a -> string)
 
 type Point = (x: int, y: int)
 type Size = (w: int)
@@ -433,9 +403,7 @@ def main = {
 /// `Sum`, whose `` `0` `` is a value rather than a function, with an instance for `Point` synthesized from its attached
 /// definitions, for the tests of context members used as values (#580).
 let private sumPrelude =
-    normalized """import nanyx/console
-
-context Sum(a) = (`0`: a, `+`: (a, a) -> a)
+    normalized """context Sum(a) = (`0`: a, `+`: (a, a) -> a)
 
 type Point = (x: int, y: int)
 def Point.`0`: Point = Point(x = 0, y = 0)
@@ -475,9 +443,7 @@ def main = {
 let ``Run - a synthesized instance from attached definitions that do not write their types`` () =
     // `Point.`+`` reads the fields of any record that has them, so it is generic: it is passed at the member's type.
     let source =
-        normalized """import nanyx/console
-
-context Sum(a) = (`0`: a, `+`: (a, a) -> a)
+        normalized """context Sum(a) = (`0`: a, `+`: (a, a) -> a)
 
 type Point = (x: int, y: int)
 def Point.`0` = Point(x = 0, y = 0)
@@ -495,9 +461,7 @@ def main = {
 [<Fact>]
 let ``Run - a function member of no parameters is passed from a synthesized instance`` () =
     let source =
-        normalized """import nanyx/console
-
-context Zero(a) = (zero: () -> a)
+        normalized """context Zero(a) = (zero: () -> a)
 
 type Point = (x: int, y: int)
 def Point.zero: () -> Point = { Point(x = 7, y = 8) }
@@ -514,9 +478,7 @@ def main = {
 [<Fact>]
 let ``Run - a function member is passed on as a value, by its name and through its context`` () =
     let source =
-        normalized """import nanyx/console
-
-context Show(a) = (show: a -> string)
+        normalized """context Show(a) = (show: a -> string)
 
 type Point = (x: int, y: int)
 def Point.show: Point -> string = { p -> "({p.x}, {p.y})" }
@@ -535,9 +497,7 @@ def main = {
 [<Fact>]
 let ``Run - an operator in a generic function calls the member of the context the function requires`` () =
     let source =
-        normalized """import nanyx/console
-
-context Add(a) = (`+`: (a, a) -> a)
+        normalized """context Add(a) = (`+`: (a, a) -> a)
 
 type Point = (x: int, y: int)
 def Point.`+`: Point, Point -> Point = { p, q -> Point(x = p.x + q.x, y = p.y + q.y) }
@@ -581,9 +541,7 @@ def main = { println(describe(Point(x = 1, y = 2))) }
 [<Fact>]
 let ``Run - a lambda that uses a context runs inside the def that supplies it (#774)`` () =
     let source =
-        """import nanyx/console
-
-context Foo = (bar: string -> string)
+        """context Foo = (bar: string -> string)
 
 def inside: [Foo] string -> string = { s ->
   def f = { bar(s) }
@@ -598,9 +556,7 @@ println(use Foo(bar = { s -> s ++ "!" }) in inside("ok"))
 [<Fact>]
 let ``Run - a lambda calls a member a use loads (#778)`` () =
     let source =
-        """import nanyx/console
-
-context Foo = (bar: string -> string)
+        """context Foo = (bar: string -> string)
 
 def calledInUse = {
   use Foo(bar = { s -> s ++ "?" })
@@ -615,9 +571,7 @@ println(calledInUse())
 [<Fact>]
 let ``Run - a lambda passed to list.map calls a member a use loads (#778)`` () =
     let source =
-        """import nanyx/console
-
-context Foo = (bar: string -> string)
+        """context Foo = (bar: string -> string)
 
 def mapped = {
   use Foo(bar = { s -> s ++ "!" })
@@ -631,9 +585,7 @@ println(mapped())
 [<Fact>]
 let ``Run - a nested lambda passes the members a use loads on to a def that requires them (#778)`` () =
     let source =
-        """import nanyx/console
-
-context Foo = (bar: string -> string)
+        """context Foo = (bar: string -> string)
 
 def twice: [Foo] string -> string = { s -> bar(bar(s)) }
 

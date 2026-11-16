@@ -19,7 +19,8 @@ let normalized (source: string) = source.ReplaceLineEndings "\n"
 /// quotes, and the code after them, on its last line.
 let withFinalNewline (source: string) = normalized source + "\n"
 
-let withTempDir (action: string -> unit) =
+/// What `action` gives in a new directory of its own under the temporary directory, which is deleted after it.
+let withTempDir (action: string -> 'T) : 'T =
     let dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))
     Directory.CreateDirectory dir |> ignore
     try
@@ -43,10 +44,10 @@ let spanOf (diagnostic: Diagnostic) =
 /// The one diagnostic compiling `source` gives.
 /// A manifest's `host` entry naming the console host the compiler ships, at its version: what an application with an
 /// `@entry` writes.
-let consoleHostEntry = $"host = (package = \"{Hosts.console.Package}\", version = \"{Toolchain.version}\")"
+let consoleHostEntry = $"host = (package = \"{Hosts.consolePackage}\", version = \"{Toolchain.version}\")"
 
 /// The console host's file, in the package the compiler ships (see `ShippedPackages`).
-let consoleHostFile = Path.Combine(ShippedPackages.directoryOf Hosts.console.Package, "src", "console.host.nyx")
+let consoleHostFile = Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "src", "console.host.nyx")
 
 /// `source` checked as the console host's file is, so that it may require `HostRuntime`, with `linters`.
 let compileAsHost (linters: LinterOptions) (source: string) = Compiler.compileFrom linters (SourceFile consoleHostFile) source
@@ -81,6 +82,25 @@ type TempPackage(files: (string * string) list) =
     member _.Path(relative: string) = Path.Combine(root, relative)
     interface IDisposable with
         member _.Dispose() = try Directory.Delete(root, true) with _ -> ()
+
+/// The manifest of an application under the console host that depends on the console's interface package,
+/// `nanyx.console.core`, so that its files can import `nanyx.console.core/console` and `nanyx.console.core/env`.
+let consoleCoreApp =
+    $"""(
+  package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"])
+  dependencies = [(package = "nanyx.console.core", version = "{Toolchain.version}")]
+  {consoleHostEntry}
+)
+"""
+
+/// `source`, a module, compiled with `linters` as the file `src/main.nyx` of an application whose manifest is
+/// `consoleCoreApp`.
+let compileWithConsoleCoreUsing (linters: LinterOptions) (source: string) =
+    use package = new TempPackage([ "app.nyxp", consoleCoreApp; "src/main.nyx", source ])
+    Package.compileSourceWith linters (package.Path "src/main.nyx") source
+
+/// `source`, a module, compiled as the file `src/main.nyx` of an application whose manifest is `consoleCoreApp`.
+let compileWithConsoleCore (source: string) = compileWithConsoleCoreUsing Linters.none source
 
 /// A listener that writes down what it is told, as "file <path>", "start <name>", "end <name>" and "reused <name>".
 type Recording() =

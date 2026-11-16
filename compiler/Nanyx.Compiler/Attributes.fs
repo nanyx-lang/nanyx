@@ -7,25 +7,9 @@ module Attributes =
     /// The attribute that marks a definition as the program's entry point: `@entry def main = { ... }`.
     let entryAttribute = "entry"
 
-    let private importsModule (moduleName: string) (module': Module) =
-        SyntaxTree.collectImports module'
-        |> List.exists (fun item ->
-            match item.Source with
-            | ModuleImport name -> name = moduleName
-            | PathImport _ -> false)
-
     /// The import of `host` itself, under an alias of its own, which a module that runs under it gets.
     let internal hostImport (host: Host) =
         TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport host.Import) (Some Hosts.importAlias) ])
-
-    /// The imports the module that declares the entry point gets from `host`: the modules of the contexts it provides
-    /// that the module sees without importing them, and the host itself (see `hostImport`).
-    let private hostImports (host: Host) (module': Module) =
-        let provided =
-            host.ImplicitModules
-            |> List.filter (fun moduleName -> not (importsModule moduleName module'))
-            |> List.map (fun moduleName -> TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport moduleName) None ]))
-        provided @ [ hostImport host ]
 
     /// The attribute that says how a workflow keyword, a member of a builder's context, takes its arguments:
     /// `@customKeywordType(#bind)` (see the workflows page).
@@ -132,7 +116,7 @@ module Attributes =
                     Diagnostics.at
                         DiagnosticCodes.EntryInLibrary
                         attribute.Span
-                        $"'{name}' is an entry point, but its package names no host, so it is a library, which has none: an application names the host its @entry runs under in its manifest, as host = (package = \"{Hosts.console.Package}\", version = \"{Toolchain.version}\")"
+                        $"'{name}' is an entry point, but its package names no host, so it is a library, which has none: an application names the host its @entry runs under in its manifest, as host = (package = \"{Hosts.consolePackage}\", version = \"{Toolchain.version}\")"
                 loop rest (def :: acc) entries externs (error :: errors)
             | Kind (Attribute(attributeName, _)) as attribute :: (Kind (Def (ValueDef(_, name, _, value))) as def) :: rest when attributeName = entryAttribute ->
                 // The call is made up for the def, and reported there. The entry point passed to `run` is at the
@@ -154,6 +138,7 @@ module Attributes =
         | items, entries, externs, errors ->
             match errors @ Externs.conflicts externs with
             | [] ->
-                let entryImport = match host with Some host when not entries.IsEmpty -> hostImports host items | _ -> []
+                // The host's prelude is imported into every module of the program, not here (see `Library`).
+                let entryImport = match host with Some host when not entries.IsEmpty -> [ hostImport host ] | _ -> []
                 Ok (entryImport @ items @ List.map snd entries, List.map fst entries)
             | errors -> Error errors

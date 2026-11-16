@@ -11,9 +11,7 @@ let ``Run - float arithmetic and printing`` () =
     // Regression: float literals parsed but `pi * 2.0` was "Type mismatch: float vs int" and the backend had
     // no f64 support at all (#36). Floats are boxed f64 values.
     let source =
-        normalized """import nanyx/console
-
-def half: float -> float = { x -> x / 2.0 }
+        normalized """def half: float -> float = { x -> x / 2.0 }
 @entry
 def main = {
   def pi = 3.14
@@ -30,9 +28,7 @@ def main = {
 let ``Run - an operator on a type that attaches it calls the attached definition`` () =
     // #527: `` def V.`+` = ... `` parsed, but `a + b` on a `V` was the built-in `+` and a type mismatch.
     let source =
-        normalized """import nanyx/console
-
-type V = protected (x: int, y: int)
+        normalized """type V = protected (x: int, y: int)
 def V.`+`: V, V -> V = { p, q -> V(x = p.x + q.x, y = p.y + q.y) }
 def V.`==`: V, V -> bool = { p, q -> p.x == q.x }
 @entry
@@ -49,9 +45,7 @@ def main = {
 let ``Run - the remainder of floats is truncated, with the sign of the left operand`` () =
     // #607: `%` on floats type-checked and then had no instruction in the backend. It is C's `fmod`.
     let source =
-        normalized """import nanyx/console
-
-@entry
+        normalized """@entry
 def main = {
   def neg = 0.0 - 7.5
   println("{7.5 % 2.0} {neg % 2.0} {7.5 % (0.0 - 2.0)} {6.0 % 2.0} {1.5 % 4.0}")
@@ -64,9 +58,7 @@ def main = {
 let ``Run - prefix minus negates ints and floats, and keeps the sign of zero`` () =
     // #609: `-x` did not parse. On a float it is IEEE 754's negation, so `-0.0` is negative zero: 1 / -0.0 is -inf.
     let source =
-        normalized """import nanyx/console
-
-@entry
+        normalized """@entry
 def main = {
   def x = 5
   def z = 0.0
@@ -80,9 +72,7 @@ def main = {
 let ``Run - generic code adds through Add, at ints, floats and a type that attaches its members`` () =
     // #609: `List.sum: [Add(a)] list(a) -> a`, and `0` beside a value of the type variable is `zero`.
     let source =
-        normalized """import nanyx/console
-
-type Money = protected (pence: int)
+        normalized """type Money = protected (pence: int)
 def Money.zero: Money = Money(pence = 0)
 def Money.`+`: Money, Money -> Money = { a, b -> Money(pence = a.pence + b.pence) }
 def Money.`-`: Money, Money -> Money = { a, b -> Money(pence = a.pence - b.pence) }
@@ -104,9 +94,7 @@ let ``Run - generic code multiplies and divides through Num, with integer litera
     // #610: `*`, `/` and `%` read through `Num`, a literal beside a value of the type variable is `fromInt` of it, and
     // a function that requires `Num` passes it to one that requires `Add`.
     let source =
-        normalized """import nanyx/console
-
-def square: [Num(a)] a -> a = { x -> x * x }
+        normalized """def square: [Num(a)] a -> a = { x -> x * x }
 def halfPlusOne: [Num(a)] a -> a = { x -> x / 2 + 1 }
 def rem3: [Num(a)] a -> a = { x -> x % 3 }
 def mean: [Num(a)] list(a) -> a = { xs -> list.sum(xs) / fromInt(list.length(xs)) }
@@ -122,8 +110,7 @@ def main = {
 let ``Run - ** is the prelude's pow, and Float.pow takes any exponent`` () =
     // #611: `**` did not parse. It groups to the right, so `2 ** 3 ** 2` is 2 ** 9.
     let source =
-        normalized """import nanyx/console
-import nanyx/math as math
+        normalized """import nanyx/math as math
 
 def cube: [Num(a)] a -> a = { x -> x ** 3 }
 @entry
@@ -139,9 +126,7 @@ def main = {
 let ``Run - boolean keywords not, and, or`` () =
     // #39: the docs make boolean operations keywords; `not` had no spelling at all.
     let source =
-        normalized """import nanyx/console
-
-def show: [Console] bool -> () = { b -> println(if b then "yes" else "no") }
+        normalized """def show: [Console] bool -> () = { b -> println(if b then "yes" else "no") }
 def between: (int, int, int) -> bool = { x, lo, hi -> x >= lo and x <= hi }
 show(not true)
 show(not false)

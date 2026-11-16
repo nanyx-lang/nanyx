@@ -60,16 +60,16 @@ public sealed class CodeActionTests : LanguageServerTestBase
     public async Task An_unknown_name_the_standard_library_exports_offers_its_import()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-12");
-        const string text = "import nanyx/console\n\ndef s = string.trim(\" a \")\n";
+        const string text = "def s = string.trim(\" a \")\n";
 
         Open(uri, text);
         Assert.Single((await NextPublished(uri)).Diagnostics!);
 
-        var import = Assert.Single(await CodeActionsIn(uri, new Range(2, 10, 2, 10)));
+        var import = Assert.Single(await CodeActionsIn(uri, new Range(0, 10, 0, 10)));
         Assert.Equal(("Add `import nanyx/text`", CodeActionKind.QuickFix, true), (import.Title, import.Kind, import.IsPreferred));
         Assert.Equal("NYX0102", Assert.Single(import.Diagnostics!).Code?.String);
         Assert.Equal(
-            "import nanyx/console\nimport nanyx/text\n\ndef s = string.trim(\" a \")\n",
+            "import nanyx/text\n\ndef s = string.trim(\" a \")\n",
             Applied(text, Assert.Single(import.Edit!.Changes![uri])));
     }
 

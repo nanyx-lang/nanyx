@@ -9,8 +9,6 @@ open TranspilerWasmTestHelpers
 let ``Run - a call on a call's result calls it, in a def's value, a statement and an interpolation hole`` () =
     let source =
         """
-import nanyx/console
-
 def g = { { 42 } }
 
 def add = { a -> { b -> a + b } }
@@ -31,8 +29,6 @@ def main = {
 let ``Run - calls on call results nest`` () =
     let source =
         """
-import nanyx/console
-
 def add3 = { a -> { b -> { c -> a * 100 + b * 10 + c } } }
 
 @entry

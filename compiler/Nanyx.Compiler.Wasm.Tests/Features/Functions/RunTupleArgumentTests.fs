@@ -9,9 +9,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - a function value whose parameter is a tuple is called with a tuple (#441)`` () =
     let source =
-        normalized """import nanyx/console
-
-@entry
+        normalized """@entry
 def main = {
   def add: (int, int) -> int = { t -> t.0 + t.1 }
   println("{add((3, 4))}")
@@ -22,9 +20,7 @@ def main = {
 [<Fact>]
 let ``Run - a function value whose parameter is a tuple pattern is called with a tuple or with two arguments`` () =
     let source =
-        normalized """import nanyx/console
-
-@entry
+        normalized """@entry
 def main = {
   def add = { (r, s) -> r + s }
   def pair = (5, 6)
@@ -36,9 +32,7 @@ def main = {
 [<Fact>]
 let ``Run - a lambda returned from another is called with a tuple`` () =
     let source =
-        normalized """import nanyx/console
-
-@entry
+        normalized """@entry
 def main = {
   def adder = { n -> { (r, s) -> n + r + s } }
   def add = adder(1)
@@ -50,9 +44,7 @@ def main = {
 [<Fact>]
 let ``Run - a function value of two parameters is called with a tuple held in a variable`` () =
     let source =
-        normalized """import nanyx/console
-
-@entry
+        normalized """@entry
 def main = {
   def add = { r, s -> r + s }
   def t = (3, 4)
@@ -64,8 +56,7 @@ def main = {
 [<Fact>]
 let ``Run - a lambda of two parameters is called by the standard library with each tuple of a list`` () =
     let source =
-        normalized """import nanyx/console
-import nanyx/text
+        normalized """import nanyx/text
 
 def numberGame = { rules ->
   { i ->
@@ -88,9 +79,7 @@ def main = {
 [<Fact>]
 let ``Run - a top-level function of one tuple parameter is passed as a value and called with two arguments`` () =
     let source =
-        normalized """import nanyx/console
-
-def sum: (int, int) -> int = { t -> t.0 + t.1 }
+        normalized """def sum: (int, int) -> int = { t -> t.0 + t.1 }
 def apply: ((int, int) -> int) -> int = { f -> f(3, 4) }
 
 @entry
@@ -104,8 +93,6 @@ def main = {
 let ``Run - a tuple in brackets of its own is one argument of a pipe (#1002)`` () =
     let source =
         """
-import nanyx/console
-
 @entry
 def main = {
   def piped = [1, 2, 3] \list.fold((0, 0)) { (sum, count), x -> (sum + x, count + 1) }
@@ -118,8 +105,6 @@ def main = {
 let ``Run - a record in brackets of its own is one argument of a pipe (#1031)`` () =
     let source =
         """
-import nanyx/console
-
 def show = { r: int, opts: (width: int) -> "{r} {opts.width}" }
 def three = { r: int, opts: (width: int), s: string -> "{r} {opts.width} {s}" }
 

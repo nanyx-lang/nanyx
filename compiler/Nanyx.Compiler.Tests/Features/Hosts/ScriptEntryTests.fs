@@ -10,9 +10,7 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``A function that names a script value that needs a context is an error, reported where it names it`` () =
     let source =
-        """import nanyx/console
-
-def line = readLine()
+        """def line = readLine()
 
 def greet = { name -> println("{name} said {line}") }
 
@@ -26,9 +24,7 @@ greet("Ada")
 [<Fact>]
 let ``A function that names a script value that needs a context through another value is an error`` () =
     let source =
-        """import nanyx/console
-
-def line = readLine()
+        """def line = readLine()
 
 def shouted = "{line}!"
 
@@ -41,9 +37,7 @@ greet()
 [<Fact>]
 let ``A statement that reads a script value that needs a context before its def is an error`` () =
     let source =
-        """import nanyx/console
-
-println(line)
+        """println(line)
 
 def line = readLine()
 """
@@ -55,9 +49,7 @@ def line = readLine()
 [<Fact>]
 let ``A function can name a script value that needs no context, which stays at the top level`` () =
     let source =
-        """import nanyx/console
-
-def limit = 10
+        """def limit = 10
 
 def small = { n -> n < limit }
 
@@ -71,9 +63,7 @@ println(small(3))
 [<Fact>]
 let ``A script value that needs a context moves into the entry point, after the statements before it`` () =
     let source =
-        """import nanyx/console
-
-println("first")
+        """println("first")
 
 def line = readLine()
 
@@ -99,9 +89,7 @@ println(line)
 [<Fact>]
 let ``A value that needs a context in a module without statements is an error, as nothing would run it`` () =
     let source =
-        """import nanyx/console
-
-def line = readLine()
+        """def line = readLine()
 """
     let code, message, text = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, code)

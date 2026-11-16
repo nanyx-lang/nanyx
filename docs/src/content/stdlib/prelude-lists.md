@@ -11,8 +11,6 @@ Since lists are immutable, every function that transforms a list gives back a ne
 Each of them is stack-safe, and works on a list of any length without running out of stack: it walks the list with [tail calls](../tour/functions#tail-recursion), and one that builds a list builds it in reverse and reverses it at the end.
 
 ```nanyx
-import nanyx/console
-
 def scores = [3, 8, 1, 8, 5]
 
 println(scores \list.filter { > 2 } \list.map { * 10 })

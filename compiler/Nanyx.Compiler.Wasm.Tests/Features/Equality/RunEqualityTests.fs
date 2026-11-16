@@ -99,8 +99,6 @@ let ``Run - a local function compares at each type it is called with`` () =
 let ``Run - a local function compares strings, lists and tags on the heap by what they hold`` () =
     // One closure for each type it is used at, each comparing as that type does, and freeing what it is given (#616).
     """
-import nanyx/console
-
 type Shape = #circle(string) | #square(int)
 
 def show = { b -> if b then "T" else "F" }
@@ -132,8 +130,6 @@ def main = {
 let ``Run - a lambda compares through a local function it captures, at each type it uses it at`` () =
     // The lambda captures a closure of `same` for each type it calls it at, each freeing what it is given (#751).
     """
-import nanyx/console
-
 def show = { b -> if b then "T" else "F" }
 
 @entry
@@ -155,8 +151,6 @@ let ``Run - a lambda in a lambda, or a local generic function, compares through 
     // Captured through two lambdas, by a generic lambda at each type it is used at, and by another local generic
     // function, whose closure at each type makes the captured one's at that type (#751).
     """
-import nanyx/console
-
 def show = { b -> if b then "T" else "F" }
 
 @entry

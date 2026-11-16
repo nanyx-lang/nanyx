@@ -112,6 +112,16 @@ x \mapSome { .length }
 y \mapSome { \Math.abs }
 ```
 
+`other` can be returned as an `r` because the arm before it takes every `#some`, so `other` is never one. The same holds for a catch-all inside a pattern, in a list's item, a tuple's field or a tag's payload, when an earlier arm takes every value of a tag there and is a catch-all everywhere else:
+
+```nanyx
+def allSomeOnto
+  : list(#some(a) | r), list(a) -> #some(list(a)) | r
+  = { | [], acc -> #some(list.reverse(acc))
+      | [#some(x), ...rest], acc -> allSomeOnto(rest, [x, ...acc])
+      | [other, ...rest], acc -> other }
+```
+
 For broader union and matching patterns, see [Pattern matching](./pattern-matching) and [Types](./types).
 
 # Runtime behavior

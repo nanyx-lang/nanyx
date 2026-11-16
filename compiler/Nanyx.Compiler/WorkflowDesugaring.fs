@@ -139,7 +139,8 @@ module WorkflowDesugaring =
             match expr.Kind with
             | WorkflowBindExpr _
             | WorkflowReturnExpr _ -> true
-            | Lambda _ -> false
+            | Lambda _
+            | ContextNames _ -> false
             // A loop's body is a lambda, but a keyword in it is the block's (see `desugarLoop`).
             | ForSyntax.Call(iterables, _, _, body) -> List.exists usesKeyword iterables || usesKeyword body
             | BuilderBlock(_, others, _, _, _) -> List.exists usesKeyword others
@@ -259,6 +260,7 @@ module WorkflowDesugaring =
                 List.collect fst lifted, rebuild (InterpolatedString(List.map snd lifted))
             | TagExpr(_, None)
             | Lambda _
+            | ContextNames _
             | Block _
             | UseIn _
             | ContextMemberAccess _
@@ -339,6 +341,7 @@ module WorkflowDesugaring =
                 FunctionCall(name, rangeOpt, args |> List.map desugarExpr)
             | Lambda(args, body, takesUnit) ->
                 Lambda(args, within InLambda (fun () -> desugarExpr body), takesUnit)
+            | ContextNames(names, body) -> ContextNames(names, desugarExpr body)
             // The right of `and`, `or` and `??` only runs when the left does not settle the result.
             | BinaryOp(op, opSpan, left, right) when isShortCircuit op ->
                 BinaryOp(op, opSpan, desugarExpr left, within InConditionalPart (fun () -> desugarExpr right))

@@ -239,8 +239,6 @@ def count: () -> int = {
 let ``An error in an earlier def does not stop a later lambda argument taking its parameter's type`` () =
     // `n` took no type, so `println(n)` found no `ToString` and was reported as NYX0205 too (#833).
     let source = """
-import nanyx/console
-
 def wrong: () -> int = { "not an int" }
 
 def h: [Console] list(int) -> list(int) = { numbers ->

@@ -6,9 +6,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - a branch of type undefined that is not taken leaves the other branch's value`` () =
     let source =
-        normalized """import nanyx/console
-
-def stop: int -> undefined = { x -> stop(x) }
+        normalized """def stop: int -> undefined = { x -> stop(x) }
 
 def double = { n -> if n > 0 then n * 2 else stop(n) }
 
@@ -24,9 +22,7 @@ def main = {
 [<Fact>]
 let ``Run - panic writes its message to stderr and exits with 1, running nothing after it`` () =
     let source =
-        normalized """import nanyx/console
-
-def half: int -> int = { n -> if n % 2 == 0 then n / 2 else panic("odd: {n}") }
+        normalized """def half: int -> int = { n -> if n % 2 == 0 then n / 2 else panic("odd: {n}") }
 
 @entry
 def main = {

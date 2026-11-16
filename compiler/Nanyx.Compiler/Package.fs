@@ -13,7 +13,11 @@ type Package =
       Sources: string list
       Entry: string option
       /// In the order its manifest lists them.
-      Dependencies: Package list }
+      Dependencies: Package list
+      /// The host its manifest's `host` names, read from the host's own manifest; none for a library.
+      Host: Host option
+      /// The host's package, whose modules the host's import resolves in.
+      HostPackage: Package option }
 
 /// What building a package found: each source file's compile, and every diagnostic once. Each module is checked once
 /// for the whole build, though a file imported by another is compiled as part of both.
@@ -78,7 +82,7 @@ module Package =
     /// An error at each entry of the manifest's `publicModules` that names none of the modules `files`, the package's
     /// source files, declare.
     let private publicModuleErrors (manifest: Manifest) (files: string list) : Diagnostic list =
-        Manifest.unknownPublicModules manifest (PackageModules.ofFiles manifest.Name manifest.Root manifest.Host files).Modules.Keys
+        Manifest.unknownPublicModules manifest (PackageModules.ofFiles manifest.Name manifest.Root None files).Modules.Keys
 
     /// The package `manifest` describes, with the packages it depends on. `chain` is the manifests of the packages
     /// that led to it, nearest first, each with its package's name, and `reached` every package the build has read so far.
@@ -95,12 +99,41 @@ module Package =
                 | several ->
                     Result.Error [ AboutPackage $"""{manifest.Path}: a package can have one @entry, but these files each declare one: {several |> List.map display |> String.concat ", "}""" ]
         let publicModules = publicModuleErrors manifest files |> List.map AtManifest
-        match entry, dependenciesIn reached ((manifest.Path, manifest.Name) :: chain) manifest with
-        | Result.Ok entry, Result.Ok dependencies when publicModules.IsEmpty ->
-            Result.Ok { Manifest = manifest; Sources = files; Entry = entry; Dependencies = dependencies }
-        | entry, dependencies ->
+        match entry, dependenciesIn reached ((manifest.Path, manifest.Name) :: chain) manifest, hostIn reached manifest.Host with
+        | Result.Ok entry, Result.Ok dependencies, Result.Ok host when publicModules.IsEmpty ->
+            Result.Ok
+                { Manifest = manifest
+                  Sources = files
+                  Entry = entry
+                  Dependencies = dependencies
+                  Host = host |> Option.map fst
+                  HostPackage = host |> Option.map snd }
+        | entry, dependencies, host ->
             let errorsOf = function Result.Error errors -> errors | Result.Ok _ -> []
-            Result.Error(errorsOf entry @ publicModules @ errorsOf dependencies)
+            Result.Error(errorsOf entry @ publicModules @ errorsOf dependencies @ errorsOf host)
+
+    /// The host `entry` names, if there is one, read from the manifest of its package, which must declare it a host (see
+    /// `HostPackages`), with that package: one the compiler ships, or one in the directory the entry gives.
+    and private hostIn (reached: Reached) (entry: HostEntry option) : Result<(Host * Package) option, Problem list> =
+        match entry with
+        | None -> Result.Ok None
+        | Some entry ->
+            let error message = Result.Error [ AtManifest(Diagnostics.at DiagnosticCodes.InvalidManifestValue entry.Span message) ]
+            let directory = entry.Path |> Option.defaultWith (fun () -> ShippedPackages.directoryOf entry.Package)
+            match manifestIn directory with
+            | Result.Error _ when entry.Path.IsNone -> error $"the compiler ships no package '{entry.Package}'"
+            | Result.Error message -> error $"the host {entry.Package} can't be read: {message}"
+            | Result.Ok path ->
+                match Manifest.read path with
+                | Result.Error errors -> Result.Error(errors |> List.map AtManifest)
+                | Result.Ok found when found.Name <> entry.Package ->
+                    error $"the package in {directory} is named {found.Name}, not {entry.Package}: the names must match"
+                | Result.Ok found ->
+                    match found.Declares with
+                    | None -> error (HostPackages.notAHost entry.Package)
+                    | Some host ->
+                        reached.[found.Name] <- path
+                        ofManifestIn reached [] found |> Result.map (fun package -> Some (host, package))
 
     /// The packages `manifest` depends on, each read with its own dependencies, or what is wrong: a directory with no
     /// manifest, a package named other than its dependant names it, one that depends on itself through others, or one
@@ -153,10 +186,14 @@ module Package =
             match Manifest.check path text with
             | Result.Error problems -> problems
             | Result.Ok manifest ->
+                let reached = reachedFrom manifest
                 let dependencyErrors =
-                    match dependenciesIn (reachedFrom manifest) [ manifest.Path, manifest.Name ] manifest with
-                    | Result.Ok _ -> []
+                    let host = match hostIn reached manifest.Host with Result.Ok _ -> [] | Result.Error problems -> problems
+                    match dependenciesIn reached [ manifest.Path, manifest.Name ] manifest with
+                    | Result.Ok _ when host.IsEmpty -> []
+                    | Result.Ok _ -> host |> List.map (function AtManifest diagnostic -> diagnostic | AboutPackage message -> Diagnostics.at DiagnosticCodes.InvalidManifestValue manifest.Value.Location message)
                     | Result.Error problems ->
+                        let problems = problems @ host
                         problems
                         |> List.map (function
                             | AtManifest diagnostic -> diagnostic
@@ -172,9 +209,19 @@ module Package =
           Lowered = Map.empty
           DocComments = lazy DocComments.none }
 
-    /// `package` run under `host` in place of its manifest's, as `--host` chooses.
-    let withHost (host: Host) (package: Package) : Package =
-        { package with Manifest = { package.Manifest with Host = Some host } }
+    /// `package` run under the host `name` names in place of its manifest's, as `--host` chooses: a directory, relative to
+    /// `directory`, that holds a host's package, or the name of a host the compiler ships. An error says why it isn't one.
+    let withHost (directory: string) (name: string) (package: Package) : Result<Package, string> =
+        let full = Path.GetFullPath(name, directory)
+        let entry =
+            if Directory.Exists full then
+                let packageName = match manifestIn full with Result.Ok path -> Path.GetFileNameWithoutExtension path | Result.Error _ -> name
+                { Package = packageName; Path = Some full; Span = SourceSpan.none }
+            else
+                { Package = name; Path = None; Span = SourceSpan.none }
+        match hostIn (Reached()) (Some entry) with
+        | Result.Ok host -> Result.Ok { package with Host = host |> Option.map fst; HostPackage = host |> Option.map snd }
+        | Result.Error problems -> Result.Error(problems |> List.map describe |> String.concat "; ")
 
     /// The package `path` names: a manifest, or a directory in or under the package. An error says why there is none.
     let find (path: string) : Result<Package, string list> =
@@ -209,15 +256,13 @@ module Package =
                 directive.Span
                 $"{name} is a directive for a script, but this file is in a package: say it in the package's manifest, {manifestPath}")
 
-    /// The modules of the package `manifest` describes, whose source files are `files`, with those of `dependencies`.
-    let rec private modulesOf (manifest: Manifest) (files: string list) (dependencies: Package list) : PackageModules =
-        { PackageModules.ofFiles manifest.Name manifest.Root manifest.Host files with
-            PublicModules = manifest.PublicModules |> List.map fst
-            Dependencies = dependencies |> List.map (fun dependency -> modulesOf dependency.Manifest dependency.Sources dependency.Dependencies) }
-
-    /// The modules of `package`, by the names its source files declare, with those of the packages it depends on.
-    let modules (package: Package) : PackageModules =
-        modulesOf package.Manifest package.Sources package.Dependencies
+    /// The modules of `package`, by the names its source files declare, with those of the packages it depends on and
+    /// of its host's package.
+    let rec modules (package: Package) : PackageModules =
+        { PackageModules.ofFiles package.Manifest.Name package.Manifest.Root package.Host package.Sources with
+            PublicModules = package.Manifest.PublicModules |> List.map fst
+            Dependencies = package.Dependencies |> List.map modules
+            HostPackage = package.HostPackage |> Option.map modules }
 
     /// The modules of the package the file at `filePath` is a source file of, if it is one of a package whose
     /// manifest reads, with those of the packages it depends on, if they read too. A file the manifest selects that is
@@ -229,11 +274,20 @@ module Package =
         | Result.Ok (Some manifestPath) ->
             match Manifest.read manifestPath with
             | Result.Ok manifest when selects manifest filePath ->
+                let reached = reachedFrom manifest
                 let dependencies =
-                    match dependenciesIn (reachedFrom manifest) [ manifest.Path, manifest.Name ] manifest with
+                    match dependenciesIn reached [ manifest.Path, manifest.Name ] manifest with
                     | Result.Ok dependencies -> dependencies
                     | Result.Error _ -> []
-                let modules = modulesOf manifest (sources manifest) dependencies
+                let host = match hostIn reached manifest.Host with Result.Ok host -> host | Result.Error _ -> None
+                let modules =
+                    modules
+                        { Manifest = manifest
+                          Sources = sources manifest
+                          Entry = None
+                          Dependencies = dependencies
+                          Host = host |> Option.map fst
+                          HostPackage = host |> Option.map snd }
                 Some (if PackageModules.contains modules filePath then modules else { modules with Files = modules.Files @ [ filePath ] })
             | _ -> None
         | _ -> None

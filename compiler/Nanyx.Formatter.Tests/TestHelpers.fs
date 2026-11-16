@@ -9,9 +9,16 @@ open Nanyx.Formatter.FormatCommand
 
 let lines (ls: string list) = String.concat "\n" ls + "\n"
 
+/// The directory `directoryWith` makes its directories in: one for the test run, removed when the run ends.
+let private runDirectory =
+    lazy
+        (let directory = Path.Combine(Path.GetTempPath(), $"nanyx-format-tests-{Guid.NewGuid():N}")
+         AppDomain.CurrentDomain.ProcessExit.Add(fun _ -> try Directory.Delete(directory, true) with _ -> ())
+         directory)
+
 /// A new empty directory for one test, with the given files (path relative to it, and text) in it.
 let directoryWith (files: (string * string) list) =
-    let directory = Path.Combine(Path.GetTempPath(), "nanyx-format-tests", Guid.NewGuid().ToString("N"))
+    let directory = Path.Combine(runDirectory.Value, Guid.NewGuid().ToString("N"))
     Directory.CreateDirectory directory |> ignore
     for path, text in files do
         let full = Path.Combine(directory, path)

@@ -6,9 +6,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - a do block's defs shadow the ones outside it only inside it, and its value is its last statement`` () =
     let source =
-        normalized """import nanyx/console
-
-@entry
+        normalized """@entry
 def main = {
   def x = 1
   do
