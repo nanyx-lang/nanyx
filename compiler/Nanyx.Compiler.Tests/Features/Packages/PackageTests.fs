@@ -54,6 +54,18 @@ let ``A manifest with the old .nyxpack extension is not a manifest`` () =
     Assert.Contains("Not a directory or a .nyxp manifest", Assert.Single(errorsOf (Package.find (package.Path "demo.nyxpack"))))
 
 [<Fact>]
+let ``A file under a manifest that does not read has the manifest's errors, not its imports'`` () =
+    use package =
+        new TempPackage(
+            [ "shop.nyxp", "[package]\nname = \"shop\"\n"
+              "src/main.nyx", "module main\n\nimport shop.catalogue\n\n@entry\ndef main = {\n  println(\"hi\")\n}\n" ])
+    let mainPath = package.Path "src/main.nyx"
+    let result = Script.compileFile mainPath
+    let diagnostic = Assert.Single(result.Diagnostics)
+    Assert.Equal(DiagnosticCodes.TomlManifest.Code, diagnostic.Code)
+    Assert.Equal(Path.GetFullPath(package.Path "shop.nyxp"), diagnostic.Span.Value.File)
+
+[<Fact>]
 let ``A build tells its caller each source file as it starts on it, in order`` () =
     use package =
         new TempPackage(

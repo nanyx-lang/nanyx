@@ -560,6 +560,33 @@ export def shout = { s: string -> s ++ "!" }
 To fix it, declare the modules other packages may import with `export module`: `export module strings`. An
 application, which names its host, needn't export anything.
 
+# NYX0034: Manifest written as TOML
+
+A package's `.nyxp` manifest was once written in TOML, and is now a Nanyx record. A manifest whose first line is a TOML
+table header, `[package]`, or a key, `name = "shop"`, is reported as TOML, at that line. A source file of the package
+reports it too, from `nanyx check`, `nanyx run` and the editor, since the package can't be read without its manifest.
+
+```nanyx
+-- file: src/main.nyx
+module main
+
+@entry
+def main = { println("hi") }
+-- file: shop.nyxp
+[package]  -- error NYX0034: The manifest is a Nanyx record, `( package = (...) ... )`, not TOML
+name = "shop"
+version = "0.1.0"
+```
+
+To fix it, write the manifest as a record:
+
+```nanyx fragment
+(
+  package = (name = "shop", version = "0.1.0")
+  host = (package = "nanyx.console", version = "...")
+)
+```
+
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which
