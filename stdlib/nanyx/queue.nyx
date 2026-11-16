@@ -16,14 +16,14 @@
   `Queue[1, 2, 3]`, or `[1, 2, 3]` where a queue is expected.
 module queue
 
-export type Queue(a) = protected (front: list(a), back: list(a), count: int)
+export type Queue(a) = protected (front: list(a), back: list(a), length: int)
 
 --| The queue with nothing in it.
-export def Queue.empty: Queue(a) = Queue(front = [], back = [], count = 0)
+export def Queue.empty: Queue(a) = Queue(front = [], back = [], length = 0)
 
 --| A queue holding `xs`, the first of them at the front.
 export def Queue.fromList: list(a) -> Queue(a) = { xs ->
-  Queue(front = xs, back = [], count = list.length(xs))
+  Queue(front = xs, back = [], length = list.length(xs))
 }
 
 --| A queue holding `xs`, the first of them at the front. What a literal builds a queue with,
@@ -38,8 +38,8 @@ export def Queue.fromArray: Array(a) -> Queue(a) = { xs ->
 --| `queue` with `value` at the back of it.
 export def Queue.enqueue: Queue(a), a -> Queue(a) = { queue, value ->
   match queue.front
-    | [] -> Queue(front = [value], back = [], count = 1)
-    | _ -> Queue(front = queue.front, back = [value, ...queue.back], count = queue.count + 1)
+    | [] -> Queue(front = [value], back = [], length = 1)
+    | _ -> Queue(front = queue.front, back = [value, ...queue.back], length = queue.length + 1)
 }
 
 --| The value at the front of `queue` and the queue behind it, or `#none` when it is empty.
@@ -47,11 +47,11 @@ export def Queue.dequeue: Queue(a) -> #some(a, Queue(a)) | #none = { queue ->
   match queue.front
     | [] -> #none
     | [first, ...rest] ->
-      def count = queue.count - 1
+      def length = queue.length - 1
 
       match rest
-        | [] -> #some(first, Queue(front = list.reverse(queue.back), back = [], count = count))
-        | _ -> #some(first, Queue(front = rest, back = queue.back, count = count))
+        | [] -> #some(first, Queue(front = list.reverse(queue.back), back = [], length = length))
+        | _ -> #some(first, Queue(front = rest, back = queue.back, length = length))
 }
 
 --| The value at the front of `queue`, or `#none` when it is empty.
@@ -63,12 +63,12 @@ export def Queue.peek: Queue(a) -> #some(a) | #none = { queue ->
 
 --| Whether `queue` has nothing in it.
 export def Queue.isEmpty: Queue(a) -> bool = { queue ->
-  queue.count == 0
+  queue.length == 0
 }
 
 --| How many values are in `queue`.
-export def Queue.count: Queue(a) -> int = { queue ->
-  queue.count
+export def Queue.length: Queue(a) -> int = { queue ->
+  queue.length
 }
 
 --| The values in `queue`, the front one first.
@@ -78,7 +78,7 @@ export def Queue.toList: Queue(a) -> list(a) = { queue ->
 
 --| Whether `p` and `q` hold equal values in the same order.
 export def Queue.`==`: [Eq(a)] Queue(a), Queue(a) -> bool = { p, q ->
-  p.count == q.count and Queue.toList(p) == Queue.toList(q)
+  p.length == q.length and Queue.toList(p) == Queue.toList(q)
 }
 
 --| The hash of the values in `queue`, in order: the same for any two queues `==` finds equal.

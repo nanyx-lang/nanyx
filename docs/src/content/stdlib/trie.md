@@ -91,10 +91,10 @@ def Trie.containsKey: [Eq(k), Hash(k)] Trie(k, v), list(k) -> bool
 
 Whether `trie` maps `key` to a value.
 
-## `Trie.count`
+## `Trie.length`
 
 ```nanyx fragment
-def Trie.count: Trie(k, v) -> int
+def Trie.length: Trie(k, v) -> int
 ```
 
 How many keys `trie` holds.
@@ -226,10 +226,10 @@ def StringTrie.containsKey: StringTrie(v), string -> bool
 
 Whether `trie` maps `key` to a value.
 
-## `StringTrie.count`
+## `StringTrie.length`
 
 ```nanyx fragment
-def StringTrie.count: StringTrie(v) -> int
+def StringTrie.length: StringTrie(v) -> int
 ```
 
 How many keys `trie` holds.
