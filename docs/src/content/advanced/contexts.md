@@ -17,7 +17,7 @@ context Console = (
 )
 ```
 
-Contexts are structural by default: any record whose members match the declared shape can be loaded as an instance, and a context serves for any other whose members it has. Declaring it `protected` after its `=`, as the prelude declares `Memory`, makes the context nominal, so that only its home module can create instances; see [Nominal types](./nominal-and-protected-types). A `protected` or `private` context is then supplied only by an instance of itself: a `use` of another context with the same members doesn't serve for it (NYX0205), or any module could forge one. It may still serve for a plain context whose members it has.
+A plain context serves for any other whose members it has: a function that requires `Add(a)` is given the `Num(a)` in scope. Declaring it `protected` after its `=`, as the prelude declares `Memory`, makes the context nominal, so that only its home module can create instances; see [Nominal types](./nominal-and-protected-types). A `protected` or `private` context is then supplied only by an instance of itself: a `use` of another context with the same members doesn't serve for it (NYX0205), or any module could forge one. It may still serve for a plain context whose members it has.
 
 ```nanyx
 context Tx = protected (commit: () -> ())
@@ -100,6 +100,8 @@ def main = {
   sayHello()
 }
 ```
+
+A `use` loads a declared context, and its instance is always written there: the context's constructor, as above, or `use Show(int)(...)` for a parameterised one, or a name a lambda gave the instance it is given (see [below](#naming-the-instance-a-lambda-is-given)). Nothing else can be loaded, so loose members are never in scope: `use (write = ...)`, `use someRecord` and `use makeConsole()` are errors (`NYX0249`).
 
 A `use` can implement one context in terms of others, as an effect handler does. A member given at the `use` may need more contexts than its type declares, and those are required where the `use` is written:
 
@@ -616,9 +618,6 @@ Each call looks for its instance in this order, and takes the first it finds:
 3. An instance synthesized from the type's attached definitions.
 
 An instance is for one type: an `Add(int)` loaded with `use` does not stand in for an `Add(Point)`.
-
-Since contexts are structural, a `use` of a record value loads it as an instance of each context it has the shape of, at the types its members settle.
-
 ## Explicit loading takes priority
 
 If you manually load a context with `use`, that instance is always used, even if attached definitions exist. This lets you override the default behavior when needed:

@@ -1413,6 +1413,24 @@ To fix it, write the instance in the `use` that loads it, `use Log(log = { m -> 
 `def quietly: ([Log] () -> a) -> a = { f -> use Log(log = { m -> () }) in f() }`, and run code with
 `quietly { ... }`. A handler writes its type, so that the lambda it is given is given the context.
 
+# NYX0249: use of something other than a context instance
+
+A `use` loads something other than a context's constructor or a name a lambda bound with `context`: a record, a def's
+name, a call's result or a field. A `use` loads only a declared context, with its instance written there, so loose
+members are never in scope ([Contexts](../advanced/contexts#loading-a-context)).
+
+```nanyx
+context Log = (log: string -> ())
+
+def quiet = {
+  use (log = { m: string -> () })  -- error NYX0249: `use` loads a context's constructor, as in `use Log(...)`, or a name bound with `context`
+  log("hi")
+}
+```
+
+To fix it, write the context's constructor, `use Log(log = { m -> () })`. To reuse an instance, write a handler, a
+function that runs a lambda under the `use`, as NYX0248 shows.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

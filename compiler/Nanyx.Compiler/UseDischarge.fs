@@ -21,6 +21,17 @@ module internal UseDischarge =
         | FunctionCall _ -> { state with UseInstances = state.UseInstances.Add value.Id }
         | _ -> state
 
+    /// The error for a `use` of `value`, unless it is a context's constructor, `use Log(...)` or `use C(T)(...)`: a `use`
+    /// loads only a declared context, so loose members are never in scope. A name a lambda binds with `context l`, the
+    /// one other thing a `use` loads, is loaded before this is asked (see `ContextNames.loaded`).
+    let notLoadable (state: InferState) (value: Expression) : Diagnostic list =
+        match value.Kind with
+        | UseInstanceSyntax.Instance _ -> []
+        | FunctionCall(name, _, _) when state.TypeDefs |> Map.tryFind name |> Option.exists _.IsContext -> []
+        | _ ->
+            [ Diagnostics.at DiagnosticCodes.UseOfNonInstance value.Span
+                  "`use` loads a context's constructor, as in `use Log(...)`, or a name bound with `context`" ]
+
     /// Whether every member of `ctx`, a plain context, is bound in `env` as the context's: an instance of it is in scope.
     let private inScope (env: TypeEnv) (state: InferState) (ctx: Ty) : bool =
         match ctx with

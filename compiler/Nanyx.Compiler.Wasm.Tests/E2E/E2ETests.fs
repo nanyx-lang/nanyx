@@ -81,10 +81,6 @@ let ``E2E - fifteen - context with multiple arities`` () =
     runE2ETest "fifteen"
 
 [<Fact>]
-let ``E2E - sixteen - use identifier reference`` () =
-    runE2ETest "sixteen"
-
-[<Fact>]
 let ``E2E - seventeen - tuple to multi-param function`` () =
     runE2ETest "seventeen"
 

@@ -152,6 +152,7 @@ module DiagnosticCodes =
     let UnknownContextName = code 246 "Context name that names no context the lambda is given" Severity.Error
     let ContextAsType = code 247 "Context written as a type" Severity.Error
     let InstanceOutsideUse = code 248 "Context instance written outside a use" Severity.Error
+    let UseOfNonInstance = code 249 "use of something other than a context instance" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -178,7 +179,7 @@ module DiagnosticCodes =
           LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotProtected; ScopedContextEscapes
           NotACellArgument; MisplacedCellType; UndeterminedContextType; EntryDoesNotFitHost; HostRuntimeOutsideHost; ScriptRunValue; ContextsWithoutType
           InvalidExtern; ExternWithoutHostRuntime; ConflictingExterns; PrivateContextMember; ContextNameAsValue; UnknownContextName
-          ContextAsType; InstanceOutsideUse
+          ContextAsType; InstanceOutsideUse; UseOfNonInstance
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

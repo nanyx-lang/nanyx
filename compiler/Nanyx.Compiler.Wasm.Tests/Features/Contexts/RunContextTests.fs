@@ -21,7 +21,13 @@ let ``Run - a use binding overrides the runtime's Console`` () =
         normalized """def greet: [Console] string -> () = { name -> println(name) }
 
 def main = {
-  use (write = { s -> write("[" ++ s ++ "]") })
+  use Console(
+    write = { s -> write("[" ++ s ++ "]") }
+    writeError = writeError
+    readLine = readLine
+    readToEnd = readToEnd
+    flush = flush
+  )
   greet("quiet")
 }
 
@@ -87,7 +93,7 @@ def main = {
     runSource source |> assertRan "local!\n[parameter]\n"
 
 [<Fact>]
-let ``Run - use bindings of parameterised contexts and records`` () =
+let ``Run - use bindings of parameterised and plain contexts`` () =
     let source =
         normalized """context Show(a) = (show: a -> string)
 context Ask = (ask: () -> int)
@@ -101,77 +107,31 @@ def main = {
   use Show(int)(show = { n -> "{n}{unit}" })
   use Show(string)(show = { s -> s })
   println(describe(3, "three"))
-  def answers = (ask = { 21 })
-  use answers
+  use Ask(ask = { 21 })
   println("{twice()}")
 }
 """
     runSource source |> assertRan "3cm & three\n42\n"
 
 [<Fact>]
-let ``Run - a use of a record value of a parameterised context's shape loads it as the instance`` () =
-    // `int` has its own `+`, which an instance found by the record's shape is nearer than (#581).
+let ``Run - a use of a parameterised context's instance is nearer than the type's own member`` () =
+    // `int` has its own `+`, which an instance a use loads is nearer than (#581).
     let source =
         normalized """context Add(a) = (`+`: (a, a) -> a)
 
 def add: [Add(a)] a, a -> a = { x, y -> `+`(x, y) }
 
-def named = {
-  def addInt = ( `+` = { x: int, y: int -> x * 10 + y } )
-  use addInt
+def statement = {
+  use Add(int)(`+` = { x, y -> x * 10 + y })
   add(1, 2)
 }
 
-def written = {
-  use ( `+` = { x, y -> x * 100 + y } )
-  add(3, 4)
-}
+def expression = { use Add(int)(`+` = { x, y -> x * 100 + y }) in add(3, 4) }
 
 @entry
-def main = { println("{named()} {written()}") }
+def main = { println("{statement()} {expression()}") }
 """
     runSource source |> assertRan "12 304\n"
-
-[<Fact>]
-let ``Run - use loads a top-level record of a parameterised context's shape (#587)`` () =
-    let source =
-        normalized """context Add(a) = (
-  `+`: (a, a) -> a
-)
-
-def add: [Add(a)] a, a -> a = { x, y -> `+`(x, y) }
-
-def addInt = (
-  `+` = { x: int, y: int -> x * 10 + y }
-)
-
-@entry
-def main = {
-  use addInt
-  println("{add(1, 2)}")
-}
-"""
-    runSource source |> assertRan "12\n"
-
-[<Fact>]
-let ``Run - use loads a top-level record of a plain context's shape (#587)`` () =
-    let source =
-        normalized """context Greeter = (greet: string -> string)
-
-def hello: [Greeter] string -> string = { name -> greet(name) }
-
-def polite = (greet = { name: string -> "Good day, {name}" })
-
-def casual = (greet = { name: string -> "Hi {name}" })
-
-@entry
-def main = {
-  use polite
-  println(hello("Ann"))
-  println(use casual in hello("Bo"))
-}
-"""
-    runSource source |> assertRan "Good day, Ann\nHi Bo\n"
 
 [<Fact>]
 let ``Run - use ... in loads an instance for its body only (#320)`` () =

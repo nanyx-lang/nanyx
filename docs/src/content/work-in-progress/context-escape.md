@@ -97,9 +97,9 @@ A function given by its name, `use Move(move = bobChooses)`, is taken the same w
 needs besides is in scope at the `use`; otherwise it keeps its type, and is `NYX0227` as before
 ([#1265](https://github.com/nanyx-lang/nanyx/issues/1265)).
 
-A `use` of a record written out, `use (log = { m: string -> println(m) })`, already checks and runs, because its
-members have no declared types to fit: `log` is `[Console] string -> ()`, and a lambda that calls it requires
-`Console`.
+A `use` of a record written out, `use (log = { m: string -> println(m) })`, used to check and run, because its
+members had no declared types to fit. A `use` now loads only a declared context
+([#1448](https://github.com/nanyx-lang/nanyx/issues/1448)).
 
 # Escape from a memory block
 
@@ -322,7 +322,7 @@ def consoleLogger: [Console] () -> Log = {   -- NYX0247: 'Log' is a context, not
 }
 
 def main = {
-  use consoleLogger()
+  use consoleLogger()   -- NYX0249: a `use` loads only a constructor or a `context` name
   log("hello")
 }
 ```
@@ -408,15 +408,15 @@ The design draws the line there, and makes every helper a function that takes th
   since a lambda passed to a function isn't given a parameterised context its type requires yet
   (`Contexts.extendEnvForLambdaArgument`), and `examples/sql-utils.nyx`'s data source opens a `Session` record that
   `withConnection` loads as the `Connection`.
-- [#1137](https://github.com/nanyx-lang/nanyx/issues/1137) (the backend can't compile `use f()` or `use x`) is no
-  longer needed: both become type errors, except `use x` of a name a lambda bound with `context x`
-  ([#1448](https://github.com/nanyx-lang/nanyx/issues/1448), after #1445 and #1447).
+- ~~A `use` loads only a context's constructor or a `context x` name~~
+  ([#1448](https://github.com/nanyx-lang/nanyx/issues/1448)). Done: `UseDischarge.notLoadable` makes NYX0249 of a
+  `use` of anything else, a record, a def's name, a call or a field, before its value is checked; a `context x`
+  name is loaded before that is asked (`ContextNames.loaded`). So [#1137](https://github.com/nanyx-lang/nanyx/issues/1137)
+  (the backend can't compile `use f()` or `use x`) is no longer needed, and is closed. The tour's collection builders
+  and the Context-qualified types and Context calls pages write a context's constructor. The backend still compiles a
+  `use` of a record, which is what `ExpressionRewrites.writeContextNames` makes of `use l`.
 - [#1059](https://github.com/nanyx-lang/nanyx/issues/1059) is settled for context instances, which never carry
   contexts because they are never values. It stays open for records.
-- A `use` of a record written out becomes a declared context and its constructor (#1448). The tour's collection builders in
-  `collections.md` (`use (yield = ...)` and ``use (`=>` = ...)``) and the examples in
-  [Context-qualified types](./context-qualified-types) change with it. The Contexts page's "contexts are structural by
-  default", and its `use addInt` loading a record as each context it has the shape of, go.
 - ~~A protected or private context matches only itself ([#1443](https://github.com/nanyx-lang/nanyx/issues/1443)),
   and a private one's members can be called only in its home module
   ([#1449](https://github.com/nanyx-lang/nanyx/issues/1449)).~~ Done, see

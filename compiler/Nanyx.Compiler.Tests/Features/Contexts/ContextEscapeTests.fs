@@ -19,7 +19,7 @@ def fooEscapes: [Foo] string -> ([Foo] () -> string) = { s ->
   { bar(s) }
 }
 
-def escaped = use (bar = { s -> s }) in fooEscapes("Hello from Foo!")
+def escaped = use Foo(bar = { s -> s }) in fooEscapes("Hello from Foo!")
 """
     compileClean returns |> ignore
     let called = returns + "\nescaped()\n"
@@ -70,15 +70,12 @@ def blockUse = {
   use Foo(bar = { s -> s })
   { bar("x") }
 }
-
-def viaRecord = use (shout = { s -> s ++ "!" }) in { n -> shout(n) }
 """
             |> _.ReplaceLineEndings("\n")
         )
     let typeOf name = Unifier.tyToString result.Types.[name]
     Assert.Equal("[Foo] () -> string", typeOf "viaUse")
     Assert.Equal("() -> ([Foo] () -> string)", typeOf "blockUse")
-    Assert.Equal("string -> string", typeOf "viaRecord")
 
 [<Fact>]
 let ``A lambda that leaves the use that loads its context requires the context where it is called`` () =
@@ -137,10 +134,10 @@ def pure: [Foo] string -> () -> string = { s ->
 }
 
 def nearer: [Foo] string -> () -> string = { s ->
-  { use (bar = { x -> x }) in bar(s) }
+  { use Foo(bar = { x -> x }) in bar(s) }
 }
 
-def shadowed = use (bar = { s -> s }) in { bar -> bar("x") }
+def shadowed = use Foo(bar = { s -> s }) in { bar -> bar("x") }
 """
     )
     |> ignore

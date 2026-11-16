@@ -104,7 +104,7 @@ The rule (`noTagInCommon`) reports `==` or `!=` on two values whose types are cl
 ## `use ... in` with a body in braces
 
 ```nanyx
-def total = use down in { counted(3) } -- Linter warning: The braces make this a function of no arguments, not a block run with the context loaded
+def total = use Counter(next = { n -> n - 1 }) in { counted(3) } -- Linter warning: The braces make this a function of no arguments, not a block run with the context loaded
 ```
 
 The rule (`useInBraces`) reports `use ... in` whose body is a lambda of no arguments written as `{ ... }`. Braces make a function, not a block, so the statements in them are not run: `total` is a function. Put the statements on the lines after `in`, indented, to run them with the context loaded (see [Contexts](../advanced/contexts#loading-a-context)). A lambda written with its argument, `{ () -> ... }` or `{ n -> ... }`, says it means a function, and is not reported.

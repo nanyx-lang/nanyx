@@ -94,7 +94,7 @@ type variable. The type checker departs from that in these ways, for now:
 
 - **A lambda's body is checked against the contexts where it is written,** so `withConnection { insert(...) }` in a def that doesn't declare `Connection` is an error at `insert`.
 - **A parameterised context is never carried,** even at a type variable: it is found where the lambda is made, as before.
-- **A lambda written inside a `use` of a record written out doesn't require a context:** `use (bar = ...) in { bar("x") }` is a `() -> string`, since the record names no context, and the lambda keeps the member it captured where it was made. A `use` of a value whose type names the context, `use Foo(bar = ...) in { bar("x") }`, gives the lambda `[Foo] () -> string` ([#844](https://github.com/nanyx-lang/nanyx/issues/844)): the `use` binds each member with the symbol `Foo` declared it with, as a def that declares `[Foo]` does.
+- **A lambda written inside a `use` requires the context the `use` loads:** `use Foo(bar = ...) in { bar("x") }` is a `[Foo] () -> string` ([#844](https://github.com/nanyx-lang/nanyx/issues/844)): the `use` binds each member with the symbol `Foo` declared it with, as a def that declares `[Foo]` does. A `use` always names its context, since a record can't be loaded ([#1448](https://github.com/nanyx-lang/nanyx/issues/1448)).
 - **A call reads what a context variable stands for from the types solved so far,** and lambda parameters take their types from the constraints only while they all agree, so an earlier type error can leave a context unbound or a parameter's type unknown.
 
 # Design notes

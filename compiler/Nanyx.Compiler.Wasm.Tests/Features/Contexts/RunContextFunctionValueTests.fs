@@ -94,7 +94,13 @@ let ``Run - a function passed as a value captures the members of the use where i
 def apply: [c] ([c] string -> ()), string -> () = { f, s -> f(s) }
 
 def main = {
-  use (write = { s -> write("[" ++ s ++ "]") })
+  use Console(
+    write = { s -> write("[" ++ s ++ "]") }
+    writeError = writeError
+    readLine = readLine
+    readToEnd = readToEnd
+    flush = flush
+  )
   apply(say, "quiet")
 }
 

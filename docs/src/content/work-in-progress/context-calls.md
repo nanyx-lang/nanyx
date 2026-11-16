@@ -129,7 +129,7 @@ passes the instance the type checker found for it there, as a call to a top-leve
 - A function value given where one requiring other contexts is expected, as an argument, a context member, a `use`
   binding, a list element or a def's result, is adapted (`CoreIrLowerMembers.coerce`): a closure over an adapter that
   holds it, drops the members it doesn't take and captures the ones it needs that the expected type doesn't pass, as
-  they are where it is given. That is how `use (write = { s -> write(...) })` calls the outer `write`, and how a
+  they are where it is given. That is how `use Console(write = { s -> write(...) })` calls the outer `write`, and how a
   builder's `try`, whose context variable no call binds, takes a continuation that prints.
 - A member of a context without parameters that is generic in type variables of its own (`ret: a -> #some(a) | r`)
   is made once, at its `use`, and called at many types, so its context's layout has the values of those variables
