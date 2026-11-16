@@ -16,6 +16,7 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files and package m
 - quick fixes, such as adding the import for a standard-library name, or writing `int.fromString` for the deprecated `Int.fromString`
 - refactorings, in the light bulb menu and under **Refactor...**: on the name of a def or a lambda parameter that does not write its type, **Write the inferred type** writes it in; on a selected expression, **Introduce local** makes it a def of its own before the statement, and offers to replace the same expression later in the block too
 - **Format Document**, which formats the file as `nanyx format` does, and **Format Selection**, which formats the definitions the selection touches
+- **Rename Symbol** (F2) on a local, a parameter, a pattern variable, or a def or type that is not exported: it renames every use in the file, and refuses, saying why, a new name that would change what any name refers to
 - **Expand Selection** and **Shrink Selection** (Shift+Alt+Right and Shift+Alt+Left), which grow the selection to the syntax around it, a name, then the call it is an argument of, the statement, the lambda, the def, and back
 - an [info view](#info-view), a view in the secondary side bar that shows what the compiler knows at the cursor
 - a [library browser](#library), which lists what the standard library exports, and a [search](#searching-the-library) of it by name and by type

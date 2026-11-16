@@ -30,7 +30,7 @@ let internal typeNameSpan (typeExpr: TypeExpr) =
     | _ -> None
 
 /// The symbol for the name at `offset`, as `symbolAt` finds it, with the span of the name.
-let private symbolAndNameAt (file: string) (result: CompileResult) (offset: int) : (Symbol * SourceSpan) option =
+let internal symbolAndNameAt (file: string) (result: CompileResult) (offset: int) : (Symbol * SourceSpan) option =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
         let referencedAt (id: NodeId) (span: SourceSpan option) =
@@ -116,31 +116,42 @@ let typeDefinitionAt (names: TypeNotation) (file: string) (result: CompileResult
             { Type = definition; Span = span; Note = note })
     | _ -> None
 
-/// The span of every name in the compiled root module that refers to `symbol`, in the order they are written: a
-/// call's or pipe's function name, an operator, an identifier or qualified name, a qualified context member's name,
-/// or a type name. For an import, the alias each qualified name it brought in is written with (`m` in `m.foo`). The
-/// declaration itself is not among them. Empty when the module did not type-check.
+/// Every name in the compiled root module that refers to a symbol, with the symbol, in the order they are written: a
+/// call's or pipe's function name, an operator, an identifier or qualified name, a qualified context member's name, or
+/// a type name. Empty when the module did not type-check.
+let internal referenceSites (result: CompileResult) : (SourceSpan * SymbolId) list =
+    match result.Syntax, result.Typed with
+    | Some syntax, Some typed ->
+        let referenced (id: NodeId) (span: SourceSpan option) =
+            match typed.References |> Map.tryFind id, span with
+            | Some symbol, Some span -> Some (span, symbol)
+            | _ -> None
+        let expressionSites = Hover.allExpressions syntax |> List.choose (fun expr -> referenced expr.Id (nameSpan expr))
+        let typeSites =
+            (syntax |> List.collect SyntaxTree.topLevelTypes) @ (Hover.allExpressions syntax |> List.collect SyntaxTree.expressionTypes)
+            |> List.collect TypeExpr.within
+            |> List.choose (fun typeExpr -> referenced typeExpr.Id (typeNameSpan typeExpr))
+        // A node desugaring made up can share the span of the syntax it came from.
+        expressionSites @ typeSites
+        |> List.filter (fst >> SourceSpan.isNone >> not)
+        |> List.distinct
+        |> List.sortBy (fun (span, _) -> span.Start)
+    | _ -> []
+
+/// The span of every name in the compiled root module that refers to `symbol`, in the order they are written, as
+/// `referenceSites` finds them. For an import, the alias each qualified name it brought in is written with (`m` in
+/// `m.foo`). The declaration itself is not among them. Empty when the module did not type-check.
 let referencesTo (result: CompileResult) (symbol: Symbol) : SourceSpan list =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
-        let refersTo (table: Map<NodeId, SymbolId>) (id: NodeId) = table |> Map.tryFind id = Some symbol.Id
-        let expressionSpans =
-            Hover.allExpressions syntax
-            |> List.choose (fun expr ->
-                if refersTo typed.References expr.Id then
-                    nameSpan expr
-                elif symbol.Kind = ImportedModule && refersTo typed.ImportReferences expr.Id then
-                    // The name is written under the import's alias, which is its first segment.
-                    Some { expr.Span with End = min expr.Span.End (expr.Span.Start + symbol.Name.Length) }
-                else
-                    None)
-        let typeSpans =
-            (syntax |> List.collect SyntaxTree.topLevelTypes) @ (Hover.allExpressions syntax |> List.collect SyntaxTree.expressionTypes)
-            |> List.collect TypeExpr.within
-            |> List.filter (fun typeExpr -> refersTo typed.References typeExpr.Id)
-            |> List.choose typeNameSpan
-        // A node desugaring made up can share the span of the syntax it came from.
-        expressionSpans @ typeSpans
+        let aliasSpans =
+            if symbol.Kind <> ImportedModule then []
+            else
+                Hover.allExpressions syntax
+                |> List.filter (fun expr -> typed.References |> Map.tryFind expr.Id <> Some symbol.Id && typed.ImportReferences |> Map.tryFind expr.Id = Some symbol.Id)
+                // The name is written under the import's alias, which is its first segment.
+                |> List.map (fun expr -> { expr.Span with End = min expr.Span.End (expr.Span.Start + symbol.Name.Length) })
+        (referenceSites result |> List.filter (fun (_, id) -> id = symbol.Id) |> List.map fst) @ aliasSpans
         |> List.filter (SourceSpan.isNone >> not)
         |> List.distinct
         |> List.sortBy (fun span -> span.Start)

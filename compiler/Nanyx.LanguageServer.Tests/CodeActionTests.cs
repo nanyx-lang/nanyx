@@ -94,15 +94,6 @@ public sealed class CodeActionTests : LanguageServerTestBase
         Assert.Empty(await CodeActionsIn(uri, new Range(2, 4, 2, 4)));
     }
 
-    /// <summary><paramref name="text"/> with <paramref name="edit"/> made to it.</summary>
-    private static string Applied(string text, TextEdit edit)
-    {
-        var positions = new SourcePositions(text);
-        var start = positions.ToOffset(edit.Range.Start);
-        var end = positions.ToOffset(edit.Range.End);
-        return text[..start] + edit.NewText + text[end..];
-    }
-
     [Fact]
     public void Server_advertises_rewrites()
     {
