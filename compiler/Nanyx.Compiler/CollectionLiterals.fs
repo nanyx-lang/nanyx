@@ -24,9 +24,9 @@ let inferSpread (infer: Infer) (env: TypeEnv) (state: InferState) (expr: Express
     | Error errors -> Error errors
     | Ok (typed, seen) ->
         match Unifier.unalias (resolveSoFar seen typed.Type) with
-        | Arrays.ArrayType _ -> inferAsCall (infer env) state expr "__spreadArray" [ operand ]
+        | Arrays.ArrayType _ -> inferAsCall (infer env) state expr CollectionSyntax.spreadArray [ operand ]
         | Lists.ListType _
-        | TyVar _ -> inferAsCall (infer env) state expr "__spreadList" [ operand ]
+        | TyVar _ -> inferAsCall (infer env) state expr CollectionSyntax.spreadList [ operand ]
         | ty ->
             Error [ Diagnostics.at DiagnosticCodes.InvalidCollectionSpread operand.Span
                         $"A spread in a square-bracket literal takes a list or an array, and this is a '{Unifier.tyToString ty}'" ]

@@ -17,6 +17,8 @@ let rec storesBeforeValue (expr: Expression) =
     // `dbg` holds its value in a local while it prints it, a `for` loop stores its elements, and a `while` loop's
     // condition and body run again each time round.
     | FunctionCall(name, _, _) when name = DbgSyntax.builtIn || name = ForSyntax.builtIn -> true
+    // A collection literal's array is held in a local while its items are written into it.
+    | FunctionCall(name, _, [ _ ]) when name = CollectionSyntax.arrayOf -> true
     | WhileSyntax.Call _ -> true
     // A read of a cell copies what it holds into a local of its own (see `CellSyntax`).
     | FunctionCall(name, _, [ _ ]) when name = CellSyntax.read || name = CellSyntax.unbox -> true

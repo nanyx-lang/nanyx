@@ -57,7 +57,8 @@ export def list.fromArray: array(a) -> list(a) = { xs ->
 }
 
 --| The array of the elements of `xs`, in order: what a collection literal's items are passed to
-  its type's `fromArray` as (see `array.fromArray`).
+  its type's `fromArray` as (see `array.fromArray`). The compiler builds a literal's array in one
+  block, with no list of the items.
 export def __arrayOf: list(a) -> array(a) = { xs ->
   __nanyx_array_of_list(xs)
 }
