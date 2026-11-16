@@ -5,7 +5,8 @@ order: 24
 ---
 
 Tail calls are built: the WebAssembly backend lowers every call in tail position to `return_call`, the official
-linter reports recursion that is not in tail position, and every walk in the standard library is stack-safe. The
+linter reports recursion that is not in tail position, `nanyx run` names the function when a program runs out of
+stack, and every walk in the standard library is stack-safe. The
 guarantee and the rules for tail position are described in [Tail recursion](../tour/functions#tail-recursion), stack
 safety in a workflow's loops in [Keywords in loops](../advanced/workflows#keywords-in-loops), and the linter's rule in
 [Recursion not in tail position](../standard-tools/official-linter#recursion-not-in-tail-position). This page keeps
@@ -77,9 +78,21 @@ of tail position, so the two designs have to agree:
 
 ## Running out of stack
 
-Recursion that is not in tail position can still exhaust the stack. When it does, the runtime should report a Nanyx
-error that names the function that recursed, not a WebAssembly backtrace. It does not yet: Wasmtime's trap report,
-`wasm trap: call stack exhausted`, is what is shown (plan item 1).
+Recursion that is not in tail position can still exhaust the stack. When it does, `nanyx run` reports it as an error
+that names the function, not as Wasmtime's backtrace
+([#1478](https://github.com/nanyx-lang/nanyx/issues/1478)):
+
+```
+Runtime error: the program ran out of stack in 'deep': a recursive call that isn't in tail position uses stack for every call (see https://nanyx.dev/docs/tour/functions#tail-recursion)
+```
+
+and exits with 1. The runner (`WasmRunner.trapped` in `Runner.fs`) reads a trap whose code is `StackOverflow` as
+`RunError.StackOverflow`, with the innermost function on the stack that the source names: it reads the name the
+backend gave the function back to the source's, without a specialisation's type arguments (`count__int` is `count`)
+and with a local `rec`'s own name (`__rec_go_16` is `go`), and passes over lambdas and runtime helpers, whose names
+start with `__`. A library function keeps its module's prefix (`list_fold`). The CLI writes the message
+(`ReportRunError` in `Program.cs`), as it does for running out of memory. A host other than the CLI reads the trap in
+its own runtime.
 
 ## Checking tail position
 
@@ -109,8 +122,7 @@ the next cell exists ([#558](https://github.com/nanyx-lang/nanyx/issues/558)).
 
 # Plan
 
-1. **Stack overflow error.** Report running out of stack as a Nanyx error.
-2. **`@tailrec`.** Check the attribute in the type checker, if per-function control turns out to be wanted.
+1. **`@tailrec`.** Check the attribute in the type checker, if per-function control turns out to be wanted.
 
 # Open questions
 

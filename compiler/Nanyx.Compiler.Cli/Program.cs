@@ -1061,6 +1061,9 @@ internal static partial class CliCommands
         return 1;
     }
 
+    /// <summary>The tour's section on tail recursion, which a program that ran out of stack is pointed to.</summary>
+    private const string TailRecursionDocs = "https://nanyx.dev/docs/tour/functions#tail-recursion";
+
     private static int ReportRunError(RunError error, TextWriter errors)
     {
         switch (error)
@@ -1073,6 +1076,11 @@ internal static partial class CliCommands
                 return 1;
             case var _ when error.IsOutOfMemory:
                 errors.WriteLine("Runtime error: out of memory");
+                return 1;
+            case RunError.StackOverflow overflow:
+                var where = FSharpOption<string>.get_IsSome(overflow.functionName) ? $" in '{overflow.functionName.Value}'" : "";
+                errors.WriteLine(
+                    $"Runtime error: the program ran out of stack{where}: a recursive call that isn't in tail position uses stack for every call (see {TailRecursionDocs})");
                 return 1;
             // The program said why it stopped (a deferred error writes itself to stderr) before it exited.
             case RunError.Exited exited:
