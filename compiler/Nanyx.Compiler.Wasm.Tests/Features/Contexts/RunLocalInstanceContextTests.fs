@@ -172,3 +172,27 @@ def main = {
 }
 """
     runSource (normalized source) |> assertRan "(1, 2)\nsize 3\n"
+
+[<Fact>]
+let ``Run - a local function calls its parameterised context's members by their own names, with the instance a use loads (#1574)`` () =
+    let source = """context Foo(a) = (
+  bar: (a, a -> a)
+  baz: (a, a -> a)
+)
+
+def outer: int -> string = { n ->
+  def local: [Foo(a)] a -> a = { y -> bar(y, baz(y, y)) }
+  use Foo(int)(bar = { x, y -> x + y }, baz = { x, y -> x * y }) in
+  use Foo(string)(bar = { x, y -> x ++ y }, baz = { x, y -> y }) in
+  "{local(n)} {local("s")}"
+}
+
+def single: int -> int = { n ->
+  def local: [Foo(a)] a -> a = { y -> baz(y, y) }
+  use Foo(int)(bar = { x, y -> x + y }, baz = { x, y -> x * y }) in local(n)
+}
+
+println(outer(3))
+println("{single(3)}")
+"""
+    runSource (normalized source) |> assertRan "12 ss\n9\n"

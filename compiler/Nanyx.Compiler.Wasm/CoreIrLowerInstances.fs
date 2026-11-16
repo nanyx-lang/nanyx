@@ -56,6 +56,18 @@ let byWrittenKeys (layouts: ContextLayouts) (contexts: Ty list) (written: TypeEx
                 |> List.tryFind (fst >> (=) (InstanceMember(key, memberName)))
                 |> Option.map (fun (_, value) -> contextMemberKey (Some writtenContext) memberName, value)))
 
+/// Each of `written` (see `byWrittenKeys`) by the member's own name too, `show` for `Show_b_show`, where no other of
+/// them and none of `keys` has a member of that name.
+let aliases (keys: ContextMemberKey list) (written: (ContextMemberKey * 'a) list) : (ContextMemberKey * 'a) list =
+    written
+    |> List.choose (function
+        | InstanceMember(_, memberName), value -> Some (memberName, value)
+        | NamedMember _, _ -> None)
+    |> List.groupBy fst
+    |> List.choose (function
+        | memberName, [ (_, value) ] when not (List.contains (NamedMember memberName) keys) -> Some (NamedMember memberName, value)
+        | _ -> None)
+
 /// Whether a function of the type `fnTy` (`subst` applied) is never called: a parameter of it is of a type variable
 /// nothing constrains, and no value of such a type is ever made (see `toIrType`). Named as a value there, as in
 /// `dbg(twice)` for `twice: [Show(a)] a -> string`, it needs no instance of a context at that variable: none of its

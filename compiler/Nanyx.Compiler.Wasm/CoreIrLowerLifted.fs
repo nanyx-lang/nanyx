@@ -88,6 +88,9 @@ let liftedCapturing (tools: LiftedTools) (name: string) (parameterNames: string 
     tools.SetSelfMembers (members |> List.map (fun (key, var) -> key, var.Type))
     // A parameterised context's members are in scope by the key its type writes too, which its body finds them by.
     let written = CoreIrLowerInstances.byWrittenKeys input.ContextLayouts (requiredContexts lambdaTy) written members
+    // And by its own name, as a top-level function's are (see `CodeGen.contextMemberAliases`), where no other context
+    // the lambda requires has a member of that name.
+    let written = written @ CoreIrLowerInstances.aliases (List.map fst members) written
     let passed = members @ written |> List.map fst |> Set.ofList
     let capturedMembers = capturedMembers |> Map.map (fun _ keys -> keys |> List.filter (passed.Contains >> not))
     let scope = { scopeOf (environmentParameter :: named) with CapturedMembers = capturedMembers; CapturedLocals = capturedLocals }
