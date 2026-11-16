@@ -91,7 +91,7 @@ type Point = (x: int, y: int)
 def Point.toString = { p -> "({p.x}, {p.y})" }
 
 def total = 3
-def where = "{total} items at {Point(x = 1, y = 2)}"   // "3 items at (1, 2)"
+def where = "{total} items at {Point(x = 1, y = 2)}" -- "3 items at (1, 2)"
 ```
 
 A function has no `ToString`, so putting one in a hole is an error, as is a list or a record that holds one.
@@ -100,7 +100,7 @@ A hole holds an expression, so to write a value some other way than its `ToStrin
 
 ```nanyx
 def price = 2.5
-println("Total: {price \float.format(decimals = 2)}")   // "Total: 2.50"
+println("Total: {price \float.format(decimals = 2)}") -- "Total: 2.50"
 ```
 
 Double-quoted strings have backslash escapes:
