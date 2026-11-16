@@ -48,9 +48,10 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     // A float is passed as the number in its box, which is only read.
     | CallImport(_, args) -> all Borrowed args
     | MakeClosure(_, _, captured) -> all Owned captured
-    // The closure is the environment, which the function it holds owns. Its code reads the closure again for the
-    // table slot after the arguments, so the closure counts as used last.
-    | CallClosure(closure, args) -> all Owned args @ [ AVar closure, Owned ]
+    // The closure is the environment, which the entry called borrows or owns (see `CoreIrClosureEntries`). Its code
+    // reads the closure again for the table slot after the arguments, so the closure counts as used last.
+    | CallClosure(closure, args, Borrowing) -> all Owned args @ [ AVar closure, Borrowed ]
+    | CallClosure(closure, args, Owning) -> all Owned args @ [ AVar closure, Owned ]
     | Interpolate parts -> parts |> List.choose (function Hole(hole, _) -> Some(AVar hole, Borrowed) | Text _ -> None)
     | Dbg text -> [ text, Borrowed ]
     | ForEach loop -> all Borrowed (ForLoop.sourceAtoms loop)
@@ -175,25 +176,25 @@ let rec private tailCalls (e: Expr) : (string * Atom list) list =
     | _ -> []
 
 /// Which parameters each function owns. A function called through the function table (a lifted lambda, or the
-/// wrapper of a function passed as a value) owns all of them, as every call through a closure passes them owned.
-/// Another function owns a parameter on the heap when it takes it over somewhere (passes it on owned, stores it,
-/// returns it, matches on it), and borrows it when it only reads it. A parameter that a tail call passes something
-/// the caller owns to is owned as well: the caller could otherwise only drop it after the call, which would then not
-/// be a tail call (see "Reference counting" in `docs/src/content/work-in-progress/tail-calls.md`).
+/// wrapper of a function passed as a value) borrows its environment and owns the rest, as every call through a closure
+/// passes them owned; its owning entry owns them all (see `CoreIrClosureEntries`). Another function owns a parameter on
+/// the heap when it takes it over somewhere (passes it on owned, stores it, returns it, matches on it), and borrows it
+/// when it only reads it. A parameter that a tail call passes something the caller owns to is owned as well: the caller
+/// could otherwise only drop it after the call, which would then not be a tail call (see "Reference counting" in
+/// `docs/src/content/work-in-progress/tail-calls.md`).
 let internal inferOwnership (functions: Function list) : Ownership =
-    let indirect =
+    let indirect = CoreIrClosureEntries.targets functions
+    let owningEntries = indirect |> Set.map CoreIrClosureEntries.owningName
+    let entries =
         functions
-        |> Seq.collect (fun f -> nodes f.Body)
-        |> Seq.collect (fun e ->
-            let made = match e.Kind with MakeClosure(name, _, _) -> [ name ] | _ -> []
-            let static' = operands Map.empty e |> List.choose (function AStaticClosure(name, _, _), _ -> Some name | _ -> None)
-            made @ static')
-        |> Set.ofSeq
+        |> List.filter (fun f -> indirect.Contains f.Name)
+        |> List.map (fun f -> f.Name, f.Params |> List.mapi (fun index _ -> if index = 0 then Borrowed else Owned))
     let uses = Dictionary<string, Use array>()
     for f in functions do
-        if not (indirect.Contains f.Name) then
+        if not (indirect.Contains f.Name || owningEntries.Contains f.Name) then
             uses.[f.Name] <- f.Params |> List.map (fun p -> if isHeapType p.Type then Borrowed else Owned) |> Array.ofList
-    let current () = uses |> Seq.map (fun pair -> pair.Key, List.ofArray pair.Value) |> Map.ofSeq
+    let current () =
+        Seq.append (uses |> Seq.map (fun pair -> pair.Key, List.ofArray pair.Value)) entries |> Map.ofSeq
     let mutable changed = true
     while changed do
         changed <- false
@@ -223,12 +224,13 @@ let internal inferOwnership (functions: Function list) : Ownership =
     current ()
 
 /// Counts one function's body. `addresses` gives the strings a value is an address in (see `addressFlow`), which a use
-/// of the value uses too.
-type private Counter(ownership: Ownership, addresses: Atom -> Var list, func: Function) =
+/// of the value uses too. `owningEntries` gives the owning entry of each function a closure is over that has one.
+type private Counter(ownership: Ownership, addresses: Atom -> Var list, owningEntries: Map<string, string>, func: Function) =
     let temps = Dictionary<int, Expr>()
     let vars = Dictionary<int, Var>()
     let counted = Dictionary<int, Expr>()
     let free = Dictionary<Expr, Set<int>>(HashIdentity.Reference)
+    let tails = HashSet<Expr>(results func.Body, HashIdentity.Reference)
 
     do
         for parameter in func.Params do
@@ -393,12 +395,28 @@ type private Counter(ownership: Ownership, addresses: Atom -> Var list, func: Fu
         | Release _
         | Reuse _
         | FreeToken _ -> internalError "the core IR is counted twice"
-        | _ ->
-            // An instruction that reads an address reads the strings it is in, last, so that they live until it is done.
-            let items = operands ownership e
-            let addressed = items |> List.collect (fst >> addresses) |> List.distinctBy _.Id |> List.map (fun text -> AVar text, Borrowed)
-            let dups, drops = this.Operands owned after (items @ addressed)
-            this.Wrap dups drops e
+        // A closure that dies at a tail call is given to the owning entry, which the caller need not drop it after, as a
+        // call by name of a function a closure is over that passes it a closure that dies there is (see
+        // `CoreIrClosureEntries`).
+        | CallClosure(closure, args, Borrowing) when this.DiesInTailCall owned after e closure ->
+            let owning = { e with Kind = CallClosure(closure, args, Owning) }
+            this.Instruction owned after owning (operands ownership owning)
+        | Call(name, (AVar environment :: _ as args)) when owningEntries.ContainsKey name && this.DiesInTailCall owned after e environment ->
+            let owning = { e with Kind = Call(owningEntries.[name], args) }
+            this.Instruction owned after owning ((AVar environment, Owned) :: List.tail (operands ownership e))
+        | _ -> this.Instruction owned after e (operands ownership e)
+
+    /// Whether `e` is a call in tail position that passes `closure` as an environment, and it dies there: a temporary,
+    /// or a variable with a reference of its own that nothing uses after.
+    member private _.DiesInTailCall (owned: Set<int>) (after: Set<int>) (e: Expr) (closure: Var) : bool =
+        tails.Contains e && (closure.Kind = Temp || owned.Contains closure.Id && not (after.Contains closure.Id))
+
+    /// An instruction on atoms, its operands, `items`, counted.
+    member private this.Instruction (owned: Set<int>) (after: Set<int>) (e: Expr) (items: (Atom * Use) list) : Expr =
+        // An instruction that reads an address reads the strings it is in, last, so that they live until it is done.
+        let addressed = items |> List.collect (fst >> addresses) |> List.distinctBy _.Id |> List.map (fun text -> AVar text, Borrowed)
+        let dups, drops = this.Operands owned after (items @ addressed)
+        this.Wrap dups drops e
 
     /// Counts the operands of an instruction, evaluated in this order: the variables it has to take a reference to
     /// first, and those (temporaries among them) it has to drop after it.
@@ -450,6 +468,7 @@ type private Counter(ownership: Ownership, addresses: Atom -> Var list, func: Fu
 /// `functions` with reference counting inserted, by the parameters `ownership` says each owns.
 let internal insert (ownership: Ownership) (functions: Function list) : Function list =
     let addressResults = inferAddressResults functions
+    let owningEntries = CoreIrClosureEntries.owningEntries functions
     functions
     |> List.map (fun func ->
         let owned =
@@ -458,4 +477,4 @@ let internal insert (ownership: Ownership) (functions: Function list) : Function
             |> List.filter (fun (index, parameter) -> isHeapType parameter.Type && parameterUse ownership func.Name index = Owned)
             |> List.map (snd >> _.Id)
             |> Set.ofList
-        { func with Body = Counter(ownership, snd (addressFlow addressResults false func), func).Count owned Set.empty func.Body })
+        { func with Body = Counter(ownership, snd (addressFlow addressResults false func), owningEntries, func).Count owned Set.empty func.Body })

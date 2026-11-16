@@ -153,7 +153,7 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | CallRuntime(_, atoms, _)
     | CallImport(_, atoms)
     | MakeClosure(_, _, atoms)
-    | CallClosure(_, atoms) -> ofAtoms atoms
+    | CallClosure(_, atoms, _) -> ofAtoms atoms
     | MakeRecord fields -> ofAtoms (List.map snd fields)
     | UpdateRecord(record, updates) -> ofAtoms (record :: List.map snd updates)
     | MakeTag(_, atom)
@@ -668,14 +668,19 @@ type private FunctionEmitter(context: EmitContext) =
                 $"i32.const {CoreIrLayout.closureSize capturedTys}\n    i32.const {dropSlot}\n    call ${helper Helpers.newObject}"
                 slotStore
                 yield! stores (List.zip offsets.Tail captured) ]
-        | CallClosure(closure, args) ->
-            // The closure is passed first, as the environment, and read again for the table slot it holds.
+        | CallClosure(closure, args, entry) ->
+            // The closure is passed first, as the environment, and read again for the table slot it holds: the
+            // borrowing entry's, with the owning entry in the slot after it (see `CoreIrClosureEntries`).
             let read = $"local.get ${localName closure}"
             let parameters = "i32" :: (args |> List.map (atomType >> CoreIrLayout.valueType))
             let result = CoreIrLayout.valueType expr.Type
             context.IndirectCall(parameters, result)
             let call = if tail then "return_call" else "call"
-            join "\n    " [ read; atomsAfter true args; read; touching "i32.load"; $"{call}_indirect (type ${indirectTypeName parameters result})" ]
+            let slot =
+                match entry with
+                | Borrowing -> touching "i32.load"
+                | Owning -> join "\n    " [ touching "i32.load"; "i32.const 1"; "i32.add" ]
+            join "\n    " [ read; atomsAfter true args; read; slot; $"{call}_indirect (type ${indirectTypeName parameters result})" ]
         | Interpolate parts -> this.Interpolation parts
         | Dbg text -> join "\n    " [ atoms [ text ]; "call $dbg_str"; "i32.const 0" ]
         | If(cond, ifTrue, ifFalse) ->

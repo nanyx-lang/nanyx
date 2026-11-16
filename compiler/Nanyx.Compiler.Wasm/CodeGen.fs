@@ -123,14 +123,20 @@ let private contextMemberKeys (defs: (string * TypeExpr option * Expression) lis
 
 
 
-/// The function-table slot of a top-level function used as a value, assigning one on first use.
-let private functionValueSlot (table: FunctionTable) (name: string) (arity: int) : int =
+/// The function-table slot of a top-level function used as a value, assigning one on first use. A function in
+/// `owningEntries` has the owning entry it names in the slot after it (see `CoreIrClosureEntries`).
+let private functionValueSlot (table: FunctionTable) (owningEntries: Map<string, string>) (name: string) (arity: int) : int =
     match table.Values.TryGetValue name with
     | true, ctxFn -> ctxFnSlot ctxFn
     | _ ->
         let slot = table.NextSlot
         table.NextSlot <- slot + 1
         table.Values.[name] <- (sanitizeIdentifier name, slot, arity)
+        match owningEntries |> Map.tryFind name with
+        | Some owning ->
+            table.NextSlot <- slot + 2
+            table.Values.[CoreIrClosureEntries.owningName name] <- (sanitizeIdentifier owning, slot + 1, arity)
+        | None -> ()
         slot
 
 
@@ -855,11 +861,16 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         definitionFunctions |> List.map CoreIrReach.withoutUnreadClosures |> CoreIrReach.reachedFrom startFunction
 
     // Reference counting, inserted over the whole module at once, since which parameters a function owns depends on
-    // the functions it calls; then drop specialisation and reuse.
+    // the functions it calls; then drop specialisation and reuse. Each function a closure is over gets its owning entry
+    // first, and keeps it only if something can call it (see `CoreIrClosureEntries`).
+    let closureTargets = CoreIrClosureEntries.targets (definitionFunctions @ Option.toList startFunction)
+    let owningEntries = closureTargets |> Set.map CoreIrClosureEntries.owningName
     let definitionFunctions, startFunction =
-        let all = definitionFunctions @ Option.toList startFunction
+        let definitions = CoreIrClosureEntries.withOwningEntries closureTargets definitionFunctions
+        let all = definitions @ Option.toList startFunction
         let counted = CoreIrCounting.insert (CoreIrCounting.inferOwnership all) all |> CoreIrReuse.insert
-        List.take definitionFunctions.Length counted, startFunction |> Option.map (fun _ -> List.last counted)
+        let start = startFunction |> Option.map (fun _ -> List.last counted)
+        CoreIrClosureEntries.withoutUncalled owningEntries (Option.toList start) (List.take definitions.Length counted), start
 
     // The tags, strings and dbg forms of exactly the functions emitted below.
     let facts = CoreIrFacts.collect (definitionFunctions @ Option.toList startFunction)
@@ -876,6 +887,15 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let hostStateAddress = (dataEnd + 7) &&& ~~~7
     let heapBase = heapBaseAfter (if facts.UsesHostState then hostStateAddress + hostStateSize else dataEnd)
     let memoryDirective = $"  (memory {initialMemoryPages (heapStartOffset heapBase)})"
+
+    // The owning entry of each function a closure is over that something can call, which has the table slot after the
+    // function's: its copy if it was kept, or the function itself if its closures capture nothing.
+    let withOwningEntry =
+        let calledTypes = CoreIrClosureEntries.owningCallTypes (definitionFunctions @ Option.toList startFunction)
+        let all = definitionFunctions @ Option.toList startFunction
+        CoreIrClosureEntries.owningEntries all
+        |> Map.filter (fun name owning ->
+            owning <> name || all |> List.exists (fun func -> func.Name = name && calledTypes.Contains (CoreIrClosureEntries.signatureOf func)))
 
     // The parameters and result of each function, which a call converts a value of no known type to and from.
     let signatures =
@@ -896,12 +916,12 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 | None -> CoreIr.internalError $"missing string literal offset for {value}"
           StaticClosure =
             fun name arity ->
-                functionValueSlot functionTable name arity |> ignore
+                functionValueSlot functionTable withOwningEntry name arity |> ignore
                 match staticClosureMap |> Map.tryFind name with
                 | Some offset -> offset
                 | None -> CoreIr.internalError $"missing static closure offset for {name}"
           RecordLayoutId = recordLayoutId recordTable
-          FunctionSlot = functionValueSlot functionTable
+          FunctionSlot = functionValueSlot functionTable withOwningEntry
           IndirectCall = functionTable.IndirectSignatures.Add >> ignore
           Signature = fun name -> signatures |> Map.tryFind name
           HostState = hostStateAddress }
@@ -924,6 +944,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         if cachedNames.Contains func.Name then
             let build = note (CoreIrEmit.emitFunction context { func with Name = CoreIrCachedValues.buildName func.Name } None)
             build + "\n\n" + CoreIrCachedValues.getter func (exportNameOf specialisations func)
+        // An owning entry is a copy of a function, never exported as well.
+        elif owningEntries.Contains func.Name then note (CoreIrEmit.emitFunction context func None)
         else note (emitFromCoreIr context specialisations func)
 
     let renderedFunctions = definitionFunctions |> List.map fromCoreIr |> String.concat "\n\n"
@@ -1084,7 +1106,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         [ renderDataSegments stringLiteralData
           yield!
               facts.StaticClosures
-              |> List.map (fun (name, arity) -> staticClosureData staticClosureMap.[name] (functionValueSlot functionTable name arity)) ]
+              |> List.map (fun (name, arity) -> staticClosureData staticClosureMap.[name] (functionValueSlot functionTable withOwningEntry name arity)) ]
         |> List.filter (fun segment -> segment <> "")
         |> String.concat "\n"
 

@@ -37,7 +37,7 @@ let directAtoms (e: Expr) : Atom list =
     | CallRuntime(_, atoms, _)
     | CallImport(_, atoms)
     | MakeClosure(_, _, atoms)
-    | CallClosure(_, atoms) -> atoms
+    | CallClosure(_, atoms, _) -> atoms
     | MakeRecord fields -> List.map snd fields
     | UpdateRecord(record, updates) -> record :: List.map snd updates
     | ForEach loop -> ForLoop.sourceAtoms loop
@@ -58,7 +58,7 @@ let directAtoms (e: Expr) : Atom list =
 /// The variables `e` reads directly, other than through its atoms.
 let directVars (e: Expr) : Var list =
     match e.Kind with
-    | CallClosure(var, _)
+    | CallClosure(var, _, _)
     | Assign(var, _)
     | SetField(var, _, _) -> [ var ]
     | Match(scrutinees, _) -> scrutinees
@@ -106,7 +106,7 @@ let rec mapVars (var: Var -> Var) (depth: int -> int) (e: Expr) : Expr =
         | CallRuntime(name, args, returnsValue) -> CallRuntime(name, atoms args, returnsValue)
         | CallImport(declared, args) -> CallImport(declared, atoms args)
         | MakeClosure(name, arity, captured) -> MakeClosure(name, arity, atoms captured)
-        | CallClosure(closure, args) -> CallClosure(var closure, atoms args)
+        | CallClosure(closure, args, entry) -> CallClosure(var closure, atoms args, entry)
         | Interpolate parts -> Interpolate(parts |> List.map (function Hole(v, holeType) -> Hole(var v, holeType) | text -> text))
         | Dbg value -> Dbg(atom value)
         | BoxFloat _

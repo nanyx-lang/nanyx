@@ -88,6 +88,10 @@ of tail position, so the two designs have to agree:
 - **Arguments to a tail call are owned.** If the callee only borrows an argument the caller owns, the caller has
   to keep it alive until the call returns, and the call is no longer a tail call. Ownership inference makes such a
   parameter owned (as Koka does), or moves the argument into the call.
+- **A closure that dies at a tail call is passed owned.** A function called through a closure borrows its
+  environment, so the caller would have to drop the closure after the call. A tail call of a closure that dies there
+  calls the function's owning entry instead, a copy that owns its environment, in the table slot after it (see
+  "Closures have two entries" in [Memory management](./memory-management)).
 
 ## Running out of stack
 

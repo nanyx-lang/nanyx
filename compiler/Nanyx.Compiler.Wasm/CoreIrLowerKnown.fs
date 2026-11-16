@@ -129,7 +129,7 @@ let usedOf (ids: Set<int>) (body: Expr) : Set<int> =
         | UpdateRecord(record, updates) -> atom record; updates |> List.iter (snd >> atom)
         | Assign(target, value)
         | SetField(target, _, value) -> var target; atom value
-        | CallClosure(closure, args) -> var closure; List.iter atom args
+        | CallClosure(closure, args, _) -> var closure; List.iter atom args
         | Interpolate parts -> parts |> List.iter (function Hole(hole, _) -> var hole | Text _ -> ())
         | ForEach loop -> ForLoop.sourceAtoms loop |> List.iter atom
         | If(cond, _, _) -> atom cond

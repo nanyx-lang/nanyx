@@ -717,12 +717,16 @@
     local.get $__use_Describe_int_describe_2
     i32.load
     call_indirect (type $ctx_fn_2_i32_i64_to_i32)
+    local.get $__use_Describe_int_describe_2
+    call $__nanyx_drop_fn_int_to_string
     local.set $xString__in1
     local.get $__use_Describe_string_describe_5
     local.get $y__in1
     local.get $__use_Describe_string_describe_5
     i32.load
     call_indirect (type $ctx_fn_2)
+    local.get $__use_Describe_string_describe_5
+    call $__nanyx_drop_fn_string_to_string
     local.set $yString__in1
     i32.const 264
     local.get $xString__in1
@@ -758,15 +762,11 @@
   (export "main" (func $main))
 
   (func $__lambda_1 (param $__env i32) (param $i_i64 i64) (result i32)
-    local.get $__env
-    call $__nanyx_drop_rec_0_word
     i32.const 304
   )
   (export "__lambda_1" (func $__lambda_1))
 
   (func $__lambda_4 (param $__env i32) (param $s i32) (result i32)
-    local.get $__env
-    call $__nanyx_drop_rec_0_word
     local.get $s
   )
   (export "__lambda_4" (func $__lambda_4))
