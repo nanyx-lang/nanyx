@@ -48,7 +48,7 @@ nanyx hello
 - `format` rewrites the files that are not formatted, or with `--check` lists them and exits with 1. With `--stdin`
   it formats standard input to standard output (see [Formatter](./formatter)).
 - `stdlib-docs` writes the generated reference of each standard-library page in the directory it is given,
-  `docs/src/content/stdlib`, from the library's doc comments, or with `--check` lists the pages that are out of date
+  `docs/src/content/stdlib`, from the doc comments of the library and of the packages the compiler ships, or with `--check` lists the pages that are out of date
   and exits with 1. It also fails for a file of the library that has no page, and a page that has no file (see
   [Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)).
 - `search` searches the standard library by name, by type, or both, and prints what matches, best first: each

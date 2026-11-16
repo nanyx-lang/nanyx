@@ -76,8 +76,9 @@ label.
   `dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -- format --check ../stdlib` from
   `compiler/` before you push.
 - **Write the standard library's pages after changing it.** The reference on each page in
-  `docs/src/content/stdlib` is generated from the library's doc comments, and a test fails when it is out of date.
-  After you change a doc comment or what the library exports, run, from `compiler/`:
+  `docs/src/content/stdlib` is generated from the doc comments of the library and of the packages in `packages/`, and a
+  test fails when it is out of date. After you change a doc comment or what the library or a shipped package exports,
+  run, from `compiler/`:
 
   ```bash
   dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -- stdlib-docs ../docs/src/content/stdlib

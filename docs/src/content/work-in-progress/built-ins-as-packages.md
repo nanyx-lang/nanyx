@@ -152,8 +152,9 @@ level, so a field is never mistaken for a package's configuration:
   package's public modules and the shipped packages it depends on. A file of the host's package, or of a package it
   depends on, sees no host, so the interface package doesn't import the prelude that re-exports it. A library lists
   `nanyx.console.core` in its `dependencies` and imports `nanyx.console.core/console`; an application may too, to
-  import it under an alias. The reference on the `console` and `env` pages of the docs site is kept by hand until the
-  generator covers shipped packages ([#1505](https://github.com/nanyx-lang/nanyx/issues/1505)).
+  import it under an alias. The reference on the `console` and `env` pages of the docs site is generated from its doc
+  comments, as the standard library's is ([#1505](https://github.com/nanyx-lang/nanyx/issues/1505), see
+  [Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)).
 - **No host means a library.** `Manifest.Host` and `PackageModules.Host` are options. A package file under no host gets
   no host import, an `@entry` there is `NYX0031` (`Attributes.applyAttributes`), and `nanyx run` on a library says it
   has no entry point. A loose script still runs under the console host.

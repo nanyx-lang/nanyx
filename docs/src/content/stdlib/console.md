@@ -50,7 +50,7 @@ A record's fields are printed in alphabetical order. A map's entries and a set's
 
 # Reference
 
-<!-- Written by hand from the doc comments in packages/nanyx.console.core until the generator covers the packages the compiler ships (#1505): keep it in step with them. -->
+<!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->
 
 How a program talks to the terminal.
 
@@ -127,3 +127,4 @@ def eprintln: [Console & ToString(a)] a -> ()
 
 Writes `value` followed by a line break to standard error, as `print` writes it.
 
+<!-- End of the generated reference. -->
