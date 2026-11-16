@@ -24,8 +24,10 @@ module internal WellKnownContexts =
           /// The prelude function that is the member of the compiler's own instance, which works by the structure of
           /// the type it is specialised at: `__equals`.
           BuiltInFunction: Identifier
-          /// Why values of a type have no instance of the compiler's own, if they have none.
-          Lacks: Ty -> string option
+          /// Why values of a type have no instance of the compiler's own, if they have none. A part the predicate says
+          /// has an instance of its own, one in scope or attached, is not looked inside, where the context is derived
+          /// from a structure's parts (`Eq` and `Hash`): `#some(f)` is compared through the `Eq` a `use` loads for `f`.
+          Lacks: (Ty -> bool) -> Ty -> string option
           /// The prelude function each operator calls on two lists whose elements have an instance other than the
           /// compiler's own, which it is passed: `__listEquals` for `==` (and `!=`, which is `not` of it).
           ListHelpers: Map<string, Identifier>
@@ -40,11 +42,13 @@ module internal WellKnownContexts =
 
     /// Where in a value of the type `ty` the first part that `kindOf` names is, if there is one: the parts of `ty` it
     /// is in, outermost first, each with whether it names several values (a list's elements), and what `kindOf` calls
-    /// it, singular and plural.
-    let rec private offendingPart (kindOf: Ty -> (string * string) option) (ty: Ty) : ((string * bool) list * (string * string)) option =
+    /// it, singular and plural. A part `covered` says has an instance of its own is not looked inside.
+    let rec private offendingPart (covered: Ty -> bool) (kindOf: Ty -> (string * string) option) (ty: Ty) : ((string * bool) list * (string * string)) option =
+        let offendingPart = offendingPart covered
         let inPart (part: string) (plural: bool) (partTy: Ty) =
             offendingPart kindOf partTy |> Option.map (fun (rest, kind) -> (part, plural) :: rest, kind)
         match kindOf ty with
+        | _ when covered ty -> None
         | Some kind -> Some ([], kind)
         | None ->
             match ty with
@@ -63,9 +67,10 @@ module internal WellKnownContexts =
             | TySelf _ -> Ty.children ty |> List.tryPick (inPart "a value it holds" false)
             | TyUnion items -> items |> List.tryPick (offendingPart kindOf)
 
-    /// Why values of the type `ty` have no `property`, if they have none: they are, or hold, a part `kindOf` names.
-    let private lacking (property: string) (kindOf: Ty -> (string * string) option) (ty: Ty) : string option =
-        offendingPart kindOf ty
+    /// Why values of the type `ty` have no `property`, if they have none: they are, or hold, a part `kindOf` names
+    /// that `covered` does not say has an instance of its own.
+    let private lacking (property: string) (kindOf: Ty -> (string * string) option) (covered: Ty -> bool) (ty: Ty) : string option =
+        offendingPart covered kindOf ty
         |> Option.map (fun (path, (singular, plural)) ->
             match path with
             | [] -> $"{plural} have no {property}"
@@ -119,7 +124,8 @@ module internal WellKnownContexts =
           Member = "compare"
           Operators = [ "<"; "<="; ">"; ">=" ]
           BuiltInFunction = "__compare"
-          Lacks =
+          // No order is derived from a structure's parts, so a part's own `compare` does not give one.
+          Lacks = fun _ ->
             lacking "order" (function
                 | TyFunc _ -> Some ("a function", "functions")
                 | Maps.MapType _ -> Some ("a map", "maps")
@@ -131,7 +137,7 @@ module internal WellKnownContexts =
                 | TyOpenRecord _ -> Some ("a record", "records")
                 | TyTag _
                 | TyUnion _ -> Some ("a tag", "tags")
-                | _ -> None)
+                | _ -> None) (fun _ -> false)
           ListHelpers =
             Map.ofList [ "<", "__listLess"; "<=", "__listLessOrEqual"; ">", "__listGreater"; ">=", "__listGreaterOrEqual" ]
           AgreesWith = None
@@ -351,7 +357,7 @@ module internal WellKnownContexts =
         let ty = List.head argTys
         let failed (message: string) =
             Ok (None, { state with FailedExprs = (pending.Call, error pending.Span message) :: state.FailedExprs })
-        match wellKnown.Lacks ty with
+        match wellKnown.Lacks (hasInstance env) ty with
         | Some reason -> failed (cannotUse wellKnown pending.Callee ty reason)
         | None ->
             match comparedVars ty |> List.tryFind (fun v -> declaredVars.Contains v.Id && not (hasInstance env (TyVar v))) with
@@ -402,10 +408,10 @@ module internal WellKnownContexts =
         | Open of TyVar
 
     /// The instance of `wellKnown` a call that requires it at `ty` finds. `hasAttached` says whether the type has the
-    /// member attached, which is found ahead of the compiler's own, and `hasInstance` whether an instance of a type
-    /// variable is in scope.
-    let atCall (wellKnown: WellKnownContext) (hasAttached: bool) (hasInstance: Ty -> bool) (ty: Ty) : CallInstance =
-        match wellKnown.Lacks ty with
+    /// member attached, which is found ahead of the compiler's own, `hasInstance` whether an instance of a type
+    /// variable is in scope, and `partHasOwn` whether a part of the type has an instance of its own (see `Lacks`).
+    let atCall (wellKnown: WellKnownContext) (hasAttached: bool) (hasInstance: Ty -> bool) (partHasOwn: Ty -> bool) (ty: Ty) : CallInstance =
+        match wellKnown.Lacks partHasOwn ty with
         | _ when hasAttached -> Attached
         | Some reason -> NoInstance reason
         | None ->

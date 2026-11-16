@@ -89,7 +89,9 @@ module internal EqualityOperators =
         | Error errors -> Error errors
         | Ok (Some called) -> Ok called
         | Ok None ->
-            match equality.Lacks ty, state.ContextScope with
+            // A part with an `==` of its own, a function given one by a `use`, is compared through it.
+            let hasOwn (part: Ty) = match instanceOf env state part with Ok (Some _, _) -> true | _ -> false
+            match equality.Lacks hasOwn ty, state.ContextScope with
             | Some reason, _ -> Error (error expr.Span (cannotUse equality op ty reason))
             | None, DefScope(name, false) when name = builtInFunction -> Ok state
             | None, _ when not (isDeclared equality state) -> Ok state

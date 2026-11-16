@@ -97,3 +97,17 @@ def describe: [Eq(a)] a, a -> bool = { x, y ->
 }
 """
     compileClean (normalized source) |> ignore
+
+[<Fact>]
+let ``A structure holding a type with no Eq is compared through the one a use loads, and is an error without it`` () =
+    let source (body: string) =
+        normalized
+            $"""
+type Button = (label: string, onClick: () -> ())
+def b = Button(label = "a", onClick = {{ -> () }})
+def inside = {{ {body}#some(b) == #some(b) }}
+"""
+    compileClean (source "use Eq(Button)(`==` = { p, q -> p.label == q.label }) in ") |> ignore
+    let code, at = singleError (source "")
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
+    Assert.Equal("#some(b) == #some(b)", at)
