@@ -27,7 +27,9 @@ order: 10
 - **Calling a map is a lookup.** `m(k)` is `map.get(m, k)`, which gives `#some(v) | #notFound`. So is a call of a
   record's field that is a map, `machine.inventory(name)`. The type checker types the call as the call to `map.get`
   (`inferMapLookup` in `Infer.fs`) and records it in `ReadAs`, and `ExpressionRewrites.writeAsRead` writes it as that
-  call for the backend.
+  call for the backend. A call of a field that holds a function, `statement.setInt(position, value)`, is read the same
+  way, as a block that keeps the field's value in a local and calls it (`FieldCalls`,
+  [#1513](https://github.com/nanyx-lang/nanyx/issues/1513)).
 - **Loops.** `for m | key, value -> ...` walks a map's entries, each a tuple of its key and its value, and
   `for s | x -> ...` a set's elements.
 - **Representation.** A map holds the list of its entries, each key once, in the order the keys were first added, and

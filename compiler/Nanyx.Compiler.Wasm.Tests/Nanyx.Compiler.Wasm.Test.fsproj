@@ -119,6 +119,7 @@
     <Compile Include="Features\Packages\ReExportTests.fs" />
     <Compile Include="Features\Records\RunRecordTests.fs" />
     <Compile Include="Features\Records\RunRecordSpreadTests.fs" />
+    <Compile Include="Features\Records\RunFunctionFieldTests.fs" />
     <Compile Include="Features\Sets\RunSetTests.fs" />
     <Compile Include="Features\Arrays\RunArrayTests.fs" />
     <Compile Include="Features\StdLib\RunIgnoreTests.fs" />
