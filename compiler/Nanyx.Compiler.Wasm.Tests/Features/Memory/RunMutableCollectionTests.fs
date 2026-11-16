@@ -97,3 +97,26 @@ def main = {
 }
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "([a, B, c], 3, #some(a), #some(c), #none, #none, #ok, #outOfRange)\n(0, [])\n"
+
+[<Fact>]
+let ``Run - += adds to a mutable list, and gives ()`` () =
+    let source = """
+import nanyx/mlist
+
+def addAll: [Memory] MList(int), list(int) -> () = { items, xs ->
+  list.fold(xs, (), { _, x -> items += x })
+}
+
+@entry
+def main = {
+  def result = memory {
+    def items: MList(int) = [1]
+    items += 2 + 3
+    def added = items += 4
+    addAll(items, [5, 6])
+    (MList.toList(items), added)
+  }
+  println(result)
+}
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "([1, 5, 4, 5, 6], ())\n"

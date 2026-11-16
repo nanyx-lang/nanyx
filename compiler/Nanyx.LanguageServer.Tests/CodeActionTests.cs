@@ -75,6 +75,20 @@ public sealed class CodeActionTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task A_look_alike_character_has_a_quick_fix_that_writes_what_it_looks_like()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-look-alike");
+        const string text = "def expected = −7.0\n";
+
+        Open(uri, text);
+        Assert.Equal("NYX0037", Assert.Single((await NextPublished(uri)).Diagnostics!).Code?.String);
+
+        var replace = Assert.Single(await CodeActionsIn(uri, new Range(0, 15, 0, 15)));
+        Assert.Equal(("Replace '−' with '-'", CodeActionKind.QuickFix), (replace.Title, replace.Kind));
+        Assert.Equal("def expected = -7.0\n", Applied(text, Assert.Single(replace.Edit!.Changes![uri])));
+    }
+
+    [Fact]
     public async Task An_unused_import_has_a_quick_fix_that_removes_it()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-13");

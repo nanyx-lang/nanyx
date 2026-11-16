@@ -403,7 +403,7 @@
         {
           "comment": "Nanyx's operators, a closed list (see the operators page), longer ones before those they start with",
           "name": "keyword.operator.nanyx",
-          "match": ">>=|=<<|<\\*>|<\\+>|\\*\\*|\\+\\+|<>|>>|<<|<=|>=|==|!=|[-+*/%^<>~]"
+          "match": ">>=|=<<|<\\*>|<\\+>|\\*\\*|\\+\\+|\\+=|<>|>>|<<|<=|>=|==|!=|[-+*/%^<>~]"
         },
         { "name": "keyword.operator.definition.nanyx", "match": "=" },
         { "name": "keyword.operator.bar.nanyx", "match": "\\|" },

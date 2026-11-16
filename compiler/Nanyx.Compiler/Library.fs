@@ -20,6 +20,14 @@ module Compiler =
             if error.Message.StartsWith "Error in " && lineEnd >= 0 then error.Message.Substring(lineEnd + 1)
             else error.Message
         Diagnostics.at DiagnosticCodes.SyntaxError error.Span message
+
+    /// The diagnostics for the parse of `source`, the file `filePath`, failing with `error`: each character that looks
+    /// like one Nanyx reads and isn't that it fails at, and then the syntax error it fails with next, if any (see
+    /// `LookAlikes`).
+    let private syntaxErrors (filePath: string) (source: string) (error: ParseError) =
+        let lookAlikes, rest = LookAlikes.diagnose filePath source error
+        lookAlikes @ (rest |> Option.map syntaxError |> Option.toList)
+
     /// The source of the file at `filePath` parsed, with its doc comments (see `parseModuleFileWithDocs`), or the syntax
     /// error, or the errors for contexts joined with `&` or `+` rather than separated by `,` (see `ContextSeparators`).
     let private parseWithDocs (filePath: string) (source: string) =
@@ -28,7 +36,7 @@ module Compiler =
             match ContextSeparators.check (source.Replace("\r\n", "\n").Replace("\r", "\n")) items with
             | [] -> Ok parsed
             | errors -> Error errors
-        | Result.Error err -> Error [ syntaxError err ]
+        | Result.Error err -> Error (syntaxErrors filePath source err)
     let private parseWithDiagnostics (filePath: string) (source: string) : Result<Module * DeclaredNames * (ModuleName * SourceSpan) list, Diagnostic list> =
         parseWithDocs filePath source |> Result.map fst
 
@@ -1037,7 +1045,7 @@ module Compiler =
     let parse (source: string) : Result<Module, Diagnostic list> =
         match parseModuleFileWithNames "" source with
         | Result.Ok (ast, _, _) -> Ok ast
-        | Result.Error err -> Error [ syntaxError err ]
+        | Result.Error err -> Error (syntaxErrors "" source err)
 
     /// The compile of the module from `origin`, which `typecheckModule` gave as `checked` with `checkedModules`, the linters
     /// `options` names run over it if it type-checked. A module with type or name errors is typed all the same, with what did

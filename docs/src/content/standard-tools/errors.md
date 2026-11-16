@@ -615,6 +615,21 @@ def total = 1
 
 To fix it, turn the linter on above it, which the error's fix does with the official linter: `::linter nanyx.lint`.
 
+# NYX0037: Character that looks like another
+
+A character outside a string or a comment looks like one Nanyx reads, but isn't it. It is usually pasted from a web
+page or a document, which writes a minus sign for `-`, curly quotes for `"` and a no-break space for a space, and in
+most fonts it can't be told apart. The parser reports it in place of a syntax error, then reads on as if the character
+it looks like were written, so the file's other syntax errors are still reported.
+
+```nanyx
+def expected = −7.0  -- error NYX0037: '−' (U+2212 Minus Sign) looks like '-' (Hyphen-Minus), but it isn't one
+```
+
+To fix it, write the character it looks like, which the error's fix does. A pair of curly quotes is one error, and its
+fix writes both. The characters it knows are the dashes and minus signs, curly quotes and primes, spaces other than the
+space and characters that can't be seen, `×`, `÷`, `≤`, `≥`, `≠` and `→`, and fullwidth brackets and punctuation.
+
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which
