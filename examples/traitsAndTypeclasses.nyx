@@ -56,7 +56,7 @@ type Point = (x: int, y: int)
 def Point.`0` = Point(x = 0, y = 0)
 def Point.`+` = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }
 
-context Sum(a) = (a, `+`: (a, a) -> a)
+context Sum(a) = (`0`: a, `+`: (a, a) -> a)
 
 def sum: [Sum(a)] list(a) -> a = { items ->
   items \fold(`0`) { + }
