@@ -250,7 +250,7 @@ let ``Run - a pattern with arguments and a payload takes two groups of brackets`
     """
 pattern string -> string -> #SplitOn(string, string) | _ = { separator ->
   { s ->
-    match s \string.split(on = separator)
+    match s \split(on = separator)
       | [a, b] -> #SplitOn(a, b)
       | _ -> _
   }

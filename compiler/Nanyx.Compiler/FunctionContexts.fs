@@ -215,7 +215,10 @@ module FunctionContexts =
         | [] when not givenExtra.IsEmpty && not shared.IsEmpty ->
             Ok (arguments @ solveTo origin (List.truncate 1 shared) (givenExtra @ [ fresh () ]) @ solveTo origin givenVars expectedExtra)
         | [] when not givenExtra.IsEmpty -> Error givenExtra
-        | [] -> Ok (arguments @ solveTo origin givenVars expectedExtra)
+        // Each variable of `given` may stand for any of the contexts `expected` has, as `c` and `d` of `seq.map`'s
+        // `[c, d] seq(b)` may where a `[Console] seq(int)` is expected: the sequence or the function may be the one that
+        // requires `Console` (#1738).
+        | [] -> Ok (arguments @ (givenVars |> List.map (fun var -> (var, TyUnion expectedExtra, Equal, origin))))
         | _ ->
             // A variable of `given` takes the scoped contexts `expected` has besides: a block given to `memory` that
             // calls a function it is not told the type of, as `{ mk -> memory { mk() } }` does, gives it the block's

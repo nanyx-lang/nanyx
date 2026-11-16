@@ -178,7 +178,7 @@ arguments of the wrong type are a type mismatch ([`NYX0201`](../standard-tools/e
 -- A pattern that splits a string in two on a separator
 pattern string -> string -> #SplitOn(string, string) | _ = { separator ->
   { s ->
-    match s \string.split(on = separator)
+    match s \split(on = separator)
       | [a, b] -> #SplitOn(a, b)
       | _ -> _
   }

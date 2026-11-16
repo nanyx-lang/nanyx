@@ -190,6 +190,9 @@ type InferState =
             /// the types as inference first saw
             /// them; the substitution unification finds turns them into resolved types.
             ExprTypes: Map<NodeId, Ty>;
+            /// The function type each lambda a lambda gives back is checked against, by the inner lambda's node: the
+            /// outer one's expected result, `b -> c` for `{ a -> { b -> ... } }` checked against `a -> b -> c` (#1749).
+            ExpectedLambdaTypes: Map<NodeId, Ty>;
             /// The callee's type at each call (and pipe), by the call's node: the function's type instantiated
             /// at that call site, which a call's own type (its result) does not show.
             CalleeTypes: Map<NodeId, Ty>;
@@ -371,6 +374,7 @@ let emptyState =
             LocalNominals = Set.empty;
             LocalPrivateNominals = Set.empty;
             ExprTypes = Map.empty;
+            ExpectedLambdaTypes = Map.empty;
             CalleeTypes = Map.empty;
             Declared = Map.empty;
             ModuleBlocks = [];

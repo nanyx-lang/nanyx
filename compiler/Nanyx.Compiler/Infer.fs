@@ -279,7 +279,11 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     | SpreadSyntax.Call parts -> RecordSpread.infer inferExpr env state expr parts
     | FunctionCall(name, spanOpt, args) -> inferCall env state expr name spanOpt args
     | Lambda(args, body, _) ->
-        state |> Contexts.outsideValue (fun state -> inferLambdaWithExpected env state expr args body None None)
+        let expectedInput, expectedReturn =
+            match state.ExpectedLambdaTypes |> Map.tryFind expr.Id with
+            | Some (TyFunc(input, ret, _)) -> Some input, Some ret
+            | _ -> None, None
+        state |> Contexts.outsideValue (fun state -> inferLambdaWithExpected env state expr args body expectedInput expectedReturn)
     | BinaryOp(op, _, left, right) when op = ArithmeticOperators.power -> ArithmeticOperators.inferPower (inferExpr env) state expr left right
     | BinaryOp(op, _, left, right) when (CompositionOperators.functionFor op).IsSome ->
         inferAsCall (inferExpr env) state expr (CompositionOperators.functionFor op).Value [ left; right ]
@@ -1032,12 +1036,21 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     | _ -> None
                 // A lambda can use the contexts its parameter's type requires, which the callee supplies.
                 // The instances of parameterised contexts it is given are in its type, so the callee passes them.
+                // One whose contexts only the call's result carries is not run by the call (see
+                // `Contexts.asCarriedArgument`).
                 let inferLambda state lambda lambdaArgs lambdaBody expectedInput paramTy =
                     let lambdaEnv, state = extendEnvForLambdaArgument env state lambda (Some paramTy)
                     let instances = instancesSuppliedToLambda state lambda (Some paramTy)
-                    match expectedInput with
-                    | Some expectedInput -> inferLambdaWithExpected lambdaEnv state lambda lambdaArgs lambdaBody (Some expectedInput) None
-                    | None -> inferExpr lambdaEnv state lambda
+                    let ownContexts =
+                        match contextRequirementsOf env state name |> Option.map ContextVariables.names with
+                        | Some vars when not vars.IsEmpty -> ContextVariables.boundAt (resolveSoFar state) vars scheme.Type funcTy
+                        | _ -> []
+                    let resultTy = match Unifier.unalias funcTy with TyFunc(_, ret, _) -> ret | _ -> TyUnion []
+                    state
+                    |> Contexts.asCarriedArgument ownContexts resultTy paramTy (fun state ->
+                        match expectedInput with
+                        | Some expectedInput -> inferLambdaWithExpected lambdaEnv state lambda lambdaArgs lambdaBody (Some expectedInput) None
+                        | None -> inferExpr lambdaEnv state lambda)
                     |> Result.map (fun (typedLambda, next) ->
                         match instances, Unifier.unalias typedLambda.Type with
                         | _ :: _, TyFunc(input, output, used) ->
@@ -1361,8 +1374,22 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
         match body.Kind with
         | ContextNames(names, _) -> ContextNames.bind env' current lambda body names
         | _ -> Ok (env', current)
+    // A lambda that gives back a lambda, `{ a -> { b -> ... } }` checked against `a -> b -> c`, checks the one it gives
+    // back against `b -> c`, so its parameters have their types while its body is inferred (#1749).
+    let rec returnedLambda (expr: Expression) =
+        match expr.Kind with
+        | Lambda _ -> Some expr
+        | Block statements ->
+            match List.tryLast statements with
+            | Some { Kind = ExprStatement last } -> returnedLambda last
+            | _ -> None
+        | _ -> None
+    let expectReturned (current: InferState) =
+        match returnedLambda body, expectedReturnOpt |> Option.map (resolveSoFar current >> Unifier.unalias) with
+        | Some inner, Some (TyFunc _ as expected) -> { current with ExpectedLambdaTypes = current.ExpectedLambdaTypes |> Map.add inner.Id expected }
+        | _ -> current
     named
-    |> Result.bind (fun (env', current) -> inferExpr env' (LambdaContexts.enter lambda current) body)
+    |> Result.bind (fun (env', current) -> inferExpr env' (LambdaContexts.enter lambda current |> expectReturned) body)
     |> function
     | Ok (bodyExpr, next) ->
         let used, next = LambdaContexts.leave lambda next ||> fun used next -> MemoryCells.parameterContexts next lambda args |> fun (cells, next) -> used @ cells |> List.distinct, next

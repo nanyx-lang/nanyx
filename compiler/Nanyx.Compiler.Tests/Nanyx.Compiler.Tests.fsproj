@@ -105,6 +105,7 @@
     <Compile Include="Features\Lambdas\ArmsAfterParametersTests.fs" />
     <Compile Include="Features\Lambdas\IgnoredParameterTests.fs" />
     <Compile Include="Features\Lambdas\ResultAnnotationTests.fs" />
+    <Compile Include="Features\Lambdas\ReturnedLambdaTests.fs" />
     <Compile Include="Features\Linters\LinterTests.fs" />
     <Compile Include="Features\Linters\UnusedBindingsTests.fs" />
     <Compile Include="Features\Linters\NonTailRecursionTests.fs" />

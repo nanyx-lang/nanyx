@@ -59,3 +59,41 @@ def pulled: ([Console] seq(int)) -> list(int) = { s -> s \seq.toList }
         )
     Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, diagnostic.Code)
     Assert.Contains("'Seq.toList' requires the context 'Console'", diagnostic.Message)
+
+[<Fact>]
+let ``A sequence mapped with a function that needs a context is made where the context is not`` () =
+    // #1738: making the sequence runs nothing, so a pure function or a top-level value can make one.
+    let typed =
+        clean """
+def loud: [Console] seq(int) = (1..3) \seq.map { x ->
+  println("pull {x}")
+  x * 10
+}
+
+def made: () -> [Console] seq(int) = {
+  (1..3) \seq.map { x ->
+    println("pull {x}")
+    x * 10
+  }
+}
+"""
+    Assert.Equal("[Console] seq(int)", typeOf typed "loud")
+    Assert.Equal("() -> [Console] seq(int)", typeOf typed "made")
+
+[<Fact>]
+let ``A sequence mapped with a function that needs a context is still pulled only where the context is`` () =
+    let diagnostic =
+        diagnosticOf (
+            """
+def made: () -> [Console] seq(int) = {
+  (1..3) \seq.map { x ->
+    println("pull {x}")
+    x
+  }
+}
+
+def pulled: () -> list(int) = { made() \seq.toList }
+""".ReplaceLineEndings "\n"
+        )
+    Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, diagnostic.Code)
+    Assert.Contains("requires the context 'Console'", diagnostic.Message)
