@@ -139,6 +139,10 @@ scoped export context Memory = protected ()
   function that supplies it starts a fresh, rigid scope. Every requirement of the context inside belongs to that
   scope, and the call's result type must not mention it. This is Haskell's `runST`, Koka's `local<h>` and Flix's
   regions, with the scope variable implied by the marker rather than written, so users never see it.
+- **A value can belong to a scope.** A type declared `type Cursor = [Tx] protected (...)` carries the scope of the `Tx`
+  each value was made under, so a value of it, or anything holding one, can't leave the call that supplies that `Tx`
+  either ([Types in a scope](../advanced/contexts#types-in-a-scope),
+  [#1521](https://github.com/nanyx-lang/nanyx/issues/1521)).
 - **Only scoped contexts are restricted.** Every other context keeps "require, don't capture", so
   `withConsoleLog { { log("x") } }` above may return a lambda that requires `Log`.
 - **Instances come only from their supplier.** A scoped context must be either `protected` or `private`, so only its own module can

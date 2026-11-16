@@ -199,6 +199,9 @@ type TypeDefInfo =
       IsContext: bool
       /// Declared `scoped context`.
       IsScoped: bool
+      /// The scoped context whose scope each value of the type belongs to, as `type Cursor = [Tx] protected (...)`
+      /// declares it: the value carries the scope as a last argument its type is applied to, which is never shown.
+      ScopedBy: string option
       Symbol: SymbolId option
       Members: Map<string, SymbolId> }
 

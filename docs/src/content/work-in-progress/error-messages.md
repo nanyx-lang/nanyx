@@ -97,9 +97,24 @@ little beyond the title.
 The language server sets each compiler diagnostic's `codeDescription.href` to the code's section on nanyx.dev, from
 `DiagnosticCodes.referenceUrl`, so that an editor shows the code as a link. A linter's code has none.
 
+# House style
+
+Decided by the maintainer ([#879](https://github.com/nanyx-lang/nanyx/issues/879)): the style most messages already
+have, written down.
+
+- A message starts with a capital letter and has no full stop at the end.
+- Names and types are in single quotes, `'total'`, `'list(int)'`; code is in backticks, `` `use` ``.
+- It says what was found, then any advice after a colon, as an instruction: "'push' requires the context 'Memory',
+  which 'calculate' does not declare: add [Memory] to the type of 'calculate'".
+- No "I" or "you", and no blame.
+
+[Principles](../foundations/principles#friendly-errors) says the same. What's left of #879 is one PR per area (parser,
+type checker, backend, packaging) rewriting the messages that break it, such as `dbg expects a single argument`, and a
+code for every error that lacks one.
+
 # Goals
 
-- Every compiler error has a stable code and a title, and follows the voice in Principles.
+- Every compiler error has a stable code and a title, and follows the [house style](#house-style).
 - Every error carries a span and, where it helps, related locations ("expected because of this annotation").
 - The CLI shows the file, the line of source and a marker under the span.
 - The most common errors (unknown name, type mismatch, missing context, non-exhaustive match) offer a

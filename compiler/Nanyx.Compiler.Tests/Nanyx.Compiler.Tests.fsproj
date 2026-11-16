@@ -32,6 +32,7 @@
     <Compile Include="Features\Contexts\ContextTests.fs" />
     <Compile Include="Features\Contexts\ContextEscapeTests.fs" />
     <Compile Include="Features\Contexts\ScopedContextTests.fs" />
+    <Compile Include="Features\Contexts\ScopedTypeTests.fs" />
     <Compile Include="Features\Contexts\ProtectedContextMatchingTests.fs" />
     <Compile Include="Features\Contexts\ContextAccessTests.fs" />
     <Compile Include="Features\Contexts\ContextNameTests.fs" />

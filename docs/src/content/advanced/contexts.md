@@ -71,6 +71,32 @@ scoped export context Memory = protected ()
 
 A scoped context must be either `protected` or `private`, so that each of its instances comes from the function its module provides to supply it: `scoped context Tx = (...)` is an error. Any module may declare one. What requires a scoped context leaving its scope is NYX0233.
 
+## Types in a scope
+
+A protected or private type can belong to a scoped context's scope: its declaration writes the context before its kind. Each value of the type belongs to the scope of the context it was made under, so it can't leave the call that supplies that context, and neither can anything holding it:
+
+```nanyx fragment
+scoped export context Tx = private ()
+
+export type Cursor = [Tx] protected (query: string, row: int)
+
+export def transaction: [c] ([Tx, c] () -> a) -> a = { block -> block() }
+export def open: [Tx] string -> Cursor = { query -> Cursor(query = query, row = 0) }
+export def next: [Tx] Cursor -> int = { c -> c.row + 1 }
+
+def row = transaction {
+  def c = open("select")
+  next(c)          -- fine
+}
+
+def leaks = transaction {
+  def c = open("select")
+  c                -- error NYX0233: the result of this 'transaction' call requires its 'Tx' through 'c'
+}
+```
+
+The type is written and shown as plain `Cursor`: the scope is never written. Making one requires the context, as calling a function that requires it does, and so does using one through functions like `next`; holding or passing one requires nothing. The type can take parameters as usual, as `type MRef(a) = [Memory] protected (...)` does, and the scope isn't one of them. Only a scoped context can be written there, and only one (NYX0252). Contexts written on any other type that isn't a function, as in `x: [Console] int`, are an error (NYX0253).
+
 # Requiring a context
 
 A function can specify required contexts in its type signature. Here, `sayHello` can call `println` because it runs in `Console`. The real `Console`, which the console host provides to every program, has a few more members, and `println` is a function written on top of its `write`:
@@ -236,7 +262,7 @@ Each call to `twice` then finds a `Show` for the type it is called with, as a ca
 
 This is also how scoped mutation is enforced: values that still require `memory` cannot escape into code that does not provide that context. See [Memory: Values cannot escape memory scope](../advanced/memory#values-cannot-escape-memory-scope).
 
-Which types other than functions will carry contexts (a type declared generic in contexts, or belonging to a scoped context's scope) is planned in [Work in progress: Context-qualified types](../work-in-progress/context-qualified-types).
+A type can also belong to a scoped context's scope, as [Types in a scope](#types-in-a-scope) describes. A type declared generic in contexts is planned in [Work in progress: Context-qualified types](../work-in-progress/context-qualified-types).
 
 # Combining contexts
 

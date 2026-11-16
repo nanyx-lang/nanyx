@@ -156,6 +156,8 @@ module DiagnosticCodes =
     let UseOfNonInstance = code 249 "use of something other than a context instance" Severity.Error
     let OwnInstanceReplaced = code 250 "Use of an instance for a type that has its own" Severity.Error
     let OperatorRequiredByMember = code 251 "Operator required by its member" Severity.Error
+    let InvalidTypeScope = code 252 "Type in the scope of something other than one scoped context" Severity.Error
+    let ContextsOnValueType = code 253 "Contexts written on a type that is not a function" Severity.Error
     let AttachedDefinitionInScope = code 254 "Attached definition already in scope for its type" Severity.Error
 
     // Generating code.
@@ -183,7 +185,7 @@ module DiagnosticCodes =
           LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotProtected; ScopedContextEscapes
           NotACellArgument; MisplacedCellType; UndeterminedContextType; EntryDoesNotFitHost; HostRuntimeOutsideHost; ScriptRunValue; ContextsWithoutType
           InvalidExtern; ExternWithoutHostRuntime; ConflictingExterns; PrivateContextMember; ContextNameAsValue; UnknownContextName
-          ContextAsType; InstanceOutsideUse; UseOfNonInstance; OwnInstanceReplaced; OperatorRequiredByMember; AttachedDefinitionInScope
+          ContextAsType; InstanceOutsideUse; UseOfNonInstance; OwnInstanceReplaced; OperatorRequiredByMember; InvalidTypeScope; ContextsOnValueType; AttachedDefinitionInScope
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

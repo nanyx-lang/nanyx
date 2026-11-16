@@ -76,8 +76,9 @@ name a destructuring def binds, and a type with a part that failed to check. Its
 | Convert between a call and a pipe | [#1540](https://github.com/nanyx-lang/nanyx/issues/1540) |
 | Organise imports | [#1541](https://github.com/nanyx-lang/nanyx/issues/1541) |
 
-Rename across files depends on
-finding uses across the workspace ([#877](https://github.com/nanyx-lang/nanyx/issues/877), which needs a decision).
+Rename across files depends on finding references across the package's files
+([#1556](https://github.com/nanyx-lang/nanyx/issues/1556)), which waits for the language server to resolve packages
+([#866](https://github.com/nanyx-lang/nanyx/issues/866)).
 
 # Ideas for later
 

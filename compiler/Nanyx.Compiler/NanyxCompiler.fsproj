@@ -78,6 +78,7 @@
     <Compile Include="RecordSpread.fs" />
     <Compile Include="PipeLookups.fs" />
     <Compile Include="Contexts.fs" />
+    <Compile Include="ScopedTypes.fs" />
     <Compile Include="ContextInstances.fs" />
     <Compile Include="ContextNames.fs" />
     <Compile Include="WorkflowRests.fs" />
