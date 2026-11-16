@@ -61,58 +61,68 @@ let ``Allocator - a freed small block is not handed out for another size`` () =
     Assert.Equal(a, allocator.Alloc 8)
 
 [<Fact>]
+let ``Allocator - a freed block of 256 bytes goes back to its own size's list, not the large blocks' (#1464)`` () =
+    use allocator = instantiate ()
+    let a = allocator.Alloc 256
+    let _ = allocator.Alloc 8
+    allocator.Free a
+    Assert.NotEqual(a, allocator.Alloc 260)
+    Assert.NotEqual(a, allocator.Alloc 252)
+    Assert.Equal(a, allocator.Alloc 256)
+
+[<Fact>]
 let ``Allocator - a freed large block is reused by an allocation it can hold`` () =
     use allocator = instantiate ()
-    let big = allocator.Alloc 101
+    let big = allocator.Alloc 401
     let _ = allocator.Alloc 8
-    let bigger = allocator.Alloc 200
+    let bigger = allocator.Alloc 800
     let _ = allocator.Alloc 8
     allocator.Free bigger
     allocator.Free big
     // First fit in address order: `big` is too small for this, so the search moves on to `bigger`.
-    Assert.Equal(bigger, allocator.Alloc 150)
+    Assert.Equal(bigger, allocator.Alloc 600)
     // `big` has too little to spare to split, so it is handed out whole and keeps its own size.
-    Assert.Equal(big, allocator.Alloc 80)
-    Assert.Equal(104, allocator.BlockSize big)
+    Assert.Equal(big, allocator.Alloc 300)
+    Assert.Equal(404, allocator.BlockSize big)
     allocator.Free big
-    Assert.Equal(big, allocator.Alloc 104)
+    Assert.Equal(big, allocator.Alloc 404)
 
 [<Fact>]
 let ``Allocator - a large block with room to spare is split, and the rest is handed out next`` () =
     use allocator = instantiate ()
-    let big = allocator.Alloc 200
+    let big = allocator.Alloc 800
     let _ = allocator.Alloc 8
     allocator.Free big
-    Assert.Equal(big, allocator.Alloc 100)
-    Assert.Equal(100, allocator.BlockSize big)
-    let rest = allocator.Alloc 96
-    Assert.Equal(big + 104, rest)
-    Assert.Equal(96, allocator.BlockSize rest)
+    Assert.Equal(big, allocator.Alloc 400)
+    Assert.Equal(400, allocator.BlockSize big)
+    let rest = allocator.Alloc 396
+    Assert.Equal(big + 404, rest)
+    Assert.Equal(396, allocator.BlockSize rest)
 
 [<Fact>]
 let ``Allocator - freed large blocks next to each other are joined into one`` () =
     use allocator = instantiate ()
-    let a = allocator.Alloc 100
-    let b = allocator.Alloc 100
-    let c = allocator.Alloc 100
+    let a = allocator.Alloc 400
+    let b = allocator.Alloc 400
+    let c = allocator.Alloc 400
     let _ = allocator.Alloc 8
     // The middle block last, so that it joins both neighbours.
     allocator.Free a
     allocator.Free c
     allocator.Free b
-    Assert.Equal(a, allocator.Alloc 308)
-    Assert.Equal(308, allocator.BlockSize a)
+    Assert.Equal(a, allocator.Alloc 1208)
+    Assert.Equal(1208, allocator.BlockSize a)
 
 [<Fact>]
 let ``Allocator - a freed large block at the top of the heap goes back to it`` () =
     use allocator = instantiate ()
-    let a = allocator.Alloc 100
-    let b = allocator.Alloc 100
+    let a = allocator.Alloc 400
+    let b = allocator.Alloc 400
     allocator.Free a
     // `b` ends at the top, so it and `a`, joined to it, both go back: the next block starts where `a` did.
     allocator.Free b
-    Assert.Equal(a, allocator.Alloc 400)
-    Assert.Equal(400, allocator.BlockSize a)
+    Assert.Equal(a, allocator.Alloc 1600)
+    Assert.Equal(1600, allocator.BlockSize a)
 
 [<Fact>]
 let ``Allocator - a string grown by copying reuses the copies it frees`` () =

@@ -20,8 +20,10 @@ let minimumHeapBase = 4096
 /// or past the data, 8-byte aligned so that the blocks `alloc` hands out stay 8-byte aligned.
 let heapBaseAfter (dataEnd: int) = max minimumHeapBase ((dataEnd + 7) &&& ~~~7)
 
-/// The largest block size, in bytes, with a free list of its own; larger blocks share one list.
-let largestSizeClass = 32
+/// The largest block size, in bytes, with a free list of its own; larger blocks share one list. It covers the strings
+/// and records programs make most of, so that freeing them never walks the large blocks' list, which is kept in address
+/// order (#1464).
+let largestSizeClass = 256
 
 /// Where `$heap_ptr` starts, given where the table of free-list heads starts (`heapBase`): after the table, one word
 /// per small size and one for the large blocks.

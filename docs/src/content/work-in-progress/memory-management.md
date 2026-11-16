@@ -186,9 +186,14 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
   The drop functions will know each object's size from its type, so the size word could later go; it costs 4
   bytes per object but keeps `free` independent of types, and lets the large list hand out a bigger block than
   asked for and still take all of it back.
-- **Classes.** Each size from 4 to 32 bytes (8 words) has its own list, so a freed block goes back to exactly the
-  size Perceus will next ask for. Larger blocks share one list, kept in address order and searched first-fit.
-- **Lists.** The heads are a table of 9 words at the start of the heap, and `$heap_ptr` starts after it. The
+- **Classes.** Each size from 4 to 256 bytes (64 words) has its own list, so a freed block goes back to exactly the
+  size Perceus will next ask for, without a search. Larger blocks share one list, kept in address order and searched
+  first-fit. The classes reach 256 bytes so that the strings and records programs make most of never go on that
+  list: freeing a large block walks it to find its place, and when blocks that do not join pile up there, as the
+  strings of a list do between its cells, freeing them takes time quadratic in their number. Eighty thousand strings
+  of 38 bytes took 4.7 s to drop when the classes stopped at 32 bytes, and take a few milliseconds now
+  ([#1464](https://github.com/nanyx-lang/nanyx/issues/1464)).
+- **Lists.** The heads are a table of 65 words at the start of the heap, and `$heap_ptr` starts after it. The
   string literals and static closures run from address 256, and the table goes at 4096 or, when they end past that,
   after them,
   8-byte aligned (`heapBaseAfter`); the module starts with enough pages of memory to hold them. A free block keeps the next block of its list in its first word. On a small size's list, `free` pushes onto the
@@ -203,7 +208,9 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
   failing, and traps with `unreachable`.
 
 Small free blocks are never joined, with each other or with large ones, and the heap never shrinks: memory once
-grown is not given back to the host.
+grown is not given back to the host. Many blocks of more than 256 bytes freed apart still walk the large list:
+boundary tags (a size word at the end of each block too) and a doubly linked list would let `free` find a block's
+neighbours without the search.
 
 ## Core IR
 
