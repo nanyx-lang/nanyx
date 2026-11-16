@@ -603,6 +603,43 @@ type private FunctionEmitter(context: EmitContext) =
                 dropOld
                 $"local.get ${slot}\n    local.get ${held}\n    {store element offset}"
                 "i32.const 0" ]
+        // A list cell's tail is given up and the list, which the cell takes over, is stored in its place.
+        | CallRuntime(name, [ cell; tail ], _) when name = Intrinsics.listSetTail ->
+            let listTy = atomType cell
+            let offset =
+                match listTy with
+                | IrList element -> CoreIrLayout.tailOffset element
+                | other -> internalError $"{name} on {IrType.show other}, which is not a list"
+            let at = freshLocal "__cell" "i32"
+            let held = freshLocal "__tail" "i32"
+            join "\n    " [
+                atoms [ cell ]
+                $"local.set ${at}"
+                atoms [ tail ]
+                $"local.set ${held}"
+                $"local.get ${at}\n    {load listTy offset}\n    {dropValue listTy}"
+                $"local.get ${at}\n    local.get ${held}\n    {store listTy offset}"
+                "i32.const 0" ]
+        // Whether the reference the intrinsic takes over is the only one, read from the count before it is given up. An
+        // immortal object's count is 0, so it is never held exclusively.
+        | CallRuntime(name, [ value ], _) when name = Intrinsics.isExclusive ->
+            let ty = atomType value
+            match IrType.unfold ty with
+            | IrList _
+            | IrTags _ -> internalError $"{name} on {IrType.show ty}, which is not always on the heap"
+            | _ when not (CoreIrDrop.isHeapType ty) -> internalError $"{name} on {IrType.show ty}, which is not on the heap"
+            | _ -> ()
+            let held = freshLocal "__exclusive" "i32"
+            let result = freshLocal "__is_exclusive" "i32"
+            join "\n    " [
+                atoms [ value ]
+                $"local.set ${held}"
+                $"local.get ${held}\n    i32.const {CoreIrLayout.headerSize ty}\n    i32.sub"
+                touching "i32.load"
+                "i32.const 1\n    i32.eq"
+                $"local.set ${result}"
+                $"local.get ${held}\n    {dropValue ty}"
+                $"local.get ${result}" ]
         | CallRuntime(name, [ array; index ], _) when name = Intrinsics.arrayGet ->
             let element = arrayElement (atomType array)
             join "\n    " [
