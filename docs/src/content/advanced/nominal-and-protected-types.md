@@ -114,6 +114,24 @@ def wrap: a -> Box(a) = { x ->
 
 `Box(int)` and `Box(string)` are different types, so `get(Box(v = "five"))` is an error. A type's arguments tell its types apart even when its shape doesn't use them: given `type Tagged(a) = protected int`, a `Tagged(string)` is not a `Tagged(int)`.
 
+## Recursive nominal types
+
+A protected or private type can name itself in its definition, anywhere in its shape. Each place it does is the type itself, at the arguments written there:
+
+```nanyx
+type Stream(a) = protected (next: () -> #next(a, Stream(a)) | #done)
+
+def total: Stream(int) -> int = { s ->
+  match s.next()
+    | #next(x, rest) -> x + total(rest)
+    | #done -> 0
+}
+
+println(total(Stream(next = { #next(1, Stream(next = { #next(2, Stream(next = { #done })) })) })))
+```
+
+A type that is generic in contexts, `type Stream(a) = [k] protected (...)`, names itself with those contexts: the rest of a `[Console] Stream(int)` is a `[Console] Stream(int)` too (see [Context-qualified types](../work-in-progress/context-qualified-types)).
+
 # Private (opaque) types
 
 Private types go further by hiding their structure completely outside their home module: they are declared with `private` after the `=`. Outside that module the type has a name and nothing else: no shape, no constructor, and none of the operations of the underlying type. A private type is nominal already, so it is never also declared `protected`.

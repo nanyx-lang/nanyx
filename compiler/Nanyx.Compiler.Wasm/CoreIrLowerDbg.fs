@@ -62,6 +62,7 @@ let rec private mangle (ty: Ty) : string =
     match ty with
     | TyAlias(name, args, TyRecursive _) -> $"{name}_{all args}"
     | TyAlias(_, _, underlying) -> mangle underlying
+    | TyNominal(nominal, args, TyRecursive _, _) -> $"{nominal.Name}_{all args}"
     | TyNominal(nominal, _, shape, _) -> $"{nominal.Name}_{mangle shape}"
     | TyPrimitive name -> name
     | TyTag(name, None) -> $"tag_{name}"
@@ -194,7 +195,7 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
             | Some constant -> Expr.make (Atom(AString constant)) IrString
             | None ->
             match ty with
-            | TyNominal(nominal, _, shape, _) -> wrapped nominal.Name shape (AVar value)
+            | RecursiveNominals.Nominal(nominal, _, shape, _) -> wrapped nominal.Name shape (AVar value)
             | _ ->
             match Unifier.unalias ty with
             | TyPrimitive "int" -> text [ Hole(value, HoleInt) ]
