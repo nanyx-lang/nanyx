@@ -91,6 +91,7 @@ module DiagnosticCodes =
     let TomlManifest = code 34 "Manifest written as TOML" Severity.Error
     let OldFormDirective = code 35 "Directive written in the old form" Severity.Error
     let LintWithoutLinter = code 36 "Lint setting with no linter above it" Severity.Error
+    let LookAlikeCharacter = code 37 "Character that looks like another" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -181,7 +182,7 @@ module DiagnosticCodes =
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
           ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped; DefinitionWithoutValue; EntryInLibrary; ContextsJoined
-          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
+          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
