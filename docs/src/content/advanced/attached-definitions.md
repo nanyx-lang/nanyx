@@ -104,7 +104,9 @@ def string.length: string -> int = { s -> 42 }  -- error NYX0254: 'string.length
 def string.shout: string -> string = { s -> s ++ "!" }  -- fine: strings have no `shout`
 ```
 
-So `"abc" \length` is always the length of the string, whichever module it is written in. The built-in types' comparisons are the compiler's own, so `` def int.`<` `` is the error `NYX0219`.
+So `"abc" \length` is always the length of the string, whichever module it is written in.
+
+A type's own definitions, those attached in the module that defines it, or in the standard library for a built-in type, are in scope wherever its values are, whether or not their module is imported. A module that gets a `Point` from another module's function pipes it to `Point.norm` without importing `Point`'s module, and `"abc" \length` needs no `import nanyx/text`. A module you do import is reached as the import says: after `import nanyx/text as t`, `string.trim` is `t.string.trim`. Where two types the module can see have the same name, it imports the one it means, as their definitions' names would not say which. The built-in types' comparisons are the compiler's own, so `` def int.`<` `` is the error `NYX0219`.
 
 # When to use attached definitions
 

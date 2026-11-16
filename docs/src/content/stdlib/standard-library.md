@@ -4,7 +4,7 @@ description: "The modules of the standard library"
 order: 1
 ---
 
-The standard library is the modules under `nanyx/`. The [prelude](./prelude) is imported into every module, so what it defines needs no import; any other module is imported by name, as `import nanyx/text`. Each page in this section describes one file of the library, and its reference is generated from the doc comments in the library's source, `stdlib/nanyx/`.
+The standard library is the modules under `nanyx/`. The [prelude](./prelude) is imported into every module, so what it defines needs no import; any other module is imported by name, as `import nanyx/math`, except that what a module attaches to a built-in type, as `nanyx/text` does to `string`, is in scope without an import. Each page in this section describes one file of the library, and its reference is generated from the doc comments in the library's source, `stdlib/nanyx/`.
 
 # Modules in this section
 

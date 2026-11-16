@@ -569,7 +569,6 @@ exports lists each of them.
 
 ```nanyx
 def larger = max(1, 2)  -- error NYX0102: Unknown function 'max'. 'max' is defined in 'nanyx/math': add `import nanyx/math`
-def found = string.contains("nanyx", "x")  -- error NYX0102: Unknown function 'string.contains'. 'string.contains' is defined in 'nanyx/text': add `import nanyx/text`
 def size = math.abs(-1)  -- error NYX0102: Unknown function 'math.abs'. 'abs' is defined in 'nanyx/math': add `import nanyx/math as math`
 ```
 

@@ -5,7 +5,7 @@
   `Memory`. There is no literal for one: make it from a list with [`array.fromList`], from its
   indices with [`array.init`], or filled with each slot's default with [`array.create`].
 
-  Each function is attached to `array`, so with `import nanyx/array` it is called as
+  Each function is attached to `array`, so it is in scope wherever arrays are, without an import, and is called as
   `array.length(xs)`, or as `xs \length` when `xs` is known to be an array. `==` compares two arrays
   element by element, and an array is written as a list is, `[10, 20, 30]`.
 module array
