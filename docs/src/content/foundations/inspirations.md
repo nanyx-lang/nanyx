@@ -108,6 +108,15 @@ gave Nanyx the name `crash` for stopping a program.
 
 See [Packages](../tour/packages).
 
+# Deferred errors
+
+**Roc**.
+
+A Nanyx program with type errors still runs: the code that checked runs as normal, and the program stops only if it
+reaches code that didn't, with the error that code had. So you can try one part of a program while another is still
+broken. It had always seemed like something a strongly typed language couldn't reasonably do. Roc showed that it can,
+and gave Nanyx the nerve to try it. See [Deferred errors](../work-in-progress/deferred-errors).
+
 # Error messages and tools
 
 **Elm**, **Rust**, and **Go**.
