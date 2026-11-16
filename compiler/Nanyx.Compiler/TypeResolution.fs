@@ -532,7 +532,23 @@ let private unknownTypeErrors (state: InferState) (parameters: Set<Identifier>) 
                         Some (Diagnostics.at DiagnosticCodes.ContextsOnValueType (SourceSpan.between first.Span (List.last written).Span)
                                   $"Only a function type carries contexts, and '{Unifier.tyToString ty}' isn't one: write them on the function that requires them")
                 | _ -> None)
-    unknown @ outside @ contexts @ onValues
+    // A union has one rest: each variable written after the first is one too many, not dropped.
+    let extraRests =
+        typeExprs
+        |> List.collect TypeExpr.within
+        |> List.collect (fun typeExpr ->
+            match typeExpr.Kind with
+            | TypeUnion items ->
+                match items |> List.filter (fun item -> match item.Kind with TypeVar _ -> true | _ -> false) with
+                | first :: extra ->
+                    let written (rest: TypeExpr) = match rest.Kind with TypeVar name -> name | _ -> "_"
+                    extra
+                    |> List.map (fun rest ->
+                        Diagnostics.at DiagnosticCodes.UnionWithTwoRests rest.Span
+                            $"A union has at most one rest variable, and this one already has '{written first}': '{written rest}' would stand for the same other tags")
+                | [] -> []
+            | _ -> [])
+    unknown @ outside @ contexts @ onValues @ extraRests
 
 /// Whether every type an annotation, such as a def's or a lambda parameter's, names exists, and is not a context.
 let internal ensureTypesExist (state: InferState) (typeExprs: TypeExpr list) : Result<unit, Diagnostic list> =
