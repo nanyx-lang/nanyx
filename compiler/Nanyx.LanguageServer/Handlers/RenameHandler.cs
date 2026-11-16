@@ -1,5 +1,10 @@
+using Microsoft.FSharp.Collections;
+using Microsoft.FSharp.Core;
+using CompileResult = NyxCompiler.CompileResult;
+using PackageModule = NyxCompiler.PackageModule;
 using NyxCompiler.Refactorings;
 using OmniSharp.Extensions.JsonRpc;
+using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -7,9 +12,10 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 namespace Nanyx.LanguageServer.Handlers;
 
 /// <summary>
-/// Renames a name and every use of it in the document (see <c>NyxCompiler.Refactorings.Rename</c>), in a document
-/// whose text type-checked. The renamed text is compiled before the edit is given, and a rename that would make any
-/// name refer to something else is refused. A refusal is an error response with its reason, which the editor shows.
+/// Renames a name and every use of it (see <c>NyxCompiler.Refactorings.Rename</c>), in a document whose text
+/// type-checked: in every file of its package, compiled as <see cref="DocumentStore.CompilePackage"/> compiles them, or
+/// in the document alone for a file in no package. The renamed files are compiled before the edit is given, and a
+/// rename that would make any name refer to something else is refused. A refusal is an error response with its reason, which the editor shows.
 /// </summary>
 public sealed class RenameHandler : RenameHandlerBase
 {
@@ -31,24 +37,55 @@ public sealed class RenameHandler : RenameHandlerBase
             return null;
         }
 
-        var result = Rename.edits(
-            document.FileName,
-            document.Text,
-            compiled,
-            document.Positions.ToOffset(request.Position),
-            request.NewName,
-            Microsoft.FSharp.Core.FuncConvert.FromFunc((string text) => _documents.Compile(uri, text).Compiled ?? throw Refused("The compiler failed on the renamed text")));
+        var offset = document.Positions.ToOffset(request.Position);
+        var package = _documents.CompilePackage(document.FileName);
+        var result = package is null
+            ? Rename.editsIn(
+                Rename.Scope.Module,
+                ListModule.OfSeq([new Rename.ModuleFile(document.FileName, document.Text, compiled)]),
+                document.FileName,
+                offset,
+                request.NewName,
+                FuncConvert.FromFunc((FSharpList<Tuple<string, string>> renamed) => ListModule.OfSeq(renamed.Select(file =>
+                    _documents.Compile(uri, file.Item2).Compiled ?? throw Refused("The compiler failed on the renamed text")))))
+            : Rename.editsIn(
+                Rename.Scope.NewPackage(ListModule.OfSeq(package.Select(file => file.Path))),
+                ListModule.OfSeq(package),
+                document.FileName,
+                offset,
+                request.NewName,
+                FuncConvert.FromFunc((FSharpList<Tuple<string, string>> renamed) => Recompiled(document.FileName, renamed)));
         if (result.IsError)
         {
             throw Refused(result.ErrorValue);
         }
 
-        var edits = result.ResultValue.Select(edit => new TextEdit
+        // A file's edits are placed in the text it was renamed in: the editor's, for an open file.
+        var sources = package?.ToDictionary(file => file.Path, file => file.Source, DocumentStore.FilePaths)
+            ?? new Dictionary<string, string>(DocumentStore.FilePaths) { [document.FileName] = document.Text };
+        var changes = new Dictionary<DocumentUri, IEnumerable<TextEdit>>();
+        foreach (var (path, edits) in result.ResultValue)
         {
-            Range = document.Positions.ToRange(edit.Span.Start, edit.Span.End),
-            NewText = edit.NewText
-        });
-        return new WorkspaceEdit { Changes = new Dictionary<OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri, IEnumerable<TextEdit>> { [uri] = edits.ToList() } };
+            var fileUri = path == document.FileName ? uri : _documents.TryGetFile(path)?.Uri ?? DocumentUri.FromFileSystemPath(path);
+            var positions = path == document.FileName ? document.Positions : new SourcePositions(sources[path]);
+            changes[fileUri] = edits.Select(edit => new TextEdit
+            {
+                Range = positions.ToRange(edit.Span.Start, edit.Span.End),
+                NewText = edit.NewText
+            }).ToList();
+        }
+
+        return new WorkspaceEdit { Changes = changes };
+    }
+
+    /// <summary>The package of <paramref name="file"/> compiled again with the renamed texts, in the order they are given.</summary>
+    private FSharpList<CompileResult> Recompiled(string file, FSharpList<Tuple<string, string>> renamed)
+    {
+        var compiled = _documents.CompilePackage(file, renamed.ToDictionary(entry => entry.Item1, entry => entry.Item2, DocumentStore.FilePaths))
+            ?? throw Refused("The compiler failed on the renamed package");
+        var byPath = compiled.ToDictionary(entry => entry.Path, entry => entry.Result, DocumentStore.FilePaths);
+        return ListModule.OfSeq(renamed.Select(entry =>
+            byPath.TryGetValue(entry.Item1, out var result) ? result : throw Refused($"The renamed package has no file {entry.Item1}")));
     }
 
     /// <summary>The error response for a refused rename: the request failed (<c>RequestFailed</c>, -32803), for the reason given.</summary>
@@ -79,7 +116,7 @@ public sealed class PrepareRenameHandler : PrepareRenameHandlerBase
     private RangeOrPlaceholderRange? Compute(PrepareRenameParams request)
     {
         if (_documents.TryGet(request.TextDocument.Uri) is not { Typed: true, Compiled: { } compiled } document
-            || Rename.prepare(document.FileName, document.Text, compiled, document.Positions.ToOffset(request.Position))?.Value is not { } prepared)
+            || Rename.prepare(ScopeOf(document.FileName), document.FileName, document.Text, compiled, document.Positions.ToOffset(request.Position))?.Value is not { } prepared)
         {
             return null;
         }
@@ -96,6 +133,12 @@ public sealed class PrepareRenameHandler : PrepareRenameHandlerBase
             Placeholder = target.Name
         });
     }
+
+    /// <summary>Where a rename in <paramref name="file"/> looks for uses: its package's files, or the module alone.</summary>
+    private static Rename.Scope ScopeOf(string file) =>
+        file.Length != 0 && PackageModule.sourceFilesOf(file) is { } files
+            ? Rename.Scope.NewPackage(files.Value)
+            : Rename.Scope.Module;
 
     protected override RenameRegistrationOptions CreateRegistrationOptions(
         RenameCapability capability,

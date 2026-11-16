@@ -25,6 +25,12 @@ export def MList.fromList: [Memory] list(a) -> MList(a) = { xs ->
   MList(MRef.new(reversed = list.reverse(xs), count = list.length(xs)))
 }
 
+--| A new list holding `xs`, in order. What a literal builds a list with, `MList[1, 2, 3]`, or
+  `[1, 2, 3]` where an `MList` is expected.
+export def MList.fromArray: [Memory] Array(a) -> MList(a) = { xs ->
+  MList.fromList(list.fromArray(xs))
+}
+
 --| Adds `value` at the end of `items`.
 export def MList.add: [Memory] MList(a), a -> () = { MList(state), value ->
   def held = MRef.get(state)

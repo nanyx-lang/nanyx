@@ -1,0 +1,144 @@
+--| Mutable slices: views of part of a mutable array, changed in place.
+
+  An `MSlice(a)` is a view of a run of an [`MArray`](marray)'s elements: the array, where the run
+  starts and how long it is. Making one with [`MArray.slice`], or a slice of a slice, copies
+  nothing. Setting an element of a slice, or sorting, filling or reversing it, changes the array it
+  views, and only the run the slice views.
+
+  A slice belongs to the `memory` block of the array it views, as the array does: its declaration
+  says so, `type MSlice(a) = [Memory] private (...)`, every operation requires the block's
+  `Memory`, and the slice can't leave the block.
+
+  Bounds clamp, as an [`Slice`](slice)'s do: `MArray.slice(xs, from, to)` is the elements from
+  `from` up to but not including `to`, each moved into `0` to the length. Reading or setting one
+  element gives `#none` or `#outOfRange` past the end, never a trap.
+
+  Each function is attached to `MSlice`, so with `import nanyx/mslice` it is called as
+  `MSlice.sort(s)`, or as `s \sort`; `xs \slice(0, 3)` makes a slice of the mutable array `xs`.
+module mslice
+
+import nanyx/marray
+
+export type MSlice(a) = [Memory] private (items: MArray(a), start: int, length: int)
+
+--| `value` moved into the range from `low` to `high`.
+def clamp: int, int, int -> int = { value, low, high ->
+  if value < low then low else if value > high then high else value
+}
+
+--| The run of `length` elements of `items` from `start`, bounds from `from` up to `to` clamped into
+  it.
+def within
+  : [Memory] MArray(a), int, int, int, int -> MSlice(a)
+  = { items, start, length, from, to ->
+    def first = clamp(from, 0, length)
+    def last = clamp(to, first, length)
+    MSlice(items = items, start = start + first, length = last - first)
+  }
+
+--| The elements of `xs` from `from` up to but not including `to`, sharing `xs`'s storage, so that a
+  change to one shows in the other: each bound is moved into `0` to the length of `xs`.
+export def MArray.slice: [Memory] MArray(a), int, int -> MSlice(a) = { xs, from, to ->
+  within(xs, 0, MArray.length(xs), from, to)
+}
+
+--| How many elements `s` views.
+export def MSlice.length: [Memory] MSlice(a) -> int = { s ->
+  s.length
+}
+
+--| The element of `s` at `index` now, counting from 0 at the start of `s`, or `#none` when `index`
+  is negative or past its end.
+export def MSlice.at: [Memory] MSlice(a), int -> #some(a) | #none = { s, index ->
+  if index >= 0 and index < s.length then MArray.at(s.items, s.start + index) else #none
+}
+
+--| Changes the element of `s` at `index`, counting from 0 at the start of `s`, to `value`, in the
+  array `s` views: `#ok`, or `#outOfRange` when `index` is negative or past the end of `s`, and
+  nothing changes.
+export def MSlice.set: [Memory] MSlice(a), int, a -> #ok | #outOfRange = { s, index, value ->
+  if index >= 0 and index < s.length
+    then MArray.set(s.items, s.start + index, value)
+    else #outOfRange
+}
+
+--| Swaps the elements of `s` at `i` and `j`: `#ok`, or `#outOfRange` when either is negative or past
+  the end of `s`, and nothing changes.
+export def MSlice.swap: [Memory] MSlice(a), int, int -> #ok | #outOfRange = { s, i, j ->
+  if i >= 0 and i < s.length and j >= 0 and j < s.length
+    then MArray.swap(s.items, s.start + i, s.start + j)
+    else #outOfRange
+}
+
+--| The elements of `s` from `from` up to but not including `to`, counting from the start of `s`,
+  sharing the same storage. The bounds clamp into `s`.
+export def MSlice.slice: [Memory] MSlice(a), int, int -> MSlice(a) = { s, from, to ->
+  within(s.items, s.start, s.length, from, to)
+}
+
+--| Sets every element of `s` to `value`.
+export def MSlice.fill: [Memory] MSlice(a), a -> () = { s, value ->
+  fillFrom(s, 0, value)
+}
+
+def fillFrom: [Memory] MSlice(a), int, a -> () = { s, index, value ->
+  if index < s.length then
+    ignore(MArray.set(s.items, s.start + index, value))
+    fillFrom(s, index + 1, value)
+  else ()
+}
+
+--| Reverses the order of the elements of `s`, in place.
+export def MSlice.reverse: [Memory] MSlice(a) -> () = { s ->
+  reverseBetween(s, 0, s.length - 1)
+}
+
+def reverseBetween: [Memory] MSlice(a), int, int -> () = { s, low, high ->
+  if low < high then
+    ignore(MSlice.swap(s, low, high))
+    reverseBetween(s, low + 1, high - 1)
+  else ()
+}
+
+--| Sorts the elements of `s` from least to greatest, in place, keeping elements that are equal in
+  the order they were in. It is an insertion sort, which suits the short runs a slice is often of.
+export def MSlice.sort: [Memory, Ord(a)] MSlice(a) -> () = { s ->
+  sortFrom(s, 1)
+}
+
+def sortFrom: [Memory, Ord(a)] MSlice(a), int -> () = { s, index ->
+  if index < s.length then
+    sinkFrom(s, index)
+    sortFrom(s, index + 1)
+  else ()
+}
+
+--| Moves the element at `index` down past each greater one before it.
+def sinkFrom: [Memory, Ord(a)] MSlice(a), int -> () = { s, index ->
+  if index > 0 then
+    match MSlice.at(s, index - 1), MSlice.at(s, index)
+      | #some(before), #some(element) ->
+        if before > element then
+          ignore(MSlice.swap(s, index - 1, index))
+          sinkFrom(s, index - 1)
+        else ()
+      | _, _ -> ()
+  else ()
+}
+
+--| The elements of `s` now, in order, as a list.
+export def MSlice.toList: [Memory] MSlice(a) -> list(a) = { s ->
+  list.reverse(toListFrom(s, 0, []))
+}
+
+def toListFrom: [Memory] MSlice(a), int, list(a) -> list(a) = { s, index, acc ->
+  match MSlice.at(s, index)
+    | #some(element) -> toListFrom(s, index + 1, [element, ...acc])
+    | #none -> acc
+}
+
+--| A copy of the elements of `s` now, in order, as an `Array`, which later changes to the array `s`
+  views leave as it is.
+export def MSlice.toArray: [Memory] MSlice(a) -> Array(a) = { s ->
+  Array[...MSlice.toList(s)]
+}

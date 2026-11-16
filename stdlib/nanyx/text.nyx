@@ -459,3 +459,73 @@ export def string.fromCodePoint: int -> #some(string) | #invalidCodePoint = { co
     then #invalidCodePoint
     else #some(encodeCodePoint(codePoint))
 }
+
+-- String slices --------------------------------------------------------------------------------
+
+--| A view of a run of a string's bytes, which shares the string instead of copying it: the string,
+  the byte the run starts at and how many bytes it is. [`string.slice`] makes one, and a slice of a
+  slice is one too, each without copying, so a parser or a lexer can walk a text and look at its
+  tokens without making a substring of each. [`StringSlice.toString`] copies the run into a string
+  of its own, which lets go of the larger one. Bytes are counted as [`string.substring`] counts them.
+export type StringSlice = private (text: string, start: int, length: int)
+
+--| `value` moved into the range from `low` to `high`.
+def clampBetween: int, int, int -> int = { value, low, high ->
+  if value < low then low else if value > high then high else value
+}
+
+--| The run of `length` bytes of `text` from `start`, bounds from `from` up to `to` clamped into it.
+def sliceWithin: string, int, int, int, int -> StringSlice = { text, start, length, from, to ->
+  def first = clampBetween(from, 0, length)
+  def last = clampBetween(to, first, length)
+  StringSlice(text = text, start = start + first, length = last - first)
+}
+
+--| The bytes of `s` from `from` up to but not including `to`, as a slice that shares `s`: each bound
+  is moved into `0` to the length of `s`, and the slice is empty when `to` is before `from`.
+export def string.slice: string, int, int -> StringSlice = { s, from, to ->
+  sliceWithin(s, 0, string.length(s), from, to)
+}
+
+--| The number of bytes `s` views.
+export def StringSlice.length: StringSlice -> int = { s ->
+  s.length
+}
+
+--| Whether `s` views no bytes.
+export def StringSlice.isEmpty: StringSlice -> bool = { s ->
+  s.length == 0
+}
+
+--| The byte of `s` at `index`, counting from 0 at the start of `s`, or `#none` when `index` is
+  negative or past its end.
+export def StringSlice.byteAt: StringSlice, int -> #some(int) | #none = { s, index ->
+  if index >= 0 and index < s.length
+    then #some(__nanyx_string_byte_at(s.text, s.start + index))
+    else #none
+}
+
+--| The bytes of `s` from `from` up to but not including `to`, counting from the start of `s`,
+  sharing the same string. The bounds clamp into `s`, as [`string.slice`]'s do.
+export def StringSlice.slice: StringSlice, int, int -> StringSlice = { s, from, to ->
+  sliceWithin(s.text, s.start, s.length, from, to)
+}
+
+--| Whether the bytes `s` views begin with `prefix`, compared without copying them.
+export def StringSlice.startsWith: StringSlice, string -> bool = { s, prefix ->
+  string.length(prefix) <= s.length and sameBytesFrom(s, prefix, 0)
+}
+
+def sameBytesFrom: StringSlice, string, int -> bool = { s, prefix, index ->
+  if index >= string.length(prefix)
+    then true
+    else if __nanyx_string_byte_at(s.text, s.start + index) == __nanyx_string_byte_at(prefix, index)
+      then sameBytesFrom(s, prefix, index + 1)
+      else false
+}
+
+--| A copy of the bytes `s` views, as a string of its own, which doesn't keep the string `s` views
+  alive.
+export def StringSlice.toString: StringSlice -> string = { s ->
+  __nanyx_string_slice(s.text, s.start, s.length)
+}

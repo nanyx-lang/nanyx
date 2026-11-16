@@ -206,9 +206,10 @@ what the compiler keeps: exact spans, resolved names and types.
   smallest first (see [Refactorings](./refactorings)). A text that does not parse has none, and the editor falls back
   on its own.
 - **Rename** ([#1534](https://github.com/nanyx-lang/nanyx/issues/1534)). `prepareRename` and `rename` rename a
-  name declared in the document and every use of it there, refusing with a reason anything that would change what a
-  name refers to (see [Refactorings](./refactorings#rename)). Names other modules may use wait for search across the
-  workspace.
+  name and every use of it in the files of the document's package, compiled as find references compiles them (or in
+  the document alone, for a file in no package), refusing with a reason anything that would change what a name
+  refers to (see [Refactorings](./refactorings#rename)). The renamed package is compiled again, with the renamed
+  texts read in place of the files', before the edit is sent.
 - **Quick fixes** ([#284](https://github.com/nanyx-lang/nanyx/issues/284)). Each fix of a diagnostic in the
   requested range is a `quickfix` code action: its edits applied to the document, carrying the diagnostic as
   published, with a diagnostic's first fix preferred. Linters offer fixes (`default/unusedBindings` removes an

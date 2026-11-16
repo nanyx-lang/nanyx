@@ -57,12 +57,31 @@ module internal ExpressionRewrites =
     /// first: the map's lookup takes the call's arguments as they are rewritten. A call that is already what it is read as
     /// keeps its arguments as they are rewritten: `(x ** 2) ** 3`.
     let writeAsRead (readAs: Map<NodeId, Expression>) (expr: Expression) : Expression =
+        // A spread in a collection literal (see `CollectionSyntax`) is read as the call that makes a list of it, which
+        // takes the operand as it is rewritten.
+        let spreadAsRead (spread: Expression) (operand: Expression) =
+            match readAs |> Map.tryFind spread.Id with
+            | Some { Kind = FunctionCall(callee, span, [ _ ]) } -> FunctionCall(callee, span, [ operand ])
+            | _ -> FunctionCall(CollectionSyntax.spread, None, [ operand ])
         if readAs.IsEmpty then
             expr
         else
             expr
             |> mapExpressionKinds (fun current kind ->
                 match kind, readAs |> Map.tryFind current.Id with
+                | FunctionCall(name, _, [ operand ]), _ when name = CollectionSyntax.spread -> spreadAsRead current operand
+                // A literal read as the call that builds the type expected of it (see `CollectionLiterals.targeted`) takes
+                // its items as they are rewritten, in the list of them the call is given, whose spreads are read too.
+                | _, Some { Kind = CollectionSyntax.Construct _ & FunctionCall(callee, span, [ { Kind = FunctionCall(arrayOf, arraySpan, [ items ]) } as array ]) }
+                    when (CollectionSyntax.segments { current with Kind = kind }).IsSome ->
+                    let written = CollectionSyntax.withSegments items (CollectionSyntax.segments { current with Kind = kind }).Value
+                    let written =
+                        written
+                        |> mapExpressionKinds (fun node kind ->
+                            match kind with
+                            | FunctionCall(name, _, [ operand ]) when name = CollectionSyntax.spread -> spreadAsRead node operand
+                            | other -> other)
+                    FunctionCall(callee, span, [ { array with Kind = FunctionCall(arrayOf, arraySpan, [ written ]) } ])
                 // `a ?? b` is read as a call that takes `b` in a lambda (see `CoalesceOperator`), which keeps its node.
                 | CoalesceOperator.Call(left, right), Some { Kind = FunctionCall(callee, span, [ _; Kind (Lambda(parameters, _, takesUnit)) as fallback ]) } ->
                     FunctionCall(callee, span, [ left; { fallback with Kind = Lambda(parameters, right, takesUnit) } ])

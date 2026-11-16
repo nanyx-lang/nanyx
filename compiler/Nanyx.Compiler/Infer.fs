@@ -949,7 +949,16 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
         match expr.Kind with
         | WhileSyntax.Call(condition, body) -> Loops.inferWhile inferExpr env state expr condition body
         | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "while expects a condition and a loop body" ]
+    elif name = CollectionSyntax.spread then
+        match args with
+        | [ operand ] -> CollectionLiterals.inferSpread inferExpr env state expr operand
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "a spread takes one list or array" ]
     else
+    match expr.Kind with
+    // `T[...]` of a type with no `fromArray`, reported at the type's name.
+    | CollectionSyntax.Construct(typeName, _, _) when (TypeEnv.tryFind name env).IsNone ->
+        Error [ CollectionLiterals.noFromArray calleeSpan typeName ]
+    | _ ->
     let contextCheck =
         match contextRequirementsOf env state name with
         // A parameterised context is found by its type once the arguments are typed (see `resolveCallInstances`).
@@ -1031,6 +1040,9 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     match expectedInput with
                     | Some expectedInput -> inferLambdaWithExpected lambdaEnv state lambda lambdaArgs lambdaBody (Some expectedInput) None
                     | None -> inferExpr lambdaEnv state lambda
+                // A square-bracket literal builds the type its parameter takes, if it is one with a `fromArray`.
+                let inferItem state item paramTy =
+                    CollectionLiterals.targeted inferExpr env state item paramTy |> Option.defaultWith (fun () -> inferExpr env state item)
                 let argResults =
                     args
                     |> List.mapi (fun index arg ->
@@ -1038,14 +1050,12 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                             match arg, paramTys |> Option.bind (List.tryItem index) with
                             | Kind (Lambda(lambdaArgs, lambdaBody, _)), Some paramTy ->
                                 inferLambda current arg lambdaArgs lambdaBody (LambdaArguments.expectedInput current (Some paramTy) arg lambdaArgs) paramTy
-                            | Kind (TupleExpr items), _ ->
-                                match tupleParamTys items with
-                                | Some itemParamTys ->
-                                    LambdaArguments.inferTupleItems (inferExpr env) inferLambda current items itemParamTys
-                                    |> Result.map (fun (typedItems, next) ->
-                                        mkTypedExpr arg (tupleRecordType (typedItems |> List.map (fun typedItem -> typedItem.Type))) None None None, next)
-                                    |> recordExprType
-                                | None -> inferExpr env current arg
+                            | Kind (TupleExpr items), _ when (tupleParamTys items).IsSome ->
+                                LambdaArguments.inferTupleItems inferItem inferLambda current items (tupleParamTys items).Value
+                                |> Result.map (fun (typedItems, next) ->
+                                    mkTypedExpr arg (tupleRecordType (typedItems |> List.map (fun typedItem -> typedItem.Type))) None None None, next)
+                                |> recordExprType
+                            | _, Some paramTy -> inferItem current arg paramTy
                             | _ -> inferExpr env current arg
                         match inferred with
                         | Ok (ty, next) ->
@@ -1152,7 +1162,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                                     match expectedInput with
                                     | Some expectedInput -> inferLambdaWithExpected env state lambda lambdaArgs lambdaBody (Some expectedInput) None
                                     | None -> inferExpr env state lambda
-                                LambdaArguments.inferTupleItems (inferExpr env) inferLambda current values memberTys
+                                LambdaArguments.inferTupleItems (fun state item _ -> inferExpr env state item) inferLambda current values memberTys
                                 |> Result.map (fun (typedValues, next) ->
                                     let fieldTys = List.zip names (typedValues |> List.map _.Type) |> Map.ofList
                                     mkTypedExpr arg (TyRecord fieldTys) None None None, next)
@@ -1282,6 +1292,9 @@ and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression)
     match expr.Kind with
     | Lambda(args, body, _) when annotation.ExpectedInput.IsSome || annotation.ExpectedReturn.IsSome ->
         inferLambdaWithExpected env state expr args body annotation.ExpectedInput annotation.ExpectedReturn
+    // A square-bracket literal builds the type the def is declared at, if it is one with a `fromArray`.
+    | _ when (annotation.Declared |> Option.bind (CollectionLiterals.targeted inferExpr env state expr)).IsSome ->
+        (annotation.Declared |> Option.bind (CollectionLiterals.targeted inferExpr env state expr)).Value
     | _ ->
         inferExpr env state expr
         |> Result.map (fun (typed, next) ->

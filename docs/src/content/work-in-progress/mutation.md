@@ -99,10 +99,17 @@ context of their own, `type MRef(a) = [Memory] protected (...)`
    `#ok | #outOfRange`. It can move onto a growable `MArray` later without changing its interface. `+=` to append
    isn't on Nanyx's list of operators, so whether and how it joins it is
    [#1564](https://github.com/nanyx-lang/nanyx/issues/1564).
-5. **Slices** ([#1545](https://github.com/nanyx-lang/nanyx/issues/1545)): views that share storage instead of copying.
-   `Slice(a)` is an immutable view of an `Array` that holds a counted reference to it, so it needs no lifetime rules;
-   `MSlice(a)` is a mutable view of an `MArray`, carrying its block's scope; and a string slice is for parsers. Each is
-   a type of its own, so a small slice can't silently keep a large parent alive. After `MArray`.
+5. **Slices** ([#1545](https://github.com/nanyx-lang/nanyx/issues/1545)): done, views that share storage instead of
+   copying, each a type of its own written in Nanyx, so a small slice can't silently keep a large parent alive, and
+   `Array` stays a plain flat block. `Slice(a)` in [`nanyx/slice`](../stdlib/slice) is a private record of the
+   `Array`, a start and a length: it holds a counted reference to the array, so it needs no lifetime rules.
+   `MSlice(a)` in [`nanyx/mslice`](../stdlib/mslice) is the same over an `MArray`, declared
+   `type MSlice(a) = [Memory] private (...)`, so NYX0233 keeps it in its block; `set`, `swap`, `fill`, `reverse`
+   and `sort` (an insertion sort) change the array in place. `StringSlice` in [`nanyx/text`](../stdlib/text) views
+   a run of a string's bytes, for parsers and lexers. Bounds clamp, as Python's do, and reading or setting one
+   element past the end is `#none` or `#outOfRange`. `toArray` and `toString` copy. Still open: spreading a slice into
+   a literal, `Array[...s]`, which waits for the `Iterable` context that spreading a set does
+   ([Collection literals](./collection-literals)).
 
 - **`mut` record fields.** The parser reads `mut` before a field name in a record type; nothing checks or compiles it
   yet.

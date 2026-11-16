@@ -220,7 +220,7 @@ public sealed class CompletionTests : LanguageServerTestBase
         Change(uri, version: 2, "import nanyx/ma\n");
         await NextPublished(uri);
         var modules = await CompletionsAt(uri, 0, 15);
-        Assert.Equal(["array", "host", "marray", "math", "mlist", "mref", "mstack", "text"], modules.Select(item => item.Label));
+        Assert.Equal(["array", "host", "marray", "math", "mlist", "mref", "mslice", "mstack", "slice", "text"], modules.Select(item => item.Label));
         var math = modules.Single(item => item.Label == "math");
         Assert.Equal(new Range(0, 13, 0, 15), math.TextEdit?.TextEdit?.Range);
         Assert.StartsWith("Numeric utilities.\n", math.Documentation?.MarkupContent?.Value);
