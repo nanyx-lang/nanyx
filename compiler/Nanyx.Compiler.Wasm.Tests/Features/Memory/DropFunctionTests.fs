@@ -70,6 +70,42 @@ def build: int -> Tree = { n -> if n == 0 then #leaf else #node(build(n - 1), "n
     assertDropFreesEverything program "build" ty
 
 [<Fact>]
+let ``Drop - a value of a recursive type nested 100,000 deep takes no stack to drop, and frees every node`` () =
+    let source = """
+type Chain = #end | #link(string, Chain)
+
+def grow: int, Chain -> Chain = { n, chain -> if n == 0 then chain else grow(n - 1, #link("link {n}", chain)) }
+
+def build: int -> Chain = { n -> grow(n, #end) }
+"""
+    let ty = IrRecursive(IrTags [ "end", None; "link", Some(IrRecord [ "0", IrString; "1", IrSelf ]) ])
+    use program = instantiateWasm (source.ReplaceLineEndings "\n") [ ty ]
+    let live = program.LiveBlocks
+    program.Drop(ty, program.Call("build", 100000))
+    Assert.Equal(live, program.LiveBlocks)
+
+[<Fact>]
+let ``Run - a value nested 100,000 deep through a list and a record is dropped, and memory balances`` () =
+    let source = """
+type Rose = #rose(int, list(Rose))
+
+def grow: int, Rose -> Rose = { n, rose -> if n == 0 then rose else grow(n - 1, #rose(n, [rose])) }
+
+def depth: int, Rose -> int = { d, rose ->
+  match rose
+  | #rose(_, [inner]) -> depth(d + 1, inner)
+  | _ -> d
+}
+
+@entry
+def main = {
+  def rose = grow(100000, #rose(0, []))
+  println(depth(0, rose))
+}
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "100000\n"
+
+[<Fact>]
 let ``Drop - a closure frees what it captures`` () =
     let source =
         normalized """def prefixer: int -> (string -> string) = { n ->
