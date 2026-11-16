@@ -745,8 +745,10 @@ module Compiler =
                 // the first import that brings it in.
                 Error (Typed, List.distinctBy Diagnostics.inItsModule merged.Errors)
             else
-                // A capitalised tag is a custom pattern's (see `CustomPatterns`).
-                let patternErrors = CustomPatterns.check (CustomPatterns.scopeOf env ambiguousImports desugared) desugared
+                // A capitalised tag is a custom pattern's, and a match on one runs the pattern (see `CustomPatterns`).
+                let patternScope = CustomPatterns.scopeOf env ambiguousImports desugared
+                let desugared, rewriteErrors = CustomPatterns.rewrite patternScope desugared
+                let patternErrors = CustomPatterns.check patternScope desugared @ rewriteErrors
                 let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.InferModule.inferModuleWithEnv env state desugared
                 let subst, mismatches = Unifier.solveDetailed state.Constraints |> fun (subst, mismatches) -> Unifier.keepWrittenNames types.Values subst, mismatches
                 // Every error in the module is reported: the items that failed to check, and each conflict among the

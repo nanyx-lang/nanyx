@@ -574,16 +574,11 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
             | ElsePattern -> Ok (env', state', mkTypedPattern pattern scrutineeTy)
             // `()` matches the unit value, so what it is matched against is unit.
             | UnitPattern -> Ok (env', addConstraint scrutineeTy (TyPrimitive "unit") state', mkTypedPattern pattern scrutineeTy)
-            // A custom pattern's tag is a match on what the pattern returns, once `CustomPatterns` has rewritten it.
-            // One left here names no pattern in scope, which is reported already: its payload binds its names all the
-            // same, of no type yet known, so that the arm reports nothing more.
+            // One `CustomPatterns` left names no pattern, which is reported: its payload binds its names all the same.
             | ArgumentTagPattern(_, _, payload) ->
                 let payloadTy, next = freshVar state'
-                match payload with
-                | Some payload ->
-                    inferPattern armBody env' next payloadTy payload
-                    |> Result.map (fun (nextEnv, nextState, _) -> nextEnv, nextState, mkTypedPattern pattern scrutineeTy)
-                | None -> Ok (env', next, mkTypedPattern pattern scrutineeTy)
+                payload |> Option.map (inferPattern armBody env' next payloadTy) |> Option.defaultValue (Ok (env', next, mkTypedPattern pattern scrutineeTy))
+                |> Result.map (fun (nextEnv, nextState, _) -> nextEnv, nextState, mkTypedPattern pattern scrutineeTy)
             | IdentifierPattern name ->
                 let symbol, declared = declareSymbol ArmBody armBody.Id name PatternVariable false (Some armBody.Span.End) state'
                 Ok (TypeEnv.declare name symbol (TypeEnv.mono scrutineeTy) env', recordSymbolType symbol scrutineeTy declared, mkTypedPattern pattern scrutineeTy)
@@ -843,7 +838,7 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                 if restError.IsSome then
                     []
                 else
-                    MatchExhaustiveness.ofWitnesses arms resolvedScrutineeTypes headSpan missingWitnesses
+                    MatchExhaustiveness.ofWitnesses arms (MatchExhaustiveness.patternColumns scrutinees) resolvedScrutineeTypes headSpan missingWitnesses
             let armTypes = armExprs |> List.rev |> List.map (fun typedExpr -> typedExpr.Type)
             let resultTy, constrained = joinBranchTypes rowVars current armTypes
             // A match that does not handle every case is reported, and typed as if it did: a debug build gives it
