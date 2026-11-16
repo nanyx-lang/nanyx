@@ -439,8 +439,11 @@ The design draws the line there, and makes every helper a function that takes th
     forgeable: `use Fake(commit = ...)` would satisfy a function that requires a protected `Tx`. Done in
     [#1443](https://github.com/nanyx-lang/nanyx/issues/1443): `Contexts.ensureContextAvailable` requires each member in
     scope of a protected or private context without parameters to have the context's own symbol, else NYX0205.
-    A context without members is still satisfied by nothing at all
-    ([#1479](https://github.com/nanyx-lang/nanyx/issues/1479)).
+    A protected or private context without members has no member to find, so the environment binds a name no code
+    can write wherever an instance of it is supplied: by a signature, by a function that supplies it to a lambda, or
+    by a `use` (`Contexts.withSupplied`). A call that requires it where that name is not bound is NYX0205
+    ([#1479](https://github.com/nanyx-lang/nanyx/issues/1479)). `HostRuntime` is left to `Hosts`, and a scoped
+    context to `ScopedCalls`.
   - **A protected context may serve for a plain one** whose members it has, as a protected type may be used as its
     representation: that hands out nothing the plain context didn't already allow.
   - Declaring the relation (`Num` includes `Add`) and having no relation at all were considered. Declaring it would
