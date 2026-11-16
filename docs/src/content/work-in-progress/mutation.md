@@ -50,9 +50,25 @@ is planned.
 
 # Planned
 
-- **Mutable collections.** `MArray` and `MList`, with attached operators that update them in place, such as `+=` on an
-  `MList`.
-- **Cells as values** (`MRef`): a cell held in a record, a list or another cell, or returned from a function. Its type
-  would carry its block's scope, as a cell parameter's does, so that NYX0233 keeps it in its block.
+Decided by the maintainer: mutable values carry their `memory` block's scope in their types, as a cell parameter's
+`mut T` does, and need nothing more general. The scope is never written or shown, each operation requires `Memory` of
+it, and NYX0233 keeps the value, and anything holding it, inside its block. This is the "Scope and escape" part of
+[Context-qualified types](./context-qualified-types), for `Memory` only; a context on any other type waits for a use
+that needs one, and for [#1059](https://github.com/nanyx-lang/nanyx/issues/1059).
+
+1. **`Array(a)`** ([#1490](https://github.com/nanyx-lang/nanyx/issues/1490)): an immutable, fixed-length sequence with
+   constant-time indexing, in `nanyx/array`. Lists are cons cells, so this is a new kind of heap block. It needs no
+   `Memory`.
+2. **`MRef(a)`, a cell as a value** ([#1491](https://github.com/nanyx-lang/nanyx/issues/1491)): held in a record, a list
+   or another cell, passed without `mut`, or returned from a function, all inside its block. In the backend it's the
+   box a captured cell already is. After [#1446](https://github.com/nanyx-lang/nanyx/issues/1446), which changes how a
+   block's `Memory` reaches the types in it.
+3. **`MArray(a)`** ([#1492](https://github.com/nanyx-lang/nanyx/issues/1492)): fixed length, each slot changed in place.
+   It behaves as an `Array(MRef(a))` whose cells are all distinct, but is laid out flat, as an `Array` is. Converting
+   between `Array` and `MArray` copies, so an `Array` stays immutable.
+4. **`MStack(a)` and `MList(a)`** ([#1493](https://github.com/nanyx-lang/nanyx/issues/1493)): written in Nanyx over
+   `MRef`, as protected types, so they need nothing new in the compiler. `MList` has `+=` attached to append. It can
+   move onto a growable `MArray` later without changing its interface.
+
 - **`mut` record fields.** The parser reads `mut` before a field name in a record type; nothing checks or compiles it
   yet.
