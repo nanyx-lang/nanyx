@@ -214,7 +214,6 @@ def s2 = email \ format"""
 let ``Typecheck pipe picks the attached function by the name of the value's type`` () =
     let source =
         normalized """type Option(a) = #some(a) | #none
-def list.map: (list(a), (a -> b)) -> list(b) = { xs, f -> [] }
 def Option.map: (Option(a), (a -> b)) -> Option(b) = { o, f -> #none }
 def xs: list(int) = [1, 2]
 def o: Option(int) = #some(1)

@@ -344,20 +344,17 @@ order above; and an `Eq` loaded for a type that holds a function isn't found ins
 # Extending a type
 
 Decided in [#1501](https://github.com/nanyx-lang/nanyx/issues/1501), so that an attached definition can't get round
-the rule above, and not built yet ([#1514](https://github.com/nanyx-lang/nanyx/issues/1514)):
+the rule above ([#1514](https://github.com/nanyx-lang/nanyx/issues/1514)). Extensions are allowed anywhere, come into
+scope by import, are ambiguous (`NYX0106`) when two imports extend a type with one name, and can't redefine a name
+in scope for their type (`NYX0252`, `AttachedOperators.redefinitions`), as
+[Extending a type](../advanced/attached-definitions#extending-a-type) describes. What is left:
 
 - **A type's owned definitions are always in scope.** "Owned" means attached in the type's own module, or in the
-  standard library for a built-in type. They're in scope wherever a value of the type is, whether or not their module
-  is imported: `string.length`, `list.map`, `string.hash`, `` int.`<` ``, a user's `` Point.`==` ``.
-- **New attached definitions are allowed anywhere,** on any type, owned or not, as extension methods are in C# and
-  Kotlin: `def string.shout = ...` in any module. There is no orphan rule.
-- **Nothing in scope can be redefined.** An attached definition whose name is already in scope for that type, owned or
-  imported, is an error at the new def, naming where the existing one comes from. Today only `==` on a built-in type
-  is caught (`NYX0219`); `def string.length`, `def list.map` and `def string.hash` are accepted and shadow the owned
-  ones, and `def int.toString` and `` def int.`<` `` are accepted and silently ignored.
-- **Extensions come into scope by import,** as any def does. If two imported modules extend a type with the same
-  name, using it is ambiguous, reported as other ambiguous imports are.
-
+  standard library for a built-in type. They're to be in scope wherever a value of the type is, whether or not their
+  module is imported: `string.length`, `list.map`, `string.hash`, `` int.`<` ``, a user's `` Point.`==` ``. Today a
+  pipe to an owned definition whose module isn't imported is `NYX0102` (`"abc" \length` without `import nanyx/text`,
+  or `p \norm` where `Point.norm` is in a module the importer doesn't import), though redefining one is already an
+  error.
 In generic code a requirement on a structured type **reduces** to requirements on its variables: `==` on a
 `list(a)` needs `Eq(a)`, and on `(name: string, value: a)` needs `Eq(a)`. So a signature writes `[Eq(a)]`, not
 `[Eq(list(a))]`. The diagnostic for a missing requirement names the reduced one.

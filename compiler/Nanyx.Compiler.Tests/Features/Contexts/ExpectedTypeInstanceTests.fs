@@ -8,9 +8,9 @@ open Nanyx.Compiler.Tests.TestSupport
 // expected to have settles it: the type a def writes, or what the rest of the def does with the result (#621).
 
 let private defaults =
-    """context Default(a) = (default: string -> a)
-def int.default: string -> int = { s -> 0 }
-def get: [Default(a)] string -> a = { s -> default(s) }
+    """context Fallback(a) = (fallback: string -> a)
+def int.fallback: string -> int = { s -> 0 }
+def get: [Fallback(a)] string -> a = { s -> fallback(s) }
 """
 
 [<Theory>]
@@ -36,4 +36,4 @@ let ``A call whose result's type nothing settles still needs the context where i
     let result = Compiler.compile (normalized (defaults + "def ignore: a -> int = { x -> 0 }\ndef u: string -> int = { s -> ignore(get(s)) }\n"))
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
-    Assert.Equal("'get' requires the context 'Default', which is not available here", diagnostic.Message)
+    Assert.Equal("'get' requires the context 'Fallback', which is not available here", diagnostic.Message)
