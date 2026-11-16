@@ -128,8 +128,9 @@ These are all of Nanyx's operators, tightest first. An operator binds tighter th
 | `=<<` | right | spare |
 | `and` | left | logical and |
 | `or` | left | logical or |
+| `+=` | none | spare |
 
-A **spare** operator has no built-in meaning: it means only what a definition of it gives it, one attached to the type of its left operand or one in scope, so `1 ^ 2` is an error. The others are built in, and you can attach them to your own types, as `` Vector.`+` `` above, but not redefine them globally. Defining an operator that is not on the list, such as `` `+++` ``, is an error.
+A **spare** operator has no built-in meaning: it means only what a definition of it gives it, one attached to the type of its left operand or one in scope, so `1 ^ 2` is an error. `+=` is the loosest of all, so `items += a + b` adds `a + b`: an `MList` attaches it to add to the end, `items += 5`. It is not assignment, so `count += 1` on a `mut` cell is an error: a cell changes with `:=`, `count := count + 1`. The others are built in, and you can attach them to your own types, as `` Vector.`+` `` above, but not redefine them globally. Defining an operator that is not on the list, such as `` `+++` ``, is an error.
 
 An operator that groups to the left reads `a - b - c` as `(a - b) - c`, and one that groups to the right reads `a ++ b ++ c` as `a ++ (b ++ c)`. One that does not group can't be written twice in a row: `a < b < c` is an error, which asks for `a < b and b < c`, and so is `a == b == c`. Two operators of one precedence that group different ways can't be written side by side either: `f >> g << h` needs brackets around one of them.
 

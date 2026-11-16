@@ -14,6 +14,9 @@ let rec freeVars (ty: Ty) : int list =
     match ty with
     | TyVar v -> [ v.Id ]
     | TyFunc(input, output, _) -> freeVars input @ freeVars output
+    // What a nominal type is made from has no variables its arguments don't have, and what one that names itself is
+    // made from has the contexts it carries as a value (see `RecursiveNominals`).
+    | TyNominal(_, args, _, _) -> args |> List.collect freeVars
     | _ -> Ty.children ty |> List.collect freeVars
 
 let rec substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
@@ -39,11 +42,13 @@ let concreteContexts (contexts: Ty list) : Ty list =
     |> List.map FunctionContexts.withoutScope
     |> List.distinct
 
-/// The definition and arguments of the recursive alias `ty` refers to, through any aliases of it (see
-/// `RecursiveAliases`).
+/// The definition and arguments of the recursive alias or nominal type `ty` refers to, through any aliases of it (see
+/// `RecursiveAliases` and `RecursiveNominals`).
 let rec private recursiveReference (ty: Ty) : (Ty * Ty list) option =
     match ty with
-    | RecursiveAliases.RecursiveAlias(body, args) -> Some (body, args)
+    | RecursiveAliases.RecursiveAlias(body, args)
+    // A nominal type's own arguments, which hold the contexts it carries as a function type's.
+    | TyNominal(_, args, TyRecursive(body, _), _) -> Some (body, args)
     | TyAlias(_, _, underlying) -> recursiveReference underlying
     | _ -> None
 
@@ -206,7 +211,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     // A type that holds itself at other arguments, such as `#node(T(list(a)))` in `T(a)`, holds ever more types.
     | Some reference when recursing |> List.contains reference || (recursing |> List.filter (fst >> (=) (fst reference)) |> List.length) > 8 ->
         cannot "a recursive type that holds itself at other type arguments"
-    | Some reference -> IrRecursive(toIrTypeExpanding layouts expanding (reference :: recursing) (Unifier.unalias ty))
+    | Some reference -> IrRecursive(toIrTypeExpanding layouts expanding (reference :: recursing) (RecursiveNominals.underlying (Unifier.unalias ty)))
     | None ->
     match Unifier.unalias ty with
     | TyPrimitive "int" -> IrInt
@@ -235,7 +240,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
         IrTags(members tags |> List.distinct |> List.sortBy fst)
     // A `Map`'s keys are in the order a record's fields are stored in.
     | TyRecord fields -> IrRecord(fields |> Map.toList |> sortFields |> List.map (fun (name, fieldTy) -> name, toIrType fieldTy))
-    | TyNominal(_, _, underlying, _) -> toIrType underlying
+    | TyNominal _ as nominal -> toIrType (RecursiveNominals.underlying nominal)
     | TyApply("list", [ element ]) -> IrList(toIrType element)
     // A map is the list of its entries, each a tuple of its key and its value (see `Maps`).
     | Maps.MapType(key, value) -> toIrType (TyApply("list", [ TyRecord(Map.ofList [ "0", key; "1", value ]) ]))

@@ -586,7 +586,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | IdentifierExpr name when scope.Vars.ContainsKey name -> scope.Vars.[name].Type
                 | _ -> tyOf record
             let slot, ty =
-                match recordTy with
+                match IrType.unfold recordTy with
                 | IrRecord fields ->
                     match fields |> List.tryFindIndex (fst >> (=) fieldName) with
                     | Some slot -> slot, snd fields.[slot]

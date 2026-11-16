@@ -104,11 +104,12 @@ How it works:
 - In the backend a value is a record of closures that take the members their contexts require. One given where a value
   that carries more is expected is a new record of its fields, each adapted (`CoreIrLowerMembers.coerce`): passed as
   an argument, as a def's result (read from its declared type), and named as a top-level value.
+- A type generic in contexts can name itself, as `seq(a)`'s `#next(a, seq(a))` does, and is then generic in the same
+  contexts there: the rest of a `[k] seq(a)` is a `[k] seq(a)` (`RecursiveNominals.close`,
+  [#1663](https://github.com/nanyx-lang/nanyx/issues/1663)).
 
 Still open:
 
-- A recursive protected type, as `seq(a)`'s `#next(a, seq(a))` needs, doesn't check yet: a nominal type's body can't
-  name the type itself ([#1663](https://github.com/nanyx-lang/nanyx/issues/1663)).
 - A generic def's result is still read from its value's type, so one whose value carries fewer contexts than it
   declares isn't adapted.
 # No special cases

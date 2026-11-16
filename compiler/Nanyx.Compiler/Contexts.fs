@@ -72,7 +72,7 @@ let internal extendEnvWithRecordFields (provider: ContextProvider) (state: Infer
     let env = context |> Option.fold (fun acc info -> withSupplied info acc) env
     match Unifier.unalias ty with
     | TyRecord fields -> addFields fields
-    | TyNominal(_, _, underlying, _) ->
+    | RecursiveNominals.Nominal(_, _, underlying, _) ->
         match Unifier.unalias underlying with
         | TyRecord fields -> addFields fields
         | _ -> env
@@ -754,3 +754,14 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
             |> List.fold (fun diagnostic (defName, ctxName) -> ContextFixes.withAddToType state defName ctxName diagnostic)
                 (Diagnostics.at DiagnosticCodes.MissingContextMembers span message)
         Error [ diagnostic ]
+
+/// What it takes for the operator `expr` to call `callee`, the definition attached to its operand's type: the
+/// contexts its type requires, `Memory` for `` MList.`+=` ``, are required where the operator is written, as a call to it
+/// would require them.
+let internal requireOperatorContexts (env: TypeEnv) (state: InferState) (expr: Expression) (callee: Identifier) (span: SourceSpan) : Result<InferState, Diagnostic list> =
+    match state.CalleeTypes |> Map.tryFind expr.Id |> Option.map Unifier.unalias with
+    | Some (TyFunc(_, _, contexts)) when not contexts.IsEmpty ->
+        let used = ContextVariables.resolved (resolveSoFar state) contexts
+        let requirePlain current ctx = ensureContextAvailable (Some expr.Id) true env current callee [ ctx ] span
+        ContextVariables.require requirePlain callee span used (LambdaContexts.recordUnsupplied env used state)
+    | _ -> Ok state

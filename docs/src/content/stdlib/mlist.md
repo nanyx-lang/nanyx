@@ -30,7 +30,7 @@ and the list can't leave the block. [`MList.at`](#mlistat) and [`MList.set`](#ml
 `list.get` does.
 
 Each function is attached to `MList`, so with `import nanyx/mlist` it is called as
-`MList.add(items, 5)`, or as `items \add(5)`.
+`MList.add(items, 5)`, or as `items \add(5)`, and `items += 5` adds too.
 
 ## `MList`
 
@@ -70,6 +70,14 @@ def MList.add: [Memory] MList(a), a -> ()
 ```
 
 Adds `value` at the end of `items`.
+
+## `` MList.`+=` ``
+
+```nanyx fragment
+def MList.`+=`: [Memory] MList(a), a -> ()
+```
+
+Adds `value` at the end of `items`, as [`MList.add`](#mlistadd) does: `items += 5`.
 
 ## `MList.at`
 

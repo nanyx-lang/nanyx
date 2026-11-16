@@ -110,10 +110,17 @@ let ``a spare operator binds tighter than the operator it is listed above`` (spa
 [<InlineData("def x = {\n  a <= b >= c\n}", ">= c", "Comparisons do not chain: write `a <= b and b >= c`")>]
 [<InlineData("def x = f >> g << h", "<< h", "`>>` and `<<` cannot be written side by side")>]
 [<InlineData("def x = a..b..c", "..c", "`..` and `..` cannot be written side by side")>]
+[<InlineData("def x = {\n  a += b += c\n}", "+= c", "`+=` and `+=` cannot be written side by side")>]
 let ``operators that do not group cannot be written side by side`` (source: string) (at: string) (message: string) =
     let reported, text = parseErrorOf source
     Assert.Contains(message, reported)
     Assert.Equal(at, text)
+
+[<Fact>]
+let ``+= is the loosest operator, so its right operand is a whole expression`` () =
+    match valueOf "def x = items += a + b or c" with
+    | BinaryOp ("+=", _, Kind (IdentifierExpr "items"), Kind (BinaryOp ("or", _, Kind (BinaryOp ("+", _, _, _)), _))) -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]
 let ``comparisons in parentheses are not a chain`` () =

@@ -40,7 +40,7 @@ module internal OrderingOperators =
     let rec private isRecordOrTag (ty: Ty) =
         match ty with
         | TyAlias(_, _, underlying)
-        | TyNominal(_, _, underlying, _) -> isRecordOrTag underlying
+        | RecursiveNominals.Nominal(_, _, underlying, _) -> isRecordOrTag underlying
         | TyRecord fields -> not (isTuple fields)
         | TyOpenRecord _
         | TyTag _
