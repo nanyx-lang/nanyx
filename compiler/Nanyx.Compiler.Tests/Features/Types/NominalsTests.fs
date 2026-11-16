@@ -110,7 +110,10 @@ import people as p
 type Person = protected (name: string)
 def theirs: p.Person = (name = "Ada")
 """
-    Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], compiledWithPeople ids |> List.map fst)
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.ProtectedShape.Code,
+          "'Person' is protected: only the module 'people' makes values of it, so a record of its shape isn't a 'Person' here." ],
+        compiledWithPeople ids)
 
 [<Fact>]
 let ``A $ before a type's name is a syntax error at the $ that shows the protected form`` () =

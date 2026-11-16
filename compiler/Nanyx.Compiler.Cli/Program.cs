@@ -1010,6 +1010,9 @@ internal static partial class CliCommands
             case RunError.Trapped trapped:
                 errors.WriteLine($"Runtime error: {trapped.Item}");
                 return 1;
+            case var _ when error.IsOutOfMemory:
+                errors.WriteLine("Runtime error: out of memory");
+                return 1;
             // The program said why it stopped (a deferred error writes itself to stderr) before it exited.
             case RunError.Exited exited:
                 return exited.Item;

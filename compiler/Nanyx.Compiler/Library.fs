@@ -763,11 +763,15 @@ module Compiler =
                         match entries |> List.tryFind (fun entry -> entry.Argument = span) with
                         | Some entry -> entryMismatch entry
                         | None ->
-                            let code =
-                                match kind with
-                                | ContextsNotAllowed -> DiagnosticCodes.ContextsNotAllowed
-                                | TypesDiffer -> MemoryCells.mismatchCode state span
-                            Diagnostics.at code span message)
+                            match kind with
+                            // Outside a nominal type's home module, a value of its shape is no value of it: the error says
+                            // why, and how to make one.
+                            | NominalShape(nominal, isPrivate, shape) when not (Visibility.inNominalHome state nominal span) ->
+                                let names = (Map.toList env.Names) @ (types |> Map.toList |> List.map (fun (name, ty) -> name, TypeEnv.mono (Unifier.apply subst ty)))
+                                ProtectedShapes.shapeError state names (normalizeSource source) desugared nominal isPrivate shape span
+                            | ContextsNotAllowed -> Diagnostics.at DiagnosticCodes.ContextsNotAllowed span message
+                            | TypesDiffer
+                            | NominalShape _ -> Diagnostics.at (MemoryCells.mismatchCode state span) span message)
                     |> List.distinct
                 // The module's own top-level defs.
                 let ownTopLevel =

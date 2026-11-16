@@ -69,6 +69,7 @@
     <Compile Include="UseDischarge.fs" />
     <Compile Include="DuplicateDefinitions.fs" />
     <Compile Include="SyntaxTree.fs" />
+    <Compile Include="ProtectedShapes.fs" />
     <Compile Include="DuplicateFields.fs" />
     <Compile Include="ContextSeparators.fs" />
     <Compile Include="LocalRecursion.fs" />
