@@ -124,12 +124,12 @@ The rule (`strayDocComments`) reports a [doc comment](../getting-started/basics#
 
 ```nanyx
 def f: int -> int = { x ->
-  panic("bad input")
-  x + 1 -- Linter warning: this code never runs: `panic` never returns
+  crash("bad input")
+  x + 1 -- Linter warning: this code never runs: `crash` never returns
 }
 ```
 
-The rule (`unreachableCode`) reports the statements of a block that come after one that never gives a value: a statement whose type is [`undefined`](../tour/types#top-and-bottom-types), such as a call to `panic`, a call to a function you have annotated to return `undefined`, or an `if` whose every branch is one of those. It reports the first statement that never runs, through the end of the block, and points at the statement that stops the block. Its fix removes the statements that never run, unless the statement before them is a def, since a block can't end with a def.
+The rule (`unreachableCode`) reports the statements of a block that come after one that never gives a value: a statement whose type is [`undefined`](../tour/types#top-and-bottom-types), such as a call to `crash`, a call to a function you have annotated to return `undefined`, or an `if` whose every branch is one of those. It reports the first statement that never runs, through the end of the block, and points at the statement that stops the block. Its fix removes the statements that never run, unless the statement before them is a def, since a block can't end with a def.
 
 ## Recursion not in tail position
 
@@ -183,7 +183,7 @@ def total: list(int) -> int = { xs ->
 }
 ```
 
-The rule (`shadowedPreludeNames`) reports a top-level def, a local def, a lambda's argument or a variable a pattern binds whose name is one the prelude brings into scope, such as `ignore`, `panic`, `pow` or `memory`. Wherever the new name is in scope, the prelude's can't be named, so a later reader who expects the prelude's gets yours. It is a warning by default, and has no fix: rename the definition.
+The rule (`shadowedPreludeNames`) reports a top-level def, a local def, a lambda's argument or a variable a pattern binds whose name is one the prelude brings into scope, such as `ignore`, `crash`, `pow` or `memory`. Wherever the new name is in scope, the prelude's can't be named, so a later reader who expects the prelude's gets yours. It is a warning by default, and has no fix: rename the definition.
 
 Only the names the prelude brings into scope unqualified count. A definition attached to a type, such as `list.map`, is named through the type, so a `def map` of your own hides nothing; nor does a `def toString` outside a def that requires `ToString`, where the context's member isn't in scope. The standard library's own modules, which define the prelude's names, are not reported.
 

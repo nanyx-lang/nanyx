@@ -39,7 +39,7 @@ def `adds points` = {
 
 A [name in backticks](../tour/naming-conventions#names-in-backticks) can be any text but a backtick, a line break or a dot, so a test reads as what it checks, and the runner reports it as `` geometry.`adds points` ``. A plain name, `def addsPoints`, works too.
 
-A test takes no arguments and returns `()`. It passes if it finishes, and fails if it panics: an `assert` that does not hold, a [deferred error](#deferred-errors), a non-exhaustive match or any other panic.
+A test takes no arguments and returns `()`. It passes if it finishes, and fails if it crashes: an `assert` that does not hold, a [deferred error](#deferred-errors), a non-exhaustive match or any other crash.
 
 Tests are only compiled into a test build. `nanyx run` and `nanyx build` leave them out, so code that is not a test cannot refer to one, and doing so is an error. Linters do not report a test as unused.
 
@@ -65,7 +65,7 @@ Each test file declares a named module, as every file in a package does. It is p
 
 # Asserting
 
-`assert` takes a `bool`. If it is `false`, `assert` panics with the expression it was given and the values in it:
+`assert` takes a `bool`. If it is `false`, `assert` crashes with the expression it was given and the values in it:
 
 ```nanyx
 @test
@@ -84,7 +84,7 @@ FAIL geometry.`scales points`  src/geometry.nyx:18:3
 
 `assert` is built in, like `dbg`, because only the compiler has what that message needs: the source text of the expression, and a printer for the type of each value in it. For a comparison it prints each side that is not a literal, then each name the expression reads. That is why there is no `assertEqual` or `assertContains`: `assert(xs \contains(3))` already prints `xs`. It prints values the way [`dbg`](../stdlib/console#dbg) does, ignoring any `ToString` the type has.
 
-`assert` is not only for tests. It works anywhere, and outside a test it is a panic with a good message, as in Rust and Zig. Panicking is not an effect in Nanyx, so `assert` needs no context: `assert: bool -> ()`.
+`assert` is not only for tests. It works anywhere, and outside a test it is a crash with a good message, as in Rust and Zig. Crashing is not an effect in Nanyx, so `assert` needs no context: `assert: bool -> ()`.
 
 A test stops at the first `assert` that fails. Each test runs on its own (see [Running tests](#running-tests)), so a failure never affects the tests after it.
 
@@ -151,7 +151,7 @@ It exits with 0 if every test passes and 1 if any fails, or if the tests could n
 
 ## One instance per test
 
-A panic ends the WebAssembly instance it happens in, so tests cannot share one: the first failure would stop the rest. Instead, the runner compiles the package once, to a module that exports each test as a function, and creates a fresh instance of that module for each test. Creating an instance from a compiled module is cheap, and it gives each test its own memory, so no state leaks from one test to the next. Tests can later run in parallel, an instance each.
+A crash ends the WebAssembly instance it happens in, so tests cannot share one: the first failure would stop the rest. Instead, the runner compiles the package once, to a module that exports each test as a function, and creates a fresh instance of that module for each test. Creating an instance from a compiled module is cheap, and it gives each test its own memory, so no state leaks from one test to the next. Tests can later run in parallel, an instance each.
 
 A test that runs for longer than a time limit fails, with a message that says so; `--timeout` sets the limit.
 
@@ -170,7 +170,7 @@ These fit the design but are not part of the first version:
 - **Parametrised tests.** A loop inside a test covers this for now, and `assert` prints the loop variable when the expression reads it.
 - **Property-based testing.** A library, with a context that generates values, rather than a language feature.
 - **Snapshot tests**, which compare a value's printed form with one stored in a file.
-- **Expecting a panic.** A test cannot catch a panic, but the runner sees one, so an attribute such as `@test(#panics)` could pass a test only if it panics.
+- **Expecting a crash.** A test cannot catch a crash, but the runner sees one, so an attribute such as `@test(#crashes)` could pass a test only if it crashes.
 - **Docs as tests.** Running the code blocks in these docs as tests, which [compilation](./compilation) already wants.
 
 # Prior art

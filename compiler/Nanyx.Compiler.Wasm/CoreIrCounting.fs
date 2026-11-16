@@ -56,7 +56,7 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | ForEach loop -> all Borrowed (ForLoop.sourceAtoms loop)
     | If(cond, _, _) -> [ cond, Borrowed ]
     | BoxFloat _
-    | Panic _
+    | Crash _
     | While _
     | Match _
     | Let _

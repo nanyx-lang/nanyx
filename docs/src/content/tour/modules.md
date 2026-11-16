@@ -372,7 +372,7 @@ def greeting = println("Hi")    -- error NYX0211: `println` requires [Console], 
 
 Because ordinary effectful initialization isn't permitted, named modules have no observable source-order initialization semantics: there's no effectful step whose order could ever be seen, which is what makes the order-independence described in [Declaration order](#declaration-order) sound rather than just convenient.
 
-Context-free is not the same as total: a top-level definition can still diverge, panic, or fail at runtime, and this rule doesn't by itself account for intrinsics or any future FFI boundary.
+Context-free is not the same as total: a top-level definition can still diverge, crash, or fail at runtime, and this rule doesn't by itself account for intrinsics or any future FFI boundary.
 
 Effects enter a program through its entry *function*, the one marked `@entry` (see [Attributes](./attributes)). The runtime provides the `[Console]` context when it calls that function, and every other effectful function is reached from there. There is no exception for the module that contains it: it is an ordinary named module and follows the rules above.
 
@@ -440,7 +440,7 @@ import (
 )
 ```
 
-One module is never imported by name: the **prelude**, `nanyx/prelude`, is imported into every module automatically, so what it defines is in scope in a file with no imports at all. It holds `proc`, [`panic`](./error-handling), [`ignore`](../stdlib/prelude#ignore), the `Result(a, e)` type and the [`Result`](../stdlib/prelude-results#results) and [option](../stdlib/prelude-results#options) helpers. A module's own definitions and its explicit imports take precedence over the prelude's, so defining your own `proc` is fine.
+One module is never imported by name: the **prelude**, `nanyx/prelude`, is imported into every module automatically, so what it defines is in scope in a file with no imports at all. It holds `proc`, [`crash`](./error-handling), [`ignore`](../stdlib/prelude#ignore), the `Result(a, e)` type and the [`Result`](../stdlib/prelude-results#results) and [option](../stdlib/prelude-results#options) helpers. A module's own definitions and its explicit imports take precedence over the prelude's, so defining your own `proc` is fine.
 
 # Example: User management module
 
