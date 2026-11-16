@@ -35,21 +35,21 @@ A Nanyx error should include:
 
 ## Friendly errors
 
-In Nanyx error messages should be written in the passive voice (no "I" or "you"), as if the compiler is narrating what _was done_ and what _was found_. Messages should be matter of fact, rather than directly addressing the user or directing blame. 
+In Nanyx error messages are matter of fact, with no "I" or "you": they say what _was found_, rather than addressing the user or directing blame. A message starts with a capital letter, puts names and types in single quotes and code in backticks, and gives any advice after a colon, as an instruction.
 
 | Preferred | Not preferred |
 |--------------|-----------|
-| Type `string` is not assignable to `int` | You cannot pass a `string` to a function that expects an `int` |
-| Duplicate definition `foo` | I found two definitions of `foo` |
-| | "You forgot to handle the `#error` case in this match expression", or "Illegal foo".|
+| Type mismatch: 'string' vs 'int' | You cannot pass a string to a function that expects an int |
+| Duplicate definition 'foo' | I found two definitions of foo |
+| Unknown identifier 'totl': did you mean 'total'? | "You forgot to handle the `#error` case in this match expression", or "Illegal foo".|
 
 An example of a good error message:
 
 | Title | Message | Suggestions | Fixes |
 |-------|---------|-------------|-------|
-| `E001: Type mismatch at 10:5` | Expected type `int` but found type `string` in the expression `x + 1` | Did you mean to convert `x` to an int with `int(x)`? | Apply `int(x)` conversion |
-| `E002: Unsatisfied context at 115:8` | The function `println` can only be run from within a `Console` context | Did you mean to add the context `Console` to the containing function `main`? | Add context `Console` to `main` |
-| `E003: Non-exhaustive pattern match at 42:3` | The match expression does not handle the case `#error(#databaseError)` of the result type `#some(Customer) \| #error(#notFound \| #databaseError)` | Did you forget to handle the `#databaseError` case? | Add a case for `#error(#databaseError)` |
+| `E001: Type mismatch at 10:5` | Expected type 'int' but found type 'string' in the expression `x + 1` | Convert 'x' to an int with `int(x)` | Apply the `int(x)` conversion |
+| `E002: Unsatisfied context at 115:8` | 'println' requires the context 'Console', which 'main' does not declare | Add the context 'Console' to the type of 'main' | Add context 'Console' to 'main' |
+| `E003: Non-exhaustive pattern match at 42:3` | The match does not handle `#error(#databaseError)` of the type '#some(Customer) \| #error(#notFound \| #databaseError)' | Handle the `#databaseError` case | Add a case for `#error(#databaseError)` |
 
 ## Structural type errors
 

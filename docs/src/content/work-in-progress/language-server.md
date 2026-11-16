@@ -321,10 +321,13 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    Go-to-definition is done for values (including those in the standard library), type names and context members
    ([#266](https://github.com/nanyx-lang/nanyx/issues/266)). Find-references is done in the open document
    ([#276](https://github.com/nanyx-lang/nanyx/issues/276)), with a use of an operator at the operator
-   ([#792](https://github.com/nanyx-lang/nanyx/issues/792)); across the workspace it is not.
+   ([#792](https://github.com/nanyx-lang/nanyx/issues/792)); across files it is not. Decided: it will read the
+   package's files, as `nanyx build` checks them, once the server resolves packages
+   ([#1556](https://github.com/nanyx-lang/nanyx/issues/1556), after [#866](https://github.com/nanyx-lang/nanyx/issues/866)).
 4. **Document symbols.** Done ([#278](https://github.com/nanyx-lang/nanyx/issues/278),
-   [#793](https://github.com/nanyx-lang/nanyx/issues/793)). Workspace symbols (Go to Symbol in Workspace) would
-   need an index of the workspace's files, as find-references across it does.
+   [#793](https://github.com/nanyx-lang/nanyx/issues/793)). Workspace symbols (Go to Symbol in Workspace), decided
+   ([#877](https://github.com/nanyx-lang/nanyx/issues/877)): from parsing every `.nyx` file under the workspace
+   folders, with no type check, re-parsing a file when the watcher reports a change.
 5. **Completion.** The last good compile, which completion needs because it is asked for while the text does not
    parse, is kept ([#210](https://github.com/nanyx-lang/nanyx/issues/210)); each symbol's scope is recorded
    ([#211](https://github.com/nanyx-lang/nanyx/issues/211)); the names in scope are offered
