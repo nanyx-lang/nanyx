@@ -75,15 +75,11 @@ let ``A dependency is read as its name and the directory it is in`` () =
     Assert.Equal(Path.GetFullPath(package.Path "util"), read.Dependencies.Head.Directory)
 
 [<Fact>]
-let ``A version is refused, since packages can't be downloaded yet`` () =
+let ``A version is read as the versions it accepts, found through the lockfile`` () =
     let manifest = """(package = (name = "app", version = "0.1.0"), dependencies = [(package = "acme.util", version = "1.2")])"""
-    match Manifest.check "app.nyxp" manifest with
-    | Result.Error [ error ] ->
-        Assert.Equal(DiagnosticCodes.UnsupportedManifestField.Code, error.Code)
-        Assert.Equal(
-            """a dependency's version names a package to download, but packages can't be downloaded yet: give the directory the package is in, path = "../util" """.TrimEnd(),
-            error.Message)
-    | other -> failwith $"Unexpected: %A{other}"
+    let dependency = (okOf (Manifest.check "app.nyxp" manifest)).Dependencies |> List.exactlyOne
+    Assert.Equal("", dependency.Directory)
+    Assert.Equal(Some "1.2", dependency.Version |> Option.map string)
 
 [<Fact>]
 let ``A dependency without a path is an error`` () =

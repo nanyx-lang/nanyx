@@ -365,19 +365,23 @@ To fix it, write the value the message asks for: `sources = ["*.nyx"]`.
 
 # NYX0024: Manifest field not supported yet
 
-The manifest uses a field the compiler knows, but does not support yet: a dependency's `version`, which names a
-package to download, or `settings` for a host.
+The manifest uses a field the compiler knows, but does not support yet: a dependency named by its version that
+`nanyx.lock` doesn't lock, since choosing a version to lock isn't supported yet, a dependency on GitHub, which can't be
+downloaded yet, or `settings` for a host.
 
 ```nanyx
 -- file: demo.nyxp
 (
   package = (name = "demo", version = "0.1.0")
-  dependencies = [(package = "acme.util", version = "1.2")]  -- error NYX0024: a dependency's version names a package to download, ...
+  dependencies = [(package = "acme.util", version = "1.2")]  -- error NYX0024: the dependency acme.util 1.2 is not locked in nanyx.lock, ...
 )
+-- file: demo.nyx
+export module demo
+
+export def one = 1
 ```
 
-To fix it, give the directory the package is in instead, `path = "../util"`. Packages can't be downloaded yet.
-
+To fix it, give the directory the package is in instead, `path = "../util"`.
 # NYX0025: Module not public
 
 A module imports a module of a package it depends on that the package does not make public. Another package can import
@@ -686,6 +690,31 @@ what it depends on.
 
 To fix it, depend on a version of the file without its `module` line or its other imports, or, if it needs more than
 the standard library, on the package it comes from.
+# NYX0041: Locked package not in the package cache
+
+A dependency named by its version is the version `nanyx.lock` locks, unpacked in the package cache, and that version
+isn't there: the lockfile is new, or the cache was cleared.
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "demo", version = "0.1.0")
+  dependencies = [(package = "acme.util", version = "1.2")]  -- error NYX0041: nanyx.lock locks acme.util 1.2.0, but it isn't in the package cache, ...
+)
+-- file: nanyx.lock
+(
+  version = 1
+  packages = [
+    (package = "acme.util", version = "1.2.0", sha256 = "9f2c41aa9f2c41aa9f2c41aa9f2c41aa9f2c41aa9f2c41aa9f2c41aa9f2c41aa", dependencies = [])
+  ]
+)
+-- file: demo.nyx
+export module demo
+
+export def one = 1
+```
+
+To fix it, run `nanyx pull`, which downloads each package the lockfile locks into the cache.
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which

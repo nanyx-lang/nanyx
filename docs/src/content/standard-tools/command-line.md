@@ -18,6 +18,7 @@ nanyx new <name> [<directory>]
 nanyx migrate [<file.nyx | directory>] [--name <name>]
 nanyx pull [<package>]
 nanyx install <package> [--path <directory> | --version <version>]
+nanyx pack [--out <directory>] [<package>]
 nanyx manifest --json [<package>]
 nanyx search <query>
 nanyx lsp [<options>]
@@ -221,13 +222,32 @@ nanyx install acme.util --path ../util   # the package in that directory
 nanyx install nanyx.console.core         # a package the compiler ships, at the compiler's version
 ```
 
-The directory must hold a package of the name you give, and a package already listed is an error. Packages can't be
-downloaded yet, so `--version` writes the entry and then fails, saying so.
+The directory must hold a package of the name you give, and a package already listed is an error. Choosing the version
+to lock in `nanyx.lock` isn't supported yet, so `--version` writes the entry and then fails, saying so.
 
 ## `nanyx pull`
 
-`nanyx pull` checks that each dependency of a package is there, as a build would, and lists them:
-`acme.util 0.3.0 (../util)`. A dependency named by its version can't be downloaded yet, so `pull` fails for one.
+`nanyx pull` downloads into the package cache each package `nanyx.lock` locks that isn't there yet, checking each
+against the SHA-256 the lockfile records, then checks that each dependency of a package is there, as a build would, and
+lists them: `acme.util 0.3.0 (../util)`, `acme.web 1.2.0 (downloaded)`. A dependency named by its version that the
+lockfile doesn't lock can't be had yet, since choosing a version isn't supported yet, so `pull` fails for one.
+
+The cache is `.nanyx/packages` in your home directory, or the directory `NANYX_PACKAGES` names. Packages are
+downloaded from the [package index](https://nanyx-lang.github.io/packages/), or from the one `NANYX_INDEX` names: an
+address, or a directory on disk.
+
+## `nanyx pack`
+
+`nanyx pack` packs a package as a `.nyxpkg`, the file a release of it carries, and prints its SHA-256:
+
+```bash
+nanyx pack                    # writes acme.util-0.3.0.nyxpkg beside the manifest
+nanyx pack --out dist ../util
+```
+
+A `.nyxpkg` is a zip of the package's manifest and its source files, and packing the same files twice makes the same
+file. A package with a dependency found by its path, or on GitHub, can't be packed, since that dependency isn't there
+once the package is unpacked elsewhere.
 
 ## `nanyx manifest`
 

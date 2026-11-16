@@ -121,8 +121,13 @@
     <Compile Include="OwnedDefinitions.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="GitHub.fs" />
+    <Compile Include="SemanticVersions.fs" />
+    <Compile Include="Lockfile.fs" />
+    <Compile Include="PackageStore.fs" />
     <Compile Include="Manifest.fs" />
     <Compile Include="Package.fs" />
+    <Compile Include="PackageArchive.fs" />
+    <Compile Include="PackageIndex.fs" />
     <Compile Include="NewPackage.fs" />
     <Compile Include="Script.fs" />
     <Compile Include="Migration.fs" />
