@@ -103,7 +103,7 @@ let collect (functions: Function list) : ModuleFacts =
         | Dbg text ->
             atom text
             usesDbgHelpers.Value <- true
-        | Panic messages -> strings.AddRange messages
+        | Crash messages -> strings.AddRange messages
         | ForEach loop -> ForLoop.sourceAtoms loop |> List.iter atom
         | If(cond, _, _) -> atom cond
         | _ -> ()

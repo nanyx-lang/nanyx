@@ -275,6 +275,55 @@ def list.zip: list(a), list(b) -> list((a, b))
 Pairs of the elements at the same position, as long as the shorter list. Stack-safe: it works on
 lists of any length.
 
+## `list.zipWith`
+
+```nanyx fragment
+def list.zipWith: [c] list(a), list(b), ([c] (a, b) -> d) -> list(d)
+```
+
+`f` applied to the elements of `xs` and `ys` in pairs, stopping at the end of the shorter, as
+[`list.zip`](#listzip) does: `[1, 2, 3] \zipWith([10, 20]) { + }` is `[11, 22]`. Stack-safe: it works on
+lists of any length.
+
+## `list.intersperse`
+
+```nanyx fragment
+def list.intersperse: list(a), a -> list(a)
+```
+
+`xs` with `separator` between each pair of neighbouring elements: `[1, 2, 3] \intersperse(0)` is
+`[1, 0, 2, 0, 3]`. Stack-safe: it works on a list of any length.
+
+## `list.chunks`
+
+```nanyx fragment
+def list.chunks: list(a), int -> list(list(a))
+```
+
+`xs` cut into lists of `size` elements, in order; the last is shorter when `size` doesn't divide
+the length: `[1, 2, 3, 4, 5] \chunks(2)` is `[[1, 2], [3, 4], [5]]`. A `size` below 1 crashes.
+Stack-safe: it works on a list of any length.
+
+## `list.windows`
+
+```nanyx fragment
+def list.windows: list(a), int -> list(list(a))
+```
+
+Every run of `size` neighbouring elements, in order: `[1, 2, 3, 4] \windows(2)` is
+`[[1, 2], [2, 3], [3, 4]]`, and a list shorter than `size` has none. A `size` below 1 crashes.
+Stack-safe: it works on a list of any length.
+
+## `list.scan`
+
+```nanyx fragment
+def list.scan: [c] list(a), b, ([c] (b, a) -> b) -> list(b)
+```
+
+The running totals of a fold: `initial`, then each value [`list.fold`](#listfold) passes along, so the last
+is what the fold gives back: `[1, 2, 3] \scan(0) { + }` is `[0, 1, 3, 6]`. Stack-safe: it works on
+a list of any length.
+
 ## `list.unzip`
 
 ```nanyx fragment

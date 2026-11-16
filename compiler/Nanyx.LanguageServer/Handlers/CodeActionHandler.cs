@@ -5,6 +5,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Nanyx.LanguageServer.Handlers;
 
@@ -19,16 +20,19 @@ namespace Nanyx.LanguageServer.Handlers;
 /// organising the document's imports, which is also a quick fix of an unused import. Each is laid out with the
 /// document's formatter settings, and only the kinds a request asks for are computed. One the compiler refuses there is
 /// offered disabled, with its reason. One that makes up a name has the <see cref="RenameAtCommand"/> command, which
-/// starts renaming it once its edits are made.
+/// starts renaming it once its edits are made. Where formatting would change the lines in the range, it offers to
+/// format them, or the whole document (see <see cref="FormattingHints"/>), even in a text that did not compile.
 /// </summary>
 public sealed class CodeActionHandler : CodeActionHandlerBase
 {
     private readonly DocumentStore _documents;
+    private readonly ServerSettings _settings;
     private readonly ILogger<CodeActionHandler> _logger;
 
-    public CodeActionHandler(DocumentStore documents, ILogger<CodeActionHandler> logger)
+    public CodeActionHandler(DocumentStore documents, ServerSettings settings, ILogger<CodeActionHandler> logger)
     {
         _documents = documents;
+        _settings = settings;
         _logger = logger;
     }
 
@@ -41,9 +45,19 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
     private CommandOrCodeActionContainer? Compute(CodeActionParams request)
     {
         var uri = request.TextDocument.Uri;
-        if (_documents.TryGet(uri) is not { Compiled: { } compiled } document)
+        if (_documents.TryGet(uri) is not { } document)
         {
             return null;
+        }
+
+        var only = request.Context?.Only?.ToList();
+        // Formatting needs only a parse, so its fixes are offered whether or not the text compiled.
+        var formatting = Wanted(only, CodeActionKind.QuickFix) && _settings.FormattingHints
+            ? FormattingActions(uri, document, request.Range)
+            : [];
+        if (document.Compiled is not { } compiled)
+        {
+            return new CommandOrCodeActionContainer(formatting.Select(action => new CommandOrCodeAction(action)));
         }
 
         var start = document.Positions.ToOffset(request.Range.Start);
@@ -58,7 +72,6 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             .SelectMany(pair => pair.First.Fixes.Select((fix, index) => ToAction(uri, document, fix, pair.Second, isPreferred: index == 0)))
             .OfType<CodeAction>()
             .ToList();
-        var only = request.Context?.Only?.ToList();
         var refactorings = Refactorings(uri, document, compiled, start, end, only).ToList();
 
         // Organising imports is a fix for an unused import, too.
@@ -83,8 +96,40 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             }
         }
 
-        return new CommandOrCodeActionContainer(actions.Concat(refactorings).Select(action => new CommandOrCodeAction(action)));
+        return new CommandOrCodeActionContainer(actions.Concat(formatting).Concat(refactorings).Select(action => new CommandOrCodeAction(action)));
     }
+
+    /// <summary>
+    /// For each formatting hint that touches <paramref name="range"/>, a quick fix that formats its lines, and, if there
+    /// is one, a quick fix that formats the whole document, resolving every hint (see <see cref="FormattingHints"/>).
+    /// </summary>
+    private List<CodeAction> FormattingActions(DocumentUri uri, OpenDocument document, Range range)
+    {
+        var hints = document.FormattingHints(uri, _logger);
+        var touched = hints.Where(hint => Touches(hint.Diagnostic.Range, range)).ToList();
+        if (touched.Count == 0)
+        {
+            return [];
+        }
+
+        CodeAction Fix(string title, IEnumerable<FormattingHint> fixing, bool isPreferred) =>
+            new()
+            {
+                Title = title,
+                Kind = CodeActionKind.QuickFix,
+                Diagnostics = new Container<Diagnostic>(fixing.Select(hint => hint.Diagnostic)),
+                IsPreferred = isPreferred,
+                Edit = new WorkspaceEdit
+                {
+                    Changes = new Dictionary<DocumentUri, IEnumerable<TextEdit>> { [uri] = fixing.Select(hint => hint.Edit).ToList() }
+                }
+            };
+
+        return [.. touched.Select(hint => Fix("Format these lines", [hint], isPreferred: true)), Fix("Format the document", hints, isPreferred: false)];
+    }
+
+    /// <summary>Whether two ranges share a position, an empty one included.</summary>
+    private static bool Touches(Range a, Range b) => a.Start <= b.End && b.Start <= a.End;
 
     /// <summary>Whether a request for the kinds <paramref name="only"/> (all, when null) wants actions of <paramref name="kind"/>.</summary>
     private static bool Wanted(List<CodeActionKind>? only, CodeActionKind kind) =>

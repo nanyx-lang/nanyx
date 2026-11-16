@@ -5,7 +5,7 @@ order: 23
 ---
 
 `undefined` is built. The language docs describe it in [Top and bottom types](../tour/types#top-and-bottom-types),
-`panic` in [Error handling](../tour/error-handling), and the `unreachableCode` rule in the
+`crash` in [Error handling](../tour/error-handling), and the `unreachableCode` rule in the
 [official linter](../standard-tools/official-linter#unreachable-code-path). This page keeps how the type checker handles it and what is
 still open.
 
@@ -25,11 +25,11 @@ solved to when it adds no tags.
   values given for it are. The order constraints are solved in (newest first) then makes no difference.
 - **Branches leave it out.** `joinBranchTypes` (`BranchJoin.fs`) drops the branches of an `if` or `match` whose type
   is `undefined`, and joins the rest. The whole is `undefined` only when every branch is. The items of a list literal
-  are joined the same way, so `[1, panic("no")]` is a `list(int)`.
+  are joined the same way, so `[1, crash("no")]` is a `list(int)`.
 
 ## Open questions
 
-- **Arguments after one that never returns.** In `f(panic("a"), g())`, `g()` never runs. The `unreachableCode` rule
+- **Arguments after one that never returns.** In `f(crash("a"), g())`, `g()` never runs. The `unreachableCode` rule
   only looks at the statements of blocks.
 - **Inferred divergence.** A function that never returns but is not annotated, such as `def loop = { x -> loop(x) }`,
   is inferred as `a -> b`, not `a -> undefined`, so calls to it are not seen as diverging.

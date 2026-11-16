@@ -4,12 +4,19 @@ description: "Working with Result and Option types"
 order: 16
 ---
 
-In Nanyx, errors are values: a function that can fail says so in its return type, using tag unions, so callers must handle the failure cases. There is no catchable exception mechanism. A program can still _panic_ on an unrecoverable failure (such as running out of memory), but a panic is not something code is expected to catch or recover from.
+In Nanyx, errors are values: a function that can fail says so in its return type, using tag unions, so callers must handle the failure cases. There is no catchable exception mechanism. A program can still _crash_ on an unrecoverable failure (such as running out of memory), but a crash is not something code is expected to catch or recover from.
 
-To panic on purpose, call the prelude's `panic` with a message. It writes `panic: ` and the message to standard error and ends the program with exit code 1. It never returns, so its type is [`undefined`](./types#top-and-bottom-types) and a call to it fits wherever a value is expected:
+To crash on purpose, call the prelude's `crash` with a message. It writes `crash: ` and the message to standard error and ends the program with exit code 1. It never returns, so its type is [`undefined`](./types#top-and-bottom-types) and a call to it fits wherever a value is expected:
 
 ```nanyx
-def half: int -> int = { n -> if n % 2 == 0 then n / 2 else panic("{n} is odd") }
+def half: int -> int = { n -> if n % 2 == 0 then n / 2 else crash("{n} is odd") }
+```
+
+Where a missing value can only be a bug, `orCrash` unwraps it: it gives the value in a `#some`, and crashes with its message on anything else, so it works on options and results alike. It reads well at the end of a pipeline:
+
+```nanyx
+def n = "42" \int.fromString \orCrash("not a number")
+println(n + 1)
 ```
 
 # Result types

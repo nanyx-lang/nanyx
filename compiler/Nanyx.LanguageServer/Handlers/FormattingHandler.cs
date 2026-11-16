@@ -31,27 +31,39 @@ public sealed class FormattingHandler : DocumentFormattingHandlerBase
 
     private TextEditContainer Compute(DocumentFormattingParams request)
     {
-        if (_documents.TryGet(request.TextDocument.Uri) is not { } document)
+        if (_documents.TryGet(request.TextDocument.Uri) is not { } document
+            || FormattedText(document, request.TextDocument.Uri, _logger) is not { } formatted
+            || formatted == document.Text)
         {
             return new TextEditContainer();
         }
 
-        if (SettingsFor(document, request.TextDocument.Uri, _logger) is not { } settings)
+        // Positions count lines and characters, which are the same in the text and its normalised form.
+        var whole = document.Positions.ToRange(0, document.Positions.NormalizedText.Length);
+        return new TextEditContainer(new TextEdit { Range = whole, NewText = formatted });
+    }
+
+    /// <summary>
+    /// <paramref name="document"/>'s text formatted, as <c>nanyx format</c> would write it, with its line endings; or
+    /// null when it does not parse, its settings can't be read, or the safety check fails, which is logged. Formatting
+    /// and the highlighting of what formatting would change both read it, so they never disagree.
+    /// </summary>
+    internal static string? FormattedText(OpenDocument document, DocumentUri uri, ILogger logger)
+    {
+        if (SettingsFor(document, uri, logger) is not { } settings)
         {
-            return new TextEditContainer();
+            return null;
         }
 
         switch (FormatCommand.formatText(settings, document.FileName, document.Text))
         {
-            case FormatCommand.Formatting.Formatted formatted when formatted.Item != document.Text:
-                // Positions count lines and characters, which are the same in the text and its normalised form.
-                var whole = document.Positions.ToRange(0, document.Positions.NormalizedText.Length);
-                return new TextEditContainer(new TextEdit { Range = whole, NewText = formatted.Item });
+            case FormatCommand.Formatting.Formatted formatted:
+                return formatted.Item;
             case FormatCommand.Formatting.NotSafe notSafe:
-                _logger.LogWarning("Not formatting {Uri}: {Reason}", request.TextDocument.Uri, notSafe.Item);
-                return new TextEditContainer();
+                logger.LogWarning("Not formatting {Uri}: {Reason}", uri, notSafe.Item);
+                return null;
             default:
-                return new TextEditContainer();
+                return null;
         }
     }
 

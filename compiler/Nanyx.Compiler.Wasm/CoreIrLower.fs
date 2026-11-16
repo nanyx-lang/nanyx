@@ -341,10 +341,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             this.Atoms scope [ value ] (fun atoms -> k (Expr.make (MakeRecord [ "0", atoms.Head ]) (IrRecord [ "0", atomType atoms.Head ])))
         | FunctionCall(form, _, [ Kind (IdentifierExpr name); value ]) when form = CellSyntax.setBox && scope.Vars.ContainsKey name ->
             this.Atoms scope [ value ] (fun atoms -> k (Expr.make (SetField(scope.Vars.[name], 0, atoms.Head)) IrUnit))
-        | PanicSyntax.Call message ->
+        | CrashSyntax.Call message ->
             // One the type checker added (the last arm of a match that does not handle every case) has no type.
             let ty = if input.ExprTypes.ContainsKey expr.Id then tyOf expr else IrError
-            k (Expr.make (Panic [ message ]) ty)
+            k (Expr.make (Crash [ message ]) ty)
         | FunctionCall(name, _, args) when name = DbgSyntax.builtIn && not (scope.Vars.ContainsKey name) && not (definitions.ContainsKey name) ->
             // Prints the value's text, which the printer of its type writes, and leaves the value.
             // The one argument, which may be a tuple, as the type checker has it.
@@ -607,7 +607,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let holes = parts |> List.choose (function StringExpr hole -> Some hole | StringText _ -> None)
             let before = holes |> List.takeWhile (fun hole -> tyOf hole <> IrError)
             let unknown = holes |> List.find (fun hole -> tyOf hole = IrError)
-            let stop = Expr.make (Panic [ Interpolation.unknownHoleMessage unknown.Span ]) IrString
+            let stop = Expr.make (Crash [ Interpolation.unknownHoleMessage unknown.Span ]) IrString
             (before @ [ unknown ])
             |> List.rev
             |> List.fold (fun (rest: Expr) hole -> this.Complex insideHole hole (fun value -> Expr.make (Do(value, rest)) rest.Type)) stop
@@ -1020,7 +1020,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         // when it is reached instead.
         let lowerExpression (expr: Expression) =
             try this.Tail scope expr
-            with CannotLower _ when not (deferredMessages expr).IsEmpty -> Expr.make (Panic(deferredMessages expr)) IrError
+            with CannotLower _ when not (deferredMessages expr).IsEmpty -> Expr.make (Crash(deferredMessages expr)) IrError
         let body =
             List.foldBack (fun (expr: Expression) (rest: Expr) -> Expr.make (Do(lowerExpression expr, rest)) IrUnit) input.TopLevel (Expr.make (Atom AUnit) IrUnit)
         { Name = startFunctionName
@@ -1047,7 +1047,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           TypeArguments = typeArguments
           Params = parameters
           Result = IrError
-          Body = Expr.make (Panic messages) IrError }
+          Body = Expr.make (Crash messages) IrError }
 
     /// The types of the parameters of the lifted lambda `name` (its environment aside), whose type where it was written
     /// is `lambdaTy`, and of its result. A lambda bound to a context member in a `use` may have parameters the type

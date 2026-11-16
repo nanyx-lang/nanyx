@@ -82,7 +82,7 @@ first one.
 ## Errors become traps
 
 A pass between the typed AST and the core IR ([memory management](./memory-management)) rewrites each marked
-expression to `Panic(diagnostic)`. At run time `Panic` writes the diagnostic to stderr, as the compiler printed it, and traps:
+expression to `Crash(diagnostic)`. At run time `Crash` writes the diagnostic to stderr, as the compiler printed it, and traps:
 
 ```
 error E001: Type mismatch at src/main.nyx:10:5 (deferred from compile time)
@@ -92,9 +92,9 @@ error E001: Type mismatch at src/main.nyx:10:5 (deferred from compile time)
 WebAssembly's `unreachable` fits wherever an instruction of any type is expected, so a trap can stand in for an
 expression of any type. Two rules keep the rest of the function valid:
 
-- **A panic does not return.** WebAssembly still validates the code after `unreachable`, so the code that would
+- **A crash does not return.** WebAssembly still validates the code after `unreachable`, so the code that would
   use the broken value cannot simply follow it: in `let x = <error>; x + 1`, `x` has no representation to load
-  into `i64.add`. The pass treats `Panic` as diverging and cuts off the rest of its enclosing sequence, as it would
+  into `i64.add`. The pass treats `Crash` as diverging and cuts off the rest of its enclosing sequence, as it would
   after any expression of type `never`.
 - **Effects to its left still happen.** Evaluation order is kept up to the error: `println("a"); f(bad)` prints
   `a` and then traps, and in `f(a(), bad, c())` the call `a()` runs and `c()` does not.
@@ -106,12 +106,12 @@ How it is built:
   code after it still validates. Nothing is cut off after a trap.
 - **The deferral pass** is `DeferredErrors.deferErrors` in [DeferredErrors.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/DeferredErrors.fs), run as the typed
   module's items are lowered for the backend, from where inference found the errors (`DeferredErrors.Sites`). Each
-  node in `FailedExprs` becomes `__panic("<message>")`. A conflict among the constraints is only known by where it
+  node in `FailedExprs` becomes `__crash("<message>")`. A conflict among the constraints is only known by where it
   was found, so the conflicts found at a span replace the outermost expression there. A match in `UnhandledMatches`
-  gets a last arm, `_ -> __panic(...)`, so it runs the cases it handles. The message is the diagnostic as `nanyx`
+  gets a last arm, `_ -> __crash(...)`, so it runs the cases it handles. The message is the diagnostic as `nanyx`
   prints it, with `(deferred from compile time)`. The pass returns the diagnostics it placed, and an error counts as
   deferred only if it is one of them, its place included, not another with the same text.
-- **`__panic`** lowers to a write of its message to stderr, then WASI's `proc_exit(1)`, then `unreachable` (which
+- **`__crash`** lowers to a write of its message to stderr, then WASI's `proc_exit(1)`, then `unreachable` (which
   `proc_exit`, never returning, never reaches). The runner reports an exit as `RunError.Exited`, and the CLI exits
   with its code and nothing more: the error has already said why the program stopped. A trap is still a runtime
   error, with Wasmtime's report.

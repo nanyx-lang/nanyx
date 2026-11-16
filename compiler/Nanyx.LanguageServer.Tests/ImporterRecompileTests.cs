@@ -126,7 +126,7 @@ public sealed class ImporterRecompileTests : LanguageServerTestBase
     public async Task A_document_that_does_not_import_the_changed_file_is_not_compiled_again()
     {
         var compiled = new List<DocumentUri>();
-        await RestartWithAsync(ServerSettings.Default with
+        await RestartWithAsync(TestSettings with
         {
             CompileStarted = uri =>
             {

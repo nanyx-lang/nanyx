@@ -592,7 +592,7 @@ module NoTagInCommon =
             | _ -> None)
 
 /// The official linter's `unreachableCode` rule: the statements of a block after one that never gives a value, whose
-/// type is `undefined` (a call to `panic`, say). They can never run. It is reported once per block, at the statements
+/// type is `undefined` (a call to `crash`, say). They can never run. It is reported once per block, at the statements
 /// from the first that never runs to the end of the block.
 module UnreachableCode =
     let rule =
@@ -600,7 +600,7 @@ module UnreachableCode =
           Title = "Unreachable code"
           DefaultSeverity = Severity.Warning
           Description =
-            "Statements of a block after one that never gives a value, such as a call to `panic`, whose type is `undefined`. They can never run." }
+            "Statements of a block after one that never gives a value, such as a call to `crash`, whose type is `undefined`. They can never run." }
 
     /// Why `expr`, whose type is `undefined`, means what follows never runs.
     let private whyNever (expr: Expression) =

@@ -90,7 +90,7 @@ let standInArity (ty: IrType) =
     | _ -> 1
 
 /// The function `functionName` a stand-in for a context member of the type `ty` is a closure over (see `neverCalled`):
-/// it takes what the member takes, and panics.
+/// it takes what the member takes, and crashes.
 let standInFunction (newVar: string -> VarKind -> IrType -> Var) (functionName: string) (ty: IrType) : Function =
     let input, result, members =
         match ty with
@@ -104,4 +104,4 @@ let standInFunction (newVar: string -> VarKind -> IrType -> Var) (functionName: 
       TypeArguments = []
       Params = environment :: values @ passed
       Result = result
-      Body = Expr.make (Panic [ "a context member at a type nothing constrains was called" ]) result }
+      Body = Expr.make (Crash [ "a context member at a type nothing constrains was called" ]) result }

@@ -127,7 +127,7 @@ let withTemporaries (e: Expr) : Expr =
         | Match _
         | ForEach _
         | While _
-        | Panic _ -> false
+        | Crash _ -> false
         | _ -> true
     // The locals made temporaries: one is read at once, so a local it reads can be one too.
     let made = HashSet<int>()

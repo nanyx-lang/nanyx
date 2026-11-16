@@ -39,12 +39,12 @@ let recordExprFields (fields: RecordField list) =
         | NamedField(name, value) -> name, value
         | PositionalField value -> string index, value)
 
-/// The messages of the errors deferred to run time inside `expr` (the `__panic` calls that stand for what failed to
+/// The messages of the errors deferred to run time inside `expr` (the `__crash` calls that stand for what failed to
 /// check), in the order they are written. What patterns hold and what a `use` loads are not looked inside.
 let rec deferredMessages (expr: Expression) : string list =
     let all (exprs: Expression list) = exprs |> List.collect deferredMessages
     match expr.Kind with
-    | PanicSyntax.Call message -> [ message ]
+    | CrashSyntax.Call message -> [ message ]
     | Block statements ->
         statements
         |> List.choose (fun statement ->

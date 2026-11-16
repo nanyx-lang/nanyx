@@ -289,7 +289,8 @@ where solving bound one to a made-up variable (`Unifier.keepWrittenNames`), and 
 `nanyx lsp --ascii` writes types in ASCII only. `--top-level-type-hints inlay` shows the top-level defs' types as
 inlay hints after their names instead of lenses, and `--top-level-type-hints off` shows neither (the default is
 `lens`). `--no-local-type-hints`, `--no-parameter-type-hints` and `--no-pattern-variable-type-hints` turn off the
-inlay hints for each of the other kinds of declaration.
+inlay hints for each of the other kinds of declaration. `--no-format-hints` turns off the hints that mark the lines
+formatting would change ([Formatter](./formatter#the-editor)).
 
 Each compile of a document is logged to the client as `window/logMessage`, which VS Code shows in the Nanyx output
 channel: `Compiled file:///…/main.nyx in 0.240s`. With `nanyx lsp --timings`, the line goes on with the tree of how
@@ -327,7 +328,7 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    ([#276](https://github.com/nanyx-lang/nanyx/issues/276)), with a use of an operator at the operator
    ([#792](https://github.com/nanyx-lang/nanyx/issues/792)); across files it is not. Decided: it will read the
    package's files, as `nanyx build` checks them, once the server resolves packages
-   ([#1556](https://github.com/nanyx-lang/nanyx/issues/1556), after [#866](https://github.com/nanyx-lang/nanyx/issues/866)).
+   ([#1556](https://github.com/nanyx-lang/nanyx/issues/1556); the server already compiles a local package as `nanyx build` does).
 4. **Document symbols.** Done ([#278](https://github.com/nanyx-lang/nanyx/issues/278),
    [#793](https://github.com/nanyx-lang/nanyx/issues/793)). Workspace symbols (Go to Symbol in Workspace), decided
    ([#877](https://github.com/nanyx-lang/nanyx/issues/877)): from parsing every `.nyx` file under the workspace

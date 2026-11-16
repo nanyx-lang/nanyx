@@ -126,12 +126,16 @@
     <Compile Include="Features\Arrays\RunArrayCallTests.fs" />
     <Compile Include="Features\StdLib\RunIgnoreTests.fs" />
     <Compile Include="Features\StdLib\RunOptionResultTests.fs" />
+    <Compile Include="Features\StdLib\RunOrCrashTests.fs" />
+    <Compile Include="Features\StdLib\RunFloatFormatTests.fs" />
+    <Compile Include="Features\StdLib\RunAllSomeTests.fs" />
     <Compile Include="Features\StdLib\RunStdLibTests.fs" />
     <Compile Include="Features\StdLib\RunStackSafeTests.fs" />
     <Compile Include="Features\StdLib\RunMathExpTests.fs" />
     <Compile Include="Features\StdLib\RunStringTakeSkipTests.fs" />
     <Compile Include="Features\StdLib\RunStringJoinTests.fs" />
     <Compile Include="Features\StdLib\RunListInitReplicateTests.fs" />
+    <Compile Include="Features\StdLib\RunListZipWithChunksTests.fs" />
     <Compile Include="Features\StdLib\RunStringCodePointTests.fs" />
     <Compile Include="Features\StdLib\RunBitwiseTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />
