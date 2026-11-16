@@ -215,6 +215,8 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | FunctionContexts.ScopeType _ -> IrUnit
     // A cell passed to a function is the box it is held in (see `CellSyntax`).
     | FunctionContexts.CellType(held, _) -> IrRecord [ "0", toIrType held ]
+    // So is a `box`, which the standard library's `MRef` is (see `Boxes`).
+    | Boxes.BoxType held -> IrRecord [ "0", toIrType held ]
     | TyTag _
     | TyUnion _ as tags ->
         let rec members ty =

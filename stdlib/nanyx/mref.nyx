@@ -1,0 +1,34 @@
+--| Mutable references: a cell as a value.
+
+  An `MRef(a)` holds one value, which [`MRef.set`] changes in place: every holder of the same
+  reference sees the change. Unlike a `mut` cell, a reference is a value, so it can be held in a
+  record, a list or another reference, passed without `mut`, and returned from a function. It
+  belongs to the `memory` block it was made in, as a cell does: making, reading or changing one
+  requires that block's `Memory`, and it can't leave the block.
+
+  A reference has no `==`, order or hash, since what it holds changes: compare what
+  [`MRef.get`] gives instead. Nor has it a `toString`, since writing what it holds would read it
+  without `Memory`.
+module mref
+
+export type MRef(a) = [Memory] private box(a)
+
+--| A new reference holding `value`.
+export def MRef.new: [Memory] a -> MRef(a) = { value ->
+  MRef(__nanyx_box_new(value))
+}
+
+--| The value `ref` holds now.
+export def MRef.get: [Memory] MRef(a) -> a = { MRef(box) ->
+  __nanyx_box_get(box)
+}
+
+--| Changes `ref` to hold `value`, in place of the value it held.
+export def MRef.set: [Memory] MRef(a), a -> () = { MRef(box), value ->
+  __nanyx_box_set(box, value)
+}
+
+--| Changes `ref` to hold `f` of the value it holds.
+export def MRef.update: [Memory, c] MRef(a), ([c] a -> a) -> () = { ref, f ->
+  MRef.set(ref, f(MRef.get(ref)))
+}

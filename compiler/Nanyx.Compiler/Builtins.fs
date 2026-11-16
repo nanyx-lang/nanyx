@@ -102,6 +102,11 @@ module Intrinsics =
     let arrayLength = prefix + "array_length"
     /// The element of an array at an index, which the standard library has checked is in range.
     let arrayGet = prefix + "array_get"
+    /// A new box holding a value (see `Boxes`), the value a box holds, and a box changed to hold another value, which
+    /// gives up the one it held.
+    let boxNew = prefix + "box_new"
+    let boxGet = prefix + "box_get"
+    let boxSet = prefix + "box_set"
 
     /// Ends the program with an exit code. It never returns, so its result is `undefined`.
     let exit = prefix + "exit"
@@ -186,6 +191,9 @@ module Intrinsics =
           arrayToList, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Arrays.ofType element, listOf element, []); Symbol = None; ProvidedBy = None }
           arrayLength, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Arrays.ofType element, intTy, []); Symbol = None; ProvidedBy = None }
           arrayGet, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ Arrays.ofType element; intTy ], element, []); Symbol = None; ProvidedBy = None }
+          boxNew, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, Boxes.ofType element, []); Symbol = None; ProvidedBy = None }
+          boxGet, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Boxes.ofType element, element, []); Symbol = None; ProvidedBy = None }
+          boxSet, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ Boxes.ofType element; element ], unitTy, []); Symbol = None; ProvidedBy = None }
           listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element, []); Symbol = None; ProvidedBy = None }
           compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy, []); Symbol = None; ProvidedBy = None }
           hash, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, intTy, []); Symbol = None; ProvidedBy = None } ]

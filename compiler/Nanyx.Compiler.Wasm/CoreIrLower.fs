@@ -399,6 +399,20 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | FunctionCall(name, _, [ value ]) when Intrinsics.reinterpretations.Contains name && not (scope.Vars.ContainsKey name) ->
             // A map and the list of its entries are held the same way: the value is its argument.
             this.Complex scope value k
+        // A `box` (see `Boxes`) is the box a captured cell is: made, read and changed as one is.
+        | FunctionCall(name, _, [ value ]) when name = Intrinsics.boxNew && not (scope.Vars.ContainsKey name) ->
+            this.Atoms scope [ value ] (fun atoms -> k (Expr.make (MakeRecord [ "0", atoms.Head ]) (IrRecord [ "0", atomType atoms.Head ])))
+        | FunctionCall(name, _, [ box ]) when name = Intrinsics.boxGet && not (scope.Vars.ContainsKey name) ->
+            this.Atoms scope [ box ] (fun atoms ->
+                let held = tyOf expr
+                let copy = newVar (uniqueName "__box_value") Local held
+                let body = k (Expr.make (Atom(AVar copy)) held)
+                Expr.make (Let(copy, Expr.make (Field(atoms.Head, 0)) held, body)) body.Type)
+        | FunctionCall(name, _, args) when name = Intrinsics.boxSet && not (scope.Vars.ContainsKey name) ->
+            this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
+                match atoms with
+                | [ AVar box; value ] -> k (Expr.make (SetField(box, 0, value)) IrUnit)
+                | _ -> internalError "a box set with something other than a box and a value")
         | FunctionCall(name, _, args) when Intrinsics.isIntrinsic name && not (scope.Vars.ContainsKey name) ->
             // A compiler intrinsic (only the standard library can call these, and a built-in property such as
             // `s.length` is one): the runtime helper of the same name.

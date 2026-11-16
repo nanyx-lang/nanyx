@@ -81,6 +81,14 @@ def leaks = transaction { open("select") }
     Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], result.Diagnostics |> List.map _.Code)
 
 [<Fact>]
+let ``Hovering a type in a scoped context's scope shows the scope`` () =
+    let source = normalized transactions
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    let hover = Definition.typeDefinitionAt Unicode "" result (offsetOf source "Cursor =" 0 1)
+    Assert.Equal(Some "type Cursor = [Tx] protected (query: string, row: int)", hover |> Option.map _.Type)
+
+[<Fact>]
 let ``A type can only belong to a scoped context's scope`` () =
     let source =
         """

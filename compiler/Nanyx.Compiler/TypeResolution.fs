@@ -60,6 +60,7 @@ let internal isBuiltInTypeName (name: string) =
     || Maps.isTypeName name
     || Sets.isTypeName name
     || Arrays.isTypeName name
+    || Boxes.isTypeName name
 
 /// Whether the type `name` is attached to exists; `span` is where the definition's name is written.
 let internal ensureAttachedTypeExists (state: InferState) (currentModuleOpt: string option) (name: Identifier) (span: SourceSpan) : Result<unit, Diagnostic list> =
@@ -288,6 +289,8 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
             Sets.ofType argTys.[0], current
         elif Arrays.isTypeName name && argTys.Length = 1 then
             Arrays.ofType argTys.[0], current
+        elif Boxes.isTypeName name && argTys.Length = 1 then
+            Boxes.ofType argTys.[0], current
         // `mut T`: a cell of the `memory` block whose `Memory` the signature writes, as `[Memory] mut int -> ()` says
         // (see `WrittenContexts.read`). A `mut cell` parameter's own annotation, which has no source, is of a scope of
         // its own: the cell given for it says which. A signature inference writes out has no source either, but what

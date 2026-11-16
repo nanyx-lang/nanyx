@@ -86,9 +86,14 @@ module internal WellKnownContexts =
         | Lists.ListType _ -> true
         | _ -> false
 
-    /// `Eq`: every type that holds no function has the compiler's own, which compares by structure. A map or a set,
-    /// or a structure that holds one, is compared by a definition derived from its parts, whatever order the entries
-    /// were added in (see `StructuralInstances`).
+    /// What a box (see `Boxes`) is called where a message says why it has no instance: a value of one is only ever seen
+    /// as the standard library's `MRef`.
+    let private mutableReference = Some ("a mutable reference", "mutable references")
+
+    /// `Eq`: every type that holds no function and no box has the compiler's own, which compares by structure. A box
+    /// changes, so it has none, by identity or by what it holds then. A map or a set, or a structure that holds one, is
+    /// compared by a definition derived from its parts, whatever order the entries were added in (see
+    /// `StructuralInstances`).
     let equality =
         { Context = "Eq"
           Member = "=="
@@ -97,6 +102,7 @@ module internal WellKnownContexts =
           Lacks =
             lacking "equality" (function
                 | TyFunc _ -> Some ("a function", "functions")
+                | Boxes.BoxType _ -> mutableReference
                 | _ -> None)
           ListHelpers = Map.ofList [ "==", "__listEquals"; "!=", "__listEquals" ]
           AgreesWith = None
@@ -118,6 +124,7 @@ module internal WellKnownContexts =
                 | Maps.MapType _ -> Some ("a map", "maps")
                 | Sets.SetType _ -> Some ("a set", "sets")
                 | Arrays.ArrayType _ -> Some ("an array", "arrays")
+                | Boxes.BoxType _ -> mutableReference
                 | TyRecord fields when not (isTuple fields) -> Some ("a record", "records")
                 | TyOpenRecord _ -> Some ("a record", "records")
                 | TyTag _
@@ -133,7 +140,7 @@ module internal WellKnownContexts =
     /// `Hash`: every type that has the compiler's own `Eq` has the compiler's own `Hash`, which hashes by structure, so
     /// that values equal by their structure have the same hash. It has no operators. A type that attaches its own `==`
     /// must attach `hash` too. A map or a set has none yet: hashing the list of its entries would give equal maps
-    /// different hashes. Nor has an array yet.
+    /// different hashes. Nor has an array yet, nor a box, which has no `Eq`.
     let hashing =
         { Context = "Hash"
           Member = "hash"
@@ -145,6 +152,7 @@ module internal WellKnownContexts =
                 | Maps.MapType _ -> Some ("a map", "maps")
                 | Sets.SetType _ -> Some ("a set", "sets")
                 | Arrays.ArrayType _ -> Some ("an array", "arrays")
+                | Boxes.BoxType _ -> mutableReference
                 | _ -> None)
           ListHelpers = Map.empty
           AgreesWith = Some equality.Member

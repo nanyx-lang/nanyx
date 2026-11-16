@@ -91,6 +91,7 @@
     <Compile Include="Features\Memory\RecordUpdateTests.fs" />
     <Compile Include="Features\Memory\MemoryDeclarationTests.fs" />
     <Compile Include="Features\Memory\CellTests.fs" />
+    <Compile Include="Features\Memory\RunMRefTests.fs" />
     <Compile Include="Features\Memory\StaticClosureTests.fs" />
     <Compile Include="Features\Memory\HeapReuseTests.fs" />
     <Compile Include="Features\Names\RunNameTests.fs" />
