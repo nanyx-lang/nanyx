@@ -44,7 +44,7 @@ module internal DeferredErrors =
         let location = diagnostic.Span |> Option.map deferredLocation |> Option.defaultValue ""
         $"{location}error {diagnostic.Code}: {diagnostic.Message} (deferred from compile time)\n"
 
-    /// `expr` with each expression that failed to check replaced by a call to `__panic`, which writes the errors
+    /// `expr` with each expression that failed to check replaced by a call to `__crash`, which writes the errors
     /// and traps when it is reached, so a debug build runs the code around it, and the diagnostics placed so. An
     /// expression in `sites.Failed` is found by its node; the conflicts in `sites.Mismatches` replace the outermost
     /// expression written at their span. A match in `sites.Unhandled`, which does not handle every case, is given a
@@ -55,11 +55,11 @@ module internal DeferredErrors =
     /// own, so it writes why it stopped without a code.
     let internal deferErrors (sites: Sites) (expr: Expression) : Expression * Diagnostic list =
         let placed = ResizeArray<Diagnostic>()
-        let panicWith (node: Expression) (message: string) =
-            FunctionCall(PanicSyntax.builtIn, None, [ Expression.from node (LiteralExpr (StringLit message)) ])
-        let panic (node: Expression) (diagnostics: Diagnostic list) =
+        let crashWith (node: Expression) (message: string) =
+            FunctionCall(CrashSyntax.builtIn, None, [ Expression.from node (LiteralExpr (StringLit message)) ])
+        let crash (node: Expression) (diagnostics: Diagnostic list) =
             placed.AddRange diagnostics
-            panicWith node (diagnostics |> List.map deferredMessage |> String.concat "")
+            crashWith node (diagnostics |> List.map deferredMessage |> String.concat "")
         let deferred =
             expr
             |> mapExpressionKinds (fun node kind ->
@@ -68,11 +68,11 @@ module internal DeferredErrors =
                     | Some diagnostics -> diagnostics
                     | None -> sites.Mismatches |> Map.tryFind node.Span |> Option.defaultValue []
                 match diagnostics, kind, sites.Unhandled |> Map.tryFind node.Id with
-                | _ :: _, _, _ -> panic node diagnostics
+                | _ :: _, _, _ -> crash node diagnostics
                 | [], Match(values, arms), Some missing ->
                     let catchAll = values |> List.map (fun _ -> Pattern.at node.Span WildcardPattern)
-                    Match(values, arms @ [ catchAll, Expression.from node (panic node missing) ])
+                    Match(values, arms @ [ catchAll, Expression.from node (crash node missing) ])
                 | [], _, _ when sites.UnknownTypeUses.Contains node.Id ->
-                    panicWith node $"{deferredLocation node.Span}error: the value used here has no known type, because of an error deferred from compile time\n"
+                    crashWith node $"{deferredLocation node.Span}error: the value used here has no known type, because of an error deferred from compile time\n"
                 | _ -> kind)
         deferred, List.ofSeq placed

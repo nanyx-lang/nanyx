@@ -29,7 +29,7 @@ def main: [Console] () -> () = {
 
 [<Fact>]
 let ``The host writes with its foreign function of fd_write, which a deferred error shares, imported once`` () =
-    let wat = transpileWat (withFinalNewline """println(if 1 > 2 then "a" else panic("no"))""")
+    let wat = transpileWat (withFinalNewline """println(if 1 > 2 then "a" else crash("no"))""")
     Assert.Equal(1, countOccurrences "(import \"wasi_snapshot_preview1\" \"fd_write\"" wat)
     Assert.Contains("""(import "wasi_snapshot_preview1" "fd_write" (func $fd_write (param i32 i32 i32 i32) (result i32)))""", wat)
     Assert.DoesNotContain("__nanyx_write_stdout", wat)

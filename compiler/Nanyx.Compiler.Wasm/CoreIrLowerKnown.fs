@@ -144,7 +144,7 @@ let usedOf (ids: Set<int>) (body: Expr) : Set<int> =
         | Do _
         | While _
         | BoxFloat _
-        | Panic _ -> ()
+        | Crash _ -> ()
     if not ids.IsEmpty then
         // In no particular order, from a stack, so that a chain as long as a function takes no stack to walk.
         let pending = System.Collections.Generic.Stack<Expr>([ body ])

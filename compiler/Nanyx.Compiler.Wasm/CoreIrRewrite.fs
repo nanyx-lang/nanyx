@@ -43,7 +43,7 @@ let directAtoms (e: Expr) : Atom list =
     | ForEach loop -> ForLoop.sourceAtoms loop
     | Interpolate _
     | BoxFloat _
-    | Panic _
+    | Crash _
     | While _
     | Let _
     | Do _
@@ -110,7 +110,7 @@ let rec mapVars (var: Var -> Var) (depth: int -> int) (e: Expr) : Expr =
         | Interpolate parts -> Interpolate(parts |> List.map (function Hole(v, holeType) -> Hole(var v, holeType) | text -> text))
         | Dbg value -> Dbg(atom value)
         | BoxFloat _
-        | Panic _ -> e.Kind
+        | Crash _ -> e.Kind
         | ForEach loop ->
             ForEach
                 { Streams =

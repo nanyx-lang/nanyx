@@ -44,12 +44,12 @@ let ``A module with errors is typed with what did check`` () =
 let ``A failed expression is compiled to a trap with its error`` () =
     let result = Compiler.compile "def f = { x -> missing(x) }\ndef g = 1"
     Assert.True(result.ErrorsDeferred)
-    let panics =
+    let crashes =
         result.Typed.Value.Module
         |> List.choose (function
-            | Kind (Def (ValueDef(_, "f", _, Kind (Lambda(_, Kind (FunctionCall("__panic", _, [ Kind (LiteralExpr (StringLit message)) ])), _))))) -> Some message
+            | Kind (Def (ValueDef(_, "f", _, Kind (Lambda(_, Kind (FunctionCall("__crash", _, [ Kind (LiteralExpr (StringLit message)) ])), _))))) -> Some message
             | _ -> None)
-    Assert.Equal<string list>([ "1:16: error NYX0102: Unknown function 'missing' (deferred from compile time)\n" ], panics)
+    Assert.Equal<string list>([ "1:16: error NYX0102: Unknown function 'missing' (deferred from compile time)\n" ], crashes)
 
 [<Fact>]
 let ``A module with no errors has nothing deferred`` () =

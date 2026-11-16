@@ -165,7 +165,7 @@ and ExprKind =
     /// Boxes a float constant: as an `f64`, or as an `f32` where the expression is an `F32`.
     | BoxFloat of float
     /// An error deferred to run time: writes these messages to stderr and ends the program.
-    | Panic of string list
+    | Crash of string list
     /// A `for` loop: evaluates its body for each element, and is unit.
     | ForEach of ForLoop
     /// A `while` loop: evaluates its condition, a bool, and while it is true its body, and is unit.
@@ -561,7 +561,7 @@ module Expr =
         | Interpolate _
         | Dbg _
         | BoxFloat _
-        | Panic _ -> []
+        | Crash _ -> []
 
     /// `e` with `f` applied to each expression directly inside it, those `children` gives, in the same order. Mapping
     /// a link of a chain maps what follows it too, so a pass that rewrites a long chain splits it (see `Chain`) and
@@ -599,7 +599,7 @@ module Expr =
             | Interpolate _
             | Dbg _
             | BoxFloat _
-            | Panic _ -> e.Kind
+            | Crash _ -> e.Kind
         { e with Kind = kind }
 
 /// The statements of a block: a chain of `Let`s, `Do`s, `Dup`s, `Drop`s, `Release`s and `FreeToken`s, each followed by the next. A
@@ -714,7 +714,7 @@ module Print =
             |> sprintf "\"%s\""
         | Dbg text -> $"dbg({atom text})"
         | BoxFloat value -> string value
-        | Panic messages -> $"""panic({messages |> String.concat ""})"""
+        | Crash messages -> $"""crash({messages |> String.concat ""})"""
         | ForEach loop ->
             let inner = indent + "  "
             let source (stream: ForStream) =
