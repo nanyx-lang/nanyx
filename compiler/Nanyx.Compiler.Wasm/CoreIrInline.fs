@@ -1,6 +1,7 @@
 /// Inlining in the core IR, after lowering and specialising and before reference counting (see
 /// `docs/src/content/work-in-progress/inlining.md`). A call is replaced by the body of the function it calls when the
-/// function is a handler, or is a lambda's and the closure over it is called once, or is small. A function in a cycle of
+/// function is a handler called once (or one called more often that is not large), or is a lambda's and the closure over
+/// it is called once, or is small. A function in a cycle of
 /// calls is never inlined, so inlining ends.
 ///
 /// The callee's body is placed where the call was, with its parameters bound to the call's arguments and every variable
@@ -16,6 +17,9 @@ open Transpiler.Wasm.CoreIrRewrite
 
 /// The most core IR nodes a function has to be inlined for its size alone.
 let sizeLimit = 40
+
+/// The most core IR nodes a handler has to be inlined where it is called more than once.
+let private handlerLimit = 4 * sizeLimit
 
 /// The most core IR nodes a function grows to by inlining; nothing more is inlined into it after that.
 let private growthLimit = 4000
@@ -197,8 +201,11 @@ type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string
                     && grown < growthLimit
                     ->
                     let calleeSize = size callee.Body
-                    // A handler is inlined whatever its size, and so is a lambda this body makes and calls once.
-                    let always = isHandler callee || (closures.Contains name && calls.[name] = 1)
+                    // A handler called once here is inlined whatever its size, and so is a lambda this body makes and
+                    // calls once. A handler called more than once is inlined only up to `handlerLimit`: one that calls
+                    // another twice would otherwise be copied twice at each level (#1664).
+                    let once = calls.[name] = 1
+                    let always = (isHandler callee && (once || calleeSize <= handlerLimit)) || (closures.Contains name && once)
                     if always || calleeSize <= sizeLimit then
                         grown <- grown + calleeSize
                         Some(callee, args)

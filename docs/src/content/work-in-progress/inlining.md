@@ -97,8 +97,9 @@ behind, and reuse sees the simplified code.
   it has no size limit. It covers the block and the continuations.
 - **A function small enough**, measured in core IR nodes under a limit set by benchmarks. It covers `try`, `return`,
   `println` after specialising, and most attached definitions.
-- **Handlers**, functions whose body is a `use ... in f()` of their lambda parameter. They are always inlined, whatever
-  their size, because inlining them is what makes their members known.
+- **Handlers**, functions whose body is a `use ... in f()` of their lambda parameter. One called once is inlined
+  whatever its size, because inlining it is what makes its members known. One called more than once is inlined only up
+  to a larger limit, so that code doesn't double with each level of handlers that call the one below twice.
 - **Never** a function into itself, or into a function that it calls back (a cycle). A recursive function is never
   inlined, but its callers may be.
 
@@ -139,8 +140,12 @@ function's locals that are read once, at once, are made temporaries (`CoreIrSimp
 ## Inlining
 
 - **What is inlined.** A call to a top-level function, when the function is a handler (its body ends in a call
-  through one of its parameters), or a lambda the caller makes a closure over and calls once, or has no more than
-  `sizeLimit` (40) core IR nodes. A call through a closure is inlined once simplifying has made it a call of the
+  through one of its parameters) that the caller calls once, or a lambda the caller makes a closure over and calls
+  once, or has no more than `sizeLimit` (40) core IR nodes. A handler the caller calls more than once is inlined when
+  it has no more than `handlerLimit` (160) nodes ([#1664](https://github.com/nanyx-lang/nanyx/issues/1664)): a
+  function that ends in a call through a context member it is given is a handler, so a chain of twenty `[Console]`
+  functions that each call the one before twice copied each level twice into the next, up to the growth limit, and
+  compiled to 1,178,434 bytes of WAT. It is 103,213 now; the same chain with one call a level is 53,350 either way. A call through a closure is inlined once simplifying has made it a call of the
   lambda, with the closure as its environment. Once a handler is inlined, its parameter is the caller's closure, so
   the next time over the block is inlined too, then the members its `use` binds, then the continuations they are
   given.
@@ -244,7 +249,9 @@ emitted.
 # Open questions
 
 - **The size limit,** and whether a function can ask to be inlined, or not, with an attribute.
-- **Code size.** Aggressive inlining grows the module. Is there a budget per function, after which it stops?
+- **Code size.** Aggressive inlining grows the module. A function stops taking more at 4,000 nodes, and a handler
+  called more than once is held to `handlerLimit`; a budget relative to the function's own size may do better. Nodes
+  undercount some code: an `Interpolate` is one node however much WAT it writes.
 - **Across modules.** A function from another module, including the standard library, can only be inlined if its core
   IR is available where it is called. That is true today, since a program compiles as one module, but not once
   packages compile separately.
