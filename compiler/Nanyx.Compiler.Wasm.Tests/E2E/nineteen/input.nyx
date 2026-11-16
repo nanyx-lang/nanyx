@@ -1,5 +1,5 @@
-type Println = (println: string -> ())
-type Add = (add: (int, int) -> int)
+context Println = (println: string -> ())
+context Add = (add: (int, int) -> int)
 
 def f: [Println & Add] = {
   println("Hello")
@@ -7,13 +7,13 @@ def f: [Println & Add] = {
 }
 
 def main = {
-  use (
+  use Println(
     println = { s ->
       dbg(s)
       ()
     }
   )
 
-  use (add = { x, y -> x + y })
+  use Add(add = { x, y -> x + y })
   f()
 }

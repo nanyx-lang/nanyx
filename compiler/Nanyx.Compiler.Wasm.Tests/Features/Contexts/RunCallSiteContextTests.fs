@@ -142,7 +142,13 @@ main()
 [<Fact>]
 let ``Run - a use member that prints calls the write in scope where the use is`` () =
     let source = """def main = {
-  use (write = { s -> write("[" ++ s ++ "]") })
+  use Console(
+    write = { s -> write("[" ++ s ++ "]") }
+    writeError = writeError
+    readLine = readLine
+    readToEnd = readToEnd
+    flush = flush
+  )
   write("hi")
 }
 

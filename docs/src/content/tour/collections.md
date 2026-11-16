@@ -74,7 +74,7 @@ def MyList.apply: ([ListBuilder(a)] () -> ()) -> MyList(a) = { f ->
   memory {
     mut listRef = MyList()
 
-    use (
+    use ListBuilder(a)(
       yield = { element -> listRef := listRef \add(element) }
     ) in f()
 
@@ -95,7 +95,7 @@ def MyMap.apply: ([MapBuilder(k, v)] () -> ()) -> MyMap(k, v) = { f ->
   memory {
     mut mapRef = MyMap()
 
-    use (
+    use MapBuilder(k, v)(
       `=>` = { k, v -> mapRef := mapRef \add(k, v) }
     ) in f()
 

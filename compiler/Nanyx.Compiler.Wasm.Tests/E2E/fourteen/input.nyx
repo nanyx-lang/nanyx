@@ -1,6 +1,8 @@
 -- Context test: use statement with function bindings
+context Scale = (double: int -> int, triple: int -> int)
+
 def main = {
-  use (double = { x -> x * 2 }, triple = { x -> x * 3 })
-  
+  use Scale(double = { x -> x * 2 }, triple = { x -> x * 3 })
+
   double(5) + triple(10)
 }

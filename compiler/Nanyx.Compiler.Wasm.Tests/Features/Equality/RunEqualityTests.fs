@@ -245,13 +245,13 @@ let ``Run - an Eq loaded with use changes a concrete comparison in its block`` (
           "  use Eq(string)(`==` = { x, y -> true })"
           "  a == b"
           "}"
-          "def literal = { a, b ->"
-          "  use (`==` = { x, y -> false })"
+          "def strict = { a, b ->"
+          "  use Eq(string)(`==` = { x, y -> false })"
           "  a == b"
           "}" ]
         [ """loose("ab", "cd")"""
           """loose("ab", "ab")"""
-          """literal("ab", "ab")"""
+          """strict("ab", "ab")"""
           "\"ab\" == \"cd\"" ]
     |> runSource
     |> assertRan "T\nT\nF\nF\n"
