@@ -821,14 +821,16 @@ module Unifier =
                     let pairConstraints = pairs |> List.map (fun (lTy, rTy) -> (lTy, rTy, Equal, origin))
                     loop subst (pairConstraints @ rest)
                 // One nominal type is the same as another when their arguments are, whether its parameters are used
-                // in what it is made from or not; that is then the same too.
+                // in what it is made from or not; that is then the same too. What one that names itself is made from
+                // holds the same arguments again (see `RecursiveNominals`).
                 | TyNominal(lNominal, lArgs, lUnderlying, lPrivate), TyNominal(rNominal, rArgs, rUnderlying, rPrivate) ->
                     if lNominal = rNominal && lArgs.Length = rArgs.Length then
                         let argConstraints = List.map2 (fun lTy rTy -> (lTy, rTy, Equal, origin)) lArgs rArgs
-                        if lPrivate || rPrivate then
-                            loop subst (argConstraints @ rest)
-                        else
-                            loop subst (argConstraints @ (lUnderlying, rUnderlying, Equal, origin) :: rest)
+                        match lUnderlying, rUnderlying with
+                        | _ when lPrivate || rPrivate -> loop subst (argConstraints @ rest)
+                        | TyRecursive _, _
+                        | _, TyRecursive _ -> loop subst (argConstraints @ rest)
+                        | _ -> loop subst (argConstraints @ (lUnderlying, rUnderlying, Equal, origin) :: rest)
                     else
                         Error (mismatchMessage l r, origin, TypesDiffer)
                 // A nominal type is a different type from its shape. Only assignability, which is one-way, lets a
@@ -1107,7 +1109,7 @@ module Unifier =
                         | TyNominal(_, _, _, true), _
                         | _, TyNominal(_, _, _, true) ->
                             Error (mismatchMessage l r, origin, TypesDiffer)
-                        | TyNominal(_, _, underlying, false), other when not (match other with TyNominal _ -> true | _ -> false) ->
+                        | RecursiveNominals.Nominal(_, _, underlying, false), other when not (match other with TyNominal _ -> true | _ -> false) ->
                             loop subst ((underlying, other, Equal, origin) :: rest)
                         | other, TyNominal(_, _, _, false) when not (match other with TyNominal _ -> true | _ -> false) ->
                             Error (mismatchMessage l r, origin, TypesDiffer)

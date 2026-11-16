@@ -71,7 +71,7 @@ let rec private recordFields (ty: Ty) : Map<string, Ty> option =
     match Unifier.unalias ty with
     | TyRecord fields
     | TyOpenRecord(fields, _) -> Some fields
-    | TyNominal(_, _, underlying, _) -> recordFields underlying
+    | RecursiveNominals.Nominal(_, _, underlying, _) -> recordFields underlying
     | _ -> None
 
 /// The type of the value `path` names at `offset`: `None` if its first name is not a value in scope there (an

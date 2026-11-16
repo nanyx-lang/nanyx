@@ -96,7 +96,10 @@ let internal writtenTypeDefinition (writeShape: Ty -> string) (symbol: Symbol) (
     // A private type's shape is its home module's to know.
     let definition =
         if info.IsPrivate && not isHome then $"{keyword} {symbol.Name}{parameters}"
-        elif info.IsNominal then $"{keyword} {symbol.Name}{parameters} = {scopedKind} {writeShape info.Underlying}"
+        elif info.IsNominal then
+            // One that names itself is written with its own name there (see `RecursiveNominals`).
+            let shape = RecursiveNominals.underlying (TyNominal(TypeDefInfo.nominalId info, [], info.Underlying, info.IsPrivate))
+            $"{keyword} {symbol.Name}{parameters} = {scopedKind} {writeShape shape}"
         else $"{keyword} {symbol.Name}{parameters} = {writeShape info.Underlying}"
     let note =
         let what = if info.IsContext then keyword else "type"

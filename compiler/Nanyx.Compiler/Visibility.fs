@@ -69,12 +69,15 @@ let internal inNominalHome (state: InferState) (nominal: NominalId) (span: Sourc
         | _ -> true)
 
 /// `state` with `actualTy`, the type of the value at `span`, made assignable to `declaredTy`, the type written for it.
-/// In the home module of a nominal type, a value of its underlying type is one of it.
+/// In the home module of a nominal type, a value of its underlying type is one of it. A value whose type the constraints
+/// so far don't settle is taken to be of the nominal type: the rest of a value of a type that names itself is one,
+/// though only solving them shows it.
 let internal addDeclaredConstraintAt (span: SourceSpan) (actualTy: Ty) (declaredTy: Ty) (state: InferState) =
     match Unifier.unalias declaredTy with
-    | TyNominal(nominal, _, underlying, _) when inNominalHome state nominal span ->
-        match Unifier.unalias actualTy with
-        | TyNominal _ -> addAssignableConstraintAt span actualTy declaredTy state
+    | RecursiveNominals.Nominal(nominal, _, underlying, _) when inNominalHome state nominal span ->
+        match Unifier.unalias (resolveSoFar state actualTy) with
+        | TyNominal _
+        | TyVar _ -> addAssignableConstraintAt span actualTy declaredTy state
         | _ -> addAssignableConstraintAt span actualTy underlying state
     | _ -> addAssignableConstraintAt span actualTy declaredTy state
 

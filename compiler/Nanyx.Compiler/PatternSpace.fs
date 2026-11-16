@@ -55,7 +55,7 @@ module PatternSpace =
 
     let rec private unwrap (ty: Ty) =
         match ty with
-        | TyNominal(_, _, underlying, _)
+        | RecursiveNominals.Nominal(_, _, underlying, _)
         | TyAlias(_, _, underlying) -> unwrap underlying
         | _ -> ty
 
@@ -241,7 +241,7 @@ module PatternSpace =
             names |> List.map fields.TryFind
         | HNamed(_, count) ->
             match ty |> Option.map Unifier.unalias with
-            | Some (TyNominal(_, _, underlying, _)) when count = 1 -> [ Some underlying ]
+            | Some (RecursiveNominals.Nominal(_, _, underlying, _)) when count = 1 -> [ Some underlying ]
             | _ -> List.replicate count None
         | HCons ->
             let element =
