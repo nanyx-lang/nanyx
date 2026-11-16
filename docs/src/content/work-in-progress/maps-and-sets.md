@@ -91,15 +91,16 @@ These are the choices the docs leave open. The code takes the marked default unt
      `k -> #some(v) | #notFound` is wanted, and the backend wraps it in a closure there.
    - **Recommended:** make a map assignable to its lookup's type, which keeps the tour's promise; until then the
      tour's example is written with `map(string, string)`.
-4. **Builders.** [Collections](../tour/collections#syntax) has square-bracket literals call a target type's `apply`
-   with a `ListBuilder` or `MapBuilder` context, so any type can have literals, and
-   `def unique: set(int) = [1, 2, 2, 3]` would be a set; the tour marks this as planned. Today a map literal is always
-   a `map(k, v)`, and a list literal always a `list(a)`, so a set is made with `set.fromList`. **Recommended:** leave builders for the
-   [type members](./type-members-and-reflection) work; nothing here gets in their way, since `__map` is one place to
-   change.
+4. ~~**Builders.**~~ Decided ([#1543](https://github.com/nanyx-lang/nanyx/issues/1543)): a literal builds any type with
+   an attached `fromArray`, chosen by the expected type (`def unique: set(int) = [1, 2, 2, 3]`) or by the type's name
+   before the brackets (`set[1, 2, 2, 3]`). The compiler passes an `Array` of the items, or of `(key, value)` tuples
+   for `k => v` entries. With neither, a literal is a `list(a)` or a `map(k, v)` as now. This replaces the tour's
+   earlier `apply` and `ListBuilder` design.
 
 Settled as the obvious choice:
 
 - **Spelling.** The type is `map(k, v)`, and its functions are attached to it by that name, `map.get`, as `list.map`
   is to `list(a)` (#653).
-- **No empty literal.** `[]` stays the empty list; the empty map is `map.empty`. A `[=>]` could be added if wanted.
+- **No empty literal.** `[]` stays the empty list; the empty map is `map.empty`. With
+  [#1543](https://github.com/nanyx-lang/nanyx/issues/1543), `[]` with an expected type is that type's empty value, so
+  `def m: map(string, int) = []` is an empty map.
