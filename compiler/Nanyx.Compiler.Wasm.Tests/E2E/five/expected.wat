@@ -247,8 +247,8 @@
   )
   (export "main" (func $main))
 
-  (func $__nanyx_drop_tags_None_Some_int (param $p i32)
-    ;; #None | #Some(int)
+  (func $__nanyx_drop_tags_none_some_int (param $p i32)
+    ;; #none | #some(int)
     local.get $p
     i32.const 1
     i32.and
@@ -267,7 +267,7 @@
     end
   )
 
-  (func $__nanyx_dup_tags_None_Some_int (param $p i32) (result i32)
+  (func $__nanyx_dup_tags_none_some_int (param $p i32) (result i32)
     block $shared
       local.get $p
       i32.const 1

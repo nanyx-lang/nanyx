@@ -42,7 +42,8 @@ module PatternSpace =
         | ListSplatMiddle _
         | RangePattern _
         | GuardPattern _
-        | TagPattern _ -> false
+        | TagPattern _
+        | ArgumentTagPattern _ -> false
 
     /// The tag an arm whose patterns are `patterns` handles in full at `index`: its pattern there is that tag with a
     /// catch-all payload, or none, and its pattern at every other position is a catch-all. Every value with that tag
@@ -157,7 +158,8 @@ module PatternSpace =
             List.foldBack (fun element after -> Cons(spaceOf certain element, after)) elements tail
         | AndPattern parts -> parts |> List.map (spaceOf certain) |> List.reduce (intersect uncertain)
         | ListSplatMiddle _
-        | GuardPattern _ -> uncertain
+        | GuardPattern _
+        | ArgumentTagPattern _ -> uncertain
 
     /// What both `left` and `right` match. `uncertain` stands for what the check cannot tell, as in `spaceOf`: two
     /// spaces with no value in common are that, so an arm asked about is never said to match nothing on their account.

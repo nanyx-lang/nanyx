@@ -104,6 +104,7 @@
     <Compile Include="Linters.fs" />
     <Compile Include="ImportFixes.fs" />
     <Compile Include="ExpressionRewrites.fs" />
+    <Compile Include="CustomPatterns.fs" />
     <Compile Include="BuiltinTypeNames.fs" />
     <Compile Include="TypeNames.fs" />
     <Compile Include="FileImports.fs" />

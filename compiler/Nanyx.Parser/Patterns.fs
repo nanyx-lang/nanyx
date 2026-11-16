@@ -159,20 +159,40 @@ let tagPattern =
                     (pstring "(")
                     (pstring ")")
                     (sepBy1 (ws >>. pattern) (pstring "," .>> ws)))
-        // One pattern, not an and-pattern: `#error data & d` is `(#error data) & d`.
+        // One pattern, not an and-pattern: `#error data & d` is `(#error data) & d`. A keyword after the tag ends the
+        // pattern: `if x is #zero then ...`.
+        let keyword = identifierNoWs >>= fun word -> if Keywords.reserved.Contains word then preturn () else pzero
         let inlinePayload =
-            skipMany1 (skipAnyOf " \t") >>. singlePattern |>> fun p -> [p], p.Span
+            skipMany1 (skipAnyOf " \t") >>. notFollowedBy keyword >>. singlePattern |>> fun p -> [p], p.Span
         // Empty brackets, `#some()`, carry the unit value, as they do in a value.
         let unitPayload = unitPattern |>> fun p -> [p], p.Span
         // Brackets of named fields are the payload's record pattern, as they are its record in a value:
         // `#some(count = 0, ...)` is `#some((count = 0, ...))`.
         let recordPayload = recordMemberPattern |>> fun p -> [p], p.Span
-        opt (attempt unitPayload <|> attempt recordPayload <|> attempt parenPayload <|> attempt inlinePayload) >>= fun patternsOpt ->
-        match patternsOpt with
-        | None -> preturn (TagPattern(tagName, None))
-        | Some ([single], _) -> preturn (TagPattern(tagName, Some single))
-        // Several payload patterns match the payload as a tuple, written as the parenthesised list.
-        | Some (multiple, span) -> preturn (TagPattern(tagName, Some (Pattern.at span (TuplePattern multiple))))
+        let payloadOf (patterns, span) =
+            match patterns with
+            | [ single ] -> single
+            // Several payload patterns match the payload as a tuple, written as the parenthesised list.
+            | multiple -> Pattern.at span (TuplePattern multiple)
+        let payload =
+            opt (attempt unitPayload <|> attempt recordPayload <|> attempt parenPayload <|> attempt inlinePayload)
+            |>> fun patternsOpt -> TagPattern(tagName, Option.map payloadOf patternsOpt)
+        // A custom pattern's arguments, before the payload's brackets (see `ArgumentTagPattern`). Several are a tuple.
+        let arguments =
+            withSpan (between (pstring "(") (pstring ")") (sepBy1 (ws >>. expression .>> ws) (pstring "," .>> ws)))
+            |>> fun (values, span) ->
+                match values with
+                | [ single ] -> single
+                | multiple -> Expression.at span (TupleExpr multiple)
+        if PatternSyntax.isPatternTag tagName then
+            choice [
+                attempt (arguments .>>. (attempt unitPayload <|> attempt recordPayload <|> parenPayload))
+                |>> fun (args, patterns) -> ArgumentTagPattern(tagName, args, Some (payloadOf patterns))
+                attempt (payload .>> notFollowedBy (pstring "("))
+                arguments |>> fun args -> ArgumentTagPattern(tagName, args, None)
+            ]
+        else
+            payload
     ))
 
 /// Fills `pattern`. Called by `Api`: a file's top-level code runs only when one of its own values is first used.

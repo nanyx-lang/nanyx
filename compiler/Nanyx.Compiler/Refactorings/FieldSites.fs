@@ -157,7 +157,9 @@ let rec private patternFields (typed: TypedModule) (ty: Ty option) (pattern: Pat
     | ListPattern(patterns, None) -> patterns |> List.collect (patternFields typed None)
     | ListPattern(patterns, Some rest) -> patterns @ [ rest ] |> List.collect (patternFields typed None)
     | ListSplatMiddle(before, after) -> before @ after |> List.collect (patternFields typed None)
+    | ArgumentTagPattern(_, _, Some payload) -> patternFields typed None payload
     | TagPattern(_, None)
+    | ArgumentTagPattern(_, _, None)
     | GuardPattern _
     | RangePattern _
     | LiteralPattern _
