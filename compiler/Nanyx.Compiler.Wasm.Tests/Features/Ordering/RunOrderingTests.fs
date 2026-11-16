@@ -123,23 +123,6 @@ let ``Run - a function that orders its type variable orders each type it is call
     |> assertRan "T\nT\nT\nT\nT\n"
 
 [<Fact>]
-let ``Run - an Ord loaded with use changes how its block orders`` () =
-    comparing
-        [ "def sortedBackwards: list(string) -> list(string) = { xs ->"
-          "  use Ord(string)(compare = { a, b -> string.compare(b, a) })"
-          "  list.sort(xs)"
-          "}"
-          "def lessBackwards: string, string -> bool = { a, b ->"
-          "  use Ord(string)(compare = { x, y -> string.compare(y, x) })"
-          "  a < b"
-          "}" ]
-        [ """sortedBackwards(["a", "c", "b"]) == ["c", "b", "a"]"""
-          """lessBackwards("b", "a")"""
-          "\"b\" < \"a\"" ]
-    |> runSource
-    |> assertRan "T\nT\nF\n"
-
-[<Fact>]
 let ``Each type ordered gets one ordering function, and its parts their own`` () =
     let wat =
         transpileWat (

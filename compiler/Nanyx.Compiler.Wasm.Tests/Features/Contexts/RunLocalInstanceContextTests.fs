@@ -61,14 +61,15 @@ def main = {
 
 [<Fact>]
 let ``Run - a call to a local function finds an instance a use puts in scope`` () =
-    let source = showContext + """@entry
+    let source = showContext + """type Bare = (n: int)
+@entry
 def main = {
   def f: [Show(b)] b -> string = { x -> describe(x) }
   println(f(Point(x = 1, y = 2)))
-  use Show(Point)(show = { p -> "point" }) in println(f(Point(x = 1, y = 2)))
+  use Show(Bare)(show = { b -> "bare" }) in println(f(Bare(n = 1)))
 }
 """
-    runSource (normalized source) |> assertRan "(1, 2)\npoint\n"
+    runSource (normalized source) |> assertRan "(1, 2)\nbare\n"
 
 [<Fact>]
 let ``Run - a local function that requires a context at a type it names`` () =

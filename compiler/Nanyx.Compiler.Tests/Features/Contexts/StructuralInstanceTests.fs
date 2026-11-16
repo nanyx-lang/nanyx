@@ -155,9 +155,10 @@ def b = listed(1, 2)
 [<Fact>]
 let ``A hole of a structure writes a part through a ToString loaded with use in its block`` () =
     let typed =
-        compileClean """def s = {
-  use ToString(int)(toString = { p -> "£{p}" })
-  "{[1, 2]}"
+        compileClean """type Cents = protected int
+def s = {
+  use ToString(Cents)(toString = { p -> "£" })
+  "{[Cents(1), Cents(2)]}"
 }
 """
     let loaded =
@@ -165,9 +166,9 @@ let ``A hole of a structure writes a part through a ToString loaded with use in 
         |> Map.values
         |> Seq.concat
         |> Seq.exists (function
-            | Some (InstanceInScope(Kind (TypeApply("ToString", [ Kind (TypeName "int") ])), _)) -> true
+            | Some (InstanceInScope(Kind (TypeApply("ToString", [ Kind (TypeName "Cents") ])), _)) -> true
             | _ -> false)
-    Assert.True(loaded, "The derived toString is not passed the ToString(int) in scope")
+    Assert.True(loaded, "The derived toString is not passed the ToString(Cents) in scope")
 
 [<Fact>]
 let ``A local function can interpolate a structure of a variable it is generic in`` () =

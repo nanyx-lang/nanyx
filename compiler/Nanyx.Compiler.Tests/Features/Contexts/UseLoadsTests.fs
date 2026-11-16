@@ -105,28 +105,28 @@ def named: [Log] () -> () = { context l ->
 
 [<Fact>]
 let ``A context is still served by a loaded instance of a larger one that has its members`` () =
-    // `add` requires `Add(int)`, and is passed the `Num(int)` the use loads, which has every member an `Add(int)` has,
-    // rather than `int`'s own.
+    // `add` requires `Add(string)`, and is passed the `Num(string)` the use loads, which has every member an
+    // `Add(string)` has. `string` has no `Add` of its own for the use to replace.
     let typed =
         compileClean (
             """def add: [Add(a)] a, a -> a = { x, y -> x + y }
 
 def main = {
-  use Num(int)(
-    zero = 0
-    `+` = { x, y -> x * 10 + y }
-    `-` = { x, y -> x - y }
-    negate = { x -> 0 - x }
-    `*` = { x, y -> x * y }
-    `/` = { x, y -> x / y }
-    `%` = { x, y -> x % y }
-    fromInt = { n -> n }
+  use Num(string)(
+    zero = ""
+    `+` = { x, y -> x ++ y }
+    `-` = { x, y -> x }
+    negate = { x -> x }
+    `*` = { x, y -> x }
+    `/` = { x, y -> x }
+    `%` = { x, y -> x }
+    fromInt = { n -> "n" }
   )
-  add(1, 2)
+  add("1", "2")
 }
 """
                 .ReplaceLineEndings "\n")
-    Assert.Equal("() -> int", Unifier.tyToString typed.Types.["main"])
+    Assert.Equal("() -> string", Unifier.tyToString typed.Types.["main"])
     match instancesOf typed with
-    | [ InstanceInScope(Kind (TypeApply ("Num", [ Kind (TypeName "int") ])), FromUse _) ] -> ()
-    | other -> failwith $"Expected the Num(int) the use loads, got %A{other}"
+    | [ InstanceInScope(Kind (TypeApply ("Num", [ Kind (TypeName "string") ])), FromUse _) ] -> ()
+    | other -> failwith $"Expected the Num(string) the use loads, got %A{other}"

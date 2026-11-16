@@ -164,11 +164,10 @@ def t = Point(x = 3, y = 4) \describe
     Assert.Equal<ContextInstance option list list>([ synthesized; synthesized ], instancesIn source)
 
 [<Fact>]
-let ``A loaded instance wins over synthesis, and a generic function passes its own on`` () =
+let ``A loaded instance is found at a call, and a generic function passes its own on`` () =
     let source =
         showContext +
-        normalized """def Point.show: Point -> string = { p -> "{p.x}" }
-def twice: [Show(a)] a -> string = { v -> describe(v) ++ describe(v) }
+        normalized """def twice: [Show(a)] a -> string = { v -> describe(v) ++ describe(v) }
 def main = {
   use Show(Point)(show = { p -> "p" })
   describe(Point(x = 1, y = 2))

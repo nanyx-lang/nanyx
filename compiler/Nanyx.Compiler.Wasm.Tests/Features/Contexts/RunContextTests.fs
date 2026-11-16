@@ -114,24 +114,24 @@ def main = {
     runSource source |> assertRan "3cm & three\n42\n"
 
 [<Fact>]
-let ``Run - a use of a parameterised context's instance is nearer than the type's own member`` () =
-    // `int` has its own `+`, which an instance a use loads is nearer than (#581).
+let ``Run - a use gives a parameterised context's instance to a type with none of its own`` () =
+    // `string` has no `+` of its own, so a `use` can give it one (#581).
     let source =
         normalized """context Add(a) = (`+`: (a, a) -> a)
 
 def add: [Add(a)] a, a -> a = { x, y -> `+`(x, y) }
 
 def statement = {
-  use Add(int)(`+` = { x, y -> x * 10 + y })
-  add(1, 2)
+  use Add(string)(`+` = { x, y -> x ++ "*" ++ y })
+  add("1", "2")
 }
 
-def expression = { use Add(int)(`+` = { x, y -> x * 100 + y }) in add(3, 4) }
+def expression = { use Add(string)(`+` = { x, y -> x ++ "+" ++ y }) in add("3", "4") }
 
 @entry
 def main = { println("{statement()} {expression()}") }
 """
-    runSource source |> assertRan "12 304\n"
+    runSource source |> assertRan "1*2 3+4\n"
 
 [<Fact>]
 let ``Run - use ... in loads an instance for its body only (#320)`` () =
@@ -178,7 +178,7 @@ def main = {
     runSource source |> assertRan "12\n8\n"
 
 [<Fact>]
-let ``Run - a call synthesizes a context's instance from attached definitions, and a use wins over it`` () =
+let ``Run - a call synthesizes a context's instance from attached definitions`` () =
     let source =
         normalized """context Show(a) = (show: a -> string)
 
@@ -204,13 +204,11 @@ def main = {
   println(both(Money(5), p))
   println(twice(p))
   println(p \describe)
-  use Show(Point)(show = { q -> "nearer {q.y}" })
-  println(describe(p))
   println(describe(Money(7)))
 }
 """
     runSource source
-    |> assertRan "(1, 2)\n<(1, 2)>\n5p & (1, 2)\n<(1, 2)><(1, 2)>\n<(1, 2)>\n<nearer 2>\n<7p>\n"
+    |> assertRan "(1, 2)\n<(1, 2)>\n5p & (1, 2)\n<(1, 2)><(1, 2)>\n<(1, 2)>\n<7p>\n"
 
 [<Fact>]
 let ``Run - contexts through the core IR, with arguments that store on the way`` () =

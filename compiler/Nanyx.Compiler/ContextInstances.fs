@@ -392,6 +392,58 @@ let private derivedInstance
         | StructuralInstances.HoldsFunction held -> [ missingContext (InterpolationHoles.holdsFunction calleeName argTys held) ]
         | StructuralInstances.OpenToCaller -> [ missingContext (InterpolationHoles.openToCaller calleeName argTys.Head annotatedDef) ]))
 
+/// Whether the type an instance of `ctxName` at `argTys` is for, its first argument, has an instance of its own, which no
+/// `use` can replace: one built from its attached definitions, derived from its parts, or the compiler's own. A type
+/// with variables in it has none of its own, since what the variables are is not decided where the `use` is. `call`
+/// and `span` are the `use`'s, which nothing is recorded for: what finding the instance would add is dropped.
+let private hasOwnInstance (env: TypeEnv) (state: InferState) (call: NodeId) (span: SourceSpan) (ctxName: Identifier) (argTys: Ty list) : bool =
+    match argTys with
+    | forType :: _ when (TypeEnv.freeTyVars forType).IsEmpty ->
+        match wellKnownInstanceAtCall env ctxName argTys (fun _ -> false) with
+        | Some (_, (WellKnownContexts.Attached | WellKnownContexts.BuiltIn)) -> true
+        | Some _ -> false
+        | None ->
+            (ctxName = InterpolationHoles.context && InterpolationHoles.hasBuiltInInstance forType)
+            || InterpolationHoles.passesBuiltIn env ctxName argTys
+            || (derivedInstance env state Set.empty (fun _ -> None) None ctxName call span ctxName argTys |> Option.exists Result.isOk)
+            || (canSynthesize ctxName argTys && synthesizeInstance env state ctxName ctxName argTys span |> Result.isOk)
+    | _ -> false
+
+/// What a type's own instance of `ctxName` is called in the error for a `use` that would replace it: the member, for a
+/// context of one, and the context's name for any other.
+let private ownInstanceText (state: InferState) (ctxName: Identifier) (argTys: Ty list) =
+    match contextMemberTypes state ctxName argTys with
+    | Some [ memberName, _ ] -> $"`{memberName}`"
+    | _ -> $"its own {ctxName}"
+
+/// What else to do for a different instance of `ctxName` than a type's own, in the error for a `use` that would replace it.
+let private ownInstanceAdvice (ctxName: Identifier) =
+    if ctxName = EqualityOperators.context then
+        "For a different equality, wrap the value in a protected type with its own `==`, or pass the comparison to a `...By` function"
+    elif ctxName = WellKnownContexts.ordering.Context then
+        "For a different order, wrap the value in a protected type with its own `compare`, or pass the comparison to a `...By` function"
+    elif ctxName = WellKnownContexts.hashing.Context then
+        "For a different hash, wrap the value in a protected type with its own `==` and `hash`"
+    elif ctxName = InterpolationHoles.context then
+        "To write it differently, call a function in the hole, or wrap the value in a protected type with its own `toString`"
+    else
+        $"For a different {ctxName}, wrap the value in a protected type with its own definitions"
+
+/// The errors for `value`, loaded with `use` into `env` to give `withUse`, for each instance it loads for a type that has
+/// its own (see `hasOwnInstance`): a `use` can't replace a type's own instance, so `1 == 2` reads `int`'s `==`
+/// wherever it is written, and a set built in one place is read with the same `Hash` in another.
+let internal ownInstanceErrors (env: TypeEnv) (withUse: TypeEnv) (state: InferState) (value: Expression) : Diagnostic list =
+    withUse.Instances
+    |> List.filter (fun instance -> not (env.Instances |> List.contains instance))
+    |> List.choose (fun instance ->
+        match resolveSoFar state instance.Context with
+        | TyApply(ctxName, (forType :: _ as argTys)) when hasOwnInstance env state value.Id value.Span ctxName argTys ->
+            let message =
+                $"'{WellKnownContexts.display forType}' already has {ownInstanceText state ctxName argTys}: a `use` can't replace it. {ownInstanceAdvice ctxName}"
+            Some (Diagnostics.at DiagnosticCodes.OwnInstanceReplaced value.Span message)
+        | _ -> None)
+    |> List.distinctBy _.Message
+
 /// The instance of the well-known context `wellKnown` the operator `op` at `span` reads on values of a type, other than
 /// the compiler's own (see `WellKnownContexts.InstanceOf`): one in scope, or else one built from the member attached to
 /// a type that is not a built-in one (see `WellKnownContexts.isBuiltIn`).

@@ -100,14 +100,17 @@ def b = list.sort([v(2), v(1)])""")
     Assert.Contains(InstanceSynthesized [ "compare", "Version.compare" ], instancesOf typed)
 
 [<Fact>]
-let ``An Ord loaded with use orders a built-in type in its block`` () =
-    let typed =
-        compileClean (
-            "def a = {\n  use Ord(string)(compare = { a, b -> string.compare(b, a) })\n  \"a\" < \"b\"\n}\n" +
-            "def b = \"a\" < \"b\"\n")
-    match instancesOf typed with
-    | [ InstanceInScope({ Kind = TypeApply("Ord", _) }, _) ] -> ()
-    | other -> failwith $"Unexpected instances: %A{other}"
+let ``An Ord loaded with use can't replace a built-in type's order`` () =
+    let source =
+        """
+def a = {
+  use Ord(string)(compare = { a, b -> string.compare(b, a) })
+  "a" < "b"
+}
+"""
+    let code, at = singleError (normalized source)
+    Assert.Equal(DiagnosticCodes.OwnInstanceReplaced.Code, code)
+    Assert.Equal("Ord(string)(compare = { a, b -> string.compare(b, a) })", at)
 
 [<Fact>]
 let ``List.sortBy takes a key of any type with an order`` () =
