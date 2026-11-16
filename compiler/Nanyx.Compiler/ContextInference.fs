@@ -55,7 +55,12 @@ module internal ContextInference =
             | TyVar v -> names |> Map.tryFind v.Id |> Option.map TypeVar
             | TyPrimitive "unit" -> Some TypeUnit
             | TyPrimitive "?error" -> None
-            | TyNominal(nominal, _, _, _) -> Some (TypeName nominal.Name)
+            // A nominal type's arguments are written when they have no variables in them, `Box(int)`: `varsInOrder`
+            // leaves out the variables of one, so `names` never names them.
+            | TyNominal(nominal, args, _, _) ->
+                let args = args |> List.filter (function FunctionContexts.ScopedContext _ -> false | _ -> true)
+                if args.IsEmpty || not (args |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty)) then Some (TypeName nominal.Name)
+                else all args |> Option.map (fun args -> TypeApply(nominal.Name, args))
             | TyPrimitive name
             | TyAlias(name, [], _) -> Some (TypeName name)
             | FunctionContexts.CellType(held, _) -> typeExprOf names held |> Option.map (fun held -> TypeApply(CellPassingSyntax.typeName, [ held ]))
