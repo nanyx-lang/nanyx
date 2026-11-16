@@ -278,4 +278,15 @@ def somes: list(#some(a) | r) -> list(a)
 
 The values of the `#some`s in `options`, in order. The other tags are dropped.
 
+## `allSome`
+
+```nanyx fragment
+def allSome: list(#some(a) | r) -> #some(list(a)) | r
+```
+
+The values of `options`, in order, if every element is `#some`; otherwise the first element that
+isn't, as it is. It works on results too, giving the first `#error`, and turns what parses a list
+of inputs into one result: `["1", "2", "x"] \list.map(int.fromString) \allSome` is `#invalidInt`.
+Stack-safe: it works on a list of any length.
+
 <!-- End of the generated reference. -->
