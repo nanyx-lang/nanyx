@@ -6,18 +6,22 @@ open System.Text.RegularExpressions
 open Parser.Program
 open Parser.Program.DataValues
 
-/// A package another depends on, in a directory on disk, `(package = "acme.util", path = "../util")` in
-/// `dependencies`, or in a GitHub repository, `(package = "acme.web", github = "acme/web", rev = "...")`.
+/// A package another depends on: in a directory on disk, `(package = "acme.util", path = "../util")` in
+/// `dependencies`; from the package index, at a version, `(package = "acme.web", version = "1.2")`; or in a GitHub
+/// repository, `(package = "acme.web", github = "acme/web", rev = "...")`.
 type Dependency =
     { /// The package's name, which its own manifest must give it too.
       Name: string
-      /// The full path of the directory its manifest is in; empty for one on GitHub, which is in the directory it is
-      /// fetched to.
+      /// The full path of the directory its manifest is in; empty for one from the index or on GitHub, which is in the
+      /// directory it is unpacked or fetched to.
       Directory: string
       /// Where its `package` is written.
       NameSpan: SourceSpan
-      /// Where its `path`, or its `github`, is written.
+      /// Where its `path`, its `version` or its `github` is written.
       PathSpan: SourceSpan
+      /// The versions accepted of a package from the index; none for one on disk, on GitHub, or shipped with the
+      /// compiler.
+      Version: VersionRequirement option
       /// The repository and commit of a package on GitHub; none for one on disk.
       GitHub: GitHubReference option }
 
@@ -374,7 +378,7 @@ module Manifest =
                 | Some packageField, None, None ->
                     match problems.Text "a dependency" fields "package" namePattern nameRule, commit with
                     | Some name, Some _ ->
-                        Some(Choice1Of2 { Name = name; Directory = ""; NameSpan = packageField.Value.Location; PathSpan = github.Value.Location; GitHub = Some reference })
+                        Some(Choice1Of2 { Name = name; Directory = ""; NameSpan = packageField.Value.Location; PathSpan = github.Value.Location; Version = None; GitHub = Some reference })
                     | _ -> None
                 | None, Some _, Some _ ->
                     match problems.Text "a dependency" fields "module" modulePattern "a module name: retry, or acme.retry", commit with
@@ -388,8 +392,8 @@ module Manifest =
             None
 
     /// The packages the manifest's `dependencies` lists, each in a directory relative to `root`, one the compiler ships,
-    /// named at the compiler's version exactly, or one on GitHub; and the files on GitHub it lists, each a module of the
-    /// package. Any other version names a package to download, which isn't supported yet. `pin` finds the commit for the
+    /// named at the compiler's version exactly, one from the index, at a version, or one on GitHub; and the files on
+    /// GitHub it lists, each a module of the package. `pin` finds the commit for the
     /// fix of a GitHub reference that is not pinned to one.
     let private readDependencies (problems: Problems) (pin: Pin) (root: string) (value: DataValue) : Dependency list * FileReference list =
         let readPackage (fields: DataField list) (value: DataValue) : Dependency option =
@@ -418,16 +422,30 @@ module Manifest =
                           Directory = ShippedPackages.directoryOf shipped.Value
                           NameSpan = (DataValue.field "package" fields).Value.Value.Location
                           PathSpan = version.Value.Location
+                          Version = None
                           GitHub = None }
                 | None -> None
-            | _, Some version ->
-                problems.Add
-                    DiagnosticCodes.UnsupportedManifestField
-                    version.NameSpan
-                    $"a dependency's version names a package to download, but packages can't be downloaded yet: give the directory the package is in, {example}"
-                None
+            | None, Some version ->
+                match version.Value.Data, name with
+                | DataString written, Some name ->
+                    match VersionRequirement.tryParse written with
+                    | Some requirement ->
+                        Some
+                            { Name = name
+                              Directory = ""
+                              NameSpan = (DataValue.field "package" fields).Value.Value.Location
+                              PathSpan = version.Value.Location
+                              Version = Some requirement
+                              GitHub = None }
+                    | None ->
+                        problems.Add DiagnosticCodes.InvalidManifestValue version.Value.Location $"""a dependency's version "{written}" must be {VersionRequirement.rule}"""
+                        None
+                | DataString _, None -> None
+                | _ ->
+                    problems.Add DiagnosticCodes.InvalidManifestValue version.Value.Location $"a dependency's version must be a string, {VersionRequirement.rule}, not {DataValue.describe version.Value}"
+                    None
             | None, None ->
-                problems.Add DiagnosticCodes.MissingManifestField value.Location $"a dependency has no path, the directory the package is in: {example}"
+                problems.Add DiagnosticCodes.MissingManifestField value.Location ($"""a dependency has no path or version: give the directory the package is in, {example}, or the version to download, version = "1.2" """.TrimEnd())
                 None
             | Some path, None ->
                 match name, path.Value.Data with
@@ -437,6 +455,7 @@ module Manifest =
                           Directory = Path.GetFullPath(Path.Combine(root, directory))
                           NameSpan = (DataValue.field "package" fields).Value.Value.Location
                           PathSpan = path.Value.Location
+                          Version = None
                           GitHub = None }
                 | _, DataString _ -> None
                 | _ ->

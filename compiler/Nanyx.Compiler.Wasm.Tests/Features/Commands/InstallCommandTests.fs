@@ -56,7 +56,7 @@ let ``A package named by its version is written, but can't be downloaded yet`` (
     let app = appWith directory plain
     let outcome = nanyxIn app [ "install"; "acme.json"; "--version"; "1.2.0" ]
     Assert.Equal(
-        "error: acme.json 1.2.0 is named by its version, but packages can't be downloaded yet: give the directory it is in, with path\n",
+        "error: acme.json 1.2.0 is named by its version, but it isn't locked in nanyx.lock, and choosing a version to lock isn't supported yet: give the directory it is in, with path\n",
         outcome.StandardError.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Contains("dependencies = [(package = \"acme.json\", version = \"1.2.0\")]", manifestOf app)
