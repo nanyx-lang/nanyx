@@ -71,6 +71,13 @@ type with content.
   `Console`) has a fix that writes `C` after the contexts the type writes, separated by `,`, or in front of the type
   as `[C] ` when it writes none. It reads where the type is written from `InferState.WrittenTypes`. A context the
   def could load with `use` instead is only named in the message.
+- **A look-alike character is named** (`LookAlikes.fs`, the parser's table in `Confusables.fs`;
+  [#1480](https://github.com/nanyx-lang/nanyx/issues/1480)): where a parse fails at a character that looks like one
+  Nanyx reads, such as U+2212 for `-`, NYX0037 names it, with a fix that writes what it looks like, in place of the
+  syntax error. A curly quote and its pair on the line are one error. The text is parsed again with the character
+  written so, until it parses or fails somewhere else, which is reported as the syntax error it is. A look-alike in a
+  string or a comment never fails a parse, so it is left alone. Type errors are not found until the look-alikes are
+  fixed, as for any syntax error.
 
 # The error reference
 

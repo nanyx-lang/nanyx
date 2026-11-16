@@ -110,6 +110,7 @@
     <Compile Include="PartialModules.fs" />
     <Compile Include="WorkflowDesugaring.fs" />
     <Compile Include="DeferredErrors.fs" />
+    <Compile Include="LookAlikes.fs" />
     <Compile Include="CheckedModule.fs" />
     <Compile Include="BinaryData.fs" />
     <Compile Include="CheckedLibrary.fs" />
