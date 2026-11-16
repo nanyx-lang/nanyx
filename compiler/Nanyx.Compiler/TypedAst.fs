@@ -363,4 +363,7 @@ type TypedModule =
       InlinedExprTypes: Map<NodeId, Ty>
       InlinedCalleeTypes: Map<NodeId, Ty>
       /// A script's values that need a context, which run in its entry point (see `InferState.ScriptEntryValues`).
-      ScriptEntryValues: Set<Identifier> }
+      ScriptEntryValues: Set<Identifier>
+      /// The names the module's own nodes declare, as the parser recorded them, each where it is written: a record's
+      /// fields and a context's members among them, which have no nodes of their own (see `DeclaredNames`).
+      Declared: DeclaredNames }

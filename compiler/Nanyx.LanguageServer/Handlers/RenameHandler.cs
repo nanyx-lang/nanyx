@@ -16,10 +16,14 @@ namespace Nanyx.LanguageServer.Handlers;
 /// type-checked: in every file of its package, compiled as <see cref="DocumentStore.CompilePackage"/> compiles them, or
 /// in the document alone for a file in no package. The renamed files are compiled before the edit is given, and a
 /// rename that would make any name refer to something else is refused. A refusal is an error response with its reason, which the editor shows.
+/// Renaming a module renames its file too, where the file is named for it and the client can rename files.
 /// </summary>
 public sealed class RenameHandler : RenameHandlerBase
 {
     private readonly DocumentStore _documents;
+
+    /// <summary>Whether the client can rename a file in a <c>WorkspaceEdit</c> (<c>workspace.workspaceEdit.resourceOperations</c>).</summary>
+    private bool _renamesFiles;
 
     public RenameHandler(DocumentStore documents)
     {
@@ -63,19 +67,37 @@ public sealed class RenameHandler : RenameHandlerBase
         // A file's edits are placed in the text it was renamed in: the editor's, for an open file.
         var sources = package?.ToDictionary(file => file.Path, file => file.Source, DocumentStore.FilePaths)
             ?? new Dictionary<string, string>(DocumentStore.FilePaths) { [document.FileName] = document.Text };
+        DocumentUri UriOf(string path) => path == document.FileName ? uri : _documents.TryGetFile(path)?.Uri ?? DocumentUri.FromFileSystemPath(path);
         var changes = new Dictionary<DocumentUri, IEnumerable<TextEdit>>();
-        foreach (var (path, edits) in result.ResultValue)
+        foreach (var (path, edits) in result.ResultValue.Edits)
         {
-            var fileUri = path == document.FileName ? uri : _documents.TryGetFile(path)?.Uri ?? DocumentUri.FromFileSystemPath(path);
             var positions = path == document.FileName ? document.Positions : new SourcePositions(sources[path]);
-            changes[fileUri] = edits.Select(edit => new TextEdit
+            changes[UriOf(path)] = edits.Select(edit => new TextEdit
             {
                 Range = positions.ToRange(edit.Span.Start, edit.Span.End),
                 NewText = edit.NewText
             }).ToList();
         }
 
-        return new WorkspaceEdit { Changes = changes };
+        // A module's file is renamed with it only where the editor can rename files; otherwise only its text changes.
+        var renamedFiles = result.ResultValue.Files;
+        if (renamedFiles.IsEmpty || !_renamesFiles)
+        {
+            return new WorkspaceEdit { Changes = changes };
+        }
+
+        var operations = changes
+            .Select(change => new WorkspaceEditDocumentChange(new TextDocumentEdit
+            {
+                TextDocument = new OptionalVersionedTextDocumentIdentifier { Uri = change.Key },
+                Edits = new TextEditContainer(change.Value)
+            }))
+            .Concat(renamedFiles.Select(renamed => new WorkspaceEditDocumentChange(new RenameFile
+            {
+                OldUri = UriOf(renamed.Item1),
+                NewUri = DocumentUri.FromFileSystemPath(renamed.Item2)
+            })));
+        return new WorkspaceEdit { DocumentChanges = new Container<WorkspaceEditDocumentChange>(operations) };
     }
 
     /// <summary>The package of <paramref name="file"/> compiled again with the renamed texts, in the order they are given.</summary>
@@ -93,8 +115,13 @@ public sealed class RenameHandler : RenameHandlerBase
 
     protected override RenameRegistrationOptions CreateRegistrationOptions(
         RenameCapability capability,
-        ClientCapabilities clientCapabilities) =>
-        new() { DocumentSelector = TextDocumentSyncHandler.Selector, PrepareProvider = true };
+        ClientCapabilities clientCapabilities)
+    {
+        var workspaceEdit = clientCapabilities.Workspace?.WorkspaceEdit.Value;
+        _renamesFiles = workspaceEdit is { DocumentChanges: true }
+            && workspaceEdit.ResourceOperations?.Contains(ResourceOperationKind.Rename) == true;
+        return new() { DocumentSelector = TextDocumentSyncHandler.Selector, PrepareProvider = true };
+    }
 }
 
 /// <summary>

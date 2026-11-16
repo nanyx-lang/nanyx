@@ -67,24 +67,41 @@ module PackageModules =
     /// The module name the file at `filePath` declares as it is on disk.
     let private declaredName (filePath: string) = declaredModule filePath |> Option.map fst
 
+    /// `modules` with the modules `declared` gives its files, each module name and whether it is exported with the file
+    /// that declares it. A module split across files is public when one of them exports it.
+    let private declaring (declared: ((string * bool) * string) list) (modules: PackageModules) =
+        { modules with
+            PublicModules = declared |> List.filter (fun ((_, exported), _) -> exported) |> List.map (fst >> fst) |> List.distinct
+            Modules =
+                declared
+                |> List.groupBy (fst >> fst)
+                |> List.map (fun (moduleName, declarations) -> moduleName, declarations |> List.map snd)
+                |> Map.ofList }
+
     /// The modules of the package called `name`, whose manifest is in `root`, whose source files are `files` and whose
     /// `@entry` runs under `host`, with the modules it exports, without dependencies. A module split across files is
     /// public when one of them exports it.
     let ofFiles (name: string) (root: string) (host: Host option) (files: string list) : PackageModules =
-        let declared = files |> List.choose (fun file -> declaredModule file |> Option.map (fun moduleName -> moduleName, file))
         { Package = name
           Host = host
           HostPackage = None
           Root = root
           Files = files
-          PublicModules = declared |> List.filter (fun ((_, exported), _) -> exported) |> List.map (fst >> fst) |> List.distinct
+          PublicModules = []
           Dependencies = []
           Script = false
-          Modules =
-            declared
-            |> List.groupBy (fst >> fst)
-            |> List.map (fun (moduleName, declarations) -> moduleName, declarations |> List.map snd)
-            |> Map.ofList }
+          Modules = Map.empty }
+        |> declaring (files |> List.choose (fun file -> declaredModule file |> Option.map (fun moduleName -> moduleName, file)))
+
+    /// `modules` with the names its own files declare read from the texts `readFile` gives them rather than from disk:
+    /// an editor's unsaved text, or a rename's.
+    let reading (readFile: string -> string) (modules: PackageModules) : PackageModules =
+        modules
+        |> declaring (
+            modules.Files
+            |> List.choose (fun file ->
+                parse file (readFile file)
+                |> Option.bind (fun (declaration, exported, _) -> declaration |> Option.map (fun (moduleName, _) -> (moduleName, exported), file))))
 
     /// Whether `filePath` is one of the package's source files.
     let contains (modules: PackageModules) (filePath: string) =

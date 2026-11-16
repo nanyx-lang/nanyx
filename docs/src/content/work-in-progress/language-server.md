@@ -225,7 +225,9 @@ what the compiler keeps: exact spans, resolved names and types.
   name and every use of it in the files of the document's package, compiled as find references compiles them (or in
   the document alone, for a file in no package), refusing with a reason anything that would change what a name
   refers to (see [Refactorings](./refactorings#rename)). The renamed package is compiled again, with the renamed
-  texts read in place of the files', before the edit is sent.
+  texts read in place of the files', before the edit is sent. A module's rename renames its file with a `RenameFile`
+  operation in the edit's `documentChanges`, after the text edits, where the client says it can
+  (`workspace.workspaceEdit.resourceOperations`); otherwise the edit is the texts alone.
 - **Quick fixes** ([#284](https://github.com/nanyx-lang/nanyx/issues/284)). Each fix of a diagnostic in the
   requested range is a `quickfix` code action: its edits applied to the document, carrying the diagnostic as
   published, with a diagnostic's first fix preferred. Linters offer fixes (`default/unusedBindings` removes an

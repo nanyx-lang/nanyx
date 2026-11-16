@@ -5,7 +5,7 @@ open NyxCompiler
 open NyxCompiler.Refactorings
 open Nanyx.Compiler.Tests.TestSupport
 
-// Rename: a name and every use of it, within the module.
+// Rename: a name and every use of it, within the module: a symbol, a context's member or a record's field.
 
 /// `marked` without its `$$`, and where the `$$` was.
 let private unmark (marked: string) =
@@ -168,6 +168,159 @@ let ``A standard library name can't be renamed`` () =
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     match Rename.prepare Rename.Module "" source result offset with
     | Some (Error reason) -> Assert.StartsWith("It is declared in another module", reason)
+    | other -> failwithf "expected a refusal, got %A" other
+
+[<Fact>]
+let ``A context's member is renamed where an instance of the context is written`` () =
+    Assert.Equal(
+        normalized
+            """context Log = (write: string -> ())
+
+def hello: [Log] () -> () = { () -> write("hi") }
+
+def run = use Log(write = { m -> () }) in hello()
+""",
+        renamedTo
+            "write"
+            """context Log = (l$$og: string -> ())
+
+def hello: [Log] () -> () = { () -> log("hi") }
+
+def run = use Log(log = { m -> () }) in hello()
+""")
+
+[<Fact>]
+let ``A context's member is renamed from the instance that provides it`` () =
+    Assert.Equal(
+        normalized
+            """context Log = (write: string -> ())
+
+def hello: [Log] () -> () = { () -> write("hi") }
+
+def run = use Log(write = { m -> () }) in hello()
+""",
+        renamedTo
+            "write"
+            """context Log = (log: string -> ())
+
+def hello: [Log] () -> () = { () -> log("hi") }
+
+def run = use Log(lo$$g = { m -> () }) in hello()
+""")
+
+[<Fact>]
+let ``A parameterised context's member is renamed in the instance a use writes`` () =
+    Assert.Equal(
+        normalized
+            """context Show(a) = (describe: a -> string)
+
+def say: [Show(int)] int -> string = { n -> describe(n) }
+
+def run = use Show(int)(describe = { n -> "n" }) in say(1)
+""",
+        renamedTo
+            "describe"
+            """context Show(a) = (sh$$ow: a -> string)
+
+def say: [Show(int)] int -> string = { n -> show(n) }
+
+def run = use Show(int)(show = { n -> "n" }) in say(1)
+""")
+
+[<Fact>]
+let ``A context's member renamed to another member's name is refused`` () =
+    Assert.StartsWith(
+        "The renamed module would not compile",
+        refusedBecause
+            "warn"
+            """context Log = (lo$$g: string -> (), warn: string -> ())
+
+def run = use Log(log = { m -> () }, warn = { m -> () }) in ()
+""")
+
+let private points =
+    """type Point = (x: int, y: int)
+type Size = (x: int)
+def origin: Point = (x = 0, y = 0)
+def unit: Size = (x = 1)
+def right = { (p: Point) -> p with x = p.x + 1 }
+def onAxis = { (p: Point) -> match p
+  | (x = 0, y = _) -> true
+  | _ -> false }
+"""
+
+[<Fact>]
+let ``A record's field is renamed in its type, constructions, reads, updates and patterns`` () =
+    Assert.Equal(
+        normalized
+            """type Point = (across: int, y: int)
+type Size = (x: int)
+def origin: Point = (across = 0, y = 0)
+def unit: Size = (x = 1)
+def right = { (p: Point) -> p with across = p.across + 1 }
+def onAxis = { (p: Point) -> match p
+  | (across = 0, y = _) -> true
+  | _ -> false }
+""",
+        renamedTo "across" (points.Replace("type Point = (x", "type Point = (x$$")))
+
+[<Fact>]
+let ``A record's field is renamed from where it is read`` () =
+    Assert.Equal(
+        normalized (points.Replace("(x: int, y", "(across: int, y").Replace("x = 0, y = 0", "across = 0, y = 0").Replace("x = p.x", "across = p.across").Replace("(x = 0, y = _)", "(across = 0, y = _)")),
+        renamedTo "across" (points.Replace("p.x", "p.x$$")))
+
+[<Fact>]
+let ``A name alone in a tuple pattern names the field it takes apart`` () =
+    Assert.Equal(
+        normalized
+            """type Point = (across: int, y: int)
+def sum = { (p: Point) -> match p
+  | (across = x, y = y) -> x + y }
+""",
+        renamedTo
+            "across"
+            """type Point = (x$$: int, y: int)
+def sum = { (p: Point) -> match p
+  | (x, y) -> x + y }
+""")
+
+[<Fact>]
+let ``A protected type's field is told apart from another record's of the same shape`` () =
+    Assert.Equal(
+        normalized
+            """type Meters = protected (amount: int)
+type Count = (value: int)
+def long = Meters(amount = 5)
+def many: Count = (value = 5)
+def total = long.amount + many.value
+""",
+        renamedTo
+            "amount"
+            """type Meters = protected (val$$ue: int)
+type Count = (value: int)
+def long = Meters(value = 5)
+def many: Count = (value = 5)
+def total = long.value + many.value
+""")
+
+[<Fact>]
+let ``A field read from a record of a type not known is refused`` () =
+    Assert.Equal(
+        "Rename can't tell whether `x` on line 3 is the same field: the type of its record is not known there",
+        refusedBecause
+            "across"
+            """type Point = (x$$: int, y: int)
+def origin: Point = (x = 0, y = 0)
+def getX = { r -> r.x }
+""")
+
+[<Fact>]
+let ``A field of a record whose type is not known can't be renamed`` () =
+    let source, offset = unmark "def getX = { r -> r.x$$ }\n"
+    let result = Compiler.compile source
+    match Rename.prepare Rename.Module "" source result offset with
+    | Some (Error reason) -> Assert.StartsWith("Rename can't tell which record's `x` this is", reason)
     | other -> failwithf "expected a refusal, got %A" other
 
 [<Fact>]
