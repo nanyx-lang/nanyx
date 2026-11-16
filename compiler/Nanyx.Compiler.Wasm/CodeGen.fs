@@ -516,8 +516,153 @@ let private foreignFunctions (typed: TypedModule) : Map<string, Extern> * TopLev
                 | _ -> true)
         declared |> List.map (fun (name, declared, _) -> name, declared) |> Map.ofList, others
 
-/// `typed` as WebAssembly text compiled with `options`, and the functions it was compiled into.
-let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) : string * BackendReport =
+/// Each local function that requires parameterised contexts, written or inferred, by its lambda's node: the
+/// contexts as the type checker writes them (`TypedModule.LocalContexts`), its lambda's type, and the contexts in
+/// that type's variables. The type checker keeps them out of the lambda's type, so they are put there for the
+/// backend: a function value carries their members.
+let private localContextsOf (typed: TypedModule) (checkedTypes: Map<NodeId, Ty>) (liftedOrigins: Map<string, LambdaLifting.LiftedOrigin>) =
+    let localSymbols = typed.Symbols |> Map.values |> Seq.filter (fun symbol -> symbol.Kind = LocalValue) |> List.ofSeq
+    liftedOrigins
+    |> Map.values
+    |> Seq.choose (fun origin ->
+        match origin.Local, checkedTypes |> Map.tryFind origin.Lambda.Id with
+        | Some local, Some lambdaTy ->
+            localSymbols
+            |> List.filter (fun symbol -> symbol.Name = local.Name && SourceSpan.contains local.Statement symbol.Declaration)
+            |> List.sortBy _.Declaration.Start
+            |> List.tryHead
+            |> Option.bind (fun symbol ->
+                // A context the def writes is its alias, `Show(Point)` with its members; one inferred is applied.
+                let applied (context: Ty) =
+                    match context with
+                    | TyAlias(name, args, _) -> TyApply(name, args)
+                    | other -> other
+                match typed.LocalContexts |> Map.tryFind symbol.Id, typed.ContextTypes |> Map.tryFind symbol.Id |> Option.map (List.map applied), typed.SymbolTypes |> Map.tryFind symbol.Id with
+                | Some written, Some contexts, Some symbolTy when written.Length = contexts.Length && List.exists isInstance contexts ->
+                    try
+                        let bindings = CoreIrLowerTypes.bindScheme Map.empty symbolTy lambdaTy
+                        Some (origin.Lambda.Id, (symbol.Id, written, lambdaTy, contexts |> List.map (CoreIrLowerTypes.substitute bindings)))
+                    with CoreIrLowerTypes.CannotLower _ -> None
+                | _ -> None)
+        | _ -> None)
+    |> Map.ofSeq
+
+/// The other names a function can call the members of the contexts it requires by, each with the key it stands
+/// for: a member of a parameterised context (`show` of `Show(a)`) by its own name (`show`), as the type checker
+/// allows, when no other context the function declares has a member of that name.
+let private contextMemberAliases
+    (functionContextRequirements: Map<string, ContextMemberKey list>)
+    (functionContextTypes: Map<string, TypeExpr list>)
+    (typeLayouts: Map<string, string list>)
+    (name: string)
+    : (string * ContextMemberKey) list =
+    let keys = functionContextRequirements |> Map.tryFind name |> Option.defaultValue []
+    functionContextTypes
+    |> Map.tryFind name
+    |> Option.defaultValue []
+    |> List.collect (fun ctxType ->
+        match ctxType.Kind with
+        | TypeApply(baseName, _) ->
+            layoutOf typeLayouts baseName |> Option.defaultValue []
+            |> List.map (fun memberName -> memberName, contextMemberKey (Some ctxType) memberName)
+        | _ -> [])
+    |> List.groupBy fst
+    |> List.choose (fun (memberName, aliased) ->
+        match aliased with
+        | [ (_, key) ] when List.contains key keys && not (List.contains (NamedMember memberName) keys) -> Some (memberName, key)
+        | _ -> None)
+
+/// The members of the contexts `name` requires, as the core IR takes them: each with its type, from the context's
+/// definition with its parameters as the function's annotation gives them, where that can be worked out.
+let private coreIrContextParameters
+    (defs: (string * TypeExpr option * Expression) list)
+    (functionContextTypes: Map<string, TypeExpr list>)
+    (typeLayouts: Map<string, string list>)
+    (functionContextRequirements: Map<string, ContextMemberKey list>)
+    (typeDefs: Map<string, TypeDefInfo>)
+    (definitionTypes: Map<string, Ty>)
+    (name: string) =
+    // The function's own type variables, by the names its annotation gives them.
+    let rec namedVars (ty: Ty) : (string * Ty) list =
+        match ty with
+        | TyVar { Name = Some varName } -> [ varName, ty ]
+        | TyFunc(input, output, _) -> namedVars input @ namedVars output
+        | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> namedVars)
+        | _ -> Ty.children ty |> List.collect namedVars
+    let annotated =
+        match defs |> List.tryFind (fun (defName, _, _) -> defName = name), definitionTypes |> Map.tryFind name with
+        | Some (_, typeOpt, value), Some ty ->
+            match unwrapContextType typeOpt value with
+            | Some annotation -> matchAnnotation annotation ty
+            | None -> []
+        | _ -> []
+    let argumentTy = writtenArgumentType (definitionTypes |> Map.tryFind name |> Option.map namedVars |> Option.defaultValue []) annotated
+    let memberTypes =
+        functionContextTypes
+        |> Map.tryFind name
+        |> Option.defaultValue []
+        |> List.collect (fun ctxType ->
+            let baseName, arguments =
+                match ctxType.Kind with
+                | TypeApply(baseName, arguments) -> baseName, arguments
+                | TypeName baseName -> baseName, []
+                | _ -> "unknown", []
+            let memberTy (memberName: string) =
+                match typeDefs |> Map.tryFind baseName with
+                | Some info when info.Parameters.Length = arguments.Length ->
+                    let argumentTys = arguments |> List.map argumentTy
+                    if argumentTys |> List.forall Option.isSome then
+                        let parameters = List.zip (info.Parameters |> List.map _.Id) (argumentTys |> List.map Option.get) |> Map.ofList
+                        let rec bind (ty: Ty) =
+                            match ty with
+                            | TyVar v when parameters.ContainsKey v.Id -> parameters.[v.Id]
+                            | TyFunc(input, output, contexts) -> TyFunc(bind input, bind output, contexts)
+                            | TyRecord(fields, order) -> TyRecord(fields |> Map.map (fun _ -> bind), order)
+                            | TyTag(tag, payload) -> TyTag(tag, payload |> Option.map bind)
+                            | TyApply(applied, args) -> TyApply(applied, args |> List.map bind)
+                            | TyUnion items -> TyUnion(items |> List.map bind)
+                            | TyAlias(alias, args, underlying) -> TyAlias(alias, args |> List.map bind, bind underlying)
+                            | TyRecursive _
+                            | TySelf _ -> Ty.map bind ty
+                            | other -> other
+                        // A context without parameters has its own type variables boxed, as in its layout.
+                        let laidOut = if info.Parameters.IsEmpty then CoreIrLowerTypes.boxOwnVariables else id
+                        match Unifier.unalias info.Underlying with
+                        | TyRecord(members, _) -> members |> Map.tryFind memberName |> Option.map (bind >> laidOut)
+                        | _ -> None
+                    else None
+                | _ -> None
+            layoutOf typeLayouts baseName |> Option.defaultValue []
+            |> List.map (fun memberName -> contextMemberKey (Some ctxType) memberName, memberTy memberName))
+        |> Map.ofList
+    let parameters =
+        functionContextRequirements.[name]
+        |> List.map (fun key ->
+            { CoreIrLowerInput.ContextParameter.Key = key
+              CoreIrLowerInput.ContextParameter.Name = contextMemberParameter key
+              CoreIrLowerInput.ContextParameter.Type = memberTypes |> Map.tryFind key |> Option.flatten })
+    parameters, contextMemberAliases functionContextRequirements functionContextTypes typeLayouts name |> Map.ofList
+
+// A specialisation is only called by the functions compiled with it; a definition that is not generic is exported,
+// unless the function is one of its specialisations on known context members (see `CoreIrLowerKnown`), or the
+// definition declares contexts, whose members no host could pass.
+let private exportNameOf (functionContextRequirements: Map<string, ContextMemberKey list>) (specialisations: Set<string>) (func: CoreIr.Function) =
+    if func.TypeArguments.IsEmpty && not (specialisations.Contains func.Name) && not (functionContextRequirements.ContainsKey func.Source) then
+        Some func.Source
+    else None
+
+let private emitFromCoreIr (functionContextRequirements: Map<string, ContextMemberKey list>) (context: CoreIrEmit.EmitContext) (specialisations: Set<string>) (func: CoreIr.Function) =
+    CoreIrEmit.emitFunction context func (exportNameOf functionContextRequirements specialisations func)
+
+/// What lowering a module gives: its definitions, the keys of the context members each requires, and its functions
+/// in the core IR.
+type private LoweredModule =
+    { Definitions: (string * TypeExpr option * Expression) list
+      ContextRequirements: Map<string, ContextMemberKey list>
+      Lowered: CoreIrLowerInput.Lowered<unit> }
+
+/// `typed` lowered to the core IR, with the first thing that cannot be compiled reported where it is written.
+let private lowerTypedModule (typed: TypedModule) : LoweredModule =
     let contextInstances = typed.ContextInstances
     let checkedTypes = typed.ExprTypes
     let externs, module' = foreignFunctions typed
@@ -553,36 +698,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         | Some (TyFunc(_, _, contexts)) -> CoreIrLowerTypes.contextMembersOf contextLayouts contexts |> List.map fst |> Set.ofList
         | _ -> Set.empty
     let module', liftedOrigins, functionWrappers, useKeys, useBindingContexts = LambdaLifting.lift synthesizedMembers memberCaptures requiresContexts passedMembers typed.UseContexts (typed.AmbientMembers |> List.map _.Definition) module'
-    // Each local function that requires parameterised contexts, written or inferred, by its lambda's node: the
-    // contexts as the type checker writes them (`TypedModule.LocalContexts`), its lambda's type, and the contexts in
-    // that type's variables. The type checker keeps them out of the lambda's type, so they are put there for the
-    // backend: a function value carries their members.
-    let localContexts =
-        let localSymbols = typed.Symbols |> Map.values |> Seq.filter (fun symbol -> symbol.Kind = LocalValue) |> List.ofSeq
-        liftedOrigins
-        |> Map.values
-        |> Seq.choose (fun origin ->
-            match origin.Local, checkedTypes |> Map.tryFind origin.Lambda.Id with
-            | Some local, Some lambdaTy ->
-                localSymbols
-                |> List.filter (fun symbol -> symbol.Name = local.Name && SourceSpan.contains local.Statement symbol.Declaration)
-                |> List.sortBy _.Declaration.Start
-                |> List.tryHead
-                |> Option.bind (fun symbol ->
-                    // A context the def writes is its alias, `Show(Point)` with its members; one inferred is applied.
-                    let applied (context: Ty) =
-                        match context with
-                        | TyAlias(name, args, _) -> TyApply(name, args)
-                        | other -> other
-                    match typed.LocalContexts |> Map.tryFind symbol.Id, typed.ContextTypes |> Map.tryFind symbol.Id |> Option.map (List.map applied), typed.SymbolTypes |> Map.tryFind symbol.Id with
-                    | Some written, Some contexts, Some symbolTy when written.Length = contexts.Length && List.exists isInstance contexts ->
-                        try
-                            let bindings = CoreIrLowerTypes.bindScheme Map.empty symbolTy lambdaTy
-                            Some (origin.Lambda.Id, (symbol.Id, written, lambdaTy, contexts |> List.map (CoreIrLowerTypes.substitute bindings)))
-                        with CoreIrLowerTypes.CannotLower _ -> None
-                    | _ -> None)
-            | _ -> None)
-        |> Map.ofSeq
+    let localContexts = localContextsOf typed checkedTypes liftedOrigins
     let withLocalContexts (exprTypes: Map<NodeId, Ty>) =
         localContexts
         |> Map.fold (fun (acc: Map<NodeId, Ty>) node (_, _, lambdaTy, contexts) ->
@@ -641,111 +757,6 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         |> List.choose (fun ambient -> functionWrappers |> Map.tryFind ambient.Definition |> Option.map (fun wrapper -> NamedMember ambient.Member, wrapper))
         |> Map.ofList
 
-    let functionTable: FunctionTable =
-        { Values = System.Collections.Generic.Dictionary<string, ContextFn>()
-          NextSlot = 0
-          IndirectSignatures = System.Collections.Generic.HashSet<string list * string>() }
-
-    let recordTable: RecordTable =
-        { LayoutIds = System.Collections.Generic.Dictionary<string list, int>() }
-
-    let usedHelpers = System.Collections.Generic.HashSet<string>()
-
-    /// The other names a function can call the members of the contexts it requires by, each with the key it stands
-    /// for: a member of a parameterised context (`show` of `Show(a)`) by its own name (`show`), as the type checker
-    /// allows, when no other context the function declares has a member of that name.
-    let contextMemberAliases (name: string) : (string * ContextMemberKey) list =
-        let keys = functionContextRequirements |> Map.tryFind name |> Option.defaultValue []
-        functionContextTypes
-        |> Map.tryFind name
-        |> Option.defaultValue []
-        |> List.collect (fun ctxType ->
-            match ctxType.Kind with
-            | TypeApply(baseName, _) ->
-                layoutOf typeLayouts baseName |> Option.defaultValue []
-                |> List.map (fun memberName -> memberName, contextMemberKey (Some ctxType) memberName)
-            | _ -> [])
-        |> List.groupBy fst
-        |> List.choose (fun (memberName, aliased) ->
-            match aliased with
-            | [ (_, key) ] when List.contains key keys && not (List.contains (NamedMember memberName) keys) -> Some (memberName, key)
-            | _ -> None)
-
-    /// The members of the contexts `name` requires, as the core IR takes them: each with its type, from the context's
-    /// definition with its parameters as the function's annotation gives them, where that can be worked out.
-    let coreIrContextParameters (typeDefs: Map<string, TypeDefInfo>) (definitionTypes: Map<string, Ty>) (name: string) =
-        // The function's own type variables, by the names its annotation gives them.
-        let rec namedVars (ty: Ty) : (string * Ty) list =
-            match ty with
-            | TyVar { Name = Some varName } -> [ varName, ty ]
-            | TyFunc(input, output, _) -> namedVars input @ namedVars output
-            | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> namedVars)
-            | _ -> Ty.children ty |> List.collect namedVars
-        let annotated =
-            match defs |> List.tryFind (fun (defName, _, _) -> defName = name), definitionTypes |> Map.tryFind name with
-            | Some (_, typeOpt, value), Some ty ->
-                match unwrapContextType typeOpt value with
-                | Some annotation -> matchAnnotation annotation ty
-                | None -> []
-            | _ -> []
-        let argumentTy = writtenArgumentType (definitionTypes |> Map.tryFind name |> Option.map namedVars |> Option.defaultValue []) annotated
-        let memberTypes =
-            functionContextTypes
-            |> Map.tryFind name
-            |> Option.defaultValue []
-            |> List.collect (fun ctxType ->
-                let baseName, arguments =
-                    match ctxType.Kind with
-                    | TypeApply(baseName, arguments) -> baseName, arguments
-                    | TypeName baseName -> baseName, []
-                    | _ -> "unknown", []
-                let memberTy (memberName: string) =
-                    match typeDefs |> Map.tryFind baseName with
-                    | Some info when info.Parameters.Length = arguments.Length ->
-                        let argumentTys = arguments |> List.map argumentTy
-                        if argumentTys |> List.forall Option.isSome then
-                            let parameters = List.zip (info.Parameters |> List.map _.Id) (argumentTys |> List.map Option.get) |> Map.ofList
-                            let rec bind (ty: Ty) =
-                                match ty with
-                                | TyVar v when parameters.ContainsKey v.Id -> parameters.[v.Id]
-                                | TyFunc(input, output, contexts) -> TyFunc(bind input, bind output, contexts)
-                                | TyRecord(fields, order) -> TyRecord(fields |> Map.map (fun _ -> bind), order)
-                                | TyTag(tag, payload) -> TyTag(tag, payload |> Option.map bind)
-                                | TyApply(applied, args) -> TyApply(applied, args |> List.map bind)
-                                | TyUnion items -> TyUnion(items |> List.map bind)
-                                | TyAlias(alias, args, underlying) -> TyAlias(alias, args |> List.map bind, bind underlying)
-                                | TyRecursive _
-                                | TySelf _ -> Ty.map bind ty
-                                | other -> other
-                            // A context without parameters has its own type variables boxed, as in its layout.
-                            let laidOut = if info.Parameters.IsEmpty then CoreIrLowerTypes.boxOwnVariables else id
-                            match Unifier.unalias info.Underlying with
-                            | TyRecord(members, _) -> members |> Map.tryFind memberName |> Option.map (bind >> laidOut)
-                            | _ -> None
-                        else None
-                    | _ -> None
-                layoutOf typeLayouts baseName |> Option.defaultValue []
-                |> List.map (fun memberName -> contextMemberKey (Some ctxType) memberName, memberTy memberName))
-            |> Map.ofList
-        let parameters =
-            functionContextRequirements.[name]
-            |> List.map (fun key ->
-                { CoreIrLowerInput.ContextParameter.Key = key
-                  CoreIrLowerInput.ContextParameter.Name = contextMemberParameter key
-                  CoreIrLowerInput.ContextParameter.Type = memberTypes |> Map.tryFind key |> Option.flatten })
-        parameters, contextMemberAliases name |> Map.ofList
-
-    // A specialisation is only called by the functions compiled with it; a definition that is not generic is exported,
-    // unless the function is one of its specialisations on known context members (see `CoreIrLowerKnown`), or the
-    // definition declares contexts, whose members no host could pass.
-    let exportNameOf (specialisations: Set<string>) (func: CoreIr.Function) =
-        if func.TypeArguments.IsEmpty && not (specialisations.Contains func.Name) && not (functionContextRequirements.ContainsKey func.Source) then
-            Some func.Source
-        else None
-
-    let emitFromCoreIr (context: CoreIrEmit.EmitContext) (specialisations: Set<string>) (func: CoreIr.Function) =
-        CoreIrEmit.emitFunction context func (exportNameOf specialisations func)
-
     // Every definition that is not generic, the start function, and the specialisations and lifted functions they
     // need. Each function is emitted once here only to find out whether it can be (tags, strings and layouts get
     // numbers of no consequence), and again below, in order, for real.
@@ -771,7 +782,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               DefinitionTypes = typed.Types
               ContextParameters =
                 functionContextRequirements
-                |> Map.map (fun name _ -> coreIrContextParameters typed.TypeDefs typed.Types name)
+                |> Map.map (fun name _ -> coreIrContextParameters defs functionContextTypes typeLayouts functionContextRequirements typed.TypeDefs typed.Types name)
               ContextArguments =
                 fun name callId scopeKeys passed ->
                     try
@@ -816,12 +827,153 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 typed.TypeDefs
                 |> Map.filter (fun _ info -> not info.IsContext)
                 |> Map.map (fun _ info -> TyNominal(TypeDefInfo.nominalId info, info.Parameters |> List.map TyVar, info.Underlying, info.IsPrivate)) }
-        CoreIrLowerModule.lowerModule input (emitFromCoreIr probeContext Set.empty >> ignore)
+        CoreIrLowerModule.lowerModule input (emitFromCoreIr functionContextRequirements probeContext Set.empty >> ignore)
 
     // The first thing that cannot be compiled is reported where it is written.
     match lowered.Failures with
     | (_, failure, span) :: _ -> raise (BackendFailure (lowerFailureDiagnostic failure span))
     | [] -> ()
+
+    { Definitions = defs; ContextRequirements = functionContextRequirements; Lowered = lowered }
+
+/// The module's functions inlined, cut down to what the program can run, and reference counted, with the names of the
+/// owning entries kept (see `CoreIrClosureEntries`).
+let private optimised (options: WasmOptions) (cachedNames: Set<string>) (definitionFunctions: CoreIr.Function list) (startFunction: CoreIr.Function option) =
+    // Inlining, over the whole module at once, since a function is inlined as it is once calls are inlined into it.
+    let definitionFunctions, startFunction =
+        if options.Inline then
+            let inlined = CoreIrInline.inlineCalls (startFunction |> Option.map _.Name) cachedNames (definitionFunctions @ Option.toList startFunction)
+            List.take definitionFunctions.Length inlined, startFunction |> Option.map (fun _ -> List.last inlined)
+        else definitionFunctions, startFunction
+
+    // Only what the program can run (see `CoreIrReach`): a function inlined wherever it is called is not reached.
+    let startFunction = startFunction |> Option.map CoreIrReach.withoutUnreadClosures
+    let definitionFunctions =
+        definitionFunctions |> List.map CoreIrReach.withoutUnreadClosures |> CoreIrReach.reachedFrom startFunction
+
+    // Reference counting, inserted over the whole module at once, since which parameters a function owns depends on
+    // the functions it calls; then drop specialisation and reuse. Each function a closure is over gets its owning entry
+    // first, and keeps it only if something can call it (see `CoreIrClosureEntries`).
+    let closureTargets = CoreIrClosureEntries.targets (definitionFunctions @ Option.toList startFunction)
+    let owningEntries = closureTargets |> Set.map CoreIrClosureEntries.owningName
+    let definitionFunctions, startFunction =
+        let definitions = CoreIrClosureEntries.withOwningEntries closureTargets definitionFunctions
+        let all = definitions @ Option.toList startFunction
+        let counted = CoreIrCounting.insert (CoreIrCounting.inferOwnership all) all |> CoreIrReuse.insert
+        let start = startFunction |> Option.map (fun _ -> List.last counted)
+        CoreIrClosureEntries.withoutUncalled owningEntries (Option.toList start) (List.take definitions.Length counted), start
+    definitionFunctions, startFunction, owningEntries
+
+/// The functions the module's own functions need beside the runtime's, as WebAssembly text.
+type private SupportFunctions =
+    { Drops: string
+      Equalities: string
+      Orderings: string
+      Hashes: string
+      Arrays: string
+      /// The types an equality, ordering or hash function is made for.
+      Compared: CoreIr.IrType list }
+
+/// The support functions `functions` need, with the runtime helpers they call added to `usedHelpers`.
+let private supportFunctions
+    (functions: CoreIr.Function list)
+    (tagIdMap: Map<string, int>)
+    (functionTable: FunctionTable)
+    (usedHelpers: System.Collections.Generic.HashSet<string>)
+    : SupportFunctions =
+    // A drop and a dup function for each type on the heap the functions above use, a function for what each of their
+    // closures captures, and `++` for each list of elements on the heap. A tag no function names has no cells to drop.
+    let drops = CoreIrDrop.collect functions
+    let renderedDrops = CoreIrDrop.render (fun name -> tagIdMap |> Map.tryFind name) drops |> String.concat "\n\n"
+    for helper in CoreIrDrop.helpersUsed drops do
+        usedHelpers.Add helper |> ignore
+    if drops.Types |> List.exists (function CoreIr.IrFunction _ | CoreIr.IrBox -> true | _ -> false) then
+        functionTable.IndirectSignatures.Add([ "i32" ], "i32") |> ignore
+
+    // An equality function for each record, list and union of tags `==` compares, and for each of their parts that
+    // needs one.
+    let equalityTypes = CoreIrEquality.collect functions
+    let renderedEqualities = CoreIrEquality.render (fun name -> tagIdMap |> Map.tryFind name) equalityTypes |> String.concat "\n\n"
+    for helper in CoreIrEquality.helpersUsed equalityTypes do
+        usedHelpers.Add helper |> ignore
+
+    // An ordering function for each type the ordering intrinsic or an operator orders, and for each of its parts.
+    let orderingTypes = CoreIrOrdering.collect functions
+    let renderedOrderings = CoreIrOrdering.render orderingTypes |> String.concat "\n\n"
+    for helper in CoreIrOrdering.helpersUsed orderingTypes do
+        usedHelpers.Add helper |> ignore
+
+    // A hash function for each type the hash intrinsic hashes, and for each of its parts.
+    let hashingTypes = CoreIrHashing.collect functions
+    let renderedHashes = CoreIrHashing.render (fun name -> tagIdMap |> Map.tryFind name) hashingTypes |> String.concat "\n\n"
+    for helper in CoreIrHashing.helpersUsed hashingTypes do
+        usedHelpers.Add helper |> ignore
+
+    // A function that makes an array from a list, and one that makes a list from an array, for each type of element.
+    let arrayElements = CoreIrArrays.collect functions
+    let renderedArrays = CoreIrArrays.render arrayElements |> String.concat "\n\n"
+    for helper in CoreIrArrays.helpersUsed arrayElements do
+        usedHelpers.Add helper |> ignore
+    { Drops = renderedDrops
+      Equalities = renderedEqualities
+      Orderings = renderedOrderings
+      Hashes = renderedHashes
+      Arrays = renderedArrays
+      Compared = equalityTypes @ orderingTypes @ hashingTypes }
+
+/// The function table and the types of the indirect calls through it.
+let private contextPrelude (functionTable: FunctionTable) =
+    let contextFnList = functionTable.Values.Values |> Seq.toList
+
+    // A type for every indirect call, and one of `i32`s for the arity of each function in the table.
+    let contextTypeDefs =
+        (contextFnList |> List.map (fun ctxFn -> List.replicate (ctxFnArity ctxFn) "i32", "i32")) @ (functionTable.IndirectSignatures |> Seq.toList)
+        |> Set.ofList
+        |> Set.toList
+        |> List.sortBy (fun (parameters, result) -> parameters.Length, indirectTypeName parameters result)
+        |> List.map (fun (parameters, result) ->
+            let name = indirectTypeName parameters result
+            match parameters with
+            | [] -> $"  (type ${name} (func (result {result})))"
+            | _ -> $"""  (type ${name} (func (param {String.concat " " parameters}) (result {result})))""")
+        |> String.concat "\n"
+
+    // A `call_indirect` needs a table to validate, even in a module that never makes a closure to put in it
+    // (a function that only calls the closures it is given).
+    let contextTable =
+        if contextFnList.IsEmpty && Seq.isEmpty functionTable.IndirectSignatures then
+            ""
+        else
+            $"  (table $ctx_table {contextFnList.Length} funcref)"
+
+    let contextElem =
+        if contextFnList.IsEmpty then
+            ""
+        else
+            let ordered = contextFnList |> List.sortBy ctxFnSlot
+            let elems = ordered |> List.map (fun ctxFn -> $"${ctxFnName ctxFn}") |> String.concat " "
+            $"  (elem (i32.const 0) {elems})"
+
+    [ contextTypeDefs; contextTable; contextElem ]
+    |> List.filter (fun line -> not (String.IsNullOrWhiteSpace line))
+    |> String.concat "\n"
+
+/// `typed` as WebAssembly text compiled with `options`, and the functions it was compiled into.
+let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) : string * BackendReport =
+    let lowered = lowerTypedModule typed
+    let defs = lowered.Definitions
+    let functionContextRequirements = lowered.ContextRequirements
+    let lowered = lowered.Lowered
+
+    let functionTable: FunctionTable =
+        { Values = System.Collections.Generic.Dictionary<string, ContextFn>()
+          NextSlot = 0
+          IndirectSignatures = System.Collections.Generic.HashSet<string list * string>() }
+
+    let recordTable: RecordTable =
+        { LayoutIds = System.Collections.Generic.Dictionary<string list, int>() }
+
+    let usedHelpers = System.Collections.Generic.HashSet<string>()
 
     // Each definition that is not generic, followed by the specialisations of it: a generic definition has only those.
     // Then the adapters between function types that require different contexts (see `coerce` in `CoreIrLowerMembers.fs`).
@@ -851,29 +1003,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             |> Set.ofList
         definitionFunctions |> List.filter (CoreIrCachedValues.isCached values.Contains) |> List.map _.Name |> Set.ofList
 
-    // Inlining, over the whole module at once, since a function is inlined as it is once calls are inlined into it.
-    let definitionFunctions, startFunction =
-        if options.Inline then
-            let inlined = CoreIrInline.inlineCalls (startFunction |> Option.map _.Name) cachedNames (definitionFunctions @ Option.toList startFunction)
-            List.take definitionFunctions.Length inlined, startFunction |> Option.map (fun _ -> List.last inlined)
-        else definitionFunctions, startFunction
-
-    // Only what the program can run (see `CoreIrReach`): a function inlined wherever it is called is not reached.
-    let startFunction = startFunction |> Option.map CoreIrReach.withoutUnreadClosures
-    let definitionFunctions =
-        definitionFunctions |> List.map CoreIrReach.withoutUnreadClosures |> CoreIrReach.reachedFrom startFunction
-
-    // Reference counting, inserted over the whole module at once, since which parameters a function owns depends on
-    // the functions it calls; then drop specialisation and reuse. Each function a closure is over gets its owning entry
-    // first, and keeps it only if something can call it (see `CoreIrClosureEntries`).
-    let closureTargets = CoreIrClosureEntries.targets (definitionFunctions @ Option.toList startFunction)
-    let owningEntries = closureTargets |> Set.map CoreIrClosureEntries.owningName
-    let definitionFunctions, startFunction =
-        let definitions = CoreIrClosureEntries.withOwningEntries closureTargets definitionFunctions
-        let all = definitions @ Option.toList startFunction
-        let counted = CoreIrCounting.insert (CoreIrCounting.inferOwnership all) all |> CoreIrReuse.insert
-        let start = startFunction |> Option.map (fun _ -> List.last counted)
-        CoreIrClosureEntries.withoutUncalled owningEntries (Option.toList start) (List.take definitions.Length counted), start
+    let definitionFunctions, startFunction, owningEntries = optimised options cachedNames definitionFunctions startFunction
 
     // The tags, strings and dbg forms of exactly the functions emitted below.
     let facts = CoreIrFacts.collect (definitionFunctions @ Option.toList startFunction)
@@ -946,10 +1076,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             emitted.Text
         if cachedNames.Contains func.Name then
             let build = note (CoreIrEmit.emitFunction context { func with Name = CoreIrCachedValues.buildName func.Name } None)
-            build + "\n\n" + CoreIrCachedValues.getter func (exportNameOf specialisations func)
+            build + "\n\n" + CoreIrCachedValues.getter func (exportNameOf functionContextRequirements specialisations func)
         // An owning entry is a copy of a function, never exported as well.
         elif owningEntries.Contains func.Name then note (CoreIrEmit.emitFunction context func None)
-        else note (emitFromCoreIr context specialisations func)
+        else note (emitFromCoreIr functionContextRequirements context specialisations func)
 
     let renderedFunctions = definitionFunctions |> List.map fromCoreIr |> String.concat "\n\n"
 
@@ -968,39 +1098,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             emitted.Text, directive
         | None -> "", ""
 
-    // A drop and a dup function for each type on the heap the functions above use, a function for what each of their
-    // closures captures, and `++` for each list of elements on the heap. A tag no function names has no cells to drop.
-    let drops = CoreIrDrop.collect (definitionFunctions @ Option.toList startFunction)
-    let renderedDrops = CoreIrDrop.render (fun name -> tagIdMap |> Map.tryFind name) drops |> String.concat "\n\n"
-    for helper in CoreIrDrop.helpersUsed drops do
-        usedHelpers.Add helper |> ignore
-    if drops.Types |> List.exists (function CoreIr.IrFunction _ | CoreIr.IrBox -> true | _ -> false) then
-        functionTable.IndirectSignatures.Add([ "i32" ], "i32") |> ignore
+    let support = supportFunctions (definitionFunctions @ Option.toList startFunction) tagIdMap functionTable usedHelpers
 
-    // An equality function for each record, list and union of tags `==` compares, and for each of their parts that
-    // needs one.
-    let equalityTypes = CoreIrEquality.collect (definitionFunctions @ Option.toList startFunction)
-    let renderedEqualities = CoreIrEquality.render (fun name -> tagIdMap |> Map.tryFind name) equalityTypes |> String.concat "\n\n"
-    for helper in CoreIrEquality.helpersUsed equalityTypes do
-        usedHelpers.Add helper |> ignore
-
-    // An ordering function for each type the ordering intrinsic or an operator orders, and for each of its parts.
-    let orderingTypes = CoreIrOrdering.collect (definitionFunctions @ Option.toList startFunction)
-    let renderedOrderings = CoreIrOrdering.render orderingTypes |> String.concat "\n\n"
-    for helper in CoreIrOrdering.helpersUsed orderingTypes do
-        usedHelpers.Add helper |> ignore
-
-    // A hash function for each type the hash intrinsic hashes, and for each of its parts.
-    let hashingTypes = CoreIrHashing.collect (definitionFunctions @ Option.toList startFunction)
-    let renderedHashes = CoreIrHashing.render (fun name -> tagIdMap |> Map.tryFind name) hashingTypes |> String.concat "\n\n"
-    for helper in CoreIrHashing.helpersUsed hashingTypes do
-        usedHelpers.Add helper |> ignore
-
-    // A function that makes an array from a list, and one that makes a list from an array, for each type of element.
-    let arrayElements = CoreIrArrays.collect (definitionFunctions @ Option.toList startFunction)
-    let renderedArrays = CoreIrArrays.render arrayElements |> String.concat "\n\n"
-    for helper in CoreIrArrays.helpersUsed arrayElements do
-        usedHelpers.Add helper |> ignore
 
     let report =
         { Functions = [ yield! definitionFunctions |> List.map _.Name; yield! startFunction |> Option.map _.Name |> Option.toList ]
@@ -1069,41 +1168,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             ""
 
     // Every function body has been rendered by now, so the function-value slots are final.
-    let contextFnList = functionTable.Values.Values |> Seq.toList
-
-    // A type for every indirect call, and one of `i32`s for the arity of each function in the table.
-    let contextTypeDefs =
-        (contextFnList |> List.map (fun ctxFn -> List.replicate (ctxFnArity ctxFn) "i32", "i32")) @ (functionTable.IndirectSignatures |> Seq.toList)
-        |> Set.ofList
-        |> Set.toList
-        |> List.sortBy (fun (parameters, result) -> parameters.Length, indirectTypeName parameters result)
-        |> List.map (fun (parameters, result) ->
-            let name = indirectTypeName parameters result
-            match parameters with
-            | [] -> $"  (type ${name} (func (result {result})))"
-            | _ -> $"""  (type ${name} (func (param {String.concat " " parameters}) (result {result})))""")
-        |> String.concat "\n"
-
-    // A `call_indirect` needs a table to validate, even in a module that never makes a closure to put in it
-    // (a function that only calls the closures it is given).
-    let contextTable =
-        if contextFnList.IsEmpty && Seq.isEmpty functionTable.IndirectSignatures then
-            ""
-        else
-            $"  (table $ctx_table {contextFnList.Length} funcref)"
-
-    let contextElem =
-        if contextFnList.IsEmpty then
-            ""
-        else
-            let ordered = contextFnList |> List.sortBy ctxFnSlot
-            let elems = ordered |> List.map (fun ctxFn -> $"${ctxFnName ctxFn}") |> String.concat " "
-            $"  (elem (i32.const 0) {elems})"
-
-    let contextPrelude =
-        [ contextTypeDefs; contextTable; contextElem ]
-        |> List.filter (fun line -> not (String.IsNullOrWhiteSpace line))
-        |> String.concat "\n"
+    let contextPrelude = contextPrelude functionTable
 
     let dataSegments =
         [ renderDataSegments stringLiteralData
@@ -1128,8 +1193,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         functionsTouchMemory
         || not facts.Imports.IsEmpty
         || usedHelperSet |> Set.exists touchesMemory
-        || renderedDrops <> ""
-        || equalityTypes @ orderingTypes @ hashingTypes |> List.exists (computedOnValue >> not)
+        || support.Drops <> ""
+        || support.Compared |> List.exists (computedOnValue >> not)
     let needsMemory =
         (not (List.isEmpty stringLiteralData && List.isEmpty facts.StaticClosures) || functionsUseMemory) && not moduleUsesIoHelpers
     let memorySection =
@@ -1165,11 +1230,11 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               if not (String.IsNullOrWhiteSpace dataSegments) then dataSegments
               if not (String.IsNullOrWhiteSpace renderedCachedGlobals) then renderedCachedGlobals
               if not (String.IsNullOrWhiteSpace renderedFunctions) then renderedFunctions
-              if not (String.IsNullOrWhiteSpace renderedDrops) then renderedDrops
-              if not (String.IsNullOrWhiteSpace renderedEqualities) then renderedEqualities
-              if not (String.IsNullOrWhiteSpace renderedOrderings) then renderedOrderings
-              if not (String.IsNullOrWhiteSpace renderedHashes) then renderedHashes
-              if not (String.IsNullOrWhiteSpace renderedArrays) then renderedArrays
+              if not (String.IsNullOrWhiteSpace support.Drops) then support.Drops
+              if not (String.IsNullOrWhiteSpace support.Equalities) then support.Equalities
+              if not (String.IsNullOrWhiteSpace support.Orderings) then support.Orderings
+              if not (String.IsNullOrWhiteSpace support.Hashes) then support.Hashes
+              if not (String.IsNullOrWhiteSpace support.Arrays) then support.Arrays
               if not (String.IsNullOrWhiteSpace renderedStartFunction) then renderedStartFunction
               if not (String.IsNullOrWhiteSpace startDirective) then startDirective ]
         let body = String.concat "\n\n" parts

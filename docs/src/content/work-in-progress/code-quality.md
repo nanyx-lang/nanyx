@@ -129,6 +129,19 @@ now `inferAll` (a tuple's, record's and list's items, a match's values, an inter
 member call's arguments), and those over patterns `inferPatterns`, beside `inferPattern`. A fresh variable for each
 item of a list is `InferState.freshVars`. `Infer.fs` is at 1,331 lines.
 
+**2026-11-16.** `CoreIrLower.fs` is at about 1,200 lines, after moves into `CoreIrLowerMatch.fs`, `CoreIrLowerLocals.fs`,
+`CoreIrLowerLifted.fs` and `CoreIrLowerMembers.fs` ([#1400](https://github.com/nanyx-lang/nanyx/issues/1400)). Its
+`FunctionLowering.Complex`, one match over every kind of expression, was 480 lines. Its long arms are now members of
+their own ([#872](https://github.com/nanyx-lang/nanyx/issues/872)): a name is `Identifier`, an operator `BinaryOp`, a
+call to a top-level function `CallDefinition`, an interpolated string `Interpolation`, and a top-level function passed
+as a value `WrapperClosure`. `Complex` is 225 lines, and no arm left in it is over about 20.
+
+`CodeGen.transpileTypedModuleWithOptions`, which compiles a whole module, was 656 lines, with every step inline. It is
+280 now: lowering the module to the core IR is `lowerTypedModule` (with `localContextsOf`, `contextMemberAliases` and
+`coreIrContextParameters`), the passes over the core IR (inlining, reach, reference counting and reuse) `optimised`,
+the drop, equality, ordering, hash and array functions `supportFunctions`, and the function table `contextPrelude`.
+What is left is emitting the functions and putting the module's text together.
+
 The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 
 # The daily review

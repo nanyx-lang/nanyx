@@ -233,98 +233,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | LiteralExpr(BoolLit value) -> k (Expr.make (Atom(ABool value)) IrBool)
         | LiteralExpr(StringLit value) -> k (Expr.make (Atom(AString value)) IrString)
         | LiteralExpr(FloatLit value) -> k (Expr.make (BoxFloat value) (tyOf expr))
-        | IdentifierExpr name ->
-            match scope.Vars |> Map.tryFind name with
-            | Some var ->
-                let var = CoreIrLowerLocals.localAt this.LocalTools scope var (input.ExprTypes |> Map.tryFind expr.Id)
-                k (Expr.make (Atom(AVar var)) var.Type)
-            // A context member in scope, named as a value (`` `0` ``, or a function member passed on).
-            | None when scope.Members.ContainsKey (NamedMember name) && not (namesOwnDefinition input expr) ->
-                let memberVar = scope.Members.[NamedMember name]
-                k (Expr.make (Atom(AVar memberVar)) memberVar.Type)
-            | None when definitions.ContainsKey name && not (isFunction name) ->
-                // A top-level value is compiled to a function of no parameters: evaluate it. One of a type generic in
-                // contexts named where one that carries more is expected is made at its own type, and adapted (see
-                // `CoreIrLowerMembers.coerce`).
-                let ty = tyOf expr
-                let own =
-                    input.DefinitionTypes
-                    |> Map.tryFind name
-                    |> Option.filter (freeVars >> List.isEmpty)
-                    |> Option.map toIrType
-                match own with
-                | Some (IrRecord _ as own) when own <> ty ->
-                    bindTemp (Expr.make (Call(callee name input.ExprTypes.[expr.Id], [])) own) (fun atom ->
-                        CoreIrLowerMembers.coerce this.MemberTools scope atom ty (fun atom -> k (Expr.make (Atom atom) ty)))
-                | _ -> k (Expr.make (Call(callee name input.ExprTypes.[expr.Id], [])) ty)
-            | None when definitions.ContainsKey name -> cannot $"the function '{name}' used as a value"
-            | None -> cannot $"a reference to '{name}'"
+        | IdentifierExpr name -> this.Identifier scope expr name k
         | TagExpr(name, None) -> k (Expr.make (Atom(ATag name)) (tyOf expr))
         | TagExpr(name, Some payload) ->
             let ty = tyOf expr
             this.Atoms scope [ payload ] (fun atoms -> k (Expr.make (MakeTag(name, atoms.Head)) ty))
-        | BinaryOp("++", _, Kind (ListExpr items), rest) when not items.IsEmpty ->
-            // `[a, b] ++ rest`, which is what `[a, b, ...rest]` is: a cell for each element, put in front of `rest`
-            // rather than copied from a list of their own. The elements are evaluated first, then `rest`, as `++`
-            // evaluates them.
-            let ty = tyOf expr
-            this.Atoms scope (items @ [ rest ]) (fun atoms ->
-                let tail = List.last atoms
-                let cons head tail = Expr.make (CallRuntime(Helpers.listCons, [ head; tail ], true)) ty
-                let rec build (heads: Atom list) (k: Expr -> Expr) =
-                    match heads with
-                    | [ head ] -> k (cons head tail)
-                    | head :: others -> build others (fun inner -> bindTemp inner (fun cell -> k (cons head cell)))
-                    | [] -> cannot "an empty list in front of ++"
-                build (List.take items.Length atoms) k)
-        | BinaryOp("++", _, left, right) ->
-            // Joining strings or lists: a runtime helper for each.
-            let helper =
-                match tyOf left with
-                | IrString -> Helpers.stringConcat
-                | IrList _ -> Helpers.listConcat
-                | other -> cannot $"the operator ++ on a value of type {IrType.show other}"
-            let ty = tyOf expr
-            this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (CallRuntime(helper, atoms, true)) ty))
-        | BinaryOp(("==" | "!=") as op, _, left, right) when (match tyOf left with
-                                                              | IrString | IrTags _ | IrRecord _ | IrList _ | IrRecursive _ -> true
-                                                              | _ -> false) ->
-            // A string, a record, a list and a tag with a payload are pointers: equality compares what they point to,
-            // by the operands' structure (see `CoreIrEquality`).
-            let helper =
-                match tyOf left with
-                | IrString -> Helpers.stringEquals
-                | _ -> Helpers.valueEquals
-            this.Atoms scope [ left; right ] (fun atoms ->
-                let equal = Expr.make (CallRuntime(helper, atoms, true)) IrBool
-                if op = "==" then k equal
-                else bindTemp equal (fun result -> k (Expr.make (Prim(Not, [ result ])) IrBool)))
-        | BinaryOp(("<" | "<=" | ">" | ">=") as op, _, left, right) when (match tyOf left with
-                                                                         | IrString | IrList _ -> true
-                                                                         | IrRecord fields -> IrType.isTuple fields
-                                                                         | _ -> false) ->
-            // A string, a tuple and a list are ordered by their structure (see `CoreIrOrdering`): their order, a
-            // number, is compared with 0. Records, tags and functions have no order: a local function that orders them
-            // is not supported. (A record inside a list or tuple is ordered field by field, only where a generic
-            // function orders a `list(a)`, see `CoreIrOrdering`.)
-            if IrType.holdsUnordered (tyOf left) then cannot $"the operator {op} on a value of type {IrType.show (tyOf left)}"
-            this.Atoms scope [ left; right ] (fun atoms ->
-                let order = Expr.make (CallRuntime(Helpers.valueCompare, atoms, true)) IrInt
-                bindTemp order (fun result -> k (Expr.make (Prim(Binary op, [ result; AInt 0L ])) IrBool)))
-        | BinaryOp(op, _, left, right) when IrType.isFloat (tyOf left) || IrType.isFloat (tyOf right) ->
-            // Floats are boxed: the operands are unboxed, and an arithmetic result boxed.
-            // `%` has no instruction: it calls a runtime helper (see `CoreIrEmit`).
-            if op <> "%" && (wasmFloatInstruction op).IsNone then cannot $"the operator {op} on floats"
-            let ty = tyOf expr
-            this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (Prim(FloatBinary op, atoms)) ty))
-        | BinaryOp(op, _, left, right) ->
-            if (wasmBinaryInstruction op).IsNone then cannot $"the operator {op}"
-            for operand in [ left; right ] do
-                match tyOf operand with
-                | IrInt | IrSized _ | IrBool | IrUnit | IrError -> ()
-                | other -> cannot $"the operator {op} on a value of type {IrType.show other}"
-            let ty = tyOf expr
-            this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (Prim(Binary op, atoms)) ty))
+        | BinaryOp(op, _, left, right) -> this.BinaryOp scope expr op left right k
         | FunctionCall(name, _, [ operand ]) when name = NotSyntax.builtIn && not (scope.Vars.ContainsKey name) && not (definitions.ContainsKey name) ->
             this.Atoms scope [ operand ] (fun atoms -> k (Expr.make (Prim(Not, atoms)) IrBool))
         | FunctionCall(name, _, [ operand ]) when name = NegateSyntax.builtIn ->
@@ -451,24 +365,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // A function value: the closure block of a lifted function over what it captures.
             match input.Lifted |> Map.tryFind target with
             | Some (LiftedLambda _) -> this.Closure scope expr target captured Map.empty [] k
-            | Some (FunctionWrapper wrapped) ->
-                // A top-level function passed as a value, through a wrapper for each type it is passed at. Each call
-                // passes the members of the contexts the value's type requires (see `IrFunction`); the closure captures
-                // those of the others the function requires, as they are where it is named (a parameterised context).
-                let ty = tyOf expr
-                let arity = IrType.closureArity (parameterNames target) ty
-                let instanceTy = substitute subst input.ExprTypes.[expr.Id]
-                let passed =
-                    match ty with
-                    | IrFunction(_, _, members) -> members |> List.map fst |> Set.ofList
-                    | _ -> Set.empty
-                let specialised =
-                    input.DefinitionTypes |> Map.tryFind wrapped |> Option.exists (freeVars >> List.isEmpty >> not)
-                    || not (contextVariables wrapped).IsEmpty
-                let key = SpecKey.plain target (if specialised then [ toIrType instanceTy ] else [])
-                CoreIrLowerMembers.contextMembers this.MemberTools scope wrapped expr.Id instanceTy passed [] (fun captured ->
-                    let name = request key subst (WrapperCalling(wrapped, instanceTy, captured |> List.map (fun (memberKey, atom) -> memberKey, atomType atom)))
-                    k (closureOver name arity (List.map snd captured) ty))
+            | Some (FunctionWrapper wrapped) -> this.WrapperClosure scope expr target wrapped k
             | None -> cannot $"a closure over '{target}', which lambda lifting did not make"
         | FunctionCall(name, _, args) when scope.Vars.ContainsKey name ->
             // A call through a function value in a parameter or local.
@@ -494,76 +391,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let ty = tyOf expr
             this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
                 CoreIrLowerMembers.memberAtoms this.MemberTools scope None selfMembers (fun members -> k (Expr.make (Call(selfName, atoms @ members)) ty)))
-        | FunctionCall(name, _, args) ->
-            if not (definitions.ContainsKey name) then cannot $"a call to '{name}'"
-            if not (isFunction name) then cannot $"a call to the value '{name}'"
-            let instanceTy =
-                match input.CalleeTypes |> Map.tryFind expr.Id with
-                | Some ty -> ty
-                | None ->
-                    // A call the type checker did not record as one (a built-in property, such as `xs.length`, is
-                    // written as a call to the function that reads it): its type is its arguments' and its own.
-                    let argumentTys =
-                        SyntaxTree.flattenCallArgs args
-                        |> List.map (fun arg ->
-                            match input.ExprTypes |> Map.tryFind arg.Id with
-                            | Some ty -> ty
-                            | None -> cannot $"a call to '{name}' whose type is not known")
-                    let input' =
-                        match argumentTys with
-                        | [ single ] -> single
-                        | several -> TyRecord(several |> List.mapi (fun index ty -> string index, ty) |> Map.ofList, FieldOrder.none)
-                    match input.ExprTypes |> Map.tryFind expr.Id with
-                    | Some output -> TyFunc(input', output, [])
-                    | None -> cannot $"a call to '{name}' whose type is not known"
-            let knownMembers = CoreIrLowerMembers.knownMembers this.MemberTools scope name expr.Id instanceTy
-            let target = calleeKnowing name instanceTy knownMembers
-            let ty = tyOf expr
-            let parameters = parameterNames name
-            // A function value given for a parameter whose type requires other contexts is adapted to it (see `CoreIrLowerMembers.coerce`).
-            let parameterTys =
-                try parameterTypes parameters (substitute subst instanceTy) true |> fst |> List.map toIrType
-                with CannotLower _ -> []
-            // The context members the callee requires follow its arguments.
-            let call atoms =
-                CoreIrLowerMembers.coerceAll this.MemberTools scope atoms (if parameterTys.Length = atoms.Length then parameterTys else []) (fun atoms ->
-                    CoreIrLowerMembers.contextMembers this.MemberTools scope name expr.Id instanceTy Set.empty knownMembers (fun members ->
-                        k (Expr.make (Call(target, atoms @ List.map snd members)) ty)))
-            // The arguments as the callee takes them.
-            match SyntaxTree.flattenCallArgs args with
-            | [ Kind (RecordExpr fields) ] when parameters.Length > 1 && fields.Length = parameters.Length ->
-                // `f(a, step = 2)`: each parameter takes the field of its name, or else the positional field in its
-                // place.
-                let positional = fields |> List.choose (function PositionalField value -> Some value | NamedField _ -> None)
-                let named = fields |> List.choose (function NamedField(n, value) -> Some (n, value) | PositionalField _ -> None) |> Map.ofList
-                let ordered =
-                    parameters
-                    |> List.mapi (fun index parameter ->
-                        match named |> Map.tryFind parameter, positional |> List.tryItem index with
-                        | Some value, _
-                        | None, Some value -> value
-                        | None, None -> cannot $"a call to '{name}' with no argument for {parameter}")
-                this.Atoms scope ordered call
-            | [ record ] when parameters.Length > 1 && (match this.TypeIn scope record with IrRecord _ -> true | _ -> false) ->
-                // A record that is not a name in scope is held in a local of its own, as each field is read from it.
-                let fieldsOf held = CoreIrLowerArguments.fieldsAsArguments newTemp name parameters (this.TypeIn scope record) held call
-                match record.Kind with
-                | IdentifierExpr held when scope.Vars.ContainsKey held -> fieldsOf (AVar scope.Vars.[held])
-                | _ ->
-                    this.Complex scope record (fun value ->
-                        let local = newVar (uniqueName "__arguments") Local value.Type
-                        let body = fieldsOf (AVar local)
-                        Expr.make (Let(local, value, body)) body.Type)
-            | several when parameters.Length = 1 && several.Length > 1 ->
-                // `f(a, b)` and `f((a, b))` parse alike; a function of one parameter takes the whole tuple.
-                let tupleTy = IrRecord(several |> List.mapi (fun index value -> string index, tyOf value))
-                this.Record scope (several |> List.mapi (fun index value -> string index, value)) tupleTy (fun tuple ->
-                    bindTemp tuple (fun atom -> call [ atom ]))
-            | [] when parameters.Length = 1 ->
-                // `f()` on a function written `{ _ -> ... }`: its one parameter is the unit.
-                call [ AUnit ]
-            | flatArgs when flatArgs.Length = parameters.Length -> this.Atoms scope flatArgs call
-            | _ -> cannot $"a call to '{name}' with its arguments in another shape"
+        | FunctionCall(name, _, args) -> this.CallDefinition scope expr name args k
         | TupleExpr items -> this.Record scope (items |> List.mapi (fun index item -> string index, item)) (tyOf expr) k
         | ListExpr items ->
             // Each element that is a function value is adapted to the list's element type (see `CoreIrLowerMembers.coerce`).
@@ -614,15 +442,207 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | None -> cannot $"the context member {ContextMemberKey.text key}, which is not in scope"
         // `x \f(a, b)` is the call `f(x, a, b)`, typed at the pipe's node.
         | Pipe(value, name, range, args) -> this.Complex scope { expr with Kind = FunctionCall(name, range, pipeCallArguments value args) } k
+        | InterpolatedString parts -> this.Interpolation scope expr parts k
+        | Lambda _ -> cannot "a lambda"
+        | _ -> cannot "this kind of expression"
+
+    /// The name `name`, at `expr`: a local, a context member in scope, or a top-level value.
+    member private this.Identifier (scope: Scope) (expr: Expression) (name: string) (k: Expr -> Expr) : Expr =
+        match scope.Vars |> Map.tryFind name with
+        | Some var ->
+            let var = CoreIrLowerLocals.localAt this.LocalTools scope var (input.ExprTypes |> Map.tryFind expr.Id)
+            k (Expr.make (Atom(AVar var)) var.Type)
+        // A context member in scope, named as a value (`` `0` ``, or a function member passed on).
+        | None when scope.Members.ContainsKey (NamedMember name) && not (namesOwnDefinition input expr) ->
+            let memberVar = scope.Members.[NamedMember name]
+            k (Expr.make (Atom(AVar memberVar)) memberVar.Type)
+        | None when definitions.ContainsKey name && not (isFunction name) ->
+            // A top-level value is compiled to a function of no parameters: evaluate it. One of a type generic in
+            // contexts named where one that carries more is expected is made at its own type, and adapted (see
+            // `CoreIrLowerMembers.coerce`).
+            let ty = tyOf expr
+            let own =
+                input.DefinitionTypes
+                |> Map.tryFind name
+                |> Option.filter (freeVars >> List.isEmpty)
+                |> Option.map toIrType
+            match own with
+            | Some (IrRecord _ as own) when own <> ty ->
+                bindTemp (Expr.make (Call(callee name input.ExprTypes.[expr.Id], [])) own) (fun atom ->
+                    CoreIrLowerMembers.coerce this.MemberTools scope atom ty (fun atom -> k (Expr.make (Atom atom) ty)))
+            | _ -> k (Expr.make (Call(callee name input.ExprTypes.[expr.Id], [])) ty)
+        | None when definitions.ContainsKey name -> cannot $"the function '{name}' used as a value"
+        | None -> cannot $"a reference to '{name}'"
+
+    /// The binary operator `op` on `left` and `right`, at `expr`.
+    member private this.BinaryOp (scope: Scope) (expr: Expression) (op: string) (left: Expression) (right: Expression) (k: Expr -> Expr) : Expr =
+        match op, left, right with
+        | "++", Kind (ListExpr items), rest when not items.IsEmpty ->
+            // `[a, b] ++ rest`, which is what `[a, b, ...rest]` is: a cell for each element, put in front of `rest`
+            // rather than copied from a list of their own. The elements are evaluated first, then `rest`, as `++`
+            // evaluates them.
+            let ty = tyOf expr
+            this.Atoms scope (items @ [ rest ]) (fun atoms ->
+                let tail = List.last atoms
+                let cons head tail = Expr.make (CallRuntime(Helpers.listCons, [ head; tail ], true)) ty
+                let rec build (heads: Atom list) (k: Expr -> Expr) =
+                    match heads with
+                    | [ head ] -> k (cons head tail)
+                    | head :: others -> build others (fun inner -> bindTemp inner (fun cell -> k (cons head cell)))
+                    | [] -> cannot "an empty list in front of ++"
+                build (List.take items.Length atoms) k)
+        | "++", _, _ ->
+            // Joining strings or lists: a runtime helper for each.
+            let helper =
+                match tyOf left with
+                | IrString -> Helpers.stringConcat
+                | IrList _ -> Helpers.listConcat
+                | other -> cannot $"the operator ++ on a value of type {IrType.show other}"
+            let ty = tyOf expr
+            this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (CallRuntime(helper, atoms, true)) ty))
+        | ("==" | "!="), _, _ when (match tyOf left with
+                                    | IrString | IrTags _ | IrRecord _ | IrList _ | IrRecursive _ -> true
+                                    | _ -> false) ->
+            // A string, a record, a list and a tag with a payload are pointers: equality compares what they point to,
+            // by the operands' structure (see `CoreIrEquality`).
+            let helper =
+                match tyOf left with
+                | IrString -> Helpers.stringEquals
+                | _ -> Helpers.valueEquals
+            this.Atoms scope [ left; right ] (fun atoms ->
+                let equal = Expr.make (CallRuntime(helper, atoms, true)) IrBool
+                if op = "==" then k equal
+                else bindTemp equal (fun result -> k (Expr.make (Prim(Not, [ result ])) IrBool)))
+        | ("<" | "<=" | ">" | ">="), _, _ when (match tyOf left with
+                                                | IrString | IrList _ -> true
+                                                | IrRecord fields -> IrType.isTuple fields
+                                                | _ -> false) ->
+            // A string, a tuple and a list are ordered by their structure (see `CoreIrOrdering`): their order, a
+            // number, is compared with 0. Records, tags and functions have no order: a local function that orders them
+            // is not supported. (A record inside a list or tuple is ordered field by field, only where a generic
+            // function orders a `list(a)`, see `CoreIrOrdering`.)
+            if IrType.holdsUnordered (tyOf left) then cannot $"the operator {op} on a value of type {IrType.show (tyOf left)}"
+            this.Atoms scope [ left; right ] (fun atoms ->
+                let order = Expr.make (CallRuntime(Helpers.valueCompare, atoms, true)) IrInt
+                bindTemp order (fun result -> k (Expr.make (Prim(Binary op, [ result; AInt 0L ])) IrBool)))
+        | _ when IrType.isFloat (tyOf left) || IrType.isFloat (tyOf right) ->
+            // Floats are boxed: the operands are unboxed, and an arithmetic result boxed.
+            // `%` has no instruction: it calls a runtime helper (see `CoreIrEmit`).
+            if op <> "%" && (wasmFloatInstruction op).IsNone then cannot $"the operator {op} on floats"
+            let ty = tyOf expr
+            this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (Prim(FloatBinary op, atoms)) ty))
+        | _ ->
+            if (wasmBinaryInstruction op).IsNone then cannot $"the operator {op}"
+            for operand in [ left; right ] do
+                match tyOf operand with
+                | IrInt | IrSized _ | IrBool | IrUnit | IrError -> ()
+                | other -> cannot $"the operator {op} on a value of type {IrType.show other}"
+            let ty = tyOf expr
+            this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (Prim(Binary op, atoms)) ty))
+
+    /// The top-level function `target` wraps, `wrapped`, passed as a value at `expr`, through a wrapper for each type it
+    /// is passed at. Each call passes the members of the contexts the value's type requires (see `IrFunction`); the
+    /// closure captures those of the others the function requires, as they are where it is named (a parameterised
+    /// context).
+    member private this.WrapperClosure (scope: Scope) (expr: Expression) (target: string) (wrapped: string) (k: Expr -> Expr) : Expr =
+        let ty = tyOf expr
+        let arity = IrType.closureArity (parameterNames target) ty
+        let instanceTy = substitute subst input.ExprTypes.[expr.Id]
+        let passed =
+            match ty with
+            | IrFunction(_, _, members) -> members |> List.map fst |> Set.ofList
+            | _ -> Set.empty
+        let specialised =
+            input.DefinitionTypes |> Map.tryFind wrapped |> Option.exists (freeVars >> List.isEmpty >> not)
+            || not (contextVariables wrapped).IsEmpty
+        let key = SpecKey.plain target (if specialised then [ toIrType instanceTy ] else [])
+        CoreIrLowerMembers.contextMembers this.MemberTools scope wrapped expr.Id instanceTy passed [] (fun captured ->
+            let name = request key subst (WrapperCalling(wrapped, instanceTy, captured |> List.map (fun (memberKey, atom) -> memberKey, atomType atom)))
+            k (closureOver name arity (List.map snd captured) ty))
+
+    /// A call, at `expr`, to the top-level function `name`, with the context members it requires after its arguments.
+    member private this.CallDefinition (scope: Scope) (expr: Expression) (name: string) (args: Expression list) (k: Expr -> Expr) : Expr =
+        if not (definitions.ContainsKey name) then cannot $"a call to '{name}'"
+        if not (isFunction name) then cannot $"a call to the value '{name}'"
+        let instanceTy =
+            match input.CalleeTypes |> Map.tryFind expr.Id with
+            | Some ty -> ty
+            | None ->
+                // A call the type checker did not record as one (a built-in property, such as `xs.length`, is
+                // written as a call to the function that reads it): its type is its arguments' and its own.
+                let argumentTys =
+                    SyntaxTree.flattenCallArgs args
+                    |> List.map (fun arg ->
+                        match input.ExprTypes |> Map.tryFind arg.Id with
+                        | Some ty -> ty
+                        | None -> cannot $"a call to '{name}' whose type is not known")
+                let input' =
+                    match argumentTys with
+                    | [ single ] -> single
+                    | several -> TyRecord(several |> List.mapi (fun index ty -> string index, ty) |> Map.ofList, FieldOrder.none)
+                match input.ExprTypes |> Map.tryFind expr.Id with
+                | Some output -> TyFunc(input', output, [])
+                | None -> cannot $"a call to '{name}' whose type is not known"
+        let knownMembers = CoreIrLowerMembers.knownMembers this.MemberTools scope name expr.Id instanceTy
+        let target = calleeKnowing name instanceTy knownMembers
+        let ty = tyOf expr
+        let parameters = parameterNames name
+        // A function value given for a parameter whose type requires other contexts is adapted to it (see `CoreIrLowerMembers.coerce`).
+        let parameterTys =
+            try parameterTypes parameters (substitute subst instanceTy) true |> fst |> List.map toIrType
+            with CannotLower _ -> []
+        // The context members the callee requires follow its arguments.
+        let call atoms =
+            CoreIrLowerMembers.coerceAll this.MemberTools scope atoms (if parameterTys.Length = atoms.Length then parameterTys else []) (fun atoms ->
+                CoreIrLowerMembers.contextMembers this.MemberTools scope name expr.Id instanceTy Set.empty knownMembers (fun members ->
+                    k (Expr.make (Call(target, atoms @ List.map snd members)) ty)))
+        // The arguments as the callee takes them.
+        match SyntaxTree.flattenCallArgs args with
+        | [ Kind (RecordExpr fields) ] when parameters.Length > 1 && fields.Length = parameters.Length ->
+            // `f(a, step = 2)`: each parameter takes the field of its name, or else the positional field in its
+            // place.
+            let positional = fields |> List.choose (function PositionalField value -> Some value | NamedField _ -> None)
+            let named = fields |> List.choose (function NamedField(n, value) -> Some (n, value) | PositionalField _ -> None) |> Map.ofList
+            let ordered =
+                parameters
+                |> List.mapi (fun index parameter ->
+                    match named |> Map.tryFind parameter, positional |> List.tryItem index with
+                    | Some value, _
+                    | None, Some value -> value
+                    | None, None -> cannot $"a call to '{name}' with no argument for {parameter}")
+            this.Atoms scope ordered call
+        | [ record ] when parameters.Length > 1 && (match this.TypeIn scope record with IrRecord _ -> true | _ -> false) ->
+            // A record that is not a name in scope is held in a local of its own, as each field is read from it.
+            let fieldsOf held = CoreIrLowerArguments.fieldsAsArguments newTemp name parameters (this.TypeIn scope record) held call
+            match record.Kind with
+            | IdentifierExpr held when scope.Vars.ContainsKey held -> fieldsOf (AVar scope.Vars.[held])
+            | _ ->
+                this.Complex scope record (fun value ->
+                    let local = newVar (uniqueName "__arguments") Local value.Type
+                    let body = fieldsOf (AVar local)
+                    Expr.make (Let(local, value, body)) body.Type)
+        | several when parameters.Length = 1 && several.Length > 1 ->
+            // `f(a, b)` and `f((a, b))` parse alike; a function of one parameter takes the whole tuple.
+            let tupleTy = IrRecord(several |> List.mapi (fun index value -> string index, tyOf value))
+            this.Record scope (several |> List.mapi (fun index value -> string index, value)) tupleTy (fun tuple ->
+                bindTemp tuple (fun atom -> call [ atom ]))
+        | [] when parameters.Length = 1 ->
+            // `f()` on a function written `{ _ -> ... }`: its one parameter is the unit.
+            call [ AUnit ]
+        | flatArgs when flatArgs.Length = parameters.Length -> this.Atoms scope flatArgs call
+        | _ -> cannot $"a call to '{name}' with its arguments in another shape"
+
+    /// The interpolated string of `parts`, at `expr`.
+    member private this.Interpolation (scope: Scope) (expr: Expression) (parts: StringPart list) (k: Expr -> Expr) : Expr =
         // A hole the compiler writes itself holds its value, not a call to convert it.
-        | InterpolatedString parts when parts |> List.exists (function StringExpr hole -> input.BuiltInHoles.Contains hole.Id | StringText _ -> false) ->
+        if parts |> List.exists (function StringExpr hole -> input.BuiltInHoles.Contains hole.Id | StringText _ -> false) then
             let written =
                 parts
                 |> List.map (function
                     | StringExpr (Kind (FunctionCall(_, _, [ value ])) as hole) when input.BuiltInHoles.Contains hole.Id -> StringExpr value
                     | part -> part)
             this.Complex scope { expr with Kind = InterpolatedString written } k
-        | InterpolatedString parts when parts |> List.exists (function StringExpr hole -> tyOf hole = IrError | StringText _ -> false) ->
+        elif parts |> List.exists (function StringExpr hole -> tyOf hole = IrError | StringText _ -> false) then
             // A hole of no known type cannot be printed. The holes are evaluated in order up to it, for what they do (the
             // hole itself most likely stops the program, through the deferred error that left its type unknown), and if
             // the program is still running then, it stops there.
@@ -635,7 +655,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             |> List.rev
             |> List.fold (fun (rest: Expr) hole -> this.Complex insideHole hole (fun value -> Expr.make (Do(value, rest)) rest.Type)) stop
             |> k
-        | InterpolatedString parts ->
+        else
             // Each hole is evaluated into its local, in order, and then the string is built from the text and them.
             // A string inside a hole is a level deeper, so that it keeps to its own hole locals.
             let depth = scope.InterpolationDepth
@@ -673,8 +693,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                         this.Atoms insideHole [ hole ] (fun atoms -> store (Expr.make (CallRuntime(format, atoms, true)) IrString))
                     else this.Complex insideHole hole store
             evaluateHoles 0 holes []
-        | Lambda _ -> cannot "a lambda"
-        | _ -> cannot "this kind of expression"
 
     /// What finding and adapting context members needs from this function's lowering (see `CoreIrLowerMembers`).
     member private this.MemberTools : CoreIrLowerMembers.MemberTools =
