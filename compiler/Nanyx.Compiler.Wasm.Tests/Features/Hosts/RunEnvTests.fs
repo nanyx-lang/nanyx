@@ -30,6 +30,21 @@ def main = {
     Assert.Equal(0, outcome.ExitCode)
 
 [<Fact>]
+let ``Arguments after -- reach the program as they are, even ones that start with -`` () =
+    let source =
+        """module main
+
+@entry
+def main = {
+  println(args())
+}
+"""
+    let outcome = runWith [] [ "--"; "-v"; "--timings"; "--"; "x" ] source
+    Assert.Equal("", outcome.StandardError)
+    Assert.Equal("[-v, --timings, --, x]\n", outcome.StandardOutput.ReplaceLineEndings "\n")
+    Assert.Equal(0, outcome.ExitCode)
+
+[<Fact>]
 let ``A program run with no arguments has none`` () =
     let source =
         """println(args())
