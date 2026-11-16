@@ -206,7 +206,7 @@ internal static class CliCommands
     /// <summary>
     /// Run a Nanyx program: a .nyx file, or the @entry of a package.
     /// </summary>
-    /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest, followed by the program's arguments; none means the package the current directory is in.</param>
+    /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest, followed by the program's arguments; none means the package the current directory is in. Put -- before arguments that start with -, so that they are not read as run's options.</param>
     /// <param name="checkMemory">Check the program's reference counting as it runs: stop at a block freed twice or an object used after it was freed, and fail if anything is left on the heap at the end.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
     /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a module such as nanyx.console/console.host. A script always runs under nanyx.console/console.host.</param>

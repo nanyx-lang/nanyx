@@ -108,10 +108,17 @@ let private inProcess (workingDirectory: string) (standardInput: string) (variab
         File.Delete inputFile
 
 /// The `nanyx` command `arguments` names, with its options, as a call of what the CLI runs for it (see `CliCommands`).
-/// Only the commands and options the tests use are read.
+/// Only the commands and options the tests use are read. As in the CLI, `--` ends the options: what follows it
+/// is a path or a program argument, whatever it starts with.
 let private command (arguments: string list) : Shell -> int =
+    // Whether `flag` is among `arguments` before any `--`, and the arguments without it
+    let takeFlag (flag: string) (arguments: string list) =
+        let endOfOptions = arguments |> List.tryFindIndex ((=) "--") |> Option.defaultValue arguments.Length
+        let before, after = List.splitAt endOfOptions arguments
+        List.contains flag before, List.filter ((<>) flag) before @ after
     let rec options (outputPath: string, release: bool, timings: bool, host: string, paths: string list) (rest: string list) =
         match rest with
+        | "--" :: rest -> outputPath, release, timings, host, Array.ofList (paths @ rest)
         | ("--out" | "-o") :: path :: rest -> options (path, release, timings, host, paths) rest
         | "--release" :: rest -> options (outputPath, true, timings, host, paths) rest
         | "--timings" :: rest -> options (outputPath, release, true, host, paths) rest
@@ -122,16 +129,19 @@ let private command (arguments: string list) : Shell -> int =
     | [ "--version" ] -> CliCommands.VersionIn
     | "new" :: name :: directory ->fun shell -> CliCommands.NewIn(shell, name, Array.ofList directory)
     | "manifest" :: rest ->
-        fun shell -> CliCommands.ManifestIn(shell, List.contains "--json" rest, rest |> List.except [ "--json" ] |> Array.ofList)
+        let json, rest = takeFlag "--json" rest
+        fun shell -> CliCommands.ManifestIn(shell, json, Array.ofList rest)
     | "check" :: rest ->
         let _, _, timings, host, path = options (null, false, false, null, []) rest
         fun shell -> CliCommands.CheckIn(shell, path, timings, host)
     | "run" :: rest ->
-        let _, _, timings, host, path = options (null, false, false, null, []) (List.except [ "--no-inline" ] rest)
-        fun shell -> CliCommands.RunIn(shell, false, path, timings, host, not (List.contains "--no-inline" rest))
+        let noInline, rest = takeFlag "--no-inline" rest
+        let _, _, timings, host, path = options (null, false, false, null, []) rest
+        fun shell -> CliCommands.RunIn(shell, false, path, timings, host, not noInline)
     | "build" :: rest ->
-        let outputPath, release, timings, host, path = options (null, false, false, null, []) (List.except [ "--no-inline" ] rest)
-        fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings, host, not (List.contains "--no-inline" rest))
+        let noInline, rest = takeFlag "--no-inline" rest
+        let outputPath, release, timings, host, path = options (null, false, false, null, []) rest
+        fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings, host, not noInline)
     | "wasm" :: inputFile :: rest ->
         let outputPath, release, _, _, _ = options (null, false, false, null, []) rest
         fun shell -> CliCommands.WasmIn(shell, inputFile, outputPath, release)
