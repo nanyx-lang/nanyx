@@ -38,3 +38,16 @@ def main = {
 }
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "123\n"
+
+[<Fact>]
+let ``Run - a returned lambda's parameter takes its type from the def's annotation`` () =
+    // #1749
+    let source =
+        """
+import nanyx/text
+
+def f: string -> string -> int = { a -> { b -> b \length } }
+
+println(f("x")("yy"))
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "2\n"
