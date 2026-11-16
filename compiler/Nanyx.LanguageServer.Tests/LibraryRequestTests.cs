@@ -46,7 +46,7 @@ public sealed class LibraryRequestTests : LanguageServerTestBase
         Assert.Equal("import nanyx/text", trim.Import);
         Assert.NotNull(trim.Location);
         Assert.EndsWith("text.nyx", trim.Location.Uri.Path);
-        Assert.Equal(193, trim.Location.Range.Start.Line);
+        Assert.Equal(210, trim.Location.Range.Start.Line);
     }
 
     [Fact]
