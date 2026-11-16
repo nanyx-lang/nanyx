@@ -26,7 +26,7 @@ def made = (zeta = 1, alpha = 2)
 [<Fact>]
 let ``An imported definition's named parameters are written as its module declares them`` () =
     Assert.Equal(
-        Some "(string, start: int, length: int) -> string",
+        Some "def string.substring: (string, start: int, length: int) -> string",
         hoverType "def part = string.substring(\"hello\", start = 1, length = 2)\n" "substring")
 
 [<Fact>]

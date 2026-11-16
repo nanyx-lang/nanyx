@@ -451,7 +451,8 @@ module Unifier =
             let withFields more = more |> Map.fold (fun acc key fieldTy -> acc |> Map.add key fieldTy) applied
             match unalias (apply (TyVar row)) with
             | TyVar solved -> TyOpenRecord(applied, solved)
-            | TyRecord(more, order) -> TyRecord(withFields more, order)
+            // The open record's own fields come first, then the others in the order of the record the row stands for.
+            | TyRecord(more, order) -> TyRecord(withFields more, FieldOrder(List.ofSeq applied.Keys @ order.Names))
             | TyOpenRecord(more, rest) -> TyOpenRecord(withFields more, rest)
             // Renamed for a reader (see `displayRenaming`): the row takes the name.
             | TyPrimitive name -> TyOpenRecord(applied, { row with Name = Some name })

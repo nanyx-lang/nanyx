@@ -140,7 +140,7 @@ def area = { r -> r.width * r.height }
 area(width = 2, height = 3, colour = "red") -- fine
 ```
 
-An editor writes an inferred record's fields in alphabetical order, and its other fields as an ellipsis, `…`, where you would write `...`. The other fields get a name, such as `…ω`, only where the type uses them twice.
+An editor writes a record's fields in the order they are written, in its type or where it is made, and those of a record inferred from the fields read in alphabetical order, with its other fields as an ellipsis, `…`, where you would write `...`. The order is only how it is shown: `(x: int, y: int)` and `(y: int, x: int)` are one type. The other fields get a name, such as `…ω`, only where the type uses them twice.
 
 An annotation is taken exactly as written, so annotate with `...` when you mean "at least these fields".
 

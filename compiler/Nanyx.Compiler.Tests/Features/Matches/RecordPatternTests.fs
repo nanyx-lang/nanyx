@@ -19,7 +19,7 @@ let ``A name alone in a pattern binds the field of that name`` () =
   | (age, name) -> "{name} is {age}" }
 """
     Assert.Equal<(string * string) list>(
-        [ "r", "(age: int, name: string)"; "age", "int"; "name", "string" ], typesOf source)
+        [ "r", "(name: string, age: int)"; "age", "int"; "name", "string" ], typesOf source)
 
 [<Fact>]
 let ``A tag's named payload is taken apart by name, in a match and in a lambda's parameter`` () =
@@ -51,7 +51,7 @@ let ``A record pattern that ends in ... leaves the other fields out`` () =
   | (name = "Alice", ...) -> "A"
   | (name = n, age = _) -> n }
 """
-    Assert.Equal<(string * string) list>([ "r", "(age: int, name: string)"; "n", "string" ], typesOf source)
+    Assert.Equal<(string * string) list>([ "r", "(name: string, age: int)"; "n", "string" ], typesOf source)
 
 [<Fact>]
 let ``A record pattern on a value of no known type yet takes exactly its fields, or at least them with ...`` () =
@@ -96,7 +96,7 @@ def f: list((name: string, age: int)) -> int = { people ->
 }
 """
     Assert.Equal<(string * string) list>(
-        [ "people", "list(age: int, name: string)"; "a", "int"; "n", "string"; "b", "int" ], typesOf source)
+        [ "people", "list(name: string, age: int)"; "a", "int"; "n", "string"; "b", "int" ], typesOf source)
 
 [<Fact>]
 let ``A name that is not one of the record's fields is matched by position, and the record has none there`` () =

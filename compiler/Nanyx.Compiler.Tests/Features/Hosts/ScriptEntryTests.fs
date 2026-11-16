@@ -110,7 +110,7 @@ def pureCaller: int -> int = { n ->
 }
 """
     let typed = compileClean source
-    Assert.Equal("(count: (int -> int), log: ([Console] string -> ()))", Unifier.tyToString typed.Types.["handlers"])
+    Assert.Equal("(log: ([Console] string -> ()), count: (int -> int))", Unifier.tyToString typed.Types.["handlers"])
     Assert.Equal("list([Console] string -> ())", Unifier.tyToString typed.Types.["inList"])
     Assert.Equal("#some([Console] string -> ())", Unifier.tyToString typed.Types.["inTag"])
 
