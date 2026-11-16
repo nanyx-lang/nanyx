@@ -7,7 +7,13 @@ order: 1
 This page settles two related questions, now that function types carry contexts
 ([#768](https://github.com/nanyx-lang/nanyx/issues/768)): how a `use` can implement one context in terms of another,
 and what replaces NYX0224, the escape check for `memory` blocks. The design was decided in
-[#1035](https://github.com/nanyx-lang/nanyx/issues/1035). The plan at the end lists the issues and which are done.
+[#1035](https://github.com/nanyx-lang/nanyx/issues/1035), and all of it is built. The language docs describe it:
+[Contexts](../advanced/contexts) for discharging at a `use`, handlers, naming the instance a lambda is given,
+contexts not being types, protected and private contexts and scoped contexts;
+[Memory](../advanced/memory#values-cannot-escape-memory-scope) for escape from a `memory` block; and
+[Workflows](../advanced/workflows) for builders. This page keeps the reasoning, the options that were set aside, how
+it is built, and the one thing left open: writing the numbered `Memory₁` form in source
+([#1591](https://github.com/nanyx-lang/nanyx/issues/1591)).
 
 NYX0225, the escape check for other contexts, is gone: since [#836](https://github.com/nanyx-lang/nanyx/issues/836)
 each call passes a function value the instances in scope where it is called, so a lambda that requires a context may
@@ -319,7 +325,7 @@ five runs, minus a one-iteration run for compiling and start-up, and runs differ
 # Contexts are not types
 
 Decided by the maintainer in [#1141](https://github.com/nanyx-lang/nanyx/issues/1141). The work is in the issues under
-[What changes](#what-changes).
+[How it is built](#how-it-is-built).
 
 A context instance can be built only where a `use` loads it, so it is never a value. The rule above (only an
 instance written at the `use` discharges) meant a handler couldn't be moved into a function of its own, and now a
@@ -385,13 +391,12 @@ The design draws the line there, and makes every helper a function that takes th
     context l -> ... use l in other() }`, which loads the same `Log` again, for instance after an inner `use`
     shadowed it.
 
-## What changes
+## How it is built
 
-- ~~The prelude's builders (`proc` and any others) become a `context` and a function. The cookbook's `OptionChain` and
-  the `@workflow` and `@customKeywordType` docs change with them, and `[typeof optionChain]` goes.~~ Done, see
+- The prelude's builders (`proc` and any others) are a `context` and a function: see
   [Workflows](#workflows-a-context-and-a-function).
-- ~~`context x` in a lambda, usable only by `use` ([#1445](https://github.com/nanyx-lang/nanyx/issues/1445)).~~
-  Done. The parser puts the names on the lambda's body (`ContextNames`), and `ContextNames.bind` binds each, with the
+- `context x` in a lambda, usable only by `use` ([#1445](https://github.com/nanyx-lang/nanyx/issues/1445)).
+  The parser puts the names on the lambda's body (`ContextNames`), and `ContextNames.bind` binds each, with the
   lambda's parameters, to the plain context it names among those the lambda is given: each context whose members
   are all bound in the body as its own by a signature (the def's, or the type the lambda is checked against), and
   `Memory` in a `memory` block. Any other context without members, or one with parameters, can't be named yet. Each
@@ -400,29 +405,27 @@ The design draws the line there, and makes every helper a function that takes th
   matches no context or several). Before the backend, `ExpressionRewrites.writeContextNames` keeps each member in a
   local at the top of the body and writes `use l` as a `use` of a record of those locals, which the backend
   compiles already, inner lambdas that capture them included.
-- ~~`memory { m -> ... }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)) becomes
-  `memory { context m -> ... }`, and `memory`'s signature becomes `[c] ([Memory, c] () -> a) -> a`~~
-  ([#1446](https://github.com/nanyx-lang/nanyx/issues/1446)). Done: `ContextNames.bind` binds a name to the `Memory`
+- `memory { m -> ... }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)) became
+  `memory { context m -> ... }`, and `memory`'s signature `[c] ([Memory, c] () -> a) -> a`
+  ([#1446](https://github.com/nanyx-lang/nanyx/issues/1446)). `ContextNames.bind` binds a name to the `Memory`
   of the `memory` block it is in (`MemoryCells.blockScope`), keeping the block's scope, and `use m` makes that scope
   the one a `mut` takes (`MemoryCells.withBlockScope`). A `use` of a name for a context without members loads
-  nothing, so `ExpressionRewrites.writeContextNames` drops it before the backend. `Memory` is never a value: its
-  name in a type is the plain nominal type until [#1447](https://github.com/nanyx-lang/nanyx/issues/1447) makes it an
-  error.
-- ~~A context's name in a type is an error, and so is a constructor call that isn't a `use`'s instance~~
-  ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)). Done: `TypeResolution.unknownTypeErrors` reports a
+  nothing, so `ExpressionRewrites.writeContextNames` drops it before the backend.
+- A context's name in a type is an error, and so is a constructor call that isn't a `use`'s instance
+  ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)): `TypeResolution.unknownTypeErrors` reports a
   context's name anywhere in an annotation or a type definition outside a context list (NYX0247), except the context
   `use C(T)(members)` is desugared with (`ensureInstanceContextExists`), and a constructor call `UseDischarge.mark`
   didn't mark as a `use`'s instance is NYX0248. `examples/Nim.nyx` already gave its strategies as plain functions.
   `examples/sql-utils.nyx`'s data source opens a `Session` record that `withConnection` loads as the `Connection`.
-- ~~A lambda passed to a function is given a parameterised context its type requires~~
-  ([#1512](https://github.com/nanyx-lang/nanyx/issues/1512)). Done: `Contexts.extendEnvForLambdaArgument` puts the
+- A lambda passed to a function is given a parameterised context its type requires
+  ([#1512](https://github.com/nanyx-lang/nanyx/issues/1512)): `Contexts.extendEnvForLambdaArgument` puts the
   instance at the types the parameter's type applies it to in scope for the lambda's body, with its members, and
   `Contexts.instancesSuppliedToLambda` puts it in the lambda's type, so the function it is passed to passes its
   members, as a def's are passed. A lambda inside it captures them as it captures a `use`'s (`LambdaLifting.lift`).
   So `additive: ([Monoid(int)] () -> b) -> b` is a handler, and `examples/traitsAndTypeclasses.nyx`'s monoids are
   written as handlers: `additive { reduce(xs) }`.
-- ~~A `use` loads only a context's constructor or a `context x` name~~
-  ([#1448](https://github.com/nanyx-lang/nanyx/issues/1448)). Done: `UseDischarge.notLoadable` makes NYX0249 of a
+- A `use` loads only a context's constructor or a `context x` name
+  ([#1448](https://github.com/nanyx-lang/nanyx/issues/1448)): `UseDischarge.notLoadable` makes NYX0249 of a
   `use` of anything else, a record, a def's name, a call or a field, before its value is checked; a `context x`
   name is loaded before that is asked (`ContextNames.loaded`). So [#1137](https://github.com/nanyx-lang/nanyx/issues/1137)
   (the backend can't compile `use f()` or `use x`) is no longer needed, and is closed. The tour's collection builders
@@ -430,9 +433,9 @@ The design draws the line there, and makes every helper a function that takes th
   `use` of a record, which is what `ExpressionRewrites.writeContextNames` makes of `use l`.
 - [#1059](https://github.com/nanyx-lang/nanyx/issues/1059) is settled: context instances are never values, and a
   record holding a lambda doesn't take on its contexts ([Context-qualified types](./context-qualified-types)).
-- ~~A protected or private context matches only itself ([#1443](https://github.com/nanyx-lang/nanyx/issues/1443)),
+- A protected or private context matches only itself ([#1443](https://github.com/nanyx-lang/nanyx/issues/1443)),
   and a private one's members can be called only in its home module
-  ([#1449](https://github.com/nanyx-lang/nanyx/issues/1449)).~~ Done, see
+  ([#1449](https://github.com/nanyx-lang/nanyx/issues/1449)): see
   [Protected and private contexts](#protected-and-private-contexts).
 
 ## Decided along the way
@@ -461,7 +464,7 @@ The design draws the line there, and makes every helper a function that takes th
 
 ## Protected and private contexts
 
-Done in [#1449](https://github.com/nanyx-lang/nanyx/issues/1449). On a context, `protected` and `private` are about
+Built in [#1449](https://github.com/nanyx-lang/nanyx/issues/1449). On a context, `protected` and `private` are about
 access. Any module can name either in a context list and call what requires it, but only the home module can write its
 constructor in a `use`: NYX0212, the check every nominal type's constructor has, which says "context" for one. Other
 modules can call a `protected` context's members. Only the home module can call a `private` one's, or read them as
@@ -473,19 +476,19 @@ from leaving out `export`, which stops other modules naming it at all. A scoped 
 Hover hides a private context's members outside its file, as it hides a private type's shape. Within one file, a
 `module name =` block's private type or context still shows its shape everywhere in the file.
 
-# Plan
+# How the scope check is built
 
-1. ~~Let a `use` give a member a lambda that needs more contexts, required where the `use` is written~~
-   ([#1054](https://github.com/nanyx-lang/nanyx/issues/1054)). Done: see `UseDischarge.fs` above.
-2. ~~Make a lambda that uses a cell require `Memory`~~ ([#1055](https://github.com/nanyx-lang/nanyx/issues/1055)).
-   Done: a read or change of a cell requires `Memory` of the lambda around it (`MemoryCells.recordUse`), so
+1. Let a `use` give a member a lambda that needs more contexts, required where the `use` is written
+   ([#1054](https://github.com/nanyx-lang/nanyx/issues/1054)). See `UseDischarge.fs` above.
+2. Make a lambda that uses a cell require `Memory` ([#1055](https://github.com/nanyx-lang/nanyx/issues/1055)).
+   a read or change of a cell requires `Memory` of the lambda around it (`MemoryCells.recordUse`), so
    `{ word -> count := count + 1 }` is `[Memory] string -> ()`, and a lambda that calls it requires `Memory` too.
-3. ~~Parse and format `scoped context`, which must be protected or private~~ ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
-   Done: the parser records `Scoped` (with the keyword's span) among the definition's modifiers,
+3. Parse and format `scoped context`, which must be protected or private ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
+   the parser records `Scoped` (with the keyword's span) among the definition's modifiers,
    `TypeDefInfo.IsScoped` carries it, a scoped context that is neither is NYX0232, and `Memory` is declared
    `scoped`.
-4. ~~Keep what requires a scoped context inside the call that supplies it, replacing NYX0224~~
-   ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057)). Done in two steps:
+4. Keep what requires a scoped context inside the call that supplies it, replacing NYX0224
+   ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057)). In two steps:
    - The scope is carried in types: a scoped context in a type is `TyApply("Memory", [scope])`, the scope wrapped so
      that `FunctionContexts.ScopedContext` knows it (`FunctionContexts.scoped`). Every scoped context of a name that one
      signature writes shares a scope (`WrittenContexts.read`), and a def's own `Memory`, where the def is named or
@@ -519,9 +522,9 @@ Hover hides a private context's members outside its file, as it hides a private 
      (`InferState.InferredScopedContexts`), and its type carries them, so its callers are checked in turn. A `for`
      loop's body runs where the loop is written, so the loop is checked the same way
      ([#1561](https://github.com/nanyx-lang/nanyx/issues/1561)).
-5. ~~Let a `memory` block name its `Memory`, `memory { context m -> ... }`~~
+5. Let a `memory` block name its `Memory`, `memory { context m -> ... }`
    ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058), then
-   [#1446](https://github.com/nanyx-lang/nanyx/issues/1446) for the `context m` form). Done: see
-   [What changes](#what-changes). Each call's own scope is a variable named `@call` (`FunctionContexts.isCallScope`): `pairUp` never
+   [#1446](https://github.com/nanyx-lang/nanyx/issues/1446) for the `context m` form). See
+   [How it is built](#how-it-is-built). Each call's own scope is a variable named `@call` (`FunctionContexts.isCallScope`): `pairUp` never
    pairs two of them, so an inner block's requirement of an outer block's `Memory` goes into its context variable,
    and the unifier keeps a call's scope as what a plain variable it meets becomes.

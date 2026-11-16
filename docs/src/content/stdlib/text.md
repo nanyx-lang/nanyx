@@ -52,7 +52,7 @@ The number of bytes in `s`.
 ## `string.substring`
 
 ```nanyx fragment
-def string.substring: (string, length: int, start: int) -> string
+def string.substring: (string, start: int, length: int) -> string
 ```
 
 The `length` bytes of `s` starting at byte `start`. Out-of-range values are clamped, so the result
@@ -207,7 +207,7 @@ for any `times`.
 ## `string.padStart`
 
 ```nanyx fragment
-def string.padStart: (string, fill: string, width: int) -> string
+def string.padStart: (string, width: int, fill: string) -> string
 ```
 
 `s` with `fill` repeated in front of it until it is `width` bytes long. Longer strings are unchanged.
@@ -215,7 +215,7 @@ def string.padStart: (string, fill: string, width: int) -> string
 ## `string.padEnd`
 
 ```nanyx fragment
-def string.padEnd: (string, fill: string, width: int) -> string
+def string.padEnd: (string, width: int, fill: string) -> string
 ```
 
 `s` with `fill` repeated after it until it is `width` bytes long. Longer strings are unchanged.
@@ -323,7 +323,7 @@ the last code point (1114111, `0x10FFFF`) gives `#invalidCodePoint`.
 ## `StringSlice`
 
 ```nanyx fragment
-type StringSlice = private (length: int, start: int, text: string)
+type StringSlice = private (text: string, start: int, length: int)
 ```
 
 A view of a run of a string's bytes, which shares the string instead of copying it: the string,

@@ -32,8 +32,9 @@ Numeric utilities.
 [`abs`](#abs), [`sign`](#sign) and [`pow`](#pow) are generic over the `Num(a)` context, so they take an `int` or a
 `float`. `abs`, `sign`, [`min`](#min), [`max`](#max), [`minMax`](#minmax) and [`clamp`](#clamp) compare through `Ord(a)`, so the
 last four take a value of any type that has an order, a `string` among them. [`sqrt`](#sqrt), [`exp`](#exp),
-[`ln`](#ln), [`floor`](#floor), [`ceil`](#ceil), [`round`](#round) and [`truncate`](#truncate) take a `float`. [`pi`](#pi) and [`e`](#e) are
-constants.
+[`ln`](#ln), [`floor`](#floor), [`ceil`](#ceil), [`round`](#round) and [`truncate`](#truncate) take a `float`. [`pi`](#pi), [`e`](#e),
+[`infinity`](#infinity) and [`nan`](#nan) are constants, and [`isNaN`](#isnan), [`isInfinite`](#isinfinite) and [`isFinite`](#isfinite) tell the
+special floats from the others.
 
 Import it with `import nanyx/math as math` to call `math.abs(x)` as the docs do, or unqualified to
 call `abs(x)`.
@@ -53,6 +54,48 @@ def e: float
 ```
 
 The base of the natural logarithm, as near as a `float` holds it, so `exp(1.0)` is `e`.
+
+## `infinity`
+
+```nanyx fragment
+def infinity: float
+```
+
+Positive infinity, the `float` above every other: what `1.0 / 0.0` gives, and `exp` gives past
+about 709.8. Minus infinity is `-math.infinity`. It is written `Infinity`.
+
+## `nan`
+
+```nanyx fragment
+def nan: float
+```
+
+Not a number: the `float` that `0.0 / 0.0` and `sqrt(-1.0)` give. It is not equal to anything,
+itself included, so test for it with [`isNaN`](#isnan), not `==`. It is written `NaN`.
+
+## `isNaN`
+
+```nanyx fragment
+def isNaN: float -> bool
+```
+
+Whether `x` is NaN, as [`nan`](#nan) is: the one `float` not equal to itself.
+
+## `isInfinite`
+
+```nanyx fragment
+def isInfinite: float -> bool
+```
+
+Whether `x` is infinity or minus infinity.
+
+## `isFinite`
+
+```nanyx fragment
+def isFinite: float -> bool
+```
+
+Whether `x` is an ordinary number: neither NaN nor infinite.
 
 ## `abs`
 
@@ -99,7 +142,7 @@ first.
 ## `clamp`
 
 ```nanyx fragment
-def clamp: [Ord(a)] (a, max: a, min: a) -> a
+def clamp: [Ord(a)] (a, min: a, max: a) -> a
 ```
 
 `n` moved into the range from `min` to `max`: `min` if it is below, `max` if it is above.

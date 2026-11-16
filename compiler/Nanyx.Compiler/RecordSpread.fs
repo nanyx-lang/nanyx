@@ -25,5 +25,5 @@ let infer (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr * Infe
             | Error err -> fields, current, errors @ err
             | Ok (typedValue, next) -> Map.add name typedValue.Type fields, next, errors
     match parts |> List.fold addPart (Map.empty, state, []) with
-    | fields, current, [] -> Ok (mkTypedExpr expr (TyRecord fields) None None None, current)
+    | fields, current, [] -> Ok (mkTypedExpr expr (TyRecord(fields, FieldOrder.none)) None None None, current)
     | _, _, errors -> Error errors

@@ -23,10 +23,17 @@ Nanyx was meant to support arbitrary unions of types. Roc's design is why it's `
 
 # Contexts
 
-**Haskell's type classes**, **Koka's effects**, and **Scala 3's givens**.
+**Haskell's type classes**, **Koka's** and **Flix's effects**, **Scala 3's givens**, and the wider work on effect
+programming.
 
 A context is a set of operations a function requires, such as `Console`, or `Eq(a)` for a type's equality, that is
 provided where the function is called.
+
+Contexts owe most to the research on **algebraic effects and handlers**: the idea, from Plotkin and Pretnar's work
+and languages such as Eff, Koka, Effekt and Flix, that what a function may do belongs in its type, separately from
+what it computes, and that the code which runs it decides how those effects are carried out. Nanyx's contexts are a
+deliberately simple corner of that design (no resumable handlers), but the shape is the same: a pure function's type
+says it's pure, and an effect is a requirement passed in, not something done behind the program's back.
 
 - From **Haskell**: contexts over types (`Eq(a)`, `Ord(a)`, `Hash(a)`) as type classes, and *coherence*. A type has one
   instance of a context, its own, which nothing can replace, so a set built in one place can't be read with a
@@ -34,6 +41,9 @@ provided where the function is called.
 - From **Koka**: effects tracked in function types (`[Console] string -> ()`), passed through higher-order functions
   with a variable (`[c]`, Koka's effect-row polymorphism), and handlers that are ordinary functions running a block
   under an implementation (`withConsoleLog { ... }`).
+- From **Flix**: effects as part of every function's type in a practical, everyday language, with purity tracked by
+  the compiler and inferred where it isn't written, and effect polymorphism for higher-order functions, so a pure
+  `list.map` stays pure when given a pure function.
 - From **Scala 3**: capabilities passed implicitly to whatever needs them, written once where they're provided.
 
 See [Contexts](../advanced/contexts).
@@ -61,13 +71,11 @@ Nanyx has no garbage collector: values are reference-counted, and freed as soon 
 
 See [Reference counting](./reference-counting).
 
-# Workflows and pipes
+# Look and feel, workflows, and pipes
 
 **F#**.
 
-Nanyx's workflows (`proc { try ... }`, with custom keywords) are F#'s computation expressions, rebuilt on contexts. The
-pipe, `xs \map(f)`, is F#'s `|>`, and much of Nanyx's feel comes from F#: indentation-sensitive, expression-oriented,
-with types inferred and written only where they help. See [Workflows](../advanced/workflows) and
+Nanyx generally looks quite a lot like F#: indentation-sensitive, expression-oriented, with types inferred and written only where they help. The pipe, `xs \map(f)`, is F#'s `|>`, and Nanyx's workflows (`proc { try ... }`) are F#'s computation expressions, rebuilt on contexts. See [Workflows](../advanced/workflows) and
 [Piping](../tour/piping).
 
 # Extending a type
@@ -77,15 +85,6 @@ with types inferred and written only where they help. See [Workflows](../advance
 An attached definition, `def string.shout = ...`, can be added to any type from any module, as C# and Kotlin allow,
 and reads as `"hi" \shout`. Unlike them, it can never replace a definition the type already has. See
 [Attached definitions](../advanced/attached-definitions).
-
-# Slices
-
-**C#'s `Span<T>`** and **Swift's `ArraySlice`**.
-
-A slice is a view of part of an array or a string, without copying it. C#'s spans are the reason Nanyx has them;
-Swift's `ArraySlice` is why a slice is a type of its own, so a small slice can't quietly keep a large array alive.
-Reference counting means a Nanyx slice needs none of a span's restrictions on where it can live. See
-[Collections](../tour/collections).
 
 # Hosts
 
@@ -115,15 +114,26 @@ See [Packages](../tour/packages).
 A Nanyx program with type errors still runs: the code that checked runs as normal, and the program stops only if it
 reaches code that didn't, with the error that code had. So you can try one part of a program while another is still
 broken. It had always seemed like something a strongly typed language couldn't reasonably do. Roc showed that it can,
-and gave Nanyx the nerve to try it. See [Deferred errors](../work-in-progress/deferred-errors).
+and gave Nanyx the nerve to try it.
+
+It has changed how writing Nanyx feels more than almost anything else. You no longer have to fix every error in a file
+before you can see whether the part you're working on does what you meant: you change a function, run the program,
+and look, while a half-finished refactor elsewhere waits its turn. The type checker stays strict, and every error is
+still reported, but it no longer stands between you and trying an idea. The loop from writing code to seeing it run is
+as short in Nanyx as in a dynamic language. See [Deferred errors](../tour/error-handling#deferred-errors).
 
 # Error messages and tools
 
-**Elm**, **Rust**, and **Go**.
+**Elm**, **Rust**, **Prettier**, and the editor tooling of **Microsoft** and **JetBrains**.
 
 - From **Elm**: compiler errors that explain what was found and what to do about it, without blaming the reader.
 - From **Rust**: a stable code for every error, with a page explaining each ([Compiler errors](../standard-tools/errors));
   naming a look-alike Unicode character, such as `−` for `-`, instead of reporting a confusing parse error; and lint
   rules suppressed with an attribute, `@allow(...)`.
-- From **Go**: one official layout, applied by [the formatter](../standard-tools/formatter), so nobody argues about
-  style.
+- From **Prettier**: one official layout, applied by [the formatter](../standard-tools/formatter) with almost
+  nothing to configure, so nobody argues about style and formatting on save just works.
+- From **Microsoft** and **JetBrains**: the conviction that a language is only as pleasant as its editor. Visual
+  Studio, VS Code and TypeScript, IntelliJ and Rider showed what it's like when the tools understand the code: types on
+  hover, rename that's always right, refactorings you trust, errors as you type. Nanyx is designed to be that kind of
+  language from the start, with [the VS Code extension](../standard-tools/vs-code-extension) and the language server
+  built alongside the compiler, not after it.

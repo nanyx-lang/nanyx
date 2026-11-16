@@ -21,7 +21,7 @@ let rec private pairScopes (general: Ty) (instantiated: Ty) : (string * Ty * Ty)
     | TyApply(_, gs), TyApply(_, ss)
     | TyAlias(_, gs, _), TyAlias(_, ss, _)
     | TyUnion gs, TyUnion ss -> all gs ss
-    | TyRecord gf, TyRecord sf when Set.ofSeq gf.Keys = Set.ofSeq sf.Keys -> all (List.ofSeq gf.Values) (List.ofSeq sf.Values)
+    | TyRecord(gf, _), TyRecord(sf, _) when Set.ofSeq gf.Keys = Set.ofSeq sf.Keys -> all (List.ofSeq gf.Values) (List.ofSeq sf.Values)
     | TyTag(_, Some g), TyTag(_, Some s)
     | TyNominal(_, _, g, _), TyNominal(_, _, s, _) -> pairScopes g s
     | _ -> []

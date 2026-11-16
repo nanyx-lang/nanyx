@@ -23,7 +23,7 @@ module Intrinsics =
 
     /// The input type of a function taking several arguments: a positional record, as inference builds it.
     let private tuple (items: Ty list) =
-        items |> List.mapi (fun index ty -> string index, ty) |> Map.ofList |> TyRecord
+        TyRecord(items |> List.mapi (fun index ty -> string index, ty) |> Map.ofList, FieldOrder.none)
 
     let private elementVar = { Id = -1; Name = Some "a" }
     let private element = TyVar elementVar

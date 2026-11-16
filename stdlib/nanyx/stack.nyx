@@ -55,7 +55,7 @@ export def Stack.isEmpty: Stack(a) -> bool = { Stack(items) ->
 
 --| How many values are on `stack`. It counts them, so it takes time in proportion to how many
   there are.
-export def Stack.count: Stack(a) -> int = { Stack(items) ->
+export def Stack.length: Stack(a) -> int = { Stack(items) ->
   list.length(items)
 }
 

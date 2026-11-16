@@ -76,7 +76,7 @@ def show = I64.toString"""
     Assert.Equal(TyPrimitive "int", typed.Types.["a"])
     Assert.Equal(TyPrimitive "int", typed.Types.["b"])
     Assert.Equal(TyPrimitive "int", typed.Types.["c"])
-    Assert.Equal(TyFunc(TyRecord(Map.ofList [ "0", TyPrimitive "int"; "1", TyPrimitive "int" ]), TyPrimitive "int", []), typed.Types.["total"])
+    Assert.Equal(TyFunc(TyRecord(Map.ofList [ "0", TyPrimitive "int"; "1", TyPrimitive "int" ], FieldOrder.none), TyPrimitive "int", []), typed.Types.["total"])
     Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "int", []), typed.Types.["int.double"])
     Assert.Equal(TyPrimitive "float", typed.Types.["d"])
     Assert.Equal(TyApply("list", [ TyPrimitive "bool" ]), typed.Types.["flags"])

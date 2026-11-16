@@ -306,4 +306,4 @@ Use `???` as a placeholder to keep code compiling while you iterate:
 def myFunction = { () -> ??? }
 ```
 
-`???` fits wherever a value is expected, whatever its type, and its type is written `???` too: `myFunction` is a `() -> ???`. The compiler reports it as an error (`Not implemented`), but like a type error it does not stop a debug build: `nanyx run` runs the program, and if it reaches the `???`, the program stops there and says so. A release build (`--release`) refuses it, so unfinished code is not shipped by accident.
+`???` fits wherever a value is expected, whatever its type, and its type is written `???` too: `myFunction` is a `() -> ???`. The compiler reports it as an error (`Not implemented`), but like a type error it does not stop a debug build ([Deferred errors](../tour/error-handling#deferred-errors)): `nanyx run` runs the program, and if it reaches the `???`, the program stops there and says so. A release build (`--release`) refuses it, so unfinished code is not shipped by accident.

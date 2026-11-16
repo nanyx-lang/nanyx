@@ -70,7 +70,7 @@ let rec private varsIn (keyOf: TyVar -> 'key option) (general: Ty) (specific: Ty
     | TyApply(_, gs), TyApply(_, ss) when gs.Length = ss.Length -> all (List.zip gs ss)
     | TyAlias(_, gs, gu), TyAlias(_, ss, su) when gs.Length = ss.Length -> all ((gu, su) :: List.zip gs ss)
     | TyNominal(_, _, gu, _), TyNominal(_, _, su, _) -> recur gu su
-    | TyRecord gf, TyRecord sf -> all (fieldPairs gf sf)
+    | TyRecord(gf, _), TyRecord(sf, _) -> all (fieldPairs gf sf)
     | TyOpenRecord(gf, _), TyOpenRecord(sf, _) -> all (fieldPairs gf sf)
     | TyTag(_, Some g), TyTag(_, Some s) -> recur g s
     | TyUnion gs, TyUnion ss when gs.Length = ss.Length -> all (List.zip gs ss)
@@ -90,7 +90,7 @@ let private contextMemberTypes (state: InferState) (ctxName: Identifier) (argTys
     match state.TypeDefs |> Map.tryFind ctxName with
     | Some info when info.Parameters.Length = argTys.Length ->
         match Unifier.unalias info.Underlying with
-        | TyRecord fields -> Some (fields |> Map.toList |> List.map (fun (name, ty) -> name, Unifier.applyToParameters info.Parameters argTys ty))
+        | TyRecord(fields, _) -> Some (fields |> Map.toList |> List.map (fun (name, ty) -> name, Unifier.applyToParameters info.Parameters argTys ty))
         | _ -> None
     | _ -> None
 
@@ -639,7 +639,7 @@ let internal pointFreeAsLambda (env: TypeEnv) (state: InferState) (value: Expres
         let arity =
             match TypeEnv.tryFind name env |> Option.map (_.Type >> Unifier.unalias) with
             | Some (TyFunc(TyPrimitive "unit", _, _)) -> 0
-            | Some (TyFunc(TyRecord fields, _, _)) when not fields.IsEmpty && Set.ofSeq fields.Keys = Set.ofList (List.init fields.Count string) -> fields.Count
+            | Some (TyFunc(TyRecord(fields, _), _, _)) when not fields.IsEmpty && Set.ofSeq fields.Keys = Set.ofList (List.init fields.Count string) -> fields.Count
             | Some (TyFunc _) -> 1
             | _ -> 0
         if arity = 0 then None

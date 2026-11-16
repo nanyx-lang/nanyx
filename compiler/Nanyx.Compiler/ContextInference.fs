@@ -27,7 +27,7 @@ module internal ContextInference =
             | TyUnion args -> args |> List.collect collect
             | TyFunc(arg, ret, contexts) ->
                 (Unifier.writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect) @ collect arg @ collect ret
-            | TyRecord fields -> fields |> Map.toList |> List.collect (snd >> collect)
+            | TyRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyOpenRecord(fields, row) -> (fields |> Map.toList |> List.collect (snd >> collect)) @ [ row ]
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
         collect ty |> List.distinctBy _.Id
@@ -75,9 +75,9 @@ module internal ContextInference =
                     | contexts -> Some (TypeWithContext(contexts, TypeExpr.synthetic (TypeFunc(arg, ret))))
                 | _ -> None
             // A tuple, such as a function's several parameters, is a record of the fields `0`, `1`, ...
-            | TyRecord fields when not fields.IsEmpty && Set.ofSeq fields.Keys = Set.ofList (List.init fields.Count string) ->
+            | TyRecord(fields, _) when not fields.IsEmpty && Set.ofSeq fields.Keys = Set.ofList (List.init fields.Count string) ->
                 all (List.init fields.Count (fun index -> fields.[string index])) |> Option.map TypeTuple
-            | TyRecord fields -> writtenFields fields |> Option.map TypeRecord
+            | TyRecord(fields, _) -> writtenFields fields |> Option.map TypeRecord
             // `(price: b, ...a)`, its other fields the row variable `a`.
             | TyOpenRecord(fields, row) ->
                 match writtenFields fields, names |> Map.tryFind row.Id with
@@ -147,7 +147,7 @@ module internal ContextInference =
             | TySelf args -> args |> List.collect collect
             | TyUnion items -> items |> List.collect (function TyVar v -> [ v ] | item -> collect item)
             | TyFunc(arg, ret, _) -> collect arg @ collect ret
-            | TyRecord fields
+            | TyRecord(fields, _)
             | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
         collect ty |> List.distinctBy _.Id

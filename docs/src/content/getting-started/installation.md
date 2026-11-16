@@ -4,8 +4,8 @@ description: "How to install Nanyx on your system"
 order: 2
 ---
 
-Nanyx is one program, `nanyx`, which compiles, runs, tests and formats Nanyx code and is the language server for
-editors. It runs on Windows, macOS and Linux, and needs nothing else installed: each release is self-contained.
+Nanyx is one program, `nanyx`, which compiles, runs and formats Nanyx code and is the language server for
+editors (see [The nanyx command](../standard-tools/command-line)). It runs on Windows, macOS and Linux, and needs nothing else installed: each release is self-contained.
 
 There are three ways to get it:
 
@@ -39,12 +39,14 @@ releases are the extension, not the compiler), and download the file for your pl
 | Linux (x64) | `nanyx-<version>-linux-x64.tar.gz` |
 | Linux (ARM64) | `nanyx-<version>-linux-arm64.tar.gz` |
 
-Each archive holds a single file: `nanyx.exe` on Windows, `nanyx` everywhere else. Put it in a folder of its own
-and add that folder to your `PATH`.
+Each archive holds the compiler, `nanyx.exe` on Windows and `nanyx` everywhere else, and the files it reads from
+beside it: the standard library, already checked (`checked-library.bin`), and a `packages` folder with the packages
+the compiler ships, such as the console host that runs command-line programs. Extract the whole archive into a folder
+of its own, keep the files together, and add that folder to your `PATH`.
 
 ## Windows
 
-Extract `nanyx.exe` from the zip into a folder such as `%LOCALAPPDATA%\Programs\nanyx`. Then add that folder to
+Extract the zip into a folder such as `%LOCALAPPDATA%\Programs\nanyx`. Then add that folder to
 your `PATH`: search the Start menu for **Edit environment variables for your account**, select `Path`, choose
 **Edit**, then **New**, and paste the folder's path. Or, in PowerShell:
 
@@ -57,28 +59,28 @@ Open a new terminal for the change to take effect.
 
 ## macOS and Linux
 
-Extract `nanyx` into a folder on your `PATH`, such as `~/.local/bin`:
+Extract the archive into a folder of its own, such as `~/.local/nanyx`:
 
 ```bash
-mkdir -p ~/.local/bin
-tar -xzf nanyx-<version>-<platform>.tar.gz -C ~/.local/bin
+mkdir -p ~/.local/nanyx
+tar -xzf nanyx-<version>-<platform>.tar.gz -C ~/.local/nanyx
 ```
 
-If `~/.local/bin` isn't on your `PATH` yet, add this line to your shell's start-up file (`~/.zshrc` or
-`~/.bashrc`) and open a new terminal:
+Then add that folder to your `PATH`: add this line to your shell's start-up file (`~/.zshrc` or `~/.bashrc`) and
+open a new terminal:
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.local/nanyx:$PATH"
 ```
 
 On macOS, the release isn't signed, so macOS blocks a `nanyx` that was downloaded in a browser. Remove the
 quarantine flag once to let it run:
 
 ```bash
-xattr -d com.apple.quarantine ~/.local/bin/nanyx
+xattr -d com.apple.quarantine ~/.local/nanyx/nanyx
 ```
 
-To update, download the newer release and replace the file.
+To update, download the newer release and extract it over the old one.
 
 # Package managers
 

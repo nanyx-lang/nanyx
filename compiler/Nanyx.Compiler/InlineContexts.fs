@@ -25,7 +25,7 @@ module internal InlineContexts =
         match general, specific with
         | TyVar v, _ when v.Id = parameter.Id -> Some specific
         | TyFunc(ga, gr, _), TyFunc(sa, sr, _) -> inAll [ ga, sa; gr, sr ]
-        | TyRecord gf, TyRecord sf -> inAll [ for KeyValue(name, g) in gf do match sf |> Map.tryFind name with Some s -> yield g, s | None -> () ]
+        | TyRecord(gf, _), TyRecord(sf, _) -> inAll [ for KeyValue(name, g) in gf do match sf |> Map.tryFind name with Some s -> yield g, s | None -> () ]
         | TyApply(_, gs), TyApply(_, ss) when gs.Length = ss.Length -> inAll (List.zip gs ss)
         | TyTag(_, Some g), TyTag(_, Some s) -> bindingOf parameter g s
         | _ -> None
@@ -35,7 +35,7 @@ module internal InlineContexts =
         match state.TypeDefs |> Map.tryFind context with
         | Some ({ Parameters = [ parameter ] } as info) ->
             match Unifier.unalias info.Underlying with
-            | TyRecord fields -> fields |> Map.tryFind memberName |> Option.map (fun memberTy -> parameter, memberTy)
+            | TyRecord(fields, _) -> fields |> Map.tryFind memberName |> Option.map (fun memberTy -> parameter, memberTy)
             | _ -> None
         | _ -> None
 

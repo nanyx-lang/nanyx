@@ -109,7 +109,7 @@ module internal StructuralInstances =
             | Some (body :: args) -> Some (TyRecursive(body, args))
             | _ -> None
         | TyFunc(arg, ret, contexts) -> all [ arg; ret ] |> Option.map (fun parts -> TyFunc(parts.[0], parts.[1], contexts))
-        | TyRecord fields -> fieldsOf fields |> Option.map TyRecord
+        | TyRecord(fields, order) -> fieldsOf fields |> Option.map (fun fields -> TyRecord(fields, order))
         | TyOpenRecord(fields, row) -> fieldsOf fields |> Option.map (fun fields -> TyOpenRecord(fields, row))
         | TyTag(name, payload) ->
             match payload with
@@ -145,8 +145,8 @@ module internal StructuralInstances =
         match Unifier.unalias ty with
         | TyTag(name, payload) -> Some (TagShape [ name, payload ])
         | TyUnion items when not items.IsEmpty -> tagsOf items |> Option.map TagShape
-        | TyRecord fields when isTuple fields -> Some (TupleShape (tupleItems fields))
-        | TyRecord fields when not fields.IsEmpty -> Some (RecordShape (Map.toList fields))
+        | TyRecord(fields, _) when isTuple fields -> Some (TupleShape (tupleItems fields))
+        | TyRecord(fields, _) when not fields.IsEmpty -> Some (RecordShape (Map.toList fields))
         | Lists.ListType element -> Some (ListShape element)
         | _ -> None
 
@@ -277,9 +277,9 @@ module internal StructuralInstances =
                     match payload with
                     | None -> None, text [ StringText $"#{tagName}" ]
                     // A payload written out as a tuple or a record is written field by field, as the tag is made.
-                    | Some (TyRecord fields) when isTuple fields ->
+                    | Some (TyRecord(fields, _)) when isTuple fields ->
                         Some (pattern (TuplePattern (positions fields.Count))), bracketed $"#{tagName}(" (positional (tupleItems fields))
-                    | Some (TyRecord fields) when not fields.IsEmpty ->
+                    | Some (TyRecord(fields, _)) when not fields.IsEmpty ->
                         Some whole, bracketed $"#{tagName}(" (named (name (partName 0)) (Map.toList fields))
                     | Some (TyPrimitive "unit") -> Some (pattern UnitPattern), text [ StringText $"#{tagName}()" ]
                     | Some payload -> Some whole, bracketed $"#{tagName}(" [ part payload (name (partName 0)) ]
@@ -469,10 +469,10 @@ module internal StructuralInstances =
             | TyUnion items ->
                 let items, acc = items |> List.mapFold part acc
                 TyUnion items, acc
-            | TyRecord fields ->
+            | TyRecord(fields, order) ->
                 let names, tys = fields |> Map.toList |> List.unzip
                 let tys, acc = tys |> List.mapFold part acc
-                TyRecord (List.zip names tys |> Map.ofList), acc
+                TyRecord(List.zip names tys |> Map.ofList, order), acc
             | Lists.ListType element ->
                 let element, acc = part acc element
                 Lists.ofType element, acc

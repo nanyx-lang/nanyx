@@ -89,7 +89,7 @@ dependencies = ["acme.core"]
 
 ## Scripts
 
-A script has no manifest, and `#:package` directives stand in for `dependencies`. Where its lockfile goes is [open](#open-questions). The proposal is a `hello.nyx.lock` beside `hello.nyx`, written the first time the script runs with a dependency. A script without one still runs and resolves its dependencies each time, which is what someone running a one-off script expects.
+A script has no manifest, and its `::dependency` directives stand in for `dependencies`. Where its lockfile goes is [open](#open-questions). The proposal is a `hello.nyx.lock` beside `hello.nyx`, written the first time the script runs with a dependency. A script without one still runs and resolves its dependencies each time, which is what someone running a one-off script expects.
 
 # Depending on a single file
 

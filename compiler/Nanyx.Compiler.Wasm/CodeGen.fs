@@ -379,7 +379,7 @@ let private contextLayoutsOf (typeDefs: Map<string, TypeDefInfo>) (typeLayouts: 
         |> Map.toList
         |> List.choose (fun (name, info) ->
             match Unifier.unalias info.Underlying, layoutOf typeLayouts name with
-            | TyRecord members, Some layout -> Some (name, info, layout |> List.choose (fun memberName -> members |> Map.tryFind memberName |> Option.map (fun ty -> memberName, ty)))
+            | TyRecord(members, _), Some layout -> Some (name, info, layout |> List.choose (fun memberName -> members |> Map.tryFind memberName |> Option.map (fun ty -> memberName, ty)))
             | _ -> None)
     { Plain =
         declared false
@@ -430,11 +430,11 @@ let rec private matchAnnotation (annotation: TypeExpr) (ty: Ty) : (TypeExpr * Ty
         | TypeFunc(input, output), TyFunc(input', output', _) -> matchAnnotation input input' @ matchAnnotation output output'
         // A function type written with the contexts it requires, `[c] a -> b`.
         | TypeWithContext(_, inner), _ -> matchAnnotation inner ty
-        | TypeTuple items, TyRecord fields ->
+        | TypeTuple items, TyRecord(fields, _) ->
             items |> List.mapi (fun index item -> fields |> Map.tryFind (string index) |> Option.map (matchAnnotation item) |> Option.defaultValue []) |> List.concat
         | TypeApply(applied, items), TyApply(applied', items') when applied = applied' && items.Length = items'.Length ->
             List.map2 matchAnnotation items items' |> List.concat
-        | TypeRecord written, TyRecord fields ->
+        | TypeRecord written, TyRecord(fields, _) ->
             written
             |> List.collect (function
                 | TypeField(fieldName, _, Some fieldType, _) ->
@@ -709,7 +709,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                                 match ty with
                                 | TyVar v when parameters.ContainsKey v.Id -> parameters.[v.Id]
                                 | TyFunc(input, output, contexts) -> TyFunc(bind input, bind output, contexts)
-                                | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> bind))
+                                | TyRecord(fields, order) -> TyRecord(fields |> Map.map (fun _ -> bind), order)
                                 | TyTag(tag, payload) -> TyTag(tag, payload |> Option.map bind)
                                 | TyApply(applied, args) -> TyApply(applied, args |> List.map bind)
                                 | TyUnion items -> TyUnion(items |> List.map bind)
@@ -720,7 +720,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                             // A context without parameters has its own type variables boxed, as in its layout.
                             let laidOut = if info.Parameters.IsEmpty then CoreIrLowerTypes.boxOwnVariables else id
                             match Unifier.unalias info.Underlying with
-                            | TyRecord members -> members |> Map.tryFind memberName |> Option.map (bind >> laidOut)
+                            | TyRecord(members, _) -> members |> Map.tryFind memberName |> Option.map (bind >> laidOut)
                             | _ -> None
                         else None
                     | _ -> None

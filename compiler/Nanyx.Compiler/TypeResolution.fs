@@ -252,8 +252,7 @@ let private isContextDef (modifiers: TypeDefModifier list) =
 let internal tupleRecordType (items: Ty list) =
     items
     |> List.mapi (fun index ty -> tupleFieldName index, ty)
-    |> Map.ofList
-    |> TyRecord
+    |> fun fields -> TyRecord(Map.ofList fields, FieldOrder.none)
 
 let internal inputTypeFromArgs argTys =
     match argTys with
@@ -263,6 +262,10 @@ let internal inputTypeFromArgs argTys =
 
 let private isPrivateType modifiers =
     modifiers |> List.exists (fun modifier -> modifier = TypeDefModifier.Private)
+
+/// The order the fields of a record type are written in (see `FieldOrder`).
+let private writtenOrder (fields: TypeRecordField list) =
+    FieldOrder(fields |> List.choose (function TypeField(name, _, _, _) | TypeMember(name, _) -> Some name | TypeFieldAttribute _ -> None))
 
 let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * InferState =
     match typeExpr.Kind with
@@ -297,7 +300,7 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
         tupleRecordType tys, current
     | TypeRecord fields ->
         let fieldMap, next = recordFieldTypes state fields
-        TyRecord fieldMap, next
+        TyRecord(fieldMap, writtenOrder fields), next
     // `...r` is the type variable `r`, shared with the rest of the annotation; `...` is a variable of its own.
     | TypeOpenRecord(fields, row) ->
         let fieldMap, next = recordFieldTypes state fields

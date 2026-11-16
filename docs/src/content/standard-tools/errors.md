@@ -7,6 +7,28 @@ order: 4
 Every error the compiler reports has a code, such as `NYX0201`, and a short title, such as "Type mismatch". The
 command line shows both before the message, and an editor links the code to its section on this page.
 
+The command line shows each error with the file, line and column it is at, then the line of source with the code it
+is about underlined:
+
+```text
+shapes.nyx:3:39: error NYX0201: 'string' cannot be used with *: it is not a number
+  |
+3 | def perimeter: int -> int = { side -> side * "4" }
+  |                                       ^^^^^^^^^^
+```
+
+On a terminal, the severity and the underline are coloured, unless the `NO_COLOR` environment variable is set.
+
+Where the compiler can tell what was meant, the message says so. An unknown name is followed by the names in scope
+closest to it (`Unknown identifier 'totl': did you mean 'total'?`), and a character that only looks like one Nanyx
+reads, such as U+2212 for `-`, is named. In an editor, these and other errors come with a fix that makes the edit for
+you: writing the name suggested, importing the standard library module that exports an unknown name, adding the arms a
+match is missing, adding a context a definition needs to its type, naming the arguments of a call that passes named
+parameters by position, or writing the character a look-alike stands for.
+
+Most errors, such as type errors and unknown names, don't stop a debug build: see
+[Deferred errors](../tour/error-handling#deferred-errors).
+
 The codes are grouped by what the compiler is doing when it finds the error:
 
 - `NYX00xx`: reading a file, its directives and its imports.
@@ -1328,7 +1350,7 @@ def same: [Foo(_)] a -> a = { x -> x }  -- error NYX0236: The body of 'same' doe
 
 # NYX0237: Entry point does not fit the host
 
-The definition marked `@entry` does not have the type its [host](../work-in-progress/hosts) runs. The host is a
+The definition marked `@entry` does not have the type its [host](../advanced/hosts) runs. The host is a
 function that takes the entry point, so the entry point must fit the type of its parameter. A command-line program runs
 under the console host, `nanyx.console/console.host`, whose entry point takes nothing and may require `Console`.
 

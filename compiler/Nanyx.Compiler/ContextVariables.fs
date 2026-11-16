@@ -80,7 +80,7 @@ let rec private pairs (isVariable: TyVar -> bool) (general: Ty) (specific: Ty) :
     | TyAlias(_, gs, _), TyAlias(_, ss, _)
     | TyNominal(_, gs, _, _), TyNominal(_, ss, _, _)
     | TyUnion gs, TyUnion ss -> all gs ss
-    | TyRecord gf, TyRecord sf when Set.ofSeq gf.Keys = Set.ofSeq sf.Keys -> all (List.ofSeq gf.Values) (List.ofSeq sf.Values)
+    | TyRecord(gf, _), TyRecord(sf, _) when Set.ofSeq gf.Keys = Set.ofSeq sf.Keys -> all (List.ofSeq gf.Values) (List.ofSeq sf.Values)
     | TyTag(_, Some g), TyTag(_, Some s) -> pairs isVariable g s
     | _ -> []
 

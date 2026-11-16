@@ -4,10 +4,12 @@ description: "What a call to a function that requires contexts costs, and how th
 order: 25
 ---
 
-> **Status: in progress.** This page describes what a call to a function that requires contexts compiles to, and
-> three changes that make it cheaper. Static closures and specialising on known members are done; inlining is not. It
-> is part of the [compilation](./compilation) workstream, and its issues carry the `compilation`, `wasm backend` and
-> `performance` labels.
+> **Status: done.** This page describes what a call to a function that requires contexts compiles to, and the three
+> changes that made it cheaper: static closures, specialising on known members, and inlining. What a user sees, that a
+> function's contexts are part of its type and passed where it's called, is in [Contexts](../advanced/contexts). It is
+> part of the [compilation](./compilation) workstream, and its issues carry the `compilation`, `wasm backend` and
+> `performance` labels. One thing is still open, under [Specialising on known members](#specialising-on-known-members):
+> a `use` of a lambda that captures nothing is still passed as a closure.
 
 # Summary
 
@@ -15,8 +17,8 @@ A function that requires contexts takes each of their members as a closure, and 
 table. Most calls pass members that are known when the call is compiled: the ambient `Console`, or an instance built
 from attached definitions, whose members are top-level functions. The compiler can use that. A closure over a
 top-level function is static data, so passing one allocates nothing. A function can be specialised on the
-members known at its call, so it calls them directly and is not passed the ones it never reads. An inliner could then
-fold small functions such as `println` into their callers.
+members known at its call, so it calls them directly and is not passed the ones it never reads. The inliner then
+folds small functions such as `println` into their callers.
 
 # What a call costs
 
@@ -145,8 +147,8 @@ its contexts aren't available. A lambda that leaves still requires the context w
 
 # Design
 
-The three changes are independent, and each is worth doing without the others. They are listed in the order to do
-them.
+The three changes are independent, and each was worth doing without the others. They are listed in the order they
+were done.
 
 ## Closures over top-level functions are static data
 
@@ -163,7 +165,7 @@ none. The module lays out one block for each such function after its string lite
 `CodeGen.fs`): a count of 0, an info word of 0, since nothing ever drops it, and the function's table slot. The tests
 are in `Features/Memory/StaticClosureTests.fs`.
 
-In the `proc` measurement on [Context escape](./context-escape#measured), variant C goes from 9 allocations per block
+In the `proc` measurement on [Context escape](./context-escape#measured-before-the-change), variant C goes from 9 allocations per block
 to 7, as predicted.
 
 ## Specialising on known members
@@ -230,7 +232,7 @@ type class dictionaries.
 
 After specialising, `println("hi")` is a call to a function that calls `string.toString`, which returns its
 argument, and calls `write` twice. The inliner folds the small ones into the caller
-([#745](https://github.com/nanyx-lang/nanyx/issues/745)).
+([#745](https://github.com/nanyx-lang/nanyx/issues/745), done).
 
 The design is on its own page, [Inlining](./inlining): what is inlined, and how a workflow's block compiles down to the
 code you would write by hand.
@@ -241,5 +243,5 @@ code you would write by hand.
    ([#743](https://github.com/nanyx-lang/nanyx/issues/743), done).
 2. ~~Specialise a function on the context members known where it is called~~
    ([#744](https://github.com/nanyx-lang/nanyx/issues/744), done: `CoreIrLowerKnown.fs`).
-3. Inline small functions in the core IR: see [Inlining](./inlining)
-   ([#745](https://github.com/nanyx-lang/nanyx/issues/745)).
+3. ~~Inline small functions in the core IR~~ ([#745](https://github.com/nanyx-lang/nanyx/issues/745), done: see
+   [Inlining](./inlining)).

@@ -121,7 +121,7 @@ let private argTypesFromExpected (state: InferState) (span: SourceSpan) (args: (
     let argTys =
         match Unifier.unalias (resolveSoFar state expectedInput) with
         | TyRecord _ when args.Length = 1 -> [ expectedInput ]
-        | TyRecord fields ->
+        | TyRecord(fields, _) ->
             args
             |> List.mapi (fun index (name, _) ->
                 match fields |> Map.tryFind name with
@@ -326,7 +326,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             let positionalExprs, namedExprs = List.splitAt positional.Length typedFields
             let positionalFieldsMap = positionalExprs |> List.mapi (fun index typedExpr -> tupleFieldName index, typedExpr.Type)
             let namedFieldsMap = List.zip (List.map fst named) (namedExprs |> List.map _.Type)
-            mkTypedExpr expr (TyRecord (Map.ofList (positionalFieldsMap @ namedFieldsMap))) None None None, current)
+            mkTypedExpr expr (TyRecord(Map.ofList (positionalFieldsMap @ namedFieldsMap), FieldOrder.ofList named)) None None None, current)
     | ListExpr items ->
         inferAll env state items
         |> Result.map (fun (typedItems, current) ->
@@ -556,7 +556,7 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
         let mkTypedPattern pattern ty = { Pattern = pattern; Type = ty }
         let rec tryRecordFields ty =
             match ty with
-            | TyRecord fields -> Some fields
+            | TyRecord(fields, _) -> Some fields
             | RecursiveNominals.Nominal(_, _, underlying, _)
             | TyAlias(_, _, underlying) -> tryRecordFields underlying
             | _ -> None
@@ -644,8 +644,7 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                     | Some fields ->
                         List.zip patterns itemTypes
                         |> List.mapi (fun index (pat, ty) -> Pattern.tupleElementField fields index pat, ty)
-                        |> Map.ofList
-                        |> TyRecord
+                        |> fun matched -> TyRecord(Map.ofList matched, FieldOrder.ofList matched)
                     | None -> tupleRecordType itemTypes
                 let constrained = addConstraint scrutineeTy tupleRecord nextState
                 inferPatterns armBody env' constrained (List.zip patterns itemTypes)
@@ -730,8 +729,8 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                     // A record type is closed, so the pattern names every field, unless it ends in `...`. Where
                     // the fields are known, they are checked rather than the value's type, which may be nominal.
                     let patternRecord, next =
-                        if hasRest then openRecordWith fieldMap innerState else TyRecord fieldMap, innerState
-                    let matched = knownFields |> Option.map TyRecord |> Option.defaultValue scrutineeTy
+                        if hasRest then openRecordWith fieldMap innerState else TyRecord(fieldMap, FieldOrder.ofList members), innerState
+                    let matched = knownFields |> Option.map (fun fields -> TyRecord(fields, FieldOrder.none)) |> Option.defaultValue scrutineeTy
                     Ok (innerEnv, addConstraint matched patternRecord next, mkTypedPattern pattern scrutineeTy)
                 else
                     Error innerErrors
@@ -1010,7 +1009,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     | TyFunc(declaredInput, _, _), [ _ ] -> Some [ declaredInput ]
                     | TyFunc(declaredInput, _, _), _ ->
                         match Unifier.unalias declaredInput with
-                        | TyRecord fields when fields.Count = args.Length ->
+                        | TyRecord(fields, _) when fields.Count = args.Length ->
                             let tys = args |> List.mapi (fun index _ -> fields |> Map.tryFind (tupleFieldName index))
                             if tys |> List.forall Option.isSome then Some (tys |> List.choose id) else None
                         | _ -> None
@@ -1021,7 +1020,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     match paramTys with
                     | Some [ declaredInput ] ->
                         match Unifier.unalias declaredInput with
-                        | TyRecord fields when fields.Count = items.Length ->
+                        | TyRecord(fields, _) when fields.Count = items.Length ->
                             let tys = items |> List.mapi (fun index _ -> fields |> Map.tryFind (tupleFieldName index))
                             if tys |> List.forall Option.isSome then Some (tys |> List.choose id) else None
                         | _ -> None
@@ -1168,7 +1167,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                                 LambdaArguments.inferTupleItems (fun state item _ -> inferExpr env state item) inferLambda current values memberTys
                                 |> Result.map (fun (typedValues, next) ->
                                     let fieldTys = List.zip names (typedValues |> List.map _.Type) |> Map.ofList
-                                    mkTypedExpr arg (TyRecord fieldTys) None None None, next)
+                                    mkTypedExpr arg (TyRecord(fieldTys, FieldOrder names)) None None None, next)
                                 |> recordExprType
                             | None -> inferExpr env current arg
                         match inferred with

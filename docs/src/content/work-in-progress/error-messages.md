@@ -4,9 +4,9 @@ description: "What diagnostics say and how they are shown"
 order: 28
 ---
 
-> **Status: outline.** This page frames the error messages workstream: what it covers, where the compiler is today
-> and what comes next. Sections marked _to do_ are placeholders to fill in as the work is designed. Work is tracked
-> under the `error messages` label.
+How errors are shown, their suggestions and fixes, and every code are described in
+[Compiler errors](../standard-tools/errors). This page frames the error messages workstream: how the compiler
+builds its messages today, and what comes next. Work is tracked under the `error messages` label.
 
 # Summary
 
@@ -129,20 +129,13 @@ code for every error that lacks one.
 
 # Plan
 
-_To do._ Candidate items:
+Done: the inventory of errors as [the error reference](#the-error-reference)
+([#878](https://github.com/nanyx-lang/nanyx/issues/878), [#882](https://github.com/nanyx-lang/nanyx/issues/882)), CLI
+rendering ([#880](https://github.com/nanyx-lang/nanyx/issues/880)), and suggestions and fixes
+([#881](https://github.com/nanyx-lang/nanyx/issues/881)); see [Where the compiler is today](#where-the-compiler-is-today).
 
-1. ~~**Inventory.** List every error the parser and type checker can produce, with an example program for each.~~
-   Done ([#878](https://github.com/nanyx-lang/nanyx/issues/878)): [the error reference](#the-error-reference) is the
-   inventory, a section and a compiled example for each code.
-2. **Codes and wording.** Every error has a code. What is left is to rewrite the messages to the house style
+1. **Codes and wording.** Every error has a code. What is left is to rewrite the messages to the house style
    ([#879](https://github.com/nanyx-lang/nanyx/issues/879)).
-3. ~~**CLI rendering.** File, source excerpt and underline; colour when the output is a terminal.~~ Done
-   ([#880](https://github.com/nanyx-lang/nanyx/issues/880)); see Where the compiler is today.
-4. ~~**Suggestions.** "Did you mean" for unknown names; missing context and missing match cases, with fixes.~~
-   Done ([#881](https://github.com/nanyx-lang/nanyx/issues/881)); see Where the compiler is today.
-5. ~~**Error reference.** One page with a section per code, checked against the compiler's table, its examples compiled as
-   tests, and linked from the language server ([#882](https://github.com/nanyx-lang/nanyx/issues/882)); see
-   [The error reference](#the-error-reference).~~ Done.
 
 # Open questions
 

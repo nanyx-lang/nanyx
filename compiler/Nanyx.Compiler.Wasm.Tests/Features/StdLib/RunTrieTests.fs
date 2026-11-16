@@ -16,7 +16,7 @@ import nanyx/trie
 def t: Trie(int, string) = [[1, 2, 3] => "c", [1] => "a", [1, 2] => "b"]
 
 println("{Trie.get(t, [1, 2])} {Trie.get(t, [2])} {Trie.get(t, [])} {Trie.containsKey(t, [1, 2, 3])}")
-println("{Trie.count(t)} {Trie.keys(t)}")
+println("{Trie.length(t)} {Trie.keys(t)}")
 println("{Trie.withPrefix(t, [1, 2])} {Trie.withPrefix(t, [3])}")
 println("{Trie.hasPrefix(t, [1, 2])} {Trie.hasPrefix(t, [2])} {Trie.hasPrefix(t, [])}")
 println("{Trie.longestPrefixOf(t, [1, 2, 5])} {Trie.longestPrefixOf(t, [1, 2, 3, 4])}")
@@ -34,7 +34,7 @@ import nanyx/trie
 
 def t: Trie(int, int) = Trie.empty
 
-println("{Trie.get(t, [])} {Trie.count(t)} {Trie.isEmpty(t)} {Trie.keys(t)} {Trie.hasPrefix(t, [])}")
+println("{Trie.get(t, [])} {Trie.length(t)} {Trie.isEmpty(t)} {Trie.keys(t)} {Trie.hasPrefix(t, [])}")
 println("{Trie.longestPrefixOf(t, [1])} {Trie.withPrefix(t, [])}")
 println(Trie.toString(t))
 """
@@ -49,8 +49,8 @@ import nanyx/trie
 def t = Trie.fromList([([1, 2], "x"), ([1, 2], "y"), ([1], "a")])
 def without = Trie.remove(t, [1, 2])
 
-println("{Trie.get(t, [1, 2])} {Trie.count(t)}")
-println("{Trie.keys(without)} {Trie.hasPrefix(without, [1, 2])} {Trie.count(without)}")
+println("{Trie.get(t, [1, 2])} {Trie.length(t)}")
+println("{Trie.keys(without)} {Trie.hasPrefix(without, [1, 2])} {Trie.length(without)}")
 println("{Trie.remove(t, [7]) == t} {Trie.remove(without, [1]) == Trie.empty}")
 """
     |> assertRan "#some(y) 2\n[[1]] false 1\ntrue true\n"
@@ -113,7 +113,7 @@ import nanyx/trie
 
 def t = StringTrie["abc" => 3, "b" => 9, "a" => 1, "ab" => 2]
 
-println("{StringTrie.get(t, "ab")} {StringTrie.get(t, "abd")} {StringTrie.containsKey(t, "b")} {StringTrie.count(t)}")
+println("{StringTrie.get(t, "ab")} {StringTrie.get(t, "abd")} {StringTrie.containsKey(t, "b")} {StringTrie.length(t)}")
 println("{StringTrie.keys(t)} {StringTrie.withPrefix(t, "ab")} {StringTrie.withPrefix(t, "c")}")
 println("{StringTrie.hasPrefix(t, "ab")} {StringTrie.hasPrefix(t, "abcd")}")
 println("{StringTrie.longestPrefixOf(t, "abd")} {StringTrie.longestPrefixOf(t, "abc")} {StringTrie.longestPrefixOf(t, "x")}")

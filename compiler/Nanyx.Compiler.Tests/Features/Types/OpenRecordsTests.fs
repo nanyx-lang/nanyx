@@ -33,7 +33,7 @@ def moved = moveRight((x = 1, y = 2, label = "a"))
 def label: string = moved.label
 """
     let typed = compileClean (source.ReplaceLineEndings "\n")
-    Assert.Equal("(label: string, x: int, y: int)", Unifier.tyToString typed.Types.["moved"])
+    Assert.Equal("(x: int, y: int, label: string)", Unifier.tyToString typed.Types.["moved"])
 
 [<Fact>]
 let ``Hover shows an open record annotation with its row`` () =

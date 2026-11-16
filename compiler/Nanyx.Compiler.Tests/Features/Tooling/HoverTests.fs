@@ -320,8 +320,8 @@ def main: () -> () = {
 [<Fact>]
 let ``A record type is written in brackets, as in source`` () =
     let fields = [ "name", TyPrimitive "string"; "age", TyPrimitive "int" ] |> Map.ofList
-    Assert.Equal("(age: int, name: string)", Unifier.tyToString (TyRecord fields))
-    Assert.Equal("#some(name: string)",Unifier.tyToString (TyTag("some", Some (TyRecord (Map.ofList [ "name", TyPrimitive "string" ])))))
+    Assert.Equal("(age: int, name: string)", Unifier.tyToString (TyRecord(fields, FieldOrder.none)))
+    Assert.Equal("#some(name: string)",Unifier.tyToString (TyTag("some", Some (TyRecord(Map.ofList [ "name", TyPrimitive "string" ], FieldOrder.none)))))
 
 [<Fact>]
 let ``The empty union is the bottom type`` () =
@@ -416,7 +416,7 @@ let ``Printed types have the fewest brackets the grammar allows`` () =
     let b = TyVar { Id = 2; Name = Some "b" }
     let c = TyVar { Id = 3; Name = Some "c" }
     let union = TyUnion [ TyTag("some", Some a); TyTag("none", None) ]
-    let pair x y = TyRecord(Map.ofList [ "0", x; "1", y ])
+    let pair x y = TyRecord(Map.ofList [ "0", x; "1", y ], FieldOrder.none)
     // `->` groups to the right: a function input is bracketed, a function result is not.
     Assert.Equal("(a -> b) -> c", Unifier.tyToString (TyFunc(TyFunc(a, b, []), c, [])))
     Assert.Equal("a -> b -> c", Unifier.tyToString (TyFunc(a, TyFunc(b, c, []), [])))
@@ -440,7 +440,7 @@ let ``Printed types have the fewest brackets the grammar allows`` () =
     // A lone record argument's fields are in the application's own brackets, as a payload's are; a tuple's are not,
     // as its items would read as more arguments.
     let named = Map.ofList [ "name", a ]
-    Assert.Equal("list(name: a)", Unifier.tyToString (TyApply("list", [ TyRecord named ])))
+    Assert.Equal("list(name: a)", Unifier.tyToString (TyApply("list", [ TyRecord(named, FieldOrder.none) ])))
     Assert.Equal("list(name: a, ...r)", Unifier.tyToString (TyApply("list", [ TyOpenRecord(named, { Id = 4; Name = Some "r" }) ])))
     Assert.Equal("list((a, b))", Unifier.tyToString (TyApply("list", [ pair a b ])))
     // The unit type is written `()`.

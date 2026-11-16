@@ -39,7 +39,7 @@ Each function is attached to `Queue`, so with `import nanyx/queue` it is called 
 ## `Queue`
 
 ```nanyx fragment
-type Queue(a) = protected (back: list(a), count: int, front: list(a))
+type Queue(a) = protected (front: list(a), back: list(a), length: int)
 ```
 
 ## `Queue.empty`
@@ -99,10 +99,10 @@ def Queue.isEmpty: Queue(a) -> bool
 
 Whether `queue` has nothing in it.
 
-## `Queue.count`
+## `Queue.length`
 
 ```nanyx fragment
-def Queue.count: Queue(a) -> int
+def Queue.length: Queue(a) -> int
 ```
 
 How many values are in `queue`.
