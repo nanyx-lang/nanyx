@@ -62,6 +62,16 @@ export def Email.parse: string -> Result(Email, #invalidEmail) = { value ->
 
 Callers in other modules obtain an `Email` by going through `Email.parse`; there is no other way to get one. Because the function is an [attached definition](./attached-definitions) on `Email`, it reads naturally at the call site: `Email.parse("ada@example.com")` or, in a pipeline, `input \Email.parse`.
 
+A value of the type's shape is not a value of the type outside its home module either. Given a record where a protected
+record type is expected, the error says why, and names the attached definitions that make one:
+
+```
+error NYX0260: 'Point' is protected: only the module 'Points' makes values of it, so a record of its shape isn't a 'Point' here. Make one with 'Point.new'.
+```
+
+When exactly one of them takes the fields in order and returns the type itself, an editor offers to rewrite the record as
+a call to it.
+
 The smart constructor can return whatever is appropriate: a `Result` when there is something useful to say about why the input was rejected, an [option-like type](./option-like-types) when there isn't, or the nominal type itself when construction cannot fail.
 
 ## Assignability

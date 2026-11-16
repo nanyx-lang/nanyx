@@ -42,9 +42,9 @@ let ``A nominal type in a module block can only be constructed in the block`` ()
     Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "Money" ], codesAt viaImport)
     let qualified = moneyBlock + "def p = money.Money(pence = 1)\n"
     Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "money.Money" ], codesAt qualified)
-    match codesAt (moneyBlock + "import money\n\ndef p: Money = (pence = 1)\n") with
-    | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
-    | other -> failwith $"Expected one type mismatch, got %A{other}"
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.ProtectedShape.Code, "(pence = 1)" ],
+        codesAt (moneyBlock + "import money\n\ndef p: Money = (pence = 1)\n"))
 
 /// A `module ids =` block with a protected `UserId`, whose shape only the block can see.
 let private idsBlock =

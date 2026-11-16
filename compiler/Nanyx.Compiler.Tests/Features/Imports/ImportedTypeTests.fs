@@ -89,8 +89,8 @@ def n: string = nameOf(Person.new("Ada"))"""
 import people
 def g: string = greet((name = "Ada"))"""
     match compiledWithPeople fromShape with
-    | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
-    | other -> failwith $"Expected one type mismatch, got %A{other}"
+    | [ code, _ ] -> Assert.Equal(DiagnosticCodes.ProtectedShape.Code, code)
+    | other -> failwith $"Expected one error for the shape, got %A{other}"
 
 [<Fact>]
 let ``An aliased import's contexts are named with the alias`` () =
@@ -127,15 +127,15 @@ let ``A shape is not assignable to a nominal type through an annotation`` () =
 import people as people
 def p: people.Person = (name = "Ada")"""
     match compiledWithPeople main with
-    | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
-    | other -> failwith $"Expected one type mismatch, got %A{other}"
+    | [ code, _ ] -> Assert.Equal(DiagnosticCodes.ProtectedShape.Code, code)
+    | other -> failwith $"Expected one error for the shape, got %A{other}"
 
 [<Fact>]
 let ``A function that returns a nominal type cannot return its shape`` () =
     let main = "module main\nimport people\ndef make: string -> Person = { name -> (name = name) }\n"
     match compiledWithPeople main with
-    | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
-    | other -> failwith $"Expected one type mismatch, got %A{other}"
+    | [ code, _ ] -> Assert.Equal(DiagnosticCodes.ProtectedShape.Code, code)
+    | other -> failwith $"Expected one error for the shape, got %A{other}"
 
 [<Fact>]
 let ``A list of a nominal type cannot hold its shape`` () =

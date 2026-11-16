@@ -11,6 +11,8 @@ type Subst = Map<int, Ty>
 type MismatchKind =
     | TypesDiffer
     | ContextsNotAllowed
+    /// A value of the shape of the nominal type it is given for: the type, whether it is private, and its shape.
+    | NominalShape of NominalId * isPrivate: bool * shape: Ty
 
 /// A constraint that cannot be satisfied: what is wrong, where (the constraint's span), and what kind of failure it is.
 type Mismatch = string * SourceSpan * MismatchKind
@@ -1144,6 +1146,18 @@ module Unifier =
                                 | Ok contexts -> loop subst (arguments @ contexts @ rest)
                                 | Error extra -> Error (carriedNotAllowedMessage extra l r, origin, ContextsNotAllowed)
                             | _ -> loop subst (arguments @ rest)
+                        // A value of a nominal type's shape is no value of it, but the mismatch says which type's shape
+                        // it has, so that the error can say why (see `ProtectedShapes`). Trying the shape changes
+                        // nothing the solving goes on with.
+                        | other, RecursiveNominals.Nominal(nominal, _, underlying, isPrivate) when
+                            not (match other with TyNominal _ -> true | _ -> false)
+                            && (let taken, putOffBefore, nextBefore = restTaken, putOff, nextRestId
+                                let fits = (loop subst [ (other, underlying, Assignable, origin) ]).IsOk
+                                restTaken <- taken
+                                putOff <- putOffBefore
+                                nextRestId <- nextBefore
+                                fits) ->
+                            Error (mismatchMessage l r, origin, NominalShape(nominal, isPrivate, underlying))
                         | TyNominal(_, _, _, true), _
                         | _, TyNominal(_, _, _, true) ->
                             Error (mismatchMessage l r, origin, TypesDiffer)
