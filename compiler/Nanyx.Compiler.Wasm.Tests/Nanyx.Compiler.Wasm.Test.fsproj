@@ -54,6 +54,7 @@
     <Compile Include="Features\Contexts\RunExpectedTypeInstanceTests.fs" />
     <Compile Include="Features\Contexts\RunLocalInstanceContextTests.fs" />
     <Compile Include="Features\Contexts\RunDefaultContextTests.fs" />
+    <Compile Include="Features\Contexts\RunBlockContextTests.fs" />
     <Compile Include="Features\Dbg\RunDbgTests.fs" />
     <Compile Include="Features\Docs\ErrorReferenceTests.fs" />
     <Compile Include="Features\Docs\RunTourExampleTests.fs" />
@@ -122,8 +123,10 @@
     <Compile Include="Features\Records\RunFunctionFieldTests.fs" />
     <Compile Include="Features\Sets\RunSetTests.fs" />
     <Compile Include="Features\Arrays\RunArrayTests.fs" />
+    <Compile Include="Features\Arrays\RunArrayCallTests.fs" />
     <Compile Include="Features\StdLib\RunIgnoreTests.fs" />
     <Compile Include="Features\StdLib\RunOptionResultTests.fs" />
+    <Compile Include="Features\StdLib\RunOrCrashTests.fs" />
     <Compile Include="Features\StdLib\RunFloatFormatTests.fs" />
     <Compile Include="Features\StdLib\RunStdLibTests.fs" />
     <Compile Include="Features\StdLib\RunStackSafeTests.fs" />

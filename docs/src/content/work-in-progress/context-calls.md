@@ -63,7 +63,7 @@ def is not run in the contexts it writes, as a lambda is: its value is a functio
 part of its type, as they are of `def k = say` (`Contexts.extractDefContexts`, which the backend reads too). A context
 it requires at a type nothing constrains, as `dbg(twice)` names `twice: [Show(a)] a -> string`, needs no instance:
 when a parameter of the value is of such a type, the value is never called, since no value of that type is ever made,
-so the closure captures a stand-in for each such member, which panics (`CoreIrLowerInstances.neverCalled`,
+so the closure captures a stand-in for each such member, which crashes (`CoreIrLowerInstances.neverCalled`,
 [#599](https://github.com/nanyx-lang/nanyx/issues/599)). A def that doesn't write its type and names such a function
 point-free, as `def f = println` does, is read as the lambda that calls it, `{ __p0 -> println(__p0) }`
 (`ContextInstances.pointFreeAsLambda`, recorded in `ReadAs`), so it requires the context at its own type as any

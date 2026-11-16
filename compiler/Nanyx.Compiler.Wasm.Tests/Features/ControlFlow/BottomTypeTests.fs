@@ -20,9 +20,9 @@ def main = {
     runSource source |> assertRan "42 one\n"
 
 [<Fact>]
-let ``Run - panic writes its message to stderr and exits with 1, running nothing after it`` () =
+let ``Run - crash writes its message to stderr and exits with 1, running nothing after it`` () =
     let source =
-        normalized """def half: int -> int = { n -> if n % 2 == 0 then n / 2 else panic("odd: {n}") }
+        normalized """def half: int -> int = { n -> if n % 2 == 0 then n / 2 else crash("odd: {n}") }
 
 @entry
 def main = {
@@ -34,4 +34,4 @@ def main = {
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("2\n", outcome.StandardOutput)
-    Assert.Equal("panic: odd: 3\n", outcome.StandardError)
+    Assert.Equal("crash: odd: 3\n", outcome.StandardError)

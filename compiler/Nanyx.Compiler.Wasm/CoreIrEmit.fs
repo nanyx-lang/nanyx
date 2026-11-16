@@ -175,7 +175,7 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | While _
     | Interpolate _
     | BoxFloat _
-    | Panic _ -> []
+    | Crash _ -> []
 
 /// The code that gives up the value on top of the stack, of type `ty`: its drop function if it is on the heap.
 let private dropValue (ty: IrType) =
@@ -457,7 +457,7 @@ type private FunctionEmitter(context: EmitContext) =
         | Prim(FloatBinary op, _) -> internalError $"the operator {op} on floats with other than two operands"
         | BoxFloat value when expr.Type = IrF32 -> $"f32.const {wasmFloatConst value}\n    call ${helper Helpers.f32Box}"
         | BoxFloat value -> $"f64.const {wasmFloatConst value}\n    call ${helper Helpers.floatBox}"
-        | Panic messages ->
+        | Crash messages ->
             // Writes each message to stderr and exits with 1. `unreachable` after the exit, which never returns, lets
             // the code stand wherever a value is expected.
             let writes = messages |> List.map (fun message -> $"i32.const {context.StringOffset message}\n    call ${helper Helpers.writeStderr}")

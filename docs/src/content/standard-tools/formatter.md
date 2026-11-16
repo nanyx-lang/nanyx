@@ -121,7 +121,7 @@ We also recommend adding a `nanyx format --check` step to your CI pipeline to en
 
 ```nanyx
 -- before
-def add={a,b->a+b}
+def add={a,b->a   +  b}
 
 -- after
 def add = { a, b -> a + b }
@@ -129,15 +129,49 @@ def add = { a, b -> a + b }
 
 ```nanyx
 -- before
-def mapSome: (#some(a) | r), (a -> b) -> (#some(b) | r) = { 
-  | #some(a), f -> #some(f(a))
-  | other, _ -> other }
+def mapSome: (#some(a) | r), (a -> b) -> (#some(b) | r) = {
+    | #some(a), f -> #some(f(a))
+      | other, _ -> other }
 
 -- after
-def mapSome
-  : (#some(a) | r), (a -> b) -> (#some(b) | r)
-  = { | #some(a), f -> #some(f(a))
-      | other, _ -> other }
+def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = {
+  | #some(a), f -> #some(f(a))
+  | other, _ -> other
+}
+```
+
+A definition that doesn't fit on one line breaks before its `:` and its `=`:
+
+```nanyx
+-- before
+def priceLine: list(Product), OrderLine -> #some(Priced) | #unknownSku(string) | #outOfStock(string) = { products, line -> find(products, line) }
+
+-- after
+def priceLine
+  : list(Product), OrderLine -> #some(Priced) | #unknownSku(string) | #outOfStock(string)
+  = { products, line ->
+    find(products, line)
+  }
+```
+
+A pipeline that doesn't fit puts each stage on its own line, and a record, list, tuple or call's arguments that don't fit put each element on its own line, with no commas between them:
+
+```nanyx
+-- before
+def report = orders \list.filter { o -> o.paid and o.total > 100 } \list.map { o -> Summary(id = o.id, customer = o.customer.name, total = o.total, placed = o.placedAt, items = o.lines.length) } \list.take(10)
+
+-- after
+def report = orders
+  \list.filter { o -> o.paid and o.total > 100 }
+  \list.map { o -> Summary(
+      id = o.id
+      customer = o.customer.name
+      total = o.total
+      placed = o.placedAt
+      items = o.lines.length
+    )
+  }
+  \list.take(10)
 ```
 
 # Configuration

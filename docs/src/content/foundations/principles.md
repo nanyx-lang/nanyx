@@ -61,7 +61,7 @@ Represent meaning in the type. Use tag unions and descriptive cases instead of m
 
 ## Exhaustive pattern matches
 
-The Nanyx compiler enforces that pattern matches handle all cases of an algebraic data type. A non-exhaustive match expression is a compile error: it blocks a release build, and in a debug build the match panics if an unhandled case is reached. We believe this encourages more robust code and enables safer refactoring of algebraic data types.
+The Nanyx compiler enforces that pattern matches handle all cases of an algebraic data type. A non-exhaustive match expression is a compile error: it blocks a release build, and in a debug build the match crashes if an unhandled case is reached. We believe this encourages more robust code and enables safer refactoring of algebraic data types.
 
 ## Separation of pure and impure code
 

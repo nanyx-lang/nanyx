@@ -250,7 +250,7 @@ shape. A body is an expression with a type on every node:
 | `callClosure(closure, atoms)` | calls through a function value, passing the closure block as the environment |
 | `boxFloat(value)` | boxes a float constant (floats are boxed, and `prim` on floats unboxes its operands) |
 | `forEach(loop)` | a `for` loop over lists and ranges in step, its body run for each step until one of them ends |
-| `panic(messages)` | an error deferred to run time: writes the messages to stderr and ends the program |
+| `crash(messages)` | an error deferred to run time: writes the messages to stderr and ends the program |
 | `interpolate(parts)` | builds an interpolated string from its text and its holes, each already stored in its hole local |
 | `dbg(text)` | prints the string `text`, the text of a value its type's printer wrote, after `dbg: ` |
 | `let x = value in body` | names a value; the value is never a `let` itself |
@@ -309,7 +309,7 @@ is written.
 
 The module's top-level expressions are lowered as one more function, the start function, which evaluates each in
 turn and drops its value. A module with type or name errors is compiled all the same in a debug build: what failed to
-check is a `panic` that reports the error when it is reached, and a value of no known type because of it has a type of
+check is a `crash` that reports the error when it is reached, and a value of no known type because of it has a type of
 its own (still an `i32`). Matching on or interpolating such a value stops the program there, if the error has not
 already. A definition (or top-level expression) that holds such errors and cannot be lowered because of them is
 lowered to a trap that reports them as soon as it is called. A definition that is generic only because an error left
