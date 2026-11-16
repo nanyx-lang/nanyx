@@ -27,21 +27,19 @@ let isMemoryCall (env: TypeEnv) (state: InferState) (name: Identifier) =
        | Some file, Some contextFile -> file = contextFile
        | _ -> false
 
+/// `env` where a `mut` makes a cell of `scope`: a `memory` block's, or after `use m`, `m` being a block's `Memory`
+/// named with `context m`, which may be an outer block's. That `use` starts no scope of its own.
+let withBlockScope (scope: Ty) (env: TypeEnv) : TypeEnv =
+    TypeEnv.extend scopeKey (TypeEnv.mono scope) env
+
 /// The environment the arguments of a call to `name` are checked in, where the call supplies `Memory` of `scope`: one
 /// where cells can be made, of that scope, for the prelude's `memory`.
 let aroundCall (env: TypeEnv) (state: InferState) (name: Identifier) (scope: Ty) : TypeEnv =
-    if isMemoryCall env state name then TypeEnv.extend scopeKey (TypeEnv.mono scope) env else env
+    if isMemoryCall env state name then withBlockScope scope env else env
 
-/// The environment after a `use` of a value of the type `ty`, `env` being the one the `use` makes: an instance of
-/// `Memory` it loads is the innermost one, so a `mut` after it makes a cell of that instance's scope, which may be an
-/// outer block's. The `use` starts no scope of its own.
-let afterUse (state: InferState) (env: TypeEnv) (ty: Ty) : TypeEnv =
-    match resolveSoFar state ty with
-    | TyNominal(nominal, FunctionContexts.ScopeType scope, _) when
-        state.TypeDefs.TryFind context |> Option.exists (fun info -> TypeDefInfo.nominalId info = nominal)
-        ->
-        TypeEnv.extend scopeKey (TypeEnv.mono scope) env
-    | _ -> env
+/// The scope of the `memory` block `env` is in, whose cell a `mut` there makes: none outside a block.
+let blockScope (env: TypeEnv) : Ty option =
+    TypeEnv.tryFind scopeKey env |> Option.map _.Type
 
 /// The scope of the cell `name`, as `env` binds it, if it is one.
 let private scopeOf (env: TypeEnv) (state: InferState) (name: Identifier) : Ty option =

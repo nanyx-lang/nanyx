@@ -182,14 +182,17 @@ module internal ExpressionRewrites =
 
     /// `module'` with the names lambdas give their contexts written as the backend reads them (see `ContextNames`): a
     /// lambda's body under `context l` starts by keeping each member of `l`'s context in a local, and `use l` loads
-    /// those locals as a `use` of a record written out does, `use (log = <the local>)`.
+    /// those locals as a `use` of a record written out does, `use (log = <the local>)`. A `use` of a name for a context
+    /// without members, a `memory` block's `Memory`, loads nothing, so it goes: the type checker has settled whose
+    /// cells a `mut` after it makes.
     let writeContextNames (state: InferState.InferState) (module': Module) : Module =
         if state.ContextNames.IsEmpty then
             module'
         else
             let indexed = state.ContextNames |> Map.toList |> List.mapi (fun index (symbol, instance) -> symbol, (index, instance)) |> Map.ofList
             let local index (memberName: Identifier) = $"__context_{index}_{memberName}"
-            // The instance `value` loads, where it is a name a lambda gives a context, with that name's members as a record.
+            // The instance `value` loads, where it is a name a lambda gives a context, with that name's members as a
+            // record: `Some None` for one without members.
             let loaded (value: Expression) =
                 match value.Kind with
                 | IdentifierExpr _ ->
@@ -197,9 +200,12 @@ module internal ExpressionRewrites =
                     |> Map.tryFind value.Id
                     |> Option.bind (fun symbol -> indexed |> Map.tryFind symbol)
                     |> Option.map (fun (index, instance) ->
-                        // Nodes of their own: the name's node has the name's type.
-                        let fields = instance.Members |> List.map (fun (memberName, _) -> NamedField(memberName, Expression.synthetic (IdentifierExpr (local index memberName))))
-                        Expression.synthetic (RecordExpr fields))
+                        match instance.Members with
+                        | [] -> None
+                        | members ->
+                            // Nodes of their own: the name's node has the name's type.
+                            let fields = members |> List.map (fun (memberName, _) -> NamedField(memberName, Expression.synthetic (IdentifierExpr (local index memberName))))
+                            Some (Expression.synthetic (RecordExpr fields)))
                 | _ -> None
             let rewrite =
                 mapExpressionKinds (fun current kind ->
@@ -219,17 +225,19 @@ module internal ExpressionRewrites =
                         | _ -> Block(kept @ [ Statement.from body (ExprStatement body) ])
                     | Block statements ->
                         statements
-                        |> List.map (fun statement ->
+                        |> List.choose (fun statement ->
                             match statement.Kind with
                             | UseStatement value ->
                                 match loaded value with
-                                | Some record -> { statement with Kind = UseStatement record }
-                                | None -> statement
-                            | _ -> statement)
+                                | Some (Some record) -> Some { statement with Kind = UseStatement record }
+                                | Some None -> None
+                                | None -> Some statement
+                            | _ -> Some statement)
                         |> Block
                     | UseIn(value, body) ->
                         match loaded value with
-                        | Some record -> UseIn(record, body)
+                        | Some (Some record) -> UseIn(record, body)
+                        | Some None -> body.Kind
                         | None -> kind
                     | other -> other)
             module'

@@ -152,12 +152,13 @@ scoped export context Memory = protected ()
 - **It fits discharge at a `use`.** A `use` in a block whose member's lambda changes a cell requires `Memory` where
   the `use` is written, which is inside the block.
 
-A block can be given its instance, `memory { m -> ... }`. Holding it counts as requiring it, so `memory { m -> m }` is
-rejected. `mut` uses the innermost `Memory` in scope, and `use m1` in an inner block makes `m1` the innermost, so the
+A block can name its `Memory`, `memory { context m -> ... }` (see
+[Contexts are not types](#contexts-are-not-types)). The name can only be loaded, so `memory { context m -> m }` is
+NYX0245. `mut` uses the innermost `Memory` in scope, and `use m1` in an inner block makes `m1` the innermost, so the
 inner block can make cells that belong to the outer one:
 
-```nanyx
-memory { m1 ->
+```nanyx fragment
+memory { context m1 ->
   memory {
     use m1
     mut z = 0   -- belongs to m1's block
@@ -166,8 +167,7 @@ memory { m1 ->
 }
 ```
 
-`memory`'s block takes the instance, `memory: [c] ([Memory & c] Memory -> a) -> a`, and `memory { ... }` still
-checks, since a lambda with no parameters ignores one.
+`memory`'s block takes nothing, `memory: [c] ([Memory & c] () -> a) -> a`.
 
 ## Options considered
 
@@ -185,8 +185,7 @@ checks, since a lambda with no parameters ignores one.
 # Settled
 
 - **A lambda with no parameters, checked against a type that takes one parameter, ignores it.** With no expected
-  type, `{ ... }` still infers `() -> ...`, and `{ () -> ... }` always takes unit. `memory { ... }` and
-  `memory { m -> ... }` check against one signature because of it. Done in
+  type, `{ ... }` still infers `() -> ...`, and `{ () -> ... }` always takes unit. Done in
   [#813](https://github.com/nanyx-lang/nanyx/issues/813): the syntax tree marks a lambda written `{ () -> ... }`
   (`takesUnit` on `Lambda`), and before the backend reads a module, `ExpressionRewrites.nameIgnoredParameters` gives
   each `{ ... }` whose type takes an input a parameter it ignores. None of the parser's desugarings (`for`, `__with`,
@@ -384,15 +383,21 @@ The design draws the line there, and makes every helper a function that takes th
 - ~~`context x` in a lambda, usable only by `use` ([#1445](https://github.com/nanyx-lang/nanyx/issues/1445)).~~
   Done. The parser puts the names on the lambda's body (`ContextNames`), and `ContextNames.bind` binds each, with the
   lambda's parameters, to the plain context it names among those the lambda is given: each context whose members
-  are all bound in the body as its own by a signature (the def's, or the type the lambda is checked against). A
-  context without members or with parameters can't be named yet; `Memory` is #1446. Each name keeps its context's
+  are all bound in the body as its own by a signature (the def's, or the type the lambda is checked against), and
+  `Memory` in a `memory` block. Any other context without members, or one with parameters, can't be named yet. Each
+  name keeps its context's
   members as the body has them, and `use l` binds them again (NYX0245 for any other use, NYX0246 for a name that
   matches no context or several). Before the backend, `ExpressionRewrites.writeContextNames` keeps each member in a
   local at the top of the body and writes `use l` as a `use` of a record of those locals, which the backend
   compiles already, inner lambdas that capture them included.
-- `memory { m -> ... }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)) becomes
-  `memory { context m -> ... }`, and `memory`'s signature becomes `[c] ([Memory & c] () -> a) -> a`. The Memory page
-  and the tests change with it ([#1446](https://github.com/nanyx-lang/nanyx/issues/1446), after #1445).
+- ~~`memory { m -> ... }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)) becomes
+  `memory { context m -> ... }`, and `memory`'s signature becomes `[c] ([Memory & c] () -> a) -> a`~~
+  ([#1446](https://github.com/nanyx-lang/nanyx/issues/1446)). Done: `ContextNames.bind` binds a name to the `Memory`
+  of the `memory` block it is in (`MemoryCells.blockScope`), keeping the block's scope, and `use m` makes that scope
+  the one a `mut` takes (`MemoryCells.withBlockScope`). A `use` of a name for a context without members loads
+  nothing, so `ExpressionRewrites.writeContextNames` drops it before the backend. `Memory` is never a value: its
+  name in a type is the plain nominal type until [#1447](https://github.com/nanyx-lang/nanyx/issues/1447) makes it an
+  error.
 - A context's name in a type is an error, and so is a constructor call that isn't a `use`'s instance
   ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)). Named instances become handlers: `def perfect = Move(...)`
   and `def cheating = Move(...)` in `examples/Nim.nyx`, `bobChooses` there, the monoid instances in
@@ -484,11 +489,9 @@ Hover hides a private context's members outside its file, as it hides a private 
      called in is given, so `{ mk -> memory { mk() } }` is generalised over the scope and supplies `Memory` in turn.
      Contexts are paired with the same scope first, so a block's requirement of an outer block's `Memory` goes into
      its context variable.
-5. ~~Give a `memory` block its instance, `memory { m -> ... }`~~ ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)).
-   Done: a scoped context's name in a type is the nominal type made from its scope, the one the signature's contexts
-   of that name have (`TypeResolution.scopedValueType`), so a value of it mentions the scope and NYX0233 keeps it in
-   its block; its constructor makes one of a scope of its own (`TypeResolution.constructedType`). A `use` of a
-   `Memory` instance makes its scope the one a `mut` after it takes (`MemoryCells.afterUse`), and the backend lowers
-   it to nothing. Each call's own scope is a variable named `@call` (`FunctionContexts.isCallScope`): `pairUp` never
+5. ~~Let a `memory` block name its `Memory`, `memory { context m -> ... }`~~
+   ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058), then
+   [#1446](https://github.com/nanyx-lang/nanyx/issues/1446) for the `context m` form). Done: see
+   [What changes](#what-changes). Each call's own scope is a variable named `@call` (`FunctionContexts.isCallScope`): `pairUp` never
    pairs two of them, so an inner block's requirement of an outer block's `Memory` goes into its context variable,
    and the unifier keeps a call's scope as what a plain variable it meets becomes.

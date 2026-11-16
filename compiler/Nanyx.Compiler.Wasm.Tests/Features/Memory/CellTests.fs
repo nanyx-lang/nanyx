@@ -150,9 +150,9 @@ def build: int -> string = { n ->
 
 
 [<Fact>]
-let ``Run - a cell made through use of an outer block's instance outlives the inner block`` () =
+let ``Run - a cell made through use of an outer block's Memory outlives the inner block`` () =
     let source = """
-def total = memory { m1 ->
+def total = memory { context m1 ->
   def get = memory {
     use m1
     mut z = 0

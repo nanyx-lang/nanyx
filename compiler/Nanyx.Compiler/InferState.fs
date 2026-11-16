@@ -95,8 +95,9 @@ type OpenMatch =
       Head: SourceSpan }
 
 /// The instance a lambda names with `context l`: the context, each of its members as the lambda's body has it where
-/// the body starts, and the node of the body (the `ContextNames` the parser makes). `use l` loads those members again.
-type ContextName = { Context: Identifier; Members: (Identifier * TypeScheme) list; Body: NodeId }
+/// the body starts, the node of the body (the `ContextNames` the parser makes), and for `Memory`, the scope of the
+/// `memory` block it is. `use l` loads those members again, and makes the block's scope the one a `mut` takes.
+type ContextName = { Context: Identifier; Members: (Identifier * TypeScheme) list; Body: NodeId; Scope: Ty option }
 
 type InferState =
         { NextId: int;

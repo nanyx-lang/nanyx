@@ -131,12 +131,12 @@ def total = memory {
 
 The rule follows `Memory` through other functions. A function that passes its parameter a block's `Memory`, such as `{ make -> memory { make() } }`, supplies it in turn, so its result must not require it either. A function whose type says it requires `Memory` itself can't give its parameter a block's: `def run: [Memory] ([Memory] () -> b) -> b = { make -> memory { make() } }` is an error at `make()`, since the block's `Memory` would reach `make`, which is bound outside the block. Only `Memory` is restricted this way: a function that supplies any other context, such as one that handles `Log` with a `use`, may give back a lambda that requires it.
 
-The block is given its instance of `Memory`, which it can name: `memory { m -> ... }`. A block that doesn't name it, `memory { ... }`, ignores it. The instance is a value of the type `Memory`, and it belongs to its block as everything that requires the block's `Memory` does, so `memory { m -> m }` is an error (NYX0233).
+The block can name the `Memory` it is given with `context`, as any lambda can name a context it is given ([Contexts](../language/contexts)): `memory { context m -> ... }`. It isn't a parameter, and the block's type is still `[Memory] () -> a`. A block that doesn't name it, `memory { ... }`, is the same block. The name isn't a value: the only thing it can do is be loaded with `use`, so `memory { context m -> m }` is an error (NYX0245).
 
 `mut` makes a cell of the innermost `Memory` in scope. `use m` makes `m` the innermost one, so an inner block can make cells that belong to an outer one, and a lambda over them may leave the inner block:
 
 ```nanyx
-def total = memory { outer ->
+def total = memory { context outer ->
   def get = memory {
     use outer
     mut z = 0 -- belongs to the outer block
