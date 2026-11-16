@@ -1347,6 +1347,28 @@ def exitWith: [HostRuntime] I64 -> ()  -- error NYX0243: 'exitWith' imports "pro
 
 To fix it, declare the import once, with the type the embedder gives it, and call that one.
 
+# NYX0244: Private context's member called outside its module
+
+A member of a `private` context is called, or read, outside the module that declares the context. Any module can
+require a private context and call the functions that require it, but only its own module can use what an instance
+holds ([Contexts](../advanced/contexts)).
+
+```nanyx
+module db =
+  export context Tx = private (commit: () -> ())
+  export def query: [Tx] string -> () = { sql -> commit() }
+
+import db
+
+def f: [Tx] () -> () = {
+  query("select 1")
+  commit()  -- error NYX0244: 'commit' is a member of the private context 'Tx', which only its own module can call: call a function that module exports instead
+}
+```
+
+To fix it, call a function the context's module exports, as `query` here, or declare the context `protected`, whose
+members any module can call.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

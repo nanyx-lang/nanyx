@@ -32,6 +32,23 @@ def main = {
 }
 ```
 
+On a context, `protected` and `private` are about access. Any module can require either in a context list and call the functions that require it, but only the home module can construct an instance in a `use` (NYX0212). Any module can call a protected context's members. Only the home module can call a private context's members (NYX0244), so a private context is a capability: other code can require `[Tx]` and pass it on to the module's functions, but only the module uses what the instance holds.
+
+```nanyx
+module db =
+  export context Tx = private (commit: () -> ())
+  export def query: [Tx] string -> () = { sql -> commit() }
+
+import db
+
+def report: [Tx] () -> () = {
+  query("select 1")   -- fine: query is db's
+  -- commit()         -- NYX0244: only db can call commit
+}
+```
+
+This differs from leaving out `export`, which stops other modules naming the context at all.
+
 The full form of a context definition is `scoped export context Name(params) = protected ...`, where `scoped`, `export` and the parameters are each optional and the modifiers come in that order. A `scoped` context belongs to the scope that supplies it, as the prelude's `Memory` belongs to a `memory` block, and nothing that requires it may leave that scope:
 
 ```nanyx fragment

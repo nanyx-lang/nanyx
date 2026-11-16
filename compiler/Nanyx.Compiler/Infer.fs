@@ -1103,7 +1103,12 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
             // Only a nominal type's home module can make one: anywhere else it comes from what that module exports.
             | Some info when isNominal info && not (inNominalHome state (TypeDefInfo.nominalId info) calleeSpan) ->
                 let kind = if info.IsPrivate then "private" else "protected"
-                Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan $"The {kind} type '{name}' can only be constructed in the module that defines it; use a function that module exports instead" ]
+                let message =
+                    if info.IsContext then
+                        $"The {kind} context '{name}' can only be constructed in the module that defines it; call a function that module exports to supply it instead"
+                    else
+                        $"The {kind} type '{name}' can only be constructed in the module that defines it; use a function that module exports instead"
+                Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan message ]
             | Some info ->
                 let mutable current = recordConstructorReference expr info state
                 let argResults =
