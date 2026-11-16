@@ -436,15 +436,18 @@ let private recordMemberCall (call: NodeId option) (env: TypeEnv) (name: Identif
     | _ -> state
 
 /// `what` (which ends "requires", say) the context `ctxName` at `span`, in the def `defName`, whose type does not
-/// declare it. A def whose type says it requires none, with `[]`, said so on purpose, so it isn't told to add one.
+/// declare it. A def whose type says it requires none, with `[]`, said so on purpose, so it isn't told to add one. A custom
+/// pattern can't require one at all.
 let internal undeclaredContext (state: InferState) (defName: Identifier) (ctxName: Identifier) (what: string) (span: SourceSpan) =
-    let message =
-        match state.WrittenTypes |> Map.tryFind defName with
-        | Some { Kind = TypeWithContext([], _) } ->
+    match state.WrittenTypes |> Map.tryFind defName with
+    | _ when (PatternSyntax.shapeOf defName).IsSome ->
+        Diagnostics.at DiagnosticCodes.PatternRequiresContexts span $"{what} the context '{ctxName}', but a pattern is pure: nothing in its body can require a context"
+    | Some { Kind = TypeWithContext([], _) } ->
+        Diagnostics.at DiagnosticCodes.UndeclaredContext span
             $"{what} the context '{ctxName}', but the type of '{defName}' says with [] that it requires no contexts: load an instance with `use`, or call something that requires none"
-        | _ ->
+    | _ ->
+        Diagnostics.at DiagnosticCodes.UndeclaredContext span
             $"{what} the context '{ctxName}', which '{defName}' does not declare: add [{ctxName}] to the type of '{defName}', or load an instance with `use`"
-    Diagnostics.at DiagnosticCodes.UndeclaredContext span message
 
 /// `what` (which ends "requires", say) the context `ctxName` at `span`, in the value `valueName` of a named module,
 /// which cannot have one.

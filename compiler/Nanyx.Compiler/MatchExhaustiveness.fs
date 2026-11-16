@@ -4,24 +4,56 @@ open Parser.Program
 
 /// The error for a match that leaves out a value of its scrutinees, with the fix that adds the arms it is missing.
 module MatchExhaustiveness =
+    /// The scrutinees of a match that are what a custom pattern returns (see `CustomPatterns`), by position.
+    let patternColumns (scrutinees: Expression list) : Set<int> =
+        scrutinees
+        |> List.indexed
+        |> List.choose (fun (index, scrutinee) ->
+            match scrutinee.Kind with
+            | IdentifierExpr name when PatternSyntax.isResultName name -> Some index
+            | _ -> None)
+        |> Set.ofList
+
+    /// What a match is missing where a custom pattern's result is matched, when `witness` is what it returns that no
+    /// arm handles.
+    let private patternCaseMissing (witness: PatternSpace.Witness) =
+        let tags =
+            match witness with
+            | PatternSpace.OneOfTags tags -> tags
+            | PatternSpace.TagCase(tag, _) -> [ tag ]
+            | _ -> []
+        match tags with
+        | [] -> $"missing case: {PatternSpace.show witness}"
+        | _ -> $"""missing {tags |> List.map (fun tag -> $"`#{tag}`") |> Diagnostics.listed}, which the pattern returns too"""
+
     /// The error for the match whose arms are `arms`, reported at `headSpan`, given `witnesses`, a value no arm matches
     /// for each scrutinee (see `PatternSpace.missingCase`), if there is one, and the scrutinees' types `scrutineeTypes`.
-    /// The value is described as the one that makes the match incomplete, or as the combination of values.
-    let ofWitnesses (arms: MatchArm list) (scrutineeTypes: Ty list) (headSpan: SourceSpan) (witnesses: PatternSpace.Witness list option) : Diagnostic list =
+    /// The value is described as the one that makes the match incomplete, or as the combination of values. The
+    /// scrutinees at `columns` are what custom patterns return: what is missing there is said as the pattern's tags,
+    /// and the others are counted without them. A match with any gets no fix.
+    let ofWitnesses (arms: MatchArm list) (columns: Set<int>) (scrutineeTypes: Ty list) (headSpan: SourceSpan) (witnesses: PatternSpace.Witness list option) : Diagnostic list =
         match witnesses with
         | None -> []
         | Some witnesses ->
+            let written = witnesses |> List.indexed |> List.filter (fun (index, _) -> not (columns.Contains index))
+            let missingResult = witnesses |> List.indexed |> List.tryFind (fun (index, witness) -> columns.Contains index && witness <> PatternSpace.Anything)
             let diagnostic =
-                match witnesses |> List.indexed |> List.filter (fun (_, witness) -> witness <> PatternSpace.Anything) with
-                | [ index, witness ] ->
-                    let suffix = if scrutineeTypes.Length > 1 then $" (scrutinee {index + 1})" else ""
-                    Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match{suffix}, {PatternSpace.whatIsMissing witness}"
-                | _ ->
-                    let missing = witnesses |> List.map PatternSpace.show |> String.concat ", "
-                    Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match, missing case: {missing}"
-            [ { diagnostic with Fixes = MatchArmFixes.unplaced arms (PatternSpace.missingArms (arms |> List.map fst) (scrutineeTypes |> List.map Some)) } ]
+                match missingResult with
+                | Some (_, witness) -> Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match, {patternCaseMissing witness}"
+                | None ->
+                    match written |> List.filter (fun (_, witness) -> witness <> PatternSpace.Anything) with
+                    | [ index, witness ] ->
+                        let suffix = if written.Length > 1 then $" (scrutinee {index + 1})" else ""
+                        Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match{suffix}, {PatternSpace.whatIsMissing witness}"
+                    | _ ->
+                        let missing = written |> List.map (snd >> PatternSpace.show) |> String.concat ", "
+                        Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match, missing case: {missing}"
+            let fixes =
+                if columns.IsEmpty then MatchArmFixes.unplaced arms (PatternSpace.missingArms (arms |> List.map fst) (scrutineeTypes |> List.map Some))
+                else []
+            [ { diagnostic with Fixes = fixes } ]
 
     /// The error for the match whose arms are `arms`, reported at `headSpan`, if they leave out a value of the types
     /// `scrutineeTypes`.
     let check (arms: MatchArm list) (scrutineeTypes: Ty list) (headSpan: SourceSpan) : Diagnostic list =
-        PatternSpace.missingCase (arms |> List.map fst) (scrutineeTypes |> List.map Some) |> ofWitnesses arms scrutineeTypes headSpan
+        PatternSpace.missingCase (arms |> List.map fst) (scrutineeTypes |> List.map Some) |> ofWitnesses arms Set.empty scrutineeTypes headSpan

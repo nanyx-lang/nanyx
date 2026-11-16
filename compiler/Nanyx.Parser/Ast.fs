@@ -776,6 +776,17 @@ module PatternSyntax =
             |> Option.map (fun (tags, isPartial) -> { Arguments = None; Input = input; Results = tags; IsPartial = isPartial })
         | _ -> None
 
+    /// A match that uses patterns is a block that binds each value the patterns run on that is not already a name, and
+    /// what each pattern returns for it, then matches on those results as more values (see `NyxCompiler.CustomPatterns`).
+    /// These are the names of those, made up from the match's node and the value's, or the result's, position.
+    let subjectName (matchId: NodeId) (position: int) = $"__patternSubject_{matchId}_{position}"
+
+    let private resultPrefix = "__patternResult_"
+    let resultName (matchId: NodeId) (column: int) = $"{resultPrefix}{matchId}_{column}"
+
+    /// Whether `name` is what a pattern returns, bound for a match (see `resultName`).
+    let isResultName (name: Identifier) = name.StartsWith resultPrefix
+
     /// The pattern a top-level def declares, as the parser writes it: its signature and its body.
     let (|Declaration|_|) (definition: Definition) =
         match definition with

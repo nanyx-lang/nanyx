@@ -1,4 +1,4 @@
-/// Custom patterns (see the custom patterns page): the patterns in scope, found by their tags.
+/// Custom patterns (see the custom patterns page): the patterns in scope, found by their tags, and what a match on their tags checks.
 module Nanyx.Compiler.Tests.Features.CustomPatterns
 
 open Xunit
@@ -80,3 +80,69 @@ let ``Two imported patterns of the same tags are ambiguous too`` () =
 let ``A module's own pattern wins over an imported one`` () =
     let result = compileImportingAll [ "parity.nyx", $"module parity\nexport {evenOdd}" ] $"module main\nimport parity\n{evenOdd}\ndef e = #Even"
     Assert.DoesNotContain(DiagnosticCodes.AmbiguousPattern.Code, codesOf result)
+
+[<Fact>]
+let ``A match that leaves out a total pattern's tag is not exhaustive, and says which`` () =
+    let source =
+        $"""
+{evenOdd}
+
+def parity = {{ n: int ->
+  match n
+    | #Even -> "even"
+}}
+"""
+            .ReplaceLineEndings "\n"
+    let code, message, text = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, code)
+    Assert.Equal("match n", text)
+    Assert.Contains("missing `#Odd`", message)
+
+[<Fact>]
+let ``A total pattern's tags make a match exhaustive, alone or with ordinary patterns`` () =
+    let source =
+        $"""
+{evenOdd}
+
+def parity = {{ n: int ->
+  match n
+    | 0 -> "zero"
+    | #Even -> "even"
+    | #Odd -> "odd"
+}}
+"""
+            .ReplaceLineEndings "\n"
+    Assert.Empty((Compiler.compile source).Diagnostics)
+
+[<Fact>]
+let ``A pattern's tag inside another pattern is an error`` () =
+    let source =
+        $"""
+{evenOdd}
+
+def f = {{ x ->
+  match x
+    | #some(#Even) -> 1
+    | _ -> 2
+}}
+"""
+            .ReplaceLineEndings "\n"
+    let code, _, text = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.PatternInsidePattern.Code, code)
+    Assert.Equal("#Even", text)
+
+[<Fact>]
+let ``A pattern whose body requires a context is an error`` () =
+    let source =
+        """
+pattern int -> #Loud | #Quiet = { n ->
+  println("checking")
+  #Loud
+}
+"""
+            .ReplaceLineEndings "\n"
+    let code, message, text = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.PatternRequiresContexts.Code, code)
+    Assert.Contains("a pattern is pure", message)
+    Assert.Equal("println", text)
+    Assert.Empty((single (Compiler.compile source)).Fixes)

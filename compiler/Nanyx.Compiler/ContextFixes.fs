@@ -7,10 +7,11 @@ open Parser.Program
 open NyxCompiler.InferState
 
 /// The fix that adds `context`, as it is written, to the type of the def `defName`, if it writes one. None where the
-/// type was made up rather than written.
+/// type was made up rather than written, or is a custom pattern's, which can't require a context.
 let addToType (state: InferState) (defName: Identifier) (context: string) : Fix list =
     let edit =
         match state.WrittenTypes |> Map.tryFind defName with
+        | Some _ when (PatternSyntax.shapeOf defName).IsSome -> None
         | Some { Kind = TypeWithContext(contexts, _) } ->
             match List.tryLast contexts with
             | Some last when not (SourceSpan.isNone last.Span) -> Some { Span = { last.Span with Start = last.Span.End }; NewText = $", {context}" }
