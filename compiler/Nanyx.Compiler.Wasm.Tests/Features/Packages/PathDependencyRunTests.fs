@@ -17,9 +17,10 @@ let ``A package runs with the public module of its path dependency`` () =
     write "util/strings.nyx" "module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
     write
         "app/app.nyxp"
-        """(
+        $"""(
   package = (name = "app", version = "0.1.0")
   dependencies = [(package = "acme.util", path = "../util")]
+  {consoleHostEntry}
 )
 """
     write "app/main.nyx" "module main\n\nimport acme.util/strings\n\n@entry\ndef main = {\n  println(shout(\"hello\"))\n}\n"

@@ -19,8 +19,9 @@ type PackageModules =
       /// Each module name the package's files declare, with the files that declare it, in order: several for a module
       /// split across files, each marked `@partial` (see `PartialModules`).
       Modules: Map<string, string list>
-      /// The host the package's `@entry` runs under: its manifest's `host`, or `--host`.
-      Host: Host
+      /// The host the package's `@entry` runs under: its manifest's `host`, or `--host`. None for a library, which can
+      /// have no `@entry`.
+      Host: Host option
       /// The modules a package that depends on this one may import: its manifest's `publicModules`.
       PublicModules: string list
       /// The packages it depends on directly, each with its own dependencies.
@@ -55,7 +56,7 @@ module PackageModules =
 
     /// The modules of the package called `name`, whose manifest is in `root`, whose source files are `files` and whose
     /// `@entry` runs under `host`, without public modules or dependencies.
-    let ofFiles (name: string) (root: string) (host: Host) (files: string list) : PackageModules =
+    let ofFiles (name: string) (root: string) (host: Host option) (files: string list) : PackageModules =
         { Package = name
           Host = host
           Root = root

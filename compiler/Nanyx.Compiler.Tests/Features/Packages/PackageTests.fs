@@ -8,8 +8,8 @@ open Nanyx.Compiler.Tests.TestSupport
 
 let private repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", ".."))
 
-/// The manifest of the package `demo`, with `fields` after its `package`: `linters = [...]`.
-let private manifest (fields: string) = $"(\n  package = (name = \"demo\", version = \"0.1.0\")\n  {fields}\n)\n"
+/// The manifest of the application `demo`, run by the console host, with `fields` after its `package`: `linters = [...]`.
+let private manifest (fields: string) = $"(\n  package = (name = \"demo\", version = \"0.1.0\")\n  {consoleHostEntry}\n  {fields}\n)\n"
 
 let private entrySource = withFinalNewline """module main
 
@@ -33,7 +33,7 @@ let private okOf result =
 let ``A package is found from a directory under it, with its sources and entry`` () =
     use package =
         new TempPackage(
-            [ "demo.nyxp", """(package = (name = "demo", version = "0.1.0", sources = ["src/**/*.nyx"]))"""
+            [ "demo.nyxp", $"""(package = (name = "demo", version = "0.1.0", sources = ["src/**/*.nyx"]), {consoleHostEntry})"""
               "src/main.nyx", entrySource
               "src/lib/util.nyx", "module util\n\nexport def one = 1\n"
               "scripts/other.nyx", (withFinalNewline """println("not a source")""") ])

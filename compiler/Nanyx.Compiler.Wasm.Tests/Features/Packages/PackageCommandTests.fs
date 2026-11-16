@@ -160,3 +160,30 @@ let ``Check - a package with an error fails, even one that a debug build would d
     Assert.Equal(1, outcome.ExitCode)
     Assert.False(wrote)
     Assert.Contains("Unknown function 'missing'", outcome.StandardOutput)
+
+/// What `nanyx <command>` does with the library `acme.util`, which names no host, holding `files` under `src`.
+let private onLibrary (files: (string * string) list) (command: string) =
+    use directory = new TempDirectory()
+    Directory.CreateDirectory(Path.Combine(directory.Path, "src")) |> ignore
+    File.WriteAllText(Path.Combine(directory.Path, "util.nyxp"), """(package = (name = "acme.util", version = "0.1.0", sources = ["src/**/*.nyx"]))""")
+    for path, text in files do
+        File.WriteAllText(Path.Combine(directory.Path, "src", path), text)
+    nanyxIn directory.Path [ command ]
+
+[<Fact>]
+let ``A library, a package with no host, checks and builds, but running it is an error: it has no entry point`` () =
+    let files = [ "strings.nyx", "module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n" ]
+    assertSucceeded (onLibrary files "check")
+    assertSucceeded (onLibrary files "build")
+    let run = onLibrary files "run"
+    Assert.Equal(1, run.ExitCode)
+    Assert.Contains("error: no entry point: acme.util names no host, so it is a library, which can't be run.", run.StandardError)
+
+[<Theory>]
+[<InlineData("check")>]
+[<InlineData("run")>]
+[<InlineData("build")>]
+let ``An @entry in a library is an error, from every command`` (command: string) =
+    let outcome = onLibrary [ "main.nyx", "module main\n\n@entry\ndef main = { () }\n" ] command
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Contains("NYX0031", outcome.StandardOutput + outcome.StandardError)

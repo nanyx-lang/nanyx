@@ -110,9 +110,9 @@ module Attributes =
     /// value makes it a foreign function (see `Externs`): its value becomes the import's module and name (see
     /// `ExternSyntax`). Any other attribute, an attribute that does not precede a value definition, or a definition with
     /// no value and no `@extern`, is an error. `@entry` takes no argument. The host is `host`: the package's, or the
-    /// console host for a file in no package. With the module, each entry point (see `EntryPoint`). An attribute before
+    /// console host for a file in no package. A package with no host is a library, so an `@entry` in it is an error. With the module, each entry point (see `EntryPoint`). An attribute before
     /// a member of a context declaration is checked here too, and stays where it is (see `fieldAttributeErrors`).
-    let applyAttributes (host: Host) (module': Module) : Result<Module * EntryPoint list, Diagnostic list> =
+    let applyAttributes (host: Host option) (module': Module) : Result<Module * EntryPoint list, Diagnostic list> =
         let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entries: (EntryPoint * TopLevelItem) list) (externs: (string * Extern * SourceSpan) list) (errors: Diagnostic list) =
             match remaining with
             | [] -> List.rev acc, List.rev entries, List.rev externs, List.rev errors
@@ -127,6 +127,13 @@ module Attributes =
             | Kind (Attribute(name, Some argument)) :: rest when name = entryAttribute ->
                 let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span $"Attribute '@{name}' takes no argument"
                 loop rest acc entries externs (error :: errors)
+            | Kind (Attribute(attributeName, _)) as attribute :: (Kind (Def (ValueDef(_, name, _, _))) as def) :: rest when attributeName = entryAttribute && host.IsNone ->
+                let error =
+                    Diagnostics.at
+                        DiagnosticCodes.EntryInLibrary
+                        attribute.Span
+                        $"'{name}' is an entry point, but its package names no host, so it is a library, which has none: an application names the host its @entry runs under in its manifest, as host = (package = \"{Hosts.console.Package}\", version = \"{Toolchain.version}\")"
+                loop rest (def :: acc) entries externs (error :: errors)
             | Kind (Attribute(attributeName, _)) as attribute :: (Kind (Def (ValueDef(_, name, _, value))) as def) :: rest when attributeName = entryAttribute ->
                 // The call is made up for the def, and reported there. The entry point passed to `run` is at the
                 // attribute, so that a mismatch with the host's `run` is told apart from any other.
@@ -136,7 +143,7 @@ module Attributes =
                 let entry =
                     { Attribute = attribute.Id
                       Name = name
-                      Host = host
+                      Host = host.Value
                       Argument = attribute.Span
                       Call = SyntaxTree.ofItem call |> List.collect SyntaxTree.expressionsWithin |> List.map _.Id }
                 loop rest (def :: acc) ((entry, call) :: entries) externs (List.rev (bodilessErrors [ def ]) @ errors)
@@ -147,6 +154,6 @@ module Attributes =
         | items, entries, externs, errors ->
             match errors @ Externs.conflicts externs with
             | [] ->
-                let entryImport = if entries.IsEmpty then [] else hostImports host items
+                let entryImport = match host with Some host when not entries.IsEmpty -> hostImports host items | _ -> []
                 Ok (entryImport @ items @ List.map snd entries, List.map fst entries)
             | errors -> Error errors

@@ -53,7 +53,7 @@ A program's host is a deployment concern. It decides which runtime gets linked, 
 
 `host` names the host's package and its version, and its `settings` are the host's configuration, passed to the host at startup. The CLI can override the host, for example `nanyx run --host nanyx.console/console.host`. Until any package can be a host, the only host a manifest can name is `nanyx.console`, the package the compiler ships with `nanyx.console/console.host` in it, and it takes no `settings` yet (`NYX0024`).
 
-Once hosts are packages, there is no default host: a manifest with no `host` can't be run, and `nanyx new` writes one ([Built-ins as packages](./built-ins-as-packages#the-manifest)). Until then, a package with no `host` runs under the console host.
+There is no default host: a package whose manifest names no `host` is a library, an `@entry` in it is an error (`NYX0031`) from `nanyx check`, `nanyx run` and `nanyx build` alike, and running it is an error that says it has no entry point. `nanyx new` writes a `host` ([Built-ins as packages](./built-ins-as-packages#the-manifest)).
 Loose script files, which run top-level statements without a manifest, always run under `ConsoleHost`.
 
 # The entry shape is just a type
@@ -365,7 +365,7 @@ The composite host runs each part under the right sub-host and coordinates start
   it as `nanyx.console/console.host` (`Host.Import`). Choosing another host is choosing another `Host` there:
   `Hosts.tryFind` gives the one an import (`nanyx.console/console.host`) is, or an error that names it.
 - **A package chooses its host.** `Manifest.check` reads the manifest's `host`, `(package = "nanyx.console", version
-  = "0.28.0")`, into `Manifest.Host` (the console host without a `host` field). A package that isn't a host is
+  = "0.28.0")`, into `Manifest.Host` (none without a `host` field: a library, whose `@entry` `Attributes.applyAttributes` reports as `NYX0031`). A package that isn't a host is
   `NYX0023`, and `settings` is `NYX0024`, since no host takes configuration yet.
   `--host` on `run`, `build` and `check` replaces it (`Package.withHost`); on a script it is a usage error. The host
   travels with the package's module table (`PackageModules.Host`), so every compile of a package's file, the language

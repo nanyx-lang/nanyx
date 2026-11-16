@@ -174,7 +174,7 @@ module Package =
 
     /// `package` run under `host` in place of its manifest's, as `--host` chooses.
     let withHost (host: Host) (package: Package) : Package =
-        { package with Manifest = { package.Manifest with Host = host } }
+        { package with Manifest = { package.Manifest with Host = Some host } }
 
     /// The package `path` names: a manifest, or a directory in or under the package. An error says why there is none.
     let find (path: string) : Result<Package, string list> =

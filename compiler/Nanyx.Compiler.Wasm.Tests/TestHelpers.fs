@@ -176,11 +176,15 @@ type TempDirectory() =
 /// Runs `nanyx` with `arguments` (with `{package}` standing for the package's directory) on a package of `files`
 /// (paths under its `src` directory, with their text), made in a directory of its own and removed afterwards. Gives
 /// what it printed and whether it wrote the program to out/app.wat.
+/// A manifest's `host` entry naming the console host the compiler ships, at its version: what an application with an
+/// `@entry` writes.
+let consoleHostEntry = $"host = (package = \"{Hosts.console.Package}\", version = \"{Toolchain.version}\")"
+
 let nanyxOnPackage (files: (string * string) list) (arguments: string list) : RunOutcome * bool =
     use directory = new TempDirectory()
     let root = directory.Path
     Directory.CreateDirectory(Path.Combine(root, "src")) |> ignore
-    File.WriteAllText(Path.Combine(root, "app.nyxp"), """(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]))""")
+    File.WriteAllText(Path.Combine(root, "app.nyxp"), $"(package = (name = \"app\", version = \"0.1.0\", sources = [\"src/**/*.nyx\"]), {consoleHostEntry})")
     for path, text in files do
         File.WriteAllText(Path.Combine(root, "src", path), text)
     let outcome = nanyxWithInput "" (arguments |> List.map (fun argument -> argument.Replace("{package}", root)))

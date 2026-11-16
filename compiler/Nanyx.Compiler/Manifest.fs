@@ -36,8 +36,8 @@ type Manifest =
       Dependencies: Dependency list
       /// The linters the manifest's `linters` turns on, and the severities their `settings` set.
       Linters: LinterOptions
-      /// The host `host` names, or the console host when the manifest has no `host`.
-      Host: Host
+      /// The host `host` names, if the manifest has one: a package with none is a library, which has no `@entry`.
+      Host: Host option
       /// The whole manifest as it is written, for tools that read the rest (see `toJson`).
       Value: DataValue }
 
@@ -204,8 +204,8 @@ module Manifest =
         { Linters = Linters.all |> List.filter (fun linter -> chosen |> List.exists (fun (a, _) -> a.Name = linter.Name))
           Severities = chosen |> List.collect snd |> Map.ofList }
 
-    /// The host the manifest's `host` names. It takes no settings yet.
-    let private readHost (problems: Problems) (value: DataValue) : Host =
+    /// The host the manifest's `host` names, if it is right. It takes no settings yet.
+    let private readHost (problems: Problems) (value: DataValue) : Host option =
         let host (name: string) =
             match Hosts.all |> List.tryFind (fun host -> host.Package = name) with
             | Some host -> Result.Ok host
@@ -215,8 +215,8 @@ module Manifest =
             match DataValue.field "settings" fields with
             | Some field -> problems.Add DiagnosticCodes.UnsupportedManifestField field.NameSpan $"{host.Package} takes no settings"
             | None -> ()
-            host
-        | None -> Hosts.console
+            Some host
+        | None -> None
 
     /// The fields of an entry of `dependencies`.
     let private dependencyFields = [ "package"; "path"; "version" ]
@@ -304,7 +304,7 @@ module Manifest =
                     name, version, problems.Strings "package" fields "sources" |> Option.map (List.map fst), publicModules
                 | None -> None, None, None, None
             let linters = field "linters" |> Option.map (fun field -> readLinters problems field.Value)
-            let host = field "host" |> Option.map (fun field -> readHost problems field.Value)
+            let host = field "host" |> Option.bind (fun field -> readHost problems field.Value)
             match problems.All with
             | [] ->
                 Result.Ok
@@ -317,7 +317,8 @@ module Manifest =
                       Dependencies = defaultArg dependencies []
                       // No `linters` means no linters: a package turns on the official one by naming nanyx.lint.
                       Linters = defaultArg linters Linters.none
-                      Host = defaultArg host Hosts.console
+                      // No `host` means a library: an application names the host it runs under.
+                      Host = host
                       Value = manifest }
             | problems -> Result.Error problems
 

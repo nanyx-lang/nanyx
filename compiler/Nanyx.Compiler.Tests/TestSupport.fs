@@ -41,6 +41,10 @@ let spanOf (diagnostic: Diagnostic) =
     diagnostic.Span.Value
 
 /// The one diagnostic compiling `source` gives.
+/// A manifest's `host` entry naming the console host the compiler ships, at its version: what an application with an
+/// `@entry` writes.
+let consoleHostEntry = $"host = (package = \"{Hosts.console.Package}\", version = \"{Toolchain.version}\")"
+
 /// The console host's file, in the package the compiler ships (see `ShippedPackages`).
 let consoleHostFile = Path.Combine(ShippedPackages.directoryOf Hosts.console.Package, "src", "console.host.nyx")
 

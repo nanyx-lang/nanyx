@@ -30,8 +30,9 @@ export def shout = { s: string -> s ++ mark }"""
 
 export def mark = "!" """ ]
 
-/// The app's manifest, depending on `dependencies`.
-let private app (dependencies: (string * string) list) = "app/app.nyxp", manifest "app" [] dependencies
+/// The app's manifest, depending on `dependencies`, run by the console host.
+let private app (dependencies: (string * string) list) =
+    "app/app.nyxp", (manifest "app" [] dependencies).Replace("\n)\n", $"\n  {consoleHostEntry}\n)\n")
 
 let private mainImporting (import: string) (body: string) =
     "app/main.nyx",
