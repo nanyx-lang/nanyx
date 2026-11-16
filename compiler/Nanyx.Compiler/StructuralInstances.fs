@@ -523,12 +523,14 @@ module internal StructuralInstances =
         (ty: Ty)
         (state: InferState)
         : Result<ContextInstance * InferState, Failure> option =
-        match functionPart ty with
+        // A function with an instance in scope is a part like any other, written or compared through it.
+        let abstractedTy, abstracted, abstractedState = abstractParts partInstance ty state
+        match functionPart abstractedTy with
         | Some held -> Some (Error (HoldsFunction held))
         // A union open to the caller's tags has an `==` derived only where it is compared (see `comparison`).
         | None when (closed rigid ty).IsNone && (closed Set.empty ty |> Option.bind (shapeFor ctxName)).IsSome -> Some (Error OpenToCaller)
         | None ->
-            let ty, abstracted, state = abstractParts partInstance ty state
+            let ty, state = abstractedTy, abstractedState
             let instanceOf = withAbstracted abstracted instanceOf
             derive rigid span ctxName ty state
             |> Option.map (fun (name, vars, next) ->

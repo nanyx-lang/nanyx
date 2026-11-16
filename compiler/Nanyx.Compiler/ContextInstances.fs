@@ -230,8 +230,9 @@ let internal useInstance (env: TypeEnv) (state: InferState) (value: Expression) 
     | _ -> env, state
 
 /// Where a call that requires `ctxName` at `argTys` finds it when no instance is in scope, if the context is a
-/// well-known one (see `WellKnownContexts.atCall`). `hasInstance` says whether an instance of a type variable is in scope.
-/// A type that holds one that attaches `==` and no `hash` has no `Hash` (see `WellKnownContexts.disagreeing`).
+/// well-known one (see `WellKnownContexts.atCall`). `hasInstance` says whether an instance of a type is in scope: a part
+/// with one, or with the member attached, is compared through it. A type that holds one that attaches `==` and no
+/// `hash` has no `Hash` (see `WellKnownContexts.disagreeing`).
 let private wellKnownInstanceAtCall (env: TypeEnv) (ctxName: Identifier) (argTys: Ty list) (hasInstance: Ty -> bool) =
     match argTys, WellKnownContexts.tryFind ctxName with
     // Without the prelude there is no instance of the compiler's own to pass.
@@ -240,7 +241,9 @@ let private wellKnownInstanceAtCall (env: TypeEnv) (ctxName: Identifier) (argTys
             not (WellKnownContexts.isBuiltIn part) && (tryResolveAttachedFunction env part memberName).IsSome
         match WellKnownContexts.disagreeing wellKnown attaches ty with
         | Some reason -> Some (wellKnown, WellKnownContexts.NoInstance reason)
-        | None -> Some (wellKnown, WellKnownContexts.atCall wellKnown (attaches ty wellKnown.Member) hasInstance ty)
+        | None ->
+            let partHasOwn (part: Ty) = attaches part wellKnown.Member || hasInstance part
+            Some (wellKnown, WellKnownContexts.atCall wellKnown (attaches ty wellKnown.Member) hasInstance partHasOwn ty)
     | _ -> None
 
 /// The type among `argTys`, the arguments of the context `ctxName`, that an instance may be derived for from its
@@ -698,7 +701,8 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
             let hasInstance (ty: Ty) =
                 match ty with
                 | TyVar v when declaredVars.Contains v.Id -> declaredRests.Contains v.Id || hasInstanceIn scopeEnv ty
-                | _ -> true
+                | TyVar _ -> true
+                | _ -> hasInstanceIn scopeEnv ty
             match wellKnownInstanceAtCall env pending.Context argTys hasInstance with
             | Some (_, WellKnownContexts.Open _) -> Some (Error pending.Errors)
             | Some (wellKnown, WellKnownContexts.NoInstance reason) ->

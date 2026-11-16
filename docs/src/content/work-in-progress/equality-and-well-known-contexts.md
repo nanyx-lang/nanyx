@@ -337,9 +337,12 @@ by this same lookup.
 **Built** for every context, well-known or not: the error is NYX0250, reported by `ContextInstances.ownInstanceErrors`,
 which asks whether the type has an instance of its own as a call would find one (attached, derived, built in, or
 `NoneDefault`'s). The lookup order in the code is unchanged, since with the error no `use` in scope is ever for a type
-with its own. Still open: for a type variable, a `use` is nearer than the signature's instance, the opposite of the
-order above; and an `Eq` loaded for a type that holds a function isn't found inside a tag or a tuple that holds it
-([#1520](https://github.com/nanyx-lang/nanyx/issues/1520)).
+with its own. An `Eq` loaded for a type that holds a function, or for a function type, is found inside a tag, a tuple
+or a record that holds it, which is compared by a derived `==` that reads that part through it
+([#1520](https://github.com/nanyx-lang/nanyx/issues/1520)): `WellKnownContext.Lacks` does not look inside a part with
+an instance of its own, and `StructuralInstances.instance` looks for a function only after such parts are made
+variables. Still open: for a type variable, a `use` is nearer than the signature's instance, the opposite of the order
+above.
 
 # Extending a type
 

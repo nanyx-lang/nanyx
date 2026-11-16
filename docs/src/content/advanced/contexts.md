@@ -664,7 +664,7 @@ A different behaviour comes from a type that says so, or from a function given i
 - **A protected type with its own definitions**, such as the `Email` above with its own `==`. Its type says which equality it has wherever it goes, so a set of them is always consistent.
 - **A function given what to do**, for a one-off: `list.sortBy` with a key to order by, or a function called in a hole for text.
 
-A `use` still gives an instance to a type that has none of its own, such as `Eq` for a record that holds a function, or `Add` for a type that attaches no `+`, and it still loads contexts that aren't for a type, such as `Console` and `Log`.
+A `use` still gives an instance to a type that has none of its own, such as `Eq` for a record that holds a function, or `Add` for a type that attaches no `+`, and it still loads contexts that aren't for a type, such as `Console` and `Log`. A tag, tuple or record that holds such a type is then compared through it too: with `Eq(Button)` loaded, `#some(ok) == #some(cancel)` compares the two buttons with the `==` the `use` gives.
 
 # Why contexts matter
 
