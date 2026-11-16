@@ -60,7 +60,7 @@ internal static class CliCommands
     /// </summary>
     /// <param name="path">A .nyx file, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported. On a terminal, the tree is shown live while the compile runs.</param>
-    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script always runs under nanyx.console.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script names its host with a ::host directive.</param>
     [Consolo("check")]
     public static int Check(
         [Consolo("timings")] bool timings = false,
@@ -209,7 +209,7 @@ internal static class CliCommands
     /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest, followed by the program's arguments; none means the package the current directory is in. Put -- before arguments that start with -, so that they are not read as run's options.</param>
     /// <param name="checkMemory">Check the program's reference counting as it runs: stop at a block freed twice or an object used after it was freed, and fail if anything is left on the heap at the end.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
-    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script always runs under nanyx.console.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script names its host with a ::host directive.</param>
     /// <param name="noInline">Compile every call as a call, without inlining: for working on the compiler, to tell whether a misbehaving program is the inliner's doing.</param>
     [Consolo("run")]
     public static int Run(
@@ -271,7 +271,7 @@ internal static class CliCommands
     /// <param name="outputPath">Where to write the program; the default is out/&lt;package name&gt;.wat beside the manifest.</param>
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
-    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script always runs under nanyx.console.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script names its host with a ::host directive.</param>
     /// <param name="noInline">Compile every call as a call, without inlining: for working on the compiler, to tell whether a misbehaving program is the inliner's doing.</param>
     [Consolo("build")]
     public static int Build(
@@ -396,7 +396,7 @@ internal static class CliCommands
         Directory.Exists(shell.FullPath(path)) || path.EndsWith(ManifestModule.extension, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// A usage error, reported, when <c>--host</c> is given for a script, which always runs under the console host; null
+    /// A usage error, reported, when <c>--host</c> is given for a script, which names its host with <c>::host</c>; null
     /// when it is not given.
     /// </summary>
     private static int? NoHostForScript(Shell shell, string? host)
@@ -406,7 +406,7 @@ internal static class CliCommands
             return null;
         }
 
-        shell.Error.WriteLine($"--host chooses a package's host: a script always runs under {Hosts.consolePackage}.");
+        shell.Error.WriteLine($"--host chooses a package's host: a script names its own with a ::host directive, ::host.acme.server = {{ path = \"../server\" }}, and runs under {Hosts.consolePackage} without one.");
         return UsageError;
     }
 

@@ -32,7 +32,7 @@ You can run this file with `nanyx run filename.nyx`. The compiler treats the fil
 
 A script has no package manifest, but it can say what a manifest would with _directives_: lines starting `::` at the top of the file, before its first line of code. They may come after a `#!` line and among comments and blank lines.
 
-A directive is a dotted key after `::`. A key on its own turns something on. A key followed by `= value` sets that value, a string in quotes or a number:
+A directive is a dotted key after `::`. A key on its own turns something on. A key followed by `= value` sets that value: a string in quotes, a number, or a table in braces, `{ path = "../json" }`:
 
 ```nanyx
 #!/usr/bin/env -S nanyx run
@@ -47,9 +47,12 @@ println("Hello!")
 | `::linters.default` | Turns the official linter on, with every rule at its default severity | `linters = [(package = "nanyx.lint", version = "0.28.0")]` |
 | `::linters.default.unusedBindings = "error"` | Turns the linter on and sets one rule's severity (`"error"`, `"warning"`, `"info"`, `"hint"` or `"off"`) | `settings = (rules = (unusedBindings = #error))` in that linter's entry |
 | `::formatter.lineWidth = 80` | Sets one of the formatter's settings, `lineWidth` or `indentSize` | `formatter = (lineWidth = 80)` |
-| `::dependencies.acme.json = "1.2"` | Depends on a package: not supported yet, so it is an error for now | `dependencies = [(package = "acme.json", path = "../json")]`, a package in a directory |
+| `::host.nanyx.console = "0.28.0"` | Runs the script under a host the compiler ships, at the compiler's version; without `::host`, a script runs under `nanyx.console` | `host = (package = "nanyx.console", version = "0.28.0")` |
+| `::host.acme.server = { path = "../server" }` | Runs the script under the host package in a directory, relative to the script | `host = (package = "acme.server", path = "../server")` |
+| `::dependencies.acme.json = { path = "../json" }` | Depends on the package in a directory, so the script can import its public modules, `import acme.json/parse` | `dependencies = [(package = "acme.json", path = "../json")]` |
+| `::dependencies.nanyx.console.core = "0.28.0"` | Depends on a package the compiler ships, at the compiler's version | `dependencies = [(package = "nanyx.console.core", version = "0.28.0")]` |
 
-As in a manifest, only the linters a script's `::linters` directives name run, so a script without one runs none. A directive the compiler does not understand, or one after the first line of code, is an error naming its line. A file that belongs to a package cannot have directives: its manifest is the one place a package says these things.
+As in a manifest, only the linters a script's `::linters` directives name run, so a script without one runs none. A wrong `::host` or `::dependencies` is the error a manifest's entry would be, at the directive. A directive the compiler does not understand, or one after the first line of code, is an error naming its line. A file that belongs to a package cannot have directives: its manifest is the one place a package says these things.
 
 # Importing by file path
 
