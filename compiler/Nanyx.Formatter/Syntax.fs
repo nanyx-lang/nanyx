@@ -7,7 +7,8 @@ open Parser.Program
 /// The items with what formatting may change taken out: each destructuring temporary, whose name says where its def is written, is renamed by the order it first
 /// appears in, imports and a field's attributes lose their spans (the only spans syntax equality looks at), imports in a row become one and are
 /// sorted (see `ImportOrder`), and a
-/// lambda whose body is a block of one expression has that expression as its body.
+/// lambda whose body is a block of one expression has that expression as its body, as does the match that takes a
+/// lambda's pattern parameters apart.
 let normalize (items: TopLevelItem list) : TopLevelItem list =
     let temps = Dictionary<string, string>()
 
@@ -27,6 +28,21 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             Selection = item.Selection |> Option.map (List.map (fun (name, _) -> name, SourceSpan.none))
             Span = SourceSpan.none }
 
+    // `{ x -> e }` and `{ x ->` / `e` / `}` (a block of the one statement `e`) are the same lambda. A lambda with a
+    // pattern parameter has its body in the arm of the match that takes the pattern apart (see `patternArgument`).
+    let rec lambdaBody (parameters: (Identifier * TypeExpr option) list) (body: Expression) =
+        let single (x: Expression) =
+            match x.Kind with
+            | Block [ { Kind = ExprStatement single } ] -> single
+            | _ -> x
+        let patternArguments = parameters |> List.mapi (fun index (n, _) -> n, index + 1) |> List.filter (fun (n, position) -> n = patternArgument position) |> List.map fst
+        match body.Kind with
+        | Match(scrutinees, [ patterns, arm ]) when
+            scrutinees |> List.forall (fun s -> match s.Kind with IdentifierExpr n -> List.contains n patternArguments | _ -> false) ->
+            { body with Kind = Match(scrutinees, [ patterns, single arm ]) }
+        | ContextNames(names, inner) -> { body with Kind = ContextNames(names, lambdaBody parameters inner) }
+        | _ -> single body
+
     let rec expr (e: Expression) : Expression =
         let kind =
             match e.Kind with
@@ -35,18 +51,9 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | IdentifierExpr n -> IdentifierExpr(name n)
             | FunctionCall(n, span, args) -> FunctionCall(n, span, List.map expr args)
             | Lambda(parameters, body, takesUnit) ->
-                // `{ x -> e }` and `{ x ->` / `e` / `}` (a block of the one statement `e`) are the same lambda.
-                let body =
-                    match body.Kind with
-                    | Block [ { Kind = ExprStatement single } ] -> single
-                    | _ -> body
-                Lambda(parameters |> List.map (fun (n, t) -> n, Option.map typeExpr t), expr body, takesUnit)
+                Lambda(parameters |> List.map (fun (n, t) -> n, Option.map typeExpr t), expr (lambdaBody parameters body), takesUnit)
             | ContextNames(names, body) ->
-                let body =
-                    match body.Kind with
-                    | Block [ { Kind = ExprStatement single } ] -> single
-                    | _ -> body
-                ContextNames(names |> List.map (fun (n, t, _) -> name n, Option.map typeExpr t, SourceSpan.none), expr body)
+                ContextNames(names |> List.map (fun (n, t, _) -> name n, Option.map typeExpr t, SourceSpan.none), expr (lambdaBody [] body))
             | BinaryOp(op, opSpan, l, r) -> BinaryOp(op, opSpan, expr l, expr r)
             | Pipe(value, n, span, args) -> Pipe(expr value, n, span, List.map expr args)
             | Block statements -> Block(List.map statement statements)
