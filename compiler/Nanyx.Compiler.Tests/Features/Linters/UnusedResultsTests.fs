@@ -7,10 +7,10 @@ open Nanyx.Compiler.Tests.TestSupport
 let private code = "default/unusedResults"
 
 /// The diagnostics of `source`, compiled with every linter on, which must have no compiler errors, or no linter would
-/// run. `default/unusedResults` is itself an error, so it does not count.
+/// run. The linters' own errors do not count.
 let private compiled (source: string) =
     let result = Compiler.compileWith Linters.everyLinter source
-    let compilerErrors = result.Diagnostics |> List.filter (fun diagnostic -> Diagnostics.isError diagnostic && diagnostic.Code <> code)
+    let compilerErrors = result.Diagnostics |> List.filter (fun diagnostic -> Diagnostics.isError diagnostic && not (diagnostic.Code.StartsWith "default/"))
     Assert.True(result.TypeChecked && compilerErrors.IsEmpty, sprintf "%A" result.Diagnostics)
     result.Diagnostics
 
@@ -41,50 +41,21 @@ let ``A call whose result is thrown away is reported at the call`` () =
     | other -> failwith $"Expected one report, got %A{other}"
 
 [<Fact>]
-let ``A pure expression whose value is thrown away is reported`` () =
+let ``A pure expression whose value is thrown away is left to uselessExpressions`` () =
     let source =
         """def f: int -> int = { n ->
   n + 2
   n
 }
 """
-    match reported source with
-    | [ diagnostic, text ] ->
-        Assert.Equal("n + 2", text)
-        Assert.Equal("This value, of type 'int', is never used: bind it to a name, or pass it to `ignore`", diagnostic.Message)
-    | other -> failwith $"Expected one report, got %A{other}"
-
-[<Fact>]
-let ``Syntax the parser makes a built-in call is reported by what was written`` () =
-    // `with` and a record spread are calls to `__with` and `__spread`, which the message named (#1012).
-    let source =
-        """def b: (x: int, y: int) -> int = { p ->
-  p with (x = 3)
-  p.x
-}
-
-def c: int -> int = { n ->
-  def base = (a = n)
-  (...base, b = 1)
-  (1..n)
-  [n => "n"]
-  n
-}
-"""
-    let messages = reported source |> List.map (fun (diagnostic, text) -> text, diagnostic.Message)
-    Assert.Equal<(string * string) list>(
-        [ "p with (x = 3)", "This `with` update, of type '(x: int, y: int)', is never used: bind it to a name, or pass it to `ignore`"
-          "(...base, b = 1)", "This record, of type '(a: int, b: int)', is never used: bind it to a name, or pass it to `ignore`"
-          "1..n", "This range, of type 'seq(int)', is never used: bind it to a name, or pass it to `ignore`"
-          """[n => "n"]""", "This map, of type 'map(int, string)', is never used: bind it to a name, or pass it to `ignore`" ],
-        messages)
+    Assert.Empty(reported source)
 
 [<Fact>]
 let ``The fix passes the value to ignore`` () =
     let source =
-        """def twice: int -> int = { n -> n * 2 }
+        """def twice: [Console] int -> int = { n -> n * 2 }
 
-def f: int -> int = { n ->
+def f: [Console] int -> int = { n ->
   twice(n)
   n
 }
@@ -158,9 +129,9 @@ let ``A call of the built-in dbg on a line of its own is not reported`` () =
 [<Fact>]
 let ``A call of a def called dbg whose result is thrown away is reported`` () =
     let source =
-        """def dbg: int -> int = { n -> n * 2 }
+        """def dbg: [Console] int -> int = { n -> n * 2 }
 
-def f: int -> int = { n ->
+def f: [Console] int -> int = { n ->
   dbg(n)
   n \dbg
   n

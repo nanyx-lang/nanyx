@@ -99,7 +99,10 @@ type SemanticModel =
 ```
 
 From this, "unused" is "a symbol with no references", and the language server's go-to-definition is
-`References` followed by `Symbol.Declaration`.
+`References` followed by `Symbol.Declaration`. The model also carries what each call requires: the callee's type at
+the call (`CalleeTypes`), what provides each context to it (`ContextProviders`), the instances it finds
+(`ContextInstances`), and the contexts of the defs it may call (`ContextTypes`, `ImportedContextTypes`).
+`uselessExpressions` reads them to tell a pure statement from one run for its effects.
 
 How it is produced:
 
@@ -215,10 +218,3 @@ a type: `Types` is a map, and a missing entry means "unknown".
 
 **Public linters.** Design the contract for Nanyx-authored linters
 ([#107](https://github.com/nanyx-lang/nanyx/issues/107)), based on what the internal linters taught us.
-
-# Planned rules
-
-- **A pure value thrown away** ([#900](https://github.com/nanyx-lang/nanyx/issues/900), decided): a rule of its own,
-  separate from `unusedResults`, for a statement whose value is thrown away and which is pure (neither its type nor
-  any call in it requires a context), such as `n + 2` on a line of its own. An error by default, with a fix that
-  removes the statement. `unusedResults` stays for calls.
