@@ -16,6 +16,13 @@ let ``if-matching desugars to a match with a unit wildcard arm`` () =
     | Result.Error err -> failwith $"Parse failed: {err}"
 
 [<Fact>]
+let ``a tag with no payload before then is the whole pattern`` () =
+    match parseModule "def x = if n is #zero then 1 else 2" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (Match (_, [ [ Kind (TagPattern ("zero", None)) ], Kind (LiteralExpr (IntLit64 1L)); _ ]))))) ] -> ()
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
 let ``if-matching with else uses the else as the wildcard arm`` () =
     match parseModule "def x = if p is (a, 0) then a else 0" with
     | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (Match ([ Kind (IdentifierExpr "p") ],

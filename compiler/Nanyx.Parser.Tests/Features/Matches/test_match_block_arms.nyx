@@ -13,11 +13,11 @@ def f = { x ->
 
 def g = { opt ->
     match opt
-    | #Some(value) ->
+    | #some(value) ->
         def doubled = value * 2
         dbg(doubled)
         doubled
-    | #None ->
+    | #none ->
         dbg(0)
         0
 }

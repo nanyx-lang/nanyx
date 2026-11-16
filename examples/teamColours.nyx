@@ -22,8 +22,8 @@ type GameId = int
 type TeamId = string
 type Rules = (maxSetPoints: int, maxSets: int)
 type Score = (by: (team: TeamId, color: TeamColor), at: Instant)
-type SetScores = list(Score)          -- the points of one set
-type GameScores = list(SetScores)     -- finished sets first, the set in play last
+type SetScores = list(Score) -- the points of one set
+type GameScores = list(SetScores) -- finished sets first, the set in play last
 
 type OpenGame = (
   id: GameId
@@ -44,19 +44,22 @@ type FinishedGame = (
 
 export type Game = #open(OpenGame) | #finished(FinishedGame)
 
-def setPoints: (SetScores, TeamId) -> int = { set, team -> set \count { s -> s.by.team == team } }
+def setPoints: SetScores, TeamId -> int = { set, team ->
+  set \count { s -> s.by.team == team }
+}
 
-def setWinner: (Rules, (TeamId, TeamId), SetScores) -> #some(TeamId) | #none = { rules, teams, set ->
+def setWinner: Rules, (TeamId, TeamId), SetScores -> #some(TeamId) | #none = { rules, teams, set ->
   def (home, away) = teams
   def homePoints = setPoints(set, home)
   def awayPoints = setPoints(set, away)
 
-  if | homePoints >= rules.maxSetPoints and homePoints - awayPoints >= 2 -> #some(home)
-     | awayPoints >= rules.maxSetPoints and awayPoints - homePoints >= 2 -> #some(away)
-     | else -> #none
+  if
+    | homePoints >= rules.maxSetPoints and homePoints - awayPoints >= 2 -> #some(home)
+    | awayPoints >= rules.maxSetPoints and awayPoints - homePoints >= 2 -> #some(away)
+    | else -> #none
 }
 
-def setsWon: (OpenGame, TeamId) -> int = { game, team ->
+def setsWon: OpenGame, TeamId -> int = { game, team ->
   game.score \count { set -> setWinner(game.rules, game.teams, set) == #some(team) }
 }
 
@@ -71,28 +74,37 @@ pattern OpenGame -> #SetInPlay | #SetWon | #GameWon = { game ->
       if setsWon(game, winner) >= setsToWin then #GameWon else #SetWon
 }
 
-export def recordScore: (OpenGame, by: (team: TeamId, color: TeamColor), at: Instant) -> Game = { game, by, at ->
-  def point = Score(by = by, at = at)
-  def finishedSets = game.score \dropLast
-  def #some(currentSet) = game.score \last except #emptyList -> #some([])
-  def updated = game with score = [...finishedSets, [...currentSet, point]]
+export def recordScore
+  : (OpenGame, by: (team: TeamId, color: TeamColor), at: Instant) -> Game
+  = { game, by, at ->
+    def point = Score(by = by, at = at)
+    def finishedSets = game.score \dropLast
+    def #some(currentSet) = game.score \last except #emptyList -> #some([])
+    def updated = game with score = [...finishedSets, [...currentSet, point]]
 
-  match updated
-    | #SetInPlay -> #open(updated)
-    | #SetWon -> #open(updated with score = [...updated.score, []])
-    | #GameWon -> #finished(FinishedGame(
-        id = updated.id
-        teams = updated.teams
-        startedAt = updated.startedAt
-        finishedAt = at
-        rules = updated.rules
-        score = updated.score
-      ))
-}
+    match updated
+      | #SetInPlay -> #open(updated)
+      | #SetWon -> #open(updated with score = [...updated.score, []])
+      | #GameWon -> #finished(
+        FinishedGame(
+          id = updated.id
+          teams = updated.teams
+          startedAt = updated.startedAt
+          finishedAt = at
+          rules = updated.rules
+          score = updated.score
+        )
+      )
+  }
 
-export def openGame: (Rules, (TeamId, TeamId), Instant, GameId) -> #some(OpenGame) | #error(#teamsMustBeUnique)
+export def openGame
+  : Rules, (TeamId, TeamId), Instant, GameId -> #some(OpenGame) | #error(#teamsMustBeUnique)
   = { rules, teams, startedAt, id ->
     def (t1, t2) = teams
-    if t1 == t2 then #error(#teamsMustBeUnique)
-    else #some(OpenGame(id = id, teams = teams, startedAt = startedAt, rules = rules, score = [[]]))
+
+    if t1 == t2
+      then #error(#teamsMustBeUnique)
+      else #some(
+        OpenGame(id = id, teams = teams, startedAt = startedAt, rules = rules, score = [[]])
+      )
   }

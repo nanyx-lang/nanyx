@@ -54,5 +54,18 @@ type PatternPrinter(source: string, sourceText: SourceText, literal: SourceSpan 
                 // A record payload's brackets are the tag's: `#some(count = 0, ...)`.
                 | RecordMemberPattern _ -> cat [ text $"#{n}"; pattern payload ]
                 | _ -> cat [ text $"#{n}("; pattern payload; text ")" ]
+        | ArgumentTagPattern(n, args, payload) ->
+            let argDocs =
+                match args.Kind with
+                | TupleExpr items -> List.map expression items
+                | _ -> [ expression args ]
+            let payloadDoc =
+                match payload with
+                | None -> []
+                | Some (Kind UnitPattern) -> [ text "()" ]
+                | Some (Kind (TuplePattern ps)) -> [ text "("; commaJoin (List.map pattern ps); text ")" ]
+                | Some (Kind (RecordMemberPattern _) as record) -> [ pattern record ]
+                | Some single -> [ text "("; pattern single; text ")" ]
+            cat ([ text $"#{n}("; commaJoin argDocs; text ")" ] @ payloadDoc)
 
     member _.Pattern(p: Pattern) : Doc = pattern p

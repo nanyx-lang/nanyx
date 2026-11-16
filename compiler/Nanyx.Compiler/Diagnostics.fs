@@ -114,6 +114,8 @@ module DiagnosticCodes =
     let InitialisationCycle = code 115 "Initialisation cycle" Severity.Error
     let InvalidTypeName = code 116 "Invalid type name" Severity.Error
     let DuplicateField = code 117 "Duplicate field" Severity.Error
+    let UnknownPattern = code 118 "Capitalised tag that names no pattern" Severity.Error
+    let AmbiguousPattern = code 119 "Tag that more than one pattern returns" Severity.Error
 
     // Types.
     let TypeMismatch = code 201 "Type mismatch" Severity.Error
@@ -190,7 +192,7 @@ module DiagnosticCodes =
           ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped; DefinitionWithoutValue; EntryInLibrary; ContextsJoined
           LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; PackageNotDownloaded; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
-          DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField
+          DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField; UnknownPattern; AmbiguousPattern
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
           MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule; WrongPatternCount

@@ -938,6 +938,31 @@ def user = (name = "Ada", name = "Grace")  -- error NYX0117: 'name' is named twi
 
 To fix it, rename or remove one of the two.
 
+# NYX0118: Capitalised tag that names no pattern
+
+A capitalised tag, such as `#Even`, is a [custom pattern](../advanced/custom-patterns)'s, and no pattern in scope
+returns this one. An ordinary tag is written in lower case.
+
+```nanyx
+def answer = #Some(42)  -- error NYX0118: No pattern in scope returns `#Some`
+```
+
+To fix it, write the tag in lower case, `#some(42)`, which the editor offers to do; or declare or import the pattern
+that returns it.
+
+# NYX0119: Tag that more than one pattern returns
+
+Two [custom patterns](../advanced/custom-patterns) in scope return the same tag, so a match on the tag couldn't tell
+which pattern to run. The error is at the second of two patterns a module declares, or, for two that it imports, where
+the tag is used.
+
+```nanyx
+pattern int -> #Even | #Odd = { n -> if n % 2 == 0 then #Even else #Odd }
+pattern int -> #Odd | #Big = { n -> if n > 100 then #Big else #Odd }  -- error NYX0119: Another pattern in this module returns `#Odd` too
+```
+
+To fix it, give one of the patterns a tag of its own, or import only one of them.
+
 # NYX0201: Type mismatch
 
 A value's type is not the type its place needs: an argument is not what the function takes, a definition's value is

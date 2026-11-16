@@ -4,9 +4,11 @@ description: "Reusable pattern-matching logic with the pattern keyword"
 order: 13
 ---
 
-> **Planned.** Custom patterns aren't built yet: `pattern` is not a keyword today. The design below is decided
-> ([#1719](https://github.com/nanyx-lang/nanyx/issues/1719)); the work is
-> [#1720](https://github.com/nanyx-lang/nanyx/issues/1720) to [#1723](https://github.com/nanyx-lang/nanyx/issues/1723).
+> **Being built.** The design below is decided ([#1719](https://github.com/nanyx-lang/nanyx/issues/1719)). The
+> compiler reads and formats `pattern` declarations and pattern tags, and reports a capitalised tag that names no
+> pattern in scope ([`NYX0118`](../standard-tools/errors#nyx0118)), or more than one
+> ([`NYX0119`](../standard-tools/errors#nyx0119)). Matching on a pattern's tags is still to come:
+> [#1721](https://github.com/nanyx-lang/nanyx/issues/1721) to [#1723](https://github.com/nanyx-lang/nanyx/issues/1723).
 
 The `pattern` keyword allows for the encapsulation of matching logic in reusable components.
 

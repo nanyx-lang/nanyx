@@ -1,0 +1,82 @@
+/// Custom patterns (see the custom patterns page): the patterns in scope, found by their tags.
+module Nanyx.Compiler.Tests.Features.CustomPatterns
+
+open Xunit
+open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
+
+/// The codes of the diagnostics compiling `result` gave.
+let private codesOf (result: CompileResult) = result.Diagnostics |> List.map _.Code
+
+let private evenOdd = "pattern int -> #Even | #Odd = { n -> if n % 2 == 0 then #Even else #Odd }"
+
+[<Fact>]
+let ``A capitalised tag that no pattern returns is an error, with a fix that writes it in lower case`` () =
+    let source = "def answer = #Some(42)"
+    let code, message, text = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.UnknownPattern.Code, code)
+    Assert.Equal("#Some(42)", text)
+    Assert.Contains("No pattern in scope returns `#Some`", message)
+    let fix = Assert.Single((single (Compiler.compile source)).Fixes)
+    Assert.Equal("def answer = #some(42)", applyFix source fix)
+
+[<Fact>]
+let ``A capitalised tag in a pattern or a type names a pattern too`` () =
+    let source =
+        """
+def f: #Yes | #no -> int = { x ->
+  match x
+    | #Yes -> 1
+    | #no -> 0
+}
+"""
+            .ReplaceLineEndings "\n"
+    let result = Compiler.compile source
+    let unknown = result.Diagnostics |> List.filter (fun diagnostic -> diagnostic.Code = DiagnosticCodes.UnknownPattern.Code)
+    Assert.Equal<string list>([ "#Yes"; "#Yes" ], unknown |> List.map (spanOf >> textAt source))
+
+[<Fact>]
+let ``A pattern's own tags name it, in its type and its body`` () =
+    let result = Compiler.compile $"{evenOdd}\ndef e = #Even"
+    Assert.DoesNotContain(DiagnosticCodes.UnknownPattern.Code, codesOf result)
+
+[<Fact>]
+let ``Two patterns a module declares that return one tag are an error at the second`` () =
+    let source = $"{evenOdd}\npattern int -> #Odd | #Big = {{ n -> if n > 100 then #Big else #Odd }}"
+    let code, message, text = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.AmbiguousPattern.Code, code)
+    Assert.Equal("int -> #Odd | #Big", text)
+    Assert.Contains("Another pattern in this module returns `#Odd` too", message)
+
+[<Fact>]
+let ``An exported pattern is in scope where its module is imported`` () =
+    let result = compileImportingAll [ "parity.nyx", $"module parity\nexport {evenOdd}" ] "module main\nimport parity\ndef e = #Even"
+    Assert.DoesNotContain(DiagnosticCodes.UnknownPattern.Code, codesOf result)
+
+[<Fact>]
+let ``A pattern that is not exported is not in scope where its module is imported`` () =
+    let result = compileImportingAll [ "parity.nyx", $"module parity\n{evenOdd}\nexport def x = 1" ] "module main\nimport parity\ndef e = #Even"
+    assertReports DiagnosticCodes.UnknownPattern result
+
+[<Fact>]
+let ``Two imported patterns that return one tag are ambiguous where the tag is used`` () =
+    let modules =
+        [ "parity.nyx", $"module parity\nexport {evenOdd}"
+          "oddity.nyx", "module oddity\nexport pattern int -> #Odd | #Normal = { n -> #Normal }" ]
+    let result = compileImportingAll modules "module main\nimport parity\nimport oddity\ndef o = #Odd"
+    assertReports DiagnosticCodes.AmbiguousPattern result
+    Assert.DoesNotContain(DiagnosticCodes.AmbiguousPattern.Code, codesOf (compileImportingAll modules "module main\nimport parity\nimport oddity\ndef e = #Even"))
+
+[<Fact>]
+let ``Two imported patterns of the same tags are ambiguous too`` () =
+    let modules =
+        [ "parity.nyx", $"module parity\nexport {evenOdd}"
+          "other.nyx", $"module other\nexport {evenOdd}" ]
+    let result = compileImportingAll modules "module main\nimport parity\nimport other\ndef e = #Even"
+    assertReports DiagnosticCodes.AmbiguousPattern result
+    Assert.Contains("parity", (result.Diagnostics |> List.find (fun d -> d.Code = DiagnosticCodes.AmbiguousPattern.Code)).Message)
+
+[<Fact>]
+let ``A module's own pattern wins over an imported one`` () =
+    let result = compileImportingAll [ "parity.nyx", $"module parity\nexport {evenOdd}" ] $"module main\nimport parity\n{evenOdd}\ndef e = #Even"
+    Assert.DoesNotContain(DiagnosticCodes.AmbiguousPattern.Code, codesOf result)

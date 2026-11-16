@@ -1,12 +1,12 @@
 def getOrDefault = { opt, default ->
     match opt
-    | #Some(value) -> value
-    | #None -> default
+    | #some(value) -> value
+    | #none -> default
 }
 
 def main = {
-    def x = #Some(42)
-    def y = #None
+    def x = #some(42)
+    def y = #none
     def a = getOrDefault(x, 0)
     def b = getOrDefault(y, 99)
     a + b

@@ -13,6 +13,7 @@ let rec private boundNamesPattern (pattern: Pattern) : string list =
     match pattern.Kind with
     | IdentifierPattern name -> [ name ]
     | TagPattern(_, Some payload) -> boundNamesPattern payload
+    | ArgumentTagPattern(_, arguments, payload) -> boundNames arguments @ (payload |> Option.map boundNamesPattern |> Option.defaultValue [])
     | TuplePattern patterns
     | AndPattern patterns -> patterns |> List.collect boundNamesPattern
     | ListPattern(patterns, rest) ->
