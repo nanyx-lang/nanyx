@@ -95,3 +95,28 @@ def xs = upTo(1000000, [])
 println("{list.length(xs)} {list.fold(xs, 0, { total, x -> total + x % 10 })}")
 """
     runSource source |> assertRan "1000000 4500000\n"
+
+[<Fact>]
+let ``Run - a catch-all in a list pattern, after an arm that takes a tag there, is returned as the rest`` () =
+    // #1455: `other` is never a `#some`, so it is returned where the result's rest is expected.
+    let source =
+        normalized """import nanyx/console
+
+def allSomeOnto: list(#some(a) | r), list(a) -> #some(list(a)) | r = {
+  | [], acc -> #some(list.reverse(acc))
+  | [#some(x), ...rest], acc -> allSomeOnto(rest, [x, ...acc])
+  | [other, ...rest], acc -> other
+}
+
+def show = {
+  | #some(xs) -> "some {xs}"
+  | #none -> "none"
+}
+
+@entry
+def main = {
+  println(show(allSomeOnto([#some(1), #some(2), #some(3)], [])))
+  println(show(allSomeOnto([#some(1), #none], [])))
+}
+"""
+    runSource source |> assertRan "some [1, 2, 3]\nnone\n"

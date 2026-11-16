@@ -781,7 +781,7 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                     | [ single ] -> Some single
                     | remaining -> Some (TyUnion remaining)
             | _ -> None
-        let rowVars =
+        let mutable rowVars =
             scrutineeTypes
             |> List.indexed
             |> List.choose (fun (index, _) -> restRowTy index)
@@ -800,6 +800,9 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                 match inferPatterns expr env current patternPairs with
                 | Error err -> errors <- errors @ err
                 | Ok (env', state', typedPatterns) ->
+                    // So is a name bound by a catch-all inside a pattern (see `NestedCatchAlls`).
+                    let env', nestedRows = NestedCatchAlls.narrow (NestedCatchAlls.tagsHandledBefore arms armIndex) env' state'
+                    rowVars <- Set.union rowVars nestedRows
                     match inferExpr env' state' expr with
                     | Ok (typedExpr, next) ->
                         current <- next
