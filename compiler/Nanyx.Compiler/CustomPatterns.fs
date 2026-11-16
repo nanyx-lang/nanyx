@@ -168,7 +168,10 @@ module internal CustomPatterns =
         match part.Kind with
         | TagPattern(tag, _) when PatternSyntax.isPatternTag tag ->
             match resolve scope tag with
-            | Found pattern when not pattern.Shape.TakesArguments && not pattern.Shape.IsPartial -> Some { Pattern = pattern; Result = part }
+            // A pattern that returns a `bool` returns `true` for its tag (see `lowerDeclaration`).
+            | Found pattern when not pattern.Shape.TakesArguments && pattern.Shape.ReturnsBool ->
+                Some { Pattern = pattern; Result = Pattern.at part.Span (LiteralPattern(BoolLit true)) }
+            | Found pattern when not pattern.Shape.TakesArguments -> Some { Pattern = pattern; Result = part }
             | _ -> None
         | _ -> None
 
@@ -277,8 +280,41 @@ module internal CustomPatterns =
             span
             $"`#{tag}` is a custom pattern, which a match runs on one of the values it matches, so it goes at the top of an arm's pattern for a value, or of an and-pattern there, not inside another pattern"
 
+    /// The def of a pattern the module declares, `written` its type and `body` its body, as one the type checker can
+    /// check: the pattern's function. A partial pattern returns `PatternSyntax.noMatchTag` for `_`, among its tags and
+    /// in its body, and one that returns a `bool` returns `true` for its tag and `false` for `_`.
+    let private lowerDeclaration (shape: PatternSyntax.Shape) (written: TypeExpr) (body: Expression) : TypeExpr * Expression =
+        let lowerResults (results: TypeExpr) =
+            if shape.ReturnsBool then
+                { results with Kind = TypeName "bool" }
+            else
+                results |> TypeExpr.mapChildren (fun item -> match item.Kind with TypeHole -> { item with Kind = TypeTag(PatternSyntax.noMatchTag, None) } | _ -> item)
+        let loweredType =
+            match written.Kind with
+            | TypeFunc(arguments, ({ Kind = TypeFunc(input, results) } as inner)) when shape.TakesArguments ->
+                { written with Kind = TypeFunc(arguments, { inner with Kind = TypeFunc(input, lowerResults results) }) }
+            | TypeFunc(input, results) -> { written with Kind = TypeFunc(input, lowerResults results) }
+            | _ -> written
+        let loweredBody =
+            body
+            |> ExpressionRewrites.mapExpressionKinds (fun _ kind ->
+                match kind with
+                | IdentifierExpr name when name = PatternSyntax.noMatch ->
+                    if shape.ReturnsBool then LiteralExpr(BoolLit false) else TagExpr(PatternSyntax.noMatchTag, None)
+                | TagExpr(tag, None) when shape.ReturnsBool && List.contains tag shape.Tags -> LiteralExpr(BoolLit true)
+                | other -> other)
+        loweredType, loweredBody
+
+    /// The error for `_` written as a value outside a pattern's body, where it means nothing.
+    let private noMatchOutsidePattern (span: SourceSpan) =
+        Diagnostics.at
+            DiagnosticCodes.NoMatchOutsidePattern
+            span
+            "`_` as a value means \"no match\", which only a custom pattern's body can return"
+
     /// `items` with each match whose arms use a pattern's tags rewritten to run the patterns (see `rewriteMatch`), and
-    /// the errors for pattern tags written where a match can't use them.
+    /// each pattern the module declares as the function it is (see `lowerDeclaration`); and the errors for pattern tags
+    /// written where a match can't use them, and for `_` as a value outside a pattern's body (see `withoutUnknownNoMatch`).
     let rewrite (scope: Scope) (items: Module) : Module * Diagnostic list =
         let errors = ResizeArray<Diagnostic>()
         let visit (current: Expression) (kind: ExpressionKind) =
@@ -286,10 +322,16 @@ module internal CustomPatterns =
             | Match(scrutinees, arms) ->
                 arms |> List.collect fst |> List.collect (nestedUses scope) |> List.map nestedPattern |> errors.AddRange
                 rewriteMatch scope current scrutinees arms |> Option.defaultValue kind
+            | IdentifierExpr name when name = PatternSyntax.noMatch ->
+                errors.Add (noMatchOutsidePattern current.Span)
+                kind
             | other -> other
         let inValue = ExpressionRewrites.mapExpressionKinds visit
         let rec inItem (item: TopLevelItem) =
             match item.Kind with
+            | Def(ValueDef(isExport, name, Some written, value)) when (PatternSyntax.shapeOf name).IsSome ->
+                let loweredType, loweredBody = lowerDeclaration (PatternSyntax.shapeOf name).Value written value
+                { item with Kind = Def(ValueDef(isExport, name, Some loweredType, inValue loweredBody)) }
             | Def(ValueDef(isExport, name, typeOpt, value)) -> { item with Kind = Def(ValueDef(isExport, name, typeOpt, inValue value)) }
             | Expr value -> { item with Kind = Expr(inValue value) }
             | ModuleBlock(name, blockItems) -> { item with Kind = ModuleBlock(name, List.map inItem blockItems) }
@@ -300,3 +342,12 @@ module internal CustomPatterns =
             | Attribute _ -> item
         let rewritten = List.map inItem items
         rewritten, List.ofSeq errors
+    /// `inferErrors`, the type checker's errors, without its unknown name for each `_` that `patternErrors` reports
+    /// as a value outside a pattern's body: that error says what `_` is.
+    let withoutUnknownNoMatch (patternErrors: Diagnostic list) (inferErrors: Diagnostic list) : Diagnostic list =
+        let reported =
+            patternErrors
+            |> List.filter (fun diagnostic -> diagnostic.Code = DiagnosticCodes.NoMatchOutsidePattern.Code)
+            |> List.choose _.Span
+            |> Set.ofList
+        inferErrors |> List.filter (fun diagnostic -> diagnostic.Code <> DiagnosticCodes.UnknownIdentifier.Code || not (diagnostic.Span |> Option.exists reported.Contains))

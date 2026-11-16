@@ -135,6 +135,82 @@ mixed
 """
 
 [<Fact>]
+let ``Run - a partial pattern returns _ for no match, and a match on it falls through to _`` () =
+    """
+pattern string -> #ParseInt(int) | #ParseBool(bool) | _ = { s ->
+  if
+    | int.fromString(s) is #some(i) -> #ParseInt(i)
+    | bool.fromString(s) is #some(b) -> #ParseBool(b)
+    | else -> _
+}
+
+def parse = { (input: string) ->
+  match input
+    | #ParseInt(i) -> "an integer: {i}"
+    | #ParseBool(b) -> "a boolean: {b}"
+    | _ -> "neither"
+}
+
+println(parse("42"))
+println(parse("true"))
+println(parse("x"))
+"""
+    |> printsAs """
+an integer: 42
+a boolean: true
+neither
+"""
+
+[<Fact>]
+let ``Run - a partial pattern with one tag and no payload may return a bool or its tag`` () =
+    """
+pattern int -> #Zero | _ = { n -> n == 0 }
+pattern int -> #Positive | _ = { n -> if n > 0 then #Positive else _ }
+
+def describe = { (num: int) ->
+  match num
+    | #Zero -> "zero"
+    | #Positive -> "positive"
+    | _ -> "negative"
+}
+
+println(describe(0))
+println(describe(5))
+println(describe(-5))
+"""
+    |> printsAs """
+zero
+positive
+negative
+"""
+
+[<Fact>]
+let ``Run - is tests a value against a pattern's tag`` () =
+    """
+pattern int -> #Zero | _ = { n -> n == 0 }
+pattern string -> #ParseInt(int) | _ = { s ->
+  match int.fromString(s)
+    | #some(i) -> #ParseInt(i)
+    | #invalidInt -> _
+}
+
+def num = 0
+
+if num is #Zero then
+  println("It's zero!")
+
+if 3 is #Zero then println("wrong") else println("3 isn't zero")
+
+if | "12" is #ParseInt(n) -> println("parsed {n}")
+   | else -> println("not a number")
+"""
+    |> printsAs """
+It's zero!
+3 isn't zero
+parsed 12
+"""
+
+[<Fact>]
 let ``Run - an imported pattern runs as the module's own does`` () =
     let directory = Directory.CreateTempSubdirectory "nanyx-patterns-"
     try
