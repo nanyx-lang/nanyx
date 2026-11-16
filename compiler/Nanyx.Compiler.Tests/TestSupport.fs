@@ -19,7 +19,8 @@ let normalized (source: string) = source.ReplaceLineEndings "\n"
 /// quotes, and the code after them, on its last line.
 let withFinalNewline (source: string) = normalized source + "\n"
 
-let withTempDir (action: string -> unit) =
+/// What `action` gives in a new directory of its own under the temporary directory, which is deleted after it.
+let withTempDir (action: string -> 'T) : 'T =
     let dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))
     Directory.CreateDirectory dir |> ignore
     try
