@@ -236,3 +236,58 @@ def firstName = { c -> rename(c).name }
           "c", "Customer", offsetOf source "c ->" 0 0
           "c", "Customer", offsetOf source "c ->" 1 0 ],
         typeHints localInlayHints source)
+
+/// `testMapOpt` after a statement or def that fails to check, `failing`, with the diagnostics the module reported and the
+/// types it reported for its defs (#1441).
+let private typesAfterAnError (failing: string) =
+    let source =
+        normalized $"""module parametric.contexts
+
+import nanyx/console
+
+context Foo = (bar: string -> string)
+
+def useFoo: [Foo] = {{ s ->
+  bar(s)
+}}
+
+def run2 = {{ f, a -> f(a) }}
+
+{failing}
+
+def mapOpt = {{
+  | #some(x), f -> #some(f(x))
+  | #none, _ -> #none
+}}
+
+def testMapOpt = {{ #some(42) \mapOpt(println) }}
+
+testMapOpt()
+"""
+    let result = Compiler.compile source
+    result, TypeHints.topLevelTypes Ascii "" result |> List.map (fun hint -> hint.Name, hint.Type) |> Map.ofList
+
+[<Fact>]
+let ``A def after a missing context has its type settled as in a module without errors`` () =
+    let result, types = typesAfterAnError """run2(useFoo, "Hello from Foo!")"""
+    assertReports DiagnosticCodes.MissingContextMembers result
+    Assert.Equal("[Console] () -> #some() | #none", types.["testMapOpt"])
+
+[<Fact>]
+let ``A def after a type error has its type settled as in a module without errors`` () =
+    let result, types = typesAfterAnError """def wrong: int = "not a number" """
+    assertReports DiagnosticCodes.TypeMismatch result
+    Assert.Equal("[Console] () -> #some() | #none", types.["testMapOpt"])
+
+[<Fact>]
+let ``A def attached to a type after a type error takes that type`` () =
+    let source =
+        normalized """type Point = (x: int, y: int)
+def wrong: int = "not a number"
+def Point.show = { p -> "{p.x}" }
+"""
+    let result = Compiler.compile source
+    assertReports DiagnosticCodes.TypeMismatch result
+    Assert.Equal<(string * string) list>(
+        [ "wrong", "int"; "Point.show", "Point -> string" ],
+        TypeHints.topLevelTypes Ascii "" result |> List.map (fun hint -> hint.Name, hint.Type))
