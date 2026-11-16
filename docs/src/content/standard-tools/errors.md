@@ -263,7 +263,6 @@ module main
 
 import shapes
 
-@entry
 def run = { () }
 -- file: a.nyx
 module shapes  -- error NYX0018: 'a.nyx' declares the module 'shapes', which 'b.nyx' declares too: ...
@@ -383,7 +382,6 @@ module main
 
 import acme.util/secrets  -- error NYX0025: The module 'secrets' of the package 'acme.util' is not public, ...
 
-@entry
 def run = { () -> ignore(mark) }
 -- file: app.nyxp
 (
@@ -416,7 +414,6 @@ module main
 
 import acme.util/strings  -- error NYX0026: The package 'acme.util' is not a dependency of 'app', only of a package it depends on: ...
 
-@entry
 def run = { () -> ignore(shout("hi")) }
 -- file: app.nyxp
 (
@@ -529,6 +526,24 @@ def size: () -> int  -- error NYX0030: 'size' has no value: write `= value` afte
 
 To fix it, write the value: `def size: () -> int = { -> 3 }`.
 
+# NYX0031: Entry point in a library
+
+A package whose manifest names no `host` is a library: other packages use its modules, and it has no program of its
+own to run. An `@entry` in it is an error, from `nanyx check`, `nanyx run` and `nanyx build` alike, and running a
+library is an error that says it has no entry point.
+
+```nanyx
+-- file: main.nyx
+module main
+
+@entry  -- error NYX0031: 'main' is an entry point, but its package names no host, so it is a library, which has none: ...
+def main = { () }
+-- file: app.nyxp
+(package = (name = "app", version = "0.1.0", sources = ["*.nyx"]))
+```
+
+To fix it, name the host the program runs under in the manifest, `host = (package = "nanyx.console", version = "...")`
+at the compiler's version, which `nanyx new` writes, or remove the `@entry` if the package is a library.
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which

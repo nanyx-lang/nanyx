@@ -254,7 +254,9 @@ internal static class CliCommands
         var entry = PackageModule.entryResult(build);
         if (entry is null)
         {
-            compiling.Error.WriteLine($"The package {package.Manifest.Name} has no @entry, so there is nothing to run.");
+            compiling.Error.WriteLine(package.Manifest.Host is null
+                ? $"error: no entry point: {package.Manifest.Name} names no host, so it is a library, which can't be run. An application names the host its @entry runs under in its manifest: host = (package = \"{Hosts.console.Package}\", version = \"{Toolchain.version}\")."
+                : $"error: no entry point: the package {package.Manifest.Name} has no @entry, so there is nothing to run.");
             return 1;
         }
 
