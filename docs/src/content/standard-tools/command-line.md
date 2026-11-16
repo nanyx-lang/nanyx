@@ -19,6 +19,7 @@ nanyx migrate [<file.nyx | directory>] [--name <name>]
 nanyx pull [<package>]
 nanyx install <package> [--path <directory> | --version <version>]
 nanyx pack [--out <directory>] [<package>]
+nanyx bump [<package>]
 nanyx manifest --json [<package>]
 nanyx search <query>
 nanyx lsp [<options>]
@@ -245,9 +246,25 @@ nanyx pack                    # writes acme.util-0.3.0.nyxpkg beside the manifes
 nanyx pack --out dist ../util
 ```
 
-A `.nyxpkg` is a zip of the package's manifest and its source files, and packing the same files twice makes the same
-file. A package with a dependency found by its path, or on GitHub, can't be packed, since that dependency isn't there
+A `.nyxpkg` is a zip of the package's manifest, its source files and its `api.json`, which records what each module it
+exports with `export module` exports, with its type, so that the next version can be compared with it. Packing the same
+files twice makes the same file, and a package that doesn't compile can't be packed. A package with a dependency found by its path, or on GitHub, can't be packed, since that dependency isn't there
 once the package is unpacked elsewhere.
+
+## `nanyx bump`
+
+`nanyx bump` sets a package's version to the one the changes to its public API need, compared with the newest version
+of it published, and lists the changes:
+
+```text
+major: strings's def whisper was removed, or is no longer exported
+acme.util 1.0.0 -> 2.0.0, after 1.0.0: written to util.nyxp
+```
+
+An export removed or changed needs a major bump, one added, or a type made more general, a minor bump, and no change
+to the public API a patch. Below `1.0.0`, a breaking change needs a minor bump and any other a patch. A version you
+wrote already that is big enough stays, and with no version published there is nothing to compare, so the version
+stays as it is. See [Packages and projects](../tour/packages#versions).
 
 ## `nanyx manifest`
 

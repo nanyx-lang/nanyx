@@ -155,6 +155,7 @@
     <Compile Include="Refactorings/Rename.fs" />
     <Compile Include="Documentation.fs" />
     <Compile Include="StandardLibraryDocs.fs" />
+    <Compile Include="PackageApi.fs" />
     <Compile Include="LibraryCatalog.fs" />
     <Compile Include="LibrarySearch.fs" />
   </ItemGroup>
