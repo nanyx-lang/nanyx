@@ -66,11 +66,19 @@ what the compiler keeps: exact spans, resolved names and types.
   takes precedence over the type of an expression around it, such as the block a local def's annotation is in.
   A nominal type's is `type Email = protected string`, followed by a sentence (`HoverInfo.Note`) that says its kind
   and the module that declares it; outside its module a private type's shape is left out (`type UserId`).
-- **Semantic tokens mark the names of nominal types** ([#1221](https://github.com/nanyx-lang/nanyx/issues/1221)).
-  `SemanticTokensHandler` gives each name of a protected or private type a `type` token with the `nominal` modifier,
-  and a private one `private` too, from `NominalNames.inModule`: the declaration, type names, constructors, patterns
-  and the type's part of an attached definition's name. They supplement the TextMate grammar, which still colours
-  everything else; the extension shows the marked names in italics.
+- **Semantic tokens say what each name is** ([#1221](https://github.com/nanyx-lang/nanyx/issues/1221),
+  [#1609](https://github.com/nanyx-lang/nanyx/issues/1609)). `NyxCompiler.SemanticTokens.inModule` goes once over the
+  last typed compile's resolved names: each symbol's declaration in the file and each name that refers to one
+  (`References`, as find references reads them), with its kind from the symbol's (a def is a `function` when its type
+  is one, else a `readonly` `variable`), the alias part of a qualified name from `ImportReferences`, and the type's
+  part of an attached definition's name. Then what has no symbol: fields (a field read's name span, and the names
+  before `=` and `:` in records, record patterns and record types, read from the text since the syntax tree keeps no
+  span for them, #96), tags, workflow keywords, and the `module` line. The standard types are used throughout
+  (`interface` for a context, `namespace` for a module); the server's own modifiers are `mutable` (a `mut` cell or a
+  `mut` parameter), and `nominal` and `private` from `NominalNames.inModule`, which the extension shows in italics.
+  A name the checker did not resolve gets no token, so the TextMate grammar's colour stays. The handler reads
+  `OpenDocument.LastGood`, as hover does, and drops a token in a top-level item edited since. On
+  `prelude-lists.nyx`, the standard library's largest file (529 lines, 1,020 tokens), it takes about 3 ms.
 - **Hover on a `_` in a type shows what it was inferred to be**: `int` on the `_` of `def xs: list(_) = [1, 2]`.
   Inference records each hole's type in `ExprTypes` under the type expression's node, and `Hover.typeAt` looks for
   holes among the type expressions at the position (`Hover.typeExprsAt`).
@@ -367,6 +375,4 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
 # Open questions
 
 - Incremental re-checking: is compiling the whole document after each pause in typing fast enough as programs grow?
-- Semantic tokens supplement the TextMate grammar today, marking only nominal types. Should they take over more of
-  the highlighting, such as telling a type's name from a constructor's?
 - Editors beyond VS Code: is `nanyx lsp` plus documented client setup enough?

@@ -125,6 +125,7 @@
     <Compile Include="Hover.fs" />
     <Compile Include="Definition.fs" />
     <Compile Include="NominalNames.fs" />
+    <Compile Include="SemanticTokens.fs" />
     <Compile Include="TypeHints.fs" />
     <Compile Include="Completion.fs" />
     <Compile Include="InfoView.fs" />

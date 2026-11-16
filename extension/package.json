@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.9.21",
+  "version": "0.9.22",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -54,6 +54,10 @@
       {
         "id": "private",
         "description": "A private type, whose shape is hidden outside the module that declares it"
+      },
+      {
+        "id": "mutable",
+        "description": "A cell: a local made with mut, or a parameter that takes one"
       }
     ],
     "configurationDefaults": {
