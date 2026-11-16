@@ -11,7 +11,8 @@ namespace Nanyx.LanguageServer;
 /// </summary>
 /// <remarks>
 /// The server publishes diagnostics, shows inferred types on hover, in lenses above unannotated top-level defs and
-/// in inlay hints after other unannotated names, goes to definitions, finds references, outlines documents,
+/// in inlay hints after other unannotated names, goes to definitions, finds references, outlines documents, finds the
+/// symbols of every file in the workspace,
 /// completes the names in scope, offers diagnostics' fixes as quick fixes, formats documents and selections, expands and
 /// shrinks selections along the syntax tree, renames names across a package's files, and says what each name is as
 /// semantic tokens. It also answers
@@ -55,6 +56,7 @@ public static class NanyxLanguageServer
                 services.AddSingleton<DocumentStore>();
                 services.AddSingleton<DiagnosticsPublisher>();
                 services.AddSingleton<CompileScheduler>();
+                services.AddSingleton<WorkspaceIndex>();
                 services.AddSingleton(settings.StandardLibrarySource ?? new StandardLibrarySource());
             })
             .ConfigureLogging(logging =>
@@ -72,6 +74,7 @@ public static class NanyxLanguageServer
             .WithHandler<DefinitionHandler>()
             .WithHandler<ReferencesHandler>()
             .WithHandler<DocumentSymbolHandler>()
+            .WithHandler<WorkspaceSymbolsHandler>()
             .WithHandler<CodeActionHandler>()
             .WithHandler<CodeLensHandler>()
             .WithHandler<InlayHintHandler>()

@@ -82,7 +82,14 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
         await StartAsync(settings);
     }
 
-    protected async Task StartAsync(ServerSettings settings)
+    /// <summary>Replaces the server started for the test with one whose client has opened <paramref name="folder"/> as its workspace.</summary>
+    protected async Task RestartInFolderAsync(string folder)
+    {
+        await StopAsync();
+        await StartAsync(TestSettings, folder);
+    }
+
+    protected async Task StartAsync(ServerSettings settings, string? workspaceFolder = null)
     {
         await StandardLibraryChecked.Value;
         _cancellation.CancelAfter(Timeout);
@@ -96,18 +103,26 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
             settings,
             _cancellation.Token);
 
-        _client = LanguageClient.PreInit(options => options
-            .WithInput(serverToClient.Reader)
-            .WithOutput(clientToServer.Writer)
-            .OnPublishDiagnostics(diagnostics =>
+        _client = LanguageClient.PreInit(options =>
+        {
+            if (workspaceFolder is not null)
             {
-                lock (_published)
-                {
-                    _published.Add(diagnostics);
-                }
+                options.WithWorkspaceFolder(DocumentUri.FromFileSystemPath(workspaceFolder), "workspace");
+            }
 
-                _publishedSignal.Release();
-            }));
+            options
+                .WithInput(serverToClient.Reader)
+                .WithOutput(clientToServer.Writer)
+                .OnPublishDiagnostics(diagnostics =>
+                {
+                    lock (_published)
+                    {
+                        _published.Add(diagnostics);
+                    }
+
+                    _publishedSignal.Release();
+                });
+        });
 
         await _client.Initialize(_cancellation.Token);
 

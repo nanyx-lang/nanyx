@@ -8,24 +8,33 @@ namespace Nanyx.LanguageServer.Handlers;
 /// <summary>
 /// Compiles again the open documents that import a Nanyx file changed on disk (<c>workspace/didChangeWatchedFiles</c>):
 /// one changed outside the editor, by <c>git checkout</c>, say. The server asks the client to watch every <c>.nyx</c>
-/// file. A file open in the editor is left to its buffer, which its importers read.
+/// file. A file open in the editor is left to its buffer, which its importers read. Every change, made, changed or
+/// deleted, is also recorded in the <see cref="WorkspaceIndex"/>, for Go to Symbol in Workspace.
 /// </summary>
 public sealed class WatchedFilesHandler : DidChangeWatchedFilesHandlerBase
 {
     private readonly DocumentStore _documents;
     private readonly CompileScheduler _compiles;
+    private readonly WorkspaceIndex _index;
 
-    public WatchedFilesHandler(DocumentStore documents, CompileScheduler compiles)
+    public WatchedFilesHandler(DocumentStore documents, CompileScheduler compiles, WorkspaceIndex index)
     {
         _documents = documents;
         _compiles = compiles;
+        _index = index;
     }
 
     public override Task<Unit> Handle(DidChangeWatchedFilesParams request, CancellationToken cancellationToken)
     {
         foreach (var change in request.Changes)
         {
-            if (change.Uri.Scheme == "file" && _documents.TryGet(change.Uri) is null)
+            if (change.Uri.Scheme != "file")
+            {
+                continue;
+            }
+
+            _index.FileChanged(DocumentStore.FileNameOf(change.Uri), change.Type == FileChangeType.Deleted);
+            if (_documents.TryGet(change.Uri) is null)
             {
                 _compiles.FileChanged(DocumentStore.FileNameOf(change.Uri));
             }
