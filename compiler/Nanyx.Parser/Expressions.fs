@@ -943,6 +943,20 @@ do
             ((cellParameter |>> Choice1Of2) <|> attempt (bracketedParameter |>> Choice1Of2) <|> attempt patternParameter <|> (parameter |>> Choice1Of2))
             (pstring "," .>> ws)
     let arrow = wsInline >>. pstring "->" .>> wsInline
+    // `context l` or `context l: Log` names the instance of a context the lambda is given (see `ContextNames`). The
+    // names come before the parameters, separated by commas, and a comma after the last goes on to the parameters.
+    let contextName =
+        attempt (pstring "context" >>. keywordEnd >>. wsInline >>. followedBy identifierNoWs)
+        >>. getPosition .>>. typedIdentifier parameterType
+        >>= fun (start, (name, typeOpt)) -> noteName start name >>% (name, typeOpt, nameSpan start name)
+    let contextNames =
+        sepBy1 contextName (attempt (wsInline >>. pstring "," .>> ws .>> followedBy (pstring "context" >>. keywordEnd)))
+        .>> optional (attempt (wsInline >>. pstring "," .>> ws))
+    // The lambda's body under the names `contextNames` parsed, if any.
+    let underContextNames (names: (Identifier * TypeExpr option * SourceSpan) list option) (body: Expression) =
+        match names with
+        | Some names -> Expression.at body.Span (ContextNames(names, body))
+        | None -> body
     // The lambda's result annotation, `{ (x: int): int -> ... }`, which the `->` after it ends (see
     // `LambdaResultSyntax`).
     let resultAnnotation = opt (attempt (wsInline >>. pstring ":" >>. ws >>. parameterType))
@@ -990,8 +1004,8 @@ do
     // body, the lambda's, declares the names the patterns bind. `{ () -> ... }` has no parameters, as `{ ... }` has,
     // but is marked as taking unit: only `{ ... }` ignores a parameter its expected type gives it.
     let lambdaWithParams =
-        pipe3 paramList (resultAnnotation .>> arrow .>> skipMany (skipAnyOf " \t")) blockBody (fun parameters resultType body -> parameters, withResult resultType body)
-        >>= fun (parameters, body) ->
+        pipe4 (opt (attempt contextNames)) paramList (resultAnnotation .>> arrow .>> skipMany (skipAnyOf " \t")) blockBody (fun names parameters resultType body -> names, parameters, withResult resultType body)
+        >>= fun (names, parameters, body) ->
             let destructured =
                 parameters
                 |> List.indexed
@@ -999,8 +1013,8 @@ do
                     | index, Choice2Of2(pattern, names) -> Some(index + 1, pattern, names)
                     | _ -> None)
             match parameters, destructured with
-            | [ Choice2Of2({ Kind = UnitPattern }, _) ], _ -> preturn (fun _ -> Lambda([], body, true))
-            | _, [] -> preturn (fun _ -> Lambda(parameters |> List.choose (function Choice1Of2 named -> Some named | _ -> None), body, false))
+            | [ Choice2Of2({ Kind = UnitPattern }, _) ], _ -> preturn (fun _ -> Lambda([], underContextNames names body, true))
+            | _, [] -> preturn (fun _ -> Lambda(parameters |> List.choose (function Choice1Of2 named -> Some named | _ -> None), underContextNames names body, false))
             | _ ->
                 let named =
                     parameters
@@ -1014,7 +1028,7 @@ do
                     // reported there.
                     let scrutinees = destructured |> List.map (fun (position, pattern, _) -> Expression.at pattern.Span (IdentifierExpr (patternArgument position)))
                     let patterns = destructured |> List.map (fun (_, pattern, _) -> pattern)
-                    Lambda(named, Expression.at span (Match(scrutinees, [ patterns, body ])), false)
+                    Lambda(named, underContextNames names (Expression.at span (Match(scrutinees, [ patterns, body ]))), false)
     let lambdaNoParams = blockBody |>> (fun body _ -> Lambda([], body, false))
     // `{ }`, possibly spanning lines, is a lambda that does nothing
     let emptyLambda = skipMany (skipAnyOf " \t\r\n") >>. followedBy (pstring "}") >>% fun span -> Lambda([], Expression.at span UnitExpr, false)

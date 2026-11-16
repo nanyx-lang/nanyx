@@ -13,6 +13,14 @@ let ``An annotated lambda parameter is bracketed`` () =
     Assert.Equal("def f = { (g: int -> int) -> g(1) }\n", format "def f = { g: (int -> int) -> g(1) }")
 
 [<Fact>]
+let ``A lambda's context names are printed before its parameters`` () =
+    unchanged "def f = { context l -> g() }\n"
+    unchanged (lines [ "def f: [Log] () -> () = { context l ->"; "  use l in g()"; "}" ])
+    unchanged "def f = { context m: Memory, context l: Log, x -> x }\n"
+    unchanged (lines [ "def f: [Log] () -> () = { context l ->"; "  use l"; "  g()"; "}" ])
+    Assert.Equal("def f = { context l: Log, x -> x }\n", format "def f = {context   l:Log,x->x}")
+
+[<Fact>]
 let ``A lambda's result annotation is printed after its parameters`` () =
     unchanged "def f = { (x: int): int -> x * 2 }\n"
     unchanged (normalized """def g = { (): string -> "u" }""")

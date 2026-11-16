@@ -76,6 +76,7 @@
     <Compile Include="PipeLookups.fs" />
     <Compile Include="Contexts.fs" />
     <Compile Include="ContextInstances.fs" />
+    <Compile Include="ContextNames.fs" />
     <Compile Include="WorkflowRests.fs" />
     <Compile Include="WorkflowMembers.fs" />
     <Compile Include="DefAnnotations.fs" />

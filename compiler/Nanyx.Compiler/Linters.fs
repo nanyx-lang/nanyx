@@ -216,7 +216,8 @@ module NonTailRecursion =
         | UnitExpr
         | IdentifierExpr _
         | ContextMemberAccess _
-        | Lambda _ -> "it is not the last thing the function does"
+        | Lambda _
+        | ContextNames _ -> "it is not the last thing the function does"
 
     /// The calls within `expr`, a function's body or part of it, other than those within lambdas, each with why it
     /// is not in tail position if it may not be: `why` says that for `expr` itself.

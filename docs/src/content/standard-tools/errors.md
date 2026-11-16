@@ -1369,6 +1369,38 @@ def f: [Tx] () -> () = {
 To fix it, call a function the context's module exports, as `query` here, or declare the context `protected`, whose
 members any module can call.
 
+# NYX0245: Context instance used as a value
+
+A name a lambda gives a context with `context l` is used other than by `use l` or `use l in ...`. It names the
+instance whoever calls the lambda supplies, which is never a value: it can't be passed, returned, stored or compared
+([Contexts](../advanced/contexts)).
+
+```nanyx
+context Log = (log: string -> ())
+
+def keep: [Log] () -> () = { context l ->
+  def saved = l  -- error NYX0245: 'l' names a context instance, which can only be loaded with `use l`
+  ()
+}
+```
+
+To fix it, load the instance with `use l` where its members are needed. To run code under a context elsewhere, pass
+that code a lambda, or call a function that requires the context.
+
+# NYX0246: Context name that names no context the lambda is given
+
+A lambda's `context l` doesn't name exactly one context its type requires: the lambda is given none, it is given
+several and `l` doesn't say which, or `context l: C` names a context the lambda isn't given.
+
+```nanyx
+context Log = (log: string -> ())
+context Tick = (tick: () -> ())
+
+def run: [Log & Tick] () -> () = { context l -> () }  -- error NYX0246: 'l' could name any of 'Log' and 'Tick', which this lambda is given: say which, as in `context l: Log`
+```
+
+To fix it, say which context the name is for, `context l: Log`, or name one the lambda's type requires.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

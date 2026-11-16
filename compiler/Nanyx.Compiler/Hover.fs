@@ -22,7 +22,8 @@ let rec private children (expr: Expression) : Expression list =
     | ContextMemberAccess _ -> []
     | FunctionCall(_, _, args)
     | ContextMemberCall(_, _, args) -> args
-    | Lambda(_, body, _) -> [ body ]
+    | Lambda(_, body, _)
+    | ContextNames(_, body) -> [ body ]
     | BinaryOp(_, _, left, right) -> [ left; right ]
     | Pipe(value, _, _, args) -> value :: args
     | Block statements -> statements |> List.collect statementExpressions

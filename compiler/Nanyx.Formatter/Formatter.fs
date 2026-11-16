@@ -137,6 +137,8 @@ let format (options: Options) (parsed: SourceModule) : string =
             let written = Names.written n
             cat [ text written; callArguments e (nameEnd nameSpan (e.Span.Start + written.Length)) args ]
         | Lambda(parameters, body, _) -> lambdaDoc e parameters body false
+        // Only a lambda's body is one, which the lambda prints (see `LambdaPrinter`).
+        | ContextNames(_, body) -> exprBare position body
         | Pipe _ -> pipeChain position e
         | CallResultSyntax.Call(callee, ({ Kind = FunctionCall(_, _, args) } as call)) ->
             cat [ exprBare full callee; callArguments call callee.Span.End args ]
