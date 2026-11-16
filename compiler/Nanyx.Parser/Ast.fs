@@ -694,6 +694,10 @@ module PatternSyntax =
     /// `_`, written in a pattern's body: the input doesn't match.
     let noMatch = "_"
 
+    /// The tag a partial pattern's function returns for `_`, which no code can write. A partial pattern with one tag and
+    /// no payload returns a `bool` instead: `true` for its tag, `false` for `_`.
+    let noMatchTag = "__noMatch"
+
     /// Whether `tag` is a pattern's: it is capitalised.
     let isPatternTag (tag: Identifier) = tag <> "" && Char.IsUpper tag[0]
 

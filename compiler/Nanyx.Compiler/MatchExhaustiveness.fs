@@ -15,16 +15,22 @@ module MatchExhaustiveness =
         |> Set.ofList
 
     /// What a match is missing where a custom pattern's result is matched, when `witness` is what it returns that no
-    /// arm handles.
+    /// arm handles: some of its tags, or what a partial pattern returns for `_`, `PatternSyntax.noMatchTag` or `false`.
     let private patternCaseMissing (witness: PatternSpace.Witness) =
         let tags =
             match witness with
             | PatternSpace.OneOfTags tags -> tags
             | PatternSpace.TagCase(tag, _) -> [ tag ]
+            | PatternSpace.BoolCase false -> [ PatternSyntax.noMatchTag ]
             | _ -> []
-        match tags with
-        | [] -> $"missing case: {PatternSpace.show witness}"
-        | _ -> $"""missing {tags |> List.map (fun tag -> $"`#{tag}`") |> Diagnostics.listed}, which the pattern returns too"""
+        let written = tags |> List.filter ((<>) PatternSyntax.noMatchTag)
+        let noMatch = "a `_` arm for the values the pattern doesn't match"
+        match written, tags.Length > written.Length with
+        | [], false -> $"missing case: {PatternSpace.show witness}"
+        | [], true -> $"missing {noMatch}"
+        | _, isPartial ->
+            let missing = $"""{written |> List.map (fun tag -> $"`#{tag}`") |> Diagnostics.listed}, which the pattern returns too"""
+            if isPartial then $"missing {missing}, and {noMatch}" else $"missing {missing}"
 
     /// The error for the match whose arms are `arms`, reported at `headSpan`, given `witnesses`, a value no arm matches
     /// for each scrutinee (see `PatternSpace.missingCase`), if there is one, and the scrutinees' types `scrutineeTypes`.

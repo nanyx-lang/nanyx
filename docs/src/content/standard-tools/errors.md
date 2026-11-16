@@ -1853,6 +1853,17 @@ pattern int -> #Loud | #Quiet = { n ->
 To fix it, do the work that needs the context where the match is, in an arm, and keep the pattern to working out
 its result.
 
+# NYX0263: `_` as a value outside a pattern's body
+
+`_` is written where a value goes, outside the body of a [partial pattern](../advanced/custom-patterns#partial-patterns).
+There, it means "no match", but anywhere else it means nothing.
+
+```nanyx
+def nothing = _  -- error NYX0263: `_` as a value means "no match", which only a custom pattern's body can return
+```
+
+To fix it, write the value meant, such as `()` for the unit value or `#none` for an absent one.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it
