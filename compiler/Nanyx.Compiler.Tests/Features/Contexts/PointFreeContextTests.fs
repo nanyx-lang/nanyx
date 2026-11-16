@@ -44,6 +44,29 @@ export def greet = { name -> "hello " ++ name } >> shout
 """
     Assert.Equal(Some "def greet: [Console] string -> ()", hoverType source "greet =")
 
+/// `count` layers of functions, `f1` to `f{count}`, each calling the one below it twice, on top of an `f0` that prints:
+/// `f0` is reached from the top along 2^count paths.
+let private layers (count: int) =
+    [ "def f0 = { s: string ->"; "  println(s)"; "  s"; "}" ]
+    @ [ for i in 1 .. count -> $"def f{i} = {{ x -> f{i - 1}(f{i - 1}(x)) }}" ]
+    |> String.concat "\n"
+
+[<Fact>]
+let ``A function named as a value requires what a function many calls below it does, however many paths reach it`` () =
+    // Each function's contexts are found once, not once per path (#1458).
+    let source = layers 40 + "\n\ndef g = { xs -> xs \\list.map(f40) }\n"
+    Assert.Equal(Some "def g: [Console] list(string) -> list(string)", hoverType source "g =")
+
+[<Fact>]
+let ``A function named as a value requires what the functions in a cycle below it do`` () =
+    let source = """def ping = { n: int -> if n > 0 then pong(n - 1) else println("done") }
+
+def pong = { n: int -> ping(n) }
+
+def run = { ns -> ns \list.map(pong) }
+"""
+    Assert.Equal(Some "def run: [Console] list(int) -> list(())", hoverType source "run =")
+
 [<Fact>]
 let ``Calling a composition that requires Console requires it where it is called`` () =
     let source = shout + """
