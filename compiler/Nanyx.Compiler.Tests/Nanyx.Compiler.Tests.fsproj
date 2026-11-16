@@ -157,6 +157,7 @@
     <Compile Include="Features\Refactorings\IntroduceFunctionTests.fs" />
     <Compile Include="Features\Refactorings\IntroduceLocalTests.fs" />
     <Compile Include="Features\Refactorings\OrganiseImportsTests.fs" />
+    <Compile Include="Features\Refactorings\PackageRenameTests.fs" />
     <Compile Include="Features\Refactorings\RenameTests.fs" />
     <Compile Include="Features\Refactorings\SelectionRangeTests.fs" />
     <Compile Include="Features\Refactorings\WriteInferredTypeTests.fs" />

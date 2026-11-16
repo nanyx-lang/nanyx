@@ -42,6 +42,45 @@ public sealed class RenameTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task Rename_of_an_exported_name_edits_every_file_of_the_package_that_uses_it()
+    {
+        File.WriteAllText(TempPath("app.nyxp"), """
+            (package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]))
+            """.ReplaceLineEndings("\n"));
+        var shapesText = """
+            module shapes
+
+            export def origin: int = 0
+            """.ReplaceLineEndings("\n");
+        var shapes = TempPath("src", "shapes.nyx");
+        File.WriteAllText(shapes, shapesText);
+        var mainText = """
+            module main
+
+            import app/shapes
+
+            def here = origin + 1
+            """.ReplaceLineEndings("\n");
+        var main = DocumentUri.FromFileSystemPath(TempPath("src", "main.nyx"));
+        File.WriteAllText(TempPath("src", "main.nyx"), mainText);
+
+        Open(main, mainText);
+        Assert.Empty((await NextPublished(main)).Diagnostics!);
+
+        var prepared = await _client.TextDocument.PrepareRename(
+            new PrepareRenameParams { TextDocument = new TextDocumentIdentifier(main), Position = new Position(4, 12) },
+            _cancellation.Token);
+        Assert.Equal("origin", prepared!.PlaceholderRange!.Placeholder);
+
+        var edit = await _client.TextDocument.RequestRename(
+            new RenameParams { TextDocument = new TextDocumentIdentifier(main), Position = new Position(4, 12), NewName = "start" },
+            _cancellation.Token);
+        Assert.Equal(mainText.Replace("origin", "start"), Applied(mainText, edit!.Changes![main]));
+        Assert.Equal(shapesText.Replace("origin", "start"), Applied(shapesText, edit.Changes[DocumentUri.FromFileSystemPath(shapes)]));
+        Assert.Equal(2, edit.Changes.Count);
+    }
+
+    [Fact]
     public async Task A_rename_that_would_change_what_a_name_refers_to_fails()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-rename-2");
