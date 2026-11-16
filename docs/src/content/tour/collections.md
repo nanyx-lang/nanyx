@@ -29,6 +29,8 @@ def addItems = memory {
 
 Use immutable collections by default. Reach for mutable variants when profiling shows a hot path that benefits from in-place updates.
 
+To work on part of an array, or of a string, without copying it, take a slice: `xs \slice(1, 4)` is a [`Slice`](../stdlib/slice) that views the elements from index 1 up to 4 and shares the array's storage. An [`MSlice`](../stdlib/mslice) does the same for a mutable array, so `ys \slice(0, 3) \sort` sorts part of it in place, and a [`StringSlice`](../stdlib/text#stringslice) views part of a string.
+
 An immutable list can be updated in place too, when nothing else can see the change: transforming a list you hold the only reference to, with `list.map` or a function of your own that takes it apart and rebuilds it, reuses its cells. See [Reference counting](../foundations/reference-counting#reuse-in-place).
 
 # Common collection abstractions
