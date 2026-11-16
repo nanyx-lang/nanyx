@@ -109,24 +109,28 @@ let typeDefCore: Parser<Definition, ParseState> =
             declare TypeDefBody body.Id [ name, nameSpan start name ] >>. noteDocumentable defStart (int start.Index) >>% def
         | ValueDef _ -> preturn def
 
-    /// What a type's declaration says after its `=`, before its body: `private`, `protected`, or neither. Both is an
-    /// error: a private type is nominal already, so `private` says all that `protected` would.
+    /// What a type's declaration says after its `=`, before its body: `private`, `protected`, or neither, with where it
+    /// is written (`KindAt`). Both is an error: a private type is nominal already, so `private` says all that
+    /// `protected` would.
     let kindModifier =
-        let word text modifier = attempt (pstring text .>> keywordEnd .>> ws) >>% modifier
+        let word text modifier = attempt (withSpan (pstring text .>> keywordEnd) .>> ws) |>> fun (_, span) -> modifier, span
         opt (getPosition .>>. (word "private" Private <|> word "protected" Protected))
         >>= function
-            | Some (start, first) ->
+            | Some (start, (first, span)) ->
                 opt (getPosition .>> followedBy (attempt (pstring (if first = Private then "protected" else "private") .>> keywordEnd)))
                 >>= function
                     | Some second when first = Private ->
                         reportFocused second "A private type is nominal already, so it is not also `protected`: keep `private`"
                     | Some _ ->
                         reportFocused start "A private type is nominal already, so it is not also `protected`: keep `private`"
-                    | None -> preturn (Some first)
-            | None -> preturn None
+                    | None -> preturn [ first; KindAt span ]
+            | None -> preturn []
 
     /// The modifiers of a type, with `kind`, what its declaration says after its `=`.
-    let withKind modifiers (kind: TypeDefModifier option) = Option.toList kind @ modifiers
+    let withKind modifiers (kind: TypeDefModifier list) =
+        match kind with
+        | first :: rest -> first :: modifiers @ rest
+        | [] -> modifiers
 
     let contextName =
         typeNameIdentifier >>= fun name ->

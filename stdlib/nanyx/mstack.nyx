@@ -10,7 +10,7 @@ module mstack
 
 import nanyx/mref
 
-export type MStack(a) = private MRef(list(a))
+export type MStack(a) = [Memory] private MRef(list(a))
 
 --| A new stack with nothing on it.
 export def MStack.empty: [Memory] () -> MStack(a) = {

@@ -455,7 +455,8 @@ let format (options: Options) (parsed: SourceModule) : string =
             | Private
             | Protected
             | Scoped _
-            | InScopeOf _ -> false
+            | InScopeOf _
+            | KindAt _ -> false
             | Export
             | Context -> true
         let head =
@@ -470,7 +471,8 @@ let format (options: Options) (parsed: SourceModule) : string =
                     | Private
                     | Protected
                     | Scoped _
-                    | InScopeOf _ -> Doc.empty
+                    | InScopeOf _
+                    | KindAt _ -> Doc.empty
                 cat [ cat (List.map modifier others); text $"type {name}" ]
         let parameter (p, typeOpt) =
             match typeOpt with

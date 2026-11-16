@@ -153,11 +153,13 @@ let internal settleContextHoles (state: InferState) (name: Identifier) (typeOpt:
     | _ -> Ok typeOpt
 
 /// The errors in the type definition `name`, checked once it is registered in `state`, so that it can name itself: a
-/// `typeof` or `_` in it, or else a scoped context that is not nominal, a scope it cannot belong to, a type it names
+/// `typeof` or `_` in it, or else a scoped context that is not nominal, a scope it cannot belong to, a scope it holds a
+/// value of without declaring it, a type it names
 /// that does not exist, and a reference to itself that nothing guards.
 let internal typeDefErrors (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
     match typeOfInTypeDef name body parameters @ TypeHoles.inTypeDef name body parameters with
     | [] ->
-        unnominalScopedContext name modifiers @ typeScopeErrors state name modifiers @ unknownTypesInTypeDef state body parameters
+        unnominalScopedContext name modifiers @ typeScopeErrors state name modifiers @ undeclaredHeldScopes state name modifiers body
+        @ unknownTypesInTypeDef state body parameters
         @ unguardedSelfReferences name modifiers body
     | errors -> errors

@@ -35,7 +35,7 @@ Each function is attached to `MList`, so with `import nanyx/mlist` it is called 
 ## `MList`
 
 ```nanyx fragment
-type MList(a) = private MRef(count: int, reversed: list(a))
+type MList(a) = [Memory] private MRef(count: int, reversed: list(a))
 ```
 
 ## `MList.empty`

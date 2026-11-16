@@ -102,6 +102,8 @@ def leaks = transaction {
 
 The type is written and shown as plain `Cursor`: the scope is never written. Making one requires the context, as calling a function that requires it does, and so does using one through functions like `next`; holding or passing one requires nothing. The type can take parameters as usual, as `type MRef(a) = [Memory] protected (...)` does, and the scope isn't one of them. Only a scoped context can be written there, and only one (NYX0252). Contexts written on any other type that isn't a function, as in `x: [Console] int`, are an error (NYX0253).
 
+A protected or private type whose representation, as its declaration writes it, holds a value of a type in a scope must declare that scope's context too, so that a reader can see where its values belong without looking inside: `type MStack(a) = [Memory] private MRef(list(a))`. Leaving it out is an error (NYX0256), and its fix writes the context. Everything a value holds of the scope is then of the value's own scope, so one value belongs to one block. A type argument given where the type is used doesn't count: `list(MRef(int))` and a `Holder(MRef(int))` of `type Holder(a) = protected (item: a)` need nothing, since the scope is visible where they're written, and nor does a function type that requires the context, which holds none of its values.
+
 # Requiring a context
 
 A function can specify required contexts in its type signature. Here, `sayHello` can call `println` because it runs in `Console`. The real `Console`, which the console host provides to every program, has a few more members, and `println` is a function written on top of its `write`:
