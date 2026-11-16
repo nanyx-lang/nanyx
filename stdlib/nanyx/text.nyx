@@ -148,35 +148,14 @@ export def string.removeSuffix: string, string -> string = { s, suffix ->
     else s
 }
 
-def upperByte: int -> int = { b ->
-  if b >= 97 then (if b <= 122 then b - 32 else b) else b
-}
-
-def lowerByte: int -> int = { b ->
-  if b >= 65 then (if b <= 90 then b + 32 else b) else b
-}
-
---| The bytes of `s` before byte `i`, each changed by `f` and made a string of its own, in order, in
-  front of `acc`.
-def mappedBytesBefore: string, int, (int -> int), list(string) -> list(string) = { s, i, f, acc ->
-  if i <= 0
-    then acc
-    else mappedBytesBefore(
-      s
-      i - 1
-      f
-      __nanyx_list_cons(__nanyx_string_from_byte(f(__nanyx_string_byte_at(s, i - 1))), acc)
-    )
-}
-
---| `s` with every ASCII letter upper-cased.
+--| `s` with every ASCII letter upper-cased, made in one allocation.
 export def string.uppercase: string -> string = { s ->
-  __nanyx_string_join(mappedBytesBefore(s, string.length(s), upperByte, []), "")
+  __nanyx_string_shift_bytes(s, 97, 122, -32)
 }
 
---| `s` with every ASCII letter lower-cased.
+--| `s` with every ASCII letter lower-cased, made in one allocation.
 export def string.lowercase: string -> string = { s ->
-  __nanyx_string_join(mappedBytesBefore(s, string.length(s), lowerByte, []), "")
+  __nanyx_string_shift_bytes(s, 65, 90, 32)
 }
 
 --| Whether byte `b` is a space, tab, line feed or carriage return.
