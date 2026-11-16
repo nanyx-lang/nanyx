@@ -165,6 +165,24 @@ module internal RefactoringText =
     let isCell (cells: (string * SourceSpan) list) (symbol: Symbol) =
         cells |> List.exists (fun (name, span) -> name = symbol.Name && SourceSpan.contains span symbol.Declaration)
 
+    /// Whether `expr`, written in place of a name, may need brackets: an operator, a pipe, a branch or a lambda, which
+    /// could take in what is around it. The formatter drops the brackets it doesn't need.
+    let isLoose (expr: Expression) =
+        match expr.Kind with
+        | BinaryOp _
+        | Pipe _
+        | IfExpr _
+        | Match _
+        | Except _
+        | UseIn _
+        | Lambda _
+        | WorkflowBindExpr _
+        | WorkflowReturnExpr _ -> true
+        | _ -> false
+
+    /// `text`, the text of `expr`, in brackets if it may need them.
+    let bracketed (expr: Expression) (text: string) = if isLoose expr then $"({text})" else text
+
     /// The number of errors compiling a module reported.
     let errorCount (result: CompileResult) =
         result.Diagnostics |> List.filter (fun diagnostic -> diagnostic.Severity = Severity.Error) |> List.length
