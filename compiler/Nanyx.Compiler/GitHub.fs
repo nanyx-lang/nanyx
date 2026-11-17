@@ -60,7 +60,7 @@ module GitHub =
     let parse (text: string) : Result<GitHubRepository * string option, string> =
         let parts = text.Split '/'
         if parts.Length < 2 || parts |> Array.exists (fun part -> not (segment.IsMatch part) || part = "." || part = "..") then
-            Result.Error "a repository, owner/name, and for a file the file's path in it: acme/web, or acme/snippets/retry.nyx"
+            Result.Error "a repository, `owner/name`, and for a file the file's path in it, as `acme/web` or `acme/snippets/retry.nyx`"
         else
             let repository = { Owner = parts[0]; Name = parts[1] }
             match parts |> Array.skip 2 with
@@ -71,7 +71,7 @@ module GitHub =
     let describe (failure: FetchFailure) =
         match failure with
         | FetchingNotSupported -> "downloading from GitHub isn't supported here"
-        | NotPulled -> "it isn't in the package cache: run nanyx pull to fetch it"
+        | NotPulled -> "it isn't in the package cache: run `nanyx pull` to fetch it"
         | FetchFailed message -> message
 
     /// The fetcher of a compiler that can't download anything: every fetch fails with `FetchingNotSupported`.
@@ -89,15 +89,15 @@ module GitHub =
             fun repository rev ->
                 match refs |> Map.tryFind $"{repository}@{rev}" with
                 | Some commit -> Result.Ok commit
-                | None -> Result.Error(FetchFailed $"{repository} has no tag or branch '{rev}'")
+                | None -> Result.Error(FetchFailed $"'{repository}' has no tag or branch '{rev}'")
           FetchFile =
             fun repository commit path ->
                 let file = Path.GetFullPath(Path.Combine(tree repository commit, path))
-                if File.Exists file then Result.Ok file else Result.Error(FetchFailed $"{repository} has no file {path} at {commit}")
+                if File.Exists file then Result.Ok file else Result.Error(FetchFailed $"'{repository}' has no file '{path}' at {commit}")
           FetchTree =
             fun repository commit ->
                 let directory = tree repository commit
-                if Directory.Exists directory then Result.Ok(Path.GetFullPath directory) else Result.Error(FetchFailed $"{repository} has no commit {commit}") }
+                if Directory.Exists directory then Result.Ok(Path.GetFullPath directory) else Result.Error(FetchFailed $"'{repository}' has no commit {commit}") }
 
     /// Where the package cache `cache` keeps the tree of `repository` at `commit`.
     let treeIn (cache: string) (repository: GitHubRepository) (commit: string) =
@@ -134,8 +134,8 @@ module GitHub =
                     | Result.Ok (Some bytes) ->
                         let commit = Text.Encoding.UTF8.GetString(bytes).Trim()
                         if isCommit commit then Result.Ok commit
-                        else Result.Error(FetchFailed $"GitHub gave {commit} for {repository}@{rev}, which is not a commit")
-                    | Result.Ok None -> Result.Error(FetchFailed $"{repository} has no tag or branch '{rev}'")
+                        else Result.Error(FetchFailed $"GitHub gave {commit} for '{repository}@{rev}', which is not a commit")
+                    | Result.Ok None -> Result.Error(FetchFailed $"'{repository}' has no tag or branch '{rev}'")
                     | Result.Error message -> Result.Error(FetchFailed message)
             )
 
@@ -171,7 +171,7 @@ module GitHub =
                             File.WriteAllBytes(partial, bytes)
                             if File.Exists file then File.Delete partial else File.Move(partial, file)
                             Result.Ok file
-                        | Result.Ok None -> Result.Error(FetchFailed $"{repository} has no file {path} at {commit}")
+                        | Result.Ok None -> Result.Error(FetchFailed $"'{repository}' has no file '{path}' at {commit}")
                         | Result.Error message -> Result.Error(FetchFailed message)
             FetchTree =
                 fun repository commit ->
@@ -185,8 +185,8 @@ module GitHub =
                                 Downloads.singleFolder names |> Option.map Result.Ok |> Option.defaultValue (Result.Error "its files are not in one folder")
                             Downloads.unzip folder bytes directory
                             |> Result.map (fun () -> directory)
-                            |> Result.mapError (fun message -> FetchFailed $"the zip of {repository} at {commit} can't be unpacked: {message}")
-                        | Result.Ok None -> Result.Error(FetchFailed $"{repository} has no commit {commit}")
+                            |> Result.mapError (fun message -> FetchFailed $"the zip of '{repository}' at {commit} can't be unpacked: {message}")
+                        | Result.Ok None -> Result.Error(FetchFailed $"'{repository}' has no commit {commit}")
                         | Result.Error message -> Result.Error(FetchFailed message) }
 
     /// Resolving through GitHub itself, shared by every fetcher of the process, so each tag or branch is asked once.

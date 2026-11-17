@@ -45,13 +45,13 @@ let ``A package is found from a directory under it, with its sources and entry``
 let ``A package with two entries is an error naming both`` () =
     use package = new TempPackage([ "demo.nyxp", manifest ""; "a.nyx", entrySource; "b.nyx", entrySource ])
     let error = Assert.Single(errorsOf (Package.find package.Root))
-    Assert.Contains("a.nyx, b.nyx", error)
+    Assert.Contains("'a.nyx' and 'b.nyx'", error)
 
 [<Fact>]
 let ``A manifest with the old .nyxpack extension is not a manifest`` () =
     use package = new TempPackage([ "demo.nyxpack", manifest ""; "main.nyx", entrySource ])
-    Assert.Contains("No .nyxp manifest in", Assert.Single(errorsOf (Package.find package.Root)))
-    Assert.Contains("Not a directory or a .nyxp manifest", Assert.Single(errorsOf (Package.find (package.Path "demo.nyxpack"))))
+    Assert.Contains("There is no .nyxp manifest in", Assert.Single(errorsOf (Package.find package.Root)))
+    Assert.Contains("is neither a directory nor a .nyxp manifest", Assert.Single(errorsOf (Package.find (package.Path "demo.nyxpack"))))
 
 [<Fact>]
 let ``A file under a manifest that does not read has the manifest's errors, not its imports'`` () =

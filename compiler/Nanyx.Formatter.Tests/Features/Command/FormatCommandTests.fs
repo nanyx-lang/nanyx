@@ -195,8 +195,8 @@ let private badSettings (formatter: string) =
 [<Fact>]
 let ``An unknown setting is an error naming the manifest and the key, and nothing under the manifest is formatted`` () =
     let message = badSettings "(formatter = (lineWidth = 80, tabs = true))"
-    Assert.Contains("formatter has no setting 'tabs'", message)
-    Assert.Contains("lineWidth and indentSize", message)
+    Assert.Contains("`formatter` has no setting 'tabs'", message)
+    Assert.Contains("'lineWidth' and 'indentSize'", message)
 
 [<Theory>]
 [<InlineData("lineWidth = 0", "lineWidth", "not 0")>]
@@ -206,7 +206,7 @@ let ``An unknown setting is an error naming the manifest and the key, and nothin
 [<InlineData("lineWidth = 99999999999", "lineWidth", "not 99999999999")>]
 let ``A setting that is not a positive integer is an error naming the manifest and the key`` (setting: string, key: string, found: string) =
     let message = badSettings $"(formatter = ({setting}))"
-    Assert.Contains($"formatter's {key} must be a positive integer", message)
+    Assert.Contains($"`formatter`'s `{key}` must be a positive integer", message)
     Assert.Contains(found, message)
 
 [<Fact>]
@@ -215,7 +215,7 @@ let ``A manifest that is not data is an error naming it`` () =
 
 [<Fact>]
 let ``A formatter field that is not a record is an error naming it`` () =
-    Assert.Contains("formatter must be a record, (lineWidth = 100), not 3", badSettings "(formatter = 3)")
+    Assert.Contains("`formatter` must be a record, `(lineWidth = 100)`, not 3", badSettings "(formatter = 3)")
 
 [<Fact>]
 let ``A script's #! line and directives are kept as written, with the comments among them`` () =
@@ -239,11 +239,11 @@ let ``A script's formatter directives set its options`` () =
     Assert.Equal("::format indentSize 4\n::format lineWidth 20\ndef x =\n    def a = 1\n    a\n", File.ReadAllText file)
 
 [<Theory>]
-[<InlineData("::format tabs 2", "unknown setting ::format tabs; the settings are lineWidth and indentSize")>]
-[<InlineData("::format lineWidth 0", "::format lineWidth must be a positive integer, not 0")>]
-[<InlineData("::format lineWidth \"80\"", "::format lineWidth must be a positive integer, not the string \"80\"")>]
-[<InlineData("::format lineWidth", "::format takes a setting and its value")>]
-[<InlineData("::format lineWidth wide", "::format lineWidth must be a positive integer, not 'wide'")>]
+[<InlineData("::format tabs 2", "Unknown setting `::format tabs`: the settings are 'lineWidth' and 'indentSize'")>]
+[<InlineData("::format lineWidth 0", "`::format lineWidth` must be a positive integer, not 0")>]
+[<InlineData("::format lineWidth \"80\"", "`::format lineWidth` must be a positive integer, not the string \"80\"")>]
+[<InlineData("::format lineWidth", "`::format` takes a setting and its value")>]
+[<InlineData("::format lineWidth wide", "`::format lineWidth` must be a positive integer, not 'wide'")>]
 let ``A formatter directive that is not valid is an error naming the file and line, and the file is left alone`` (directive: string, message: string) =
     let directory = directoryWith [ "a.nyx", "-- A script.\n" + directive + "\n" + unformatted ]
     let file = Path.Combine(directory, "a.nyx")
@@ -257,7 +257,7 @@ let ``A formatter directive in a file of a package is an error saying to use the
     let directory = directoryWith [ "app.nyxp", "(formatter = (indentSize = 4))"; "a.nyx", "::format indentSize 2\n" + block ]
     let file = Path.Combine(directory, "a.nyx")
     match run Write [ file ] with
-    | [ _, Failed(BadSettings error) ] -> Assert.Contains("formatter field of " + Path.Combine(directory, "app.nyxp"), error)
+    | [ _, Failed(BadSettings error) ] -> Assert.Contains("`formatter` field of '" + Path.Combine(directory, "app.nyxp") + "'", error)
     | other -> failwith $"Unexpected results: %A{other}"
 
 [<Fact>]

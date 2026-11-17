@@ -161,7 +161,7 @@ package, the manifest says these things.
 
 ```nanyx
 -- file: main.nyx
-::linter nanyx.lint  -- error NYX0010: ::linter is a directive for a script, but this file is in a package: say it in the package's manifest, .../app.nyxp
+::linter nanyx.lint  -- error NYX0010: `::linter` is a directive for a script, but this file is in a package: say it in the package's manifest, '.../app.nyxp'
 
 module main
 
@@ -254,7 +254,7 @@ every file is a module, and the program starts at the package's `@entry` definit
 
 ```nanyx
 -- file: main.nyx
-def total = 1  -- error NYX0017: 'main.nyx' is in the package 'app', so it must declare a module name: start it with module main
+def total = 1  -- error NYX0017: 'main.nyx' is in the package 'app', so it must declare a module name: start it with `module main`
 -- file: app.nyxp
 (package = (name = "app", version = "0.1.0", sources = ["*.nyx"]))
 ```
@@ -313,7 +313,7 @@ definition, an import or a `::` directive is code. A manifest that is not Nanyx 
 -- file: demo.nyxp
 (
   package = (name = "demo", version = "0.1.0")
-  formatter = (lineWidth = 80 + 20)  -- error NYX0020: the operator '+' is code, but this file holds only data
+  formatter = (lineWidth = 80 + 20)  -- error NYX0020: The operator `+` is code, but this file holds only data
 )
 ```
 
@@ -327,7 +327,7 @@ linter's `settings`, or its `rules`. The message lists the fields it takes.
 ```nanyx
 -- file: demo.nyxp
 (
-  package = (name = "demo", version = "0.1.0", src = ["*.nyx"])  -- error NYX0021: package has no field 'src'; its fields are 'name', 'version', 'sources', 'host'
+  package = (name = "demo", version = "0.1.0", src = ["*.nyx"])  -- error NYX0021: Package has no field 'src': its fields are 'name', 'version', 'sources', 'host'
 )
 ```
 
@@ -341,7 +341,7 @@ or `version`.
 ```nanyx
 -- file: demo.nyxp
 (
-  package = (name = "demo")  -- error NYX0022: package has no version, which it needs
+  package = (name = "demo")  -- error NYX0022: Package has no version, which it needs
 )
 ```
 
@@ -357,7 +357,7 @@ compiler doesn't have. A package listed twice in `dependencies` is one too, at t
 ```nanyx
 -- file: demo.nyxp
 (
-  package = (name = "demo", version = "0.1.0", sources = "*.nyx")  -- error NYX0023: package's sources must be a list of strings, not the string "*.nyx"
+  package = (name = "demo", version = "0.1.0", sources = "*.nyx")  -- error NYX0023: Package's sources must be a list of strings, not the string "*.nyx"
 )
 ```
 
@@ -372,7 +372,7 @@ The manifest uses a field the compiler knows, but does not support yet: a depend
 -- file: demo.nyxp
 (
   package = (name = "demo", version = "0.1.0")
-  dependencies = [(package = "acme.util", version = "1.2")]  -- error NYX0024: the dependency acme.util 1.2 is not locked in nanyx.lock, ...
+  dependencies = [(package = "acme.util", version = "1.2")]  -- error NYX0024: The dependency 'acme.util' 1.2 is not locked in 'nanyx.lock', ...
 )
 -- file: demo.nyx
 export module demo
@@ -460,7 +460,7 @@ so there can't be a cycle.
 -- file: a/a.nyxp
 (
   package = (name = "acme.a", version = "0.1.0")
-  dependencies = [(package = "acme.b", path = "../b")]  -- error NYX0027: packages can't depend on each other in a cycle: acme.a -> acme.b -> acme.a
+  dependencies = [(package = "acme.b", path = "../b")]  -- error NYX0027: Packages can't depend on each other in a cycle: 'acme.a' -> 'acme.b' -> 'acme.a'
 )
 -- file: a/main.nyx
 export module main
@@ -494,7 +494,7 @@ export module main
 -- file: loud/loud.nyxp
 (
   package = (name = "acme.loud", version = "0.1.0")
-  dependencies = [(package = "acme.util", path = "../copy")]  -- error NYX0028: the build reaches the package acme.util by two paths, ...
+  dependencies = [(package = "acme.util", path = "../copy")]  -- error NYX0028: The build reaches the package 'acme.util' by two paths, ...
 )
 -- file: loud/louder.nyx
 export module louder
@@ -519,7 +519,7 @@ the one it ships. The compiler ships each of them at its own version, and a mani
 -- file: demo.nyxp
 (
   package = (name = "demo", version = "0.1.0")
-  linters = [(package = "nanyx.lint", version = "0.1.0")]  -- error NYX0029: the compiler ships nanyx.lint ..., not 0.1.0: ...
+  linters = [(package = "nanyx.lint", version = "0.1.0")]  -- error NYX0029: The compiler ships 'nanyx.lint' ..., not 0.1.0: ...
 )
 ```
 
@@ -540,7 +540,7 @@ To fix it, write the value: `def size: () -> int = { -> 3 }`.
 
 A package whose manifest names no `host` is a library: other packages use its modules, and it has no program of its
 own to run. An `@entry` in it is an error, from `nanyx check`, `nanyx run` and `nanyx build` alike, and running a
-library is an error that says it has no entry point.
+library is [NYX0045](#nyx0045).
 
 ```nanyx
 -- file: main.nyx
@@ -574,7 +574,7 @@ its public modules. One that declares none with `export module` can't be used at
 ```nanyx
 -- file: util.nyxp
 (
-  package = (name = "acme.util", version = "0.1.0", sources = ["*.nyx"])  -- error NYX0033: acme.util is a library, since its manifest names no host, but it exports no module: ...
+  package = (name = "acme.util", version = "0.1.0", sources = ["*.nyx"])  -- error NYX0033: 'acme.util' is a library, since its manifest names no host, but it exports no module: ...
 )
 -- file: strings.nyx
 module strings
@@ -665,7 +665,7 @@ is pinned by a full commit SHA: its `rev`, or a `commit` beside a tag or a branc
 -- file: demo.nyxp
 (
   package = (name = "demo", version = "0.1.0")
-  dependencies = [(package = "acme.web", github = "acme/web", rev = "v1.2.0")]  -- error NYX0038: acme/web names "v1.2.0", which is not a full commit SHA, ...
+  dependencies = [(package = "acme.web", github = "acme/web", rev = "v1.2.0")]  -- error NYX0038: 'acme/web' names "v1.2.0", which is not a full commit SHA, ...
 )
 ```
 
@@ -699,7 +699,7 @@ is pinned to: a build reads it from the cache, and never downloads.
 -- file: demo.nyxp
 (
   package = (name = "demo", version = "0.1.0")
-  dependencies = [(package = "acme.util", version = "1.2")]  -- error NYX0041: nanyx.lock locks acme.util 1.2.0, but it isn't in the package cache, ...
+  dependencies = [(package = "acme.util", version = "1.2")]  -- error NYX0041: 'nanyx.lock' locks 'acme.util' 1.2.0, but it isn't in the package cache, ...
 )
 -- file: nanyx.lock
 (
@@ -715,6 +715,82 @@ export def one = 1
 ```
 
 To fix it, run `nanyx pull`, which downloads each package the lockfile locks, and each GitHub reference, into the cache.
+
+# NYX0042: Sources that match no file
+
+A package's `sources` select its source files, and no file matches them, so the package has no code. When a manifest
+names no `sources`, they are `**/*.nyx`, every Nanyx file under it.
+
+```nanyx
+-- file: main.nyx
+::dependency acme.util ./util
+
+def total = 1
+-- file: util/util.nyxp
+(package = (name = "acme.util", version = "0.1.0", sources = ["src/*.nyx"]))
+```
+
+This reports `'.../util.nyxp' selects its sources with 'src/*.nyx', which match no file`. To fix it, write `sources` that
+match the package's files, or move the files to where they match.
+
+# NYX0043: More than one entry point in a package
+
+More than one source file of a package declares an `@entry`, and a package runs from one.
+
+```nanyx
+-- file: main.nyx
+::dependency acme.tool ./tool
+
+def total = 1
+-- file: tool/tool.nyxp
+(package = (name = "acme.tool", version = "0.1.0"))
+-- file: tool/build.nyx
+module build
+
+@entry
+def main = { () -> () }
+
+-- file: tool/release.nyx
+module release
+
+@entry
+def main = { () -> () }
+```
+
+This reports `More than one file of '.../tool.nyxp' declares an `@entry`, 'build.nyx' and 'release.nyx', but a package
+has one: keep one of them`. To fix it, keep the `@entry` of the program the package is, and make the others modules it
+imports, or packages of their own.
+
+# NYX0044: Lockfile that can't be read
+
+The package's `nanyx.lock` is not a lockfile this `nanyx` reads: it is not a record, a locked package lacks a field,
+or it was written in another format. `nanyx` writes the lockfile and keeps it up to date, so it is not edited by hand.
+
+```nanyx
+-- file: demo.nyxp
+(package = (name = "demo", version = "0.1.0"))  -- error NYX0044: The lockfile's format is the int 2, but this nanyx reads format 1
+-- file: nanyx.lock
+(
+  version = 2
+  packages = []
+)
+-- file: demo.nyx
+export module demo
+
+export def one = 1
+```
+
+To fix it, delete the lockfile, and `nanyx pull` writes it again.
+
+# NYX0045: Package with nothing to run
+
+`nanyx run` is given a package with no `@entry`, so there is nothing to run: a library, whose manifest names no host,
+or an application whose files declare no `@entry`. No example can show it, since it is reported by `nanyx run`, not by
+checking the package.
+
+To fix it, run an application, or add an `@entry` to one of its files and name the host it runs under in its manifest,
+as `host = (package = "nanyx.console", version = "...")`.
+
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which

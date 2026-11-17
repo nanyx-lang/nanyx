@@ -107,7 +107,7 @@ let ``A directory with several scripts that have statements is refused, naming e
     let outcome = nanyxIn directory.Path [ "migrate"; "tasks" ]
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal(
-        "error: These scripts each have top-level statements, but a package runs from one @entry: build.nyx, release.nyx. Migrate them one at a time (nanyx migrate <file>), or make all but one of them modules first\n",
+        "error: The scripts 'build.nyx' and 'release.nyx' each have top-level statements, but a package runs from one `@entry`: migrate them one at a time, with `nanyx migrate <file>`, or make all but one of them modules first\n",
         outcome.StandardError.ReplaceLineEndings "\n")
     Assert.Empty(Directory.GetFiles(root, "*.nyxp"))
     Assert.Equal("println(\"build\")\n", read root "build.nyx")
@@ -135,7 +135,7 @@ let ``Dependencies move into the manifest, a path made relative to it, and one n
     Assert.Equal(0, outcome.ExitCode)
     Assert.Contains("""  dependencies = [(package = "acme.util", path = "../util"), (package = "acme.json", version = "1.2.0")]""", read root "app.nyxp")
     Assert.Contains(
-        "note: acme.json is named by its version, but packages can't be downloaded yet, so the package won't build until they can",
+        "note: 'acme.json' is named by its version, but packages can't be downloaded yet, so the package won't build until they can",
         outcome.StandardOutput)
 
 [<Fact>]
@@ -144,7 +144,7 @@ let ``A directory that is already a package is refused`` () =
     let root = scripts directory "app" [ "app.nyxp", "(package = (name = \"app\", version = \"0.1.0\"))\n"; "main.nyx", "println(1)\n" ]
     let outcome = nanyxIn directory.Path [ "migrate"; "app" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Equal($"error: {root} is already a package: it has app.nyxp\n", outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Equal($"error: '{root}' is already a package, with the manifest 'app.nyxp'\n", outcome.StandardError.ReplaceLineEndings "\n")
 
 [<Fact>]
 let ``A directory whose name is not a package name needs --name`` () =
@@ -152,6 +152,6 @@ let ``A directory whose name is not a package name needs --name`` () =
     scripts directory "My Scripts" [ "main.nyx", "println(1)\n" ] |> ignore
     let outcome = nanyxIn directory.Path [ "migrate"; "My Scripts" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("is not a package name, which must be lower case, with words separated by dots: acme.web: give one with --name", outcome.StandardError)
+    Assert.Contains("is not a package name, which must be lower case, with words separated by dots, as `acme.web`: give one with `--name`", outcome.StandardError)
     let named = nanyxIn directory.Path [ "migrate"; "--name"; "acme.scripts"; "My Scripts" ]
     Assert.Equal(0, named.ExitCode)
