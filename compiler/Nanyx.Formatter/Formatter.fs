@@ -184,7 +184,8 @@ let format (options: Options) (parsed: SourceModule) : string =
             if isWrittenBlock body then cat [ head; nest (cat [ hard; block body ]) ]
             else cat [ head; text " "; expr full body ]
         | WorkflowBindExpr(n, value) ->
-            let keyword = if n = WorkflowSyntax.tryKeyword && not (sourceText.StartsWith e.Span (n + "!")) then n + " " else n + "! "
+            let bare = n = WorkflowSyntax.yieldKeyword || (n = WorkflowSyntax.tryKeyword && not (sourceText.StartsWith e.Span (n + "!")))
+            let keyword = if bare then n + " " else n + "! "
             cat [ text keyword; expr full value ]
         | WorkflowReturnExpr value -> cat [ text (WorkflowSyntax.returnKeyword + " "); expr full value ]
         | InterpolatedString parts ->

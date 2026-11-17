@@ -8,7 +8,7 @@ Workflows are one of Nanyx's most distinctive features. They let libraries provi
 
 # The builder shape
 
-A workflow builder is a function that runs a block under a [context](./contexts). The context's members are the builder's _keywords_, such as `yield`, `try`, `defer` or `return`. Writing a block after the builder's name:
+A workflow builder is a function that runs a block under a [context](./contexts). The context's members are the builder's _keywords_, such as `try`, `defer` or `return`. Writing a block after the builder's name:
 
 ```nanyx fragment
 someBuilder {
@@ -26,14 +26,14 @@ someBuilder({
 
 The builder's type says the block requires the context, so the block can call the context's members, and the builder loads an instance of the context with `use` and calls the block under it. Inside the block, every keyword is a call to the member of that name with two arguments: the value the keyword was applied to, and a _continuation_ holding the rest of the block. This is the one desugaring rule for all workflows; everything else on this page is a consequence of it.
 
-The simplest possible workflow can be illustrated with a builder whose context has just a `yield` member that prints the value it is given:
+The simplest possible workflow can be illustrated with a builder whose context has just a `log` member that prints the value it is given:
 
 ```nanyx fragment
-context Debug = (yield: [c] (string, ([c] () -> ())) -> ())
+context Debug = (log: [c] (string, ([c] () -> ())) -> ())
 
 def debug: [c, Console] ([Debug, c] () -> ()) -> () = { block ->
   use Debug(
-    yield = { value, continue ->
+    log = { value, continue ->
       println(value)
       continue()
     }
@@ -41,56 +41,78 @@ def debug: [c, Console] ([Debug, c] () -> ()) -> () = { block ->
 }
 
 debug {
-  yield! "Debug message 1"
-  yield! "Debug message 2"
+  log! "Debug message 1"
+  log! "Debug message 2"
 }
 ```
 
-The block content is rewritten to nested calls to the `yield` member, each receiving the rest of the block as its continuation:
+The block content is rewritten to nested calls to the `log` member, each receiving the rest of the block as its continuation:
 
 ```nanyx fragment
 debug({
-  yield("Debug message 1", {
-    yield("Debug message 2", {
+  log("Debug message 1", {
+    log("Debug message 2", {
       -- end of block
     })
   })
 })
 ```
 
-Because `yield` here calls its continuation immediately, the block runs top to bottom like ordinary sequential code. A keyword that chooses _not_ to call its continuation stops the rest of the block from running, which is how short-circuiting keywords such as `try` work (see below).
+Because `log` here calls its continuation immediately, the block runs top to bottom like ordinary sequential code. A keyword that chooses _not_ to call its continuation stops the rest of the block from running, which is how short-circuiting keywords such as `try` work (see below).
 
 Three things about the types are worth knowing when writing a builder:
 
 - **The builder writes its type.** The block's type, `[Debug, c] () -> ()`, is what gives the block the context's members. A builder whose type is inferred can't say that.
-- **A continuation takes a context variable.** The rest of the block calls the context's members, so the continuation requires the context. A member that takes a continuation writes its type as `[c] ... -> ...` with a context variable, as `yield`'s `[c] () -> ()` does, and so does the block's type, so that the block may also call what requires other contexts, such as `println`.
+- **A continuation takes a context variable.** The rest of the block calls the context's members, so the continuation requires the context. A member that takes a continuation writes its type as `[c] ... -> ...` with a context variable, as `log`'s `[c] () -> ()` does, and so does the block's type, so that the block may also call what requires other contexts, such as `println`.
 - **Members are generic at each call.** A member's own type variables are instantiated afresh at each call, so one block can bind values of different types: `try` in `proc` binds an `int` in one statement and a `string` in the next.
 
-Applying a keyword to a value without parentheses, as in `yield! 1` or `try f()`, is sugar reserved for workflow keywords; ordinary functions are always called with parentheses. `try` and `return` are written without the `!`.
+Applying a keyword to a value without parentheses, as in `log! "hi"` or `try f()`, is sugar reserved for workflow keywords; ordinary functions are always called with parentheses. The language's own keywords, `try`, `yield` and `return`, are written without the `!`.
 
 A builder can take parameters before its block, and can require contexts of its own. `retrying(3) { ... }` is `retrying(3, { ... })`, and a builder whose type is `[Clock, c] ([Retry, c] () -> a) -> a` needs a `Clock` where it is called.
 
-# Yield and collection builders
+# Yield and sequences
 
-A `seq` builder will provide `yield`, letting you build sequences with a clean syntax. It's planned
-([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)), with `yield` written without `!`, as `try` and `return`
-are:
+A block with `yield` in it is a [lazy sequence](../stdlib/prelude-sequences) of the values it yields. `yield` is written without `!`, as `try` and `return` are, and `seq { ... }` makes a sequence of such a block:
 
-```nanyx fragment
-def numbers = seq {
+```nanyx
+def items = seq {
+  println("Yielding 1")
   yield 1
+  println("Yielding 2")
   yield 2
-  yield 3
 }
+
+println(items \seq.take(1) \seq.toList)
 ```
 
-It isn't an ordinary workflow, because a lazy sequence runs the rest of the block only when it's pulled, after the
-builder has returned. Instead its `yield` member is of a planned keyword kind, `#yield`, which rewrites the block into
-the sequence itself, with nothing left that needs the builder's context:
+The code after a `yield` runs only when the sequence is pulled that far, so the program above prints `Yielding 1` and `[1]`, and never `Yielding 2`.
+
+It isn't an ordinary workflow: the rest of the block runs only when the sequence is pulled, after `seq` has returned, so there's no builder's context left for it to call. Instead `yield` is a keyword of kind `#yield`, which rewrites the block into the sequence itself, with no context left in it:
 
 ```nanyx fragment
-seq.cons(1, { seq.cons(2, { seq.cons(3, { seq.empty() }) }) })
+def items = seq({
+  println("Yielding 1")
+  seq.cons(1, {
+    println("Yielding 2")
+    seq.cons(2, { seq.empty() })
+  })
+})
 ```
+
+`yield x` with the rest of the block after it is `seq.cons(x, { rest })`, and the end of the block, or of a branch that doesn't yield, is `seq.empty()`. A `for` loop whose body yields gives the sequences its body gives for each element, one after another, then goes on to the rest of the block: it's `seq.concatMap` over the loop's sequence, which must be a `seq`, a range included (walk a list with `\list.toSeq`).
+
+```nanyx
+def evens = seq {
+  for 1..10 | n ->
+    if n % 2 == 0 then yield n
+}
+
+println(evens \seq.toList)
+```
+
+Any lambda with a `yield` in it is a sequence, not only a block after `seq`, so a function can take one: `list.select` gives back every value its lambda yields for each element, as in `xs \list.select { x -> if x > 0 then yield x }`.
+
+A sequence has no `return`: it ends where its block does. `yield` gives no value, so it's a statement of its own, never bound with `def`. And it can't be in a `while` loop, whose body runs again each time round: walk a sequence with a `for` loop instead, or make the sequence with `seq.unfold`.
 
 # Custom keywords
 
@@ -113,7 +135,7 @@ retrying(3, {
 })
 ```
 
-A keyword is any member of the builder's context. The `@customKeywordType` attribute on the member's declaration says how the keyword's arguments are passed (see [Keyword kinds](#keyword-kinds)). There is no naming convention for keywords; `retry`, `try` and `yield` are ordinary member names.
+A keyword is any member of the builder's context. The `@customKeywordType` attribute on the member's declaration says how the keyword's arguments are passed (see [Keyword kinds](#keyword-kinds)). There is no naming convention for keywords; `retry` and `defer` are ordinary member names.
 
 ```nanyx fragment
 context Retry = (
@@ -130,7 +152,7 @@ def retrying: [c] int, ([Retry, c] () -> Attempt(a)) -> Attempt(a) = { times, bl
 
 | Keyword | Description |
 |---------|-------------|
-| `yield`  | Produce a value in a collection builder |
+| `yield`  | Produce an element of a lazy sequence (a `#yield` keyword, see [Yield and sequences](#yield-and-sequences)) |
 | `try`    | Short-circuit on errors in a workflow that handles results |
 | `return` | Wrap the block's final value and finish the block |
 | `zero`   | The value of a block that produces no value (an `if` without `else`, or falling off the end without `return`) |
@@ -145,6 +167,7 @@ def retrying: [c] int, ([Retry, c] () -> Attempt(a)) -> Attempt(a) = { times, bl
 | `#bind`  | `kw(e, { rest of the block })` | `try`, and `retry` in a retrying workflow: the member takes a value and the continuation, which it calls with the result |
 | `#bindF` | `kw({ e }, { rest of the block })` | `defer`, which runs `e` after the rest of the block |
 | `#delay` | `kw({ e })` | anything that takes "this computation, not its value": `start!`, a `retry!`, a `timeout!` |
+| `#yield` | `seq.cons(e, { rest of the block })` | `yield`: the lambda it is in is a lazy sequence, and no member is called |
 
 A member without the attribute is a `#bind` keyword. A `#bindF` member's first parameter is a function of no parameters, `[c] () -> a`, and its second the continuation. A `#delay` member takes only the function: its type is of the form `(() -> a) -> r`, with the lambda's contexts as usual (`[c] () -> a` where the member is generic in them). A member whose type doesn't take a function of no parameters where its kind passes one is a compile error at the attribute ([NYX0046](../standard-tools/errors#nyx0046)).
 
@@ -163,7 +186,7 @@ Like `try`, every keyword takes the whole expression after it. For a `#delay` ke
 
 A keyword's kind is the one its member's declaration gives it, in the module or in a module it imports.
 
-A fourth kind is planned, `#yield` ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)), which rewrites a block into a lazy sequence, as [above](#yield-and-collection-builders). Any other kind is a compile error at the attribute ([NYX0019](../standard-tools/errors#nyx0019)), as is the attribute anywhere but before a member of a `context` declaration.
+A `#yield` keyword makes the lambda it is in a lazy sequence, as [above](#yield-and-sequences). The language's `yield` is one, declared by the prelude's `Yield` context, and a context of your own can declare another, used as `emit! x`. Any other kind is a compile error at the attribute ([NYX0019](../standard-tools/errors#nyx0019)), as is the attribute anywhere but before a member of a `context` declaration.
 
 # Workflow keywords
 

@@ -333,7 +333,7 @@ for events(feedUrl) \seq.filter { e -> e.level == #error } \seq.take(10) | e -> 
 
 | Kotlin | Nanyx |
 |---|---|
-| `flow { emit(x) }` | `seq.unfold` today; a `seq { yield x }` builder once [#1699](https://github.com/nanyx-lang/nanyx/issues/1699) is decided |
+| `flow { emit(x) }` | `seq { yield x }` ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)), or `seq.unfold` |
 | Cold: nothing runs until it's collected | The same: a `seq` runs only as it's pulled |
 | `map`, `filter`, `take`, `fold` | `seq.map`, `seq.filter`, `seq.take`, `seq.fold`, with no async versions, since they're generic over contexts |
 | `collect` | a `for` loop, or `seq.fold` |

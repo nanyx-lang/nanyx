@@ -11,11 +11,7 @@ type TextDocument = (lineCount: int, lineAt: int -> TextLine)
 export type Direction = #backwards | #forwards
 export type Change = #greaterThan | #lessThan
 
-export type RelativeIndentation =
-  | #noIndentation
-  | #lessIndentation
-  | #moreIndentation
-  | #sameIndentation
+export type RelativeIndentation = #noIndentation | #lessIndentation | #moreIndentation | #sameIndentation
 
 def TextLine.isBlank = { line -> line.text \trim == "" }
 
@@ -23,77 +19,81 @@ def TextLine.isBlank = { line -> line.text \trim == "" }
 export def TextLine.isStopLine = { line -> not (line.text \Regex.matches('[a-zA-Z0-9]')) }
 export def TextLine.isSignificant = { line -> not line.isStopLine }
 
-def changeToDiff: Change -> ((int, int) -> bool) = {
+def changeToDiff: Change -> (int, int) -> bool = {
   | #greaterThan -> { > }
   | #lessThan -> { < }
 }
 
-def directionToDelta: Direction -> (int -> int) = {
+def directionToDelta: Direction -> int -> int = {
   | #forwards -> { + 1 }
   | #backwards -> { - 1 }
 }
 
 -- Every line from `start` in the given direction, until the document ends
-export def iterLines: (TextDocument, start: int, direction: Direction) -> seq(TextLine)
+export def iterLines
+  : (TextDocument, start: int, direction: Direction) -> seq(TextLine)
   = { document, start, direction ->
     def advance = directionToDelta(direction)
-    seq {
-      memory {
-        mut current = start
-        while current >= 0 and current < document.lineCount ->
-          yield document.lineAt(current)
-          current := advance(current)
+
+    seq.unfold(
+      start
+      { current ->
+        if current >= 0 and current < document.lineCount then
+          #some(document.lineAt(current), advance(current))
+        else
+          #done
       }
-    }
+    )
   }
 
-type Neighbours = (#some(TextLine) | #none, #some(TextLine) | #none)
+type Neighbours = ((#some(TextLine) | #none), (#some(TextLine) | #none))
 
 -- Walk outwards from a line, yielding the lines either side of it
-export def iterLinesOutwards: (TextDocument, int) -> seq(Neighbours) = { document, lineNumber ->
-  seq {
-    memory {
-      mut back = lineNumber - 1
-      mut forward = lineNumber + 1
-
-      while back >= 0 or forward < document.lineCount ->
-        def backLine = if back >= 0 then #some(document.lineAt(back)) else #none
-        def forwardLine = if forward < document.lineCount then #some(document.lineAt(forward)) else #none
-        yield (backLine, forwardLine)
-        back := back - 1
-        forward := forward + 1
-    }
+export def iterLinesOutwards: TextDocument, int -> seq(Neighbours) = { document, lineNumber ->
+  def lineAt = { n ->
+    if n >= 0 and n < document.lineCount then #some(document.lineAt(n)) else #none
   }
+
+  seq.unfold(
+    1
+    { distance ->
+      def back = lineNumber - distance
+      def forward = lineNumber + distance
+
+      if back >= 0 or forward < document.lineCount then
+        #some((lineAt(back), lineAt(forward)), distance + 1)
+      else
+        #done
+    }
+  )
 }
 
-export def nearestSignificantLine: (TextDocument, int) -> TextLine = { document, lineNumber ->
+export def nearestSignificantLine: TextDocument, int -> TextLine = { document, lineNumber ->
   def current = document.lineAt(lineNumber)
 
-  if current.isSignificant then current
-  else
+  if current.isSignificant then current else
     def #some(line) =
-      iterLinesOutwards(document, lineNumber)
-        \flatMap { back, forward -> [back, forward] \somes }
-        \find { .isSignificant }
-        except #notFound -> #some(current)
+      iterLinesOutwards(document, lineNumber) \flatMap { back, forward -> [back, forward] \somes
+      } \find { .isSignificant } except #notFound -> #some(current)
+
     line
 }
 
 export def nextLineOfChangeOfIndentation
-  : (TextDocument, TextLine, Change, Direction) -> #some(TextLine) | #none
+  : TextDocument, TextLine, Change, Direction -> #some(TextLine) | #none
   = { document, currentLine, change, direction ->
     def diff = changeToDiff(change)
     def start = directionToDelta(direction)(currentLine.number)
 
-    iterLines(document, start = start, direction = direction)
-      \filter { .isSignificant }
-      \find { line -> diff(line.firstNonWhitespace, currentLine.firstNonWhitespace) }
-      except #notFound -> #none
+    iterLines(document, start = start, direction = direction) \filter { .isSignificant
+    } \find { line -> diff(line.firstNonWhitespace, currentLine.firstNonWhitespace)
+    } except #notFound -> #none
   }
 
-export def relativeIndentation: (TextLine, TextLine) -> RelativeIndentation = { from, to ->
-  if | to.isBlank -> #noIndentation
-     | from.firstNonWhitespace > to.firstNonWhitespace -> #lessIndentation
-     | from.firstNonWhitespace < to.firstNonWhitespace -> #moreIndentation
-     | else -> #sameIndentation
+export def relativeIndentation: TextLine, TextLine -> RelativeIndentation = { from, to ->
+  if
+    | to.isBlank -> #noIndentation
+    | from.firstNonWhitespace > to.firstNonWhitespace -> #lessIndentation
+    | from.firstNonWhitespace < to.firstNonWhitespace -> #moreIndentation
+    | else -> #sameIndentation
 }

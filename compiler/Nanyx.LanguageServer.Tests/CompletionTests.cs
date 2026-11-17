@@ -62,12 +62,12 @@ public sealed class CompletionTests : LanguageServerTestBase
         Open(uri, "def answer = 42\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        // `yield`, `await` and `defer` are members of a workflow's builder, not words the language reserves.
+        // `await` and `defer` are members of a workflow's builder, not words the language reserves; `yield`, like `try`, is.
         Assert.Equal(
             [
                 "and", "as", "context", "def", "do", "else", "except", "export", "for", "if", "import", "in", "is", "match",
                 "module", "mut", "not", "or", "pattern", "private", "protected", "rec", "return", "then", "try", "type", "typeof",
-                "use", "where", "while", "with"
+                "use", "where", "while", "with", "yield"
             ],
             (await CompletionsAt(uri, 1, 0)).Where(item => item.Kind == CompletionItemKind.Keyword).Select(item => item.Label).Order());
     }

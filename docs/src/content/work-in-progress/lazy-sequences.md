@@ -7,8 +7,8 @@ order: 25
 > **Status: being built.** `seq(a)` is in the prelude with its core functions, and ranges are values of it
 > ([prelude: sequences](../stdlib/prelude-sequences), [#192](https://github.com/nanyx-lang/nanyx/issues/192), done).
 > A `for` loop walks any sequence ([#1698](https://github.com/nanyx-lang/nanyx/issues/1698), done).
-> Still to do: `Iterable`, and the `seq { }` builder
-> ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)).
+> A block with `yield` in it is a sequence, and `seq { }` makes one ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699), done).
+> Still to do: `Iterable`.
 
 # Summary
 
@@ -28,8 +28,8 @@ order: 25
   ([Concurrency, "Streams"](./concurrency-and-crash-boundaries#streams-async-sequences), proposed).
 - A function that takes "anything that can be iterated" requires a context, `Iterable(c)`, which a type gets by
   attaching a `toSeq`. A list is never a sequence by subtyping or by implicit conversion.
-- Sequences are built with `seq.unfold`, from a list with `list.toSeq`, or with a `seq { ... }` workflow whose `yield`
-  keyword produces the elements ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)).
+- Sequences are built with `seq.unfold`, from a list with `list.toSeq`, or with a `seq { ... }` block whose `yield`
+  keyword produces the elements ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699), done).
 - A range is a sequence: `a..b` is read as the prelude's `seq.range(a, b)`, and `a..` as `seq.from(a)` (`Infer`,
   `Seqs`). A `for` loop over a range written in place still counts with its bounds, and doesn't make the sequence
   (`Loops.inferFor` keeps the range as it is written; `CoreIrLowerLoops`).
@@ -45,8 +45,8 @@ Where each idea the docs described stands:
 | `Sequence.map`, `Gen.take` | | `seq.map`, `seq.take` and the rest, in the prelude |
 | `Iter(a)` with `next` and an associated `elem` type | The standard library's `iter` page, since deleted | Nothing; it waits on [associated types](./type-members-and-reflection#associated-types) |
 | `getIterator` | [Sequences and queries](../advanced/sequences-and-queries) | Nothing, and nothing defines it |
-| `seq { yield ... }` | [Workflows](../advanced/workflows), [Ranges](../tour/ranges) | No `seq` builder ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)) |
-| `Yield(b)` for `list.select` | [Lists](../stdlib/prelude-lists), [Lambdas](../tour/lambdas-and-higher-order-functions#contextual-lambdas) | The prelude's `Yield(b)`, over a `mut` list in a `memory` block ([#478](https://github.com/nanyx-lang/nanyx/issues/478)) |
+| `seq { yield ... }` | [Workflows](../advanced/workflows#yield-and-sequences), [Ranges](../tour/ranges) | The `#yield` keyword kind (`WorkflowDesugaring`), into the prelude's `seq.cons`, `seq.empty`, `seq.concatMap`, `seq.append` and `seq.delay` ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)) |
+| `yield` in `list.select` | [Lists](../stdlib/prelude-lists), [Lambdas](../tour/lambdas-and-higher-order-functions#contextual-lambdas) | A lambda that yields is a sequence, which `list.select` flattens ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)) |
 
 A `for` loop accepts a `list`, `seq`, `map` or `set` by type (`Loops.inferFor`), and rejects a range with no end
 written in place unless something that ends is walked beside it (NYX0217). The backend walks a list and a range written
@@ -135,8 +135,8 @@ value, can make a `[Console] seq(int)` with `seq.map`, and whatever pulls it nee
 `[Console] seq(int)` is expected, either of `[c, d]` may be the one that requires `Console`.
 
 A sequence whose steps read a `mut` cell requires `Memory`, so it can't leave its `memory` block
-([Memory](../advanced/memory#values-cannot-escape-memory-scope)). The `range` example on the Ranges page, which builds a sequence from a `while`
-loop over a cell, can never return; it becomes a `Seq.unfold`.
+([Memory](../advanced/memory#values-cannot-escape-memory-scope)). So the `range` example on the Ranges page is a recursive `seq { }`, not a `while`
+loop over a cell.
 
 ## Taking anything that can be iterated
 
@@ -187,29 +187,17 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
 - **`Seq.unfold`** takes a state and a step that gives `#some(element, nextState)` or `#done`, the same step as
   `list.unfold`. `list.unfold` becomes `Seq.unfold(...) \Seq.toList`.
 - **`seq { ... }`** is a block whose `yield` produces an element, and the code after a `yield` doesn't run until the
-  next element is pulled. Decided by the maintainer on 2026-11-17
-  ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)):
-
-  ```nanyx fragment
-  def items = seq {
-    println("Yielding 1")
-    yield 1
-    println("Yielding 2")
-    yield 2
-  }
-  ```
-
-  - **Not an ordinary workflow.** Under the one desugaring rule, `yield x` is `yield(x, rest)`, and `rest` needs the
-    builder's context, which is gone by the time the sequence is pulled: the sequence would carry the context.
-  - **A keyword kind, `#yield`,** rewrites a block run under a context whose member has it, leaving no context in it:
-    `yield x` with the rest `k` becomes `seq.cons(x, { k })`, the end of the block `seq.empty()`, and a `for` loop
-    whose body yields `seq.concatMap`. Laziness comes from the closures. `seq` stays an ordinary prelude definition,
-    since the member's kind chooses the rewrite, not the builder's name. It joins the
-    [`#bind`, `#bindF` and `#delay`](../advanced/workflows#keyword-kinds) kinds.
-  - **`yield` is written without `!`,** as `try` and `return` are.
-  - **No `yield` in a `while` loop.** A `while` needs a cell, and a sequence that reads one can't leave its `memory`
-    block anyway.
-- **Ranges** give sequences: `1..10` and `0..` are both `seq(int)` values that can be passed around and stored, not
+  next element is pulled. Built ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)); the
+  [Workflows](../advanced/workflows#yield-and-sequences) page describes it. An ordinary workflow couldn't do it: under
+  the one desugaring rule `yield x` is `yield(x, rest)`, and `rest` needs the builder's context, which is gone by the
+  time the sequence is pulled. So `yield` is a keyword of kind `#yield`, and any lambda with one in it, a block after
+  `seq` included, is rewritten into the sequence itself (`WorkflowDesugaring`): `yield x` with the rest `k` is
+  `seq.cons(x, { k })`, the end of the block `seq.delay({ seq.empty() })`, and a `for` loop whose body yields
+  `seq.append(seq.concatMap(items, body), seq.delay({ k }))`. `seq` is an ordinary prelude function, `seq.delay` by
+  another name. The end is delayed because the contexts a sequence carries are unified where the branches of an `if`
+  join, and `seq.empty()` carries none, so it couldn't join a branch whose sequence prints; `seq.delay` and `seq.cons`
+  take the lambda's own contexts, which a pure lambda's can be any, apart from those of the sequence it gives. There is no `yield` in a `while` loop: a `while` needs a cell, and a sequence that reads one can't
+  leave its `memory` block anyway.- **Ranges** give sequences: `1..10` and `0..` are both `seq(int)` values that can be passed around and stored, not
   only walked by a `for` loop.
 
 # Open questions
@@ -238,12 +226,11 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
   `Iterable` reads well in signatures; `ToSeq` would sit beside `ToString` and `FromString`.
 - **Walking an unbounded range.** A default-linter rule for a `for` over only an unbounded range literal, or nothing,
   as for `while true`.
-- ~~**One `yield`.**~~ Decided ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)): the prelude's `Yield(b)`,
-  which `list.select` uses today as a call, `yield(x)`, becomes the `#yield` context. `list.select` becomes a
-  `flatMap` whose lambda is rewritten the same way, so it's written `xs \list.select { x -> if x > 0 then yield x }`,
-  and the call form goes. The `ListBuilder` member behind [literal builders](../tour/collections#syntax) goes too if
-  a builder can take a `seq(a)` instead; #1699 says which.
-
+- ~~**One `yield`.**~~ Decided and built ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)): the prelude's
+  `Yield` context declares the `#yield` keyword, and `list.select` takes a lambda that yields, a sequence it flattens,
+  so it's written `xs \list.select { x -> if x > 0 then yield x }`. The call form, `yield(x)`, is gone. There was no
+  `ListBuilder` member left to move: [literal builders](../tour/collections#syntax) take an `Array` through an attached
+  `fromArray`.
 # Plan
 
 1. Settle the open questions above. Done: the [Sequences and queries](../advanced/sequences-and-queries),
@@ -255,9 +242,9 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
 3. ~~Give `seq(a)` its runtime representation, with ranges as values, and `for` loops over any sequence.~~ Done
    ([#192](https://github.com/nanyx-lang/nanyx/issues/192), [#1698](https://github.com/nanyx-lang/nanyx/issues/1698)).
 4. The core functions. Done: `seq.empty`, `range`, `from`, `unfold`, `map`, `filter`, `take`, `skip`, `takeWhile`,
-   `fold`, `toList`, and `list.toSeq`. Still to write: `seq.zip`, `set.toSeq`, `map.toSeq`.
+   `fold`, `toList`, `cons`, `delay`, `append`, `concatMap`, and `list.toSeq`. Still to write: `seq.zip`, `set.toSeq`, `map.toSeq`.
 5. `Iterable(c)`, with `for` loops and the `Seq` functions that consume a sequence taking it
    ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802), after associated types,
    [#1800](https://github.com/nanyx-lang/nanyx/issues/1800)).
-6. The `seq { }` builder, by the `#yield` keyword kind, with `yield` written bare and `list.select` moved to it
-   ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699), Ready).
+6. ~~The `seq { }` builder, by the `#yield` keyword kind, with `yield` written bare and `list.select` moved to it.~~
+   Done ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)).

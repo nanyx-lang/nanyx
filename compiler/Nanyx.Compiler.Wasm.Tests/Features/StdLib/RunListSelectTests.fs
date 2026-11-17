@@ -3,8 +3,8 @@ module TranspilerWasmTests.Features.StdLib.RunListSelect
 open Xunit
 open TranspilerWasmTestHelpers
 
-// `list.select` and `list.selectOne` run a function with the prelude's `Yield(b)`, whose `yield` adds a value to the
-// list they give back (#478).
+// `list.select` and `list.selectOne` take a lambda that yields, which is a lazy sequence (#1699), and give back the values
+// it yields for each element.
 
 [<Fact>]
 let ``Run - list.select gives the values the function yields, in order`` () =
@@ -13,7 +13,7 @@ let ``Run - list.select gives the values the function yields, in order`` () =
 
 def names: list(Person) -> list(string) = { people ->
   people \list.select { person ->
-    if person.isActive then yield(person.name)
+    if person.isActive then yield person.name
   }
 }
 
@@ -22,12 +22,12 @@ def items = [#other(1), #thing, #other(3)]
 @entry
 def main = {
   println(names([Person(name = "Ada", isActive = true), Person(name = "Bob", isActive = false), Person(name = "Cy", isActive = true)]))
-  println(items \list.select { item -> if item is #other(v) then yield(v) })
+  println(items \list.select { item -> if item is #other(v) then yield v })
   println([1, 2] \list.select { x ->
-    yield(x)
-    yield(x * 10)
+    yield x
+    yield x * 10
   })
-  println([1, 2] \list.select { _ -> () })
+  println([1, 2] \list.select { x -> if x > 5 then yield x })
 }
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "[Ada, Cy]\n[1, 3]\n[1, 10, 2, 20]\n[]\n"
@@ -39,8 +39,8 @@ let ``Run - list.selectOne gives the first value the function yields`` () =
 
 @entry
 def main = {
-  println(items \list.selectOne { item -> if item is #other(v) then yield(v) })
-  println([1, 2] \list.selectOne { x -> if x > 5 then yield(x) })
+  println(items \list.selectOne { item -> if item is #other(v) then yield v })
+  println([1, 2] \list.selectOne { x -> if x > 5 then yield x })
 }
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "#some(1)\n#notFound\n"
@@ -52,8 +52,8 @@ let ``Run - list.selectOne stops at the first yield`` () =
   xs \list.selectOne { x ->
     println("at {x}")
     if x > limit then
-      yield("{x}")
-      yield("again")
+      yield "{x}"
+      yield "again"
   }
 }
 
@@ -88,7 +88,7 @@ let ``Run - the function list.select runs can use the caller's contexts`` () =
 def main = {
   def doubled = [1, 2] \list.select { x ->
     println("at {x}")
-    yield(x * 2)
+    yield x * 2
   }
   println(doubled)
 }

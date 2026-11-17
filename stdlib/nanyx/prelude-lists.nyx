@@ -179,53 +179,41 @@ export def list.find: [c] list(a), ([c] a -> bool) -> #some(a) | #notFound = {
   | [x, ...rest], matches -> if matches(x) then #some(x) else list.find(rest, matches)
 }
 
---| The values `f` yields for each element in turn, in the order it yields them: `f` runs with a
-  [`Yield`] whose `yield` adds a value to the list. `items \list.select { item -> if item is #other(v)
-  then yield(v) }` gives the payload of each `#other`.
-export def list.select: [c] list(a), ([Yield(b), c] a -> ()) -> list(b) = { xs, f ->
+--| The values `f` yields for each element in turn, in the order it yields them. A lambda with
+  `yield` in it is a sequence (see [`Yield`]), so `items \list.select { item -> if item is #other(v)
+  then yield v }` gives the payload of each `#other`.
+export def list.select: [c, d] list(a), ([c] a -> [d] seq(b)) -> list(b) = { xs, f ->
   -- Built front to back: each value yielded goes in a new cell that becomes the tail of the last
   -- one. Nothing else sees the cells until the list is given back.
   memory {
     mut first = []
     mut last = []
 
-    use Yield(b)(
-      yield = { x ->
-        def cell = [x]
+    for xs | x ->
+      for f(x) | y ->
+        def cell = [y]
 
         match last
           | [] -> (first := cell)
           | previous -> __nanyx_list_set_tail(previous, cell)
 
         last := cell
-      }
-    )
 
-    for xs | x -> f(x)
     first
   }
 }
 
 --| The first value `f` yields, running it on the elements in turn as [`list.select`] does, or `#notFound`
   when it yields none. It stops at the first yield: `f` runs on no element after the one it yields
-  for, and a second value it yields for that element is left out.
-export def list.selectOne: [c] list(a), ([Yield(b), c] a -> ()) -> #some(b) | #notFound = { xs, f ->
-  memory {
-    mut rest = xs
-    mut found: #some(b) | #notFound = #notFound
-    mut looking = true
-    use Yield(b)(yield = { x -> if found is #notFound then found := #some(x) })
+  for, and the code after that `yield` doesn't run.
+export def list.selectOne: [c, d] list(a), ([c] a -> [d] seq(b)) -> #some(b) | #notFound = {
+  | [], _ -> #notFound
+  | [x, ...rest], f ->
+    def selected = f(x)
 
-    while looking ->
-      match rest
-        | [x, ...tail] ->
-          rest := tail
-          f(x)
-          if found is #some(_) then looking := false
-        | [] -> looking := false
-
-    found
-  }
+    match selected.next()
+      | #next(y, _) -> #some(y)
+      | #done -> list.selectOne(rest, f)
 }
 
 --| Whether `test` holds for every element (so `true` for an empty list).

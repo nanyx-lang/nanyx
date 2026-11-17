@@ -625,11 +625,18 @@ let ifExpr =
     |>> fun (build, span) -> build span
     <?> "if expression"
 
+// `yield` is written before its value without `!` (see `workflowKeywordExpr`), so `yield! x` fails at the keyword.
 let workflowBindExpr =
+    let keyword =
+        identifierNoWs .>>. getPosition .>> pchar '!'
+        >>= fun (name, position) ->
+            if name = WorkflowSyntax.yieldKeyword then
+                reportFocused position $"`{name}` is written without `!`: write `{name} x`, as `try x` and `return x` are"
+            else preturn name
     attempt (
         spanned (
             pipe2
-                (identifierNoWs .>> pchar '!' .>> ws)
+                (keyword .>> ws)
                 expression
                 (fun name expr -> WorkflowBindExpr(name, expr))))
     <?> "workflow bind"
@@ -646,12 +653,21 @@ let workflowReturnExpr =
     <?> "workflow return"
 
 // `try x` applies the workflow keyword `try` to `x`, the same as the older `try! x`; what it does is up to the
-// workflow (see the workflows page of the docs). `try` is the only keyword written this way so far. Its value is
-// on the same line, and `try` is reserved: `try` alone is not a name.
+// workflow (see the workflows page of the docs). `yield x` is written the same way, and never `yield(x)`, which fails
+// at the keyword: a `yield` is not a call. Each keyword's value is on the same line, and each is reserved: `try` alone
+// is not a name.
 let workflowKeywordExpr =
+    let keyword =
+        WorkflowSyntax.bareKeywords
+        |> List.map (fun name -> attempt (pstring name .>> keywordEnd))
+        |> choice
+    let yieldCall =
+        getPosition .>> followedBy (pstring WorkflowSyntax.yieldKeyword >>. pchar '(')
+        >>= fun position ->
+            reportFocused position $"`{WorkflowSyntax.yieldKeyword}` is not a function: write `{WorkflowSyntax.yieldKeyword} x`, with no parentheses"
     spanned (
-        attempt (pstring WorkflowSyntax.tryKeyword .>> keywordEnd) >>. wsInline >>. expression
-        |>> fun value -> WorkflowBindExpr(WorkflowSyntax.tryKeyword, value))
+        (yieldCall <|> keyword) .>> wsInline .>>. expression
+        |>> fun (name, value) -> WorkflowBindExpr(name, value))
     <?> "workflow keyword"
 
 // The value a `use` loads: `use addInt`, or an instance written out, `use Add(Point)(zero = ..., ...)` (see
@@ -741,7 +757,7 @@ let contextMemberAccess =
                 | None -> ContextMemberAccess(ctxType, field)))
 
 // A name applied to a value without parentheses, as in `yield 1`, is how a workflow keyword is used (see the
-// workflows page of the docs). Only `try` is parsed that way so far, and without this any other name parses as
+// workflows page of the docs). Only `try` and `yield` are parsed that way so far, and without this any other name parses as
 // an identifier and the failure surfaces far from here. So it fails at the name (see `reportFocused`). Workflow
 // blocks are lambdas, so only a name inside a lambda is taken for a keyword: outside one, a line such as
 // `pattern string -> ...` is some other mistake.
@@ -757,7 +773,7 @@ let private workflowKeywordApplication =
     >>. getPosition .>>. lookAhead (keyword .>> skipMany1 (anyOf " \t") .>> operand)
     >>= fun (position, name) ->
         reportFocused position
-            ($"`{name}` is applied to a value without parentheses, as only a workflow keyword (`try` or `return`) is: "
+            ($"`{name}` is applied to a value without parentheses, as only a workflow keyword (`try`, `yield` or `return`) is: "
              + $"write `{name}(...)` to call a function")
 
 let primaryExprNoWs =

@@ -76,7 +76,7 @@ let ``An unknown keyword kind is an error, reported at the attribute`` () =
     let source = "context C = (\n  @customKeywordType(#later)\n  step: int\n)"
     let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.UnknownKeywordKind.Code, diagnostic.Code)
-    Assert.Equal("Unknown keyword kind '#later': the kinds are `#bind`, `#bindF`, `#delay`", diagnostic.Message)
+    Assert.Equal("Unknown keyword kind '#later': the kinds are `#bind`, `#bindF`, `#delay`, `#yield`", diagnostic.Message)
     Assert.Equal((16, 42), (diagnostic.Span.Value.Start, diagnostic.Span.Value.End))
 
 [<Theory>]

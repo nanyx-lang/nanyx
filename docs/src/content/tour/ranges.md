@@ -51,20 +51,23 @@ def points = Point(x = 1, y = 1)..Point(x = 8, y = 8)
 
 # Implementing ranges
 
-You can implement your own range generator when you have `succ` and a comparison:
+You can implement your own range generator when you have `succ` and a comparison. A block with `yield` in it is a sequence, and the code after a `yield` runs only when the sequence is pulled that far, so a range can be made of its first element and the range after it:
 
-```nanyx skip=#1699
-def range
-  : [(succ: a -> a, `<=`: (a, a) -> bool)] (start: a, end: a) -> seq(a)
-  = { start, end ->
-      seq {
-        memory {
-          mut current = start
+```nanyx
+context Succ(a) = (succ: a -> a)
 
-          while current <= end ->
-            yield current
-            current := succ(current)
-        }
-      }
-    }
+def range: [Succ(a), Ord(a)] a, a -> seq(a) = { start, end ->
+  seq {
+    if start <= end then
+      yield start
+      for range(succ(start), end) | x -> yield x
+  }
+}
+
+def main = {
+  use Succ(int)(succ = { n -> n + 1 })
+  println(range(1, 5) \seq.toList)
+}
+
+main()
 ```
