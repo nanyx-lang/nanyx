@@ -24,7 +24,7 @@ order: 25
   ([Context-qualified types](./context-qualified-types#a-context-variable-the-type-is-generic-in-contexts),
   [#1525](https://github.com/nanyx-lang/nanyx/issues/1525), done). Its tail, `seq(a)` in its own body, is a
   `[k] seq(a)` too: a protected type can name itself ([#1663](https://github.com/nanyx-lang/nanyx/issues/1663), done).
-- A function that takes "anything that can be iterated" requires a context, `Iterable(c, a)`, which a type gets by
+- A function that takes "anything that can be iterated" requires a context, `Iterable(c)`, which a type gets by
   attaching a `toSeq`. A list is never a sequence by subtyping or by implicit conversion.
 - Sequences are built with `seq.unfold`, from a list with `list.toSeq`, or with a `seq { ... }` workflow whose `yield`
   keyword produces the elements ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)).
@@ -142,7 +142,7 @@ Nanyx has no subtyping, so a `list(a)` is not a `seq(a)`. It doesn't need to be 
 says that:
 
 ```nanyx
-export context Iterable(c, a) = (toSeq: c -> seq(a))
+export context Iterable(c) = (elem: type, toSeq: c -> seq(elem))
 
 def List.toSeq: list(a) -> seq(a) = ...
 def Set.toSeq: set(a) -> seq(a) = ...
@@ -153,14 +153,15 @@ def Seq.toSeq: seq(a) -> seq(a) = { s -> s }
 - **A type gets the context by attaching `toSeq`.** The compiler builds an instance from a type's attached definitions
   by member name, as it builds `ToString(a)` from an attached `toString`
   ([Equality and well-known contexts](./equality-and-well-known-contexts)).
-- **The element type needs no associated type.** It is the context's second parameter, and unification fixes it:
-  resolving `Iterable(list(int), a)` against `List.toSeq: list(x) -> seq(x)` makes `a` an `int`. `FromString(a, e)`
-  shows contexts with two parameters already work.
+- **The element type is an [associated type](./type-members-and-reflection#associated-types),** `elem`, decided on
+  2026-11-17 ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802)). An instance's `toSeq` fixes it by
+  unification: `List.toSeq: list(x) -> seq(x)` makes `Iterable(list(int)).elem` an `int`. A signature constrains only
+  the container, and fixes the element type where it needs to, as in `[Iterable(c, elem = string)]`.
 - **Functions that consume a sequence take any iterable; functions that make one return `seq(b)`**:
 
   ```nanyx
-  Seq.fold: [Iterable(c, a), d] c, b, ([d] b, a -> b) -> b
-  Seq.map: [Iterable(c, a)] c, ([d] a -> b) -> [d] seq(b)
+  Seq.fold: [Iterable(c), d] c, b, ([d] b, elem -> b) -> b
+  Seq.map: [Iterable(c)] c, ([d] elem -> b) -> [d] seq(b)
   ```
 
   So `[1, 2, 3] \Seq.map { * 2 }` needs no conversion, and gives back a lazy `seq(int)`.
@@ -171,7 +172,7 @@ def Seq.toSeq: seq(a) -> seq(a) = { s -> s }
 - **`xs \List.toSeq` is always there** for code that wants to say it.
 
 A function whose type is inferred gets this for free: `def walk = { items -> for items | item -> ... }` is inferred as
-`[Iterable(s, a)] s -> ()`. Only a written signature pays for it, and how to make that shorter is an
+`[Iterable(s)] s -> ()`. Only a written signature pays for it, and how to make that shorter is an
 [open question](#open-questions).
 
 The compiler could instead insert `toSeq` wherever a `seq(a)` is expected and a `list(a)` is given. It won't:
@@ -193,11 +194,11 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
 
 # Open questions
 
-- **A shorter signature.** `[Iterable(s, a)] s -> ()` says the right thing, but `seq(a) -> ()` was easier to read. Two
+- **A shorter signature.** `[Iterable(s)] s -> ()` says the right thing, but `seq(a) -> ()` was easier to read. Two
   sources of inspiration:
   - Rust's `impl Trait` in argument position: a context named where a type is expected, with every parameter but its
-    first, stands for a new type variable that the context constrains. `def walk: Iterable(a) -> ()` would mean
-    `[Iterable(s, a)] s -> ()`. Each occurrence is its own variable, it is allowed only for parameters, and it works
+    first, stands for a new type variable that the context constrains. `def walk: Iterable -> ()` would mean
+    `[Iterable(s)] s -> ()`. Each occurrence is its own variable, it is allowed only for parameters, and it works
     for any context (`def describe: ToString -> string`). A context's name where a type goes is NYX0247 today
     ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)), so this would give that position a meaning rather
     than need a rule to tell the names apart.
@@ -215,8 +216,6 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
   ([#1525](https://github.com/nanyx-lang/nanyx/issues/1525), done).
 - **The context's name.** The compiler matches the member, `toSeq`, by name; the context's own name is free.
   `Iterable` reads well in signatures; `ToSeq` would sit beside `ToString` and `FromString`.
-- **An instance's second parameter.** Building an instance from attached definitions has only been used for contexts
-  whose parameters are all fixed by the type. Check that it fills in `Iterable`'s `a` by unification as described.
 - **Walking an unbounded range.** A default-linter rule for a `for` over only an unbounded range literal, or nothing,
   as for `while true`.
 - **One `yield`.** The docs have three: the `seq { }` keyword, the `Yield(b)` context of `list.select`
@@ -238,5 +237,7 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
    ([#192](https://github.com/nanyx-lang/nanyx/issues/192), [#1698](https://github.com/nanyx-lang/nanyx/issues/1698)).
 4. The core functions. Done: `seq.empty`, `range`, `from`, `unfold`, `map`, `filter`, `take`, `skip`, `takeWhile`,
    `fold`, `toList`, and `list.toSeq`. Still to write: `seq.zip`, `set.toSeq`, `map.toSeq`.
-5. `Iterable(c, a)`, with `for` loops and the `Seq` functions that consume a sequence taking it.
+5. `Iterable(c)`, with `for` loops and the `Seq` functions that consume a sequence taking it
+   ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802), after associated types,
+   [#1800](https://github.com/nanyx-lang/nanyx/issues/1800)).
 6. The `seq { }` builder.
