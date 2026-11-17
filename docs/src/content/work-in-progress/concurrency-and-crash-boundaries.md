@@ -7,8 +7,8 @@ order: 6
 Two questions that turn out to be one design. **Async:** an HTTP client, and soon a server, needs to wait on many
 things at once without a thread each. **Crash boundaries:** a crash ends the whole program today, and a server
 can't let one bad request do that. This page collects the ideas and recommends a direction. Async's direction is
-decided (direct style, B) and filed in stages ([Plan](#plan)); the crash-boundary parts are still proposals. Nothing
-is built yet.
+decided (direct style, B) and filed in stages ([Plan](#plan)), of which the first, the `Async` context, is built; the
+crash-boundary parts are still proposals.
 
 Two things are fixed already and constrain everything below:
 
@@ -70,7 +70,7 @@ This needs no language feature and makes every later step better, so it comes fi
 
 There are three ways to give Nanyx async.
 
-**A. A workflow,** as the [Workflows](../advanced/workflows#async-and-custom-keywords) page sketches today:
+**A. A workflow,** as the [Workflows](../advanced/workflows) page sketched it before this was decided:
 
 ```nanyx fragment
 def greeting = async {
@@ -275,9 +275,13 @@ Decided by the maintainer on 2026-11-17 ([#1890](https://github.com/nanyx-lang/n
 
 The language doesn't change between these; the hosts and the backend do.
 
-- **First: a wait suspends the whole instance.** Wasmtime can run an instance on its own stack and suspend it inside
-  a host call, so `http.get` blocks only that instance, and the host runs many instances at once. That's the HTTP
-  host's one instance per request, available now. Tasks can be built on it by running each as a
+- **First: a wait holds only its instance.** Built ([#1889](https://github.com/nanyx-lang/nanyx/issues/1889)): each
+  instance runs on a thread of its own, and a call that waits is a host call that blocks that thread, so `http.get`
+  holds only its instance, and the HTTP host answers other requests meanwhile, each in an instance of its own. Running
+  an instance on Wasmtime's own fiber stack, so that a wait suspends it and frees the thread, would scale further,
+  but the .NET embedding has no async API: it would mean calling Wasmtime's C API directly and running .NET host
+  functions on Wasmtime's stacks, which .NET doesn't support. A possible later optimisation
+  ([#1901](https://github.com/nanyx-lang/nanyx/issues/1901)). Tasks can be built on instances by running each as a
   process (below), at the cost of copying.
 - **Then: tasks inside one instance, by stack switching.** WebAssembly's stack-switching proposal gives a module
   many stacks and lets it switch between them; it's built for effect handlers, which is what `Async` is. Wasmtime
@@ -443,13 +447,10 @@ in the code.
 
 # What this changes on other pages
 
-- [Files, HTTP and JSON](./files-http-json) says every call blocks. With this design, the calls that wait require
-  `Async`, and block only their task. `nanyx.fs` and `nanyx.http.core` can ship blocking first, and gain `Async` in
-  their types when it exists: closed alpha, so no transition.
-- [Hosts](./hosts) leaves async for later and asks whether a host can change how the entry runs. Under this design
-  the host provides `Async` or doesn't, and the entry's type says whether it needs it.
-- [Workflows](../advanced/workflows#async-and-custom-keywords) uses async as its example of a custom keyword. If B is
-  chosen, that example moves to something workflows are the right tool for.
+- [Files, HTTP and JSON](./files-http-json) and [Hosts](./hosts): the calls that wait require `Async`, and the console
+  and HTTP hosts provide it. Done ([#1889](https://github.com/nanyx-lang/nanyx/issues/1889)).
+- [Workflows](../advanced/workflows#custom-keywords) no longer uses async as its example of a custom keyword. Done
+  ([#1889](https://github.com/nanyx-lang/nanyx/issues/1889)).
 
 # Open questions
 
@@ -475,7 +476,7 @@ Async is filed in three stages, after the keyword kinds. The crash-boundary step
 | Step | Issue | Stage |
 |---|---|---|
 | The `#delay` and `#bindF` keyword kinds ([Keyword kinds](../advanced/workflows#keyword-kinds)) | [#1879](https://github.com/nanyx-lang/nanyx/issues/1879) | Done |
-| Async 1: the `Async` context, provided by hosts; a wait suspends the instance | [#1889](https://github.com/nanyx-lang/nanyx/issues/1889) | Ready |
+| Async 1: the `Async` context, provided by hosts; a wait holds only its instance | [#1889](https://github.com/nanyx-lang/nanyx/issues/1889) | Done |
 | Async 2: `start!`, `await` and `race`, each def a scope, tasks on stack switching | [#1890](https://github.com/nanyx-lang/nanyx/issues/1890) | Ready |
 | Async 3: channels, and `seq.buffer`, `conflate` and `merge` | [#1891](https://github.com/nanyx-lang/nanyx/issues/1891) | Planning: full channels, cancelled streams |
 | Asyncify, for hosts with neither stack switching nor JSPI | | not filed |

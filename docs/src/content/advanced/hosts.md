@@ -33,11 +33,11 @@ A single `.nyx` file runs under the console host unless a `::host` directive at 
 
 ## The entry point fits the host
 
-The entry point is passed to the host's `run` function, so it must have the type `run` takes. Under the console host that is a function with no parameters, which may require `Console`, `Env`, `FileSystem` and `Http`. An entry point of another shape is an error at its `@entry` that names the host and both types:
+The entry point is passed to the host's `run` function, so it must have the type `run` takes. Under the console host that is a function with no parameters, which may require `Async`, `Console`, `Env`, `FileSystem` and `Http`. An entry point of another shape is an error at its `@entry` that names the host and both types:
 
 ```text
 main.nyx:3:1: error NYX0237: The entry point 'main' doesn't fit the host 'nanyx.console/console.host'
-  expected: [Console, Env, FileSystem, Http] () -> a
+  expected: [Async, Console, Env, FileSystem, Http] () -> a
   found:    int -> int
 ```
 
@@ -45,14 +45,15 @@ A script's statements are its entry point, and run under its host in the same wa
 
 # The console host
 
-The console host, `nanyx.console`, runs command-line programs. It provides four contexts:
+The console host, `nanyx.console`, runs command-line programs. It provides five contexts:
 
 - [`Console`](../stdlib/console) reads standard input and writes standard output and standard error.
 - [`Env`](../stdlib/env) gives the program's command-line arguments (`args`) and environment variables (`variable`), and ends it with an exit code (`exit`).
 - [`FileSystem`](../stdlib/filesystem) reads and writes files, through the functions of the shipped package `nanyx.fs` ([`file`](../stdlib/file), [`dir`](../stdlib/dir) and [`path`](../stdlib/path)). `nanyx run` lets a program reach the current directory and, with [`--allow-dir`](../standard-tools/command-line#nanyx-run), one other; a path outside them is `#error(#permissionDenied)`.
 - [`Http`](../stdlib/client) makes HTTP requests, through the functions of the shipped package `nanyx.http.core` ([`http`](../stdlib/http)). Each call waits for its response.
+- [`Async`](../stdlib/async) lets a function wait. The calls of `nanyx.fs` and `nanyx.http.core` wait, so they require it, and so does every function that calls them.
 
-The host has a _prelude_: a module whose exports every module of the program sees without importing them. The console host's brings in `Console`, `Env`, `FileSystem`, `Http`, `print`, `println`, `eprint` and `eprintln`, so a program uses them with no import:
+The host has a _prelude_: a module whose exports every module of the program sees without importing them. The console host's brings in `Async`, `Console`, `Env`, `FileSystem`, `Http`, `print`, `println`, `eprint` and `eprintln`, so a program uses them with no import:
 
 ```nanyx
 match args()
@@ -86,7 +87,8 @@ An application that depends on the library calls `greet` from its entry point, w
 # The HTTP host
 
 The HTTP host, `nanyx.http`, serves a program whose entry point is a request handler, a `Request -> Response`
-function. It provides `Http`, for requests the handler makes itself, and neither `Console` nor `FileSystem`. Each
+function. It provides `Http`, for requests the handler makes itself, with `Async`, so that the handler can wait on
+them, and neither `Console` nor `FileSystem`. While one handler waits, the host answers other requests. Each
 request is answered by a fresh instance of the program, so nothing is shared between requests, and a handler that
 stops the program ends only its own request, which is answered with a 500.
 

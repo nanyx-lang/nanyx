@@ -6,22 +6,25 @@
 export module http
 
 import (
+  nanyx/async as (Async)
   nanyx.http.core/client as (Http, HttpError)
   nanyx.http.core/request as (Request)
   nanyx.http.core/response as (Response)
 )
 
 --| Sends `request`, and gives its response.
-export def send: [Http] Request -> #some(Response) | #error(HttpError) = { request ->
+export def send: [Async, Http] Request -> #some(Response) | #error(HttpError) = { request ->
   sendRequest(request)
 }
 
 --| Gets `url`, and gives the response.
-export def get: [Http] string -> #some(Response) | #error(HttpError) = { url ->
+export def get: [Async, Http] string -> #some(Response) | #error(HttpError) = { url ->
   sendRequest(Request.of(#get, url))
 }
 
 --| Posts `body` to `url`, and gives the response.
-export def post: [Http] string, string -> #some(Response) | #error(HttpError) = { url, body ->
-  sendRequest(Request.of(#post, url) with body = body)
-}
+export def post
+  : [Async, Http] string, string -> #some(Response) | #error(HttpError)
+  = { url, body ->
+    sendRequest(Request.of(#post, url) with body = body)
+  }

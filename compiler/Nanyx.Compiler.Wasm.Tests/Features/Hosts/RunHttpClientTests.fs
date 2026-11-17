@@ -153,6 +153,21 @@ match http.get("ftp://example.com/file")
     |> assertPrinted "connection failed\ninvalid url\ninvalid url\n"
 
 [<Fact>]
+let ``A function that waits on a request is called from the top level, which has Async from the host`` () =
+    use server = new TestServer(fun _ _ _ _ -> 200, [], "Ada")
+    run $"""def fetchName: [Async, Http] string -> string = {{ url ->
+  def response = http.get(url) \orCrash("no name")
+  response.body
+}}
+
+def greetings = {{ urls: list(string) -> urls \list.map {{ url -> "Hello, {{fetchName(url)}}" }} }}
+
+println("Hello, {{fetchName("{server.Url}/name")}}")
+println(greetings(["{server.Url}/a", "{server.Url}/b"]))
+"""
+    |> assertPrinted "Hello, Ada\n[Hello, Ada, Hello, Ada]\n"
+
+[<Fact>]
 let ``A program that does not use Http imports nothing for it`` () =
     let wat = transpileWat (withFinalNewline """@entry
 def main = { println("hi") }""")

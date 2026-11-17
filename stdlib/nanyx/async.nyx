@@ -1,0 +1,15 @@
+--| Waiting, in direct style: a function that can wait requires [`Async`], and is otherwise an ordinary
+  function. There is no `async` block and no `await` keyword: a call that waits, such as `http.get`,
+  suspends the program until it can carry on, and reads as a call that blocks.
+
+  Nothing starts `Async`: a host that can suspend provides it to the program's entry point, as it
+  provides `Console`, and inference adds it to every function that calls one that waits. A function
+  that doesn't require it provably never waits.
+module async
+
+--| The capability to wait. It has no members: the functions that wait, such as `http.get` and
+  `file.read`, require it, so their type says that they can. Only a host provides it: its prelude
+  exports `Async` and its `run` requires it, so the program's top level has it, and the host's `run`
+  passes it on to the entry point. It is protected, so no `use` outside this module can make one,
+  and a host that can't suspend doesn't provide it, so a program that needs it is an error there.
+export context Async = protected ()

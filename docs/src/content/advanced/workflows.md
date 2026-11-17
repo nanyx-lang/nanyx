@@ -4,11 +4,11 @@ description: "Builder-based workflows and custom keywords"
 order: 1
 ---
 
-Workflows are one of Nanyx's most distinctive features. They let libraries provide language-like constructs by rewriting a block into calls to a context's members. This makes patterns like async/await, error chaining, and DSLs feel native.
+Workflows are one of Nanyx's most distinctive features. They let libraries provide language-like constructs by rewriting a block into calls to a context's members. This makes patterns like retrying, error chaining, and DSLs feel native.
 
 # The builder shape
 
-A workflow builder is a function that runs a block under a [context](./contexts). The context's members are the builder's _keywords_, such as `yield`, `await`, `try` or `return`. Writing a block after the builder's name:
+A workflow builder is a function that runs a block under a [context](./contexts). The context's members are the builder's _keywords_, such as `yield`, `try`, `defer` or `return`. Writing a block after the builder's name:
 
 ```nanyx fragment
 someBuilder {
@@ -68,7 +68,7 @@ Three things about the types are worth knowing when writing a builder:
 
 Applying a keyword to a value without parentheses, as in `yield! 1` or `try f()`, is sugar reserved for workflow keywords; ordinary functions are always called with parentheses. `try` and `return` are written without the `!`.
 
-A builder can take parameters before its block, and can require contexts of its own. `retrying(3) { ... }` is `retrying(3, { ... })`, and a builder whose type is `[Scheduler, c] ([Async, c] () -> a) -> a` needs a `Scheduler` where it is called.
+A builder can take parameters before its block, and can require contexts of its own. `retrying(3) { ... }` is `retrying(3, { ... })`, and a builder whose type is `[Clock, c] ([Retry, c] () -> a) -> a` needs a `Clock` where it is called.
 
 # Yield and collection builders
 
@@ -92,28 +92,28 @@ the sequence itself, with nothing left that needs the builder's context:
 seq.cons(1, { seq.cons(2, { seq.cons(3, { seq.empty() }) }) })
 ```
 
-# Async and custom keywords
+# Custom keywords
 
-Workflows can introduce custom keywords. For example, an async workflow can expose `await` by giving its context an `await` member.
+Workflows can introduce custom keywords. For example, a workflow that retries what fails can expose `retry` by giving its context a `retry` member.
 
 ```nanyx fragment
-def greetingAsync = async {
-  def name = await! getName()
-  return "Hello, {name}"
+def page = retrying(3) {
+  def text = retry! download(url)
+  return parse(text)
 }
 ```
 
-That expands into calls to the members of the context `async` runs its block under, with the binding `def name = await! ...` becoming the parameter of the continuation:
+That expands into calls to the members of the context `retrying` runs its block under, with the binding `def text = retry! ...` becoming the parameter of the continuation:
 
 ```nanyx fragment
-async({
-  await(getName(), { name ->
-    return("Hello, {name}")
+retrying(3, {
+  retry(download(url), { text ->
+    return(parse(text))
   })
 })
 ```
 
-A keyword is any member of the builder's context. The `@customKeywordType` attribute on the member's declaration says how the keyword's arguments are passed (see [Keyword kinds](#keyword-kinds)). There is no naming convention for keywords; `await`, `try` and `yield` are ordinary member names.
+A keyword is any member of the builder's context. The `@customKeywordType` attribute on the member's declaration says how the keyword's arguments are passed (see [Keyword kinds](#keyword-kinds)). There is no naming convention for keywords; `retry`, `try` and `yield` are ordinary member names.
 
 ```nanyx fragment
 context Retry = (
@@ -131,7 +131,6 @@ def retrying: [c] int, ([Retry, c] () -> Attempt(a)) -> Attempt(a) = { times, bl
 | Keyword | Description |
 |---------|-------------|
 | `yield`  | Produce a value in a collection builder |
-| `await`  | Await an asynchronous operation in an async workflow |
 | `try`    | Short-circuit on errors in a workflow that handles results |
 | `return` | Wrap the block's final value and finish the block |
 | `zero`   | The value of a block that produces no value (an `if` without `else`, or falling off the end without `return`) |
@@ -143,7 +142,7 @@ def retrying: [c] int, ([Retry, c] () -> Attempt(a)) -> Attempt(a) = { times, bl
 
 | Kind | `kw! e` becomes | For |
 |---------|-------------|-----|
-| `#bind`  | `kw(e, { rest of the block })` | `try`, `await` in a workflow: the member takes a value and the continuation, which it calls with the result |
+| `#bind`  | `kw(e, { rest of the block })` | `try`, and `retry` in a retrying workflow: the member takes a value and the continuation, which it calls with the result |
 | `#bindF` | `kw({ e }, { rest of the block })` | `defer`, which runs `e` after the rest of the block |
 | `#delay` | `kw({ e })` | anything that takes "this computation, not its value": `start!`, a `retry!`, a `timeout!` |
 
@@ -171,20 +170,20 @@ A fourth kind is planned, `#yield` ([#1699](https://github.com/nanyx-lang/nanyx/
 Builders expose keywords as the members of their context, and mark them with `@customKeywordType` where they are declared:
 
 ```nanyx fragment
-context Async = (
+context Jobs = (
   @customKeywordType(#bind)
-  await: [c] (Task(a), ([c] a -> Task(b))) -> Task(b)
+  run: [c] (Job(a), ([c] a -> Job(b))) -> Job(b)
 
   @customKeywordType(#bindF)
-  defer: [c] (([c] () -> ()), ([c] () -> Task(a))) -> Task(a)
+  defer: [c] (([c] () -> ()), ([c] () -> Job(a))) -> Job(a)
 
-  zero: Task(())
+  zero: Job(())
 )
 ```
 
 ```nanyx fragment
 def main = {
-  async {
+  jobs {
     defer! println("This runs at the end of the block")   -- defer({ println(...) }, { _ -> ... })
     println("This runs first")
   }
@@ -217,7 +216,7 @@ A workflow can also provide a `return` keyword that exits the block early, and a
 
 ```nanyx
 def main = {
-  async {
+  jobs {
     defer! println("This runs at the end of the block")
 
     if b then return "Early exit"
@@ -317,5 +316,5 @@ Workflows are also how HTML-style builders or configuration DSLs are implemented
 # When to use workflows
 
 - You want syntax that reads like a language feature, but is implemented in libraries.
-- You need structured control flow around effects (async, retries, error handling).
+- You need structured control flow around effects (retries, cleanup, error handling).
 - You want to provide a DSL for a narrow domain.

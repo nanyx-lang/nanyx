@@ -124,8 +124,8 @@ def main: [Log, Clock, Env] Request -> Response = { req ->
 **The handler is synchronous, and the host provides concurrency.** A page can't block, which is why the browser host
 is Elm-style. A server can. The host runs many calls of the handler at once, one WebAssembly instance (or worker) per
 request, as `wasmtime serve`, Spin and Fastly run components of the `wasi:http` world. Inside a request, an outbound
-call or a query blocks only that request's instance. So the handler needs no async, and the
-[decision to leave async for later](#decided) holds for servers too.
+call or a query waits in that request's instance only. The handler requires `Async` for such a call, as any
+function that waits does, and the host provides it ([Concurrency and crash boundaries](./concurrency-and-crash-boundaries)).
 
 **What the host provides:** `Log`, `Clock`, `Env`, `Random` and `Http`, an outbound HTTP client, and later perhaps a
 key-value store or a database. It doesn't provide `Console` or `FileSystem`, so a library that writes files is a
@@ -252,8 +252,12 @@ The composite host runs each part under the right sub-host and coordinates start
 - **One entry shape per host.** The console host's is `() -> ()`. A program's arguments, environment and exit code
   come from an `Env` context, not from a second shape. Built ([#1246](https://github.com/nanyx-lang/nanyx/issues/1246)).
 - **Hosts whose platform can't block are Elm-style for now.** The browser host's entry is `init`, `update` and `view`,
-  and effects such as fetching and timers come back to `update` as messages. Nothing in the language suspends, so this
-  can be built without async. Async is a separate design, for later.
+  and effects such as fetching and timers come back to `update` as messages. A host that can't suspend doesn't
+  provide `Async`, so a program whose entry needs it is an error there.
+- **A host that can suspend provides `Async`**, as it provides `Console`: its prelude exports it and its `run`
+  requires it, and the entry's type says whether it needs it. The console and HTTP hosts do. Built
+  ([#1889](https://github.com/nanyx-lang/nanyx/issues/1889), see
+  [Concurrency and crash boundaries](./concurrency-and-crash-boundaries)).
 - **Hosts are ordinary packages** that the compiler ships but doesn't treat specially
   ([Built-ins as packages](./built-ins-as-packages)), chosen with the manifest's `host`, `--host` or a script's
   `::host`. Built ([#1247](https://github.com/nanyx-lang/nanyx/issues/1247),
@@ -283,11 +287,8 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
 - **Host configuration typing.** The `settings` of the manifest's `host` are checked against the settings the host
   declares in its manifest, with their defaults: a misspelt key is an error, and so is a value of another kind than its
   default. Checking them against a record type the host exports, as Nanyx types are checked, is still open.
-- **Async and workflows.** Can a host change how the entry runs, for example by running it as a [workflow](../advanced/workflows) or on an event loop, without changing the entry's written type? [Concurrency and crash boundaries](./concurrency-and-crash-boundaries) proposes that a host provides an `Async` context or doesn't, and the entry's type says whether it needs one.
 - **Naming a host and its interface.** Does the host take the short name (`nanyx.console`, with `nanyx.console.core` for
   the interface), or the interface (`nanyx.http`, with `nanyx.http.host`)? See
   [Libraries for a host](#libraries-for-a-host). The console's are `nanyx.console` and `nanyx.console.core` for now:
   `Hosts.consolePackage` names the host, so that a rename is a small change.
 - **Host code in another language.** A browser host needs JavaScript beside the module. How does a host package carry it, and how does the build write it out?
-- **Calls that can't block, later.** The browser host starts Elm-style, with effects as messages. Whether contexts may
-  one day suspend the program, so that a `fetch` reads like an ordinary call, is the async question above.

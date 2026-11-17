@@ -7,38 +7,39 @@
 export module file
 
 import (
+  nanyx/async as (Async)
   nanyx.fs/filesystem as (FileSystem, FsError)
   nanyx.fs/path as (Path)
 )
 
 --| The text of the file at `at`, read as UTF-8.
-export def read: [FileSystem] Path -> #some(string) | #error(FsError) = { at ->
+export def read: [Async, FileSystem] Path -> #some(string) | #error(FsError) = { at ->
   readFile(at)
 }
 
 --| The bytes of the file at `at`.
-export def readBytes: [FileSystem] Path -> #some(Array(U8)) | #error(FsError) = { at ->
+export def readBytes: [Async, FileSystem] Path -> #some(Array(U8)) | #error(FsError) = { at ->
   readFileBytes(at)
 }
 
 --| Writes `text` to the file at `at` in UTF-8, in place of what it held, and makes the file when
   there is none. Its directory must be there already.
-export def write: [FileSystem] Path, string -> #ok | #error(FsError) = { at, text ->
+export def write: [Async, FileSystem] Path, string -> #ok | #error(FsError) = { at, text ->
   writeFile(at, text)
 }
 
 --| Writes `text` to the end of the file at `at` in UTF-8, and makes the file when there is none.
-export def append: [FileSystem] Path, string -> #ok | #error(FsError) = { at, text ->
+export def append: [Async, FileSystem] Path, string -> #ok | #error(FsError) = { at, text ->
   appendFile(at, text)
 }
 
 --| Whether there is a file or a directory at `at` that the program may reach.
-export def exists: [FileSystem] Path -> bool = { at ->
+export def exists: [Async, FileSystem] Path -> bool = { at ->
   pathExists(at)
 }
 
 --| Deletes the file at `at`. A directory is `#error(#isDirectory)`: this deletes only files.
-export def delete: [FileSystem] Path -> #ok | #error(FsError) = { at ->
+export def delete: [Async, FileSystem] Path -> #ok | #error(FsError) = { at ->
   deleteFile(at)
 }
 
@@ -67,7 +68,7 @@ def piecesOf: string -> (list(string), string) = { text ->
 type Reading = (ready: list(string), carried: string, offset: int)
 
 --| The next line of the file at `at`, and what is left of it after that.
-def nextLine: [FileSystem] Path, Reading -> #some(string, Reading) | #done = { at, reading ->
+def nextLine: [Async, FileSystem] Path, Reading -> #some(string, Reading) | #done = { at, reading ->
   match reading.ready
     | [line, ...rest] -> #some(withoutReturn(line), reading with ready = rest)
     | [] ->
@@ -92,7 +93,7 @@ def describe: FsError -> string = {
   chunk is the file's end. A read that failed stops the program, so that it is never taken for the
   end of a shorter file.
 def afterChunk
-  : [FileSystem] Path, Reading, (#some(string) | #error(FsError)) -> #some(string, Reading) | #done
+  : [Async, FileSystem] Path, Reading, (#some(string) | #error(FsError)) -> #some(string, Reading) | #done
   = { at, reading, chunk ->
     match chunk
       | #some(text) ->
@@ -120,17 +121,19 @@ def afterChunk
       for lines | line -> println(line)
     | #error(e) -> println("Couldn't read the log: {e}")
   ```
-export def lines: [FileSystem] Path -> #some(([FileSystem] seq(string))) | #error(FsError) = { at ->
-  match readFileChunk(at, 0, chunkSize)
-    | #error(e) -> #error(e)
-    | #some(first) ->
-      def (whole, rest) = piecesOf(first)
-      def offset = if first == "" then -1 else string.length(first)
+export def lines
+  : [Async, FileSystem] Path -> #some(([Async, FileSystem] seq(string))) | #error(FsError)
+  = { at ->
+    match readFileChunk(at, 0, chunkSize)
+      | #error(e) -> #error(e)
+      | #some(first) ->
+        def (whole, rest) = piecesOf(first)
+        def offset = if first == "" then -1 else string.length(first)
 
-      #some(
-        seq.unfold(
-          Reading(ready = whole, carried = rest, offset = offset)
-          { reading -> nextLine(at, reading) }
+        #some(
+          seq.unfold(
+            Reading(ready = whole, carried = rest, offset = offset)
+            { reading -> nextLine(at, reading) }
+          )
         )
-      )
-}
+  }

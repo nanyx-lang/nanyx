@@ -118,7 +118,7 @@ let ``A handler makes requests of its own, through Http`` () =
 import nanyx.http.core/http as http
 
 @entry
-def main: [Http] Request -> Response = {{ request ->
+def main: [Async, Http] Request -> Response = {{ request ->
   match Request.path(request)
     | "/proxy" ->
       match http.get("http://localhost:{port}/inner")
@@ -161,3 +161,46 @@ let ``A setting the host doesn't take, or of another kind, is an error at the se
     let outcome = nanyxIn directory.Path [ "check" ]
     Assert.Equal(1, outcome.ExitCode)
     Assert.Contains($"error {code}: {message}", outcome.StandardError)
+
+[<Fact>]
+let ``A request is answered while another's handler waits on a request of its own`` () =
+    use slow = new HttpListener()
+    let slowPort = freePort ()
+    slow.Prefixes.Add $"http://localhost:{slowPort}/"
+    slow.Start()
+    let answeringSlowly =
+        Task.Run(fun () ->
+            try
+                let context = slow.GetContext()
+                Thread.Sleep 3000
+                let bytes = Text.Encoding.UTF8.GetBytes "late"
+                context.Response.OutputStream.Write(bytes, 0, bytes.Length)
+                context.Response.Close()
+            with _ -> ())
+    use directory = new TempDirectory()
+    let port = freePort ()
+    writePackage directory.Path port $"""module main
+
+import nanyx.http.core/http as http
+
+@entry
+def main = {{ request: Request ->
+  match Request.path(request)
+    | "/wait" ->
+      match http.get("http://localhost:{slowPort}/")
+        | #some(answer) -> Response.text(200, answer.body)
+        | #error(_) -> Response.text(502, "Bad Gateway")
+    | _ -> Response.text(200, "quick")
+}}
+"""
+    serving directory.Path port (fun client ->
+        let waiting = client.GetStringAsync "/wait"
+        Thread.Sleep 500
+        let started = Diagnostics.Stopwatch.StartNew()
+        Assert.Equal((200, "quick"), get client "/quick")
+        Assert.True(started.ElapsedMilliseconds < 2000L, $"The second request took {started.ElapsedMilliseconds} ms")
+        Assert.False(waiting.IsCompleted)
+        Assert.Equal("late", waiting.GetAwaiter().GetResult()))
+    |> ignore
+    slow.Stop()
+    answeringSlowly.Wait()

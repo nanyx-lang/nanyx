@@ -38,7 +38,7 @@ call `http.get`, `http.post` and `http.send` by those names.
 ## `send`
 
 ```nanyx fragment
-def send: [Http] Request -> #some(Response) | #error(HttpError)
+def send: [Async, Http] Request -> #some(Response) | #error(HttpError)
 ```
 
 Sends `request`, and gives its response.
@@ -46,7 +46,7 @@ Sends `request`, and gives its response.
 ## `get`
 
 ```nanyx fragment
-def get: [Http] string -> #some(Response) | #error(HttpError)
+def get: [Async, Http] string -> #some(Response) | #error(HttpError)
 ```
 
 Gets `url`, and gives the response.
@@ -54,7 +54,7 @@ Gets `url`, and gives the response.
 ## `post`
 
 ```nanyx fragment
-def post: [Http] string, string -> #some(Response) | #error(HttpError)
+def post: [Async, Http] string, string -> #some(Response) | #error(HttpError)
 ```
 
 Posts `body` to `url`, and gives the response.

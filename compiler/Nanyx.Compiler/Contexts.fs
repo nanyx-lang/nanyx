@@ -43,6 +43,25 @@ let private isMemberless (info: TypeDefInfo) =
 let private withSupplied (info: TypeDefInfo) (env: TypeEnv) : TypeEnv =
     if isMemberless info then { env with Supplied = env.Supplied.Add(TypeDefInfo.nominalId info) } else env
 
+/// Whether the context `ctxName` is one with no members (see `isMemberless`) that the host provides, as `Async`: an
+/// ambient context, as one whose members the host's prelude stands in for is, but known by its name alone.
+let private isAmbientMemberless (state: InferState) (ctxName: Identifier) =
+    state.HostContexts.Contains ctxName && tryFindTypeDef ctxName state |> Option.exists isMemberless
+
+/// The module's ambient contexts: those whose members the host's prelude stands in for (see
+/// `InferState.AmbientMembers`), and those with no members the host provides.
+let internal ambientContexts (state: InferState) : Set<Identifier> =
+    state.AmbientMembers
+    |> Map.values
+    |> Seq.map snd
+    |> Set.ofSeq
+    |> Set.union (state.HostContexts |> Set.filter (isAmbientMemberless state))
+
+/// Whether something nearer than the host supplies the context with no members `ctxName` in `env`: a def that declares
+/// it, or a `use`.
+let private suppliedMemberless (env: TypeEnv) (state: InferState) (ctxName: Identifier) =
+    tryFindTypeDef ctxName state |> Option.exists (fun info -> env.Supplied.Contains(TypeDefInfo.nominalId info))
+
 /// `env` with the members of the instance a `use` of a value of type `ty` loads, each bound by its name. When the
 /// type names a plain context, as `Foo(bar = ...)`'s does, each member has the symbol the context's definition
 /// declared, as in a def that declares the context, so a lambda that calls it requires the context (see
@@ -377,6 +396,11 @@ let private availableAmbientContexts (env: TypeEnv) (state: InferState) : Set<Id
             | ScriptValueScope _ -> suppliedNearer env state members)
         |> List.map fst
         |> Set.ofList
+    let memberless =
+        state.HostContexts
+        |> Set.filter (fun ctxName ->
+            isAmbientMemberless state ctxName && (state.ContextScope = AmbientScope || suppliedMemberless env state ctxName))
+    let fromMembers = Set.union fromMembers memberless
     match state.ContextScope with
     | AmbientScope -> Set.union fromMembers state.CarriedAmbientContexts
     | DefScope _
@@ -435,6 +459,7 @@ let private ambientProviders (env: TypeEnv) (state: InferState) : Map<Identifier
     let carried =
         state.CarriedAmbientContexts
         |> Set.toList
+        |> List.append (state.HostContexts |> Set.filter (fun ctxName -> isAmbientMemberless state ctxName && not (suppliedMemberless env state ctxName)) |> Set.toList)
         |> List.choose (fun ctxName -> ambientProvider state.ContextScope |> Option.map (fun provider -> ctxName, provider))
     Map.ofList (carried @ ofMembers)
 
@@ -699,12 +724,17 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
     // instance's; otherwise it is needed from the ambient instance, as a context this module can name is.
     let fromAmbient (ctx: TypeExpr) members =
         (isCarried ctx && not (suppliedNearer env state members)) || members |> List.exists (isAmbientMember env state)
+    // A context with no members the host provides is needed from the host wherever nothing nearer supplies it.
+    let fromHost (ctx: TypeExpr) =
+        match ctx.Kind with
+        | TypeName ctxName -> isAmbientMemberless state ctxName && not (suppliedMemberless env state ctxName)
+        | _ -> false
     let recordProviders (current: InferState) =
         match call with
         | Some call ->
             requiredMembers
             |> List.fold (fun current (ctx, members) ->
-                match ctx.Kind, providerOf env current (fromAmbient ctx members) members with
+                match ctx.Kind, providerOf env current (fromAmbient ctx members || fromHost ctx) members with
                 | TypeName ctxName, Some provider -> recordProvider call ctxName provider current
                 | _ -> current) current
         | None -> current
@@ -712,7 +742,7 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
     // supplies (see `withSupplied`).
     let missing =
         requiredMembers
-        |> List.filter (fst >> isCarried >> not)
+        |> List.filter (fun (ctx, _) -> not (isCarried ctx) && not (fromHost ctx))
         |> List.choose (fun (ctx, members) ->
             let unsupplied =
                 match ctx.Kind with
@@ -765,6 +795,7 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
                 match ctx.Kind, members |> List.exists (isAmbientMember env current) with
                 | (TypeName ctxName | TypeApply(ctxName, _)), _ when isCarried ctx && not (suppliedNearer env current members) ->
                     needAmbientContext current ctxName $"'{name}' requires" span
+                | TypeName ctxName, _ when fromHost ctx -> needAmbientContext current ctxName $"'{name}' requires" span
                 | (TypeName ctxName | TypeApply(ctxName, _)), true -> needAmbientContext current ctxName $"'{name}' requires" span
                 | _ -> Ok current)) (Ok state)
         |> Result.map recordProviders

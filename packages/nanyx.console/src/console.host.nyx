@@ -2,7 +2,8 @@
 
   A program's `@entry` is passed to [`run`], which runs it in the contexts this host provides:
   [`Console`], which reads and writes the standard streams, [`Env`], [`FileSystem`], which reads
-  and writes files, and [`Http`], which makes HTTP requests. The first three are written on WASI's
+  and writes files, [`Http`], which makes HTTP requests, and `Async`, which the calls that wait
+  require. The first three are written on WASI's
   functions, and `Http` on the `nanyx` runtime's own `nanyx:http`, since WASI preview 1 has no
   networking. The host declares them with `@extern` and calls them with the [`HostRuntime`] the
   toolchain provides to it, passing their buffers in memory with `nanyx/host.memory`.
@@ -10,6 +11,7 @@ export module console.host
 
 import (
   nanyx/array
+  nanyx/async as (Async)
   nanyx/host.memory
   nanyx/host.runtime
   nanyx/text
@@ -619,39 +621,44 @@ def sendThroughRuntime: [HostRuntime] Request -> #some(Response) | #error(HttpEr
 }
 
 --| Runs `entry`, the program's entry point, with a `Console` that reads and writes the standard
-  streams, an `Env` that reads what the program was started with, and a `FileSystem` that reads and
-  writes the directories the runtime opened for it. What `entry`
-  returns is ignored.
-export def run: [HostRuntime] ([Console, Env, FileSystem, Http] () -> a) -> () = { entry ->
-  use Console(
-    write = { text -> writeTo(1, text) }
-    writeError = { text -> writeTo(2, text) }
-    readLine = { _ -> readLineAfter([]) }
-    readToEnd = { _ -> #some(readToEndAfter([])) }
-    flush = { _ -> () }
-  )
+  streams, an `Env` that reads what the program was started with, a `FileSystem` that reads and
+  writes the directories the runtime opened for it, an `Http` that makes requests through the
+  runtime, and `Async`, so that it may wait. What `entry` returns is ignored.
+export def run
+  : [HostRuntime, Async] ([Async, Console, Env, FileSystem, Http] () -> a) -> ()
+  = { entry ->
+    use Console(
+      write = { text -> writeTo(1, text) }
+      writeError = { text -> writeTo(2, text) }
+      readLine = { _ -> readLineAfter([]) }
+      readToEnd = { _ -> #some(readToEndAfter([])) }
+      flush = { _ -> () }
+    )
 
-  use Env(
-    args = { _ -> arguments() }
-    variable = { name -> environmentVariable(name) }
-    exit = { code -> exitProcess(code) }
-  )
+    use Env(
+      args = { _ -> arguments() }
+      variable = { name -> environmentVariable(name) }
+      exit = { code -> exitProcess(code) }
+    )
 
-  use FileSystem(
-    readFile = { at -> readWith(at, { address, count -> stringAt(address, count) }) }
-    readFileBytes = { at -> readWith(at, { address, count -> bytesAt(address, count) }) }
-    readFileChunk = { at, offset, length -> chunkAt(at, offset, length) }
-    writeFile = { at, text -> writeWith(at, text, 9, 0) }
-    appendFile = { at, text -> writeWith(at, text, 1, 1) }
-    pathExists = { at -> existsAt(at) }
-    deleteFile = { at -> deleteAt(at) }
-    listDirectory = { at -> namesAt(at) }
-    createDirectory = { at ->
-      atPath(at, { directory, address, length -> pathCreateDirectory(directory, address, length) })
-    }
-  )
+    use FileSystem(
+      readFile = { at -> readWith(at, { address, count -> stringAt(address, count) }) }
+      readFileBytes = { at -> readWith(at, { address, count -> bytesAt(address, count) }) }
+      readFileChunk = { at, offset, length -> chunkAt(at, offset, length) }
+      writeFile = { at, text -> writeWith(at, text, 9, 0) }
+      appendFile = { at, text -> writeWith(at, text, 1, 1) }
+      pathExists = { at -> existsAt(at) }
+      deleteFile = { at -> deleteAt(at) }
+      listDirectory = { at -> namesAt(at) }
+      createDirectory = { at ->
+        atPath(
+          at
+          { directory, address, length -> pathCreateDirectory(directory, address, length) }
+        )
+      }
+    )
 
-  use Http(sendRequest = { request -> sendThroughRuntime(request) })
+    use Http(sendRequest = { request -> sendThroughRuntime(request) })
 
-  ignore(entry())
-}
+    ignore(entry())
+  }
