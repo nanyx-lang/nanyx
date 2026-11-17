@@ -19,13 +19,51 @@ export type MArray(a) = [Memory] private marray(a)
 --| A new array of `count` elements, the one at each index `f` of it: `MArray.init(3, { i -> i * i })`
   holds `0`, `1` and `4`. A `count` of 0 or less makes an empty array.
 export def MArray.init: [Memory, c] int, ([c] int -> a) -> MArray(a) = { count, f ->
-  MArray(__nanyx_marray_of_list(list.init(count, f)))
+  MArray(fillFrom(__nanyx_marray_new(count), 0, f))
 }
 
 --| A new array of `count` elements, each the [`Default`] of its type: `MArray.create(3)` of ints
   holds three `0`s. A `count` of 0 or less makes an empty array.
 export def MArray.create: [Memory, Default(a)] int -> MArray(a) = { count ->
-  MArray(__nanyx_marray_of_list(list.init(count, { _ -> default })))
+  MArray(fillWithDefaultFrom(__nanyx_marray_new(count), 0))
+}
+
+-- Each helper that fills a new array writes each of its elements once, from `index` on, and gives
+-- it back, so that its element type is the caller's. Nothing reads the array before it is full.
+
+-- `made`, a new array, once `f` of each of its indices from `index` on is written into it.
+def fillFrom: [c] marray(a), int, ([c] int -> a) -> marray(a) = { made, index, f ->
+  if index < __nanyx_marray_length(made) then
+    __nanyx_marray_write(made, index, f(index))
+    fillFrom(made, index + 1, f)
+  else made
+}
+
+-- `made`, a new array, once the default of its element type is written at each index from `index`
+-- on.
+def fillWithDefaultFrom: [Default(a)] marray(a), int -> marray(a) = { made, index ->
+  if index < __nanyx_marray_length(made) then
+    __nanyx_marray_write(made, index, default)
+    fillWithDefaultFrom(made, index + 1)
+  else made
+}
+
+-- `made`, a new mutable array as long as `xs`, once each element of `xs` from `index` on is written
+-- into it.
+def copyFrom: array(a), marray(a), int -> marray(a) = { xs, made, index ->
+  if index < __nanyx_marray_length(made) then
+    __nanyx_marray_write(made, index, __nanyx_array_get(xs, index))
+    copyFrom(xs, made, index + 1)
+  else made
+}
+
+-- `made`, a new array as long as `xs`, once each element of `xs` from `index` on is written into
+-- it.
+def copyOutFrom: marray(a), array(a), int -> array(a) = { xs, made, index ->
+  if index < __nanyx_array_length(made) then
+    __nanyx_array_write(made, index, __nanyx_marray_get(xs, index))
+    copyOutFrom(xs, made, index + 1)
+  else made
 }
 
 --| A new array of the elements of `xs`, in order.
@@ -46,13 +84,13 @@ export def MArray.build: [Memory, c, d] ([c] () -> [d] seq(a)) -> MArray(a) = { 
 
 --| A new array of a copy of the elements of `xs`, in order: changing it leaves `xs` as it is.
 export def MArray.fromArray: [Memory] Array(a) -> MArray(a) = { xs ->
-  MArray(__nanyx_marray_of_list(__nanyx_array_to_list(xs)))
+  MArray(copyFrom(xs, __nanyx_marray_new(__nanyx_array_length(xs)), 0))
 }
 
 --| A copy of the elements of `xs` now, in order, as an `Array`, which later changes to `xs` leave
   as it is.
 export def MArray.toArray: [Memory] MArray(a) -> Array(a) = { MArray(xs) ->
-  __nanyx_array_of_list(__nanyx_marray_to_list(xs))
+  copyOutFrom(xs, __nanyx_array_new(__nanyx_marray_length(xs)), 0)
 }
 
 --| The elements of `xs` now, in order, as a list.

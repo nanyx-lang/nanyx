@@ -158,6 +158,7 @@
     <Compile Include="Features\Arrays\RunArrayTests.fs" />
     <Compile Include="Features\Arrays\RunArrayCallTests.fs" />
     <Compile Include="Features\Arrays\ArrayAllocationTests.fs" />
+    <Compile Include="Features\Arrays\MArrayAllocationTests.fs" />
     <Compile Include="Features\Arrays\RunSliceTests.fs" />
     <Compile Include="Features\Arrays\RunMArraySortTests.fs" />
     <Compile Include="Features\Collections\RunCollectionLiteralTests.fs" />
