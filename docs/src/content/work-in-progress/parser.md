@@ -8,7 +8,7 @@ This page is how the parser should work, and how to get there from today's parse
 The maintainer decided in [#846](https://github.com/nanyx-lang/nanyx/issues/846), which tracks the work, to go all the
 way, through stage 6, in the stages below. Error recovery (stage 5) is what the language server and the
 [refactorings](./refactorings) need most. Error messages that change at stage 4 are accepted after review, following
-the [house style](./error-messages#house-style).
+the [house style](../foundations/principles#friendly-errors).
 
 # Today
 

@@ -1,314 +1,40 @@
 ---
 title: "Info view and library browser"
-description: "A panel that shows what the compiler knows at the cursor, and a browser and type search for the standard library"
+description: "What is still open about the info view, doc comments, the library browser and search by type"
 order: 30
 ---
 
 > Doc comments, the info view, the library browser and search by type are built, and described for users on
 > [VS Code extension](../standard-tools/vs-code-extension#info-view),
 > [Basics](../getting-started/basics#doc-comments) and [The nanyx command](../standard-tools/command-line#the-standard-library).
-> This page keeps how they are built, what is [still open](#still-open) and the [open questions](#open-questions).
-> Work is tracked under the `lsp` label.
+> This page keeps what is [still open](#still-open) and the [open questions](#open-questions). Work is tracked under
+> the `lsp` label.
 
-# Summary
-
-Three editor features, each built on what the language server already knows:
-
-1. **An info view.** A view in the side bar beside the editor that follows the cursor, modelled on the infoview in Lean 4's VS
-   Code extension. It shows the type of the expression at the cursor and the names in scope with their types. It
-   also shows the contexts in scope and where each comes from. In a long function, that last part shows which
-   `use` or which part of the signature each call's contexts come from.
-2. **Doc comments.** A `--|` comment above a definition is its documentation. Hover and completion show it, and
-   the browser will.
-3. **A library browser with search by type.** A view of the standard library's modules and what each exports,
-   with each export's type and doc comment. You can search it by name or by type: type `bool -> string` and find
-   what turns a `bool` into a `string`, without knowing its name.
-
-# What the compiler already records
-
-These features mostly read tables the server already has in `TypedModule` (see `TypedAst.fs`) for every compile:
-
-| Need | Already recorded |
-|------|------------------|
-| Type at the cursor | `ExprTypes`, `CalleeTypes`, `SymbolTypes`, read by `Hover.typeAt` |
-| Names in scope at the cursor | `Scopes`, read by `Completion.namesInScope` |
-| Contexts an unannotated def needs | `InferredContextTypes` |
-| Where a call finds a parameterised context | `ContextInstances`: in scope (with the `use`, signature or inference that put it there), built from attached definitions, derived from a type's parts, or built in |
-| What provides each context a call requires | `ContextProviders`: the signature, a `use`, inference, or the runtime |
-| What each `use` loads | `UseContexts` (parameterised contexts only); the type of the value it loads, in `ExprTypes` |
-| The contexts the runtime supplies at the top level | `AmbientContexts` |
-| The library's modules and their doc comments | `StandardLibrary.moduleNames`, `Documentation.ofModule` |
-| Opening a library definition | `StandardLibrarySource` writes a read-only copy of a module to open |
-| Every export in the library | the export index `ImportFixes` builds once, to offer missing imports |
-| Doc comments | attached by `DocComments.attach`, read for a symbol by `Documentation.Reader` |
-
-The library's exports and their types are read from each module's compile as an import checks it, from the checked
-library the compiler embeds (`Compiler.compileStandardLibraryModuleReporting`), and listed with their signatures once per
-process (`LibraryCatalog.moduleExports`), as the browser and search by type need them. Search keeps its candidates for
-the process too, and reads a doc comment only for a match ([#1462](https://github.com/nanyx-lang/nanyx/issues/1462)).
-
-# 1. Info view
-
-The first cut is built ([#715](https://github.com/nanyx-lang/nanyx/issues/715)), and "This call"
-([#989](https://github.com/nanyx-lang/nanyx/issues/989)) and the context flow
-([#717](https://github.com/nanyx-lang/nanyx/issues/717)) since: everything below but types as trees.
-`NyxCompiler.InfoView.at` and `NyxCompiler.ContextFlow` gather it, `InfoViewHandler` answers the request, and
-`extension/src/infoView.ts` is the panel (see [VS Code extension](../standard-tools/vs-code-extension#info-view)).
-
-## What it shows
-
-The panel follows the cursor. It is organised by scope, innermost first, with a rule between one scope and the next
-([#1066](https://github.com/nanyx-lang/nanyx/issues/1066)): the cursor, each lambda around it, each def around it
-(a local def as well as a top-level one), and the module. `InfoView.at` gives the lambdas and defs as `Scope`s,
-innermost first, each with the names it declares and the contexts it provides: a name or context belongs to the
-innermost lambda or def whose value it is declared or provided in. A def's value is the def's scope, not a lambda of
-its own, and a `memory` block and a `use` are part of the scope they are in. Each scope's heading names it and links to
-it: a lambda by its parameters and line (`{ message -> … } (line 4)`), a def by its name (`def greet`), the module by
-its declared name (`module library.lending`, or `this module`). From the fourth scope on, and the module always, a
-scope starts collapsed, since the side bar is narrow.
-
-- **At the cursor.**
-  - **Expression.** On a module's name, as `Hover.moduleAt` finds it, `module name` and the module's doc comment.
-    Otherwise the type of the narrowest typed expression at the cursor, as hover shows it. On a name that refers
-    to a generic def, the def's declared signature comes first, as hover writes the def (`def name: [contexts] type`),
-    then the type at this use, then the bindings of the signature's type variables at this use (`a = string`, and a
-    context variable as the contexts it stands for, `c = Console`), each linking to the def; `Hover.instantiationAt`
-    works them out ([#929](https://github.com/nanyx-lang/nanyx/issues/929)). A def that is not generic shows its type
-    once.
-  - **Messages.** The diagnostics at the cursor's line.
-  - **This call.** On the innermost call or pipe around the cursor that requires contexts, each context it requires
-    and where it finds that context: a provider (a signature, a `use`, inference or the runtime), linked, or an
-    instance the compiler builds, from attached definitions (named, `attached Point.show`), derived from the type's
-    parts, or its own (`built in`) ([#989](https://github.com/nanyx-lang/nanyx/issues/989)). `InfoView.callContextsOf`
-    reads the contexts the callee's type declares, at the types of the call, beside the call's `ContextInstances` in
-    order, then the others `ContextProviders` records for it (a member's context, or one a function value it runs
-    requires).
-- **A lambda**, for each one around the cursor: its type, with the contexts it carries (`[Log] int -> ()`), its
-  parameters, locals and pattern variables with their types, nearest first, and each `use` in it with the context it
-  gives.
-- **A def**, for each one around the cursor: its signature, `declared` if it writes its type and `inferred` if not,
-  with its doc comment; its parameters and locals; the contexts its signature writes or it was inferred to require
-  (`[Show(α)]`, from `InferredContextTypes`), and each `use` in it outside a lambda; and, in the innermost def, its
-  *Context flow* (see below).
-- **The module**: its doc comment, its top-level definitions and imports in scope, the file's own first, and the
-  contexts the runtime supplies, such as `Console`.
-
-Each type and context is written as hover writes it, with the type variables of the locals, the lambdas and the
-contexts named together.
-
-Every span in the panel is a link: clicking a `use` or a signature jumps to it.
-
-## Following contexts through a long function
-
-The info view answers "where does this call's `Console` come from?" for one call. For a whole function, its
-*Context flow* section ([#717](https://github.com/nanyx-lang/nanyx/issues/717)) shows the innermost def around the
-cursor: each context its signature writes, each it was inferred to require, then each `use` in it, and under each
-one the calls it serves, linked. A `use` that serves no call is shown as unused. `ContextFlow.at` builds it from what
-`InfoView.callContextsOf` finds for each call in the def, matching a provider by the span that links it (a
-signature's context, the value a `use` loads, the def's name for an inferred one, with the context's name).
-
-The same data decorates the editor: the response carries `highlights`, the ranges of the document to highlight, which
-`ContextFlow.at` finds from the same search of the def as the flow. On a `use`, or a context of the def's signature, they are that provider and the calls it
-serves; on a call, the call and the providers of its contexts. The extension draws them with the editor's word
-highlight colours while the view is visible and not pinned, and, as `nanyx.infoView.contextLines` says, joins them
-with lines down the left margin and across to each one (`ContextLines` in `extension/src/contextLines.ts`, drawn as
-absolutely placed `before`/`after` pieces of empty decorations). They come with the info view's request, not
-`textDocument/documentHighlight`: a server that answers that request replaces VS Code's own highlighting of the word
-under the cursor everywhere else.
-
-This needs the compiler to record, for each call, the provider of every context the callee requires, and it does
-([#716](https://github.com/nanyx-lang/nanyx/issues/716)): `TypedModule.ContextProviders` holds, by the node of each
-call or pipe, each context the call requires, as a type (`Console` is `TyApply("Console", [])`, `Show(Point)` is
-`TyApply("Show", [Point])`), with what provides it there:
-
-```fsharp
-type ContextProvider =
-    | FromSignature of SourceSpan        // the context as the def's annotation writes it
-    | FromUse of NodeId                  // the value the `use` loads, as `UseContexts` is keyed
-    | FromInference                      // an unannotated def, which now requires it itself
-    | FromRuntime                        // the top level of a module
-```
-
-A call records the contexts its callee's type declares or was inferred to require, those a function value it runs
-requires (through a context variable, see `ContextVariables`), and, for a call of a context's member (`println`),
-that member's context. A context written out as a record has no name to record it by, and is left out.
-
-It records what inference decides; it does not decide anything new. A member that a `use` or a def's signature
-binds carries which of them binds it, in its `TypeScheme`'s `ProvidedBy` (`extendEnvWithRecordFields`,
-`extendEnvWithContexts`), so the provider is that of the members the check in `Contexts.ensureContextAvailable`
-finds. Where they are the ambient instance's, the provider is the runtime at the top level and inference in an
-unannotated def (`Contexts.ambientProvider`). A call of an unannotated top-level def keeps what provides each ambient
-context where it is (`DeferredContextUse.Providers`), and records the def's contexts once every def is inferred
-(`Contexts.recordDeferredProviders`).
-
-A parameterised context keeps its provider in `ContextInstances` itself, rather than in a table beside it:
-`InstanceInScope of TypeExpr * ContextProvider`. Each instance put in scope (`bindInstanceOf` in
-`ContextInstances.fs`) keeps the `use` or the signature that put it there beside it, in the environment's own list of
-instances (`TypeEnv.Instances`, of `InstanceBinding` records), and `instanceInScope` returns it with the instance. An instance a def that does not write its type was inferred to
-require is provided by inference (`ContextInference.resolvePending`). Once the module is inferred,
-`ContextInstances.recordInstanceProviders` adds an entry to `ContextProviders` for each `InstanceInScope` a call
-found, before the contexts found by their members' names, as written where it is put in scope (`Show(a)`, over
-variables of its own that keep its names). So there is one source of truth for an instance and what provides it, and
-the backend, which reads `ContextInstances`, ignores the provider. An instance built from attached definitions
-(`InstanceSynthesized`), derived from a type's parts (`InstanceDerived`) or the compiler's own (`InstanceBuiltIn`) has
-no provider, and has no entry in `ContextProviders`; "This call" shows those from `ContextInstances`.
-
-## Protocol and client
-
-- **Request.** A custom request, `nanyx/infoView`, with a document and a position. It returns structured JSON:
-  scopes, innermost first, and the ranges to highlight (`highlights`). A scope has its kind (`cursor`, `lambda`,
-  `function`, `module`), its heading, the location the heading links to, the module's doc comment, whether it starts
-  collapsed, and its sections, each with an id, a title and items. The cursor's sections are always `expression`,
-  `messages` and `call`; a lambda's are `type`, `names` and `uses`, a def's `signature`, `names`, `contexts` and
-  `flow`, and the module's `names` and `contexts`, each left out when it has nothing in it. An
-  item has its text, a detail (`parameter`, `use`, `error NYX0101`), a location to link to, the items under it (the
-  calls a provider in the flow serves), and the doc comment of what it names, as Markdown with its links written
-  out, as hover shows it ([#917](https://github.com/nanyx-lang/nanyx/issues/917)): for an import, its module's.
-  `InfoView.at` gives each item's symbol and `InfoViewHandler` reads its doc with `Documentation.Reader.ForSymbol`. A
-  context's doc is that of the def a `use` names, if it has one, or else the context's own. The client renders it with
-  VS Code's Markdown renderer (`markdown.api.render`). It returns data, not rendered text, so the client can lay it out and
-  link the spans. The server reads the same cached compile as hover (`DocumentStore`), and the last good compile
-  while the text does not parse; the expression is left out where the text has been edited since.
-- **Client.** A webview view in `extension/`, in a view container of its own in VS Code's secondary side bar
-  ([#921](https://github.com/nanyx-lang/nanyx/issues/921); `contributes.viewsContainers.secondarySidebar` needs
-  VS Code 1.106), revealed by *Nanyx: Show info view* (Ctrl+Shift+Enter, as in Lean). It sends the request when the
-  selection or the document changes, debounced, while the view is visible, and drops an answer a later request has
-  overtaken. It can pin a position, so the view keeps showing that position while you edit elsewhere; the pinned
-  position does not move with edits above it yet. It draws each scope as a collapsible section under its heading,
-  with a rule between scopes, and remembers which are open by kind and heading. It shows each doc comment under its
-  item, cut to its first paragraph until clicked, except that of what is at the cursor, which it shows in full. Plain
-  TypeScript and HTML; no framework.
-- **Other editors.** The request is plain LSP, so another client can show the same thing. A text rendering in an
-  output buffer would do for Neovim.
-
-Lean's infoview also lets you hover each part of a type shown in the panel. That needs the server to send types as
-trees rather than strings. That is a later step; see [Open questions](#open-questions).
-
-# 2. Doc comments
-
-Settled in [#719](https://github.com/nanyx-lang/nanyx/issues/719) and done: a doc comment starts with `--|` and goes
-on for the lines indented further than its first (see [Basics](../getting-started/basics#doc-comments)). The lexer
-takes the continuation lines as part of the comment, and `DocComments.attach` (in `Nanyx.Parser/DocComments.fs`)
-attaches each doc comment, by position, to the declaration that starts the next line with code: a def, a type or
-context, a field or context member (by the span `DeclaredNames` has for it), a tag, or the module. The parser notes
-where each such construct starts, from its first keyword (`export def`, `| #tag`), and what it declares
-(`noteDocumentable`), so no list of keywords is kept for this. The language
-server shows a symbol's doc comment on hover and in completion items, read with `Documentation.Reader.ForSymbol`, which
-parses the file the symbol is declared in (the document, a file beside it, or a standard-library module) for its doc
-comments and keeps them by file. It turns each `` [`name`] `` into a link to the name's definition, looked up among
-the names in scope where the comment is, then the top-level names of the comment's own file. A module's doc comment
-is shown on hover over the module's name, in completion of import paths, under the info view's module heading and
-with an import in its list of the module's definitions and imports (`Documentation.Reader.ForModule`, [#937](https://github.com/nanyx-lang/nanyx/issues/937)).
-
-The standard library's pages on the docs site are generated from its doc comments by `nanyx stdlib-docs`
-([#722](https://github.com/nanyx-lang/nanyx/issues/722)).
-
-Still open:
-
-- Recording docs by symbol in `TypedModule`, so the info view and the browser read them as they read types, rather
-  than parsing the declaring file again.
-- A tag has no symbol, so its doc comment is attached but not shown anywhere yet; nor is a record field's on a
-  member completion.
-
-# 3. Library browser and search by type
-
-## The browser
-
-A tree view in VS Code's sidebar (*Nanyx library*):
-
-- **Modules.** Each standard-library module, with its summary. The prelude comes first, since its names need no
-  import.
-- **Exports.** Under each module, its exports grouped by kind: functions, types and contexts, and attached
-  definitions by the type they attach to (`string.trim` under `string`).
-- **Each export** shows its type, its doc comment, and the import it needs (`import nanyx/text`). Opening it goes
-  to its source, through `StandardLibrarySource`, as go-to-definition does. A button inserts the import into the
-  active document, using the edit the missing-import quick fix already makes.
-
-Go-to-definition on a standard-library type already works. The browser adds a way in for when there is no use of
-the name to click on yet.
-
-The server provides two requests: `nanyx/libraryModules` (each module's import path and doc) and `nanyx/libraryModule`
-(one module's exports, each with kind, name, signature, doc, import and location). The library is checked once per
-server process, so these are cheap. The packages a workspace depends on could be listed the same way later.
-
-## Search by type
-
-Done ([#714](https://github.com/nanyx-lang/nanyx/issues/714)): `NyxCompiler.LibrarySearch`, beside
-`LibraryCatalog`, reads a query and matches it against the library.
-
-A query is a name, a type, or both, with a colon between them: `trim`, `bool -> string`, `trim: string -> string`.
-Text that is not a name is a type. A type is parsed with the parser's own type grammar (`Api.parseTypeSignature`), so
-the query is written as a signature is: `bool -> string`, `list(a), (a -> bool) -> list(a)`, `string -> list(string)`.
-It is read as an annotation is (`TypeResolution.typeExprToTy`), with no type definitions in scope, so a named type is
-matched by its name and the arguments it is written with: `a -> MRef(a)` finds `MRef.new`. A type in a scoped
-context's scope is matched without its scope, which a query doesn't write
-([#1566](https://github.com/nanyx-lang/nanyx/issues/1566)). A name finds the names that contain it, ignoring case: the one it names, or whose last part it
-is, first, then those that start with it.
-
-**What matches.** An export matches if its type can be made equal to the query's:
-
-- **Instantiation.** The export's type variables can be instantiated. `a -> string` matches `bool -> string`, with
-  `a = bool`.
-- **Variables in the query.** These stand for any type, but consistently: `a -> a` does not match
-  `int -> string`.
-- **Order of inputs.** The inputs of a function that takes several can come in any order, since the query writer
-  rarely knows which comes first. `(a -> bool), list(a) -> list(a)` finds `list.filter`.
-- **Contexts.** An export's contexts must have an instance at the types it is instantiated at, or the match is
-  shown with the contexts it still needs. `bool -> string` finds `ToString(a).toString`, which
-  `ToString(bool)`, the compiler's own instance, satisfies. An instance is the compiler's own `ToString`, or one built
-  from a definition attached to the type for each of the context's members (`int.compare`); one derived from a type's
-  parts (a list's `ToString`) is not looked for yet, so such a match is shown as still needing it. A context of no
-  parameters, such as `Console`, is supplied where the function is called, and is not matched. Each member of a
-  context the library exports is searched as `Context(a).member`.
-- **Attached definitions.** These are found by the type they attach to, as the first input, which is how their
-  types have it.
-- **Values of any type**, such as `Num`'s `zero`, whose type is a variable alone, would match every query, and are
-  left out of a search by type.
-
-**Ranking.** Best first:
-
-1. a type equal to the query, up to the names of its variables
-2. a more general type instantiated
-3. inputs reordered
-4. contexts needed
-
-Within each rank, a match that makes fewer of the query's variables a type comes first (`abs: a -> a` before
-`ln: float -> float` for `a -> a`), then the better match of the name, then shorter names. Names that start with
-`__` (intrinsics and desugaring targets) are never shown.
-
-**Where it runs.** The index is built once, from the same export list as the browser. Each query is a unification
-against every export, which is fast for a library this size. The query's variables are treated as fresh variables,
-and an export's as instantiated ones. For a library much bigger than the standard library, the index can be keyed
-by the type's shape (its result's head, its number of inputs) first.
-
-**Where to find it.**
-
-- the browser's search button, which opens the quick pick below: a tree view has no search box of its own
-- a quick-pick command, *Nanyx: Search library by type*, which searches as you type, through the server's
-  `nanyx/librarySearch` request, and inserts the chosen name and its import (`nanyx/addImport`)
-- `nanyx search "bool -> string"` on the command line, for the terminal and for agents, with the same results as
-  text
-
-Completion could later use the same ranking: offer the functions whose type fits the hole the cursor is in.
+The info view (`NyxCompiler.InfoView`, `NyxCompiler.ContextFlow`, the server's `nanyx/infoView` request and
+`extension/src/infoView.ts`) is modelled on the infoview in Lean 4's VS Code extension. The library browser and search
+by type (`NyxCompiler.LibraryCatalog`, `NyxCompiler.LibrarySearch`, the `nanyx/libraryModules`, `nanyx/libraryModule`,
+`nanyx/librarySearch` and `nanyx/addImport` requests) read the exports of the checked standard library.
 
 # Still open
 
-Every item of the plan is built: doc comments ([#711](https://github.com/nanyx-lang/nanyx/issues/711)), the library
-requests ([#712](https://github.com/nanyx-lang/nanyx/issues/712)) and browser
-([#713](https://github.com/nanyx-lang/nanyx/issues/713)), search by type
-([#714](https://github.com/nanyx-lang/nanyx/issues/714)), the info view
-([#715](https://github.com/nanyx-lang/nanyx/issues/715)), context providers
-([#716](https://github.com/nanyx-lang/nanyx/issues/716)), the context flow
-([#717](https://github.com/nanyx-lang/nanyx/issues/717)) and scopes
-([#1066](https://github.com/nanyx-lang/nanyx/issues/1066)). What is left:
-
-- Recording doc comments by symbol, and showing a tag's and a record field's (see [Doc comments](#2-doc-comments)).
-- A `memory` block is part of the scope it is in. Now that a block can name its `Memory`,
+- **Doc comments by symbol.** `Documentation.Reader` parses the file a symbol is declared in for its doc comments.
+  Recording them by symbol in `TypedModule` would let the info view and the browser read them as they read types.
+- **A tag's and a record field's doc comment.** A tag has no symbol, so its doc comment is attached but not shown
+  anywhere yet; nor is a record field's on a member completion.
+- **A `memory` block** is part of the scope it is in. Now that a block can name its `Memory`,
   `memory { context m -> … }` ([#1446](https://github.com/nanyx-lang/nanyx/issues/1446)), it may become a scope of
-  its own, since it is where a scoped context lives ([#1035](https://github.com/nanyx-lang/nanyx/issues/1035)).
-- A pinned position does not move with edits above it.
-- Search by type does not look for a context instance derived from a type's parts, such as a list's `ToString`, so
-  such a match is shown as still needing it.
+  its own in the info view, since it is where a scoped context lives.
+- **A pinned position** does not move with edits above it.
+- **Derived instances in search.** Search by type does not look for a context instance derived from a type's parts,
+  such as a list's `ToString`, so such a match is shown as still needing it.
+- **Other packages.** The browser and search list only the standard library. The packages a workspace depends on
+  could be listed the same way.
+- **Completion by type.** Completion could use the same ranking as search: offer the functions whose type fits the
+  hole the cursor is in.
+- **Bigger libraries.** Each query is a unification against every export, which is fast for a library the size of
+  the standard library. For a much bigger one, the index can be keyed by the type's shape (its result's head, its
+  number of inputs) first.
+
 # Open questions
 
 - Should the info view show types as trees, so each part can be hovered and followed to its definition, as Lean's
@@ -319,3 +45,5 @@ requests ([#712](https://github.com/nanyx-lang/nanyx/issues/712)) and browser
   readable without an editor?
 - Should user widgets come later? In Lean, a library can ship its own UI into the infoview. That is a long way off
   here, but `nanyx/infoView` returning sections of items leaves room for it.
+- Should other editors get the info view? The request is plain LSP, so another client can show the same thing; a
+  text rendering in an output buffer would do for Neovim.
