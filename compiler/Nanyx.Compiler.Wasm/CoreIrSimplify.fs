@@ -338,8 +338,19 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
         let mutable branchedLast = None
         // The atom each variable bound in this chain to one is given.
         let aliases = Dictionary<int, Atom>()
+        // The variable each variable this chain gave another's value to is read as, put in each link as it is reached
+        // rather than in the whole rest of the chain at once, which made a function of n such links take n² time.
+        let renamed = Dictionary<int, Var>()
+        let rename (e: Expr) =
+            if renamed.Count = 0 then e
+            else mapVars (fun v -> match renamed.TryGetValue v.Id with | true, source -> source | _ -> v) id e
+        // A link with its own parts renamed, not what follows it.
+        let renameLink (link: Expr) =
+            match Chain.next link with
+            | Some following when renamed.Count > 0 -> Chain.relink (rename (Chain.relink link (Expr.make (Atom AUnit) IrUnit))) following
+            | _ -> link
         while not remaining.IsEmpty do
-            let link = remaining.Head
+            let link = renameLink remaining.Head
             remaining <- remaining.Tail
             match link.Kind, remaining with
             // A temporary given at once to a variable is that variable's value itself.
@@ -364,13 +375,11 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
                 && not (source.Kind = Param && CoreIrDrop.isHeapType source.Type)
                 ->
                 changed <- true
-                let rest = Chain.rebuild Chain.relink remaining last |> mapVars (fun v -> if v.Id = var.Id then source else v) id
-                let links, chainEnd = Chain.split rest
-                remaining <- links
-                last <- chainEnd
+                renamed.[var.Id] <- source
             | Let(var, value, _), _ ->
                 let value = this.Value facts value
-                match this.Branched facts var value remaining last, last.Kind with
+                let following, chainEnd = remaining, last
+                match this.Branched facts var value (fun () -> Chain.rebuild Chain.relink following chainEnd |> rename), last.Kind with
                 | Some branched, _ ->
                     remaining <- []
                     branchedLast <- Some branched
@@ -390,6 +399,7 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
                 let value = this.Value facts value
                 rebuilt.Add(fun next -> doValue value next)
             | _ -> rebuilt.Add(fun next -> Chain.relink link next)
+        let last = if branchedLast.IsSome then last else rename last
         let last =
             match branchedLast, last.Kind with
             | Some branched, _ -> branched
@@ -407,7 +417,7 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
     /// that gives a tag in some branch and `rest` matches on `var`: in each copy, which tag `var` is is known. It is
     /// done only when the copies, simplified, grow the code by no more than `copyLimit` nodes, as when all but one of
     /// them come to little.
-    member this.Branched (facts: Map<int, Fact>) (var: Var) (value: Expr) (links: Expr list) (last: Expr) : Expr option =
+    member this.Branched (facts: Map<int, Fact>) (var: Var) (value: Expr) (rest: unit -> Expr) : Expr option =
         let rec givesTag (branch: Expr) =
             match (snd (Chain.split branch)).Kind with
             | MakeTag _
@@ -422,7 +432,7 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
             | _ -> []
         if trying || var.Kind = Temp || assigned.Contains var.Id || not (List.exists givesTag branches) then None
         else
-            let rest = Chain.rebuild Chain.relink links last
+            let rest = rest ()
             if not (matchesOn var rest) then None
             else
                 let wasChanged = changed
