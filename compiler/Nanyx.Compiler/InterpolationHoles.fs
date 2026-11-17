@@ -41,7 +41,7 @@ module InterpolationHoles =
 
     /// Whether `ty`, resolved as far as it can be, has the compiler's own `ToString`. A tag union open to more tags has
     /// it when the tags it names do; the backend prints the ones it holds at each type it is used at. A value that
-    /// failed to check has it, so that the hole is not an error too.
+    /// failed to check, or one made of such a value (a list of them), has it, so that the hole is not an error too.
     let hasBuiltInInstance (ty: Ty) =
         let isPlainTag (item: Ty) =
             match Unifier.unalias item with
@@ -49,7 +49,8 @@ module InterpolationHoles =
             | TyVar _ -> true
             | _ -> false
         match Unifier.unalias ty with
-        | TyPrimitive("int" | "float" | "bool" | "string" | "?error") -> true
+        | errorPart when Unifier.holdsError errorPart -> true
+        | TyPrimitive("int" | "float" | "bool" | "string") -> true
         | SizedNumberType _ -> true
         | TyTag(_, None) -> true
         | TyUnion items -> items |> List.forall isPlainTag
