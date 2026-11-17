@@ -3,6 +3,7 @@ module TranspilerWasmTestHelpers
 open System
 open System.IO
 open System.Diagnostics
+open System.Text.RegularExpressions
 open NyxCompiler
 open Parser.Program
 open Transpiler.Wasm.CodeGen
@@ -329,10 +330,12 @@ let runE2E testName =
 
 /// `source`, saved as a script and run (see `runScriptWithOptions`).
 let runSourceWithOptions (checkMemory: bool) (inlineCalls: bool) (standardInput: string) (source: string) : RunOutcome =
-    let inputPath = Path.Combine(Path.GetTempPath(), $"nanyx-run-{Guid.NewGuid():N}.nyx")
+    // Named `main.nyx`, in a directory of its own, so that what `dbg` prints names it so.
+    let directory = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"nanyx-run-{Guid.NewGuid():N}")).FullName
+    let inputPath = Path.Combine(directory, "main.nyx")
     File.WriteAllText(inputPath, source.ReplaceLineEndings "\n")
     try runScriptWithOptions checkMemory inlineCalls standardInput inputPath
-    finally File.Delete inputPath
+    finally Directory.Delete(directory, true)
 
 let runSourceWith (checkMemory: bool) (standardInput: string) (source: string) : RunOutcome =
     runSourceWithOptions checkMemory true standardInput source
@@ -357,6 +360,11 @@ let assertRan (expectedOutput: string) (outcome: RunOutcome) =
     Assert.True((outcome.ExitCode = 0), $"Expected exit code 0, got {outcome.ExitCode}. stderr:\n{outcome.StandardError}")
     Assert.Equal(expectedOutput, outcome.StandardOutput)
     Assert.Equal("", outcome.StandardError)
+
+/// `outcome` with the location each `dbg` line starts with, `[main.nyx:12] `, left out: for a test that prints values
+/// with `dbg` and is about something else.
+let withoutDbgLocations (outcome: RunOutcome) =
+    { outcome with StandardOutput = Regex.Replace(outcome.StandardOutput, @"^\[main\.nyx:\d+\] ", "", RegexOptions.Multiline) }
 
 /// The options the in-process tests compile with: memory checks on, so that the counters are there to read.
 let checkedOptions = { WasmOptions.Default with CheckMemory = true }

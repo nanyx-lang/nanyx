@@ -63,9 +63,14 @@ type WasmOptions =
       CheckMemory: bool
       /// Inline calls in the core IR (see `CoreIrInline`). Off only for working on the compiler (`--no-inline`): it
       /// tells whether a misbehaving program is the inliner's doing.
-      Inline: bool }
+      Inline: bool
+      /// A release build (`--release`): `dbg(x)` compiles to `x`.
+      Release: bool
+      /// The root of the package the module is in, which a debug build's `dbg` names its file from (see
+      /// `CoreIrLowerInput.DbgBuild`); none for a script, whose `dbg` names its file alone.
+      SourceRoot: string option }
 
-    static member Default = { CheckMemory = false; Inline = true }
+    static member Default = { CheckMemory = false; Inline = true; Release = false; SourceRoot = None }
 
 /// The names a module compiled with `CheckMemory` exports.
 module CheckedExports =
@@ -722,7 +727,7 @@ let private nominalTypeNames (typeDefs: Map<string, TypeDefInfo>) (exprTypes: Ma
     let named = typeDefs |> Map.filter (fun _ info -> info.IsNominal) |> Map.keys |> Set.ofSeq
     exprTypes |> Map.values |> Seq.distinct |> Seq.fold collect named
 
-let private lowerTypedModule (typed: TypedModule) : LoweredModule =
+let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : LoweredModule =
     let contextInstances = typed.ContextInstances
     let checkedTypes = typed.ExprTypes
     let allExprTypes = typed.InlinedExprTypes |> Map.fold (fun acc id ty -> acc |> Map.add id ty) checkedTypes
@@ -888,7 +893,8 @@ let private lowerTypedModule (typed: TypedModule) : LoweredModule =
               NamedTypes =
                 typed.TypeDefs
                 |> Map.filter (fun _ info -> not info.IsContext)
-                |> Map.map (fun _ info -> TyNominal(TypeDefInfo.nominalId info, info.Parameters |> List.map TyVar, info.Underlying, info.IsPrivate)) }
+                |> Map.map (fun _ info -> TyNominal(TypeDefInfo.nominalId info, info.Parameters |> List.map TyVar, info.Underlying, info.IsPrivate))
+              Dbg = if options.Release then CoreIrLowerInput.Stripped else CoreIrLowerInput.PrintedFrom options.SourceRoot }
         CoreIrLowerModule.lowerModule input (emitFromCoreIr functionContextRequirements probeContext Set.empty >> ignore)
 
     // The first thing that cannot be compiled is reported where it is written.
@@ -1022,7 +1028,7 @@ let private contextPrelude (functionTable: FunctionTable) =
 
 /// `typed` as WebAssembly text compiled with `options`, and the functions it was compiled into.
 let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) : string * BackendReport =
-    let lowered = lowerTypedModule typed
+    let lowered = lowerTypedModule options typed
     let defs = lowered.Definitions
     let functionContextRequirements = lowered.ContextRequirements
     let lowered = lowered.Lowered
@@ -1222,7 +1228,6 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               memoryDirective
               """  (export "memory" (memory 0))"""
               if facts.UsesDbgHelpers then
-                  $"""  (data (i32.const {dbgDataBaseOffset}) "dbg: ")"""
                   $"""  (data (i32.const {dbgStrNewlineOffset}) "\0a")"""
                   yield! dbgFunctions ]
             |> String.concat "\n"

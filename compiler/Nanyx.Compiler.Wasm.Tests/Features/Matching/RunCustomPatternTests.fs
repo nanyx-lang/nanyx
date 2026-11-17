@@ -108,7 +108,7 @@ def describe = { n: int ->
 println(describe(6))
 """
     |> printsAs """
-dbg: 7
+[main.nyx:2] 7
 odd
 """
 
@@ -311,7 +311,7 @@ def fizz = { (n: int) ->
 println(fizz(4))
 """
     |> printsAs """
-dbg: 1
+[main.nyx:3] 1
 4
 """
 

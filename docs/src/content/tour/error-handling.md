@@ -250,6 +250,8 @@ Some errors can't be deferred, and with any of them nothing runs: a syntax error
 | `nanyx build --release`, `nanyx wasm --release` | Reports them and writes nothing |
 | `nanyx check` | Reports them and runs nothing |
 
+A release build also leaves out every [`dbg`](../stdlib/console#dbg), which prints nothing there.
+
 Deferred errors don't change the exit status. A debug run exits with the program's own status: 0 if it ends normally without reaching an error, and 1 if it reaches one. A debug build that writes a program exits with 0. A script or CI job that must not pass a program with errors uses `nanyx check` or `--release`, which exit with 1 on any error.
 
 > **Philosophy:** By making errors explicit in the type system, Nanyx ensures you always handle failure cases. No more unexpected crashes!
