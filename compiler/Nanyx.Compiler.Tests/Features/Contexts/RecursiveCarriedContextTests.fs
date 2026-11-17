@@ -46,11 +46,11 @@ def append: ([c] Stream(a)), ([d] Stream(a)) -> [c, d] Stream(a) = { s, t ->
     Assert.Equal("([c] Stream(a)), ([d] Stream(a)) -> [c, d] Stream(a)", Unifier.tyToDisplayString Ascii typed.Types.["append"])
 
 [<Fact>]
-let ``A context variable of a signature stays when its function is passed on to seq.concatMap`` () =
+let ``A context variable of a signature stays when its function is passed on to seq.flatMap`` () =
     let source =
         """
 def flat: [c] list(a), ([c] a -> [c] seq(b)) -> list(b) = { xs, f ->
-  xs \list.toSeq \seq.concatMap(f) \seq.toList
+  xs \list.toSeq \seq.flatMap(f) \seq.toList
 }
 
 def loud: [Console] () -> list(int) = {
