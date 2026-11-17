@@ -76,6 +76,22 @@ public sealed class CodeActionTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task The_refactor_menu_lists_an_unknown_names_import_as_a_refactoring()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-import-refactoring");
+        const string text = "def s = max(1, 2)\n";
+
+        Open(uri, text);
+        Assert.Single((await NextPublished(uri)).Diagnostics!);
+
+        var import = Assert.Single(await CodeActionsIn(uri, new Range(0, 10, 0, 10), [CodeActionKind.Refactor]), action => action.Kind == CodeActionKind.RefactorRewrite);
+        Assert.Equal("Add `import nanyx/math`", import.Title);
+        Assert.Equal(
+            "import nanyx/math\n\ndef s = max(1, 2)\n",
+            Applied(text, Assert.Single(import.Edit!.Changes![uri])));
+    }
+
+    [Fact]
     public async Task A_look_alike_character_has_a_quick_fix_that_writes_what_it_looks_like()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-look-alike");
