@@ -31,9 +31,10 @@ Wider deferral, if it is wanted:
 - **Syntax errors**, with parser recovery ([compilation](./compilation#plan)): a top-level definition that does not
   parse. The [principles](../foundations/principles) say syntax errors stop a build.
 - **Conflicts among constraints** bind to the error type only the variables of a failed constraint's expected side
-  that nothing else fixes, solved after everything else (`Solving.solveSettingAside`): a failed argument leaves
-  unknown what it would have decided of the call's result. The expressions where a conflict was found are otherwise
-  typed by their other constraints, and the deferral pass replaces the outermost expression at the conflict's span.
+  that nothing else fixes, solved after everything else once the module is checked (`Solving.solveLeavingUnknown`):
+  a failed argument leaves unknown what it would have decided of the call's result. The expressions where a conflict
+  was found are otherwise typed by their other constraints, and the deferral pass replaces the outermost expression at
+  the conflict's span.
 
 # Tests
 
