@@ -95,10 +95,10 @@ def MStack.isEmpty: [Memory] MStack(a) -> bool
 
 Whether `stack` has nothing on it.
 
-## `MStack.count`
+## `MStack.length`
 
 ```nanyx fragment
-def MStack.count: [Memory] MStack(a) -> int
+def MStack.length: [Memory] MStack(a) -> int
 ```
 
 How many values are on `stack`.

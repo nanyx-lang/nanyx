@@ -56,7 +56,7 @@ export def MStack.isEmpty: [Memory] MStack(a) -> bool = { MStack(items) ->
 }
 
 --| How many values are on `stack`.
-export def MStack.count: [Memory] MStack(a) -> int = { MStack(items) ->
+export def MStack.length: [Memory] MStack(a) -> int = { MStack(items) ->
   list.length(MRef.get(items))
 }
 
