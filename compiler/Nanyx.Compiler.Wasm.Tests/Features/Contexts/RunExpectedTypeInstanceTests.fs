@@ -27,7 +27,7 @@ def main = {
 [<Fact>]
 let ``Run - a call finds an instance of FromString at the type a def writes`` () =
     let source =
-        """def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { texts -> texts \List.map({ t -> FromString(a, e).fromString(t) }) }
+        """def readAll: [FromString(a)] list(string) -> list(#some(a) | failure) = { texts -> texts \List.map({ t -> FromString(a).fromString(t) }) }
 def ints: list(#some(int) | #invalidInt) = readAll(["1", "x"])
 
 @entry

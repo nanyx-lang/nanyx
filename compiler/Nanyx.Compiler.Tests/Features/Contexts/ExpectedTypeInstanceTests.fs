@@ -25,7 +25,7 @@ let ``A call finds its instance at the type its result is expected to have`` (de
 [<Fact>]
 let ``A call finds an instance of a context of two types at the type a def writes`` () =
     let source =
-        """def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { texts -> texts \List.map({ t -> FromString(a, e).fromString(t) }) }
+        """def readAll: [FromString(a)] list(string) -> list(#some(a) | failure) = { texts -> texts \List.map({ t -> FromString(a).fromString(t) }) }
 def ints: list(#some(int) | #invalidInt) = readAll(["1", "x"])
 """
     let result = Compiler.compile (normalized source)

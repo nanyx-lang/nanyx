@@ -217,7 +217,7 @@ signature is `[Iter(c, elem)]` over a type variable of the signature named `elem
 context in scope has one of that name), `Iter(c, elem = string)` is `Iter(c, string)`, and a context written as a type,
 as a `use Iter(Bag)(...)` writes it, is given a `_` for each. The type checker then needs little that is new: an
 instance is chosen by the arguments but its associated types, and fixes those (`ContextInstances.nearestOf`); one built
-from attached definitions fixes them by its members' types, as it settled `FromString(int, e)`'s failure before, or by
+from attached definitions fixes them by its members' types, as `int.fromString` fixes the `failure` of `FromString(int)`, or by
 an attached alias, `type Bag.elem = int`, and leaving one unfixed or fixing it two ways is an error.
 
 A function's type need not write its associated types, as `elem` in `countAll: [Iter(c)] c -> int`, though its body has

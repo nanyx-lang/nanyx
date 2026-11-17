@@ -153,8 +153,8 @@ let internal memberOfInstanceInScope (env: TypeEnv) (state: InferState) (memberN
 
 /// Whether an instance of a context applied to `argTys` can be built from attached definitions: whether the type it
 /// is for, its first argument, has a name definitions can be attached to (not a variable, or a record written out).
-/// The others may still be open: the definitions' types settle them, as `int.fromString` makes a
-/// `FromString(int, e)` a `FromString(int, #invalidInt)`. The `Default` of `#some(a) | #none` is built too, from the
+/// The others may still be open: the definitions' types settle them, as `int.fromString` makes the associated
+/// `failure` of a `FromString(int)` the tag `#invalidInt`. The `Default` of `#some(a) | #none` is built too, from the
 /// prelude's definition (see `NoneDefault`).
 let private canSynthesize (ctxName: Identifier) (argTys: Ty list) =
     match argTys with
@@ -955,8 +955,8 @@ let internal recordInstanceProviders (state: InferState) : InferState =
 
 /// Builds, before the def `name` is generalised, the instances of contexts of more than one parameter that its calls
 /// left to be found and that are now known to be for a type with a name, from that type's attached definitions, as a
-/// call does. Building one can settle the context's other arguments, as a `FromString(int, e)` built from
-/// `int.fromString` makes `e` the `#invalidInt` it gives back, and the def's type must have them settled, not be
+/// call does. Building one can settle the context's other arguments, as a `FromString(int)` built from
+/// `int.fromString` makes its `failure` the `#invalidInt` it gives back, and the def's type must have them settled, not be
 /// generic in them. The others are left to `resolvePendingInstances`.
 let internal synthesizeSettledInstances (env: TypeEnv) (state: InferState) (name: Identifier) : Result<InferState, Diagnostic list> =
     let settled, others =

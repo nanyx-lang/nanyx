@@ -809,7 +809,7 @@ If any member is missing or has an incompatible type, synthesis fails and the co
 
 An attached definition may require contexts of its own. A generic type's `==`, `hash` or `toString` usually does, since it reads the values the type holds: `def Box.toString: [ToString(a)] Box(a) -> string` is the `ToString(Box(int))` wherever one is needed, in a string hole, inside a list, or passed to a function that requires it, and is passed the `ToString(int)` it requires, found as a call to it would find it.
 
-A context with more than one parameter is synthesized from the definitions attached to its first parameter's type. Its other parameters need not be known at the call: the definitions' types settle them. The prelude's [`FromString(a, e)`](../stdlib/prelude-contexts#reading-from-text) is built for `int` from `int.fromString`, whose type makes `e` the tag `#invalidInt`.
+A context with more than one parameter is synthesized from the definitions attached to its first parameter's type. Its other parameters need not be known at the call, and nor need its [associated types](#associated-types): the definitions' types settle them. The prelude's [`FromString(a)`](../stdlib/prelude-contexts#reading-from-text) is built for `int` from `int.fromString`, whose type makes its `failure` the tag `#invalidInt`.
 
 Each call looks for its instance in this order, and takes the first it finds:
 

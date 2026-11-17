@@ -65,7 +65,7 @@ let ``Run - F32 reads what float reads, to the nearest F32`` () =
 let ``Run - the sized types read through FromString`` () =
     let source =
         """
-def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { texts ->
+def readAll: [FromString(a)] list(string) -> list(#some(a) | failure) = { texts ->
   list.map(texts, { text -> fromString(text) })
 }
 
