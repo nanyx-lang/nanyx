@@ -15,7 +15,7 @@ exception BackendFailure of Diagnostic
 /// What a broken invariant of the backend (see `CoreIr.InternalError`) says to the user: the one place it gets its
 /// prefix, and asks for a bug report.
 let private internalErrorMessage (reason: string) =
-    $"Internal error: {reason}. This is a bug in the compiler: please report it at https://github.com/nanyx-lang/nanyx/issues"
+    $"Internal error in the compiler ({reason}): report it at https://github.com/nanyx-lang/nanyx/issues"
 
 /// A broken invariant of the backend, at `span` if it is known.
 let private internalErrorDiagnostic (reason: string) (span: SourceSpan option) =
@@ -1058,7 +1058,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             fun name ->
                 match tagIdMap |> Map.tryFind name with
                 | Some id -> id
-                | None -> CoreIr.internalError $"missing tag discriminant for #{name}"
+                | None -> CoreIr.internalError $"missing tag discriminant for `#{name}`"
           StringOffset =
             fun value ->
                 match stringLiteralMap |> Map.tryFind value with
@@ -1150,7 +1150,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             match runtimeImports |> List.tryFind (fun runtime -> runtime.Module = declared.Module && runtime.Name = declared.Name) with
             | Some runtime when runtime = declared -> false
             | Some runtime ->
-                raise (BackendFailure (Diagnostics.general DiagnosticCodes.ConflictingExterns $"A foreign function imports \"{declared.Name}\" from \"{declared.Module}\" with another type than the runtime's: declare it as {CoreIrEmit.importDeclaration runtime |> fun text -> text.Trim()}"))
+                raise (BackendFailure (Diagnostics.general DiagnosticCodes.ConflictingExterns $"A foreign function imports \"{declared.Name}\" from \"{declared.Module}\" with another type than the runtime's: declare it as `{CoreIrEmit.importDeclaration runtime |> fun text -> text.Trim()}`"))
             | None -> true)
         |> List.map CoreIrEmit.importDeclaration
         |> String.concat "\n"

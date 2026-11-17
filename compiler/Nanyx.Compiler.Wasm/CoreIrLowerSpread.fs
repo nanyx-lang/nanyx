@@ -15,7 +15,7 @@ let record (newLocal: IrType -> Var) (lower: Expression -> (Expr -> Expr) -> Exp
     let fields =
         match ty with
         | IrRecord fields -> fields
-        | other -> cannot $"a record spread of type {IrType.show other}"
+        | other -> cannot $"a record spread of type '{IrType.show other}'"
     // Where each field comes from: the last part that has it, of those held in `held`, the last first.
     let source (held: (SpreadPart * Var) list) (name: string) =
         held

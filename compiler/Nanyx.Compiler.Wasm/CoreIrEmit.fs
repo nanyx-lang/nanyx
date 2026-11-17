@@ -93,13 +93,13 @@ let private integerType (ty: IrType) =
     match ty with
     | IrSized integer -> Some integer
     | IrInt -> None
-    | other -> internalError $"a conversion of {IrType.show other}, which is not an integer"
+    | other -> internalError $"a conversion of '{IrType.show other}', which is not an integer"
 
 /// The type of the elements of an array of `ty`.
 let private arrayElement (ty: IrType) =
     match ty with
     | IrArray element -> element
-    | other -> internalError $"an array intrinsic on {IrType.show other}, which is not an array"
+    | other -> internalError $"an array intrinsic on '{IrType.show other}', which is not an array"
 
 /// The operators that give a number, where the others on numbers give a bool.
 let private arithmetic = set [ "+"; "-"; "*"; "/"; "%" ]
@@ -410,7 +410,7 @@ type private FunctionEmitter(context: EmitContext) =
         let recordFields (record: IrType) =
             match IrType.unfold record with
             | IrRecord fields -> fields
-            | other -> internalError $"a field of {IrType.show other}, which is not a record"
+            | other -> internalError $"a field of '{IrType.show other}', which is not a record"
         match expr.Kind with
         | Atom atom -> atoms [ atom ]
         | Prim(Binary op, operands) when operands |> List.exists (atomType >> (=) IrInt) ->
@@ -428,7 +428,7 @@ type private FunctionEmitter(context: EmitContext) =
                 | _ ->
                     match wasmIntInstruction op with
                     | Some instruction -> instruction
-                    | None -> internalError $"no instruction for the operator {op} on ints"
+                    | None -> internalError $"no instruction for the operator `{op}` on ints"
             // Arithmetic gives an int and a comparison a bool, taken as the type the expression has.
             let given = if arithmetic.Contains op then IrInt else IrBool
             join "\n    " [ operandCode; instruction; conversion given expr.Type ]
@@ -437,7 +437,7 @@ type private FunctionEmitter(context: EmitContext) =
         | Prim(Binary op, operands) ->
             match wasmBinaryInstruction op with
             | Some instruction -> join "\n    " [ atoms operands; instruction ]
-            | None -> internalError $"no instruction for the operator {op}"
+            | None -> internalError $"no instruction for the operator `{op}`"
         | Prim(Not, operands) -> join "\n    " [ atoms operands; "i32.eqz" ]
         | Prim(FloatBinary op, [ left; right ]) ->
             // Each operand is unboxed; an arithmetic result is boxed, and a comparison's is the i32 it leaves. An `F32` is
@@ -456,8 +456,8 @@ type private FunctionEmitter(context: EmitContext) =
                 else
                     let box = if isF32 then Helpers.f32Box else Helpers.floatBox
                     $"{compute}\n    call ${helper box}"
-            | None -> internalError $"no instruction for the operator {op} on floats"
-        | Prim(FloatBinary op, _) -> internalError $"the operator {op} on floats with other than two operands"
+            | None -> internalError $"no instruction for the operator `{op}` on floats"
+        | Prim(FloatBinary op, _) -> internalError $"the operator `{op}` on floats with other than two operands"
         | BoxFloat value when expr.Type = IrF32 -> $"f32.const {wasmFloatConst value}\n    call ${helper Helpers.f32Box}"
         | BoxFloat value -> $"f64.const {wasmFloatConst value}\n    call ${helper Helpers.floatBox}"
         | Crash messages ->
@@ -519,7 +519,7 @@ type private FunctionEmitter(context: EmitContext) =
             let element =
                 match expr.Type with
                 | IrList element -> element
-                | other -> internalError $"a list literal of type {IrType.show other}"
+                | other -> internalError $"a list literal of type '{IrType.show other}'"
             join "\n    " [
                 atoms items
                 "i32.const 0"
@@ -549,7 +549,7 @@ type private FunctionEmitter(context: EmitContext) =
                 match expr.Type with
                 | IrInt -> [ $"i64.{operation}" ]
                 | IrSized integer -> SizedIntegerCode.wrapping integer operation
-                | other -> internalError $"{name} at {IrType.show other}, which is not an integer"
+                | other -> internalError $"'{name}' at '{IrType.show other}', which is not an integer"
             join "\n    " [ atoms args; yield! code ]
         | CallRuntime(name, args, _) when bitwiseOperations.ContainsKey name -> join "\n    " [ atoms args; yield! bitwiseOperations.[name] ]
         | CallRuntime(name, [ arg ], _) when name = Intrinsics.intCast ->
@@ -569,7 +569,7 @@ type private FunctionEmitter(context: EmitContext) =
             match expr.Type with
             | IrSized integer -> join "\n    " [ atoms [ arg ]; $"call ${helper (SizedIntegerCode.fromIntHelper integer)}" ]
             | IrF32 -> join "\n    " [ atoms [ arg ]; "f32.convert_i64_s"; $"call ${helper Helpers.f32Box}" ]
-            | other -> internalError $"{Intrinsics.fromInt} at {IrType.show other}, which is not a sized integer"
+            | other -> internalError $"'{Intrinsics.fromInt}' at '{IrType.show other}', which is not a sized integer"
         | CallRuntime(name, args, _) when memoryAccesses.ContainsKey name ->
             let instruction, writes = memoryAccesses.[name]
             join "\n    " [ atoms args; touching instruction; (if writes then "i32.const 0" else "") ]
@@ -667,7 +667,7 @@ type private FunctionEmitter(context: EmitContext) =
             let offset =
                 match listTy with
                 | IrList element -> CoreIrLayout.tailOffset element
-                | other -> internalError $"{name} on {IrType.show other}, which is not a list"
+                | other -> internalError $"'{name}' on '{IrType.show other}', which is not a list"
             let at = freshLocal "__cell" "i32"
             let held = freshLocal "__tail" "i32"
             join "\n    " [
@@ -684,8 +684,8 @@ type private FunctionEmitter(context: EmitContext) =
             let ty = atomType value
             match IrType.unfold ty with
             | IrList _
-            | IrTags _ -> internalError $"{name} on {IrType.show ty}, which is not always on the heap"
-            | _ when not (CoreIrDrop.isHeapType ty) -> internalError $"{name} on {IrType.show ty}, which is not on the heap"
+            | IrTags _ -> internalError $"'{name}' on '{IrType.show ty}', which is not always on the heap"
+            | _ when not (CoreIrDrop.isHeapType ty) -> internalError $"'{name}' on '{IrType.show ty}', which is not on the heap"
             | _ -> ()
             let held = freshLocal "__exclusive" "i32"
             let result = freshLocal "__is_exclusive" "i32"
@@ -871,7 +871,7 @@ type private FunctionEmitter(context: EmitContext) =
             match SizedIntegerCode.binary integer op with
             | Some (SizedIntegerCode.Instruction instruction) -> instruction
             | Some (SizedIntegerCode.CallHelper name) -> $"call ${helper name}"
-            | None -> internalError $"no instruction for the operator {op} on {IrType.show sized}"
+            | None -> internalError $"no instruction for the operator `{op}` on '{IrType.show sized}'"
         join "\n    " [ operandCode; instruction; conversion (if arithmetic.Contains op then sized else IrBool) ty ]
 
     member this.Atom (deferred: Dictionary<int, Expr>) (onStack: HashSet<int>) (atom: Atom) : string =
@@ -954,16 +954,16 @@ type private FunctionEmitter(context: EmitContext) =
                 | _ -> None
             match payloadTy with
             | Some payloadTy -> $"{valueCode}\n      {load payloadTy CoreIrLayout.payloadOffset}", payloadTy
-            | None -> internalError $"a pattern on the payload of #{name}, which {IrType.show ty} does not give one"
+            | None -> internalError $"a pattern on the payload of `#{name}`, which '{IrType.show ty}' does not give one"
         // The field in `slot` of a record of `ty`, with its type.
         let fieldCode (ty: IrType) valueCode slot =
             match IrType.unfold ty with
             | IrRecord fields -> $"{valueCode}\n      {load (snd fields.[slot]) (CoreIrLayout.fieldOffset fields slot)}", snd fields.[slot]
-            | other -> internalError $"a pattern on the fields of {IrType.show other}, which is not a record"
+            | other -> internalError $"a pattern on the fields of '{IrType.show other}', which is not a record"
         let elementOf (ty: IrType) =
             match IrType.unfold ty with
             | IrList element -> element
-            | other -> internalError $"a list pattern on {IrType.show other}"
+            | other -> internalError $"a list pattern on '{IrType.show other}'"
         // The list after `count` cells, and the head of the list after `index` cells, of a list of `ty`.
         let listTailCode (ty: IrType) valueCode count =
             if count = 0 then valueCode

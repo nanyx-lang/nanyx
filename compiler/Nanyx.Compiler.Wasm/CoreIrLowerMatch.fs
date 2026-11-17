@@ -67,7 +67,7 @@ let lowerMatch (tools: MatchTools) (scope: Scope) (expr: Expression) (values: Ex
                 let elementTy =
                     match IrType.unfold valueTy with
                     | IrList elementTy -> elementTy
-                    | other -> cannot $"a list pattern on a value of type {IrType.show other}"
+                    | other -> cannot $"a list pattern on a value of type '{IrType.show other}'"
                 PList(elements |> List.map (lowerPattern false scrutinee elementTy), rest |> Option.map (lowerPattern false scrutinee valueTy))
             | LiteralPattern(BoolLit value) -> PBool value
             | TagPattern(name, payload) ->
@@ -77,16 +77,16 @@ let lowerMatch (tools: MatchTools) (scope: Scope) (expr: Expression) (values: Ex
                         match tags |> List.tryFind (fst >> (=) name) with
                         | Some (_, payloadTy) -> payloadTy
                         | None -> raise NeverMatches
-                    | _ -> cannot $"the pattern #{name} on a value that is not a tag"
+                    | _ -> cannot $"the pattern `#{name}` on a value that is not a tag"
                 match payload, payloadTy with
                 | Some inner, Some innerTy -> PTag(name, Some (lowerPattern false scrutinee innerTy inner))
                 | None, _ -> PTag(name, None)
-                | Some _, None -> cannot $"a payload pattern on #{name}, which has none"
+                | Some _, None -> cannot $"a payload pattern on `#{name}`, which has none"
             | TuplePattern elements ->
                 let fields =
                     match IrType.unfold valueTy with
                     | IrRecord fields when fields.Length = elements.Length -> fields
-                    | other -> cannot $"a tuple pattern on a value of type {IrType.show other}"
+                    | other -> cannot $"a tuple pattern on a value of type '{IrType.show other}'"
                 let names = fields |> List.map fst |> Set.ofList
                 PFields(elements |> List.mapi (fun index element ->
                     let field = Pattern.tupleElementField names index element
@@ -98,7 +98,7 @@ let lowerMatch (tools: MatchTools) (scope: Scope) (expr: Expression) (values: Ex
                 let fields =
                     match IrType.unfold valueTy with
                     | IrRecord fields -> fields
-                    | other -> cannot $"a record pattern on a value of type {IrType.show other}"
+                    | other -> cannot $"a record pattern on a value of type '{IrType.show other}'"
                 PFields(members |> List.map (fun (name, member') ->
                     match fields |> List.tryFindIndex (fst >> (=) name) with
                     | Some slot -> slot, lowerPattern false scrutinee (snd fields.[slot]) member'
