@@ -30,7 +30,7 @@ def apply: (int -> int), int -> int = { f, x -> f(x) }
 dbg(apply(double, 4))"""
     let wat = transpileWatNotInlined source
     Assert.Contains("(func $double", wat)
-    runSource source |> assertRan "dbg: 8\n"
+    runSource source |> withoutDbgLocations |> assertRan "8\n"
 
 [<Fact>]
 let ``A module without a start emits every function`` () =
@@ -58,4 +58,4 @@ main()"""
     let wat = transpileWat source
     Assert.DoesNotContain("(func $bye", wat)
     Assert.DoesNotContain("__use_part", wat)
-    runSource source |> assertRan "dbg: \"hello Ada\"\n"
+    runSource source |> withoutDbgLocations |> assertRan "\"hello Ada\"\n"

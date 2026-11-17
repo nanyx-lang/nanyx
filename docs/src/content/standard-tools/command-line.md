@@ -127,7 +127,7 @@ browsers, Wasmtime and other WebAssembly runtimes load. A package with no `@entr
 | Option | What it does |
 |--------|--------------|
 | `--out <path>`, `-o <path>` | Writes the program to another file, making its directory if need be. |
-| `--release` | Refuses any error. Without it, a build is a debug build: type and name errors are deferred, and the program is written all the same. |
+| `--release` | Refuses any error, and leaves out every [`dbg`](../stdlib/console#dbg): `dbg(x)` compiles to `x`. Without it, a build is a debug build: type and name errors are deferred, and the program is written all the same. |
 | `--wat` | Writes WebAssembly text, to `out/<package name>.wat`, rather than the binary format: the same program, for reading. |
 | `--timings`, `--host <host>` | As for `run`. |
 

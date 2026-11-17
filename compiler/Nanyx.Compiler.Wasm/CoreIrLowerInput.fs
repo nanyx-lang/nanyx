@@ -47,6 +47,15 @@ type ContextArgument =
     /// `CoreIrLowerInstances.standInType`).
     | Unfound of ContextMemberKey
 
+/// What a call to `dbg` compiles to.
+type DbgBuild =
+    /// A debug build's: it prints the value after where it was called, `[main.nyx:12] `. The file is named by its path
+    /// from this directory, the package's root, with `/` between its parts; by its name alone without one (a script) or
+    /// when the file is outside it.
+    | PrintedFrom of root: string option
+    /// A release build's: `dbg(x)` is `x`, which prints nothing.
+    | Stripped
+
 /// What the lowering reads from the typed module.
 type LowerInput =
     { /// The module's top-level definitions as the backend compiles them, in order: a function is a lambda.
@@ -111,7 +120,9 @@ type LowerInput =
       TopLevel: Expression list
       /// The types the module defines (records and nominal types, not contexts), by name: what an annotation that
       /// names one means.
-      NamedTypes: Map<string, Ty> }
+      NamedTypes: Map<string, Ty>
+      /// What a call to `dbg` compiles to.
+      Dbg: DbgBuild }
 
 /// The top-level function `wrapper`, a wrapper lambda lifting made, wraps.
 let wrappedOf (input: LowerInput) (wrapper: string) =

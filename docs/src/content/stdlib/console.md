@@ -22,14 +22,19 @@ match readLine()
 dbg: [Console] a -> a
 ```
 
-It prints any value, after `dbg: `, and gives it back, so it can be put in the middle of a pipeline:
+It prints any value after where it was called, the file and the line, and gives the value back, so it can be put in
+the middle of a pipeline:
 
 ```nanyx fragment
 [1, 2, 3]
   \map { * 2 }
   \dbg
--- Prints: dbg: [2, 4, 6]
+-- Prints: [main.nyx:3] [2, 4, 6]
 ```
+
+The file is named by its path in its package, such as `src/main.nyx`, or for a script by its name. It doesn't print the
+expression, which for a `dbg` in a pipeline would be the whole pipeline. A release build (`--release`) leaves `dbg` out:
+`dbg(x)` compiles to `x`, which prints nothing, so a `dbg` left in code costs nothing there.
 
 A value is printed as you would write it in code, from its type, whatever `toString` the type has:
 

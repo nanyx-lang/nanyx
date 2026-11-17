@@ -45,7 +45,7 @@ public static partial class BrowserCompiler
         if (FSharpOption<TypedModule>.get_IsSome(result.Typed) && !result.Diagnostics.Any(Diagnostics.isError))
         {
             stopwatch.Restart();
-            var emitted = CodeGen.tryTranspileTypedModuleWith(new CodeGen.WasmOptions(false, true), result.Typed.Value);
+            var emitted = CodeGen.tryTranspileTypedModuleWith(CodeGen.WasmOptions.Default, result.Typed.Value);
             emitMs = stopwatch.Elapsed.TotalMilliseconds;
             if (emitted.IsError)
             {

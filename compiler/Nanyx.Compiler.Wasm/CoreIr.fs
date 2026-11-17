@@ -176,8 +176,9 @@ and ExprKind =
     | CallClosure of Var * Atom list * ClosureEntry
     /// Builds an interpolated string from its text and its holes, which are already evaluated into their locals.
     | Interpolate of InterpolationPart list
-    /// What `dbg(value)` prints: the string, the value's text (see `CoreIrLowerDbg`), after `dbg: `. It is unit.
-    | Dbg of Atom
+    /// What `dbg(value)` prints in a debug build: the second string, the value's text (see `CoreIrLowerDbg`), after the
+    /// first, where the `dbg` was called (`[main.nyx:12] `), then a newline. It is unit.
+    | Dbg of location: Atom * text: Atom
     /// A float constant: an `f64`, or an `f32` in a box of its own where the expression is an `F32`.
     | FloatConstant of float
     /// An error deferred to run time: writes these messages to stderr and ends the program.
@@ -738,7 +739,7 @@ module Print =
                 | Hole(v, _) -> "{" + v.Name + "}")
             |> String.concat ""
             |> sprintf "\"%s\""
-        | Dbg text -> $"dbg({atom text})"
+        | Dbg(location, text) -> $"dbg({atom location}, {atom text})"
         | FloatConstant value -> string value
         | Crash messages -> $"""crash({messages |> String.concat ""})"""
         | ForEach loop ->

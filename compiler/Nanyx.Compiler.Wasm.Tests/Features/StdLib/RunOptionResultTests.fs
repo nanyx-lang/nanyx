@@ -68,7 +68,7 @@ def main = {
   dbg(someOr(list.head(values), 0))
 }
 """
-    runSource source |> assertRan "dbg: 100000\ndbg: 2\n"
+    runSource source |> withoutDbgLocations |> assertRan "100000\n2\n"
 
 [<Fact>]
 let ``Run - Result.mapOr applies the function to a success and gives the default for an error`` () =
@@ -81,7 +81,7 @@ def main = {
   println(Result.mapOr(bad, "none", int.toString))
 }
 """
-    runSource source |> assertRan "dbg: 40\ndbg: 0\nnone\n"
+    runSource source |> withoutDbgLocations |> assertRan "40\n0\nnone\n"
 
 [<Fact>]
 let ``Run - Result.orElse keeps a success and passes an error to the fallback`` () =
@@ -127,7 +127,7 @@ def main = {
   dbg(absent \mapSomeOrElse(seven, { n -> n + 1 }))
 }
 """
-    runSource source |> assertRan "dbg: 7\ndbg: 4\ndbg: 7\n"
+    runSource source |> withoutDbgLocations |> assertRan "7\n4\n7\n"
 
 // #183: two steps that fail with different tags.
 let private steps =

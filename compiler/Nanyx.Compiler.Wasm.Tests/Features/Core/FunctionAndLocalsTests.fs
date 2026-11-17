@@ -138,7 +138,7 @@ def main = dbg("hello")"""
 
     let wat = transpileWat source
 
-    Assert.Contains("(func $dbg_str (param $ptr i32)", wat)
+    Assert.Contains("(func $dbg_str (param $location i32) (param $text i32)", wat)
     Assert.Contains("hello", wat)
     Assert.Contains("call $dbg_str", wat)
 

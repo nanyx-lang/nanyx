@@ -21,7 +21,9 @@ text to the binary format for `nanyx build` and `nanyx wasm` (below).
   function. A module with a start function emits only the functions the start reaches, through calls and closures,
   and binds no static closure that nothing reads (`CoreIrReach.fs`); a module without one emits every definition.
 - `dbg(...)` of a value of any type, and the console host's `Console`, write to stdout through WASI `fd_write`; `dbg`
-  writes the value through a printer function generated for its type (`CoreIrLowerDbg.fs`).
+  writes the value through a printer function generated for its type (`CoreIrLowerDbg.fs`), after where it was
+  called: the line, and the file's path in its package or a script's name (`WasmOptions.SourceRoot`). A release build
+  (`WasmOptions.Release`) lowers `dbg(x)` to `x`.
 - How values are laid out and freed is in [Memory management](./memory-management), and how context members are
   passed in [Context calls](./context-calls).
 

@@ -224,7 +224,7 @@ shape. A body is an expression with a type on every node:
 | `forEach(loop)` | a `for` loop over lists and ranges in step, its body run for each step until one of them ends |
 | `crash(messages)` | an error deferred to run time: writes the messages to stderr and ends the program |
 | `interpolate(parts)` | builds an interpolated string from its text and its holes, each already stored in its hole local |
-| `dbg(text)` | prints the string `text`, the text of a value its type's printer wrote, after `dbg: ` |
+| `dbg(location, text)` | prints the string `text`, the text of a value its type's printer wrote, after the string `location`, where the `dbg` was called (`[main.nyx:12] `); a release build has none |
 | `let x = value in body` | names a value; the value is never a `let` itself |
 | `do value; rest` | evaluates a value for its effects and drops it |
 | `if atom then e1 else e2` | |

@@ -180,8 +180,8 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | Field(atom, _)
     | Assign(_, atom)
     | SetField(_, _, atom)
-    | Dbg atom
     | If(atom, _, _) -> ofAtoms [ atom ]
+    | Dbg(location, text) -> ofAtoms [ location; text ]
     | ForEach loop -> ofAtoms (ForLoop.sourceAtoms loop)
     | Dup(_, body)
     | Drop(_, body)
@@ -721,7 +721,7 @@ type private FunctionEmitter(context: EmitContext) =
                 | Owning -> join "\n    " [ touching "i32.load"; "i32.const 1"; "i32.add" ]
             join "\n    " [ read; atomsAfter true args; read; slot; $"{call}_indirect (type ${indirectTypeName parameters result})" ]
         | Interpolate parts -> this.Interpolation parts
-        | Dbg text -> join "\n    " [ atoms [ text ]; "call $dbg_str"; "i32.const 0" ]
+        | Dbg(location, text) -> join "\n    " [ atoms [ location; text ]; "call $dbg_str"; "i32.const 0" ]
         | If(cond, ifTrue, ifFalse) ->
             let condCode = atoms [ cond ]
             let result = CoreIrLayout.valueType expr.Type
