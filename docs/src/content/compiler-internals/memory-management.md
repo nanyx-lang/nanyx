@@ -354,7 +354,9 @@ nodes to the IR: `dup x1, ...; e`, `drop x1, ...; e`, and `e then drop x1, ...` 
   borrows that parameter too.
 - **What a function only reads in a match is borrowed** ([#1468](https://github.com/nanyx-lang/nanyx/issues/1468)),
   inferred as Lean 4 does (`borrowedFrom` and `couldReuse` in `CoreIrCounting.fs`). Matching on a parameter does not
-  take it over: the scrutinee that copies it, and the names its patterns bind, are borrowed with it, and the function
+  take it over: the scrutinee that copies it, and the names its patterns bind, are borrowed with it, and so is the
+  closure read as the record of what it captures, which is how the inliner gives an inlined lambda its environment
+  (`isReadingCopy`, [#1877](https://github.com/nanyx-lang/nanyx/issues/1877)); the function
   borrows the parameter when none of them is taken over (a call that borrows them in turn, the function's own tail call
   included, does not take them over) and no arm could reuse its block (none allocates a block of that size, see
   `CoreIrReuseSites.fs`). So a sum or an evaluator over a shared list or tree counts nothing. The cost accepted: a fold

@@ -34,7 +34,7 @@ the backlog:
 [The parser](./parser) proposes moving the parser to a lexer and a hand-written parser, in stages.
 The compilation workstream has pages of its own for the larger pieces of its design:
 [deferred errors](./deferred-errors),
-[tail calls](./tail-calls), [memory management](./memory-management), [context calls](./context-calls), [inlining](./inlining)
+[tail calls](./tail-calls), [memory management](./memory-management), [inlining](./inlining)
 and [lazy sequences](./lazy-sequences). How the standard library is built is in
 [Standard library implementation](../compiler-internals/standard-library-implementation), and how the CLI is built in
 [The `nanyx` command](../compiler-internals/command-line); what the CLI does is on

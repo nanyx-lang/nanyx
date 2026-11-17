@@ -176,15 +176,24 @@ let rec private tailCalls (e: Expr) : (string * Atom list) list =
     | Call(name, args) -> [ name, args ]
     | _ -> []
 
-/// The variables of `func` whose values the borrowed variables `roots` keep alive: the roots, each `match` scrutinee
-/// that is a copy of one (`let __match_tmp_0 = xs`), and each name a pattern binds in a value one of them is. They live
-/// as long as the roots do, so the function borrows them too.
+/// Whether `var`, bound to the value of `source`, is a copy of it that only reads it: a `match` scrutinee
+/// (`let __match_tmp_0 = xs`), or a closure read as the record of what it captures, which is how the inliner gives an
+/// inlined lambda its environment (see `CoreIrInline`).
+let private isReadingCopy (var: Var) (source: Var) =
+    var.Kind = MatchTemp
+    || (match var.Type, source.Type with
+        | IrRecord _, IrFunction _ -> var.Kind = Local || var.Kind = Temp
+        | _ -> false)
+
+/// The variables of `func` whose values the borrowed variables `roots` keep alive: the roots, each copy of one that
+/// only reads it (`isReadingCopy`), and each name a pattern binds in a value one of them is. They live as long as the
+/// roots do, so the function borrows them too.
 let private borrowedFrom (func: Function) (roots: Set<int>) : Set<int> =
     let mutable found = roots
     // A value's node comes before the nodes of what follows it, and a match's before its arms.
     for e in nodes func.Body do
         match e.Kind with
-        | Let(var, { Kind = Atom(AVar source) }, _) when var.Kind = MatchTemp && found.Contains source.Id -> found <- found.Add var.Id
+        | Let(var, { Kind = Atom(AVar source) }, _) when isReadingCopy var source && found.Contains source.Id -> found <- found.Add var.Id
         | Match(scrutinees, arms) ->
             for arm in arms do
                 for scrutinee, pattern in List.zip scrutinees arm.Patterns do
@@ -250,11 +259,11 @@ let internal inferOwnership (functions: Function list) : Ownership =
         for f in functions do
             let borrowedParams = f.Params |> List.indexed |> List.filter (fun (index, _) -> parameterUse ownership f.Name index = Borrowed)
             let borrowedIds = borrowedFrom f (borrowedParams |> List.map (snd >> _.Id) |> Set.ofList)
-            // A scrutinee that copies a borrowed variable borrows it, and takes nothing over.
+            // A copy of a borrowed variable that only reads it borrows it, and takes nothing over.
             let copies = HashSet<Expr>(HashIdentity.Reference)
             for e in nodes f.Body do
                 match e.Kind with
-                | Let(var, value, _) when var.Kind = MatchTemp && borrowedIds.Contains var.Id -> copies.Add value |> ignore
+                | Let(var, ({ Kind = Atom(AVar source) } as value), _) when isReadingCopy var source && borrowedIds.Contains var.Id -> copies.Add value |> ignore
                 | _ -> ()
             let takenOver =
                 nodes f.Body
@@ -503,6 +512,9 @@ type private Counter(ownership: Ownership, addresses: Atom -> Var list, owningEn
                 let afterRest = Set.union (rest |> List.map (fst >> this.FreeIn) |> Set.unionMany) after
                 let afterThis = Set.union afterRest borrowedIds
                 match atom with
+                // A copy of a borrowed variable that only reads it is read as the variable is, with no reference of
+                // its own (see `isReadingCopy`).
+                | AVar temp when temp.Kind = Temp && borrowed.Contains temp.Id -> counted.[temp.Id] <- temps.[temp.Id]
                 | AVar temp when temp.Kind = Temp ->
                     let value = temps.[temp.Id]
                     counted.[temp.Id] <- this.Count (Set.intersect owned (Set.union (this.Free value) afterThis)) afterThis value

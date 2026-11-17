@@ -246,9 +246,9 @@ def twice: [Ask] () -> int = { ask() + ask() }
 def plain: [Show(a)] a -> string = { value -> show(value) }
 
 def main = {
-  use Ask(ask = { 21 })
   def p = Point(x = 1, y = 2)
   def s = plain(p)
+  use Ask(ask = if s == "" then { 1 } else { 21 })
   twice()
 }
 """
@@ -259,8 +259,8 @@ def main = {
     Assert.DoesNotContain("__fn_Point_show", report.Functions)
     Assert.Contains("""(func $plain__rec_x_int_y_int__known (param $value i32) (result i32)""", wat)
     Assert.Contains("""return_call $Point_show""", wat)
-    // A member that is not known, such as a `use` of a lambda, arrives in a parameter of its own, after the function's
-    // own parameters.
+    // A member that is not known, such as a `use` of a lambda chosen as the program runs, arrives in a parameter of its
+    // own, after the function's own parameters.
     Assert.Contains("""(func $twice (param $__ctx_ask i32) (result i64)""", wat)
 
 [<Fact>]
