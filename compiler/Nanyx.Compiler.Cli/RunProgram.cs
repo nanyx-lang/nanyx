@@ -1,0 +1,157 @@
+using Microsoft.FSharp.Collections;
+using Microsoft.FSharp.Core;
+using Nanyx.Runtime;
+using NyxCompiler;
+using Transpiler.Wasm;
+
+/// <summary>
+/// Running a compiled program for <c>nanyx run</c>: lowering it, running or serving it, and saying what stopped it.
+/// </summary>
+internal static partial class CliCommands
+{
+    /// <summary>
+    /// Runs a compiled program with the shell's standard streams and the command-line arguments
+    /// <paramref name="arguments"/>, its name first, reporting what stops it to the shell's stderr, and gives the exit
+    /// code. The program may read and write the shell's directory and each of <paramref name="allowedDirectories"/>, full
+    /// paths. A program whose host answers HTTP requests is served on <paramref name="port"/> instead (see
+    /// <see cref="Serve"/>).
+    /// </summary>
+    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, int port = 3000)
+    {
+        var programArguments = ListModule.OfSeq(arguments ?? ["nanyx"]);
+        var directories = ListModule.OfSeq<string>([shell.Directory, .. allowedDirectories ?? []]);
+        var errors = shell.Error;
+        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls);
+        if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred, timings))
+        {
+            return 1;
+        }
+
+        // The program's output follows the run's box, unmarked, and so does what the run reports after it.
+        (errors as RunBox.Writer)?.Box.Close("output");
+        if (WasmServer.serves(wat))
+        {
+            return Serve(shell, programArguments, wat, port, errors);
+        }
+
+        if (memoryCheck == MemoryCheck.Off)
+        {
+            var outcome = WasmRunner.run(shell.Io, programArguments, directories, wat);
+            return outcome.IsOk ? 0 : ReportRunError(outcome.ErrorValue, errors);
+        }
+
+        var (counted, counters) = WasmRunner.runCounting(shell.Io, programArguments, directories, CodeGen.CheckedExports.start, MemoryReport.Counters, wat);
+        var exitCode = counted.IsError ? ReportRunError(counted.ErrorValue, errors) : CheckNothingLeft(counted.ResultValue, errors);
+        // The report follows what stopped the program, or the leak the check found.
+        if (memoryCheck == MemoryCheck.Report && counters is not null)
+        {
+            MemoryReport.Write(errors, counters.Value);
+        }
+
+        return exitCode;
+    }
+
+    /// <summary>
+    /// The exit code of a program run with memory checks that returned, given its <see cref="MemoryReport.Counters"/>:
+    /// 1 when it left blocks on the heap, which it says to <paramref name="errors"/>.
+    /// </summary>
+    private static int CheckNothingLeft(int[] counters, TextWriter errors)
+    {
+        int Counter(string name) => counters[Array.IndexOf(MemoryReport.Counters, name)];
+        var live = Counter(CodeGen.CheckedExports.liveBlocks);
+        if (live == 0)
+        {
+            return 0;
+        }
+
+        errors.WriteLine(
+            $"Memory check failed: {live} of the {Counter(CodeGen.CheckedExports.allocations)} blocks the program allocated were never freed");
+        return 1;
+    }
+
+    /// <summary>
+    /// Serves the program <paramref name="wat"/>, whose host answers HTTP requests, on <paramref name="port"/> until the
+    /// shell's <see cref="Shell.Stop"/> is cancelled or, for the process's own, Ctrl+C is pressed. Each request is
+    /// answered by a fresh instance of it; one that stops without answering is a 500, which is said on
+    /// <paramref name="errors"/>, and the server carries on.
+    /// </summary>
+    private static int Serve(Shell shell, FSharpList<string> arguments, string wat, int port, TextWriter errors)
+    {
+        using var stopping = CancellationTokenSource.CreateLinkedTokenSource(shell.Stop);
+        ConsoleCancelEventHandler interrupted = (_, pressed) =>
+        {
+            pressed.Cancel = true;
+            stopping.Cancel();
+        };
+        var own = shell.Io.IsInherited;
+        if (own)
+        {
+            Console.CancelKeyPress += interrupted;
+        }
+
+        try
+        {
+            var gate = new object();
+            void Report(string line)
+            {
+                lock (gate)
+                {
+                    errors.WriteLine(line);
+                }
+            }
+
+            var outcome = WasmServer.serve(
+                shell.Io,
+                arguments,
+                Program.NewText(wat),
+                port,
+                stopping.Token,
+                FuncConvert.FromAction<string>(address => Report($"Serving {address} (Ctrl+C to stop)")),
+                FuncConvert.FromAction<string>(Report));
+            return outcome.IsOk ? 0 : ReportRunError(outcome.ErrorValue, errors);
+        }
+        finally
+        {
+            if (own)
+            {
+                Console.CancelKeyPress -= interrupted;
+            }
+        }
+    }
+
+    /// <summary>The tour's section on tail recursion, which a program that ran out of stack is pointed to.</summary>
+    private const string TailRecursionDocs = "https://nanyx.dev/docs/tour/functions#tail-recursion";
+
+    private static int ReportRunError(RunError error, TextWriter errors)
+    {
+        switch (error)
+        {
+            case RunError.InvalidModule invalid:
+                errors.WriteLine($"Internal error in the compiler, whose WebAssembly is invalid ({invalid.Item}): report it at https://github.com/nanyx-lang/nanyx/issues");
+                return 1;
+            case RunError.Trapped trapped:
+                errors.WriteLine($"Runtime error: {trapped.Item}");
+                return 1;
+            case var _ when error.IsOutOfMemory:
+                errors.WriteLine("Runtime error: out of memory");
+                return 1;
+            case RunError.StackOverflow overflow:
+                var where = FSharpOption<string>.get_IsSome(overflow.functionName) ? $" in '{overflow.functionName.Value}'" : "";
+                errors.WriteLine(
+                    $"Runtime error: the program ran out of stack{where}: a recursive call that isn't in tail position uses stack for every call (see {TailRecursionDocs})");
+                return 1;
+            case RunError.ArithmeticError arithmetic:
+                errors.WriteLine($"Runtime error: {WasmRunner.describeFault(arithmetic.fault, arithmetic.functionName)}");
+                return 1;
+            case RunError.CannotServe cannot:
+                errors.WriteLine($"error: the program can't be served on port {cannot.port}: {cannot.reason}. Give the host another `port` in its `settings`");
+                return 1;
+            // The program said why it stopped (a deferred error writes itself to stderr) before it exited.
+            case RunError.Exited exited:
+                return exited.Item;
+            default:
+                errors.WriteLine($"Run failed: {error}");
+                return 1;
+        }
+    }
+}
