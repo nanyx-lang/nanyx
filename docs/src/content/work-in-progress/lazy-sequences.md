@@ -241,8 +241,9 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
    ([#192](https://github.com/nanyx-lang/nanyx/issues/192)).
 3. ~~Give `seq(a)` its runtime representation, with ranges as values, and `for` loops over any sequence.~~ Done
    ([#192](https://github.com/nanyx-lang/nanyx/issues/192), [#1698](https://github.com/nanyx-lang/nanyx/issues/1698)).
-4. The core functions. Done: `seq.empty`, `range`, `from`, `unfold`, `map`, `filter`, `take`, `skip`, `takeWhile`,
-   `fold`, `toList`, `cons`, `delay`, `append`, `concatMap`, and `list.toSeq`. Still to write: `seq.zip`, `set.toSeq`, `map.toSeq`.
+4. ~~The core functions.~~ Done: `seq.empty`, `range`, `from`, `unfold`, `map`, `filter`, `take`, `skip`, `takeWhile`,
+   `fold`, `toList`, `cons`, `delay`, `append`, `concatMap`, `zip`, and `list.toSeq`, `set.toSeq` and `map.toSeq`
+   ([#1795](https://github.com/nanyx-lang/nanyx/issues/1795)).
 5. `Iterable(c)`, with `for` loops and the `Seq` functions that consume a sequence taking it
    ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802), after associated types,
    [#1800](https://github.com/nanyx-lang/nanyx/issues/1800)).

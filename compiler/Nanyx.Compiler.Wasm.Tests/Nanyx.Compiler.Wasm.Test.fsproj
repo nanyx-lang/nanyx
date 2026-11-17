@@ -187,6 +187,7 @@
     <Compile Include="Features\StdLib\RunQueueTests.fs" />
     <Compile Include="Features\StdLib\RunReduceTests.fs" />
     <Compile Include="Features\StdLib\RunFromSeqBuildTests.fs" />
+    <Compile Include="Features\StdLib\RunSeqZipToSeqTests.fs" />
     <Compile Include="Features\StdLib\RunTrieTests.fs" />
     <Compile Include="Features\StdLib\RunCollectionLengthTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />

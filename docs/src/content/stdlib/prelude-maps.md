@@ -99,6 +99,14 @@ def map.toList: map(k, v) -> list((k, v))
 
 The entries of `m`, each a key and its value, in the order the keys were first added.
 
+## `map.toSeq`
+
+```nanyx fragment
+def map.toSeq: map(k, v) -> seq((k, v))
+```
+
+The entries of `m` as a sequence of key-value pairs, in the order [`map.toList`](#maptolist) gives them.
+
 ## `map.get`
 
 ```nanyx fragment
@@ -284,6 +292,14 @@ def set.toList: set(a) -> list(a)
 ```
 
 The elements of `s`, in the order they were first added.
+
+## `set.toSeq`
+
+```nanyx fragment
+def set.toSeq: set(a) -> seq(a)
+```
+
+The elements of `s` as a sequence, in the order [`set.toList`](#settolist) gives them.
 
 ## `set.contains`
 
