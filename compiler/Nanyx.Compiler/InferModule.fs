@@ -515,6 +515,9 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     state <- checkedLiterals
     errors <- errors @ literalErrors
 
+    // Each call that leaves out a type argument, now that the types say which one to pass (see `TypeArguments`).
+    state <- TypeArguments.report state
+
     // The defs that failed and the expressions that failed inside the others, in the order they are in the source. An
     // expression inferred more than once (a lambda checked again against its expected type) is reported once.
     let failedExprErrors = state.FailedExprs @ state.UnhandledMatches |> List.rev |> List.collect snd

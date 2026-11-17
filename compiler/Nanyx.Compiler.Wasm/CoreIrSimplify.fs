@@ -55,7 +55,7 @@ let rec private isPure (e: Expr) =
     | MakeClosure _
     | Field _
     | MakeList _
-    | BoxFloat _
+    | FloatConstant _
     | Interpolate _
     | Prim(Not, _)
     | Prim(FloatBinary _, _) -> true

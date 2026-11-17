@@ -105,7 +105,8 @@ let private annotateFromMemberType (memberType: TypeExpr option) (args: (string 
 /// followed by the values it captures. A lifted function takes that block as its first parameter,
 /// `__env`, and starts by binding each captured name to the matching field; a call through a value
 /// passes the block as the environment and calls the slot it holds. A top-level function used as a
-/// value gets a wrapper that takes and ignores an environment. Lifts the lambdas of a module into
+/// value gets a wrapper that takes and ignores an environment, and so does a foreign function, whose number of
+/// parameters `externArities` gives, as it is not among the module's definitions. Lifts the lambdas of a module into
 /// top-level definitions appended at the end, and returns where each came from (lifting runs after
 /// type checking, so the backend uses that to find the types of parameters and captures) and the
 /// wrapper made for each top-level function used as a value.
@@ -130,7 +131,7 @@ let private annotateFromMemberType (memberType: TypeExpr option) (args: (string 
 /// binds such a member by its key's text, and the key of each such name is returned too. So is the plain context each
 /// local a `use` binding is evaluated into binds a member of, where the `use` names it (`use Proc(...)`), by the local's
 /// name: two plain contexts may have members of the same name.
-let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKey list>) (requiresContexts: string -> bool) (passedMembers: Expression -> Set<ContextMemberKey>) (useContexts: Map<NodeId, TypeExpr>) (ambientDefinitions: string list) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> * Map<string, ContextMemberKey> * Map<string, string> =
+let lift (externArities: Map<string, int>) (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKey list>) (requiresContexts: string -> bool) (passedMembers: Expression -> Set<ContextMemberKey>) (useContexts: Map<NodeId, TypeExpr>) (ambientDefinitions: string list) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> * Map<string, ContextMemberKey> * Map<string, string> =
     let lifted = System.Collections.Generic.List<TopLevelItem>()
     let origins = System.Collections.Generic.Dictionary<string, LiftedOrigin>()
     let wrappers = System.Collections.Generic.Dictionary<string, string>()
@@ -147,14 +148,15 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
     // Whether some lambda is passed the members of contexts where it is called, which may be the ambient instance's.
     let mutable passesMembers = false
 
-    // Every top-level function, with its number of parameters. One of none (`{ ... }`) is a function too: its name,
-    // written on its own, is the function as a value, never a call (#182).
+    // Every top-level function, with its number of parameters, the foreign functions (`externArities`) among them. One of
+    // none (`{ ... }`) is a function too: its name, written on its own, is the function as a value, never a call (#182).
     let topLevelArities =
         module'
         |> List.choose (function
             | Kind (Def (ValueDef(_, name, _, Kind (Lambda(args, _, _))))) -> Some (name, args.Length)
             | _ -> None)
         |> Map.ofList
+        |> Map.fold (fun arities name arity -> arities |> Map.add name arity) externArities
     let topLevelFunctions = topLevelArities |> Map.filter (fun _ arity -> arity > 0)
 
     // The name of every top-level definition.
@@ -182,8 +184,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
                 let members =
                     fields
                     |> List.choose (function
-                        | TypeField(fieldName, _, typeOpt, _)
-                        | TypeMember(fieldName, typeOpt) -> typeOpt |> Option.map (fun ty -> fieldName, ty)
+                        | TypeField(fieldName, _, typeOpt, _) -> typeOpt |> Option.map (fun ty -> fieldName, ty)
                         | TypeFieldAttribute _ -> None)
                     |> Map.ofList
                 Some (name, (parameters |> List.map fst, members))

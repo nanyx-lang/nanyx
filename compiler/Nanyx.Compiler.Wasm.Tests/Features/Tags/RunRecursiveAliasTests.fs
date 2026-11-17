@@ -6,8 +6,6 @@ open TranspilerWasmTestHelpers
 // A tag union alias that names itself in its tags' payloads (#246). Each program runs with its memory checked, so a
 // tree that is not freed, or freed twice, fails the test.
 
-let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
-
 let private tree = """
 type Tree(a) = #leaf | #node(Tree(a), a, Tree(a))
 
@@ -51,7 +49,7 @@ def eval: Expr -> int = {
 
 println("{eval(#add(#num(2), #num(3)))}")
 """
-    run source |> assertRan "5\n"
+    runSource source |> assertRan "5\n"
 
 [<Fact>]
 let ``Run - a generic recursive alias is built, matched, mapped and freed`` () =
@@ -61,7 +59,7 @@ def names = mapTree(t, { n -> "<{n}>" })
 println("{sum(t)} {size(t)} {size(names)}")
 println(inOrder(names))
 """
-    run source |> assertRan "17 4 4\n<1><3><5><8>\n"
+    runSource source |> assertRan "17 4 4\n<1><3><5><8>\n"
 
 [<Fact>]
 let ``Run - a large tree built in a loop is freed`` () =
@@ -73,7 +71,7 @@ def build: int, Tree(int) -> Tree(int) = { n, t ->
 def t = build(200, #leaf)
 println("{size(t)} {sum(t)}")
 """
-    run source |> assertRan "200 10036\n"
+    runSource source |> assertRan "200 10036\n"
 
 [<Fact>]
 let ``Run - values of a recursive alias are compared by their structure`` () =
@@ -85,7 +83,7 @@ def same: Expr, Expr -> string = { a, b -> if a == b then "same" else "different
 println(same(#add(#num(1), #neg(#num(2))), #add(#num(1), #neg(#num(2)))))
 println(same(#add(#num(1), #neg(#num(2))), #add(#num(1), #neg(#num(3)))))
 """
-    run source |> assertRan "same\ndifferent\n"
+    runSource source |> assertRan "same\ndifferent\n"
 
 [<Fact>]
 let ``Run - a recursive alias holds another`` () =
@@ -99,7 +97,7 @@ def total: Tree(Tree(int)) -> int = {
 
 println("{total(forest)} {size(forest)}")
 """
-    run source |> assertRan "13 2\n"
+    runSource source |> assertRan "13 2\n"
 
 [<Fact>]
 let ``Run - a list of a recursive alias's values`` () =
@@ -117,4 +115,4 @@ def exprs: list(Expr) = [ #num(1), sum, nested ]
 
 for exprs | e -> println("{eval(e)}")
 """
-    run source |> assertRan "1\n5\n15\n"
+    runSource source |> assertRan "1\n5\n15\n"

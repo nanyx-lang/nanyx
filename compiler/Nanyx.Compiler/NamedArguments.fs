@@ -10,7 +10,7 @@ module internal NamedArguments =
     /// The arguments a call writes by position, and the names it passes by name. `f(a, b)` is one tuple argument
     /// and `f(a, n = b)` one record; a pipe's arguments are spliced into a list, or into that record. A lone
     /// argument is the callee's whole input, as `p` is in `shift(p)` for a record `p`, so it says nothing here.
-    let private written (args: Expression list) : Expression list * string list =
+    let internal written (args: Expression list) : Expression list * string list =
         match args with
         | [ Kind (RecordExpr fields) ] ->
             fields |> List.choose (function PositionalField value -> Some value | NamedField _ -> None),

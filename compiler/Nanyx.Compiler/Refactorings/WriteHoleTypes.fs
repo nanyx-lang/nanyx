@@ -38,7 +38,8 @@ let private annotations (syntax: Module) (typed: TypedModule) =
         | SyntaxTree.LambdaParameter -> Some { Type = written.Type; Def = None; IsParameter = true }
         | SyntaxTree.TypeBody _
         | SyntaxTree.ParameterConstraint
-        | SyntaxTree.ContextNamed -> None)
+        | SyntaxTree.ContextNamed
+        | SyntaxTree.PassedType -> None)
     |> List.filter (fun annotation -> not (TypeExpr.holes annotation.Type).IsEmpty)
 
 /// Each `_` in `annotation`, with whether a function written in its place needs brackets: everywhere but the whole of a

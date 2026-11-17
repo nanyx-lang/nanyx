@@ -5,11 +5,9 @@ open TranspilerWasmTestHelpers
 
 // #1642: `Trie(k, v)` and `StringTrie(v)` in `nanyx/trie`.
 
-let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
-
 [<Fact>]
 let ``Run - a trie maps list keys to values, and answers prefix queries`` () =
-    run
+    runSource
         """
 import nanyx/trie
 
@@ -28,7 +26,7 @@ println(Trie.toString(t))
 
 [<Fact>]
 let ``Run - the empty trie has no keys, and no prefix of any`` () =
-    run
+    runSource
         """
 import nanyx/trie
 
@@ -42,7 +40,7 @@ println(Trie.toString(t))
 
 [<Fact>]
 let ``Run - inserting a key again replaces its value, and removing one prunes what it leaves empty`` () =
-    run
+    runSource
         """
 import nanyx/trie
 
@@ -57,7 +55,7 @@ println("{Trie.remove(t, [7]) == t} {Trie.remove(without, [1]) == Trie.empty}")
 
 [<Fact>]
 let ``Run - an old trie reads the same after a new one is made from it`` () =
-    run
+    runSource
         """
 import nanyx/trie
 
@@ -71,7 +69,7 @@ println("{Trie.toList(t)} {Trie.toList(more)} {Trie.toList(less)}")
 
 [<Fact>]
 let ``Run - tries holding the same keys are equal, whatever order they were added in`` () =
-    run
+    runSource
         """
 import nanyx/trie
 
@@ -84,7 +82,7 @@ println("{a == b} {a == Trie.insert(b, [1], "z")}")
 
 [<Fact>]
 let ``Run - a trie's elements are compared and hashed with their own == and hash`` () =
-    run
+    runSource
         """
 import nanyx/text
 import nanyx/trie
@@ -107,7 +105,7 @@ println("{Trie.get(t, [Code("gb"), Code("lon")])} {region}")
 
 [<Fact>]
 let ``Run - a string trie takes and gives strings, its keys sorted`` () =
-    run
+    runSource
         """
 import nanyx/trie
 
@@ -124,7 +122,7 @@ println(StringTrie.toString(t))
 
 [<Fact>]
 let ``Run - removing from a string trie leaves the old one as it was`` () =
-    run
+    runSource
         """
 import nanyx/trie
 

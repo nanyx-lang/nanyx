@@ -120,9 +120,11 @@ let wrapperCalling (tools: LiftedTools) (wrapped: string) (instanceTy: Ty) (capt
     let declared = tools.Input.ContextParameters |> Map.tryFind wrapped |> Option.map (fst >> List.map _.Key) |> Option.defaultValue []
     let order = declared @ (tools.VariableMembers wrapped (tools.BindingsAt wrapped instanceTy) |> List.map fst)
     let rec call (remaining: ContextMemberKey list) (members: Atom list) =
-        match remaining with
-        | [] -> Expr.make (Call(tools.Callee wrapped instanceTy, (named |> List.map AVar) @ List.rev members)) (tools.ToIrType resultTy)
-        | key :: rest ->
+        match remaining, tools.Input.Externs |> Map.tryFind wrapped with
+        // A foreign function takes no context members: the call is to the module's import of it.
+        | [], Some declared -> Expr.make (CallImport(declared, named |> List.map AVar)) (tools.ToIrType resultTy)
+        | [], None -> Expr.make (Call(tools.Callee wrapped instanceTy, (named |> List.map AVar) @ List.rev members)) (tools.ToIrType resultTy)
+        | key :: rest, _ ->
             match captured |> List.tryFindIndex (fst >> (=) key), passed |> List.tryFind (fst >> (=) key) with
             | Some index, _ ->
                 tools.BindTemp (Expr.make (Field(AVar environmentParameter, index + 1)) (snd captured.[index])) (fun atom -> call rest (atom :: members))

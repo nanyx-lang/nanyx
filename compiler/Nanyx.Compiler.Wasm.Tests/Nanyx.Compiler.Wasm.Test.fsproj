@@ -77,11 +77,13 @@
     <Compile Include="Features\Except\RunExceptTests.fs" />
     <Compile Include="Features\Floats\RunFloatTextTests.fs" />
     <Compile Include="Features\Floats\RunFloatSettledLaterTests.fs" />
+    <Compile Include="Features\Floats\FloatValueTests.fs" />
     <Compile Include="Features\Functions\RunArmsAfterParametersTests.fs" />
     <Compile Include="Features\Functions\RunCallResultTests.fs" />
     <Compile Include="Features\Functions\RunDefinitionOrderTests.fs" />
     <Compile Include="Features\Functions\RunFunctionTests.fs" />
     <Compile Include="Features\Functions\RunTupleArgumentTests.fs" />
+    <Compile Include="Features\Functions\RunTypeArgumentTests.fs" />
     <Compile Include="Features\Functions\RunUnitFunctionValueTests.fs" />
     <Compile Include="Features\Hashing\RunHashTests.fs" />
     <Compile Include="Features\Hosts\RunConsoleHostTests.fs" />

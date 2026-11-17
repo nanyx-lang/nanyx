@@ -25,8 +25,10 @@ progress. They are what [hosts](./hosts) are built on.
 - **Compiling it.** `CodeGen` takes the externs out of the module before anything else is compiled from it, with each
   one's value types read from its type (`Externs.signatureOfType`), and reports two that name one import with
   different types, wherever they came from, as `NYX0243`. A call to one is a `CallImport` in the core IR: its
-  arguments as the value types the import takes (a float out of its box), then a direct `call` of the import, and a
-  float result boxed; an import that returns nothing leaves unit. The module declares each import a call reaches once
+  arguments as the value types the import takes (an `F32` out of its box), then a direct `call` of the import, and an
+  `F32` result boxed; an import that returns nothing leaves unit. An extern named as a value is a closure over a
+  wrapper, as a top-level function is: lambda lifting is given the externs' numbers of parameters
+  (`LambdaLifting.lift`), and the wrapper's body is the `CallImport` (`CoreIrLowerLifted.wrapperCalling`). The module declares each import a call reaches once
   (`CoreIrFacts.Imports`, `CoreIrEmit.importDeclaration`), as `$import_<module>_<name>`, before every other import,
   and exports its memory.
 - **Running it.** `nanyx run` links Wasmtime's WASI, so an extern of a WASI preview 1 function runs, and the runtime's

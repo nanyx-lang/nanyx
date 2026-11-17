@@ -67,6 +67,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | MemberAccess(target, f, span) -> MemberAccess(expr target, f, span)
             | ContextMemberAccess(t, f) -> ContextMemberAccess(typeExpr t, f)
             | ContextMemberCall(t, f, args) -> ContextMemberCall(typeExpr t, f, List.map expr args)
+            | TypeValue t -> TypeValue(typeExpr t)
             | UseIn(value, body) -> UseIn(expr value, expr body)
             | WorkflowBindExpr(n, value) -> WorkflowBindExpr(n, expr value)
             | WorkflowReturnExpr value -> WorkflowReturnExpr(expr value)
@@ -109,6 +110,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | TypeKeyword -> t.Kind
             | TypeNamedArgument(n, value) -> TypeNamedArgument(n, typeExpr value)
             | TypeAssociated(context, n) -> TypeAssociated(typeExpr context, n)
+            | TypeArgument operand -> TypeArgument(typeExpr operand)
             | TypeTuple items -> TypeTuple(List.map typeExpr items)
             | TypeRecord fields -> TypeRecord(List.map typeField fields)
             | TypeOpenRecord(fields, row) -> TypeOpenRecord(List.map typeField fields, row)
@@ -127,7 +129,6 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
     and typeField (f: TypeRecordField) =
         match f with
         | TypeField(n, isMutable, t, defaultValue) -> TypeField(n, isMutable, Option.map typeExpr t, Option.map expr defaultValue)
-        | TypeMember(n, t) -> TypeMember(n, Option.map typeExpr t)
         | TypeFieldAttribute(n, argument, _) -> TypeFieldAttribute(n, Option.map expr argument, SourceSpan.none)
 
     and typeDef (n, modifiers, parameters, body) =

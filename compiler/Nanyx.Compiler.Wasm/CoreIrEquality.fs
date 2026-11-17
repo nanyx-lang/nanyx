@@ -83,7 +83,7 @@ let private compare (ty: IrType) (loadA: string list) (loadB: string list) : str
     | IrSized _ -> loadA @ loadB @ [ $"{CoreIrLayout.valueType ty}.eq" ]
     | IrBool
     | IrUnit -> loadA @ loadB @ [ "i32.eq" ]
-    | IrFloat -> loadA @ [ "f64.load" ] @ loadB @ [ "f64.load"; "f64.eq" ]
+    | IrFloat -> loadA @ loadB @ [ "f64.eq" ]
     | IrF32 -> loadA @ [ "f32.load" ] @ loadB @ [ "f32.load"; "f32.eq" ]
     | IrString -> loadA @ loadB @ [ $"call ${Helpers.stringEquals}" ]
     | IrRecord _

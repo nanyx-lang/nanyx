@@ -5,18 +5,16 @@ open TranspilerWasmTestHelpers
 
 // The prelude's lazy sequence, `seq(a)`, and ranges as values of it (#192). Each program runs with its memory checked.
 
-let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
-
 [<Fact>]
 let ``Run - a range is mapped and made a list`` () =
-    run """
+    runSource """
 println((1..10) \seq.map { * 2 } \seq.toList)
 """
     |> assertRan "[2, 4, 6, 8, 10, 12, 14, 16, 18, 20]\n"
 
 [<Fact>]
 let ``Run - a range without an end is cut short by take`` () =
-    run """
+    runSource """
 def naturals = 0..
 
 println(naturals \seq.filter { x -> x % 3 == 0 } \seq.take(4) \seq.toList)
@@ -26,7 +24,7 @@ println(naturals \seq.skip(5) \seq.takeWhile { x -> x < 9 } \seq.toList)
 
 [<Fact>]
 let ``Run - a sequence is pulled only as far as it is needed, when it is`` () =
-    run """
+    runSource """
 def loud = (1..5) \seq.map { x ->
   println("pulling {x}")
   x * 10
@@ -39,7 +37,7 @@ println(loud \seq.take(2) \seq.toList)
 
 [<Fact>]
 let ``Run - a sequence is unfolded, folded and made from a list`` () =
-    run """
+    runSource """
 println(seq.unfold(1, { n -> if n > 50 then #done else #some(n, n * 3) }) \seq.toList)
 println((1..4) \seq.fold(0) { + })
 println([5, 6, 7] \list.toSeq \seq.map { x -> x + 1 } \seq.toList)
@@ -49,7 +47,7 @@ println(seq.empty() \seq.toList \list.length)
 
 [<Fact>]
 let ``Run - a sequence is pulled by matching on what next gives`` () =
-    run """
+    runSource """
 def total: seq(int) -> int = { s ->
   match s.next()
     | #next(x, rest) -> x + total(rest)
@@ -62,7 +60,7 @@ println(total(1..100))
 
 [<Fact>]
 let ``Run - a for loop over a range still counts`` () =
-    run """
+    runSource """
 for 1..3 | i -> println(i)
 for ["a", "b"], 10.. | s, i -> println("{s}{i}")
 """
@@ -71,7 +69,7 @@ for ["a", "b"], 10.. | s, i -> println("{s}{i}")
 [<Fact>]
 let ``Run - a sequence made in a pure function runs its function's context when it is pulled`` () =
     // #1738
-    run """
+    runSource """
 def made: () -> [Console] seq(int) = {
   (1..3) \seq.map { x ->
     println("pull {x}")
@@ -94,7 +92,7 @@ first()
 [<Fact>]
 let ``Run - a function that requires a context is passed on to concatMap through a signature's context variable`` () =
     // #1908
-    run """
+    runSource """
 def flat: [c] list(a), ([c] a -> [c] seq(b)) -> list(b) = { xs, f ->
   xs \list.toSeq \seq.concatMap(f) \seq.toList
 }

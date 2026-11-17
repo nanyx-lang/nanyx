@@ -434,6 +434,10 @@ let notImplemented = "???"
 let private notImplementedExpr =
     spanned (pstring notImplemented >>% IdentifierExpr notImplemented)
 
+/// `type Point`, a type passed as a type argument (see `TypeValue`).
+let private typeValueExpr =
+    spanned (attempt (pstring "type" >>. keywordEnd >>. wsInline) >>. typeOperand |>> TypeValue)
+
 // Unit literal: ()
 let unitExpr =
     spanned (between (pstring "(") (ws >>. pstring ")") (preturn ()) |>> fun _ -> UnitExpr)
@@ -806,6 +810,7 @@ let primaryExprNoWs =
         attempt whileExpr
         attempt matchExpr
         attempt lambda
+        attempt typeValueExpr
         attempt contextMemberAccess  // C(T).field - must come before functionCall
         attempt functionCall
         attempt tagExpr  // #tag or #tag(expr)

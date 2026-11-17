@@ -270,10 +270,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             k value
         match expr.Kind with
         | UnitExpr -> k (Expr.make (Atom AUnit) IrUnit)
+        // A `Type` value is known at compile time, so it holds nothing at run time (see `TypeValues`).
+        | TypeValue _ -> k (Expr.make (Atom AUnit) IrUnit)
         | LiteralExpr(IntLit value) -> k (Expr.make (Atom(intAtom value (tyOf expr))) (tyOf expr))
         | LiteralExpr(BoolLit value) -> k (Expr.make (Atom(ABool value)) IrBool)
         | LiteralExpr(StringLit value) -> k (Expr.make (Atom(AString value)) IrString)
-        | LiteralExpr(FloatLit value) -> k (Expr.make (BoxFloat value) (tyOf expr))
+        | LiteralExpr(FloatLit value) -> k (Expr.make (FloatConstant value) (tyOf expr))
         | IdentifierExpr name -> this.Identifier scope expr name k
         | TagExpr(name, None) -> k (Expr.make (Atom(ATag name)) (tyOf expr))
         | TagExpr(name, Some payload) ->
@@ -288,7 +290,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let ty = tyOf expr
             this.Atoms scope [ operand ] (fun atoms ->
                 match ty with
-                | IrFloat | IrF32 -> bindTemp (Expr.make (BoxFloat -0.0) ty) (fun zero -> k (Expr.make (Prim(FloatBinary "-", zero :: atoms)) ty))
+                | IrFloat | IrF32 -> bindTemp (Expr.make (FloatConstant -0.0) ty) (fun zero -> k (Expr.make (Prim(FloatBinary "-", zero :: atoms)) ty))
                 | IrInt -> k (Expr.make (Prim(Binary "-", AInt 0L :: atoms)) ty)
                 | IrSized integer -> k (Expr.make (Prim(Binary "-", ASized(integer, 0L) :: atoms)) ty)
                 | other -> cannot $"the operator `-` on a value of type '{IrType.show other}'")
@@ -592,7 +594,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 let order = Expr.make (CallRuntime(Helpers.valueCompare, atoms, true)) IrInt
                 bindTemp order (fun result -> k (Expr.make (Prim(Binary op, [ result; AInt 0L ])) IrBool)))
         | _ when IrType.isFloat (tyOf left) || IrType.isFloat (tyOf right) ->
-            // Floats are boxed: the operands are unboxed, and an arithmetic result boxed.
+            // An instruction on the floats' values (an `F32`'s unboxed, and its arithmetic result boxed).
             // `%` has no instruction: it calls a runtime helper (see `CoreIrEmit`).
             if op <> "%" && (wasmFloatInstruction op).IsNone then cannot $"the operator `{op}` on floats"
             let ty = tyOf expr

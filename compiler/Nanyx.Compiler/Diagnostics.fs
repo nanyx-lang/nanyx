@@ -190,6 +190,9 @@ module DiagnosticCodes =
     let UnknownAssociatedType = code 267 "Associated type the context does not have" Severity.Error
     let UnfixedAssociatedType = code 268 "Instance that leaves an associated type unfixed" Severity.Error
     let AssociatedTypeFixedTwice = code 269 "Instance that fixes an associated type two ways" Severity.Error
+    let InvalidTypeParameter = code 270 "Type parameter declared wrongly" Severity.Error
+    let MissingTypeArgument = code 271 "Type argument left out" Severity.Error
+    let TypeChosenAtRunTime = code 272 "Type value not known at compile time" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -219,6 +222,7 @@ module DiagnosticCodes =
           ContextAsType; InstanceOutsideUse; UseOfNonInstance; OwnInstanceReplaced; OperatorRequiredByMember; InvalidTypeScope; ContextsOnValueType; AttachedDefinitionInScope; OperatorArity
           UndeclaredTypeScope; NoFromArray; InvalidCollectionSpread; UnionWithTwoRests; ProtectedShape; PatternInsidePattern; PatternRequiresContexts; NoMatchOutsidePattern; PatternArguments
           InvalidAssociatedType; AmbiguousAssociatedType; UnknownAssociatedType; UnfixedAssociatedType; AssociatedTypeFixedTwice
+          InvalidTypeParameter; MissingTypeArgument; TypeChosenAtRunTime
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

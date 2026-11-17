@@ -5,11 +5,9 @@ open TranspilerWasmTestHelpers
 
 // #1642: the immutable `Stack(a)` in `nanyx/stack`.
 
-let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
-
 [<Fact>]
 let ``Run - a stack pushes and pops at the top`` () =
-    run
+    runSource
         """
 import nanyx/stack
 
@@ -25,7 +23,7 @@ println(Stack.toString(s))
 
 [<Fact>]
 let ``Run - the empty stack has nothing to pop or peek at`` () =
-    run
+    runSource
         """
 import nanyx/stack
 
@@ -42,7 +40,7 @@ println(Stack.toString(s))
 
 [<Fact>]
 let ``Run - a stack literal and fromList put the first value on top`` () =
-    run
+    runSource
         """
 import nanyx/stack
 
@@ -56,7 +54,7 @@ println("{a == b} {a == Stack[1, 2, 3]} {a != Stack.fromList([3, 2, 1])}")
 
 [<Fact>]
 let ``Run - pushing and popping leave the stack they were given as it was`` () =
-    run
+    runSource
         """
 import nanyx/stack
 
@@ -73,7 +71,7 @@ println("{Stack.toList(base)} {Stack.toList(pushed)} {Stack.toList(popped)}")
 
 [<Fact>]
 let ``Run - a stack can be a map's key`` () =
-    run
+    runSource
         """
 import nanyx/stack
 

@@ -26,12 +26,7 @@ let private rewrittenBy (title: string) (marked: string) =
     | source, offers ->
         match offers |> List.tryPick (function Available refactoring when refactoring.Title.StartsWith title -> Some refactoring | _ -> None) with
         | Some refactoring ->
-            let after = applyEdits source refactoring.Edits
-            let result = Compiler.compile after
-            Assert.True(result.Diagnostics.IsEmpty, sprintf "%s\n%A" after result.Diagnostics)
-            match FormatCommand.formatText Formatter.Options.defaults "" after with
-            | FormatCommand.Formatting.Formatted formatted -> Assert.Equal(formatted, after)
-            | other -> failwithf "%A" other
+            let after = refactoredText source refactoring
             let at = Option.get refactoring.Rename
             Assert.Equal("extracted", after.Substring(at, "extracted".Length))
             after

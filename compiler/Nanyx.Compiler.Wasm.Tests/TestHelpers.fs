@@ -231,6 +231,14 @@ type TempDirectory() =
     let path = Path.Combine(Path.GetTempPath(), $"nanyx-{Guid.NewGuid():N}")
     do Directory.CreateDirectory path |> ignore
     member _.Path = path
+
+    /// Writes `text`, with its line endings made `\n`, to the file at `relative` under the directory, making the
+    /// directories it is in.
+    member _.Write (relative: string) (text: string) =
+        let full = Path.Combine(path, relative)
+        Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
+        File.WriteAllText(full, text.ReplaceLineEndings "\n")
+
     interface IDisposable with
         member _.Dispose() = try Directory.Delete(path, true) with _ -> ()
 
@@ -322,7 +330,7 @@ let runE2E testName =
 /// `source`, saved as a script and run (see `runScriptWithOptions`).
 let runSourceWithOptions (checkMemory: bool) (inlineCalls: bool) (standardInput: string) (source: string) : RunOutcome =
     let inputPath = Path.Combine(Path.GetTempPath(), $"nanyx-run-{Guid.NewGuid():N}.nyx")
-    File.WriteAllText(inputPath, source)
+    File.WriteAllText(inputPath, source.ReplaceLineEndings "\n")
     try runScriptWithOptions checkMemory inlineCalls standardInput inputPath
     finally File.Delete inputPath
 

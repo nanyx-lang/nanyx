@@ -15,9 +15,9 @@ type IrType =
     | IrBool
     | IrUnit
     | IrString
-    /// A float, in a box of its own: the value is a pointer to the `f64`.
+    /// A float: an `f64`, on the heap only as a part of something else.
     | IrFloat
-    /// An `F32`, in a box of its own as a float is: the value is a pointer to the `f32`.
+    /// An `F32`, in a box of its own: the value is a pointer to the `f32`.
     | IrF32
     /// A value of no known type, because of an error deferred to run time (a debug build of a module with errors).
     | IrError
@@ -178,8 +178,8 @@ and ExprKind =
     | Interpolate of InterpolationPart list
     /// What `dbg(value)` prints: the string, the value's text (see `CoreIrLowerDbg`), after `dbg: `. It is unit.
     | Dbg of Atom
-    /// Boxes a float constant: as an `f64`, or as an `f32` where the expression is an `F32`.
-    | BoxFloat of float
+    /// A float constant: an `f64`, or an `f32` in a box of its own where the expression is an `F32`.
+    | FloatConstant of float
     /// An error deferred to run time: writes these messages to stderr and ends the program.
     | Crash of string list
     /// A `for` loop: evaluates its body for each element, and is unit.
@@ -583,7 +583,7 @@ module Expr =
         | CallClosure _
         | Interpolate _
         | Dbg _
-        | BoxFloat _
+        | FloatConstant _
         | Crash _ -> []
 
     /// `e` with `f` applied to each expression directly inside it, those `children` gives, in the same order. Mapping
@@ -622,7 +622,7 @@ module Expr =
             | CallClosure _
             | Interpolate _
             | Dbg _
-            | BoxFloat _
+            | FloatConstant _
             | Crash _ -> e.Kind
         { e with Kind = kind }
 
@@ -739,7 +739,7 @@ module Print =
             |> String.concat ""
             |> sprintf "\"%s\""
         | Dbg text -> $"dbg({atom text})"
-        | BoxFloat value -> string value
+        | FloatConstant value -> string value
         | Crash messages -> $"""crash({messages |> String.concat ""})"""
         | ForEach loop ->
             let inner = indent + "  "
