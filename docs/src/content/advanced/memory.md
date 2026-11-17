@@ -217,7 +217,7 @@ def names = memory {
 
 `+=` is a [spare operator](../tour/operators#the-operators) that `MList` attaches, so `items += x` is `MList.add(items, x)`, and gives `()`. It doesn't assign: a `mut` cell changes with `:=`, so `count += 1` on one is an error that says to write `count := count + ...`.
 
-An `MArray` from [`nanyx/marray`](../stdlib/marray) is a fixed-length array whose elements `set` changes in place, laid out in one block as an [`Array`](../stdlib/array) is. It belongs to its block too. Converting between an `Array` and an `MArray` copies, so an `Array` never changes. An `MSlice` from [`nanyx/mslice`](../stdlib/mslice) is a view of part of an `MArray`: setting, sorting, filling or reversing it changes that part of the array, and nothing else.
+An `MArray` from [`nanyx/marray`](../stdlib/marray) is a fixed-length array whose elements `set` changes in place, laid out in one block as an [`Array`](../stdlib/array) is. It belongs to its block too. Converting between an `Array` and an `MArray` copies, so an `Array` never changes. An `MSlice` from [`nanyx/mslice`](../stdlib/mslice) is a view of part of an `MArray`: setting, sorting, filling or reversing it changes that part of the array, and nothing else. `MArray.sort(xs)` sorts a whole array in place, with no copy to a list and back; it and `sortDescending`, `sortBy`, `sortByDescending` and `sortWith`, the family `list` has, are stable, and come with `nanyx/mslice`.
 
 ```nanyx
 import (

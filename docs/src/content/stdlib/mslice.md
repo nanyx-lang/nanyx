@@ -40,6 +40,8 @@ element gives `#none` or `#outOfRange` past the end, never a trap.
 
 Each function is attached to `MSlice`, so with `import nanyx/mslice` it is called as
 `MSlice.sort(s)`, or as `s \sort`; `xs \slice(0, 3)` makes a slice of the mutable array `xs`.
+Sorting a whole array is here too, as the sort of the slice of all of it: `MArray.sort(xs)`,
+`MArray.sortBy(xs, key)` and the rest, each stable.
 
 ## `MSlice`
 
@@ -117,14 +119,97 @@ def MSlice.reverse: [Memory] MSlice(a) -> ()
 
 Reverses the order of the elements of `s`, in place.
 
+## `MSlice.sortWith`
+
+```nanyx fragment
+def MSlice.sortWith: [Memory, c] MSlice(a), ([c] (a, a) -> #less | #equal | #greater) -> ()
+```
+
+Sorts the elements of `s` in the order `order` gives, in place, in the array `s` views: `order(x,
+y)` is `#less` when `x` goes before `y`. The sort is stable: elements `order` finds `#equal` keep
+the order they were in. It is a merge sort: runs of 16 are sorted by insertion, then merged in
+pairs, back and forth between `s` and one scratch array of its length, so it takes time in
+proportion to n log n and memory for n more elements. Stack-safe: it works on a slice of any
+length.
+
 ## `MSlice.sort`
 
 ```nanyx fragment
 def MSlice.sort: [Memory, Ord(a)] MSlice(a) -> ()
 ```
 
-Sorts the elements of `s` from least to greatest, in place, keeping elements that are equal in
-the order they were in. It is an insertion sort, which suits the short runs a slice is often of.
+Sorts the elements of `s` from least to greatest by their `Ord`, in place. The sort is stable,
+as [`MSlice.sortWith`](#mslicesortwith) is.
+
+## `MSlice.sortDescending`
+
+```nanyx fragment
+def MSlice.sortDescending: [Memory, Ord(a)] MSlice(a) -> ()
+```
+
+Sorts the elements of `s` from greatest to least by their `Ord`, in place. The sort is stable:
+equal elements keep their order, which sorting and then reversing would not do.
+
+## `MSlice.sortBy`
+
+```nanyx fragment
+def MSlice.sortBy: [Memory, Ord(b), c] MSlice(a), ([c] a -> b) -> ()
+```
+
+Sorts the elements of `s` in ascending order of `key`, in place: `MSlice.sortBy(s, { p ->
+p.name })`. The sort is stable: elements with the same key keep their order.
+
+## `MSlice.sortByDescending`
+
+```nanyx fragment
+def MSlice.sortByDescending: [Memory, Ord(b), c] MSlice(a), ([c] a -> b) -> ()
+```
+
+Sorts the elements of `s` in descending order of `key`, in place. The sort is stable: elements
+with the same key keep their order.
+
+## `MArray.sortWith`
+
+```nanyx fragment
+def MArray.sortWith: [Memory, c] MArray(a), ([c] (a, a) -> #less | #equal | #greater) -> ()
+```
+
+Sorts the elements of `xs` in the order `order` gives, in place, as [`MSlice.sortWith`](#mslicesortwith) does.
+
+## `MArray.sort`
+
+```nanyx fragment
+def MArray.sort: [Memory, Ord(a)] MArray(a) -> ()
+```
+
+Sorts the elements of `xs` from least to greatest by their `Ord`, in place, as [`MSlice.sort`](#mslicesort)
+does: `MArray.sort(xs)`.
+
+## `MArray.sortDescending`
+
+```nanyx fragment
+def MArray.sortDescending: [Memory, Ord(a)] MArray(a) -> ()
+```
+
+Sorts the elements of `xs` from greatest to least by their `Ord`, in place, as
+[`MSlice.sortDescending`](#mslicesortdescending) does.
+
+## `MArray.sortBy`
+
+```nanyx fragment
+def MArray.sortBy: [Memory, Ord(b), c] MArray(a), ([c] a -> b) -> ()
+```
+
+Sorts the elements of `xs` in ascending order of `key`, in place, as [`MSlice.sortBy`](#mslicesortby) does.
+
+## `MArray.sortByDescending`
+
+```nanyx fragment
+def MArray.sortByDescending: [Memory, Ord(b), c] MArray(a), ([c] a -> b) -> ()
+```
+
+Sorts the elements of `xs` in descending order of `key`, in place, as [`MSlice.sortByDescending`](#mslicesortbydescending)
+does.
 
 ## `MSlice.toList`
 
