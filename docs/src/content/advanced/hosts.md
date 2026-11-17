@@ -33,11 +33,11 @@ A single `.nyx` file runs under the console host unless a `::host` directive at 
 
 ## The entry point fits the host
 
-The entry point is passed to the host's `run` function, so it must have the type `run` takes. Under the console host that is a function with no parameters, which may require `Console`, `Env` and `FileSystem`. An entry point of another shape is an error at its `@entry` that names the host and both types:
+The entry point is passed to the host's `run` function, so it must have the type `run` takes. Under the console host that is a function with no parameters, which may require `Console`, `Env`, `FileSystem` and `Http`. An entry point of another shape is an error at its `@entry` that names the host and both types:
 
 ```text
 main.nyx:3:1: error NYX0237: The entry point 'main' doesn't fit the host 'nanyx.console/console.host'
-  expected: [Console, Env, FileSystem] () -> a
+  expected: [Console, Env, FileSystem, Http] () -> a
   found:    int -> int
 ```
 
@@ -45,13 +45,14 @@ A script's statements are its entry point, and run under its host in the same wa
 
 # The console host
 
-The console host, `nanyx.console`, runs command-line programs. It provides three contexts:
+The console host, `nanyx.console`, runs command-line programs. It provides four contexts:
 
 - [`Console`](../stdlib/console) reads standard input and writes standard output and standard error.
 - [`Env`](../stdlib/env) gives the program's command-line arguments (`args`) and environment variables (`variable`), and ends it with an exit code (`exit`).
 - [`FileSystem`](../stdlib/filesystem) reads and writes files, through the functions of the shipped package `nanyx.fs` ([`file`](../stdlib/file), [`dir`](../stdlib/dir) and [`path`](../stdlib/path)). `nanyx run` lets a program reach the current directory and, with [`--allow-dir`](../standard-tools/command-line#nanyx-run), one other; a path outside them is `#error(#permissionDenied)`.
+- [`Http`](../stdlib/client) makes HTTP requests, through the functions of the shipped package `nanyx.http.core` ([`http`](../stdlib/http)). Each call waits for its response.
 
-The host has a _prelude_: a module whose exports every module of the program sees without importing them. The console host's brings in `Console`, `Env`, `FileSystem`, `print`, `println`, `eprint` and `eprintln`, so a program uses them with no import:
+The host has a _prelude_: a module whose exports every module of the program sees without importing them. The console host's brings in `Console`, `Env`, `FileSystem`, `Http`, `print`, `println`, `eprint` and `eprintln`, so a program uses them with no import:
 
 ```nanyx
 match args()
@@ -201,6 +202,7 @@ The compiler ships the packages every program needs beside itself, in a `package
 
 - `nanyx.console`, the console host;
 - `nanyx.console.core`, its interface package, which declares `Console` and `Env`;
-- `nanyx.fs`, the interface package of the file system, which declares `FileSystem`, `Path` and the functions on them.
+- `nanyx.fs`, the interface package of the file system, which declares `FileSystem`, `Path` and the functions on them;
+- `nanyx.http.core`, the interface package of HTTP, which declares `Http`, `Request`, `Response` and the functions on them.
 
 A manifest or a directive names a package the compiler ships at the compiler's version exactly; any other version is an error that names the one shipped (`NYX0029`). In a `::host` or `::dependency` directive it needs no version at all: `::dependency nanyx.console.core`. The standard library, `nanyx/...`, is built into the compiler and is never listed as a dependency.
