@@ -60,6 +60,10 @@ export def MStack.length: [Memory] MStack(a) -> int = { MStack(items) ->
   list.length(MRef.get(items))
 }
 
+--| The values on `stack` now, the top one first, as a sequence: pushing or popping later doesn't
+  change it. A mutable stack is [`Iterable`] by it, so a `for` loop walks one.
+export def MStack.toSeq: [Memory] MStack(a) -> seq(a) = { stack -> list.toSeq(MStack.toList(stack)) }
+
 --| The values on `stack`, the top one first.
 export def MStack.toList: [Memory] MStack(a) -> list(a) = { MStack(items) ->
   MRef.get(items)

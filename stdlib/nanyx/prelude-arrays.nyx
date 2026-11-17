@@ -63,6 +63,23 @@ export def __arrayOf: list(a) -> array(a) = { xs ->
   __nanyx_array_of_list(xs)
 }
 
+--| The elements of `xs`, in order, each read when the sequence is pulled. An array is
+  [`Iterable`] by it, so a `for` loop walks one.
+export def array.toSeq: array(a) -> seq(a) = { xs ->
+  elementsFrom(xs, 0)
+}
+
+-- The elements of `xs` from `index` on.
+def elementsFrom: array(a), int -> seq(a) = { xs, index ->
+  Seq(
+    next = {
+      if index >= __nanyx_array_length(xs)
+        then #done
+        else #next(__nanyx_array_get(xs, index), elementsFrom(xs, index + 1))
+    }
+  )
+}
+
 --| The elements of the array `xs`, which a collection literal spreads, `[...xs]`.
 export def __spreadArray: array(a) -> list(a) = { xs ->
   __nanyx_array_to_list(xs)

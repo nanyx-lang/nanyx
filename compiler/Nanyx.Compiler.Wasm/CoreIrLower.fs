@@ -140,7 +140,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | Some scheme -> bindScheme Map.empty scheme (substitute subst instanceTy)
         | None -> Map.empty
 
-    /// The type variables the types of the definition `name`'s nodes name, by name.
+    /// The type variables the types of the definition `name`'s nodes name, and the types of the members of the contexts
+    /// it requires, by name.
     let namedVariables =
         let cache = System.Collections.Generic.Dictionary<string, Map<string, int list>>()
         fun (name: string) ->
@@ -151,9 +152,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     match ty with
                     | TyVar { Id = id; Name = Some varName } -> [ varName, id ]
                     | _ -> Ty.children ty |> List.collect named
+                let memberTys =
+                    input.ContextParameters |> Map.tryFind name |> Option.map fst |> Option.defaultValue [] |> List.choose _.Type
                 let found =
                     SyntaxTree.expressionsWithin definitions.[name]
                     |> List.choose (fun expr -> input.ExprTypes |> Map.tryFind expr.Id)
+                    |> List.append memberTys
                     |> List.collect named
                     |> List.distinct
                     |> List.groupBy fst
@@ -775,7 +779,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           Settle = settle
           KnownOf = knownOf
           VariableMembers = variableMembers
-          BindingsAt = bindingsAt
+          BindingsAt = fun call name instanceTy -> bindingsAt name instanceTy |> withAssociatedArguments (Some call) name
           ParameterNames = parameterNames
           Callee = callee
           WrappedOf = wrappedOf }

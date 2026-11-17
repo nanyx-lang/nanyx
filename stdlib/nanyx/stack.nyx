@@ -70,6 +70,10 @@ export def Stack.length: Stack(a) -> int = { Stack(items) ->
   list.length(items)
 }
 
+--| The values on `stack`, the top one first, as a sequence. A stack is [`Iterable`] by it, so a
+  `for` loop walks one.
+export def Stack.toSeq: Stack(a) -> seq(a) = { Stack(items) -> list.toSeq(items) }
+
 --| The values on `stack`, the top one first.
 export def Stack.toList: Stack(a) -> list(a) = { Stack(items) -> items }
 

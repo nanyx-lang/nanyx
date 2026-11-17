@@ -32,6 +32,7 @@
     <Compile Include="Features\Calls\BuiltInCallTests.fs" />
     <Compile Include="Features\Contexts\AppendContextTests.fs" />
     <Compile Include="Features\Contexts\AssociatedTypeTests.fs" />
+    <Compile Include="Features\Contexts\IterableTests.fs" />
     <Compile Include="Features\Contexts\AddContextFixTests.fs" />
     <Compile Include="Features\Contexts\ContextTests.fs" />
     <Compile Include="Features\Contexts\ContextEscapeTests.fs" />

@@ -166,10 +166,14 @@ let private canSynthesize (ctxName: Identifier) (argTys: Ty list) =
 /// variables from; it is read afresh, and is the callee's type at the call. Without one, the type variables are
 /// matched by name against `generalTy`, the callee's type before it was instantiated. Each is given resolved as far as
 /// the constraints so far tell, and as read: a type resolved now may have a union rest the unifier made up, which is
-/// numbered afresh each time the constraints are solved, so one to constrain later is the type as read.
-let private contextArgTysAtCall (state: InferState) (signature: TypeExpr option) (generalTy: Ty) (calleeTy: Ty) (args: TypeExpr list) : Ty list * Ty list * InferState =
-    // Read with no variables in scope, so each variable is a fresh one, shared by the signature and the arguments.
-    let mutable current = { state with TypeVars = Map.empty }
+/// numbered afresh each time the constraints are solved, so one to constrain later is the type as read. `shared` are
+/// the variables the call's other contexts were read with, so that a variable only the contexts name, an associated
+/// type such as `elem` in `[Iterable(c), ToString(elem)]`, is one variable across them; the variables read are given
+/// back for the next.
+let private contextArgTysAtCall (state: InferState) (shared: Map<TypeVarKey, TyVar>) (signature: TypeExpr option) (generalTy: Ty) (calleeTy: Ty) (args: TypeExpr list) : Ty list * Ty list * Map<TypeVarKey, TyVar> * InferState =
+    // Read with only the call's own variables in scope, so each other variable is a fresh one, shared by the
+    // signature and the arguments.
+    let mutable current = { state with TypeVars = shared }
     let read (typeExpr: TypeExpr) =
         let ty, next = typeExprToTy current typeExpr
         current <- next
@@ -191,8 +195,9 @@ let private contextArgTysAtCall (state: InferState) (signature: TypeExpr option)
         | None ->
             let names = namedVarsIn generalTy calleeTy
             args |> List.map (read >> replaceNamedVars names)
+    let read = current.TypeVars
     let current = { current with TypeVars = state.TypeVars }
-    argTys |> List.map (resolveSoFar current), argTys, current
+    argTys |> List.map (resolveSoFar current), argTys, read, current
 
 /// `env` with the instance a `use` of the value of type `valueTy` loads in scope, when it is one of a parameterised
 /// context: a value whose type is the context applied to types, as `use Sum(int)(...)` makes (recorded by the node of
@@ -381,13 +386,14 @@ let private unsettledBesideOther (name: Identifier) (ctxName: Identifier) (other
 
 /// `state` with what each associated type of the context `ctxName`, which the callee of `call` requires written with
 /// `args`, is at the call, `argTys`, by the name the callee's signature gives it (see `TypedModule.AssociatedArguments`).
+/// One the signature fixes, `[Iterable(c, elem = int)]`, is recorded by the context's name for it, which the types of
+/// the context's members name it by.
 let private recordAssociatedArguments (state: InferState) (call: NodeId) (ctxName: Identifier) (args: TypeExpr list) (argTys: Ty list) =
     match tryFindTypeDef ctxName state with
     | Some info when not info.AssociatedTypes.IsEmpty && args.Length = argTys.Length ->
         let named =
-            List.zip args argTys
-            |> List.skip (args.Length - info.AssociatedTypes.Length)
-            |> List.choose (fun (arg, ty) -> match arg.Kind with TypeVar name -> Some (name, ty) | _ -> None)
+            List.zip3 (List.skip (args.Length - info.AssociatedTypes.Length) args) info.AssociatedTypes (List.skip (args.Length - info.AssociatedTypes.Length) argTys)
+            |> List.map (fun (arg, associated, ty) -> match arg.Kind with TypeVar name -> name, ty | _ -> associated, ty)
         let recorded = state.AssociatedArguments |> Map.tryFind call |> Option.defaultValue Map.empty
         { state with AssociatedArguments = state.AssociatedArguments |> Map.add call (named |> List.fold (fun acc (name, ty) -> acc |> Map.add name ty) recorded) }
     | _ -> state
@@ -544,6 +550,8 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
     let contexts = contextRequirementsOf env state name |> Option.defaultValue []
     match TypeEnv.tryFind name env, calleeTy with
     | Some scheme, Some calleeTy when contexts |> List.exists (isParameterizedContext state) ->
+        // The variables the call's contexts are read with, one variable for each name across them.
+        let shared = ref Map.empty
         contexts
         |> List.fold (fun result ctx ->
             result
@@ -551,12 +559,14 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                 match ctx.Kind with
                 | TypeApply(ctxName, args) when isParameterizedContext current ctx ->
                     let signature = contextSignatureOf env current name
-                    let argTys, argTysAsRead, current = contextArgTysAtCall current signature scheme.Type calleeTy args
+                    let before = shared.Value
+                    let argTys, argTysAsRead, read, current = contextArgTysAtCall current before signature scheme.Type calleeTy args
                     // A number literal nothing has settled yet is of its default type here (see `NumericLiterals`).
-                    let argTys, argTysAsRead, current =
+                    let argTys, argTysAsRead, read, current =
                         match NumericLiterals.settleIn argTys current with
-                        | Some literalsSettled -> contextArgTysAtCall literalsSettled signature scheme.Type calleeTy args
-                        | None -> argTys, argTysAsRead, current
+                        | Some literalsSettled -> contextArgTysAtCall literalsSettled before signature scheme.Type calleeTy args
+                        | None -> argTys, argTysAsRead, read, current
+                    shared.Value <- read
                     let settled = argTys |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty)
                     let current = recordAssociatedArguments current call.Id ctxName args argTysAsRead
                     // A well-known context of a type with no member attached is the compiler's own (see
