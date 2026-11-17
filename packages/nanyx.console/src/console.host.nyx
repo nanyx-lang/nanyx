@@ -443,8 +443,9 @@ def readChunk
     result
   }
 
---| Up to `length` bytes of the file at `at`, from byte `offset` on: the file is opened, read and
-  closed again, so nothing is left open between one chunk and the next.
+--| Up to `length` bytes of the file at `at`, from byte `offset` on, or an error for an `offset` past
+  its end: the file is opened, read and closed again, so nothing is left open between one chunk and
+  the next.
 def chunkAt
   : [HostRuntime] Path, int, int -> #some(string) | #error(FsError)
   = { at, offset, length ->
@@ -456,8 +457,16 @@ def chunkAt
           | #some(fd) ->
             def result = match described(fd)
               | #error(e) -> #error(e)
-              | #some(kind, _) ->
-                if kind == directoryKind then #error(#isDirectory) else readChunk(fd, offset, size)
+              | #some(kind, fileSize) ->
+                if kind == directoryKind
+                  then #error(#isDirectory)
+                  else if offset > fileSize
+                    then #error(
+                      #other(
+                        "it is shorter than it was: it ends at byte {fileSize}, before {offset}"
+                      )
+                    )
+                    else readChunk(fd, offset, size)
 
             ignore(fdClose(fd))
             result

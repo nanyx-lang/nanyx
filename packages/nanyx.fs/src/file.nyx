@@ -78,8 +78,19 @@ def nextLine: [FileSystem] Path, Reading -> #some(string, Reading) | #done = { a
           else #some(withoutReturn(reading.carried), Reading(ready = [], carried = "", offset = -1))
 }
 
+--| `error` in words, for a crash's message.
+def describe: FsError -> string = {
+  | #notFound -> "it is no longer there"
+  | #permissionDenied -> "permission denied"
+  | #isDirectory -> "it is a directory"
+  | #notDirectory -> "a part of its path is not a directory"
+  | #alreadyExists -> "something is already there"
+  | #other(why) -> why
+}
+
 --| The next line of the file at `at` once `chunk`, read at `reading.offset`, is read: an empty
-  chunk is the file's end, and so is a read that failed.
+  chunk is the file's end. A read that failed stops the program, so that it is never taken for the
+  end of a shorter file.
 def afterChunk
   : [FileSystem] Path, Reading, (#some(string) | #error(FsError)) -> #some(string, Reading) | #done
   = { at, reading, chunk ->
@@ -92,7 +103,7 @@ def afterChunk
             at
             Reading(ready = whole, carried = rest, offset = reading.offset + string.length(text))
           )
-      | #error(_) -> nextLine(at, reading with offset = -1)
+      | #error(e) -> crash("Couldn't read the rest of '{Path.toString(at)}': {describe(e)}")
   }
 
 --| The lines of the file at `at`, read lazily, a chunk at a time: a file larger than memory is
@@ -100,7 +111,8 @@ def afterChunk
   is a line too. The first chunk is read when this is called, and `#error` says why the file can't
   be read; after that, the file is opened, read and closed again for each chunk the sequence pulls,
   so a sequence abandoned before its end leaves nothing open. A read that fails partway, because the
-  file was deleted, say, ends the sequence there.
+  file was deleted or cut short, say, stops the program with a crash naming the file and why: the
+  sequence never ends early, so a short file and a failed read can't be mistaken for each other.
 
   ```nanyx fragment
   match file.lines(path.of("big.log"))

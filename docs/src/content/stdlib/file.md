@@ -116,7 +116,8 @@ never held whole. Each line is without its line break, `\n` or `\r\n`, and a las
 is a line too. The first chunk is read when this is called, and `#error` says why the file can't
 be read; after that, the file is opened, read and closed again for each chunk the sequence pulls,
 so a sequence abandoned before its end leaves nothing open. A read that fails partway, because the
-file was deleted, say, ends the sequence there.
+file was deleted or cut short, say, stops the program with a crash naming the file and why: the
+sequence never ends early, so a short file and a failed read can't be mistaken for each other.
 
 ```nanyx fragment
 match file.lines(path.of("big.log"))

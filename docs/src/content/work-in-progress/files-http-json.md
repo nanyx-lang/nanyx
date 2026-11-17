@@ -57,6 +57,8 @@ match config
 - **Lazily, line by line:** `file.lines(path)` gives `#some` of a `[FileSystem] seq(string)`
   ([Lazy sequences](./lazy-sequences)), so a large file is never read whole, or `#error(FsError)` when the file
   can't be read ([#1784](https://github.com/nanyx-lang/nanyx/issues/1784)). Each line is without its `\n` or `\r\n`.
+  A read that fails once the sequence is under way crashes the program, naming the file and why: it never ends the
+  sequence early, so a short file and a failed read can't be mistaken for each other.
 - **Scoped by default.** The console host implements it with WASI's file calls. `nanyx run` gives a program the
   current directory and nothing outside it unless `--allow-dir` adds more, and anything outside is
   `#permissionDenied`.
@@ -92,14 +94,16 @@ match config
   written with `/`. `nanyx run` passes the shell's directory and the one `--allow-dir` names (`Program.RunIn`); a
   directory that isn't there is a usage error. Output a test redirects is written by WASI to files of its own, then
   copied to the caller's streams, so that `fd_write` stays WASI's and writes to files too.
-
 - **`file.lines`** reads a chunk of 64 KB at a time through a member of its own, `readFileChunk(at, offset,
   length)`, and splits it at `\n`, carrying a line that runs past the chunk into the next; the sequence is
   `seq.unfold` over what is left (the lines split but not given yet, that carried start, and the offset of the next
   chunk). Settled here:
-  - **Its errors.** A `seq(string)` has nowhere to put an `FsError`, so `file.lines` reads the first chunk when it is
-    called and gives `#some(lines)` or `#error(FsError)`, and the sequence it gives ends early when a later read
-    fails (the file was deleted, say).
+  - **Its errors** (decided by the maintainer). A `seq(string)` has nowhere to put an `FsError`, so `file.lines`
+    reads the first chunk when it is called, which checks the file can be read, and gives `#some(lines)` or
+    `#error(FsError)` (`#notFound`, `#permissionDenied`, `#isDirectory`, `#notDirectory` and the rest). A read that
+    fails later, because the file was deleted or cut short between two chunks, or another I/O error, crashes the
+    program with the prelude's `crash`, naming the file and the error: it must not quietly end the sequence. A cut is
+    caught because the host's `readFileChunk` gives an error, not an empty chunk, for an offset past the file's end.
   - **Nothing is left open.** The console host opens the file, reads the chunk with `fd_pread` at its offset, and
     closes it again, for each chunk, so a sequence abandoned before its end holds no file, and no drop hook is needed:
     the open question of what dropping one does is gone. Reading at an offset, rather than on from where the last
