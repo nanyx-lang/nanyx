@@ -38,6 +38,16 @@ let ``A value named as a built-in type is the value`` () =
     Assert.Equal(TyFunc(TyApply("list", [ TyPrimitive "int" ]), TyPrimitive "int", []), typed.Types.["count"])
 
 [<Fact>]
+let ``A top-level def named as a built-in type leaves the type's definitions alone`` () =
+    // #1841: only a local value of the type's name is read as the value.
+    let typed =
+        compileClean (normalized """def map: int -> int = { x -> x }
+def empty: map(string, int) = Map.empty
+def alsoEmpty: map(string, int) = map.empty
+def size = map.length(empty)""")
+    Assert.Equal(TyPrimitive "int", typed.Types.["size"])
+
+[<Fact>]
 let ``A capitalised built-in type is the type its alias names`` () =
     let typed =
         compileClean
