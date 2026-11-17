@@ -1060,15 +1060,21 @@ module UnconstructibleTypes =
         let blocks = items |> List.collect (function Kind (ModuleBlock(block, blockItems)) -> modulesOf (Some block) blockItems | _ -> [])
         (name, items |> List.filter (function Kind (Def _) -> true | _ -> false)) :: blocks
 
+    /// The definition of `name.of`, which takes the type's `representation`, as written, and wraps it in the type, whose
+    /// parameters are `parameters`: exported when `exported`.
+    let internal ofDefinition (exported: bool) (name: string) (parameters: Identifier list) (representation: string) =
+        let applied =
+            match parameters with
+            | [] -> name
+            | _ -> $"""{name}({parameters |> String.concat ", "})"""
+        let export = if exported then "export " else ""
+        $"{export}def {name}.of: {representation} -> {applied} = {{ value -> {name}(value) }}"
+
     /// The fix: an exported `of` after the type's declaration that takes its representation, as written, and wraps it.
     let private ofStub (model: SemanticModel) (item: TopLevelItem) (name: string) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
         let indent = String(' ', item.Span.StartColumn)
         let representation = model.Source.Substring(body.Span.Start, body.Span.End - body.Span.Start)
-        let applied =
-            match parameters with
-            | [] -> name
-            | _ -> $"""{name}({parameters |> List.map fst |> String.concat ", "})"""
-        let stub = $"export def {name}.of: {representation} -> {applied} = {{ value -> {name}(value) }}"
+        let stub = ofDefinition true name (List.map fst parameters) representation
         { Title = $"Export `{name}.of`, which makes a `{name}`"
           Edits = [ { Span = TextEdit.spanBetween model.Source item.Span item.Span.End item.Span.End; NewText = $"\n\n{indent}{stub}" } ] }
 

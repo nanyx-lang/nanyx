@@ -10,7 +10,7 @@ open NyxCompiler.Refactorings.RefactoringText
 
 /// A top-level `type` definition: its name, where the name is written, its modifiers, parameters and body, and the
 /// item that holds it.
-type private Alias =
+type internal Alias =
     { Name: string
       NameStart: int
       Modifiers: TypeDefModifier list
@@ -19,7 +19,7 @@ type private Alias =
       Item: TopLevelItem }
 
 /// The top-level `type` definitions of `syntax`, other than contexts.
-let private aliasesIn (source: string) (syntax: Module) =
+let internal aliasesIn (source: string) (syntax: Module) =
     syntax
     |> List.choose (fun item ->
         match item.Kind with

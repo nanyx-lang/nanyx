@@ -24,6 +24,5 @@ Each refactoring below has an issue with its design; none is built yet.
 | Change a def's signature: add, remove or reorder parameters, updating every call | [#1822](https://github.com/nanyx-lang/nanyx/issues/1822) |
 | Make a parameter named or positional, updating every call | [#1827](https://github.com/nanyx-lang/nanyx/issues/1827) |
 | Move a def to another module | [#1823](https://github.com/nanyx-lang/nanyx/issues/1823) |
-| Make a structural type protected or private, with a constructor | [#1825](https://github.com/nanyx-lang/nanyx/issues/1825) |
 | Implement a context as a quick fix on a missing-instance error | [#1959](https://github.com/nanyx-lang/nanyx/issues/1959) |
 | Move a file and update the imports of it by path | [#1831](https://github.com/nanyx-lang/nanyx/issues/1831) |

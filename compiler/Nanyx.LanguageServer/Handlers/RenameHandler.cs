@@ -101,14 +101,9 @@ public sealed class RenameHandler : RenameHandlerBase
     }
 
     /// <summary>The package of <paramref name="file"/> compiled again with the renamed texts, in the order they are given.</summary>
-    private FSharpList<CompileResult> Recompiled(string file, FSharpList<Tuple<string, string>> renamed)
-    {
-        var compiled = _documents.CompilePackage(file, renamed.ToDictionary(entry => entry.Item1, entry => entry.Item2, DocumentStore.FilePaths))
-            ?? throw Refused("The compiler failed on the renamed package");
-        var byPath = compiled.ToDictionary(entry => entry.Path, entry => entry.Result, DocumentStore.FilePaths);
-        return ListModule.OfSeq(renamed.Select(entry =>
-            byPath.TryGetValue(entry.Item1, out var result) ? result : throw Refused($"The renamed package has no file {entry.Item1}")));
-    }
+    private FSharpList<CompileResult> Recompiled(string file, FSharpList<Tuple<string, string>> renamed) =>
+        ListModule.OfSeq(_documents.RecompilePackage(file, renamed.Select(entry => (entry.Item1, entry.Item2)).ToList())
+            ?? throw Refused("The compiler failed on the renamed package"));
 
     /// <summary>The error response for a refused rename: the request failed (<c>RequestFailed</c>, -32803), for the reason given.</summary>
     internal static Exception Refused(string reason) => new RpcErrorException(-32803, null, reason);
