@@ -56,7 +56,7 @@ let ``A package named by its version is written, but can't be downloaded yet`` (
     let app = appWith directory plain
     let outcome = nanyxIn app [ "install"; "acme.json"; "--version"; "1.2.0" ]
     Assert.Equal(
-        "error: acme.json 1.2.0 is named by its version, but it isn't locked in nanyx.lock, and choosing a version to lock isn't supported yet: give the directory it is in, with path\n",
+        "error: 'acme.json' 1.2.0 is named by its version, but it isn't locked in 'nanyx.lock', and choosing a version to lock isn't supported yet: give the directory it is in, with `path`\n",
         outcome.StandardError.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Contains("dependencies = [(package = \"acme.json\", version = \"1.2.0\")]", manifestOf app)
@@ -68,7 +68,7 @@ let ``A package already listed is an error naming its entry`` () =
     let before = manifestOf app
     let outcome = nanyxIn app [ "install"; "acme.util"; "--path"; "../util" ]
     Assert.Equal(
-        "error: acme.util is already a dependency, at line 3 of app.nyxp: (package = \"acme.util\", path = \"../util\")\n",
+        "error: 'acme.util' is already a dependency, at line 3 of 'app.nyxp': `(package = \"acme.util\", path = \"../util\")`\n",
         outcome.StandardError.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal(before, manifestOf app)
@@ -78,7 +78,7 @@ let ``A directory holding a package of another name is an error`` () =
     use directory = new TempDirectory()
     let app = appWith directory plain
     let outcome = nanyxIn app [ "install"; "acme.tools"; "--path"; "../util" ]
-    Assert.Contains("is named acme.util, not acme.tools: the names must match", outcome.StandardError)
+    Assert.Contains("is named 'acme.util', not 'acme.tools': make the names match", outcome.StandardError)
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal(plain, manifestOf app)
 
@@ -87,5 +87,5 @@ let ``A package that isn't shipped needs a path or a version`` () =
     use directory = new TempDirectory()
     let app = appWith directory plain
     let outcome = nanyxIn app [ "install"; "acme.util" ]
-    Assert.Equal("error: Give the directory acme.util is in with --path, or its version with --version\n", outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Equal("error: Neither `--path` nor `--version` was given: give the directory 'acme.util' is in with `--path`, or its version with `--version`\n", outcome.StandardError.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)

@@ -126,7 +126,7 @@ internal static partial class CliCommands
 
         if (!json)
         {
-            shell.Error.WriteLine("nanyx manifest prints the manifest as JSON, so it needs --json: nanyx manifest --json");
+            shell.Error.WriteLine("`nanyx manifest` prints the manifest as JSON, so it needs `--json`: run `nanyx manifest --json`");
             return UsageError;
         }
 
@@ -249,8 +249,8 @@ internal static partial class CliCommands
         if (entry is null)
         {
             compiling.Error.WriteLine(package.Host is null
-                ? $"error: no entry point: {package.Manifest.Name} names no host, so it is a library, which can't be run. An application names the host its @entry runs under in its manifest: host = (package = \"{Hosts.consolePackage}\", version = \"{Toolchain.version}\")."
-                : $"error: no entry point: the package {package.Manifest.Name} has no @entry, so there is nothing to run.");
+                ? $"error {DiagnosticCodes.NothingToRun.Code}: '{package.Manifest.Name}' names no host, so it is a library, which can't be run: name the host its `@entry` runs under in its manifest, as `host = (package = \"{Hosts.consolePackage}\", version = \"{Toolchain.version}\")`"
+                : $"error {DiagnosticCodes.NothingToRun.Code}: The package '{package.Manifest.Name}' has no `@entry`, so there is nothing to run");
             return 1;
         }
 
@@ -349,7 +349,7 @@ internal static partial class CliCommands
             }
             catch (Exception ex) when (ex is WasmBinary.WasmAssemblyError or WatSyntax.WatSyntaxError)
             {
-                shell.Error.WriteLine($"Internal compiler error: the generated WebAssembly can't be assembled: {ex.Message}");
+                shell.Error.WriteLine($"Internal error in the compiler, whose WebAssembly can't be assembled ({ex.Message}): report it at https://github.com/nanyx-lang/nanyx/issues");
                 return null;
             }
         }
@@ -383,7 +383,7 @@ internal static partial class CliCommands
         path = paths.FirstOrDefault();
         if (paths.Length > 1)
         {
-            shell.Error.WriteLine($"Give one file, directory or manifest, not {paths.Length}.");
+            shell.Error.WriteLine($"{paths.Length} paths were given: give one file, directory or manifest");
             return false;
         }
 
@@ -408,7 +408,7 @@ internal static partial class CliCommands
 
         if (!Directory.Exists(full))
         {
-            shell.Error.WriteLine($"Not a directory or a {ManifestModule.extension} manifest: {path}");
+            shell.Error.WriteLine($"'{path}' is neither a directory nor a {ManifestModule.extension} manifest");
             failed = UsageError;
             return false;
         }
@@ -423,7 +423,7 @@ internal static partial class CliCommands
 
         if (found.ResultValue is null)
         {
-            shell.Error.WriteLine($"No {ManifestModule.extension} manifest in {full} or any directory above it");
+            shell.Error.WriteLine($"There is no {ManifestModule.extension} manifest in '{full}' or any directory above it");
             failed = 1;
             return false;
         }
@@ -475,7 +475,7 @@ internal static partial class CliCommands
             return null;
         }
 
-        shell.Error.WriteLine($"--host chooses a package's host: a script names its own with a ::host directive, ::host acme.server ../server, and runs under {Hosts.consolePackage} without one.");
+        shell.Error.WriteLine($"`--host` chooses a package's host, and a script names its own with a `::host` directive, as `::host acme.server ../server`, or runs under '{Hosts.consolePackage}' without one: leave out `--host`");
         return UsageError;
     }
 
@@ -518,7 +518,7 @@ internal static partial class CliCommands
         failed = UsageError;
         if (path is not null && !File.Exists(shell.FullPath(path)) && !Directory.Exists(shell.FullPath(path)))
         {
-            shell.Error.WriteLine($"Not found: {path}");
+            shell.Error.WriteLine($"There is no file or directory '{path}'");
             return false;
         }
 
@@ -577,13 +577,13 @@ internal static partial class CliCommands
     {
         if (check && write)
         {
-            Console.Error.WriteLine("Use --check or --write, not both.");
+            Console.Error.WriteLine("`--check` and `--write` were both given: use one of them");
             return UsageError;
         }
 
         if (stdin && paths.Length > 0)
         {
-            Console.Error.WriteLine("Format standard input (--stdin) or files, not both.");
+            Console.Error.WriteLine("`--stdin` and files were both given: format one or the other");
             return UsageError;
         }
 
@@ -624,16 +624,16 @@ internal static partial class CliCommands
                         PrintDiagnostics(shell, ListModule.OfSeq([Compiler.syntaxError(notParsed.Item)]), Console.Error);
                         break;
                     case Nanyx.Formatter.FormatCommand.Formatting.NotSafe notSafe:
-                        Console.Error.WriteLine($"{shell.DisplayPath(file)}: internal error: {notSafe.Item}; the file was left as it is.");
+                        Console.Error.WriteLine($"{shell.DisplayPath(file)}: Internal error in the formatter ({notSafe.Item}), so the file was left as it is: report it at https://github.com/nanyx-lang/nanyx/issues");
                         break;
                     // A directive's error is the file's own, and starts with where in it the directive is.
                     case Nanyx.Formatter.FormatCommand.Formatting.BadSettings badSettings when badSettings.Item.StartsWith(file + ":", StringComparison.Ordinal):
-                        Console.Error.WriteLine($"{shell.DisplayPath(file)}{badSettings.Item[file.Length..]}; the file was left as it is.");
+                        Console.Error.WriteLine($"{shell.DisplayPath(file)}{badSettings.Item[file.Length..]}, so the file was left as it is");
                         break;
                     case Nanyx.Formatter.FormatCommand.Formatting.BadSettings badSettings:
                         if (settingsErrors.Add(badSettings.Item))
                         {
-                            Console.Error.WriteLine($"{badSettings.Item}; no file under it was formatted.");
+                            Console.Error.WriteLine($"{badSettings.Item}, so no file under it was formatted");
                         }
                         break;
                 }
@@ -656,7 +656,7 @@ internal static partial class CliCommands
         var path = Path.GetFullPath(directory, shell.Directory);
         if (!Directory.Exists(path))
         {
-            Console.Error.WriteLine($"{directory} is not a directory.");
+            Console.Error.WriteLine($"'{directory}' is not a directory");
             return UsageError;
         }
 
@@ -759,7 +759,7 @@ internal static partial class CliCommands
         };
         if (topLevel is null)
         {
-            Console.Error.WriteLine($"--top-level-type-hints must be lens, inlay or off, not '{topLevelTypeHints}'.");
+            Console.Error.WriteLine($"`--top-level-type-hints` must be 'lens', 'inlay' or 'off', not '{topLevelTypeHints}'");
             return UsageError;
         }
 
@@ -809,13 +809,13 @@ internal static partial class CliCommands
     {
         if (string.IsNullOrWhiteSpace(inputFile))
         {
-            shell.Error.WriteLine("Give a .nyx file.");
+            shell.Error.WriteLine("No file was given: give a .nyx file");
             return UsageError;
         }
 
         if (!File.Exists(shell.FullPath(inputFile)))
         {
-            shell.Error.WriteLine($"File not found: {inputFile}");
+            shell.Error.WriteLine($"error {DiagnosticCodes.FileNotFound.Code}: There is no file '{inputFile}'");
             return UsageError;
         }
 
@@ -1057,7 +1057,7 @@ internal static partial class CliCommands
         }
 
         errors.WriteLine(
-            $"Memory check failed: {live} of the {Counter(CodeGen.CheckedExports.allocations)} blocks the program allocated were never freed.");
+            $"Memory check failed: {live} of the {Counter(CodeGen.CheckedExports.allocations)} blocks the program allocated were never freed");
         return 1;
     }
 
@@ -1069,7 +1069,7 @@ internal static partial class CliCommands
         switch (error)
         {
             case RunError.InvalidModule invalid:
-                errors.WriteLine($"Internal compiler error: the generated WebAssembly is invalid: {invalid.Item}");
+                errors.WriteLine($"Internal error in the compiler, whose WebAssembly is invalid ({invalid.Item}): report it at https://github.com/nanyx-lang/nanyx/issues");
                 return 1;
             case RunError.Trapped trapped:
                 errors.WriteLine($"Runtime error: {trapped.Item}");
@@ -1139,7 +1139,7 @@ internal static partial class CliCommands
 
     private static int UnsupportedTarget(Shell shell, string target)
     {
-        shell.Error.WriteLine($"Unsupported target: {target}");
+        shell.Error.WriteLine($"Unknown target '{target}'");
         return UsageError;
     }
 }

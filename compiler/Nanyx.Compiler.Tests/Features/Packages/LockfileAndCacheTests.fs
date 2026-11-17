@@ -73,7 +73,7 @@ let ``A lockfile is written sorted by name, and read back`` () =
 [<Fact>]
 let ``A lockfile with a package locked twice, or a hash that isn't one, is refused`` () =
     let twice = (Lockfile.write lockfile).Replace("\"acme.web\"", "\"acme.core\"")
-    Assert.Contains(errorsOf (Lockfile.check "nanyx.lock" twice), fun error -> error.Contains "acme.core is locked 2 times")
+    Assert.Contains(errorsOf (Lockfile.check "nanyx.lock" twice), fun error -> error.Contains "locks 'acme.core' 2 times")
     let badHash = (Lockfile.write lockfile).Replace(hashOf 'a', "abc")
     Assert.Contains(errorsOf (Lockfile.check "nanyx.lock" badHash), fun error -> error.Contains "is not 64 hexadecimal digits")
     let format = (Lockfile.write lockfile).Replace("version = 1", "version = 2")
@@ -159,7 +159,7 @@ let ``A package with a path dependency or one on GitHub can't be packed`` () =
         [ DiagnosticCodes.InvalidManifestValue.Code; DiagnosticCodes.GitHubReferenceNotPublishable.Code ],
         PackageArchive.packErrors manifest |> List.map _.Code
     )
-    Assert.Contains("is found by its path, so app can't be packed", (PackageArchive.packErrors manifest).Head.Message)
+    Assert.Contains("is found by its path, so 'app' can't be packed", (PackageArchive.packErrors manifest).Head.Message)
 
 [<Fact>]
 let ``Unpacking refuses an entry that would land outside the package`` () =
@@ -213,7 +213,7 @@ let ``A download whose SHA-256 isn't the locked one is refused`` () =
     let locked = publish package "util/acme.util.nyxp"
     lock package [ { locked with Sha256 = hashOf 'c' } ]
     let error = errorsOf (PackageDependencies.pull (storeOf package) (package.Path "app/app.nyxp")) |> List.exactlyOne
-    Assert.Contains($"but nanyx.lock locks {hashOf 'c'}", error)
+    Assert.Contains($"but 'nanyx.lock' locks {hashOf 'c'}", error)
     Assert.False(Directory.Exists(package.Path "cache/acme.util"))
 
 [<Fact>]
@@ -222,13 +222,13 @@ let ``A version the index doesn't list can't be downloaded`` () =
     let locked = publish package "util/acme.util.nyxp"
     lock package [ { locked with Version = version "1.0.1" } ]
     let error = errorsOf (PackageDependencies.pull (storeOf package) (package.Path "app/app.nyxp")) |> List.exactlyOne
-    Assert.Contains("has no acme.util 1.0.1", error)
+    Assert.Contains("has no 'acme.util' 1.0.1", error)
 
 [<Fact>]
 let ``A dependency the lockfile doesn't lock can't be had yet`` () =
     use package = new TempPackage(util @ app [ """(package = "acme.util", version = "1.0")""" ])
     let error = errorsOf (PackageDependencies.pull (storeOf package) (package.Path "app/app.nyxp")) |> List.exactlyOne
-    Assert.Contains("isn't locked in nanyx.lock, and choosing a version to lock isn't supported yet", error)
+    Assert.Contains("isn't locked in 'nanyx.lock', and choosing a version to lock isn't supported yet", error)
     let diagnostic = (Package.compileManifestFrom (storeOf package) (package.Path "app/app.nyxp") (File.ReadAllText(package.Path "app/app.nyxp"))).Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.UnsupportedManifestField.Code, diagnostic.Code)
 
@@ -240,7 +240,7 @@ let ``A locked version the dependency doesn't accept is an error at its version`
     let diagnostic = (Package.compileManifestFrom (storeOf package) (package.Path "app/app.nyxp") text).Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.InvalidManifestValue.Code, diagnostic.Code)
     Assert.Equal("\"2.0\"", textAt (text.ReplaceLineEndings "\n") (spanOf diagnostic))
-    Assert.Contains("nanyx.lock locks acme.util 1.0.0, which this dependency doesn't accept", diagnostic.Message)
+    Assert.Contains("'nanyx.lock' locks 'acme.util' 1.0.0, but this dependency accepts only", diagnostic.Message)
 
 [<Fact>]
 let ``A locked package that isn't in the cache is an error that says to pull`` () =
@@ -249,12 +249,12 @@ let ``A locked package that isn't in the cache is an error that says to pull`` (
     let text = File.ReadAllText(package.Path "app/app.nyxp")
     let diagnostic = (Package.compileManifestFrom (storeOf package) (package.Path "app/app.nyxp") text).Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.PackageNotDownloaded.Code, diagnostic.Code)
-    Assert.Contains("run nanyx pull to download it", diagnostic.Message)
+    Assert.Contains("run `nanyx pull` to download it", diagnostic.Message)
 
 [<Fact>]
 let ``A version requirement must be one`` () =
     match Manifest.check "app.nyxp" """(package = (name = "app", version = "0.1.0"), dependencies = [(package = "acme.util", version = "^1.2")])""" with
     | Result.Error [ error ] ->
         Assert.Equal(DiagnosticCodes.InvalidManifestValue.Code, error.Code)
-        Assert.Contains("must be a version, 1.2.0, or its first numbers, 1.2", error.Message)
+        Assert.Contains("must be a version, `1.2.0`, or its first numbers, `1.2`", error.Message)
     | other -> failwith $"%A{other}"

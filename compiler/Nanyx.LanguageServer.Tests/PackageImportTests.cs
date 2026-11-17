@@ -38,7 +38,7 @@ public sealed class PackageImportTests : LanguageServerTestBase
             """.ReplaceLineEndings("\n"));
         var diagnostic = Assert.Single((await NextPublished(uri)).Diagnostics!);
         Assert.Equal("NYX0003", diagnostic.Code?.String);
-        Assert.Contains("the package 'acme.web' has no module 'salutations'", diagnostic.Message.String);
+        Assert.Contains("The package 'acme.web' has no module 'salutations'", diagnostic.Message.String);
     }
 
     [Fact]

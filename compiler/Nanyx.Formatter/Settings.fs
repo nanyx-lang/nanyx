@@ -17,7 +17,7 @@ let rec manifestIn (directory: string) : Result<string option, string> =
         match Path.GetDirectoryName directory with
         | null -> Result.Ok None
         | parent -> manifestIn parent
-    | several -> Result.Error $"""{directory} has more than one .nyxp manifest: {several |> Array.map Path.GetFileName |> String.concat ", "}"""
+    | several -> Result.Error $"""'{directory}' has more than one .nyxp manifest: {several |> Array.map (Path.GetFileName >> sprintf "'%s'") |> String.concat ", "}"""
 
 /// `path:line:column`, from 1, of where `span` starts.
 let private location (span: Parser.Program.SourceSpan) = $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}"
@@ -29,9 +29,9 @@ let read (manifest: string) : Result<Formatter.Options, string> =
     let positive (field: DataField) =
         match field.Value.Data with
         | DataInt n when n > 0I && n <= bigint Int32.MaxValue -> Result.Ok(int n)
-        | _ -> Result.Error $"{location field.Value.Location}: formatter's {field.Name} must be a positive integer, not {DataValue.describe field.Value}"
+        | _ -> Result.Error $"{location field.Value.Location}: `formatter`'s `{field.Name}` must be a positive integer, not {DataValue.describe field.Value}"
     match DataValue.read manifest (File.ReadAllText manifest) with
-    | Result.Error _ -> Result.Error $"{manifest}: not a manifest: it holds code or is not Nanyx; nanyx check says why"
+    | Result.Error _ -> Result.Error $"{manifest}: This is not a manifest, since it holds code or is not Nanyx: run `nanyx check` on it to see why"
     | Result.Ok { Data = DataRecord fields } ->
         match DataValue.field "formatter" fields with
         | None -> Result.Ok Formatter.Options.defaults
@@ -43,8 +43,8 @@ let read (manifest: string) : Result<Formatter.Options, string> =
                     match setting.Name with
                     | "lineWidth" -> positive setting |> Result.map (fun n -> { options with LineWidth = n })
                     | "indentSize" -> positive setting |> Result.map (fun n -> { options with IndentSize = n })
-                    | name -> Result.Error $"{location setting.NameSpan}: formatter has no setting '{name}'; the settings are lineWidth and indentSize"))
-        | Some field -> Result.Error $"{location field.Value.Location}: formatter must be a record, (lineWidth = 100), not {DataValue.describe field.Value}"
+                    | name -> Result.Error $"{location setting.NameSpan}: `formatter` has no setting '{name}': the settings are 'lineWidth' and 'indentSize'"))
+        | Some field -> Result.Error $"{location field.Value.Location}: `formatter` must be a record, `(lineWidth = 100)`, not {DataValue.describe field.Value}"
     | Result.Ok _ -> Result.Ok Formatter.Options.defaults
 
 /// The options for the file at `path`: those of its manifest, or the defaults if it has none.
@@ -70,14 +70,14 @@ let withDirectives (path: string) (text: string) (options: Formatter.Options) : 
             let positive (key: string) (word: Parser.Program.Header.DirectiveWord) =
                 match DataValue.ofWord word with
                 | Some { Data = DataInt n } when n > 0I && n <= bigint Int32.MaxValue -> Result.Ok(int n)
-                | Some value -> error $"::format {key} must be a positive integer, not {DataValue.describe value}"
-                | None -> error $"::format {key} must be a positive integer, not '{word.Text}'"
+                | Some value -> error $"`::format {key}` must be a positive integer, not {DataValue.describe value}"
+                | None -> error $"`::format {key}` must be a positive integer, not '{word.Text}'"
             match manifest, directive.Arguments |> List.map (fun word -> word.Text, word) with
-            | Result.Ok (Some manifest), _ -> error $"::format is for a script; in a package, set it in the formatter field of {manifest}"
+            | Result.Ok (Some manifest), _ -> error $"`::format` is for a script, and this file is in a package: set it in the `formatter` field of '{manifest}'"
             | _, [ "lineWidth" as key, _; _, value ] -> positive key value |> Result.map (fun n -> { options with LineWidth = n })
             | _, [ "indentSize" as key, _; _, value ] -> positive key value |> Result.map (fun n -> { options with IndentSize = n })
-            | _, [ key, _; _ ] -> error $"unknown setting ::format {key}; the settings are lineWidth and indentSize"
-            | _ -> error "::format takes a setting and its value: ::format lineWidth 100"))
+            | _, [ key, _; _ ] -> error $"Unknown setting `::format {key}`: the settings are 'lineWidth' and 'indentSize'"
+            | _ -> error "`::format` takes a setting and its value: write `::format lineWidth 100`"))
 
 /// `forFile`, reading each manifest once, for formatting many files.
 let cached () : string -> Result<Formatter.Options, string> =

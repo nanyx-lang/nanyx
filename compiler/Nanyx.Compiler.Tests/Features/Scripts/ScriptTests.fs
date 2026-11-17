@@ -85,12 +85,12 @@ let private directiveError (source: string) =
     diagnostic, source.Substring(span.Start, span.End - span.Start)
 
 [<Theory>]
-[<InlineData("::linter nope", "NYX0023", "nope", "there is no linter 'nope'; the linters are 'nanyx.lint'")>]
+[<InlineData("::linter nope", "NYX0023", "nope", "There is no linter 'nope': the linters are 'nanyx.lint'")>]
 [<InlineData("::linter nanyx.lint ../lint", "NYX0009", "../lint", "A linter cannot be found by its directory yet")>]
-[<InlineData("::linter nanyx.lint 0.0.1", "NYX0029", "0.0.1", "the compiler ships nanyx.lint")>]
+[<InlineData("::linter nanyx.lint 0.0.1", "NYX0029", "0.0.1", "The compiler ships 'nanyx.lint'")>]
 [<InlineData("::linter", "NYX0009", "::linter", "`::linter` takes a linter: write `::linter nanyx.lint`")>]
-[<InlineData("::linter nanyx.lint\n::lint nope #error", "NYX0021", "nope", "the rules of nanyx.lint has no field 'nope'")>]
-[<InlineData("::linter nanyx.lint\n::lint unusedBindings #loud", "NYX0023", "#loud", "the rule unusedBindings must be #error, #warning, #info, #hint, #off, not #loud")>]
+[<InlineData("::linter nanyx.lint\n::lint nope #error", "NYX0021", "nope", "The rules of 'nanyx.lint' has no field 'nope'")>]
+[<InlineData("::linter nanyx.lint\n::lint unusedBindings #loud", "NYX0023", "#loud", "The rule unusedBindings must be #error, #warning, #info, #hint, #off, not #loud")>]
 [<InlineData("::linter nanyx.lint\n::lint unusedBindings 3", "NYX0023", "3", "not 3")>]
 [<InlineData("::linter nanyx.lint\n::lint unusedBindings error", "NYX0009", "error", "'error' is not a value")>]
 [<InlineData("::linter nanyx.lint\n::lint unusedBindings", "NYX0009", "::lint unusedBindings", "`::lint` takes a rule of the linter above it and a severity")>]

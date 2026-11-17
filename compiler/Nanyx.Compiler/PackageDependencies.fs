@@ -29,7 +29,7 @@ module PackageDependencies =
         let text = normalize (File.ReadAllText manifestPath)
         match DataValue.read manifestPath text with
         | Result.Ok { Data = DataRecord fields } -> Result.Ok(text, fields)
-        | _ -> Result.Error $"{manifestPath} is not a manifest: run nanyx check on it to see why"
+        | _ -> Result.Error $"'{manifestPath}' is not a manifest: run `nanyx check` on it to see why"
 
     /// Each entry of the manifest's `dependencies` (`fields` are its top level), as it is written.
     let entries (fields: DataField list) : DependencyEntry list =
@@ -54,7 +54,7 @@ module PackageDependencies =
     /// What can't be had yet, for `nanyx pull` and `nanyx install`: a package named by its version that the lockfile
     /// doesn't lock.
     let private cantDownload (name: string) (version: string) =
-        $"{name} {version} is named by its version, but it isn't locked in {Lockfile.fileName}, and choosing a version to lock isn't supported yet: give the directory it is in, with path"
+        $"'{name}' {version} is named by its version, but it isn't locked in '{Lockfile.fileName}', and choosing a version to lock isn't supported yet: give the directory it is in, with `path`"
 
     /// Each package of the build, depended on directly or through others, once, in the order a build reaches them.
     let rec private reached (packages: Package list) : Package list =
@@ -101,10 +101,10 @@ module PackageDependencies =
     /// The name of the package whose manifest is in `directory`, or why there is none.
     let private packageIn (directory: string) : Result<string, string> =
         if not (Directory.Exists directory) then
-            Result.Error $"{directory} is not a directory"
+            Result.Error $"'{directory}' is not a directory"
         else
             match Directory.GetFiles(directory, "*" + Manifest.extension) |> Array.sort with
-            | [||] -> Result.Error $"{directory} holds no package: it has no {Manifest.extension} manifest"
+            | [||] -> Result.Error $"'{directory}' holds no package, since it has no {Manifest.extension} manifest"
             | manifests ->
                 match Manifest.read manifests[0] with
                 | Result.Ok manifest -> Result.Ok manifest.Name
@@ -141,29 +141,29 @@ module PackageDependencies =
     /// be added: a name the manifest refuses, one already listed, or neither a directory nor a version to find it by.
     let install (toolVersion: string) (manifestPath: string) (name: string) (version: string option) (directory: string option) : Result<Installed, string> =
         if not (Manifest.namePattern.IsMatch name) then
-            Result.Error $"""The package name "{name}" must be {Manifest.nameRule}"""
+            Result.Error $"""The package name '{name}' must be {Manifest.nameRule}"""
         else
             readData manifestPath
             |> Result.bind (fun (text, fields) ->
                 match entries fields |> List.tryFind (fun entry -> entry.Name = name) with
                 | Some existing ->
                     let written = text.Substring(existing.Location.Start, existing.Location.End - existing.Location.Start)
-                    Result.Error $"{name} is already a dependency, at line {existing.Location.StartLine + 1} of {Path.GetFileName manifestPath}: {written}"
+                    Result.Error $"'{name}' is already a dependency, at line {existing.Location.StartLine + 1} of '{Path.GetFileName manifestPath}': `{written}`"
                 | None ->
                     let added =
                         match directory, version with
-                        | Some _, Some _ -> Result.Error "Give a dependency's directory with --path, or its version with --version, not both"
+                        | Some _, Some _ -> Result.Error "`--path` and `--version` were both given: give a dependency's directory or its version, not both"
                         | Some directory, None ->
                             packageIn directory
                             |> Result.bind (fun found ->
                                 if found <> name then
-                                    Result.Error $"The package in {directory} is named {found}, not {name}: the names must match"
+                                    Result.Error $"The package in '{directory}' is named '{found}', not '{name}': make the names match"
                                 else
                                     let path = Path.GetRelativePath(Path.GetDirectoryName manifestPath, directory).Replace('\\', '/')
                                     Result.Ok($"(package = \"{name}\", path = \"{path}\")", None))
                         | None, Some version -> Result.Ok($"(package = \"{name}\", version = \"{version}\")", (if isShipped name then None else Some (name, version)))
                         | None, None when isShipped name -> Result.Ok($"(package = \"{name}\", version = \"{toolVersion}\")", None)
-                        | None, None -> Result.Error $"Give the directory {name} is in with --path, or its version with --version"
+                        | None, None -> Result.Error $"Neither `--path` nor `--version` was given: give the directory '{name}' is in with `--path`, or its version with `--version`"
                     added |> Result.map (fun (entry, download) -> { Manifest = withEntry text fields entry; ToDownload = download }))
 
     /// What `nanyx install` says of the package `name` it added at `version`, which has to be downloaded.

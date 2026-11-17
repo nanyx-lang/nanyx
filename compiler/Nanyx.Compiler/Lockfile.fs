@@ -65,10 +65,10 @@ module Lockfile =
             match DataValue.field name fields with
             | Some { DataField.Value = { DataValue.Data = DataString value } } -> Some value
             | Some field ->
-                errors.Add(at field.Value.Location $"a locked package's {name} must be a string, not {DataValue.describe field.Value}")
+                errors.Add(at field.Value.Location $"A locked package's {name} must be a string, not {DataValue.describe field.Value}")
                 None
             | None ->
-                errors.Add(at location $"a locked package has no {name}")
+                errors.Add(at location $"A locked package has no {name}")
                 None
         let package (value: DataValue) =
             match value.Data with
@@ -78,13 +78,13 @@ module Lockfile =
                     text' "version" fields value.Location
                     |> Option.bind (fun written ->
                         let parsed = SemanticVersion.tryParse written
-                        if parsed.IsNone then errors.Add(at value.Location $"the locked version \"{written}\" is not a semantic version")
+                        if parsed.IsNone then errors.Add(at value.Location $"The locked version \"{written}\" is not a semantic version")
                         parsed)
                 let sha256 =
                     text' "sha256" fields value.Location
                     |> Option.filter (fun hash ->
                         let valid = sha256Pattern.IsMatch hash
-                        if not valid then errors.Add(at value.Location $"the locked sha256 \"{hash}\" is not 64 hexadecimal digits in lower case")
+                        if not valid then errors.Add(at value.Location $"The locked sha256 \"{hash}\" is not 64 hexadecimal digits in lower case")
                         valid)
                 let dependencies =
                     match DataValue.field "dependencies" fields with
@@ -95,23 +95,23 @@ module Lockfile =
                 | Some name, Some version, Some sha256 -> Some { Name = name; Version = version; Sha256 = sha256; Dependencies = dependencies }
                 | _ -> None
             | _ ->
-                errors.Add(at value.Location $"a locked package must be a record, not {DataValue.describe value}")
+                errors.Add(at value.Location $"A locked package must be a record, not {DataValue.describe value}")
                 None
         match DataValue.read path text with
-        | Result.Error _ -> Result.Error [ $"{path} is not a lockfile nanyx can read: delete it, and nanyx pull writes it again" ]
+        | Result.Error _ -> Result.Error [ $"'{path}' is not a lockfile nanyx can read: delete it, and `nanyx pull` writes it again" ]
         | Result.Ok { Data = DataRecord fields; Location = location } ->
             match DataValue.field "version" fields with
             | Some { DataField.Value = { DataValue.Data = DataInt version } } when version = bigint formatVersion -> ()
-            | Some field -> errors.Add(at field.Value.Location $"the lockfile's format is {DataValue.describe field.Value}, but this nanyx reads format {formatVersion}")
-            | None -> errors.Add(at location "the lockfile has no version")
+            | Some field -> errors.Add(at field.Value.Location $"The lockfile's format is {DataValue.describe field.Value}, but this nanyx reads format {formatVersion}")
+            | None -> errors.Add(at location "The lockfile has no version")
             let packages =
                 match DataValue.field "packages" fields with
                 | Some { DataField.Value = { DataValue.Data = DataList items } } -> items |> List.choose package
                 | _ -> []
             for name, count in packages |> List.countBy _.Name do
-                if count > 1 then errors.Add $"{path}: {name} is locked {count} times, but a build has one version of each package"
+                if count > 1 then errors.Add $"'{path}' locks '{name}' {count} times, but a build has one version of each package: lock it once"
             if errors.Count = 0 then Result.Ok { Packages = packages |> List.sortBy _.Name } else Result.Error(List.ofSeq errors)
-        | Result.Ok value -> Result.Error [ at value.Location $"a lockfile is a record, not {DataValue.describe value}" ]
+        | Result.Ok value -> Result.Error [ at value.Location $"A lockfile is a record, not {DataValue.describe value}" ]
 
     /// The lockfile at `path`, if there is one, or what is wrong with it.
     let read (path: string) : Result<Lockfile option, string list> =
