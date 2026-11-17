@@ -135,10 +135,12 @@ let importItem: Parser<ImportItem, ParseState> =
         { Source = source; Alias = alias; Selection = selection; Span = span }
 
 /// What follows `export` in a re-export, `export collections.list (map, filter)`: the module, then on the same line the
-/// names it exports that are exported again.
+/// names it exports that are exported again; or the module alone on its line, `export shapes`, which exports again
+/// everything it exports (no selection).
 let reExportItem: Parser<ImportItem, ParseState> =
-    withSpan (importSource .>>. (wsInline >>. importSelection))
-    |>> fun ((source, selection), span) -> { Source = source; Alias = None; Selection = Some selection; Span = span }
+    let lineEnds = wsInline >>. followedBy (skipNewline <|> eof <|> skipString "--")
+    withSpan (importSource .>>. ((attempt (wsInline >>. importSelection) |>> Some) <|> (lineEnds >>% None)))
+    |>> fun ((source, selection), span) -> { Source = source; Alias = None; Selection = selection; Span = span }
 
 let importItems: Parser<ImportItem list, ParseState> =
     let importParenItems =

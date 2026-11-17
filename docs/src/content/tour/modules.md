@@ -204,7 +204,7 @@ A module need not be exported to be imported by the other modules of its own pac
 
 ## Re-exporting
 
-Export items from other modules:
+Export items from other modules, a chosen few or all of them:
 
 ```nanyx fragment
 module collections
@@ -212,9 +212,13 @@ module collections
 -- Re-export from sub-modules
 export collections.list (map, filter, fold)
 export collections.map (empty, insert, lookup)
+-- Everything collections.set exports
+export collections.set
 ```
 
 A module that imports `collections` gets `map`, `insert` and the rest as if `collections` had defined them, under the alias it imports `collections` with, if any. They are still the definitions in `collections.list` and `collections.map`, which is where the editor goes to find them. A re-export also imports what it names into the module that writes it, as `import collections.list as (map, filter, fold)` would. What it names follows the rules for [selective imports](#selective-imports): a type brings the definitions attached to it, and a name the module doesn't export is an error.
+
+A module alone on its line, `export collections.set`, re-exports everything it exports, as `import collections.set` with no selection imports it all, including what it re-exports itself, so re-exports chain. Two modules that re-export each other this way make an [import cycle](#circular-dependencies). A whole-module re-export can't give a name the module that writes it defines too, or that a re-export before it gives from another module: that is an error ([NYX0120](../standard-tools/errors#nyx0120)), whose fix re-exports only the rest. A module can re-export another file's module whole, but not yet one of its own `module name =` blocks.
 
 # Declaration order
 
