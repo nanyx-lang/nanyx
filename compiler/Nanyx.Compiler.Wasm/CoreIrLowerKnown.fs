@@ -3,8 +3,8 @@
 ///
 /// A member is known when a call finds it as a closure over the wrapper of a top-level function (a member of the
 /// ambient instance, or of an instance built from attached definitions), as a top-level definition's value, or in a
-/// local that a `def` gave a top-level function or a constant, as a `use` does with `use C(bump = addThree, limit = 3)`
-/// (see `FunctionLowering.NoteDefinedKnown`). A call
+/// local that a `def` gave a top-level function, a lambda or a constant, as a `use` does with `use C(bump = addThree,
+/// limit = 3)` (see `FunctionLowering.NoteDefinedKnown`). A call
 /// does not pass its callee the members it knows: it calls a specialisation of the callee on them instead, whose key
 /// names them. In the specialisation, a known member is a local that a call to it never reads, since the call goes
 /// straight to the function (see `directArguments`), and that a call passing it on passes as known in turn. Only where
@@ -22,10 +22,23 @@ type KnownMember =
     /// A closure over `wrapper`, the wrapper of the top-level function `wrapped`, at the type `at`: a call to it is a
     /// call to `wrapped` at that type.
     | KnownFunction of wrapper: string * wrapped: string * at: Ty
+    /// `closure`, the static closure over `lifted`, a lifted lambda that captures nothing: a call to it is a call to
+    /// `lifted` with the closure as its environment.
+    | KnownLambda of lifted: string * closure: Atom
+    /// A closure over `lifted`, a lifted lambda that captures values, which differs from call to call: unlike the
+    /// others, the member is still passed, as the lambda's environment, but a call through it is a call to `lifted`.
+    | KnownLambdaOver of lifted: string
     /// The value of the top-level definition of this name, which is of this type.
     | KnownValue of definition: string * Ty
     /// A constant, an int or a bool, of this type: what a `use` binds a member to when it is given a literal.
     | KnownConstant of Atom * IrType
+
+module KnownMember =
+    /// Whether a function specialised on `knownMember` is still passed it: a lambda's environment is.
+    let isPassed (knownMember: KnownMember) =
+        match knownMember with
+        | KnownLambdaOver _ -> true
+        | _ -> false
 
 /// What a function is lowered for: a definition, at type arguments (none when it is not generic), and specialised on the
 /// members known for some of the contexts it requires, by their keys. The others it takes as parameters.

@@ -46,10 +46,13 @@ let wrapperClosure (tools: MemberTools) (wrapper: string) (memberTy: Ty option) 
     let name = tools.Request (SpecKey.plain wrapper (wrapperTypeArguments tools.Input tools.ToIrType wrapped at)) (tools.Subst ()) (WrapperCalling(wrapped, at, []))
     AStaticClosure(name, IrType.closureArity (tools.ParameterNames wrapper) (tools.ToIrType at), tools.ToIrType at)
 
-/// The value of a known member, passed to `k`: the closure over a function's wrapper, or a top-level value, evaluated.
+/// The value of a known member, passed to `k`: the closure over a function's wrapper or a lambda, or a top-level value,
+/// evaluated.
 let valueOfKnown (tools: MemberTools) (knownMember: KnownMember) (k: Atom -> Expr) : Expr =
     match knownMember with
     | KnownFunction(wrapper, _, at) -> k (wrapperClosure tools wrapper (Some at))
+    | KnownLambda(_, closure) -> k closure
+    | KnownLambdaOver lifted -> internalError $"the value of a closure over '{lifted}', which is passed, not known"
     | KnownValue(definition, ty) -> tools.BindTemp (Expr.make (Call(tools.Callee definition ty, [])) (tools.ToIrType ty)) k
     | KnownConstant(constant, _) -> k constant
 
@@ -225,7 +228,7 @@ and private derivedClosure (tools: MemberTools) (scope: Scope) (wrapper: string)
 /// it (see `LowerInput.ContextArguments`), then those of the contexts its context variables stand for, found in
 /// scope. They are passed on to `k` in the order the function takes them, but for those of the keys in `passed`,
 /// which the callers of the function's value pass instead, and those in `knownMembers`, which the callee is
-/// specialised on.
+/// specialised on, but for a lambda's environment (`KnownMember.isPassed`).
 and contextMembers (tools: MemberTools) (scope: Scope) (name: string) (node: NodeId) (instanceTy: Ty) (passed: Set<ContextMemberKey>) (knownMembers: (ContextMemberKey * KnownMember) list) (k: (ContextMemberKey * Atom) list -> Expr) : Expr =
     let contextParameters, memberTys = memberTypes tools name instanceTy
     let variables = tools.VariableMembers name (tools.BindingsAt name instanceTy) |> List.filter (fst >> passed.Contains >> not)
@@ -240,7 +243,8 @@ and contextMembers (tools: MemberTools) (scope: Scope) (name: string) (node: Nod
             match remaining with
             | [] -> memberAtoms tools scope None variables (fun atoms -> k (List.rev acc @ List.zip (List.map fst variables) atoms))
             | (_, PassedByCaller, _) :: rest -> pass rest acc
-            | (key, _, _) :: rest when knownMembers |> List.exists (fst >> (=) key) -> pass rest acc
+            | (key, _, _) :: rest when knownMembers |> List.exists (fun (known, knownMember) -> known = key && not (KnownMember.isPassed knownMember)) ->
+                pass rest acc
             // A member that is a value (`Point.`0``) is passed as it is, at the member's type if it is generic.
             | (key, (DefinitionValue _ as argument), memberTy) :: rest -> argumentAtom tools scope argument memberTy (fun atom -> pass rest ((key, atom) :: acc))
             | (key, Unfound _, Some memberTy) :: rest when CoreIrLowerInstances.neverCalled (substitute (tools.Subst ()) instanceTy) ->

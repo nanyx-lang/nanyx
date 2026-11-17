@@ -5,8 +5,7 @@ order: 5
 ---
 
 This page says what a call to a function that requires contexts compiles to. What a user sees, that a function's
-contexts are part of its type and passed where it's called, is in [Contexts](../advanced/contexts). What is still to do
-is on [Context calls](../work-in-progress/context-calls) in Work in progress.
+contexts are part of its type and passed where it's called, is in [Contexts](../advanced/contexts).
 
 # Summary
 
@@ -159,12 +158,17 @@ requires contexts on its context members too (`CoreIrLowerKnown.fs`):
   as a closure over a top-level function's wrapper (the ambient instance, an instance built from attached
   definitions), as a top-level definition's value, or bound by a `use` to a top-level function that is not generic and
   requires no contexts, or to an int or bool literal: `use Counter(bump = addThree, limit = 1000003)` makes both
-  members known ([#1299](https://github.com/nanyx-lang/nanyx/issues/1299)). A `use` of a generic function, of a cell's
-  value or of any other expression leaves the member unknown.
+  members known ([#1299](https://github.com/nanyx-lang/nanyx/issues/1299)). So does a `use` of a lambda: one that
+  captures nothing is a static closure over its lifted function (`KnownLambda`), and one that captures values is known
+  as a function only (`KnownLambdaOver`), since its closure differs from call to call
+  ([#1877](https://github.com/nanyx-lang/nanyx/issues/1877)). A `use` of a generic function, of a cell's value or of
+  any other expression leaves the member unknown.
 - In a specialisation, a known member is not a parameter. A call to it is a direct `call` or `return_call`. A call that
-  passes it on passes it as known, so the callee is specialised on it too.
-- A member that is not known stays a closure parameter: a `use` of a lambda that captures locals, or a member
-  that a function not specialised on it passes on.
+  passes it on passes it as known, so the callee is specialised on it too. The exception is a lambda that captures
+  values: the specialisation still takes its closure, as the lambda's environment, and a call through it is a direct
+  call to the lambda with the closure first (`KnownMember.isPassed`). Inlined, the lambda reads what it captures from
+  the closure, which the function borrows.
+- A member that is not known stays a closure parameter: a member that a function not specialised on it passes on.
 - A known member that the specialisation never reads is not passed.
 - Specialisations on members count towards the limit on specialisations per definition (`maxSpecialisations`).
 - Debug and release builds specialise alike, since specialising changes no behaviour.
@@ -202,7 +206,7 @@ How it is built:
   (`CoreIrLowerKnown.knownValue`), as a generic function member is the function at that type
   ([#1794](https://github.com/nanyx-lang/nanyx/issues/1794)).
 - Lambda lifting turns each binding of a `use` into a local `def`, so a `use`'s member is a local. A `def` whose value
-  is a top-level function named as a value, a literal, or a local known already records its local as known
+  is a top-level function named as a value, a literal, a lambda, or a local known already records its local as known
   (`FunctionLowering.NoteDefinedKnown`): such a local never changes, as a cell is a `def` of `mut(...)`. A call that
   finds a member in scope in such a local finds it known, and a call through the local is a direct call.
 

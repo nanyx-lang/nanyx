@@ -899,6 +899,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match knownOf closure, closure.Type with
                 | Some (KnownFunction(wrapper, wrapped, at)), IrFunction(input, _, _) ->
                     directArguments bindTemp (parameterNames wrapper).Tail.Length input atoms (fun atoms -> k (Expr.make (Call(callee wrapped at, atoms)) ty))
+                // A lambda that captures nothing is called as a call through its closure calls it, with the closure as
+                // its environment.
+                | Some (KnownLambda(lifted, closure)), IrFunction(_, output, [])
+                    when not (CoreIrLowerBoxes.needsConversion output ty || CoreIrLowerMembers.differInContexts output ty) ->
+                    k (Expr.make (Call(lifted, closure :: atoms)) ty)
+                | Some (KnownLambdaOver lifted), IrFunction(_, output, [])
+                    when not (CoreIrLowerBoxes.needsConversion output ty || CoreIrLowerMembers.differInContexts output ty) ->
+                    k (Expr.make (Call(lifted, AVar closure :: atoms)) ty)
                 | _ ->
                     CoreIrLowerMembers.memberAtoms this.MemberTools scope (Some node) members (fun memberAtoms ->
                         // A context member's result with values boxed, or a function that requires other contexts'
@@ -1097,23 +1105,28 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     /// Records the local `local`, which a `def` gives the value `rhs`, lowered to `value`, as known when `rhs` is a
     /// top-level function that is not generic and requires no contexts, named as a value (`def bump = addThree`, or what
-    /// lambda lifting makes of `use Counter(bump = addThree)`), an int or bool literal, or a local known already. Such a
-    /// local holds that value for as long as it is in scope (a cell's `def` is `mut(...)`, which is none of these), so a
-    /// call through it is a call to the function, and a `use` that binds it to a context member makes the member known.
+    /// lambda lifting makes of `use Counter(bump = addThree)`), an int or bool literal, a lambda (`use Step(step = { x ->
+    /// x + 3 })`), or a local known already. Such a local holds that value for as long as it is in scope (a cell's `def`
+    /// is `mut(...)`, which is none of these), so a call through it is a call to the function, and a `use` that binds it
+    /// to a context member makes the member known. A lambda that captures values is known as a function only: its
+    /// closure, its environment, is still passed (#1877).
     member private this.NoteDefinedKnown (local: Var) (rhs: Expression) (value: Expr) =
         match rhs.Kind, value.Kind with
         | LiteralExpr(IntLit _ | BoolLit _), Atom(AInt _ | ASized _ | ABool _ as constant) ->
             definedKnown.[local.Id] <- KnownConstant(constant, value.Type)
         | IdentifierExpr _, Atom(AVar var) -> knownOf var |> Option.iter (fun knownMember -> definedKnown.[local.Id] <- knownMember)
-        | ClosureSyntax.Closure(target, []), _ ->
-            match input.Lifted |> Map.tryFind target with
-            | Some (FunctionWrapper wrapped) when
-                not (input.ContextParameters.ContainsKey wrapped)
+        | ClosureSyntax.Closure(target, captured), _ ->
+            match input.Lifted |> Map.tryFind target, value.Kind with
+            | Some (FunctionWrapper wrapped), _ when
+                captured.IsEmpty
+                && not (input.ContextParameters.ContainsKey wrapped)
                 && (contextVariables wrapped).IsEmpty
                 && input.DefinitionTypes |> Map.tryFind wrapped |> Option.exists (freeVars >> List.isEmpty)
                 ->
                 let _, at = wrappedAt input target None
                 definedKnown.[local.Id] <- KnownFunction(target, wrapped, at)
+            | Some (LiftedLambda _), Atom(AStaticClosure(lifted, _, _) as closure) -> definedKnown.[local.Id] <- KnownLambda(lifted, closure)
+            | Some (LiftedLambda _), MakeClosure(lifted, _, _) -> definedKnown.[local.Id] <- KnownLambdaOver lifted
             | _ -> ()
         | _ -> ()
 
@@ -1171,7 +1184,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let parameters =
             (parameterNames |> List.map (fun parameterName -> newVar (uniqueName parameterName) Param IrError))
             @ (contextParameters
-               |> List.filter (fun parameter -> not (self.Known |> List.exists (fst >> (=) parameter.Key)))
+               |> List.filter (fun parameter ->
+                   not (self.Known |> List.exists (fun (key, knownMember) -> key = parameter.Key && not (KnownMember.isPassed knownMember))))
                |> List.map (fun parameter -> newVar parameter.Name Param IrError))
             @ (variableMembers name subst |> List.map (fun (key, _) -> newVar (contextMemberParameter key) Param IrError))
         { Name = functionName
@@ -1240,9 +1254,16 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     let knownMember = self.Known |> List.tryFind (fst >> (=) parameter.Key) |> Option.map snd
                     match parameter.Type with
                     | Some ty ->
-                        let var = newVar parameter.Name (if knownMember.IsSome then Local else Param) (toIrType (substitute subst ty))
-                        knownMember |> Option.iter (fun knownMember -> known.[var.Id] <- (var, knownMember))
-                        parameter.Key, var
+                        match knownMember with
+                        // A lambda's environment is passed, and a call through it is a call to the lambda.
+                        | Some knownMember when KnownMember.isPassed knownMember ->
+                            let var = newVar parameter.Name Param (toIrType (substitute subst ty))
+                            definedKnown.[var.Id] <- knownMember
+                            parameter.Key, var
+                        | _ ->
+                            let var = newVar parameter.Name (if knownMember.IsSome then Local else Param) (toIrType (substitute subst ty))
+                            knownMember |> Option.iter (fun knownMember -> known.[var.Id] <- (var, knownMember))
+                            parameter.Key, var
                     | None -> cannot $"the context member '{ContextMemberKey.text parameter.Key}', whose type is not known")
             // Then those of the contexts its context variables stand for here.
             let members =
