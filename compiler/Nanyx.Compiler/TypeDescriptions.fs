@@ -26,9 +26,22 @@ let (|Skolem|_|) (ty: Ty) =
 /// The type of the member `memberName` of a value of the type `ty`, if it is a description type that has the member,
 /// and `state` with what it opened. A field, a case or a type argument packages a type: reading a member of one opens
 /// it at a type of its own (see `skolem`). Read from the value a name stands for, `symbol`, it is opened once for every
-/// member read through that name, so `f.get(value)` and `f.type` agree, as a walker over a record's fields needs.
+/// member read through that name, so `f.get(value)` and `f.type` agree, as a walker over a record's fields needs. A field
+/// `build` gives its function is already open, at the type it is given as a second argument (see `build`).
+///
+/// A record's `build` makes a value of the record from a function that gives each field's value, or fails. That function
+/// must work for every field's type, which users never write: it is given a field opened at a type of its own, made
+/// for this `build`, and must give a value of that type, so it gives one of any field's type. Its failure is the
+/// `build`'s, at the first field it fails on.
 let memberType (state: InferState) (symbol: SymbolId option) (ty: Ty) (memberName: string) : (Ty * InferState) option =
     match resolveSoFar state ty with
+    | TyApply(name, [ described; opened ]) when name = field ->
+        descriptionMembers name [ described ] opened |> List.tryFind (fst >> (=) memberName) |> Option.map (fun (_, memberTy) -> memberTy, state)
+    | TyApply(name, [ described ]) when name = recordInfo && memberName = "build" ->
+        let anyField, next = skolem "b" state
+        let failure, next = freshVar next
+        let given = TyFunc(TyApply(field, [ described; anyField ]), TyUnion [ TyTag("some", Some anyField); failure ], [])
+        Some (TyFunc(given, TyUnion [ TyTag("some", Some described); failure ], []), next)
     | TyApply(name, args) when isDescriptionType name ->
         let packaged, next =
             if not (packaging.Contains name) then TyPrimitive "unit", state

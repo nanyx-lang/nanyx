@@ -66,3 +66,19 @@ from the type's definition (`TypeDefInfo.Doc`, filled from the module's doc comm
   is, since only its description's `get`s read it. A field's `get` (`fieldGettingFunction`) and a case's `get`
   (`caseGettingFunction`) are closures over functions of their own that unbox the value, read the part, and box it in
   this form, through a function per collection type (`canonicalisingFunction`).
+
+# Building
+
+A record description's `build` has a type of its own each time it is read (`TypeDescriptions.memberType`): it is
+given a function from a field opened at a skolem made for this `build`, `Field(a, b)`, to `#some(b)` or a failure, and
+gives `#some(a)` or that failure. Since the function is checked with `b` a type of its own, it gives a value of any
+field's type: the rank-2 type users never write. A case's `build`, from its packaged type to `a`, is an ordinary member.
+
+`CoreIrLowerBuild` runs them. A record's description holds, besides the members a program reads, `__make`
+(`CoreIrLowerTypes.makeMember`): a closure that makes a value of the record from its fields' values, boxed in their
+canonical form, in the order the description has its fields, unboxing each with the inverse of canonical boxing
+(`decanonical`). `r.build` (`FunctionLowering.Complex`, on a member access of `build` on a `RecordInfo`) is a closure
+over the description and a function of its own, specialised by the IR type of `build` at the use, which calls the
+function it is given with each field (`buildingFieldsFunction`), gathers the boxes, and makes the record with
+`__make`, or gives the first failure, made again as a value of the result's union. A case's `build` unboxes the payload
+and makes the tag.
