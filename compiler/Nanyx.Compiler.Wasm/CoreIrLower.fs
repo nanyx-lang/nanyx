@@ -294,8 +294,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             k value
         match expr.Kind with
         | UnitExpr -> k (Expr.make (Atom AUnit) IrUnit)
-        // A `Type` value is known at compile time, so it holds nothing at run time (see `TypeValues`).
-        | TypeValue _ -> k (Expr.make (Atom AUnit) IrUnit)
+        // A `Type` value is the number of the type it stands for (see `CoreIrTypeIds`).
+        | TypeValue _ ->
+            match input.ExprTypes |> Map.tryFind expr.Id |> Option.map (substitute subst) with
+            | Some (TypeValues.TypeValueType standsFor) when (freeVars standsFor).IsEmpty && not (holdsBoxed standsFor) ->
+                k (Expr.make (Atom(AInt(input.TypeIds.Of standsFor))) IrInt)
+            | _ -> cannot "a `type` of a type that is only known when the program runs"
         | LiteralExpr(IntLit value) -> k (Expr.make (Atom(intAtom value (tyOf expr))) (tyOf expr))
         | LiteralExpr(BoolLit value) -> k (Expr.make (Atom(ABool value)) IrBool)
         | LiteralExpr(StringLit value) -> k (Expr.make (Atom(AString value)) IrString)
@@ -548,7 +552,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         match scope.Vars |> Map.tryFind name with
         | Some var ->
             let var = CoreIrLowerLocals.localAt this.LocalTools scope var (input.ExprTypes |> Map.tryFind expr.Id)
-            k (Expr.make (Atom(AVar var)) var.Type)
+            // A value of a type only known when the program runs, used in an arm of a `Type` match that says what its
+            // type is, is unboxed there (see `CoreIrLowerTypeMatch`).
+            match input.ExprTypes |> Map.tryFind expr.Id |> Option.map (substitute subst >> toIrType) with
+            | Some expected when CoreIrLowerBoxes.holdsBox var.Type && CoreIrLowerBoxes.needsConversion var.Type expected ->
+                CoreIrLowerMembers.coerce this.MemberTools scope (AVar var) expected (fun atom -> k (Expr.make (Atom atom) expected))
+            | _ -> k (Expr.make (Atom(AVar var)) var.Type)
         // A context member in scope, named as a value (`` `0` ``, or a function member passed on).
         | None when scope.Members.ContainsKey (NamedMember name) && not (namesOwnDefinition input expr) ->
             let memberVar = scope.Members.[NamedMember name]
@@ -827,6 +836,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// may be more than the type checker recorded at the node (for a parameter lambda lifting annotated, say).
     member this.TypeIn (scope: Scope) (expr: Expression) : IrType =
         match expr.Kind with
+        // A boxed value an arm of a `Type` match unboxes where it is used has the type it is unboxed to (see `Identifier`).
+        | IdentifierExpr name when scope.Vars.ContainsKey name && CoreIrLowerBoxes.holdsBox scope.Vars.[name].Type && input.ExprTypes.ContainsKey expr.Id ->
+            tyOf expr
         | IdentifierExpr name when scope.Vars.ContainsKey name -> scope.Vars.[name].Type
         | MemberAccess(record, fieldName, _) when (match record.Kind with IdentifierExpr name -> scope.Vars.ContainsKey name | _ -> true) ->
             match this.TypeIn scope record with
@@ -1008,10 +1020,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     /// Lowers `expr`, a branch of an `if` or a `match` whose value is of type `ty`, in tail position. A branch whose
     /// value carries fewer contexts than the whole, as the pure rest of a sequence in a `match` that gives a
-    /// `[Console] seq(a)`, is adapted to it (see `CoreIrLowerMembers.coerce`).
+    /// `[Console] seq(a)`, is adapted to it (see `CoreIrLowerMembers.coerce`). So is an arm of a `Type` match that gives
+    /// a value of the type it narrows `a` to, where `a` is only known when the program runs (see `CoreIrLowerTypeMatch`).
     member this.Branch (scope: Scope) (expr: Expression) (ty: IrType) : Expr =
         let value = this.Tail scope expr
-        if CoreIrLowerMembers.differInContexts value.Type ty then
+        if CoreIrLowerMembers.differInContexts value.Type ty || CoreIrLowerBoxes.needsConversion value.Type ty then
             bindTemp value (fun atom -> CoreIrLowerMembers.coerce this.MemberTools scope atom ty (fun atom -> Expr.make (Atom atom) ty))
         else value
 
@@ -1196,7 +1209,25 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     /// Lowers a `match` (see `CoreIrLowerMatch`).
     member this.Match (scope: Scope) (expr: Expression) (values: Expression list) (arms: (Parser.Program.Pattern list * Expression) list) (k: Expr -> Expr) : Expr =
-        CoreIrLowerMatch.lowerMatch this.MatchTools scope expr values arms k
+        match values |> List.map (fun value -> input.ExprTypes |> Map.tryFind value.Id |> Option.map (substitute subst)) with
+        // A match on a type's description (see `CoreIrLowerTypeMatch`).
+        | [ Some (TypeValues.TypeValueType standsFor) ] -> CoreIrLowerTypeMatch.lower this.TypeMatchTools scope expr values.Head standsFor arms k
+        | _ -> CoreIrLowerMatch.lowerMatch this.MatchTools scope expr values arms k
+
+    /// What lowering a `match` on a type, or a function that builds descriptions, needs from this function's lowering
+    /// (see `CoreIrLowerTypeMatch`).
+    member private this.TypeMatchTools : CoreIrLowerTypeMatch.TypeMatchTools =
+        { NewVar = newVar
+          UniqueName = uniqueName
+          ToIrType = toIrType
+          TypeIds = input.TypeIds
+          ExprTypes = input.ExprTypes
+          BindPackaged = fun id ty -> subst <- subst |> Map.add id ty
+          TypeOf = tyOf
+          Complex = this.Complex
+          Branch = this.Branch
+          Request = fun name lowering -> request (SpecKey.plain name []) Map.empty lowering
+          Reader = (CoreIrLowerMembers.boxTools this.MemberTools emptyScope).Reader }
 
     /// What lowering a `match` needs from this function's lowering (see `CoreIrLowerMatch`).
     member private this.MatchTools : CoreIrLowerMatch.MatchTools =
@@ -1274,6 +1305,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | StandingIn ty -> CoreIrLowerInstances.standInFunction newVar functionName ty
         | ListConverting(given, expected) -> CoreIrLowerBoxes.listConverterFunction (CoreIrLowerMembers.boxTools this.MemberTools emptyScope) newVar functionName given expected
         | Printing printer -> CoreIrLowerDbg.printerFunction printerTools functionName printer
+        | Describing -> CoreIrLowerTypeMatch.describingFunction this.TypeMatchTools functionName
+        | FieldGetting(recordType, fieldName) -> CoreIrLowerTypeMatch.fieldGettingFunction this.TypeMatchTools functionName recordType fieldName
+        | CaseGetting(unionType, caseName) -> CoreIrLowerTypeMatch.caseGettingFunction this.TypeMatchTools functionName unionType caseName
+        | Canonicalising collection -> CoreIrLowerTypeMatch.canonicalisingFunction this.TypeMatchTools functionName collection
         | _ ->
         let expr = definitions.[name]
         let parameterNames, body = parametersAndBody expr
@@ -1366,6 +1401,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | StandingIn _ -> internalError "a stand-in lowered as a definition"
         | ListConverting _ -> internalError "a list's conversion lowered as a definition"
         | Printing _ -> internalError "a printer lowered as a definition"
+        | Describing
+        | FieldGetting _
+        | CaseGetting _
+        | Canonicalising _ -> internalError "a part of a type's description lowered as a definition"
         | AsStart -> internalError "the start function lowered as a definition"
 
     /// What lowering a lifted lambda, a wrapper or an adapter needs from this function's lowering (see

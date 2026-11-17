@@ -95,6 +95,8 @@
     <Compile Include="WorkflowMembers.fs" />
     <Compile Include="DefAnnotations.fs" />
     <Compile Include="TypeArguments.fs" />
+    <Compile Include="TypeDescriptions.fs" />
+    <Compile Include="TypeMatches.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="InferModule.fs" />
     <Compile Include="RequiredContexts.fs" />

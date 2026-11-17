@@ -308,3 +308,36 @@ export def Regex.split: string, Regex -> list(string) = { text, regex ->
       if last != subject.length then [between(subject, start, subject.length), ...done] else done
     )
 }
+
+-- Matching in a match ---------------------------------------------------------------------------
+
+--| The regex of `pattern`, which crashes with why when the pattern is wrong.
+def regexOrCrash: string -> Regex = { pattern ->
+  match Regex.parse(pattern)
+    | #some(regex) -> regex
+    | #error(e) -> crash("The regex '{pattern}' is wrong at column {e.column}: {e.message}")
+}
+
+--| Matches a string that the regex of `pattern` matches anywhere in, with the [`Match`] as its
+  payload: `| #Matches('^(\d+)-(\d+)$')(m) -> m \group(1)`, or `| #Matches('^\s*$') -> ...` without
+  it. The pattern is read once, when it is given, and a pattern that is wrong crashes with what
+  [`Regex.parse`] says of it. For a regex made at run time, use [`#MatchesRegex`](#matchesregex).
+export pattern string -> string -> #Matches(Match) | _ = { pattern ->
+  def regex = regexOrCrash(pattern)
+
+  { text ->
+    match text \Regex.find(regex)
+      | #some(m) -> #Matches(m)
+      | #notFound -> _
+  }
+}
+
+--| Matches a string that `regex` matches anywhere in, with the [`Match`] as its payload:
+  `| #MatchesRegex(digits)(m) -> m.text`, or `| #MatchesRegex(digits) -> ...` without it.
+export pattern Regex -> string -> #MatchesRegex(Match) | _ = { regex ->
+  { text ->
+    match text \Regex.find(regex)
+      | #some(m) -> #MatchesRegex(m)
+      | #notFound -> _
+  }
+}

@@ -190,4 +190,24 @@ The pieces of `text` between the matches of `regex`, in order. An empty match at
 splits nothing off, so `"abc" \Regex.split(empty)` is `["a", "b", "c"]`, and an empty text is one
 empty piece.
 
+## `#Matches`
+
+```nanyx fragment
+pattern string -> string -> #Matches(Match) | _
+```
+
+Matches a string that the regex of `pattern` matches anywhere in, with the [`Match`](#match) as its
+payload: `| #Matches('^(\d+)-(\d+)$')(m) -> m \group(1)`, or `| #Matches('^\s*$') -> ...` without
+it. The pattern is read once, when it is given, and a pattern that is wrong crashes with what
+[`Regex.parse`](#regexparse) says of it. For a regex made at run time, use [`#MatchesRegex`](#matchesregex).
+
+## `#MatchesRegex`
+
+```nanyx fragment
+pattern Regex -> string -> #MatchesRegex(Match) | _
+```
+
+Matches a string that `regex` matches anywhere in, with the [`Match`](#match) as its payload:
+`| #MatchesRegex(digits)(m) -> m.text`, or `| #MatchesRegex(digits) -> ...` without it.
+
 <!-- End of the generated reference. -->

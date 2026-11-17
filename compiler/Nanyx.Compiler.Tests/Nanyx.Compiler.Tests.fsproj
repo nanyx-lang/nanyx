@@ -82,6 +82,7 @@
     <Compile Include="Features\Definitions\LocalRecursionTests.fs" />
     <Compile Include="Features\Definitions\ModuleBlockTests.fs" />
     <Compile Include="Features\Definitions\PolymorphicRecursionTests.fs" />
+    <Compile Include="Features\Types\TypeMatchTests.fs" />
     <Compile Include="Features\Diagnostics\DiagnosticCodeTests.fs" />
     <Compile Include="Features\Diagnostics\DiagnosticSpanTests.fs" />
     <Compile Include="Features\Diagnostics\LookAlikeTests.fs" />

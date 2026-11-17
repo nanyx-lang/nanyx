@@ -123,7 +123,9 @@ type LowerInput =
       /// What a call to `dbg` compiles to.
       Dbg: DbgBuild
       /// Whether the module has debug probes (see `CoreIrProbes`).
-      Probes: bool }
+      Probes: bool
+      /// The numbers the types `Type` values stand for are at run time (see `CoreIrTypeIds`).
+      TypeIds: CoreIrTypeIds.TypeIds }
 
 /// The top-level function `wrapper`, a wrapper lambda lifting made, wraps.
 let wrappedOf (input: LowerInput) (wrapper: string) =
