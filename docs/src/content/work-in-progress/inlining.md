@@ -11,8 +11,11 @@ This page keeps what is planned and open about the inliner of the WebAssembly ba
 # Plan
 
 1. **Tune the size limits** (`sizeLimit`, `handlerLimit`, `copyLimit`) against the generated-code benchmarks.
-2. **Lower and inline only what a program reaches**
-   ([#1848](https://github.com/nanyx-lang/nanyx/issues/1848)).
+2. **Lower only what a program reaches**
+   ([#1848](https://github.com/nanyx-lang/nanyx/issues/1848)). Inlining already goes over only what the start
+   reaches. Lowering still lowers every definition that is not generic, and emits each once to find out whether it
+   can be, which is most of hello world's emit now. Lowering on demand from the start would mean a definition the
+   program never reaches no longer reports that it can't be compiled, which is to be decided.
 3. **Later:** inlining across modules, and the other builders and handlers in the standard library.
 
 # Open questions
