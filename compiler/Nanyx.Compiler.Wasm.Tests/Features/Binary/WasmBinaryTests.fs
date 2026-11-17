@@ -59,7 +59,7 @@ def main = {
     Assert.Contains("Hello, Édouard!", output)
 
 [<Fact>]
-let ``A program that traps traps the same, in the same function`` () =
+let ``A program that traps traps the same`` () =
     let _, (_, _, ended) =
         assertRunsTheSame
             """def divide = { a: int, b: int -> a / b }
@@ -69,8 +69,7 @@ def main = {
   println("{divide(1, string.length("") )}")
 }
 """
-    Assert.StartsWith("trapped: ", ended)
-    Assert.Contains("divide by zero", ended)
+    Assert.Equal("ArithmeticError (DivisionByZero, None)", ended)
 
 [<Fact>]
 let ``A tail call runs in constant stack from the binary too`` () =

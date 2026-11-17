@@ -1156,6 +1156,9 @@ internal static partial class CliCommands
                 errors.WriteLine(
                     $"Runtime error: the program ran out of stack{where}: a recursive call that isn't in tail position uses stack for every call (see {TailRecursionDocs})");
                 return 1;
+            case RunError.ArithmeticError arithmetic:
+                errors.WriteLine($"Runtime error: {WasmRunner.describeFault(arithmetic.fault, arithmetic.functionName)}");
+                return 1;
             case RunError.CannotServe cannot:
                 errors.WriteLine($"error: the program can't be served on port {cannot.port}: {cannot.reason}. Give the host another `port` in its `settings`");
                 return 1;

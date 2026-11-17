@@ -85,6 +85,7 @@ module WasmServer =
                     | Trapped message -> Error message
                     | OutOfMemory -> Error "it ran out of memory"
                     | StackOverflow _ -> Error "it ran out of stack"
+                    | ArithmeticError(fault, functionName) -> Error(WasmRunner.describeFault fault functionName)
                     | other -> Error(string other)
             finally
                 lock gate finish

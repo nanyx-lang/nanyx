@@ -116,19 +116,19 @@ def main = {
     |> assertRan "200 18446744073709551615 -600 max other 0.1 true\n[1, 2, 3] 0 3000000001\n"
 
 [<Theory>]
-[<InlineData("I8.fromInt(127) + I8.fromInt(1)")>]
-[<InlineData("I16.fromInt(-32768) - I16.fromInt(1)")>]
-[<InlineData("I32.fromInt(65536) * I32.fromInt(65536)")>]
-[<InlineData("I32.fromInt(-2_147_483_648) / I32.fromInt(-1)")>]
-[<InlineData("U8.fromInt(0) - U8.fromInt(1)")>]
-[<InlineData("U16.fromInt(256) * U16.fromInt(256)")>]
-[<InlineData("U32.fromInt(4_294_967_295) + U32.fromInt(1)")>]
-[<InlineData("U64.fromInt(1) - U64.fromInt(2)")>]
-[<InlineData("U64.fromInt(5_000_000_000) * U64.fromInt(5_000_000_000)")>]
-[<InlineData("-U8.fromInt(1)")>]
-[<InlineData("U8.fromInt(256)")>]
-[<InlineData("U64.fromInt(-1)")>]
-let ``Run - sized integer arithmetic that does not fit stops the program`` (expression: string) =
+[<InlineData("I8.fromInt(127) + I8.fromInt(1)", "integer overflow: the result is out of the range of I8")>]
+[<InlineData("I16.fromInt(-32768) - I16.fromInt(1)", "integer overflow: the result is out of the range of I16")>]
+[<InlineData("I32.fromInt(65536) * I32.fromInt(65536)", "integer overflow: the result is out of the range of I32")>]
+[<InlineData("I32.fromInt(-2_147_483_648) / I32.fromInt(-1)", "integer overflow: the result is out of the range of I32")>]
+[<InlineData("U8.fromInt(0) - U8.fromInt(1)", "integer overflow: the result is out of the range of U8")>]
+[<InlineData("U16.fromInt(256) * U16.fromInt(256)", "integer overflow: the result is out of the range of U16")>]
+[<InlineData("U32.fromInt(4_294_967_295) + U32.fromInt(1)", "integer overflow: the result is out of the range of U32")>]
+[<InlineData("U64.fromInt(1) - U64.fromInt(2)", "integer overflow: the result is out of the range of U64")>]
+[<InlineData("U64.fromInt(5_000_000_000) * U64.fromInt(5_000_000_000)", "integer overflow: the result is out of the range of U64")>]
+[<InlineData("-U8.fromInt(1)", "integer overflow: the result is out of the range of U8")>]
+[<InlineData("U8.fromInt(256)", "an int out of the range of U8 converted to U8")>]
+[<InlineData("U64.fromInt(-1)", "an int out of the range of U64 converted to U64")>]
+let ``Run - sized integer arithmetic that does not fit stops the program`` (expression: string, message: string) =
     let source =
         $"""
 @entry
@@ -140,7 +140,7 @@ def main = {{
     let outcome = runSource (source.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("before\n", outcome.StandardOutput)
-    Assert.Contains("wasm trap: integer overflow", outcome.StandardError)
+    Assert.Equal($"Runtime error: {message}\n", outcome.StandardError.ReplaceLineEndings "\n")
 
 [<Fact>]
 let ``Run - sized integer arithmetic that comes close to not fitting does not stop the program`` () =
