@@ -4,7 +4,7 @@ description: "Associated types on contexts, types passed as arguments, and inspe
 order: 4
 ---
 
-This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), and what is left of them here is how they meet type arguments and the prelude contexts that move to them. **Type arguments** let a function take a type as a parameter and inspect its structure; their design was decided on 2026-11-17 and is filed in stages ([Plan](#plan)). Passing a type is built ([Type arguments](../tour/functions#type-arguments)), and so is checking code that inspects one ([Inspecting a type](../tour/functions#inspecting-a-type)); running it is not yet. Both are the same thing: a record member whose value is a type.
+This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), and what is left of them here is how they meet type arguments and the prelude contexts that move to them. **Type arguments** let a function take a type as a parameter and inspect its structure; their design was decided on 2026-11-17 and is filed in stages ([Plan](#plan)). Passing a type and inspecting it are built ([Type arguments](../tour/functions#type-arguments), [Inspecting a type](../tour/functions#inspecting-a-type), and how they compile in [Type descriptions](../compiler-internals/type-descriptions)); what is left is a description's attributes, module and doc comments, `#nominal` outside a type's home module, and `build`. Both are the same thing: a record member whose value is a type.
 
 # The problems
 
@@ -58,7 +58,7 @@ Every prelude context whose later parameter is fixed by its first is a context w
 
 # Type arguments
 
-Passing a type is built: a parameter `type a` or `into: type` of type `Type(a)`, the value `type Point` of type `Type(Point)`, always written at the call and never left out, and known at compile time, as the [Functions](../tour/functions#type-arguments) page describes. It is the same idea as Haskell's `Proxy a`, Scala's `ClassTag` and Kotlin's `KClass<T>`. A `Type` value holds nothing at run time yet. What is open is inspecting one.
+Passing a type is built: a parameter `type a` or `into: type` of type `Type(a)`, the value `type Point` of type `Type(Point)`, always written at the call and never left out, and known at compile time, as the [Functions](../tour/functions#type-arguments) page describes. It is the same idea as Haskell's `Proxy a`, Scala's `ClassTag` and Kotlin's `KClass<T>`. Inspecting one by matching on it is built too, as [Inspecting a type](../tour/functions#inspecting-a-type) describes.
 
 Decided by the maintainer on 2026-11-17:
 
@@ -68,48 +68,31 @@ Decided by the maintainer on 2026-11-17:
 - **Customising an encoding:** a type that provides the library's context itself wins over walking its description, as an explicit instance already wins over synthesis, and attributes on fields cover renames without one.
 - **`dbg`, interpolation and `==` become library code over descriptions, eventually,** once reflection is proven and measured ([#2000](https://github.com/nanyx-lang/nanyx/issues/2000)).
 
-## Descriptions are in the module only when used
+## What is left of descriptions
 
-Since a `Type` value is known at compile time, reflection stays out of the runtime, which matters for a single WebAssembly module whose unused code is removed:
+Matching on a `Type`, narrowing in its arms, and the packaged types of fields, cases and elements are built
+([Type descriptions](../compiler-internals/type-descriptions)). A module holds descriptions only of the types its `Type`
+values name and of their parts. Still to come, as [#1996](https://github.com/nanyx-lang/nanyx/issues/1996) goes on:
 
-- The module contains a description only of the types that are written as `type X` somewhere in the program, or that need a [`Typed` instance](#the-synthesised-typeda-context). Nothing has to be kept just in case it is reflected over.
-- Because every `Type` value is a constant after monomorphisation, the compiler can specialise code that walks a type's description. The output is close to what a template would produce, while the checking stays that of ordinary generic code. This is an optimisation, not part of the semantics.
+- **Attributes on fields,** so a type can say `@json(name = "user_id")` on a field and a library reads it from the field's description. Attributes on record fields aren't allowed yet.
+- **A description's module and doc comment**, which are empty strings for now.
+- **`#nominal` outside the home module.** A nominal type is described by its structure everywhere for now.
 
-## Inspection with typed type descriptions
-
-The leading design gives `Type(a)` a structure that can be matched. Each case tells the type checker more about the type:
-
-```nanyx
-def encodeAt: a, type a -> Json = { value, t ->
-  match t
-    | #int -> json.int(value)              -- here a = int
-    | #string -> json.string(value)
-    | #list(elem) -> value \map { x -> encodeAt(x, elem) } \json.array
-    | #record(fields) ->
-        fields \map { f -> (f.name, encodeAt(f.get(value), f.type)) } \json.object
-    | #union(cases) -> ...
-}
-```
-
-Each field packages up some type `b` that the checker never learns, together with `name: string`, `type: Type(b)` and `get: a -> b`. The checker only needs to know that `f.get(value)` and `f.type` agree to check the recursive call once.
+## Decoding with `build`
 
 Decoding builds a record instead of taking one apart. It needs a function that works for every field's type:
 
-```nanyx
+```nanyx fragment
 | #record(r) -> r.build { f -> decode(obj \json.field(f.name), f.type) }
 ```
 
-The type system needs three additions, as decided:
-
-- **Narrowing on a `Type` match** only: in the `#int` arm, `a` is known to be `int`, as TypeScript and Kotlin narrow on type tests. Not general GADTs.
-- **Packaged types** (existential types) for fields and union cases.
-- **A `build` the compiler provides** for each record description and union case. The function given to it must work for every field type, a rank-2 type, which users never write.
+The function given to `build` must work for every field type, a rank-2 type, which users never write: the compiler provides `build` for each record description and union case ([#1997](https://github.com/nanyx-lang/nanyx/issues/1997)).
 
 Precedents: Jane Street's `typerep` for OCaml, GHC's `Type.Reflection`, and the "Scrap your boilerplate" approach (`Data`). Swift's `Mirror` and Go's `reflect` have a similar shape but are not typed.
 
 ## The synthesised `Typed(a)` context
 
-`Typed(a) = (typeOf: Type(a))` is built: the compiler gives an instance for every type, nominal ones too, so a function that is given a value of type `a` needn't also take `type a` ([Type arguments](../tour/functions#type-arguments)). It is the implicit counterpart of a type argument, as Haskell's `Typeable` is of `Proxy`, and as Scala's `ClassTag` is usually an implicit parameter. What is left open is what its `typeOf` describes, which comes with descriptions ([#1996](https://github.com/nanyx-lang/nanyx/issues/1996)):
+`Typed(a) = (typeOf: Type(a))` is built: the compiler gives an instance for every type, nominal ones too, so a function that is given a value of type `a` needn't also take `type a` ([Type arguments](../tour/functions#type-arguments)). It is the implicit counterpart of a type argument, as Haskell's `Typeable` is of `Proxy`, and as Scala's `ClassTag` is usually an implicit parameter. Its `typeOf` is a `Type` like any other, which a match inspects. Two things follow:
 
 - **The walker stays explicit.** When `encodeAt` recurses into a record's fields, each field's type is one the checker never learns, so there is no `Typed` instance for it; only `f.type`. A library therefore takes `Typed(a)` in its public function and passes the type explicitly in the code that walks it: `def encode: [Typed(a)] a -> Json = { value -> encodeAt(value, typeOf) }`.
 - **A nominal type gives nothing away.** Outside the type's home module its description is the read-only `#nominal`, so giving `Typed` of it everywhere reveals no structure.
@@ -151,14 +134,13 @@ C#'s source generators run user code at compile time that emits more source. The
 # Open questions
 
 - **Deserialisation-only constructors** for nominal types, logged for later ([#2001](https://github.com/nanyx-lang/nanyx/issues/2001)).
-- **Running inspection.** A `Type` value holds nothing at run time yet, so a `match` on one type-checks but the backend can't compile it (NYX0301). The plan: a `Type` value is a number that names a described type, and a generated function builds its description; where a function is specialised at a known type its `match` picks its arm at compile time, and where it is called at a field's type, which is only known when the program runs, that type's values are boxed, as a context member's own type variables are, and an arm converts them. Attributes on fields and `#nominal` outside a type's home module come after ([#1996](https://github.com/nanyx-lang/nanyx/issues/1996)).
 
 # Plan
 
 | Step | Issue | After |
 |---|---|---|
 | Type arguments: `type a`, `into: type`, `Type(a)` values (built) | [#1995](https://github.com/nanyx-lang/nanyx/issues/1995) | |
-| Type descriptions, matched with narrowing | [#1996](https://github.com/nanyx-lang/nanyx/issues/1996) | #1995 |
+| Type descriptions, matched with narrowing (matching built; attributes, docs, `#nominal` left) | [#1996](https://github.com/nanyx-lang/nanyx/issues/1996) | #1995 |
 | A compiler-provided `build` for decoding | [#1997](https://github.com/nanyx-lang/nanyx/issues/1997) | #1996 |
 | `Typed(a)`, synthesised for every type (built) | [#1998](https://github.com/nanyx-lang/nanyx/issues/1998) | #1995 |
 | An associated type as a `Type` value (built) | [#1999](https://github.com/nanyx-lang/nanyx/issues/1999) | #1995 |

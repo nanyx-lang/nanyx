@@ -32,6 +32,15 @@ type internal Lowering =
     | StandingIn of IrType
     /// As a function that writes values as text for `dbg` (see `CoreIrLowerDbg`).
     | Printing of CoreIrLowerDbg.Printer
+    /// As the module's function that builds the description of the type of a number (see `CoreIrLowerTypeMatch`).
+    | Describing
+    /// As the `get` of the field of this name of this record type, in its description (see `CoreIrLowerTypeMatch`).
+    | FieldGetting of Ty * string
+    /// As the `get` of the case of this name of this union, in its description (see `CoreIrLowerTypeMatch`).
+    | CaseGetting of Ty * string
+    /// As the function that gives the elements of a value of this collection type boxed, in their canonical form (see
+    /// `CoreIrLowerTypeMatch`).
+    | Canonicalising of Ty
     /// As the start function, from the module's top-level expressions.
     | AsStart
 

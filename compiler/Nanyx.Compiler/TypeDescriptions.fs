@@ -2,58 +2,26 @@
 /// built-in type, `#int` or `#string`, which tells the checker what `a` is; `#list(elem)` and the other collections,
 /// whose element type is one the checker never learns; and `#record(r)`, `#union(u)` and `#nominal(n)`, which carry a
 /// value of a built-in description type. A record's fields and a union's cases each package a type of their own, which
-/// the checker never learns either (see `open'`).
+/// the checker never learns either (see `memberType`).
 module internal NyxCompiler.TypeDescriptions
 
 open Parser.Program
 open NyxCompiler.InferState
 open NyxCompiler.TypeValues
 
-/// The description types that package a type of their own.
-let private packaging = set [ field; case; someType ]
-
-/// The mark a packaged type's name carries, before the number that makes it its own: `b#12`.
-let private mark = '#'
-
 /// A type the checker never learns, named `name` for a reader: a type of its own, which only itself is, so that a
 /// value of it can only be given where the same type is expected. It is written as a type with no arguments whose name
-/// no other type has.
+/// no other type has (see `TypeValues.PackagedType`).
 let skolem (name: string) (state: InferState) : Ty * InferState =
     match freshVar state with
-    | TyVar var, next -> TyApply($"{name}{mark}{var.Id}", []), next
+    | TyVar var, next -> TyApply($"{name}{packagedMark}{var.Id}", []), next
     | _ -> failwith "Internal error: a fresh variable is a variable"
 
 /// A type the checker never learns (see `skolem`).
 let (|Skolem|_|) (ty: Ty) =
     match ty with
-    | TyApply(name, []) when name.Contains mark -> Some name
+    | PackagedType id -> Some id
     | _ -> None
-
-/// The type of a value of the record `fields`, in their order.
-let private recordOf (fields: (string * Ty) list) = TyRecord(Map.ofList fields, FieldOrder.ofList fields)
-
-let private stringTy = TyPrimitive "string"
-
-/// What a named type's description says of it besides its structure: its name, its module, the type arguments it is
-/// applied to, and its doc comment. A record or union written out has an empty name and module.
-let private naming =
-    [ "name", stringTy; "module", stringTy; "parameters", Lists.ofType (TyApply(someType, [])); "doc", stringTy ]
-
-/// The members of a value of the description type `name` applied to `args`, a packaged type opened as `packaged`.
-let private membersOf (name: string) (args: Ty list) (packaged: Ty) : Map<string, Ty> =
-    let described = List.tryHead args |> Option.defaultValue (TyPrimitive "unit")
-    let fields =
-        match name with
-        | n when n = recordInfo -> naming @ [ "fields", Lists.ofType (TyApply(field, [ described ])) ]
-        | n when n = unionInfo -> naming @ [ "cases", Lists.ofType (TyApply(case, [ described ])) ]
-        | n when n = nominalInfo -> naming
-        | n when n = field ->
-            [ "name", stringTy; "type", TypeValues.ofType packaged; "get", TyFunc(described, packaged, []); "doc", stringTy ]
-        | n when n = case ->
-            let payload = TyUnion [ TyTag("some", Some packaged); TyTag("none", None) ]
-            [ "name", stringTy; "type", TypeValues.ofType packaged; "get", TyFunc(described, payload, []); "doc", stringTy ]
-        | _ -> [ "type", TypeValues.ofType packaged ]
-    Map.ofList fields
 
 /// The type of the member `memberName` of a value of the type `ty`, if it is a description type that has the member,
 /// and `state` with what it opened. A field, a case or a type argument packages a type: reading a member of one opens
@@ -72,7 +40,7 @@ let memberType (state: InferState) (symbol: SymbolId option) (ty: Ty) (memberNam
                     match symbol with
                     | Some symbol -> opened, { next with OpenedPackages = next.OpenedPackages |> Map.add symbol opened }
                     | None -> opened, next
-        membersOf name args packaged |> Map.tryFind memberName |> Option.map (fun memberTy -> memberTy, next)
+        descriptionMembers name args packaged |> List.tryFind (fst >> (=) memberName) |> Option.map (fun (_, memberTy) -> memberTy, next)
     | _ -> None
 
 /// The types the checker never learns that `ty` holds.

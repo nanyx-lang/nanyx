@@ -14,31 +14,10 @@ open NyxCompiler.TypeValues
 /// tag says.
 type private Case = { Payload: Ty option; Narrowed: Ty option }
 
-/// The tags of a type's description that stand for a built-in type with no parts, with the type each says `a` is.
-let private builtIns =
-    [ "int", TyPrimitive "int"
-      "float", TyPrimitive "float"
-      "bool", TyPrimitive "bool"
-      "string", TyPrimitive "string"
-      "unit", TyPrimitive "unit"
-      "f32", F32.ty ]
-    @ (SizedInteger.all |> List.map (fun integer -> (SizedInteger.name integer).ToLowerInvariant(), SizedInteger.ty integer))
-
-/// The tags of a collection's description, each with the collection of its element types.
-let private collections =
-    [ "list", 1, (fun (args: Ty list) -> Lists.ofType args.Head)
-      "array", 1, (fun args -> Arrays.ofType args.Head)
-      "set", 1, (fun args -> Sets.ofType args.Head)
-      "map", 2, (fun args -> Maps.ofTypes args.[0] args.[1]) ]
-
-/// The tags of a type's description, in the order a diagnostic lists them.
-let tags =
-    (builtIns |> List.map fst) @ (collections |> List.map (fun (tag, _, _) -> tag)) @ [ "function"; "record"; "union"; "nominal" ]
-
 /// What the arm of the tag `tag` finds of the type `standsFor`, if `tag` is one of a description's. A collection's
 /// element types are each a type of its own, which `elem` stands for.
 let private caseOf (state: InferState) (standsFor: Ty) (tag: string) : (Case * InferState) option =
-    match builtIns |> List.tryFind (fst >> (=) tag), collections |> List.tryFind (fun (name, _, _) -> name = tag) with
+    match builtInDescriptions |> List.tryFind (fst >> (=) tag), collectionDescriptions |> List.tryFind (fun (name, _, _) -> name = tag) with
     | Some (_, ty), _ -> Some ({ Payload = None; Narrowed = Some ty }, state)
     | None, Some (_, count, collection) ->
         let elements, next =
@@ -51,10 +30,10 @@ let private caseOf (state: InferState) (standsFor: Ty) (tag: string) : (Case * I
         Some ({ Payload = Some payload; Narrowed = Some (collection elements) }, next)
     | None, None ->
         match tag with
-        | "function" -> Some ({ Payload = None; Narrowed = None }, state)
-        | "record" -> Some ({ Payload = Some (TyApply(recordInfo, [ standsFor ])); Narrowed = None }, state)
-        | "union" -> Some ({ Payload = Some (TyApply(unionInfo, [ standsFor ])); Narrowed = None }, state)
-        | "nominal" -> Some ({ Payload = Some (TyApply(nominalInfo, [])); Narrowed = None }, state)
+        | t when t = functionTag -> Some ({ Payload = None; Narrowed = None }, state)
+        | t when t = recordTag -> Some ({ Payload = Some (TyApply(recordInfo, [ standsFor ])); Narrowed = None }, state)
+        | t when t = unionTag -> Some ({ Payload = Some (TyApply(unionInfo, [ standsFor ])); Narrowed = None }, state)
+        | t when t = nominalTag -> Some ({ Payload = Some (TyApply(nominalInfo, [])); Narrowed = None }, state)
         | _ -> None
 
 /// Whether `ty` is the type `target` that a match narrows: the same variable, or the same type the checker never learns.
@@ -164,6 +143,12 @@ let infer
             found
             |> Result.bind (fun (tag, armEnv, next, isCatchAll, case) ->
                 let narrowed = case |> Option.bind _.Narrowed
+                // What the arm says the type is, kept at its pattern for the backend, which picks the arm where the
+                // type is known (see `CoreIrLowerTypeMatch`).
+                let next =
+                    match narrowed with
+                    | Some ty -> { next with ExprTypes = next.ExprTypes |> Map.add pattern.Id ty }
+                    | None -> next
                 // The arm sees what is in scope, and gives what the match gives, with the type narrowed in them.
                 let armEnv, armResult =
                     match target, narrowed with
@@ -190,7 +175,7 @@ let infer
         arms
         |> List.fold arm (Ok ([], Set.empty, false, state))
         |> Result.map (fun (typedArms, covered, catchAll, current) ->
-            let missing = tags |> List.filter (covered.Contains >> not)
+            let missing = descriptionTags |> List.filter (covered.Contains >> not)
             let current =
                 if catchAll || missing.IsEmpty then current
                 else

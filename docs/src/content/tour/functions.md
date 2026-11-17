@@ -247,7 +247,7 @@ println(describe(5)) -- int 5
 
 Generic code inspects a type argument by matching on it. Each arm is a tag of the type's description, and an arm that says what the type is tells the checker too: in the `#int` arm below, `a` is `int`, so `value + 1` checks, and in the `#string` arm it is `string`. The function is checked once, as all generic code is, not once for each type it is called at:
 
-```nanyx skip=#1996
+```nanyx
 def describe: a, type a -> string = { value, t ->
   match t
     | #int -> "the int {value + 1}"

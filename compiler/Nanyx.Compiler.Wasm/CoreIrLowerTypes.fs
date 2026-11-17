@@ -20,10 +20,20 @@ let rec freeVars (ty: Ty) : int list =
     | TyNominal(_, args, _, _) -> args |> List.collect freeVars
     | _ -> Ty.children ty |> List.collect freeVars
 
+/// The type a context member's own type variables are at in its context's layout (see `boxOwnVariables`), and a field's
+/// or an element's type that is only known when the program runs (see `substitute`): their values are boxed (`IrBox`).
+let boxedTy = TyPrimitive "?box"
+
+/// Whether `ty` holds a type whose values are boxed (see `boxedTy`).
+let rec holdsBoxed (ty: Ty) = ty = boxedTy || Ty.children ty |> List.exists holdsBoxed
+
 let rec substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
     let go = substitute subst
     match ty with
     | TyVar v -> subst |> Map.tryFind v.Id |> Option.defaultValue ty
+    // A field's or an element's type in a type's description is the one a `Type` match found where the type is known
+    // (see `CoreIrLowerTypeMatch`), and otherwise only known when the program runs: its values are boxed.
+    | TypeValues.PackagedType id -> subst |> Map.tryFind id |> Option.defaultValue boxedTy
     | TyFunc(input, output, contexts) -> TyFunc(go input, go output, contexts |> List.map go |> FunctionContexts.flatten)
     | TyContexts contexts -> TyContexts(contexts |> List.map go |> FunctionContexts.flatten)
     | TyRecord(fields, order) -> TyRecord(fields |> Map.map (fun _ -> go), order)
@@ -181,10 +191,6 @@ let sortFields (fields: (string * 'a) list) =
     let byName = Map.ofList fields
     storageOrder (List.map fst fields) |> List.map (fun name -> name, byName.[name])
 
-/// The type a context member's own type variables are at in its context's layout (see `boxOwnVariables`): their values
-/// are boxed (`IrBox`).
-let boxedTy = TyPrimitive "?box"
-
 let (|BoxedType|_|) (ty: Ty) = if ty = boxedTy then Some () else None
 
 /// The type variables of `ty` that are the type of a value: not the rest of a union or record, which changes nothing in
@@ -232,8 +238,12 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | BoxedType -> IrBox
     // A scoped context's scope means nothing at run time: a value of the context's type is unit.
     | TyScope _ -> IrUnit
-    // Nor does a `Type` value, which is known at compile time (see `TypeValues`).
-    | TypeValues.TypeValueType _ -> IrUnit
+    // A `Type` value is the number of the type it stands for, which the module's descriptions are kept by (see
+    // `CoreIrTypeIds`).
+    | TypeValues.TypeValueType _ -> IrInt
+    // A value of a description type is the record it is, with the packaged type's values boxed.
+    | TyApply(name, args) when TypeValues.isDescriptionType name ->
+        toIrType (TypeValues.descriptionRecord name (args |> List.map (fun _ -> boxedTy)) boxedTy)
     // A cell passed to a function is the box it is held in (see `CellSyntax`).
     | FunctionContexts.CellType(held, _) -> IrRecord [ "0", toIrType held ]
     // So is a `box`, which the standard library's `MRef` is (see `Boxes`).
