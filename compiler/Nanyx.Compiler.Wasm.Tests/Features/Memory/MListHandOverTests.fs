@@ -44,7 +44,7 @@ def copied: int -> int = { n ->
 }
 
 def selected: int -> int = { n ->
-  sum(list.init(n, { i -> i }) \list.select { x -> if x % 2 == 0 then yield(x) })
+  sum(list.init(n, { i -> i }) \list.select { x -> if x % 2 == 0 then yield x })
 }
 
 def initialised: int -> int = { n -> sum(list.init(n, { i -> i })) }
@@ -79,6 +79,7 @@ let ``list.select builds its list without reversing it`` () =
     let liveBefore = program.LiveBlocks
     let selectAllocations, total = allocationsOf program "selected" 100
     Assert.Equal(2450, total)
-    // A cell for each value yielded, and the cells, closure and mutable cells of the block: no copy of the list.
-    Assert.InRange(selectAllocations - initAllocations, 50, 55)
+    // A cell for each value yielded, the sequence the lambda gives for each element (#1699), and the cells, closure and
+    // mutable cells of the block: no copy of the list.
+    Assert.InRange(selectAllocations - initAllocations, 645, 655)
     Assert.Equal(liveBefore, program.LiveBlocks)

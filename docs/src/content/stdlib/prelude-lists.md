@@ -186,22 +186,22 @@ The first element `matches` holds for, or `#notFound`.
 ## `list.select`
 
 ```nanyx fragment
-def list.select: [c] list(a), ([Yield(b), c] a -> ()) -> list(b)
+def list.select: [c, d] list(a), ([c] a -> [d] seq(b)) -> list(b)
 ```
 
-The values `f` yields for each element in turn, in the order it yields them: `f` runs with a
-`Yield` whose `yield` adds a value to the list. `items \list.select { item -> if item is #other(v)
-then yield(v) }` gives the payload of each `#other`.
+The values `f` yields for each element in turn, in the order it yields them. A lambda with
+`yield` in it is a sequence (see `Yield`), so `items \list.select { item -> if item is #other(v)
+then yield v }` gives the payload of each `#other`.
 
 ## `list.selectOne`
 
 ```nanyx fragment
-def list.selectOne: [c] list(a), ([Yield(b), c] a -> ()) -> #some(b) | #notFound
+def list.selectOne: [c, d] list(a), ([c] a -> [d] seq(b)) -> #some(b) | #notFound
 ```
 
 The first value `f` yields, running it on the elements in turn as [`list.select`](#listselect) does, or `#notFound`
 when it yields none. It stops at the first yield: `f` runs on no element after the one it yields
-for, and a second value it yields for that element is left out.
+for, and the code after that `yield` doesn't run.
 
 ## `list.all`
 

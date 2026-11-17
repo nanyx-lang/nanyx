@@ -49,14 +49,14 @@ let ``a keyword other than try applied to a value is reported where it is writte
     let source =
         "def numbers = { n ->\n"
         + "  seq {\n"
-        + "    def x = yield n\n"
+        + "    def x = emit n\n"
         + "    x\n"
         + "  }\n"
         + "}\n"
     match parseModule source with
     | Result.Error err ->
         err |> should haveSubstring "Ln: 3 Col: 13"
-        err |> should haveSubstring "`yield` is applied to a value without parentheses"
+        err |> should haveSubstring "`emit` is applied to a value without parentheses"
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]

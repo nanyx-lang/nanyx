@@ -56,11 +56,18 @@ module WorkflowDesugaring =
     /// A keyword's kind is the one `@customKeywordType` gives the member of its name in `module'`'s context declarations,
     /// else in `imported`'s (the keywords of the modules it imports, see `Attributes.keywordKinds`), else `#bind`. A
     /// `#delay` keyword `k! e` is `k({ e })` wherever it is, with nothing else rewritten, so it needs no builder; a
-    /// `#bindF` keyword is a `#bind` keyword whose value is passed as `{ e }`.
+    /// `#bindF` keyword is a `#bind` keyword whose value is passed as `{ e }`. The language's `yield` is a `#yield`
+    /// keyword: a lambda, a builder's block included, with one in it is the lazy sequence of the values it yields, and
+    /// calls no member (see `Seqs.consFunction`).
     let desugarWithDiagnostics (imported: Map<Identifier, KeywordKind>) (module': Module) : Module * Diagnostic list * Map<NodeId, SourceSpan * Identifier> * Map<NodeId, NodeId list> =
         let isReturnKeyword keyword = keyword = WorkflowSyntax.returnKeyword
         let kinds = imported |> Attributes.withKeywordKinds (Attributes.keywordKinds module')
-        let kindOf keyword = kinds |> Map.tryFind keyword |> Option.defaultValue KeywordKind.Bind
+        let kindOf keyword =
+            match kinds |> Map.tryFind keyword with
+            | Some kind -> kind
+            | None when keyword = WorkflowSyntax.yieldKeyword -> KeywordKind.Yield
+            | None -> KeywordKind.Bind
+        let isYield keyword = kindOf keyword = KeywordKind.Yield
         // A workflow bind whose keyword takes the rest of the block: one whose keyword is not `#delay`.
         let (|Bind|_|) (kind: ExpressionKind) =
             match kind with
@@ -85,6 +92,9 @@ module WorkflowDesugaring =
         // member `k` of the context the builder runs its block under, `return` its member `return`.
         let mutable builder: string option = None
 
+        // Whether the builder's block, or the lambda, being desugared is a sequence: one with a `#yield` keyword in it.
+        let mutable yielding = false
+
         // Where the expression being desugared is, when the rest of the builder's block cannot follow a keyword
         // there: inside a lambda, which runs when it is called; in the body of a `for` loop, which runs once per
         // element; or in a part of an expression that may not run, as a branch of an `if` that is not a statement
@@ -107,6 +117,8 @@ module WorkflowDesugaring =
                 | InLoopBody ->
                     "in the body of a `for` loop that is part of an expression or walks several iterables",
                     "make the loop a statement of its own over one list, or handle the value with a `match` in the loop's body"
+                | InWhileLoop when isYield keyword ->
+                    "in a `while` loop", "walk a sequence with a `for` loop instead, or make the sequence with `seq.unfold`"
                 | InWhileLoop -> "in a `while` loop", "handle the value with a `match` in the loop"
                 | InConditionalPart -> "in a part of an expression that may not run", "make the `if` or `match` it is in a statement of its own"
             diagnostics.Add(
@@ -122,25 +134,33 @@ module WorkflowDesugaring =
         // `Contexts.extendEnvForLambdaArgument`). Each call instantiates the member's own type variables afresh. The
         // call is reported at `source`, with the builder's name, if no context in scope there has a member `k`. Outside
         // a builder's block it is a call to a function named `k`, and an error if `k` is one of the language's own
-        // keywords, `try` or `return`, which no function can be named.
+        // keywords, `try`, `yield` or `return`, which no function can be named. A sequence has no `return`: it ends
+        // where its block does.
         let memberCall (source: Expression) (builderName: string) (keyword: string) (args: Expression list) =
             let call = madeFor source (FunctionCall(keyword, None, args))
             memberPlaces <- memberPlaces |> Map.add call.Id (source.Span, builderName)
             call
         let workflowCall (source: Expression) (keyword: string) (args: Expression list) : Expression =
             match builder with
+            | Some builderName when yielding && isReturnKeyword keyword ->
+                diagnostics.Add(
+                    Diagnostics.at DiagnosticCodes.InvalidWorkflow source.Span
+                        $"`{keyword}` can't end the `{builderName}` block, which is a sequence because it uses `yield`: the sequence ends where the block does")
+                madeFor source (FunctionCall(keyword, None, args))
             | Some builderName -> memberCall source builderName keyword args
             | None ->
-                if keyword = WorkflowSyntax.tryKeyword || isReturnKeyword keyword then
+                if List.contains keyword WorkflowSyntax.bareKeywords || isReturnKeyword keyword then
                     let keywordSpan = { source.Span with End = source.Span.Start + keyword.Length }
+                    let where = if isYield keyword then "a lambda or a builder block, such as `seq { ... }`" else "a builder block, such as `proc { ... }`"
                     diagnostics.Add(
                         Diagnostics.at DiagnosticCodes.WorkflowKeywordOutsideWorkflow keywordSpan
-                            $"`{keyword}` is a workflow keyword, so it can only be used inside a builder block, such as `proc {{ ... }}`")
+                            $"`{keyword}` is a workflow keyword, so it can only be used inside {where}")
                 madeFor source (FunctionCall(keyword, None, args))
 
-        // Whether `expr` uses a workflow keyword of the block it is in: one not inside a lambda, or inside a builder
-        // block of its own.
-        let rec usesKeyword (expr: Expression) : bool =
+        // Whether `expr` uses a workflow keyword of the block it is in, one for which `isKeyword` holds: one not inside
+        // a lambda, or inside a builder block of its own.
+        let rec usesKeywordWhere (isKeyword: ExpressionKind -> bool) (expr: Expression) : bool =
+            let usesKeyword = usesKeywordWhere isKeyword
             let inValue (statement: Statement) =
                 match statement.Kind with
                 | DefStatement(_, _, _, value)
@@ -150,10 +170,10 @@ module WorkflowDesugaring =
                 | TypeDefStatement _
                 | AttributeStatement _ -> false
             match expr.Kind with
-            | Bind _
-            | WorkflowReturnExpr _ -> true
+            | kind when isKeyword kind -> true
             // A `#delay` keyword's expression is in a lambda.
             | WorkflowBindExpr _
+            | WorkflowReturnExpr _
             | Lambda _
             | ContextNames _ -> false
             // A loop's body is a lambda, but a keyword in it is the block's (see `desugarLoop`).
@@ -179,6 +199,9 @@ module WorkflowDesugaring =
             | UnitExpr
             | LiteralExpr _
             | IdentifierExpr _ -> false
+        let usesKeyword = usesKeywordWhere (function Bind _ | WorkflowReturnExpr _ -> true | _ -> false)
+        // Whether `expr`, a lambda's body, makes the lambda a sequence: whether it uses a `#yield` keyword.
+        let yields = usesKeywordWhere (function Bind(keyword, _) -> isYield keyword | _ -> false)
 
         // Whether `expr` is an `if` or a `match` with a workflow keyword in a branch: as a statement of its own, each
         // branch goes on to the rest of the block (see `desugarBranching`).
@@ -326,6 +349,13 @@ module WorkflowDesugaring =
             | TypeDefStatement _
             | AttributeStatement _ -> [ statement ]
 
+        // The end of a sequence: `seq.delay({ seq.empty() })`, not `seq.empty()`, whose sequence carries no contexts. A
+        // sequence's contexts are unified where branches join, and the lambda's own contexts, which a pure one's can be
+        // any, let an end join a branch that carries some.
+        let sequenceEnd () =
+            let empty = Expression.synthetic (FunctionCall(Seqs.emptyFunction, None, []))
+            Expression.synthetic (FunctionCall(Seqs.delayFunction, None, [ Expression.synthetic (Lambda([], empty, false)) ]))
+
         // A workflow bind or return becomes a call to the workflow's members, whose type is not that of the bind as
         // written (a bind's call is the whole rest of the workflow), so that call is a node of its own, with a new id.
         // Everything else keeps its node's id.
@@ -334,6 +364,25 @@ module WorkflowDesugaring =
             | WorkflowBindExpr _
             | WorkflowReturnExpr _ -> madeFor expr (desugarKind expr)
             | _ -> { expr with Kind = desugarKind expr }
+        // `desugarIt ()` in the block of the builder `name`, whose keywords call its context's members, or which is a
+        // sequence if `isSequence`. A builder block nested in it starts afresh.
+        and inBlockOf (name: string) (isSequence: bool) (desugarIt: unit -> Expression) =
+            let outerBuilder, outerUnreachable, outerYielding = builder, unreachable, yielding
+            builder <- Some name
+            unreachable <- None
+            yielding <- isSequence
+            let desugared = desugarIt ()
+            builder <- outerBuilder
+            unreachable <- outerUnreachable
+            yielding <- outerYielding
+            desugared
+        // A builder's block, or a lambda's body, desugared. A sequence's body that is not a block is desugared as a
+        // block of one statement, so that a `yield` in it has the end of the block after it.
+        and desugarBlockBody (body: Expression) =
+            match body.Kind with
+            | Block _ -> desugarExpr body
+            | _ when yielding -> madeFor body (Block(desugarBlock [ Statement.from body (ExprStatement body) ]))
+            | _ -> desugarExpr body
         // `{ value }`, desugared: how a `#delay` or `#bindF` keyword passes the expression after it.
         and desugarThunk (value: Expression) = desugarExpr (madeFor value (Lambda([], value, false)))
         // The value a bind of `keyword` passes its member along with the continuation.
@@ -347,13 +396,11 @@ module WorkflowDesugaring =
             | BuilderBlock(name, others, lambda, body, takesUnit) ->
                 let rangeOpt = match expr.Kind with FunctionCall(_, rangeOpt, _) -> rangeOpt | _ -> None
                 let others' = others |> List.map desugarExpr
-                let outerBuilder, outerUnreachable = builder, unreachable
-                builder <- Some name
-                unreachable <- None
-                let body' = desugarExpr body
-                builder <- outerBuilder
-                unreachable <- outerUnreachable
+                let body' = inBlockOf name (yields body) (fun () -> desugarBlockBody body)
                 FunctionCall(name, rangeOpt, others' @ [ { lambda with Kind = Lambda([], body', takesUnit) } ])
+            // A lambda with a `#yield` keyword in it is a sequence, as a builder's block with one is.
+            | Lambda(args, body, takesUnit) when yields body ->
+                Lambda(args, inBlockOf Seqs.alias true (fun () -> desugarBlockBody body), takesUnit)
             // A `for` loop's body is a lambda of the elements, which the loop runs once per step.
             | ForSyntax.Call(iterables, loop, parameters, body) ->
                 let body' = within InLoopBody (fun () -> desugarExpr body)
@@ -449,10 +496,12 @@ module WorkflowDesugaring =
             | AttributeStatement _ -> stmt
         // The statements of a block from its first workflow keyword on, as that keyword's call with the rest of the
         // block as its continuation, and so on. A block that falls off its end without `return` has the builder's
-        // `zero` as its value there (`#some()` for `proc`), its last value only run; outside a builder's block, `()`.
+        // `zero` as its value there (`#some()` for `proc`), its last value only run; outside a builder's block, `()`. A
+        // sequence's ends there: `seq.empty()`.
         and desugarWorkflowChain (statements: Statement list) =
             let ending () =
                 match builder with
+                | Some _ when yielding -> sequenceEnd ()
                 | Some builderName ->
                     let zero = Expression.synthetic (IdentifierExpr WorkflowSyntax.zeroMember)
                     let place = statements |> List.tryLast |> Option.map _.Span |> Option.defaultValue SourceSpan.none
@@ -460,11 +509,14 @@ module WorkflowDesugaring =
                     zero
                 | None -> Expression.synthetic UnitExpr
             // The chain may end in several places (see `desugarBranching`), each with an ending of its own.
-            desugarChain statements (fun last ->
-                let ending = ending ()
-                match last with
-                | Some value -> madeFor value (Block [ Statement.from value (ExprStatement value); Statement.synthetic (ExprStatement ending) ])
-                | None -> ending)
+            desugarChain statements (endWith ending)
+        // The end of a chain, given the value of its last statement if that is an expression: that value, only run,
+        // then `ending ()`.
+        and endWith (ending: unit -> Expression) (last: Expression option) =
+            let ending = ending ()
+            match last with
+            | Some value -> madeFor value (Block [ Statement.from value (ExprStatement value); Statement.synthetic (ExprStatement ending) ])
+            | None -> ending
         // `statements` as a workflow chain that goes on to `next` at its end, given the value of its last statement
         // if that is an expression. A keyword takes the rest of the chain as its continuation; `return` ends the
         // whole block, so what follows it, `next` included, never runs.
@@ -476,6 +528,11 @@ module WorkflowDesugaring =
                 match statement.Kind with
                 | DefStatement(isExport, name, typeOpt, expr) ->
                     match expr.Kind with
+                    | Bind(keyword, bindExpr) when isYield keyword ->
+                        diagnostics.Add(
+                            Diagnostics.at DiagnosticCodes.InvalidWorkflow expr.Span
+                                $"`{keyword}` gives the sequence a value and has none of its own, so `{name}` can't be bound to it: write `{keyword}` as a statement of its own")
+                        yieldCall expr bindExpr rest next
                     | Bind(keyword, bindExpr) when isReturnKeyword keyword ->
                         workflowCall expr WorkflowSyntax.returnKeyword [desugarExpr bindExpr]
                     | Bind(keyword, bindExpr) ->
@@ -486,6 +543,7 @@ module WorkflowDesugaring =
                 | ExprStatement expr ->
                     match expr.Kind with
                     | WorkflowReturnExpr value -> workflowCall expr WorkflowSyntax.returnKeyword [desugarExpr value]
+                    | Bind(keyword, bindExpr) when isYield keyword -> yieldCall expr bindExpr rest next
                     | Bind(keyword, bindExpr) when isReturnKeyword keyword ->
                         workflowCall expr WorkflowSyntax.returnKeyword [desugarExpr bindExpr]
                     // The last statement's bound value is the chain's value.
@@ -496,6 +554,8 @@ module WorkflowDesugaring =
                     | Bind(keyword, bindExpr) ->
                         workflowCall expr keyword [boundArgument keyword bindExpr; madeFor expr (Lambda([("_", None)], restOfChain (), false))]
                     | _ when branchesUseKeywords expr -> desugarBranching expr None rest next
+                    | ForSyntax.Call([ iterable ], loop, parameters, body) when yielding && usesKeyword body ->
+                        desugarSequenceLoop expr iterable loop parameters body rest next
                     | ForSyntax.Call([ iterable ], loop, parameters, body) when builder.IsSome && usesKeyword body ->
                         desugarLoop expr iterable loop parameters body rest next
                     | _ when rest.IsEmpty -> next (Some (desugarExpr expr))
@@ -580,6 +640,27 @@ module WorkflowDesugaring =
             let bodyFunction = { loop with Kind = Lambda(parameters @ [ nextName, None ], bodyChain, false) }
             let restFunction = madeFor expr (Lambda([], desugarChain rest next, false))
             memberCall expr (Option.get builder) WorkflowSyntax.forMember [ desugarExpr iterable; bodyFunction; restFunction ]
+        // A `yield` of `value` in a sequence, `expr`, followed by `rest`: the sequence of `value` and then what the rest
+        // of the block up to `next` gives, which runs only when the sequence is pulled that far.
+        //
+        //   seq.cons(value, { <rest of the block> })
+        and yieldCall (expr: Expression) (value: Expression) (rest: Statement list) next =
+            let tail = madeFor expr (Lambda([], desugarChain rest next, false))
+            madeFor expr (FunctionCall(Seqs.consFunction, None, [ desugarExpr value; tail ]))
+        // A `for` loop statement over `iterable` whose body yields, `expr`, in a sequence, followed by `rest`: the
+        // sequences the body gives for each element, one after another, then what the rest of the block up to `next`
+        // gives. Each is worked out when the sequence is pulled that far.
+        //
+        //   seq.append(seq.concatMap(items, { item -> <body, then seq.empty()> }), seq.delay({ <rest of the block> }))
+        and desugarSequenceLoop (expr: Expression) iterable (loop: Expression) parameters (body: Expression) (rest: Statement list) next =
+            let statements =
+                match body.Kind with
+                | Block statements -> statements
+                | _ -> [ Statement.from body (ExprStatement body) ]
+            let bodyChain = desugarChain (statements |> List.collect liftStatementBinds) (endWith sequenceEnd)
+            let each = madeFor expr (FunctionCall(Seqs.concatMapFunction, None, [ desugarExpr iterable; { loop with Kind = Lambda(parameters, bodyChain, false) } ]))
+            let restOfBlock = madeFor expr (FunctionCall(Seqs.delayFunction, None, [ madeFor expr (Lambda([], desugarChain rest next, false)) ]))
+            madeFor expr (FunctionCall(Seqs.appendFunction, None, [ each; restOfBlock ]))
         // A statement followed by the rest of the chain, as a block made up for them that spans from the statement
         // to the end of the rest. The rest is a made-up `()` with no span when the statement is the last one.
         and chainBlock (statement: Statement) (nextExpr: Expression) (desugared: Statement) =

@@ -100,20 +100,32 @@ As with a [destructuring binding](./pattern-matching#destructuring-bindings), a 
 Higher-order functions can accept lambdas that require a context. This lets APIs parameterize the capability available inside the callback.
 
 ```nanyx fragment
-list.select: [c] list(a), ([Yield(b), c] a -> ()) -> list(b)
+memory: [c] ([Memory, c] () -> a) -> a
 ```
 
-In the type above, the callback `a -> ()` runs with a `Yield(b)` context, so it can call `yield` while processing each element, and `list.select` gives back the values it yields. (`c` is a context variable, explained [below](#parametric-contexts): the callback may use the caller's contexts too.)
+In the type above, the callback runs with a `Memory` context, so it can make and change [`mut` cells](../advanced/memory), and `memory` gives back what it returns. (`c` is a context variable, explained [below](#parametric-contexts): the callback may use the caller's contexts too.)
 
 ```nanyx fragment
-def names: list(Person) -> list(string) = { people ->
-  people \list.select { person ->
-    if person.isActive then yield(person.name)
+def total: list(int) -> int = { xs ->
+  memory {
+    mut sum = 0
+    for xs | x -> sum := sum + x
+    sum
   }
 }
 ```
 
 This pattern is called a **contextual lambda**: the higher-order function decides which context to provide, while the lambda body uses that context implicitly.
+
+A lambda with `yield` in it is a lazy sequence of the values it yields (see [Workflows](../advanced/workflows#yield-and-sequences)), so `list.select` takes one, and gives back every value it yields for each element:
+
+```nanyx
+def names = ["Ann", "", "Bo"] \list.select { name ->
+  if name != "" then yield name
+}
+
+println(names)
+```
 
 ## Parametric contexts
 

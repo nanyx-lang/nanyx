@@ -329,12 +329,15 @@ def list.default: () -> list(a)
 ## `Yield`
 
 ```nanyx fragment
-context Yield(b) = (
-  yield: b -> ()
+context Yield(a) = (
+  yield: a -> Seq(a)
 )
 ```
 
-Values of type `b` given one at a time: [`list.select`](prelude-lists#listselect) runs a function with one whose `yield` adds to
-the list it gives back, so `xs \list.select { x -> if x > 0 then yield(x) }` keeps the positive ones.
+The keyword `yield`, of kind `#yield`: a block or lambda with `yield x` in it is a lazy sequence of
+the values it yields, and the code after a `yield` runs only when the sequence is pulled that far.
+`seq { yield 1  yield 2 }` gives `1` and `2`, and `xs \list.select { x -> if x > 0 then yield x }`
+keeps the positive ones. Nothing loads this context: the compiler rewrites the block into calls to
+`seq.cons` and `seq.empty`, so the sequence needs no context of its own.
 
 <!-- End of the generated reference. -->

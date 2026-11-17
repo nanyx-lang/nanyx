@@ -295,7 +295,7 @@ in [Workflows](../advanced/workflows#keyword-kinds).
 
 ```nanyx
 context Lazy = (
-  @customKeywordType(#later)  -- error NYX0019: Unknown keyword kind '#later': the kinds are `#bind`, `#bindF`, `#delay`
+  @customKeywordType(#later)  -- error NYX0019: Unknown keyword kind '#later': the kinds are `#bind`, `#bindF`, `#delay`, `#yield`
   force: [c] (int, ([c] int -> int)) -> int
 )
 ```
@@ -1626,11 +1626,11 @@ call a foreign function, and a library reaches the outside world only through th
 
 ```nanyx
 @extern("wasi_snapshot_preview1", "sched_yield")
-def yield: () -> I32  -- error NYX0242: A foreign function's type must require 'HostRuntime', so that only a host can call it: write [HostRuntime] before it
+def schedYield: () -> I32  -- error NYX0242: A foreign function's type must require 'HostRuntime', so that only a host can call it: write [HostRuntime] before it
 ```
 
 To fix it, import `nanyx/host.runtime` and write `[HostRuntime]` before the type:
-`def yield: [HostRuntime] () -> I32`.
+`def schedYield: [HostRuntime] () -> I32`.
 
 # NYX0243: Import declared with different types
 

@@ -151,7 +151,8 @@ module Attributes =
         let takesThunk (parameter: TypeExpr) = match parameterTypes parameter with Some [ Kind TypeUnit ] -> true | _ -> false
         let fits, expected =
             match kind, typeOpt |> Option.bind parameterTypes with
-            | KeywordKind.Bind, _ -> true, ""
+            | KeywordKind.Bind, _
+            | KeywordKind.Yield, _ -> true, ""
             | KeywordKind.Delay, parameters -> (match parameters with Some [ thunk ] -> takesThunk thunk | _ -> false), "`(() -> a) -> r`"
             | KeywordKind.BindF, parameters -> (match parameters with Some [ thunk; _ ] -> takesThunk thunk | _ -> false), "`(() -> a, a -> r) -> r`"
         if fits then None

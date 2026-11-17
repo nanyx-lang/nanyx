@@ -414,7 +414,7 @@ allocation `reusing` a token.
   counting adds before the check, inlined or not, and a function that checks a parameter owns it. `MList.toList`
   checks its box this way, and hands over the cells the `MList` built when it holds the only reference, or copies them.
   `__nanyx_list_set_tail` changes a cell's tail in place, giving up the old one and taking the new one over: what
-  builds a list front to back, in cells nothing else sees yet (`MList.add`, `list.select`). Both are written out where
+  builds a list front to back, in cells nothing else sees yet (`MList.add`). Both are written out where
   they are used (`CoreIrEmit.fs`), with no helper.
 - **`[a, ...rest]`** is `[a] ++ rest` to the parser. It is lowered to a cell for `a` in front of `rest`, rather than
   a one-element list whose cell `++` copies, so that it allocates one cell, and can reuse one.

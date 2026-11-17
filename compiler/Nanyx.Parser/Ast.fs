@@ -894,21 +894,27 @@ module CellSyntax =
 
 /// How a workflow keyword takes the expression after it, as `@customKeywordType(#kind)` on its member says (see the
 /// workflows page). `k! e` is `k(e, { rest of the block })` for `Bind`, `k({ e }, { rest of the block })` for `BindF`,
-/// and `k({ e })` for `Delay`, which rewrites nothing else and needs no builder.
+/// and `k({ e })` for `Delay`, which rewrites nothing else and needs no builder. A lambda with a `Yield` keyword in it
+/// is a lazy sequence, `k! e` with the rest of its block `seq.cons(e, { rest of the block })`, and calls no member.
 [<RequireQualifiedAccess>]
 type KeywordKind =
     | Bind
     | BindF
     | Delay
+    | Yield
 
-/// The workflow keywords the language reserves (see the workflows page): `try x`, a `WorkflowBindExpr` of `tryKeyword`,
-/// and `return x`, a `WorkflowReturnExpr`. In a builder's block each calls the builder's member of the same name.
+/// The workflow keywords the language reserves (see the workflows page): `try x` and `yield x`, `WorkflowBindExpr`s of
+/// `tryKeyword` and `yieldKeyword`, and `return x`, a `WorkflowReturnExpr`. In a builder's block `try` and `return` call
+/// the builder's member of the same name; `yield` is of kind `Yield`.
 module WorkflowSyntax =
     /// The kinds `@customKeywordType` takes, each by the tag that names it: `@customKeywordType(#delay)`.
-    let keywordKinds = [ "bind", KeywordKind.Bind; "bindF", KeywordKind.BindF; "delay", KeywordKind.Delay ]
+    let keywordKinds = [ "bind", KeywordKind.Bind; "bindF", KeywordKind.BindF; "delay", KeywordKind.Delay; "yield", KeywordKind.Yield ]
 
     let tryKeyword = "try"
+    let yieldKeyword = "yield"
     let returnKeyword = "return"
+    /// The keywords written before their value without `!`, as `try x` and `yield x` are.
+    let bareKeywords = [ tryKeyword; yieldKeyword ]
     /// The member that is the value of a builder's block that ends without `return`.
     let zeroMember = "zero"
     /// The member that runs a `for` loop whose body uses a keyword: `for(items, { item, next -> ... }, { _ -> ... })`.
