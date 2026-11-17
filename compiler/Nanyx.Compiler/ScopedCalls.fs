@@ -78,7 +78,8 @@ let enter (env: TypeEnv) (state: InferState) (call: Expression) (callee: Identif
 /// Whether the def `defName`, where it writes its type, has the scoped context `context` in its body: the type writes
 /// it, or the def supplies it to a function it is given, as `memory` does, or it takes a cell, for `Memory`.
 let private declares (state: InferState) (defName: Identifier) (context: Identifier) =
-    let names (contexts: TypeExpr list) = contexts |> List.exists (fun ctx -> ctx.Kind = TypeName context)
+    let names (contexts: TypeExpr list) =
+        contexts |> List.exists (fun ctx -> match ctx.Kind with TypeName name -> WrittenContexts.declaredScoped state name = context | _ -> false)
     let inParameters (signature: TypeExpr) =
         match signature.Kind with
         | TypeFunc(input, _) ->
