@@ -148,8 +148,16 @@ let private command (arguments: string list) : Shell -> int =
         let checkMemory, rest = takeFlag "--check-memory" rest
         let memory, rest = takeFlag "--memory" rest
         let memoryCheck = if memory then MemoryCheck.Report elif checkMemory then MemoryCheck.Check else MemoryCheck.Off
+        // Each `--allow-dir <directory>` before any `--`, and the arguments without them.
+        let rec allowing (directories: string list) (kept: string list) (rest: string list) =
+            match rest with
+            | "--" :: _ -> List.rev directories, List.rev kept @ rest
+            | "--allow-dir" :: directory :: rest -> allowing (directory :: directories) kept rest
+            | argument :: rest -> allowing directories (argument :: kept) rest
+            | [] -> List.rev directories, List.rev kept
+        let allowed, rest = allowing [] [] rest
         let _, _, timings, host, path = options (null, false, false, null, []) rest
-        fun shell -> CliCommands.RunIn(shell, memoryCheck, path, timings, host, not noInline)
+        fun shell -> CliCommands.RunIn(shell, memoryCheck, path, timings, host, not noInline, Array.ofList allowed)
     | "build" :: rest ->
         let noInline, rest = takeFlag "--no-inline" rest
         let wat, rest = takeFlag "--wat" rest
@@ -429,7 +437,7 @@ let runHost (arguments: string list) (wat: string) : Result<string, Nanyx.Runtim
     try
         use output = new MemoryStream()
         use error = new MemoryStream()
-        Nanyx.Runtime.WasmRunner.run (Nanyx.Runtime.Redirected(input, output, error, [])) arguments wat
+        Nanyx.Runtime.WasmRunner.run (Nanyx.Runtime.Redirected(input, output, error, [])) arguments [] wat
         |> Result.map (fun () -> Text.Encoding.UTF8.GetString(output.ToArray()))
     finally
         File.Delete input
@@ -441,7 +449,7 @@ let runCheckedHost (arguments: string list) (wat: string) : Result<string * int,
     try
         use output = new MemoryStream()
         use error = new MemoryStream()
-        Nanyx.Runtime.WasmRunner.runReading (Nanyx.Runtime.Redirected(input, output, error, [])) arguments CheckedExports.start [| CheckedExports.liveBlocks |] wat
+        Nanyx.Runtime.WasmRunner.runReading (Nanyx.Runtime.Redirected(input, output, error, [])) arguments [] CheckedExports.start [| CheckedExports.liveBlocks |] wat
         |> Result.map (fun counters -> Text.Encoding.UTF8.GetString(output.ToArray()), counters.[0])
     finally
         File.Delete input

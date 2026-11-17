@@ -204,7 +204,7 @@ is in.
   inferred to need, and each `use` in it, with the calls each one serves under it. A `use` that serves no call is
   marked `unused`.
 - **The module**: its doc comment, the top-level definitions and imports in scope, the file's own first, and the
-  contexts the runtime supplies (`Console` and `Env`, from the host's prelude).
+  contexts the runtime supplies (`Console`, `Env` and `FileSystem`, from the host's prelude).
 
 While the view is visible and not pinned, it also highlights in the editor how contexts flow: with the cursor on a
 `use`, or on a context in a definition's signature, the calls it serves are highlighted; with the cursor on a call,

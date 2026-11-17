@@ -115,8 +115,8 @@ have, written down.
   which 'calculate' does not declare: add [Memory] to the type of 'calculate'".
 - No "I" or "you", and no blame.
 
-[Principles](../foundations/principles#friendly-errors) says the same. What's left of #879 is one PR per area (backend,
-packaging) rewriting the messages that break it. The parser's and the type checker's messages, and those for
+[Principles](../foundations/principles#friendly-errors) says the same. What's left of #879 is rewriting the messages of
+packages and the CLI that break it. The parser's, the type checker's and the backend's messages, and those for
 directives, attributes and imports, are done. A syntax error the parser has no message of its own for is still FParsec's report ("Expecting: ..."), which the
 recursive-descent parser ([#846](https://github.com/nanyx-lang/nanyx/issues/846)) replaces.
 

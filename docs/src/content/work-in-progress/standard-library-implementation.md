@@ -104,7 +104,7 @@ again (`Compiler.compileStandardLibraryModuleReporting`),
 and of each public module of the packages it ships beside it (`ShippedPackages`), not from a parse of its own (`StandardLibraryDocs` in `Nanyx.Compiler/StandardLibraryDocs.fs`), and a link in a doc
 comment, `` [`name`] ``, leads to the name's entry, on its page or another.
 
-A shipped package's public module, such as `nanyx.console.core`'s `console` and `env`, has a page in the same section,
+A shipped package's public module, such as `nanyx.console.core`'s `console` and `env`, or `nanyx.fs`'s `file`, has a page in the same section,
 named for its file as a library file's is, and its reference is generated in the same way from the package's files in
 `packages/`. A host's modules (`nanyx.console`'s `console.host` and `console.prelude`) have none: a program doesn't
 import them.

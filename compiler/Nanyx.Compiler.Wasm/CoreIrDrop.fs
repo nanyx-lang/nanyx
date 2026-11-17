@@ -238,7 +238,7 @@ let private fieldDrops (tagId: string -> int option) (ty: IrType) : string list 
     | IrError
     | IrWord
     | IrRecursive _
-    | IrSelf -> internalError $"the fields of {IrType.show ty}, which is not an object with fields"
+    | IrSelf -> internalError $"the fields of '{IrType.show ty}', which is not an object with fields"
 
 /// The body of the drop function of `ty`, which takes the value in `$p`.
 let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
@@ -286,7 +286,7 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
     | IrError
     | IrWord
     | IrRecursive _
-    | IrSelf -> internalError $"a drop function for {IrType.show ty}, which is not on the heap"
+    | IrSelf -> internalError $"a drop function for '{IrType.show ty}', which is not on the heap"
 
 /// The body of the function that drops the object at `$p`, a value of `ty`, a type that `defers`, whose last reference
 /// has been given up: its fields, then the object. A list's tail is given up as any other list would be.

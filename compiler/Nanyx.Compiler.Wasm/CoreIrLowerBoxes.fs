@@ -119,7 +119,7 @@ let rec convert (tools: BoxTools) (atom: Atom) (expected: IrType) (k: Atom -> Ex
             let converted = Expr.make (Call(tools.ListConverter givenElement expectedElement, [ AVar elements ])) (IrList expectedElement)
             bindLocal tools "__converted" converted (fun list ->
                 bindLocal tools "__converted" (call NyxCompiler.Intrinsics.arrayOfList [ AVar list ] expected) (AVar >> k)))
-    | _ -> internalError $"a conversion from {IrType.show given} to {IrType.show expected}"
+    | _ -> internalError $"a conversion from '{IrType.show given}' to '{IrType.show expected}'"
 
 /// The function `functionName` that converts a list of values of `given` to a list of values of `expected`: a new list
 /// of the same length, each element converted (see `convert`).

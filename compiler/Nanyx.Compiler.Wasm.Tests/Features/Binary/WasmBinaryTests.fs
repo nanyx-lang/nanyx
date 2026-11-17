@@ -18,8 +18,8 @@ let private run (program: Nanyx.Runtime.Program) =
         let io = Nanyx.Runtime.Redirected(input, output, error, [])
         let outcome =
             match program with
-            | Nanyx.Runtime.Text wat -> Nanyx.Runtime.WasmRunner.run io [ "program" ] wat
-            | Nanyx.Runtime.Binary wasm -> Nanyx.Runtime.WasmRunner.runBinary io [ "program" ] wasm
+            | Nanyx.Runtime.Text wat -> Nanyx.Runtime.WasmRunner.run io [ "program" ] [] wat
+            | Nanyx.Runtime.Binary wasm -> Nanyx.Runtime.WasmRunner.runBinary io [ "program" ] [] wasm
         let ended =
             match outcome with
             | Ok () -> "ok"
@@ -140,8 +140,8 @@ let ``An example runs the same from its binary, with its memory checked`` (examp
             let io = Nanyx.Runtime.Redirected(input, output, error, [])
             let outcome =
                 match program with
-                | Nanyx.Runtime.Text wat -> Nanyx.Runtime.WasmRunner.runReading io [ example ] start counters wat
-                | Nanyx.Runtime.Binary wasm -> Nanyx.Runtime.WasmRunner.runBinaryReading io [ example ] start counters wasm
+                | Nanyx.Runtime.Text wat -> Nanyx.Runtime.WasmRunner.runReading io [ example ] [] start counters wat
+                | Nanyx.Runtime.Binary wasm -> Nanyx.Runtime.WasmRunner.runBinaryReading io [ example ] [] start counters wasm
             $"%A{outcome}", Text.Encoding.UTF8.GetString(output.ToArray())
         finally
             File.Delete input

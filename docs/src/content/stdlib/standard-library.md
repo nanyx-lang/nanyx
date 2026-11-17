@@ -35,6 +35,14 @@ ships it, and the console host's prelude brings its names into every module of a
 - [console](./console) — reading from and writing to the terminal (`nanyx.console.core/console`)
 - [env](./env) — a program's arguments, environment variables and exit code (`nanyx.console.core/env`)
 
+The file system's interface package, `nanyx.fs`, is shipped too. A program names it with `::dependency nanyx.fs`, or
+in its manifest's `dependencies`, and imports its modules; the console host provides `FileSystem`:
+
+- [filesystem](./filesystem) — the `FileSystem` context and `FsError` (`nanyx.fs/filesystem`)
+- [file](./file) — reading and writing files (`nanyx.fs/file`)
+- [dir](./dir) — listing and making directories (`nanyx.fs/dir`)
+- [path](./path) — paths to files and directories (`nanyx.fs/path`)
+
 It also ships `nanyx.json`, which a program names in its dependencies to read and write JSON:
 
 - [json](./json) — the `Json` value, parsing and printing (`nanyx.json/json`)
