@@ -857,9 +857,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     directArguments bindTemp (parameterNames wrapper).Tail.Length input atoms (fun atoms -> k (Expr.make (Call(callee wrapped at, atoms)) ty))
                 | _ ->
                     CoreIrLowerMembers.memberAtoms this.MemberTools scope (Some node) members (fun memberAtoms ->
-                        // A context member's result with values boxed is converted to the type the call has it at.
+                        // A context member's result with values boxed, or a function that requires other contexts'
+                        // members than the call has it require (#1899), is adapted to the type the call has it at.
                         match closure.Type with
-                        | IrFunction(_, output, _) when CoreIrLowerBoxes.needsConversion output ty ->
+                        | IrFunction(_, output, _) when CoreIrLowerBoxes.needsConversion output ty || CoreIrLowerMembers.differInContexts output ty ->
                             bindTemp (Expr.make (CallClosure(closure, atoms @ memberAtoms, Borrowing)) output) (fun result ->
                                 CoreIrLowerMembers.coerce this.MemberTools scope result ty (fun atom -> k (Expr.make (Atom atom) ty)))
                         | _ -> k (Expr.make (CallClosure(closure, atoms @ memberAtoms, Borrowing)) ty)))
