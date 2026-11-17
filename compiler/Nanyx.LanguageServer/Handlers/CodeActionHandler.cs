@@ -16,7 +16,8 @@ namespace Nanyx.LanguageServer.Handlers;
 /// an unknown name from the standard library needs (<c>NyxCompiler.ImportFixes</c>). A fix that would edit another
 /// file is not offered. It also offers the refactorings at the range (see <c>NyxCompiler.Refactorings</c>), in a
 /// document whose text type-checked: writing the inferred type of the name at its start, inlining the def it names,
-/// converting the call or pipe it names to the other, and introducing a local or a function for what it selects; and
+/// converting the call or pipe it names to the other, introducing a local or a function for what it selects, and a type
+/// alias for a type it selects; and
 /// organising the document's imports, which is also a quick fix of an unused import. Each is laid out with the
 /// document's formatter settings, and only the kinds a request asks for are computed. One the compiler refuses there is
 /// offered disabled, with its reason. One that makes up a name has the <see cref="RenameAtCommand"/> command, which
@@ -193,6 +194,11 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             }
 
             foreach (var extract in IntroduceFunction.at(options, document.FileName, document.Text, compiled, selection, recompile))
+            {
+                yield return ToAction(uri, document, extract);
+            }
+
+            foreach (var extract in IntroduceTypeAlias.at(options, document.FileName, document.Text, compiled, selection, recompile))
             {
                 yield return ToAction(uri, document, extract);
             }

@@ -24,7 +24,6 @@ Each refactoring below has an issue with its design; none is built yet.
 
 | Refactoring | Issue |
 |---|---|
-| Introduce a type alias from a written type | [#1819](https://github.com/nanyx-lang/nanyx/issues/1819) |
 | Inline a type alias | [#1826](https://github.com/nanyx-lang/nanyx/issues/1826) |
 | Write the inferred types of the `_`s in an annotation | [#1820](https://github.com/nanyx-lang/nanyx/issues/1820) |
 | Change a def's signature: add, remove or reorder parameters, updating every call | [#1822](https://github.com/nanyx-lang/nanyx/issues/1822) |
