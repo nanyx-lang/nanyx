@@ -34,11 +34,19 @@ let ``The console's interface package is shipped beside the compiler, and the co
     Assert.Equal<string list>([ "console"; "env" ], (ShippedPackages.tryModules "nanyx.console.core").Value.PublicModules)
     Assert.Equal(None, core.Declares)
     let host = manifestOf Hosts.consolePackage
-    Assert.Equal<string list>([ "nanyx.console.core" ], host.Dependencies |> List.map _.Name)
+    Assert.Equal<string list>([ "nanyx.console.core"; "nanyx.fs" ], host.Dependencies |> List.map _.Name)
     // A script's build reads the host's package with the shipped packages it depends on.
     let modules = (ShippedPackages.tryModules Hosts.consolePackage).Value
-    Assert.Equal<string list>([ "nanyx.console.core" ], modules.Dependencies |> List.map _.Package)
+    Assert.Equal<string list>([ "nanyx.console.core"; "nanyx.fs" ], modules.Dependencies |> List.map _.Package)
     Assert.Equal<string list>([ "console"; "env" ], modules.Dependencies.Head.PublicModules)
+
+[<Fact>]
+let ``The file system's interface package is shipped beside the compiler, with no dependencies`` () =
+    let fs = manifestOf "nanyx.fs"
+    Assert.Equal(("nanyx.fs", Toolchain.version), (fs.Name, fs.Version))
+    Assert.Equal(None, fs.Declares)
+    Assert.Empty(fs.Dependencies)
+    Assert.Equal<string list>([ "dir"; "file"; "filesystem"; "path" ], (ShippedPackages.tryModules "nanyx.fs").Value.PublicModules |> List.sort)
 
 [<Fact>]
 let ``The JSON package is shipped beside the compiler, with one public module and no dependencies`` () =

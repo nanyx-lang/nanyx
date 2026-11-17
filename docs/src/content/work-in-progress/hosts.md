@@ -55,7 +55,7 @@ A host provides the contexts the program's entry may require, and only those. Th
 
 | Host | Entry shape | Provides |
 | --- | --- | --- |
-| `ConsoleHost` | `() -> ()` | `Console & Env`; `FileSystem`, `Clock` and `Random` as they are added |
+| `ConsoleHost` | `() -> ()` | `Console & Env & FileSystem`; `Clock` and `Random` as they are added |
 | HTTP host | `Request -> Response` | `Log & Clock & Env & Random & Http` (see [Serving HTTP](#serving-http)) |
 | Browser host | a record of `init`, `update` and `view` | `Dom & Fetch & Clock & Log` |
 | Plugin / sandbox host | host-defined | only what the embedder grants |
@@ -266,7 +266,9 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
 (#1424, #1425, #1426), and any package as a host, with `::host` and `::dependency` (#1344, #1504).
 
 1. **More contexts for the console host**, as they are added: [`Random`](https://github.com/nanyx-lang/nanyx/issues/1237),
-   then `Clock` and `FileSystem` ([Files, HTTP and JSON](./files-http-json), [#1783](https://github.com/nanyx-lang/nanyx/issues/1783)).
+   then `Clock`. `FileSystem` is done ([Files, HTTP and JSON](./files-http-json), [#1783](https://github.com/nanyx-lang/nanyx/issues/1783)),
+   but for reporting a library that requires it under a host that doesn't provide it
+   ([#1811](https://github.com/nanyx-lang/nanyx/issues/1811)).
 2. **Console in a page**, for the [playground](./playground): the embedder changes in "`ConsoleHost` in a page"
    above; writing `.wasm` is done ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).
 3. **The browser host**: `init`, `update` and `view`, with `Dom`, `Clock` and `Log`, and the JavaScript it ships
@@ -364,8 +366,9 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
   ([#1458](https://github.com/nanyx-lang/nanyx/issues/1458)). A def that writes `[c.Console]` for an aliased import is passed the members as `[Console]` is: the
   backend reads the layout of the context's own name (`CodeGen.layoutOf`), and a member called under the alias,
   `c.write`, is written by its own name for the backend (`ModuleLinking.writeMemberAliases`).
-- **`Env`** is declared in `nanyx.console.core/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, so its
-  parameter is `[Console, Env] () -> a`; an entry that requires fewer contexts fits. The host's prelude re-exports
+- **`Env`** is declared in `nanyx.console.core/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, with
+  `FileSystem` (see below), so its parameter is `[Console, Env, FileSystem] () -> a`; an entry that requires fewer
+  contexts fits. The host's prelude re-exports
   `Env`, so its members are ambient names in every module of the program. Its members are functions of the host's own
   over WASI's `args_sizes_get` and `args_get`, `environ_sizes_get` and `environ_get`, and `proc_exit`, declared with
   `@extern`, with their buffers allocated with `nanyx/host.memory` (see
@@ -382,6 +385,11 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
   count as a leak. A script's entry point requires only the plain contexts that are ambient in its module
   (`Scripts.withAmbientContextsOnly`): a statement that calls a function whose type is an error would otherwise leave it
   requiring all that `run` provides, `Env` too in a script that doesn't import it.
+- **`FileSystem`** is declared in the shipped package `nanyx.fs`, which the console host depends on; its prelude
+  re-exports `FileSystem`, with `Path` and `FsError`, the types its members name. Its members are written on WASI's
+  file functions over the directories the runtime preopens (see
+  [Files, HTTP and JSON](./files-http-json#how-the-file-system-is-built)). A program reaches its functions by
+  importing `nanyx.fs`'s modules, with `::dependency nanyx.fs` or a manifest's `dependencies`.
 
 # Open questions
 

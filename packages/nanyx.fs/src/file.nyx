@@ -1,0 +1,43 @@
+--| Reading and writing files.
+
+  Each function requires [`FileSystem`](filesystem), and gives what went wrong as an
+  [`FsError`](filesystem): reading a file that isn't there is `#error(#notFound)`, and one outside the
+  directories the host gave the program is `#error(#permissionDenied)`. Import the module as
+  `import nanyx.fs/file as file` to call `file.read`, `file.write` and the rest by those names.
+export module file
+
+import (
+  nanyx.fs/filesystem as (FileSystem, FsError)
+  nanyx.fs/path as (Path)
+)
+
+--| The text of the file at `at`, read as UTF-8.
+export def read: [FileSystem] Path -> #some(string) | #error(FsError) = { at ->
+  readFile(at)
+}
+
+--| The bytes of the file at `at`.
+export def readBytes: [FileSystem] Path -> #some(Array(U8)) | #error(FsError) = { at ->
+  readFileBytes(at)
+}
+
+--| Writes `text` to the file at `at` in UTF-8, in place of what it held, and makes the file when
+  there is none. Its directory must be there already.
+export def write: [FileSystem] Path, string -> #ok | #error(FsError) = { at, text ->
+  writeFile(at, text)
+}
+
+--| Writes `text` to the end of the file at `at` in UTF-8, and makes the file when there is none.
+export def append: [FileSystem] Path, string -> #ok | #error(FsError) = { at, text ->
+  appendFile(at, text)
+}
+
+--| Whether there is a file or a directory at `at` that the program may reach.
+export def exists: [FileSystem] Path -> bool = { at ->
+  pathExists(at)
+}
+
+--| Deletes the file at `at`. A directory is `#error(#isDirectory)`: this deletes only files.
+export def delete: [FileSystem] Path -> #ok | #error(FsError) = { at ->
+  deleteFile(at)
+}

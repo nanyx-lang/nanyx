@@ -209,7 +209,7 @@ The entrypoint runs under the package's host, which loads the contexts it may us
 )
 ```
 
-`nanyx.console` is the host for a command-line program. The compiler ships it beside itself, so it needs nothing installed, and it brings `println`, `Console` and `Env` into scope in every module of the program. A host the compiler doesn't ship is found by its path instead of a version, as a dependency is: `host = (package = "acme.host", path = "../acme.host")`. A package with no `host` is a library: it can't have an `@entry`, and running it is an error. `nanyx run`, `nanyx build` and `nanyx check` take `--host` with a host's name or directory to choose one for a single command instead. A single `.nyx` file runs under `nanyx.console` unless it names another host with a `::host` directive (see [Script mode](#script-mode)). [Hosts](../advanced/hosts) describes what a host provides, and how to write one.
+`nanyx.console` is the host for a command-line program. The compiler ships it beside itself, so it needs nothing installed, and it brings `println`, `Console`, `Env` and `FileSystem` into scope in every module of the program. A host the compiler doesn't ship is found by its path instead of a version, as a dependency is: `host = (package = "acme.host", path = "../acme.host")`. A package with no `host` is a library: it can't have an `@entry`, and running it is an error. `nanyx run`, `nanyx build` and `nanyx check` take `--host` with a host's name or directory to choose one for a single command instead. A single `.nyx` file runs under `nanyx.console` unless it names another host with a `::host` directive (see [Script mode](#script-mode)). [Hosts](../advanced/hosts) describes what a host provides, and how to write one.
 
 # Building and running a package
 

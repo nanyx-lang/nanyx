@@ -10,13 +10,16 @@ You can run a single Nanyx file directly, or you can organize code as a multi-fi
 
 A single file can be executed on its own. It does not need module or members declarations; you can write imports and top-level statements directly.
 
-```nanyx skip=#870
+```nanyx
+::dependency nanyx.fs
+
 import (
-  nanyx/file
   nanyx/text
+  nanyx.fs/file as file
+  nanyx.fs/path as path
 )
 
-match file.read("input.txt")
+match file.read(path.of("input.txt"))
   | #some(content) ->
     def words = content
       \split(on = " ")
@@ -27,7 +30,7 @@ match file.read("input.txt")
     println("Error: {err}")
 ```
 
-You can run this file with `nanyx run filename.nyx`. The compiler treats the file as an implicit module and executes top-level statements. This is great for quick scripts, experiments, and learning.
+You can run this file with `nanyx run filename.nyx`. The compiler treats the file as an implicit module and executes top-level statements. Its first line is a directive (see [Directives](#directives) below): it lets the script import the shipped package `nanyx.fs`, whose [`file`](../stdlib/file) module reads files. This is great for quick scripts, experiments, and learning.
 
 ## Directives
 

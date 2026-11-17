@@ -19,7 +19,7 @@ def main = { name: string -> println("Hello, {name}!") }
     Assert.Equal(DiagnosticCodes.EntryDoesNotFitHost.Code, code)
     Assert.Equal(
         """The entry point 'main' doesn't fit the host 'nanyx.console/console.host'
-  expected: [Console, Env] () -> a
+  expected: [Console, Env, FileSystem] () -> a
   found:    string -> ()""".ReplaceLineEndings "\n",
         message)
     Assert.Equal("@entry", text)
@@ -96,7 +96,7 @@ h.run({ () })
 [<Fact>]
 let ``The console host, its interface package and nanyx/host.runtime call no compiler intrinsic`` () =
     Assert.DoesNotContain(Intrinsics.prefix, (StandardLibrary.tryLoadSource "host.runtime").Value)
-    for name in [ Hosts.consolePackage; "nanyx.console.core" ] do
+    for name in [ Hosts.consolePackage; "nanyx.console.core"; "nanyx.fs" ] do
         for file in Directory.GetFiles(Path.Combine(ShippedPackages.directoryOf name, "src"), "*.nyx") do
             Assert.DoesNotContain(Intrinsics.prefix, File.ReadAllText file)
 

@@ -5,5 +5,8 @@
     sources = ["src/**/*.nyx"]
     host = (root = "console.host", prelude = "console.prelude")
   )
-  dependencies = [(package = "nanyx.console.core", version = "0.28.0")]
+  dependencies = [
+    (package = "nanyx.console.core", version = "0.28.0")
+    (package = "nanyx.fs", version = "0.28.0")
+  ]
 )
