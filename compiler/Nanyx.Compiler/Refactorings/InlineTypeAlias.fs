@@ -24,7 +24,7 @@ let private aliasesIn (source: string) (syntax: Module) =
     |> List.choose (fun item ->
         match item.Kind with
         | Def (TypeDef(name, modifiers, parameters, body)) when not (modifiers |> List.contains Context) ->
-            let text = source.Substring(item.Span.Start, item.Span.End - item.Span.Start)
+            let text = SourceSpan.textIn source item.Span
             let found = System.Text.RegularExpressions.Regex.Match(text, $@"\btype\s+{System.Text.RegularExpressions.Regex.Escape name}\b")
             if found.Success then
                 Some
@@ -63,7 +63,7 @@ let rec private variablesIn (takesFunction: bool) (typeExpr: TypeExpr) =
 /// The text of `alias`'s body with its parameters replaced by `arguments`, as written in `source`, in brackets if it is
 /// a function.
 let private substituted (source: string) (alias: Alias) (arguments: TypeExpr list) =
-    let textOf (typeExpr: TypeExpr) = source.Substring(typeExpr.Span.Start, typeExpr.Span.End - typeExpr.Span.Start)
+    let textOf (typeExpr: TypeExpr) = SourceSpan.textIn source typeExpr.Span
     let byParameter = List.zip (List.truncate arguments.Length alias.Parameters) (List.truncate alias.Parameters.Length arguments) |> Map.ofList
     let body = alias.Body
     let replacements =

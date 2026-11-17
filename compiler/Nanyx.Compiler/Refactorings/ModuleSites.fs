@@ -7,8 +7,6 @@ open System.Text.RegularExpressions
 open Parser.Program
 open NyxCompiler
 
-let private textOf (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
-
 /// `span` from `offset` characters into it, for `length` characters, on its first line.
 let private within (span: SourceSpan) (offset: int) (length: int) =
     { span with Start = span.Start + offset; End = span.Start + offset + length; StartColumn = span.StartColumn + offset }
@@ -22,7 +20,7 @@ let declaration (source: string) (result: CompileResult) : (string * SourceSpan)
         |> List.tryPick (fun item ->
             match item.Kind with
             | ModuleDecl(_, declared) when declared = name && not (SourceSpan.isNone item.Span) ->
-                let keyword = Regex.Match(textOf source item.Span, $@"\bmodule\s+{Regex.Escape name}\b")
+                let keyword = Regex.Match(SourceSpan.textIn source item.Span, $@"\bmodule\s+{Regex.Escape name}\b")
                 if keyword.Success then Some (name, within item.Span (keyword.Index + keyword.Length - name.Length) name.Length) else None
             | _ -> None)
     | _ -> None
@@ -58,7 +56,7 @@ let importAt (package: string) (source: string) (result: CompileResult) (offset:
                     | -1 -> Some name
                     | slash when name.Substring(0, slash) = package -> Some (name.Substring(slash + 1))
                     | _ -> None
-                let at = (textOf source item.Span).IndexOf name
+                let at = (SourceSpan.textIn source item.Span).IndexOf name
                 moduleName
                 |> Option.filter (fun _ -> at >= 0)
                 |> Option.map (fun moduleName -> moduleName, within item.Span (at + name.Length - moduleName.Length) moduleName.Length)
@@ -84,7 +82,7 @@ let imports
         importsIn syntax
         |> List.filter (fun item -> not (SourceSpan.isNone item.Span))
         |> List.choose (fun item ->
-            let text = textOf source item.Span
+            let text = SourceSpan.textIn source item.Span
             match item.Source with
             | ModuleImport name when name = moduleName || name = $"{package}/{moduleName}" ->
                 let at = text.IndexOf name

@@ -29,30 +29,22 @@ type private Subject =
     | Field of name: string * FieldSites.Record
     | ModuleName of string
 
-let private normalise (source: string) = source.Replace("\r\n", "\n").Replace("\r", "\n")
-
-/// The part of a name after its last dot: `shout` in `string.shout`.
-let private ownName (name: string) = name.Substring(name.LastIndexOf '.' + 1)
-
-/// The text of `span` in `source`.
-let private textOf (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
-
 /// The part of `span`, written in `source`, that is `name`'s own part, if it ends with it.
 let private ownPart (source: string) (name: string) (span: SourceSpan) =
-    let own = ownName name
-    let text = textOf source span
+    let own = Names.ownPart name
+    let text = SourceSpan.textIn source span
     if text.EndsWith own then Some { span with Start = span.End - own.Length; StartColumn = span.StartColumn + text.Length - own.Length }
     else None
 
 /// The part of `span`, written in `source`, that is the type's part `typeName` of an attached definition's name, if it
 /// starts with it: `Point` in `Point.show`.
 let private typePart (source: string) (typeName: string) (span: SourceSpan) =
-    if (textOf source span).StartsWith(typeName + ".") then Some { span with End = span.Start + typeName.Length }
+    if (SourceSpan.textIn source span).StartsWith(typeName + ".") then Some { span with End = span.Start + typeName.Length }
     else None
 
 /// Whether the import `symbol`, declared in `source`, is written with an alias (`import nanyx/text as t`).
 let private hasAlias (source: string) (symbol: Symbol) =
-    System.Text.RegularExpressions.Regex.IsMatch(textOf source symbol.Declaration, $@"\bas\s+{System.Text.RegularExpressions.Regex.Escape symbol.Name}$")
+    System.Text.RegularExpressions.Regex.IsMatch(SourceSpan.textIn source symbol.Declaration, $@"\bas\s+{System.Text.RegularExpressions.Regex.Escape symbol.Name}$")
 
 /// The line of `offset` in `source`, counted from 1.
 let private lineOf (source: string) (offset: int) = (source.Substring(0, offset) |> Seq.filter ((=) '\n') |> Seq.length) + 1
@@ -140,14 +132,14 @@ let private subjectAt (scope: Scope) (file: string) (source: string) (result: Co
 /// The name a subject has, as an editor shows it to be renamed.
 let private nameOf (subject: Subject) =
     match subject with
-    | Named symbol -> ownName symbol.Name
+    | Named symbol -> Names.ownPart symbol.Name
     | Field(name, _) -> name
     | ModuleName name -> name
 
 /// The name at `offset` in `source`, the text of the root module of `result` compiled as `file`, that an editor can
 /// rename in `scope`, or why it can't. `None` where no name is, or where the module did not type-check.
 let prepare (scope: Scope) (file: string) (source: string) (result: CompileResult) (offset: int) : Result<Target, string> option =
-    let source = normalise source
+    let source = RefactoringText.normalised source
     subjectAt scope file source result offset |> Option.map (Result.map (fun (subject, span) -> { Name = nameOf subject; Span = span }))
 
 /// Why `name` can't be the new name of `subject`, if it can't.
@@ -253,12 +245,6 @@ let private moduleEdits (package: string) (name: string) (newName: string) (rena
         |> Option.toList
     declared @ ModuleSites.imports package name newName renamed file.Path file.Source file.Result
 
-/// `source` with `edits`, which do not overlap, made to it.
-let private applied (source: string) (edits: TextEdit list) =
-    edits
-    |> List.sortByDescending (fun edit -> edit.Span.Start)
-    |> List.fold (fun (text: string) edit -> text.Substring(0, edit.Span.Start) + edit.NewText + text.Substring(edit.Span.End)) source
-
 /// Where an offset of a text is once `edits` are made to it: text inserted at the offset comes before it.
 let private movedBy (edits: TextEdit list) (offset: int) =
     edits
@@ -302,7 +288,7 @@ let editsIn
     (newName: string)
     (recompile: (string * string) list -> CompileResult list)
     : Result<Renaming, string> =
-    let files = files |> List.map (fun moduleFile -> { moduleFile with Source = normalise moduleFile.Source })
+    let files = files |> List.map (fun moduleFile -> { moduleFile with Source = RefactoringText.normalised moduleFile.Source })
     let root = files |> List.tryFind (fun moduleFile -> moduleFile.Path = file)
     match root |> Option.bind (fun root -> subjectAt scope file root.Source root.Result offset) with
     | None -> Error "There is no name here to rename"
@@ -315,7 +301,7 @@ let editsIn
         | None, Ok (edits, renamedFiles) ->
             let editsOf path = edits |> List.tryPick (fun (moduleFile, edits) -> if moduleFile.Path = path then Some edits else None)
             let move path offset = match editsOf path with Some edits -> movedBy edits offset | None -> offset
-            let renamed = edits |> List.map (fun (moduleFile, edits) -> moduleFile.Path, applied moduleFile.Source edits)
+            let renamed = edits |> List.map (fun (moduleFile, edits) -> moduleFile.Path, RefactoringText.applied moduleFile.Source (edits |> List.map (fun edit -> edit.Span.Start, edit.Span.End, edit.NewText)))
             let after = recompile renamed
             let compared = List.zip3 files renamed after
             let newError =

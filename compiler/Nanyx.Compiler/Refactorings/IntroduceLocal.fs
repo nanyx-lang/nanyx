@@ -77,11 +77,10 @@ let rec internal findIn (source: string) (selection: SourceSpan) (site: Site) (s
 /// unique among `taken` by a number after it. The function's name is usually taken: a local of that name would hide
 /// it.
 let private nameFor (taken: Set<string>) (expr: Expression) =
-    let ownName (name: string) = name.Substring(name.LastIndexOf '.' + 1)
     let named =
         match expr.Kind with
         | FunctionCall(name, _, _)
-        | Pipe(_, name, _, _) when not (MadeUpNames.isMadeUp name) -> ownName name
+        | Pipe(_, name, _, _) when not (MadeUpNames.isMadeUp name) -> Names.ownPart name
         | MemberAccess(_, field, _) -> field
         | _ -> "result"
     unique taken "result" (if Names.isIdentifier named && not (MadeUpNames.isMadeUp named) then named else "result")
@@ -152,7 +151,7 @@ let at (options: Formatter.Options) (file: string) (source: string) (result: Com
     match result.Syntax, result.Typed with
     | Some syntax, Some typed when selection.End > selection.Start ->
         // The selection less the spaces around it.
-        let text = source.Substring(selection.Start, selection.End - selection.Start)
+        let text = SourceSpan.textIn source selection
         let selection =
             { selection with Start = selection.Start + (text.Length - text.TrimStart().Length); End = selection.End - (text.Length - text.TrimEnd().Length) }
         let found =
@@ -184,7 +183,7 @@ let at (options: Formatter.Options) (file: string) (source: string) (result: Com
             | Some reason -> [ Refused(title, RefactoringKind.Extract, reason) ]
             | None ->
                 let name = nameFor (takenNames syntax typed) expr
-                let exprText = source.Substring(expr.Span.Start, expr.Span.End - expr.Span.Start)
+                let exprText = SourceSpan.textIn source expr.Span
                 let offer (title: string) (uses: Expression list) =
                     let replacements = uses |> List.map (fun used -> used.Span.Start, used.Span.End, name)
                     let edits =
@@ -206,7 +205,7 @@ let at (options: Formatter.Options) (file: string) (source: string) (result: Com
                             let indent = lambdaIndent + String.replicate options.IndentSize " "
                             let bodyText =
                                 applied
-                                    (source.Substring(body.Span.Start, body.Span.End - body.Span.Start))
+                                    (SourceSpan.textIn source body.Span)
                                     (replacements |> List.map (fun (start, finish, text) -> start - body.Span.Start, finish - body.Span.Start, text))
                             [ body.Span.Start, body.Span.End, $"\n{indent}def {name} = {exprText}\n{indent}{bodyText}\n{lambdaIndent}" ]
                     let after = appliedAndFormatted options file source edits
