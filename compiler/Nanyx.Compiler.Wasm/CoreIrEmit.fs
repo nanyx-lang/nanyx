@@ -43,7 +43,12 @@ type EmitContext =
       CheckMemory: bool
       /// The name a program shows for the source file at this path, as a span names it (see `CoreIr.shownFile`), when
       /// the code is marked with the places it was made from (see `placeMarker`); none when it isn't.
-      ShownFile: (string -> string) option }
+      ShownFile: (string -> string) option
+      /// Whether the function of this name takes over the argument it is given at this place, rather than borrowing it
+      /// (see `CoreIrCounting`): a probe gives a printer that does a reference of its own.
+      TakesOver: string -> int -> bool
+      /// A new probe's number, unique in the module, which the runtime knows it by (see `WasmBinary.spanTableName`).
+      ProbeId: unit -> int }
 
 /// The marker that says the code after it, up to the next one, was made from source at `place`: a line comment,
 /// `;;@ main.nyx:12`, that `WasmBinary` writes into the module's table of places (see `WatSyntax.Placed`). Code inlined
@@ -74,7 +79,8 @@ let private marked (kind: ExprKind) =
     | CallClosure _
     | Interpolate _
     | Dbg _
-    | Crash _ -> true
+    | Crash _
+    | Probe _ -> true
     | Atom _
     | Field _
     | Assign _
@@ -246,7 +252,44 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | While _
     | Interpolate _
     | FloatConstant _
-    | Crash _ -> []
+    | Crash _
+    | Probe _ -> []
+
+/// What a debug build's probes import from the runtime, the module `nanyx:debug` (see `CoreIrProbes`): whether it is
+/// probing, read into a global when the program starts; the probe, which takes a probe's number and gives whether to
+/// write its locals; and the writing of a local, its name and its text.
+let probeModule = "nanyx:debug"
+let probingEnabled = "__nanyx_probing_enabled"
+let probing = "__nanyx_probing"
+let probeCall = "__nanyx_probe"
+let probeLocal = "__nanyx_probe_local"
+
+/// The variables a probe at the start of `rest`, the rest of a chain, may write (see `CoreIrProbes`): those `rest` reads
+/// but does not bind itself. One it never reads again may have been given up already, so a probe leaves it out.
+let private aliveAt (rest: Expr) : Set<int> =
+    let read = HashSet<int>()
+    let bound = HashSet<int>()
+    for e in CoreIrRewrite.allExprs rest do
+        for atom in CoreIrRewrite.directAtoms e do
+            match atom with
+            | AVar var -> read.Add var.Id |> ignore
+            | _ -> ()
+        for var in CoreIrRewrite.directVars e do
+            read.Add var.Id |> ignore
+        match e.Kind with
+        | Let(var, _, _) -> bound.Add var.Id |> ignore
+        | Match(_, arms) ->
+            for arm in arms do
+                for pattern in arm.Patterns do
+                    for var in Pattern.binds pattern do
+                        bound.Add var.Id |> ignore
+        | ForEach loop ->
+            for stream in loop.Streams do
+                for var in [ stream.Element; stream.Cursor; stream.End ] do
+                    bound.Add var.Id |> ignore
+        | _ -> ()
+    read.ExceptWith bound
+    Set.ofSeq read
 
 /// The code that gives up the value on top of the stack, of type `ty`: its drop function if it is on the heap.
 let private dropValue (ty: IrType) =
@@ -290,6 +333,16 @@ type private FunctionEmitter(context: EmitContext) =
         extraLocals.Add((name, valueType))
         name
 
+    // The names of the function's parameters and locals, which a probe writes only those of (see `Probe`).
+    let mutable declared = Set.empty<string>
+
+    // The local the function reads whether the runtime is probing from, which it copies from the global when it starts
+    // (see `ProbingCopy`): a local can stay in a register, where each probe's read of the global would load it.
+    let probingLocal = lazy (freshLocal "__probing" "i32")
+
+    // The local a probe holds a local's text in while the runtime reads it (see `Probe`).
+    let probeText = lazy (freshLocal "__probe_text" "i32")
+
     let localOf (var: Var) =
         match droppedTemps.TryGetValue var.Id with
         | true, local -> local
@@ -298,6 +351,14 @@ type private FunctionEmitter(context: EmitContext) =
     member _.Helpers = Set.ofSeq helpers
 
     member _.UsesMemory = usesMemory
+
+    /// The code that copies whether the runtime is probing into the function's local of it, if a probe in the function
+    /// reads it, which the function starts with.
+    member _.ProbingCopy =
+        if probingLocal.IsValueCreated then [ $"global.get ${probing}"; $"local.set ${probingLocal.Value}" ] else []
+
+    /// The names of the function's parameters and locals (see `Probe`).
+    member _.Declared with set (names: Set<string>) = declared <- names
 
     member _.ExtraLocals = List.ofSeq extraLocals
 
@@ -418,6 +479,10 @@ type private FunctionEmitter(context: EmitContext) =
                 flush ()
                 parts.Add(join "\n    " [ this.Value false deferred onStack value; $"local.set ${localName var}" ])
                 walk body
+            // A probe stores nothing a temporary waits on, so it can stand among them.
+            | Do({ Kind = Probe(kind, locals) } as probe, rest) ->
+                parts.Add(this.Probe probe kind locals (aliveAt rest))
+                walk rest
             | Do(value, rest) ->
                 claim value
                 flush ()
@@ -443,6 +508,47 @@ type private FunctionEmitter(context: EmitContext) =
         walk expr
         if deferred.Count > 0 || onStack.Count > 0 then internalError "a temporary in the core IR is used out of order"
         join "\n    " parts
+
+    /// The code of the probe `probe` (see `CoreIrProbes`): when the runtime is probing (see `ProbingCopy`), a call with the probe's number,
+    /// and, if the runtime asks, each of its locals `alive` has, written by its printer, passed with its name. Before it
+    /// go the marker of its place and its own, `;;@probe 3 statement` (with the function's name after `entry`), from which `WasmBinary` tells the runtime where
+    /// each probe is.
+    member this.Probe (probe: Expr) (kind: ProbeKind) (locals: ProbeLocal list) (alive: Set<int>) : string =
+        let id = context.ProbeId ()
+        let place =
+            match probe.Place, context.ShownFile with
+            | Some place, Some shownFile -> placeMarker shownFile place
+            | _ -> ""
+        let kindName =
+            match kind with
+            | Entry functionName -> $"entry {functionName}"
+            | ProbeKind.Statement -> "statement"
+            | Return -> "return"
+        let writes =
+            locals
+            |> List.filter (fun local -> alive.Contains local.Var.Id && declared.Contains (localName local.Var))
+            |> List.map (fun local ->
+                let text = probeText.Value
+                join "\n    " [
+                    $"i32.const {context.StringOffset local.Name}"
+                    (if context.TakesOver local.Printer 0 then this.DupVars [ local.Var ] else "")
+                    $"local.get ${localName local.Var}"
+                    $"call ${local.Printer}"
+                    $"local.tee ${text}"
+                    $"call ${probeLocal}"
+                    $"local.get ${text}"
+                    dropValue IrString ])
+        join "\n    " [
+            place
+            $";;@probe {id} {kindName}"
+            $"local.get ${probingLocal.Value}"
+            "if"
+            $"i32.const {id}"
+            $"call ${probeCall}"
+            "if"
+            yield! writes
+            "end"
+            "end" ]
 
     /// The code of a sequence whose value is taken as a value of `ty` (see `conversion`): a branch of an `if` or a
     /// `match`, or a function's body. Nothing can follow a tail call, so a sequence that needs converting makes none.
@@ -542,6 +648,7 @@ type private FunctionEmitter(context: EmitContext) =
         | Prim(FloatBinary op, _) -> internalError $"the operator `{op}` on floats with other than two operands"
         | FloatConstant value when expr.Type = IrF32 -> $"f32.const {wasmFloatConst value}\n    call ${helper Helpers.f32Box}"
         | FloatConstant value -> $"f64.const {wasmFloatConst value}"
+        | Probe(kind, locals) -> join "\n    " [ this.Probe expr kind locals Set.empty; "i32.const 0" ]
         | Crash messages ->
             // Writes each message to stderr and traps in `Helpers.crashed`, so the runtime reports the stack. `unreachable`
             // after it, which is never reached, lets the code stand wherever a value is expected.
@@ -1235,11 +1342,10 @@ let private declaredLocals (body: Expr) : (string * string) list =
     walk body
     let declared (var: Var) = localName var, CoreIrLayout.valueType var.Type
     let ofKind kind = found |> Seq.filter (fun var -> var.Kind = kind) |> Seq.map declared |> List.ofSeq
+    // A hole is declared wherever it is bound: the string it was for may be gone, as one whose value nothing reads is.
     let interpolationLocals =
-        if interpolates.Value then
-            (Interpolation.scratchLocals |> List.map (fun name -> name, "i32"))
-            @ (holes |> Seq.sortBy (fun (depth, index, var) -> depth, index, localName var) |> Seq.map (fun (_, _, var) -> declared var) |> List.ofSeq)
-        else []
+        (if interpolates.Value then Interpolation.scratchLocals |> List.map (fun name -> name, "i32") else [])
+        @ (holes |> Seq.sortBy (fun (depth, index, var) -> depth, index, localName var) |> Seq.map (fun (_, _, var) -> declared var) |> List.ofSeq)
     [ yield! ofKind Local
       yield! ofKind MatchTemp
       yield! ofKind PatternBound
@@ -1268,7 +1374,9 @@ let private withoutRepeatedMarkers (code: string) =
 /// `func` as a WebAssembly function, exported under `exportName` if given.
 let emitFunction (context: EmitContext) (func: Function) (exportName: string option) : Emitted =
     let emitter = FunctionEmitter(context)
-    let bodyCode = emitter.SequenceAs true func.Result func.Body |> withoutRepeatedMarkers
+    emitter.Declared <- (func.Params |> List.map localName) @ (declaredLocals func.Body |> List.map fst) |> Set.ofList
+    let bodyCode = emitter.SequenceAs true func.Result func.Body
+    let bodyCode = emitter.ProbingCopy @ [ bodyCode ] |> String.concat "\n    " |> withoutRepeatedMarkers
     let header =
         [ func.Params |> List.map (fun p -> $"(param ${localName p} {CoreIrLayout.valueType p.Type})") |> String.concat " "
           $"(result {CoreIrLayout.valueType func.Result})"
@@ -1281,12 +1389,14 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
         | None -> definition
     { Text = text; Helpers = emitter.Helpers; UsesMemory = emitter.UsesMemory }
 
-/// The start function, `func` (see `CoreIrLower.StartFunction`): the top-level expressions, with what was inlined into
-/// them, each value dropped, then the code `after`. It takes nothing and returns nothing, and makes no tail call.
-let emitStart (context: EmitContext) (func: Function) (after: string list) : Emitted =
+/// The start function, `func` (see `CoreIrLower.StartFunction`): the code `before`, then the top-level expressions, with
+/// what was inlined into them, each value dropped, then the code `after`. It takes nothing and returns nothing, and
+/// makes no tail call.
+let emitStart (context: EmitContext) (func: Function) (before: string list) (after: string list) : Emitted =
     let emitter = FunctionEmitter(context)
-    let bodyCode =
-        $"{emitter.Sequence false func.Body}\n    {dropValue func.Body.Type}" :: after |> String.concat "\n    " |> withoutRepeatedMarkers
+    emitter.Declared <- declaredLocals func.Body |> List.map fst |> Set.ofList
+    let body = $"{emitter.Sequence false func.Body}\n    {dropValue func.Body.Type}"
+    let bodyCode = before @ emitter.ProbingCopy @ body :: after |> String.concat "\n    " |> withoutRepeatedMarkers
     let header =
         match localDeclarations (declaredLocals func.Body @ emitter.ExtraLocals) with
         | "" -> ""

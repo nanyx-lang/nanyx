@@ -118,26 +118,6 @@ module WasmRunner =
     let private frameNames (trap: TrapException) =
         if isNull trap.Frames then [] else trap.Frames |> Seq.map _.FunctionName |> List.ofSeq
 
-    /// The name a function has in the source, from the name the backend gave it: `count`; `list_fold` for a library
-    /// module's `fold`; `go` for a local `rec go` (`__rec_go_16`, see `LambdaLifting`); without the type arguments of a
-    /// specialisation (`map__int`) or the suffix of a closure's owning entry (`__owning`, see `CoreIrClosureEntries`).
-    /// None for a lambda (`__lambda_3`), a runtime helper (`__nanyx_alloc`) and the other functions the backend makes,
-    /// whose names all start with `__`.
-    let private sourceName (name: string) =
-        // The name without what follows its first `__`, the type arguments of a specialisation or `__owning`.
-        let own (name: string) =
-            match name.IndexOf "__" with
-            | -1 -> name
-            | index -> name.Substring(0, index)
-        if String.IsNullOrEmpty name then None
-        elif name.StartsWith "__rec_" then
-            let numbered = own (name.Substring "__rec_".Length)
-            match numbered.LastIndexOf '_' with
-            | index when index > 0 -> Some(numbered.Substring(0, index))
-            | _ -> None
-        elif name.StartsWith "__fn_" then Some(own (name.Substring "__fn_".Length))
-        elif name.StartsWith "__" then None
-        else Some(own name)
 
     /// The integer type and the operation of a runtime helper on integers that the backend names `__nanyx_<type>_<op>`:
     /// `int` and `add` for `__nanyx_int_add`, `I8` and `from_int` for `__nanyx_i8_from_int` (see `SizedIntegerCode`).
@@ -170,21 +150,10 @@ module WasmRunner =
     /// `Transpiler.Wasm.WasmRuntime.Helpers.crashed`).
     let private crashed = "__nanyx_crashed"
 
-    /// The name a stack shows for the function the backend named `name`: its name in the source (see `sourceName`),
-    /// `<lambda>` for a lambda and `<top level>` for a script's top-level code, which the compiler makes a def named
-    /// `__script` (see `NyxCompiler.Scripts.definitionName`); none for another function the compiler made, such as a
-    /// runtime helper or the start function, which runs the host, and which a stack leaves out.
-    let private shownName (name: string) =
-        match sourceName name with
-        | _ when isNull name -> None
-        | _ when name = "__script" || name = "__fn___script" -> Some "<top level>"
-        | Some name when name <> "" -> Some name
-        | _ when name.StartsWith "__lambda" -> Some "<lambda>"
-        | _ -> None
 
     /// The program's stack where it trapped, innermost first, each frame with the file and line `table` gives its code,
     /// if there is a table. A frame whose code was inlined from other functions is shown as the frames the calls would
-    /// have had, innermost first. A frame of a function the stack leaves out (see `shownName`) is left out.
+    /// have had, innermost first. A frame of a function the stack leaves out (see `FunctionNames.shown`) is left out.
     let private stackOf (table: SpanTable option) (trap: TrapException) =
         if isNull trap.Frames then []
         else
@@ -192,11 +161,11 @@ module WasmRunner =
             |> Seq.collect (fun frame ->
                 let place = table |> Option.map (fun table -> SpanTable.placeAt table (int frame.ModuleOffset)) |> Option.defaultValue []
                 match place with
-                | [] -> shownName frame.FunctionName |> Option.map (fun name -> { Name = name; Place = None }) |> Option.toList
+                | [] -> FunctionNames.shown frame.FunctionName |> Option.map (fun name -> { Name = name; Place = None }) |> Option.toList
                 | inlined ->
                     inlined
                     |> List.choose (fun (functionName, file, line) ->
-                        shownName (defaultArg functionName frame.FunctionName)
+                        FunctionNames.shown (defaultArg functionName frame.FunctionName)
                         |> Option.map (fun name -> { Name = name; Place = Some(file, line) })))
             |> List.ofSeq
 
@@ -209,10 +178,10 @@ module WasmRunner =
             OutOfMemory
         | :? TrapException as trap when trap.Type = TrapCode.Unreachable && List.tryHead (frameNames trap) = Some crashed ->
             Crashed(stackOf table trap)
-        | :? TrapException as trap when trap.Type = TrapCode.StackOverflow -> StackOverflow(frameNames trap |> List.tryPick sourceName)
+        | :? TrapException as trap when trap.Type = TrapCode.StackOverflow -> StackOverflow(frameNames trap |> List.tryPick FunctionNames.source)
         | :? TrapException as trap ->
             match arithmeticFault trap with
-            | Some fault -> ArithmeticError(fault, frameNames trap |> List.tryPick sourceName, stackOf table trap)
+            | Some fault -> ArithmeticError(fault, frameNames trap |> List.tryPick FunctionNames.source, stackOf table trap)
             | None -> Trapped(ex.Message, stackOf table trap)
         | _ -> Trapped(ex.Message, [])
 
@@ -247,7 +216,8 @@ module WasmRunner =
             | Binary bytes -> Ok (Module.FromBytes(engine, "nanyx", bytes))
         with :? WasmtimeException as ex -> Error (InvalidModule ex.Message)
 
-    /// Instantiates `program` in a store that `configure` sets up, which runs its start function, then calls its export
+    /// Instantiates `program` in a store that `configure` sets up, with its debug probes, if it has any, answered by
+    /// `listener`, which runs its start function, then calls its export
     /// `start` if it is given and the module exports it, and gives what `read` makes of the instance afterwards: `None`
     /// when the program ended itself, through `proc_exit` with exit code 0, so there is no instance or it stopped without
     /// freeing what it held. Also gives what `inspect` makes of the instance once the program has stopped, however it
@@ -258,6 +228,7 @@ module WasmRunner =
         (start: string option)
         (read: Instance option -> 'a)
         (inspect: Instance -> 'b)
+        (listener: IProbeListener option)
         : Result<'a, RunError> * 'b option =
         use engine = new Engine()
         match compile engine program with
@@ -268,6 +239,7 @@ module WasmRunner =
             use store = new Store(engine)
             linker.DefineWasi()
             HttpImport.define linker
+            Probing.define linker (spanTable program) listener
             configure store
             let mutable instantiated = None
             let outcome =
@@ -299,15 +271,16 @@ module WasmRunner =
         (start: string option)
         (read: Instance option -> 'a)
         (inspect: Instance -> 'b)
+        (listener: IProbeListener option)
         : Result<'a, RunError> * 'b option =
         let mutable finish = ignore
         try
-            executeIn (fun store -> finish <- configureIo io arguments directories store) program start read inspect
+            executeIn (fun store -> finish <- configureIo io arguments directories store) program start read inspect listener
         finally
             finish ()
 
     let private execute (io: ProgramIo) (arguments: string list) (directories: string list) (program: Program) (start: string option) (read: Instance option -> 'a) : Result<'a, RunError> =
-        executeInspecting io arguments directories program start read ignore |> fst
+        executeInspecting io arguments directories program start read ignore None |> fst
 
     /// The value of the exported global `name` of `instance`, an `i32` or an `i64`: 0 when it does not export it.
     let private globalValue (instance: Instance) (name: string) : int64 =
@@ -328,6 +301,10 @@ module WasmRunner =
     let runBinary (io: ProgramIo) (arguments: string list) (directories: string list) (wasm: byte array) : Result<unit, RunError> =
         execute io arguments directories (Binary wasm) None ignore
 
+    /// `runBinary`, with the program's debug probes answered by `listener` (see `IProbeListener`).
+    let runListening (io: ProgramIo) (arguments: string list) (directories: string list) (wasm: byte array) (listener: IProbeListener) : Result<unit, RunError> =
+        executeInspecting io arguments directories (Binary wasm) None ignore ignore (Some listener) |> fst
+
     /// What `runCounting` gives, for any `Program`.
     let private counting (io: ProgramIo) (arguments: string list) (directories: string list) (start: string) (globals: string array) (program: Program) =
         executeInspecting
@@ -344,6 +321,7 @@ module WasmRunner =
                     match instance.GetMemory "memory" with
                     | null -> 0L
                     | memory -> memory.GetSize() * 65536L })
+            None
 
     /// Runs the module described by `wat`, which exports its start function as `start` rather than running it when
     /// instantiated, and gives the values of its exported `i32` globals `globals` once `start` has returned, as

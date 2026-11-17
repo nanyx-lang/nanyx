@@ -71,6 +71,25 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           PrinterOf = fun printer -> request (SpecKey.plain (CoreIrLowerDbg.key printer) []) Map.empty (Printing printer)
           ToIrType = toIrType }
 
+    // In a debug build, the name and type of each parameter and `def` local, by id: those a probe writes (see
+    // `CoreIrProbes`).
+    let probedLocals = System.Collections.Generic.Dictionary<int, string * Ty>()
+
+    /// Notes that a probe writes `var`, named `name` and of `ty`, in a debug build, if a printer can write it.
+    let noteProbed (name: string) (var: Var) (ty: Ty) =
+        let ty = unconstrainedAsUnit ty
+        // A cell's local holds its box, not the value its type is the type of.
+        if input.Probes && not (MadeUpNames.isMadeUp name) && CoreIrLowerDbg.printable toIrType ty && toIrType ty = var.Type then
+            probedLocals.[var.Id] <- (name, ty)
+
+    /// What a probe writes of `vars`: those `noteProbed` noted, each with its type's printer.
+    let probeLocals (vars: Var seq) : ProbeLocal list =
+        vars
+        |> Seq.choose (fun var ->
+            match probedLocals.TryGetValue var.Id with
+            | true, (name, ty) -> Some { Name = name; Var = var; Printer = printerTools.PrinterOf (CoreIrLowerDbg.Showing ty) }
+            | _ -> None)
+        |> List.ofSeq
 
     let wrappedOf = wrappedOf input
 
@@ -1020,9 +1039,24 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | expr :: rest -> this.Complex scope expr (fun value -> settle value (fun atom -> go (atom :: acc) rest))
         go [] exprs
 
-    /// Lowers a block, its value passed to `k`, a statement at a time (see `CoreIrLowerHoles`).
+    /// Lowers a block, its value passed to `k`, a statement at a time (see `CoreIrLowerHoles`). In a debug build, each
+    /// statement starts with a probe that can write the locals in scope there (see `CoreIrProbes`).
     member this.Block (scope: Scope) (statements: StatementKind list) (k: Expr -> Expr) : Expr =
-        CoreIrLowerHoles.lowerBlock (fun scope statements -> this.Statement scope statements k) scope statements
+        CoreIrLowerHoles.lowerBlock
+            (fun scope statements ->
+                let lowered, rest = this.Statement scope statements k
+                let written =
+                    match statements with
+                    | (ExprStatement written | DefStatement(_, _, _, written) | UseStatement written) :: _ when not (SourceSpan.isNone written.Span) ->
+                        Some { File = written.Span.File; Line = written.Span.StartLine + 1; InlinedAt = None }
+                    | _ -> None
+                match written with
+                | Some place when input.Probes ->
+                    let probe = CoreIrProbes.probe ProbeKind.Statement (probeLocals (Map.values scope.Vars)) (Some place)
+                    { lowered with Kind = Do(probe, lowered) }, rest
+                | _ -> lowered, rest)
+            scope
+            statements
 
     /// The first of a block's `statements`, lowered around a hole (see `CoreIrLowerHoles.lowerBlock`).
     member private this.Statement (scope: Scope) (statements: StatementKind list) (k: Expr -> Expr) : Expr * (Expr * Scope * StatementKind list) option =
@@ -1076,6 +1110,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 this.Complex scope rhs (fun value ->
                     let local = newVar localName Local value.Type
                     this.NoteDefinedKnown local rhs value
+                    input.ExprTypes |> Map.tryFind rhs.Id |> Option.iter (fun ty -> noteProbed name local (substitute subst ty))
                     let members =
                         match scope.CapturedMembers |> Map.tryFind name with
                         | Some keys -> keys |> List.fold (fun acc key -> acc |> Map.add key local) scope.Members
@@ -1253,6 +1288,15 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
               Params = parameters
               Result = result
               Body = body }
+        // A function the source writes, in a debug build, starts with a probe that can write its parameters and ends
+        // with one (see `CoreIrProbes`).
+        let probed (parameters: Var list) (result: IrType) (body: Expr) =
+            if not input.Probes then make parameters result body
+            else
+                // A def the compiler made, as a script's top-level code is, has no place of its own.
+                let place = if SourceSpan.isNone expr.Span then None else Some { File = expr.Span.File; Line = expr.Span.StartLine + 1; InlinedAt = None }
+                let newResult (ty: IrType) = newVar (uniqueName "__result") Local ty
+                make parameters result (CoreIrProbes.around newResult name place (probeLocals parameters) body)
         match lowering with
         | AsDefined ->
             let defTy =
@@ -1261,6 +1305,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | None -> cannot "a definition without a type"
             let parameterTys, resultTy = parameterTypes parameterNames defTy isLambda
             let parameters = List.map2 (fun parameterName ty -> parameterOf parameterName (toIrType ty)) parameterNames parameterTys
+            List.iter2 (fun parameterName (parameter, ty) -> noteProbed parameterName parameter ty) parameterNames (List.zip parameters parameterTys)
             // The members of the contexts it requires follow, each a closure in a parameter of its own, but those it is
             // specialised on, each in a local that has the member's value only if the body uses it as one.
             let contextParameters, aliases = input.ContextParameters |> Map.tryFind name |> Option.defaultValue ([], Map.empty)
@@ -1310,9 +1355,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | IrRecord _ when value.Type <> result -> bindTemp value (fun atom -> CoreIrLowerMembers.coerce this.MemberTools scope atom result (fun atom -> Expr.make (Atom atom) result))
                 | _ -> value
             let parameters = parameters @ (members |> List.map snd |> List.filter (fun var -> var.Kind = Param))
-            make parameters result (this.WithKnownValues (this.Complex scope body adapted))
+            probed parameters result (this.WithKnownValues (this.Complex scope body adapted))
         | LiftedCapturing(capturedTys, capturedLocals) ->
-            CoreIrLowerLifted.liftedCapturing this.LiftedTools name parameterNames body scopeOf make capturedTys capturedLocals
+            CoreIrLowerLifted.liftedCapturing this.LiftedTools name parameterNames body scopeOf probed capturedTys capturedLocals
         | WrapperCalling(wrapped, instanceTy, captured) ->
             CoreIrLowerLifted.wrapperCalling this.LiftedTools wrapped instanceTy captured parameterNames make
         | Adapting _ -> internalError "an adapter lowered as a definition"

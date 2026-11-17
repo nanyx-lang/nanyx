@@ -225,6 +225,10 @@ and ExprKind =
     /// An error deferred to run time, or a crash: writes these messages to stderr and ends the program, with a trap in
     /// `Helpers.crashed`, from which the runtime reports the stack.
     | Crash of string list
+    /// A debug build's probe (see `CoreIrProbes`): tells the runtime the program is at the start of a function, a
+    /// statement, or a function's end, at the expression's place, and, if the runtime asks, writes each of these locals
+    /// that is still alive there. It is unit, and uses none of its locals: a probe never keeps a value alive.
+    | Probe of ProbeKind * ProbeLocal list
     /// A `for` loop: evaluates its body for each element, and is unit.
     | ForEach of ForLoop
     /// A `while` loop: evaluates its condition, a bool, and while it is true its body, and is unit.
@@ -253,6 +257,20 @@ and ExprKind =
     /// Frees the block the token holds, if it holds one, then evaluates the expression: a branch that makes no
     /// allocation to reuse the block in, where another branch does (see `CoreIrReuse`).
     | FreeToken of token: Var * Expr
+
+/// Where a probe is (see `Probe`).
+and ProbeKind =
+    /// The start of the function of this name, where the runtime pushes a frame onto its shadow stack.
+    | Entry of functionName: string
+    /// A statement's start.
+    | Statement
+    /// A function's end, where the runtime pops its frame: before the call a function ends in, so that a tail call
+    /// stays one, or after the value it gives back.
+    | Return
+
+/// A local a probe writes if the runtime asks: its name in the source, its variable, and the printer of its type (see
+/// `CoreIrLowerDbg`).
+and ProbeLocal = { Name: string; Var: Var; Printer: string }
 
 /// An object a `match` arm releases (see `Release`).
 and Released =
@@ -627,7 +645,8 @@ module Expr =
         | Interpolate _
         | Dbg _
         | FloatConstant _
-        | Crash _ -> []
+        | Crash _
+        | Probe _ -> []
 
     /// `e` with `f` applied to each expression directly inside it, those `children` gives, in the same order. Mapping
     /// a link of a chain maps what follows it too, so a pass that rewrites a long chain splits it (see `Chain`) and
@@ -666,7 +685,8 @@ module Expr =
             | Interpolate _
             | Dbg _
             | FloatConstant _
-            | Crash _ -> e.Kind
+            | Crash _
+            | Probe _ -> e.Kind
         { e with Kind = kind }
 
 /// The statements of a block: a chain of `Let`s, `Do`s, `Dup`s, `Drop`s, `Release`s and `FreeToken`s, each followed by the next. A
@@ -784,6 +804,7 @@ module Print =
         | Dbg(location, text) -> $"dbg({atom location}, {atom text})"
         | FloatConstant value -> string value
         | Crash messages -> $"""crash({messages |> String.concat ""})"""
+        | Probe(kind, locals) -> $"""probe {kind}({locals |> List.map _.Var.Name |> String.concat ", "})"""
         | ForEach loop ->
             let inner = indent + "  "
             let source (stream: ForStream) =

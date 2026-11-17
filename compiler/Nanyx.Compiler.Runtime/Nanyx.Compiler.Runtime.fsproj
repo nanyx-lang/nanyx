@@ -9,6 +9,7 @@
   <ItemGroup>
     <Compile Include="HttpImport.fs" />
     <Compile Include="SpanTable.fs" />
+    <Compile Include="Probing.fs" />
     <Compile Include="Runner.fs" />
     <Compile Include="Serving.fs" />
   </ItemGroup>

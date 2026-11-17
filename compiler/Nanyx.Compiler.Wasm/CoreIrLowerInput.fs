@@ -121,7 +121,9 @@ type LowerInput =
       /// names one means.
       NamedTypes: Map<string, Ty>
       /// What a call to `dbg` compiles to.
-      Dbg: DbgBuild }
+      Dbg: DbgBuild
+      /// Whether the module has debug probes (see `CoreIrProbes`).
+      Probes: bool }
 
 /// The top-level function `wrapper`, a wrapper lambda lifting made, wraps.
 let wrappedOf (input: LowerInput) (wrapper: string) =

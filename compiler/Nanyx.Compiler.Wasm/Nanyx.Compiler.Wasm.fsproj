@@ -25,6 +25,7 @@
     <Compile Include="CoreIrLowerSyntax.fs" />
     <Compile Include="CoreIrLowerInput.fs" />
     <Compile Include="CoreIrLowerDbg.fs" />
+    <Compile Include="CoreIrProbes.fs" />
     <Compile Include="CoreIrLowerSpread.fs" />
     <Compile Include="CoreIrLowerArrayLiterals.fs" />
     <Compile Include="CoreIrLowerArguments.fs" />

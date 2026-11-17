@@ -160,6 +160,8 @@ let usedOf (ids: Set<int>) (body: Expr) : Set<int> =
         | Release(released, _) -> var released.Object
         | Reuse(token, _)
         | FreeToken(token, _) -> var token
+        // A probe uses none of its locals.
+        | Probe _
         | Let _
         | Do _
         | While _

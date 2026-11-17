@@ -18,8 +18,16 @@ let allExprs (e: Expr) : Expr seq =
                 pending.Push child
     }
 
-/// How many core IR nodes `e` has.
-let size (e: Expr) = Seq.length (allExprs e)
+/// How many core IR nodes `e` has, not counting a debug build's probes (see `CoreIrProbes`), so that debug and release
+/// builds inline alike.
+let size (e: Expr) =
+    allExprs e
+    |> Seq.filter (fun e ->
+        match e.Kind with
+        | Probe _
+        | Do({ Kind = Probe _ }, _) -> false
+        | _ -> true)
+    |> Seq.length
 
 /// The atoms `e` reads directly.
 let directAtoms (e: Expr) : Atom list =
@@ -45,6 +53,7 @@ let directAtoms (e: Expr) : Atom list =
     | Interpolate _
     | FloatConstant _
     | Crash _
+    | Probe _
     | While _
     | Let _
     | Do _
@@ -114,6 +123,7 @@ let rec mapVarsAndPlaces (var: Var -> Var) (depth: int -> int) (place: Place opt
         | Dbg(location, value) -> Dbg(atom location, atom value)
         | FloatConstant _
         | Crash _ -> e.Kind
+        | Probe(kind, locals) -> Probe(kind, locals |> List.map (fun local -> { local with Var = var local.Var }))
         | ForEach loop ->
             ForEach
                 { Streams =

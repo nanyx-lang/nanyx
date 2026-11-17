@@ -1,6 +1,6 @@
 /// What a module needs besides its functions, worked out from the core IR it is emitted from: the tags it numbers,
 /// the string literals and static closures in its data segment, the foreign functions it imports, whether `dbg` prints,
-/// and whether its host keeps state in memory.
+/// whether its host keeps state in memory, and whether it has debug probes.
 module Transpiler.Wasm.CoreIrFacts
 
 open System.Collections.Generic
@@ -19,7 +19,9 @@ type ModuleFacts =
       /// Whether some `dbg` prints through `$dbg_str`.
       UsesDbgHelpers: bool
       /// Whether some function reads the address of the block the module sets aside for its host.
-      UsesHostState: bool }
+      UsesHostState: bool
+      /// Whether some function has a debug probe (see `Probe`), which imports `nanyx:debug`.
+      UsesProbes: bool }
 
 /// The facts of a module made of `functions`.
 let collect (functions: Function list) : ModuleFacts =
@@ -29,6 +31,7 @@ let collect (functions: Function list) : ModuleFacts =
     let imports = ResizeArray<NyxCompiler.Extern>()
     let usesDbgHelpers = ref false
     let usesHostState = ref false
+    let usesProbes = ref false
 
     // A temporary's value is emitted where the temporary is used, not where it is bound, so it is looked at there too:
     // the strings are then in the order the code uses them.
@@ -106,6 +109,10 @@ let collect (functions: Function list) : ModuleFacts =
             atom text
             usesDbgHelpers.Value <- true
         | Crash messages -> strings.AddRange messages
+        // A local's name is written beside its text, from the data segment.
+        | Probe(_, locals) ->
+            usesProbes.Value <- true
+            locals |> List.iter (fun local -> strings.Add local.Name)
         | ForEach loop -> ForLoop.sourceAtoms loop |> List.iter atom
         | If(cond, _, _) -> atom cond
         | _ -> ()
@@ -139,4 +146,5 @@ let collect (functions: Function list) : ModuleFacts =
       StaticClosures = staticClosures |> Seq.distinct |> List.ofSeq
       Imports = imports |> Seq.distinct |> List.ofSeq
       UsesDbgHelpers = usesDbgHelpers.Value
-      UsesHostState = usesHostState.Value }
+      UsesHostState = usesHostState.Value
+      UsesProbes = usesProbes.Value }

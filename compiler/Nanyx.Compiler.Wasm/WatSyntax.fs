@@ -19,6 +19,10 @@ type SExpr =
     /// through (`;;@ prelude.nyx:18 | crash | main.nyx:12`), innermost first, each with the name of the function whose
     /// code it is; the outermost's is the function the marker is in, so it has none.
     | Placed of frames: (string option * string * int) list
+    /// A probe's marker, `;;@probe 3 statement` or `;;@probe 1 entry count` (see `CoreIrEmit.Probe`): the probe of this
+    /// number and kind, and for an entry the function's name, is at the place of the last place marker before it. To
+    /// WebAssembly it is a comment.
+    | Probed of id: int * kind: string * functionName: string option
 
 /// WebAssembly text that is not well formed: what is wrong, and the offset into the text where it was found.
 exception WatSyntaxError of message: string * offset: int
@@ -97,18 +101,27 @@ let read (text: string) : SExpr list =
                     // the code was inlined through. Each file runs to the last `:`, and the line number follows it.
                     let start = i
                     let lineEnd = match text.IndexOf('\n', i) with -1 -> text.Length | found -> found
-                    let parts = text.Substring(i + 3, lineEnd - i - 3).Trim().Split(" | ")
+                    let written = text.Substring(i + 3, lineEnd - i - 3).Trim()
+                    let parts = written.Split(" | ")
                     let place (written: string) =
                         let colon = written.LastIndexOf ':'
                         match (if colon < 0 then None else Some(Int32.TryParse(written.Substring(colon + 1)))) with
                         | Some(true, line) -> written.Substring(0, colon), line
                         | _ -> raise (WatSyntaxError("a place marker that is not ;;@ file:line", start))
-                    if parts.Length % 2 = 0 then raise (WatSyntaxError("a place marker with a function but not its call", start))
-                    let frames =
-                        [ for index in 0..2 .. parts.Length - 1 ->
-                              let file, line = place parts.[index]
-                              (if index + 1 < parts.Length then Some parts.[index + 1] else None), file, line ]
-                    items.Add(Placed frames)
+                    // A function's name, after `entry`, may hold spaces, as one in backticks does.
+                    match written.Split(' ', 4) with
+                    | [| "probe"; id; kind |]
+                    | [| "probe"; id; kind; _ |] as probe ->
+                        match Int32.TryParse id with
+                        | true, id -> items.Add(Probed(id, kind, Array.tryItem 3 probe))
+                        | _ -> raise (WatSyntaxError("a probe's marker that is not ;;@probe number kind", start))
+                    | _ ->
+                        if parts.Length % 2 = 0 then raise (WatSyntaxError("a place marker with a function but not its call", start))
+                        let frames =
+                            [ for index in 0..2 .. parts.Length - 1 ->
+                                  let file, line = place parts.[index]
+                                  (if index + 1 < parts.Length then Some parts.[index + 1] else None), file, line ]
+                        items.Add(Placed frames)
                     i <- lineEnd
                 | '(' ->
                     i <- i + 1
