@@ -65,7 +65,7 @@ dotnet test Nyx.Compiler.slnx
 dotnet run --project compiler/Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -- run hello.nyx
 ```
 
-What each command does is in [The nanyx command](https://nanyx.dev/docs/work-in-progress/command-line).
+What each command does is in [The nanyx command](https://nanyx.dev/docs/standard-tools/command-line).
 
 ## Continuous integration and releases
 

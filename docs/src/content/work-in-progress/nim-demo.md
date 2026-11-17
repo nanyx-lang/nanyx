@@ -26,8 +26,7 @@ rows and handlers" (TyDe 2016), reworked for Nanyx contexts:
   choices are a fixed list rather than coin flips.
 
 It compiles and runs with `nanyx run examples/Nim.nyx`. The strategies were once named instances of `Move`
-(`def perfect = Move(move = ...)`, then `use perfect`), but the WebAssembly backend compiles only a `use` of a
-constructor written in place ([#1137](https://github.com/nanyx-lang/nanyx/issues/1137)). Since [contexts are not types](./context-escape#contexts-are-not-types),
+(`def perfect = Move(move = ...)`, then `use perfect`), but since [contexts are not types](./context-escape#contexts-are-not-types),
 a named instance is an error ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)), and a reusable strategy is a
 handler function.
 
@@ -58,7 +57,7 @@ click. So the page version is a state machine:
 
 - The model is the heap, whose turn it is, both players' strategies and the scores.
 - `update` handles a click on a stick button as the human's move, and a timer message as a computer player's move. A
-  computer move still comes from the same `Move` instances, called with `use` inside `update`.
+  computer move still comes from the same strategies, given to the game with `use Move(...)` inside `update`.
 - The rules (whose turn is next, when the game ends, what counts as cheating) stay as they are in the example and are
   shared by both versions.
 

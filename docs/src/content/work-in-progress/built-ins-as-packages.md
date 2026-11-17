@@ -16,14 +16,14 @@ workstream.
   should be able to write one that works exactly as the official one does. If the official ones use privileges no
   package has, the public contract for linters and hosts is never really tested.
 - **Nanyx should be enough to write Nanyx's tools.** A linter written in Nanyx exercises the language, the standard
-  library and the [semantic model](./linters#3-the-semantic-model) that every other linter will use.
+  library and the [semantic model](./linters#what-a-linter-sees) that every other linter will use.
 - **The compiler gets smaller.** Its job becomes running linter packages and hosts, not containing them.
 
 # The official linter
 
 **Today** the official linter is F#: the `default` linter's rules (`unusedBindings`, `nonTailRecursion`,
 `unusedResults` and the rest) are in `compiler/Nanyx.Compiler/Linters.fs`, about 970 lines, run by the compiler's
-[linter host](./linters#4-the-linter-host-internal). Linters written in Nanyx aren't possible yet: their contract is
+[linter host](./linters). Linters written in Nanyx aren't possible yet: their contract is
 [#107](https://github.com/nanyx-lang/nanyx/issues/107).
 
 **It will be a Nanyx package**, `nanyx.lint`, written against the same public contract any linter uses, and reporting
