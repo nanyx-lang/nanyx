@@ -29,5 +29,6 @@ def config = (
 [<Fact>]
 let ``a record with a spread names its other fields`` () =
     match parseModule "def config = (...defaults, 1)" with
-    | Result.Error err -> Assert.Contains("A record with a spread has a field without a name: name each of its other fields", err)
+    // FParsec wraps a long message onto several lines.
+    | Result.Error err -> Assert.Contains("A record with a spread has a field without a name: name each of its other fields", err.ReplaceLineEndings " ")
     | Result.Ok other -> failwith $"Expected a parse error: %A{other}"
