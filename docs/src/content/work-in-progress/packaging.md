@@ -61,7 +61,8 @@ Local packages work: a package and the packages it depends on by path are built,
   dependency's `version` is the version `nanyx.lock` locks, unpacked in the cache, which `nanyx pull` downloads into ([#863](https://github.com/nanyx-lang/nanyx/issues/863)); one the lockfile doesn't lock is `NYX0024` until versions can be chosen ([#864](https://github.com/nanyx-lang/nanyx/issues/864)). There is no `.nyxproj`. `nanyx migrate` makes a package of scripts, `nanyx pull` downloads and lists its dependencies, `nanyx install` adds one, and `nanyx pack` packs it; for a package named by its version that the lockfile doesn't lock, `pull` and `install` are stubs ([#1471](https://github.com/nanyx-lang/nanyx/issues/1471), [The nanyx command](./command-line#packages)). The formatter
   reads the manifest's `formatter` field itself.
 - **The compiler ships packages as source directories** beside it (`ShippedPackages`): the console host,
-  `packages/nanyx.console`, and its interface package, `packages/nanyx.console.core`, at the compiler's version, which
+  `packages/nanyx.console`, its interface package, `packages/nanyx.console.core`, and the JSON library, `packages/nanyx.json`,
+  at the compiler's version, which
   a manifest's `host` or `dependencies` names at that version exactly (`NYX0029`) (see
   [Built-ins as packages](./built-ins-as-packages#how-shipped-packages-are-built)).
 - **A package's imports go through its module table** (`PackageModules.fs`). Every source file the manifest
