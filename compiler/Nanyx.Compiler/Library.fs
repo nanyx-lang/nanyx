@@ -45,7 +45,7 @@ module Compiler =
     /// `Unifier.outputOnlyRestVars`): a union widened by a call, as a `proc` block's is by each `try`, is left
     /// open for more tags, but no more can come once the definition is done. A rest a context the definition requires
     /// is applied to is left open (`contexts` has each one's contexts): an instance can add tags to it, as
-    /// `FromString(int, #invalidInt)` does to the `e` of `[FromString(a, e)] string -> #some(a) | e`.
+    /// `FromString(int)`'s `#invalidInt` does to the `failure` of `[FromString(a)] string -> #some(a) | failure`.
     let private resolveTypes (subst: Subst) (types: Map<string, Ty>) (contexts: Map<string, TypeExpr list>) (typeDefs: Map<string, TypeDefInfo>) (items: TypedTopLevelItem list) =
         let closeOutputRests name ty =
             let contextVars = contexts |> Map.tryFind name |> Option.defaultValue [] |> List.collect NyxCompiler.TypeResolution.annotationVarNames |> Set.ofList

@@ -285,11 +285,12 @@ export def bool.toString: bool -> string = { b ->
 --| `s` itself.
 export def string.toString: string -> string = { s -> s }
 
---| How a value of type `a` is read from text, with `e` for text that does not hold one: [`int.fromString`]
-  gives back `#some(int) | #invalidInt`. A type gets one by attaching a `fromString`, as `int`,
-  `float` and `bool` do, so a function can read a value of whichever type it is called at:
-  `def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e)`.
-export context FromString(a, e) = (fromString: string -> #some(a) | e)
+--| How a value of type `a` is read from text, with `failure` for text that does not hold one:
+  [`int.fromString`] gives back `#some(int) | #invalidInt`, so `int`'s `failure` is `#invalidInt`.
+  A type gets one by attaching a `fromString`, as `int`, `float` and `bool` do,
+  which also fixes its `failure`, so a function can read a value of whichever type it is called at:
+  `def readAll: [FromString(a)] list(string) -> list(#some(a) | failure)`.
+export context FromString(a) = (failure: type, fromString: string -> #some(a) | failure)
 
 -- Defaults --------------------------------------------------------------------------------------
 

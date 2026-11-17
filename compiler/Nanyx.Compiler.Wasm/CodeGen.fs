@@ -491,6 +491,11 @@ let private writtenArgumentType (named: (string * Ty) list) (annotated: (TypeExp
         |> Option.orElse (if SizedNumber.isName varName then Some (TyPrimitive varName) else None)
         |> Option.orElse (writtenTy argument)
     | TypeVar varName -> vars |> Map.tryFind varName
+    // A tag, or a union of them, as an associated type is fixed with: `FromString(a, failure = #invalidInt)`.
+    | TypeTag(tag, None) -> Some (TyTag(tag, None))
+    | TypeUnion items ->
+        let tags = items |> List.choose (fun item -> match item.Kind with TypeTag(tag, None) -> Some (TyTag(tag, None)) | _ -> None)
+        if tags.Length = items.Length then Some (TyUnion tags) else writtenTy argument
     | _ -> writtenTy argument
 
 /// Whether `context` is a parameterised context, at some types.

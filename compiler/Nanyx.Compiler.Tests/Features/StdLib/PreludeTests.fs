@@ -112,16 +112,16 @@ def text = label(42)"""
 
 [<Fact>]
 let ``FromString is in the prelude, and a function that requires it keeps its failure type open`` () =
-    let source = "def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { xs -> xs \\list.map(fromString) }"
+    let source = "def readAll: [FromString(a)] list(string) -> list(#some(a) | failure) = { xs -> xs \\list.map(fromString) }"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    Assert.Equal("list(string) -> list(#some(a) | e)", Unifier.tyToString result.Typed.Value.Types.["readAll"])
+    Assert.Equal("list(string) -> list(#some(a) | failure)", Unifier.tyToString result.Typed.Value.Types.["readAll"])
 
 [<Fact>]
 let ``A FromString is synthesized from an attached fromString, and settles the failure type`` () =
-    // Each def gives back the failure as it is, so its type shows the tag the instance settled `e` to.
+    // Each def gives back the failure as it is, so its type shows the tag the instance settled `failure` to.
     let source =
-        normalized """def readOne: [FromString(a, e)] string -> #some(a) | e = { s -> fromString(s) }
+        normalized """def readOne: [FromString(a)] string -> #some(a) | failure = { s -> fromString(s) }
 def number = { s -> match readOne(s)
   | #some(n) -> #some(n + 1)
   | failure -> failure

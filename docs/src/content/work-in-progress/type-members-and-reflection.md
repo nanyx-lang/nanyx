@@ -56,22 +56,9 @@ Associated types are built: a context's member of kind `type`, named `Iter(c).el
 
 ## The prelude moves to them
 
-Every prelude context whose later parameter is fixed by its first becomes a context with an associated type:
-
-- **`FromString(a, e)` becomes `FromString(a)`** ([#1801](https://github.com/nanyx-lang/nanyx/issues/1801)). The tag `fromString` gives back for text it can't read is its associated `failure` type:
-
-  ```nanyx fragment
-  context FromString(a) = (
-    failure: type
-    fromString: string -> #some(a) | failure
-  )
-
-  def readAll: [FromString(a)] list(string) -> list(#some(a) | failure)
-  ```
+Every prelude context whose later parameter is fixed by its first becomes a context with an associated type. `FromString(a)` has its `failure` already ([#1801](https://github.com/nanyx-lang/nanyx/issues/1801)), and no other context in the prelude or the shipped packages has that shape. What is left:
 
 - **`Iterable(c)`,** planned on the [Lazy sequences](./lazy-sequences#taking-anything-that-can-be-iterated) page, has an associated `elem` type instead of a second parameter ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802)).
-- **Any other context of that shape** in the prelude or the shipped packages moves in the same change as `FromString`.
-
 # Current direction
 
 These points follow from the decisions above. They have been proposed but not agreed.

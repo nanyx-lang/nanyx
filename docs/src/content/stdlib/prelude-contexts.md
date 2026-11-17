@@ -50,10 +50,10 @@ label(true)  -- "<true>"
 
 `int`, `float` and `bool` each have an attached `fromString`, on the [numbers](prelude-numbers) and [prelude](prelude) pages. Each gives back an [option-like](../advanced/option-like-types) union, with its own tag for text it cannot read: `int.fromString("42")` is `#some(42)`, and `bool.fromString("yes")` is `#invalidBool`. The [sized number types](../advanced/sized-numbers#reading-from-text) have one each too, `I8.fromString` to `U64.fromString` and `F32.fromString`, each with its own tag: `U8.fromString("300")` is `#invalidU8`.
 
-Each is the mirror of the type's `toString`, and, as `toString` gives a type a `ToString`, an attached `fromString` gives it the [`FromString`](#fromstring) context. Its second parameter, `e`, is what `fromString` gives back when the text holds no value, so that each type keeps its own tag. A function that reads a value of any type from text requires it, and a call finds the instance as it finds any other: synthesized from the attached `fromString` of the type it is called at, which also settles `e`. At `int` that is `FromString(int, #invalidInt)`:
+Each is the mirror of the type's `toString`, and, as `toString` gives a type a `ToString`, an attached `fromString` gives it the [`FromString`](#fromstring) context. Its [associated type](../advanced/contexts#associated-types) `failure` is what `fromString` gives back when the text holds no value, so that each type keeps its own tag. A function that reads a value of any type from text requires it, and a call finds the instance as it finds any other: synthesized from the attached `fromString` of the type it is called at, whose type also fixes `failure`. At `int` that is `#invalidInt`, and a constraint can say so, `[FromString(a, failure = #invalidInt)]`:
 
 ```nanyx fragment
-def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { xs -> xs \list.map(fromString) }
+def readAll: [FromString(a)] list(string) -> list(#some(a) | failure) = { xs -> xs \list.map(fromString) }
 
 def total: list(#some(int) | #invalidInt) -> int = { results -> results \somes \list.fold(0, { sum, n -> sum + n }) }
 
@@ -68,7 +68,7 @@ A type of your own gets one by attaching a `fromString`, with a tag of its own f
 def Point.fromString: string -> #some(Point) | #invalidPoint = { s -> ... }
 ```
 
-Something has to settle `a`: what the call is given, what its result is passed to, or the type the result is expected to have, as in `def ints: list(#some(int) | #invalidInt) = readAll(texts)`. The `e` parameter is expected to become an [associated type](../work-in-progress/type-members-and-reflection#associated-types) once those exist, as `e` is always determined by `a`.
+Something has to settle `a`: what the call is given, what its result is passed to, or the type the result is expected to have, as in `def ints: list(#some(int) | #invalidInt) = readAll(texts)`.
 
 # Reference
 
@@ -264,15 +264,17 @@ def string.toString: string -> string
 ## `FromString`
 
 ```nanyx fragment
-context FromString(a, e) = (
-  fromString: string -> #some(a) | e
+context FromString(a) = (
+  failure: type
+  fromString: string -> #some(a) | failure
 )
 ```
 
-How a value of type `a` is read from text, with `e` for text that does not hold one: [`int.fromString`](prelude-numbers#intfromstring)
-gives back `#some(int) | #invalidInt`. A type gets one by attaching a `fromString`, as `int`,
-`float` and `bool` do, so a function can read a value of whichever type it is called at:
-`def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e)`.
+How a value of type `a` is read from text, with `failure` for text that does not hold one:
+[`int.fromString`](prelude-numbers#intfromstring) gives back `#some(int) | #invalidInt`, so `int`'s `failure` is `#invalidInt`.
+A type gets one by attaching a `fromString`, as `int`, `float` and `bool` do,
+which also fixes its `failure`, so a function can read a value of whichever type it is called at:
+`def readAll: [FromString(a)] list(string) -> list(#some(a) | failure)`.
 
 ## `Default`
 

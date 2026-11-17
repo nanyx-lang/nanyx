@@ -359,7 +359,7 @@ check(5.0)
 
 /// `readAll`, generic in the prelude's `FromString`, and a function of each result type that sums or counts what was read.
 let private readAllSource =
-    normalized """def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { xs -> xs \list.map(fromString) }
+    normalized """def readAll: [FromString(a)] list(string) -> list(#some(a) | failure) = { xs -> xs \list.map(fromString) }
 
 def total: list(#some(int) | #invalidInt) -> int = { results ->
   results \somes \list.fold(0, { sum, n -> sum + n })
@@ -419,6 +419,20 @@ println("{sumYs(["4", "nope", "5"])}")
 """
     runSource source |> assertRan "18\n"
 
+[<Fact>]
+let ``Run - a constraint that fixes FromString's failure reads ints`` () =
+    let source =
+        normalized """def readInts: [FromString(a, failure = #invalidInt)] list(string) -> list(#some(a) | #invalidInt) = { xs ->
+  xs \list.map(fromString)
+}
+
+def counted: list(#some(int) | #invalidInt) -> int = { results ->
+  results \list.filter({ | #invalidInt -> true | _ -> false }) \list.length
+}
+
+println("{counted(readInts(["1", "x", "y"]))}")
+"""
+    runSource source |> assertRan "2\n"
 [<Fact>]
 let ``Run - Int.toFloat turns an int into a float, called and piped`` () =
     let source =
