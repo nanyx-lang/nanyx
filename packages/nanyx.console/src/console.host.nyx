@@ -222,6 +222,9 @@ def pathOpen: [HostRuntime] I32, I32, I32, I32, I32, I64, I64, I32, I32 -> I32
 @extern("wasi_snapshot_preview1", "fd_close")
 def fdClose: [HostRuntime] I32 -> I32
 
+@extern("wasi_snapshot_preview1", "fd_pread")
+def fdPread: [HostRuntime] I32, I32, I32, I64, I32 -> I32
+
 @extern("wasi_snapshot_preview1", "fd_filestat_get")
 def fdFilestatGet: [HostRuntime] I32, I32 -> I32
 
@@ -410,6 +413,56 @@ def readWith
         result
   }
 
+--| How many bytes of the file `fd`, from byte `offset` on, it reads into the `size` bytes at
+  `buffer`, after the `done` it has read: until the buffer is full or the file ends.
+def readAt
+  : [HostRuntime] I32, int, I32, I32, I32 -> #some(I32) | #error(FsError)
+  = { fd, offset, buffer, size, done ->
+    if done >= size then #some(done) else
+      writeI32(stateAt(12), I32.wrappingAdd(buffer, done))
+      writeI32(stateAt(16), size - done)
+      def errno = fdPread(fd, stateAt(12), 1, offset + I32.toInt(done), stateAt(20))
+      def read = readI32(stateAt(20))
+
+      if errno != 0
+        then #error(errorOf(errno))
+        else if read == 0 then #some(done) else readAt(fd, offset, buffer, size, done + read)
+  }
+
+--| Up to `size` bytes of the file `fd`, from byte `offset` on, as a string.
+def readChunk
+  : [HostRuntime] I32, int, I32 -> #some(string) | #error(FsError)
+  = { fd, offset, size ->
+    def buffer = allocate(size + 1)
+
+    def result = match readAt(fd, offset, buffer, size, 0)
+      | #some(read) -> #some(stringAt(buffer, read))
+      | #error(e) -> #error(e)
+
+    free(buffer)
+    result
+  }
+
+--| Up to `length` bytes of the file at `at`, from byte `offset` on: the file is opened, read and
+  closed again, so nothing is left open between one chunk and the next.
+def chunkAt
+  : [HostRuntime] Path, int, int -> #some(string) | #error(FsError)
+  = { at, offset, length ->
+    match int.toI32(length)
+      | #outOfRange -> #error(#other("a chunk that large can't be read at once"))
+      | #some(size) ->
+        match openAt(at, 0, 6, 0)
+          | #error(e) -> #error(e)
+          | #some(fd) ->
+            def result = match described(fd)
+              | #error(e) -> #error(e)
+              | #some(kind, _) ->
+                if kind == directoryKind then #error(#isDirectory) else readChunk(fd, offset, size)
+
+            ignore(fdClose(fd))
+            result
+  }
+
 --| The bytes from `address` on, `count` of them, as an array.
 def bytesAt: [HostRuntime] I32, I32 -> Array(U8) = { address, count ->
   array.init(
@@ -578,6 +631,7 @@ export def run: [HostRuntime] ([Console, Env, FileSystem, Http] () -> a) -> () =
   use FileSystem(
     readFile = { at -> readWith(at, { address, count -> stringAt(address, count) }) }
     readFileBytes = { at -> readWith(at, { address, count -> bytesAt(address, count) }) }
+    readFileChunk = { at, offset, length -> chunkAt(at, offset, length) }
     writeFile = { at, text -> writeWith(at, text, 9, 0) }
     appendFile = { at, text -> writeWith(at, text, 1, 1) }
     pathExists = { at -> existsAt(at) }
