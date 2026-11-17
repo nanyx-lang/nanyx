@@ -6,3 +6,4 @@ tests/
 tsconfig.json
 package-lock.json
 *.vsix
+notes/
