@@ -49,11 +49,11 @@ println("Hello!")
 
 | Directive | What it does | In a manifest |
 | --- | --- | --- |
-| `::host nanyx.console` | Runs the script under a host the compiler ships; without `::host`, a script runs under `nanyx.console` | `host = (package = "nanyx.console", version = "0.28.0")` |
+| `::host nanyx.console` | Runs the script under a host the compiler ships; without `::host`, a script runs under `nanyx.console` | `host = (package = "nanyx.console", version = "0.29.0")` |
 | `::host acme.server ../server` | Runs the script under the host package in a directory, relative to the script | `host = (package = "acme.server", path = "../server")` |
 | `::dependency acme.json ../json` | Depends on the package in a directory, so the script can import its public modules, `import acme.json/parse` | `dependencies = [(package = "acme.json", path = "../json")]` |
-| `::dependency nanyx.console.core` | Depends on a package the compiler ships | `dependencies = [(package = "nanyx.console.core", version = "0.28.0")]` |
-| `::linter nanyx.lint` | Turns the official linter on, with every rule at its default severity | `linters = [(package = "nanyx.lint", version = "0.28.0")]` |
+| `::dependency nanyx.console.core` | Depends on a package the compiler ships | `dependencies = [(package = "nanyx.console.core", version = "0.29.0")]` |
+| `::linter nanyx.lint` | Turns the official linter on, with every rule at its default severity | `linters = [(package = "nanyx.lint", version = "0.29.0")]` |
 | `::lint unusedBindings #error` | Sets a rule's severity (`#error`, `#warning`, `#info`, `#hint` or `#off`) for the linter of the nearest `::linter` above it | `settings = (rules = (unusedBindings = #error))` in that linter's entry |
 | `::format lineWidth 80` | Sets one of the formatter's settings, `lineWidth` or `indentSize` | `formatter = (lineWidth = 80)` |
 
@@ -96,8 +96,8 @@ A package is described by a `.nyxp` file at the package root: one Nanyx record, 
 ```nanyx fragment
 (
   package = (name = "word_counter", version = "0.1.0", sources = ["src/**/*.nyx"])
-  linters = [(package = "nanyx.lint", version = "0.28.0")]
-  host = (package = "nanyx.console", version = "0.28.0")
+  linters = [(package = "nanyx.lint", version = "0.29.0")]
+  host = (package = "nanyx.console", version = "0.29.0")
 )
 ```
 

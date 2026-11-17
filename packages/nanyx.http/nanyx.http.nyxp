@@ -1,9 +1,9 @@
 (
   package = (
     name = "nanyx.http"
-    version = "0.28.0"
+    version = "0.29.0"
     sources = ["src/**/*.nyx"]
     host = (root = "http.host", prelude = "http.prelude", settings = (port = 3000))
   )
-  dependencies = [(package = "nanyx.http.core", version = "0.28.0")]
+  dependencies = [(package = "nanyx.http.core", version = "0.29.0")]
 )
