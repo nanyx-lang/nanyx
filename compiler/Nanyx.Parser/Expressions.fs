@@ -508,6 +508,43 @@ let listExpr =
             | _ -> segments |> List.reduceBack (fun left right -> Expression.at span (BinaryOp("++", None, left, right)))
         | Choice2Of2 tuples -> Expression.at span (FunctionCall(MapSyntax.builtIn, None, [ Expression.at span (ListExpr tuples) ]))
 
+// A table literal: a list of records of the same shape, written as a header of field names and a row of values for
+// each record, one row per line, the `|` of each column lined up by the formatter:
+//
+//   [| name     | age |
+//    | "Alex"   | 22  |
+//    | "Taylor" | 30  |]
+//
+// It is the list literal `[(name = "Alex", age = 22), (name = "Taylor", age = 30)]`, each record spanning its row, so
+// nothing after the parser knows it was a table. A row with a different number of cells than the header is an error
+// at the row, and a table has at least one row.
+let tableExpr =
+    let cellEnd = wsInline >>. pstring "|"
+    let headerCell = attempt (wsInline >>. getPosition .>>. nameNoWs) .>> cellEnd
+    let cell = attempt (wsInline >>. notFollowedBy (pchar ']' <|> newline) >>. expression) .>> cellEnd
+    let row = getPosition .>>. withSpan (pstring "|" >>. many1 cell)
+    let nextRow = attempt (ws >>. followedBy (pchar '|')) >>. row
+    let inOrder (parsers: Parser<'a, ParseState> list) =
+        List.foldBack (fun p rest -> pipe2 p rest (fun head tail -> head :: tail)) parsers (preturn [])
+    let rowRecord (header: (Position * Identifier) list) (start: Position, (cells: Expression list, span)) =
+        if cells.Length <> header.Length then
+            reportFocused start $"This row has {cells.Length} cells, but the table's header names {header.Length} fields: each row has a value for each field"
+        else
+            List.zip header cells
+            |> List.map (fun ((nameStart, name), value) -> declareField nameStart name value.Id >>% NamedField(name, value))
+            |> inOrder
+            |>> fun fields -> Expression.at span (RecordExpr fields)
+    withSpan (
+        noteFailureInside (
+            pstring "[|" >>. many1 headerCell
+            .>>. (getPosition .>>. many nextRow)
+            .>> pstring "]"))
+    >>= fun ((header, (afterHeader, rows)), span) ->
+        match rows with
+        | [] -> reportFocused afterHeader "A table literal has a row of values under its header"
+        | _ ->
+            rows |> List.map (rowRecord header) |> inOrder |>> fun records -> Expression.at span (ListExpr records)
+
 /// `T[...]`, a literal written straight after a type's name, which builds a `T` (see `CollectionSyntax`). It spans the
 /// name and the brackets; the array of the items spans the brackets.
 let internal collectionConstruct (name: Identifier) (nameSpan: SourceSpan option) =
@@ -742,6 +779,7 @@ let primaryExprNoWs =
         attempt functionCall
         attempt tagExpr  // #tag or #tag(expr)
         spanned (literalNoWs |>> LiteralExpr)
+        tableExpr
         listExpr
         tupleOrParenExpr
         workflowKeywordApplication

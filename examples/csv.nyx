@@ -5,7 +5,13 @@ import (
   nanyx/math
 )
 
-type Stock = (ticker: string, name: string, price: float, change: float, pct: float)
+type Stock = (
+  ticker: string
+  name: string
+  price: float
+  change: float
+  pct: float
+)
 
 -- A table literal is a list of records with the same shape
 def stocks: list(Stock) =
@@ -14,7 +20,9 @@ def stocks: list(Stock) =
    | "YHOO" | "Yahoo! Inc."         | 27.38  | 0.33   | 1.22    |
    | "CNET" | "CNET Networks, Inc." | 8.62   | -0.13  | -1.4901 |]
 
-def quote: string -> string = { s -> '"' ++ s ++ '"' }
+def quote: string -> string = { s ->
+  '"' ++ s ++ '"'
+}
 
 def toCsvLine: Stock -> string = { s ->
   [s.ticker, quote(s.name), "{s.price}", "{s.change}", "{s.pct}"] \string.join(",")
@@ -23,14 +31,14 @@ def toCsvLine: Stock -> string = { s ->
 def fromCsvLine: string -> #some(Stock) | #error(#malformed) | #invalidFloat = { line ->
   match line \split(on = ",")
     | [ticker, name, price, change, pct] -> proc {
-        return Stock(
-          ticker = ticker
-          name = name \trim('"')
-          price = try float.fromString(price)
-          change = try float.fromString(change)
-          pct = try float.fromString(pct)
-        )
-      }
+      return Stock(
+        ticker = ticker
+        name = name \trim('"')
+        price = (try float.fromString(price))
+        change = (try float.fromString(change))
+        pct = try float.fromString(pct)
+      )
+    }
     | _ -> #error(#malformed)
 }
 
@@ -47,7 +55,8 @@ def main: [Console, FileSystem] () -> () = {
   for File.readLines(path) | line ->
     match fromCsvLine(line)
       | #some(stock) ->
-        def #some(status) = statusLabels(Math.sign(stock.change)) except #notFound -> #some("unknown")
+        def sign = Math.sign(stock.change)
+        def #some(status) = statusLabels(sign) except #notFound -> #some("unknown")
         println("{stock.name} is {status} {stock.pct}")
       | _ ->
         println("Skipping malformed line: {line}")
