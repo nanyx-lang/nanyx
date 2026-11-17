@@ -253,7 +253,10 @@ def describe: a, type a -> string = { value, t ->
     | #int -> "the int {value + 1}"
     | #string -> "the string " ++ value
     | #list(elem) -> value \list.map { x -> describe(x, elem) } \string.join(", ")
-    | #record(r) -> r.fields \list.map { f -> f.name ++ " = " ++ describe(f.get(value), f.type) } \string.join(", ")
+    | #record(r) ->
+      r.fields
+        \list.map { f -> f.name ++ " = " ++ describe(f.get(value), f.type) }
+        \string.join(", ")
     | else -> "something else"
 }
 
