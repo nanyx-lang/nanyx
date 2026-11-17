@@ -283,6 +283,22 @@ public sealed class CodeActionTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task A_type_s_name_offers_to_implement_a_context()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-implement");
+        const string text = "type Point = protected (x: int, y: int)\n";
+
+        Open(uri, text);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var implement = Assert.Single(await CodeActionsIn(uri, new Range(0, 6, 0, 6)), action => action.Title == "Implement `Ord`");
+        Assert.Equal(CodeActionKind.RefactorRewrite, implement.Kind);
+        Assert.Equal(
+            "type Point = protected (x: int, y: int)\n\ndef Point.compare: Point, Point -> #less | #equal | #greater = { a, b -> ??? }\n",
+            Applied(text, Assert.Single(implement.Edit!.Changes![uri])));
+    }
+
+    [Fact]
     public async Task A_selected_expression_offers_to_introduce_a_function()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-introduce-function");
