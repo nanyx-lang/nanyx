@@ -132,7 +132,7 @@ module internal ContextInference =
     /// the contexts' arguments from it, as it does from a type that is written. `None` when the type is one an
     /// annotation cannot write.
     let writtenType (state: InferState) (scheme: TypeScheme) : TypeExpr option =
-        let subst = fst (Unifier.solve state.Constraints)
+        let subst = fst (Solving.solve state.Constraints)
         let written =
             state.TypeVars
             |> Map.toList
@@ -226,7 +226,7 @@ module internal ContextInference =
         | None -> [], state
         | Some used ->
             let state = { state with InferredContextVars = state.InferredContextVars |> Map.remove defName }
-            let subst = fst (Unifier.solve state.Constraints)
+            let subst = fst (Solving.solve state.Constraints)
             let unbound =
                 used
                 |> List.map (Unifier.apply subst)
@@ -361,7 +361,7 @@ module internal ContextInference =
                 && not (InterpolationHoles.isHole p.Callee))
         if candidates.IsEmpty || scheme.Quantified.IsEmpty then state
         else
-            let subst = fst (Unifier.solve state.Constraints)
+            let subst = fst (Solving.solve state.Constraints)
             let ownVars (p: PendingContextInstance) =
                 let vars = p.ArgTys |> List.map (Unifier.applySolved subst >> function TyVar v when scheme.Quantified.Contains v.Id -> Some v | _ -> None)
                 if vars |> List.forall Option.isSome then Some (p, vars |> List.map Option.get) else None

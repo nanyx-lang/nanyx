@@ -113,7 +113,7 @@ let ``The error type agrees with every type`` () =
           (a, Unifier.errorType, Equal, SourceSpan.none)
           (a, TyPrimitive "int", Equal, SourceSpan.none)
           (a, TyPrimitive "string", Equal, SourceSpan.none) ]
-    let _, failures = Unifier.solve constraints
+    let _, failures = Solving.solve constraints
     Assert.Empty(failures)
 
 [<Fact>]

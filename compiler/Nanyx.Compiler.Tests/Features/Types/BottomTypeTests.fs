@@ -66,7 +66,7 @@ let private others =
 [<Fact>]
 let ``undefined is assignable to every type, binding nothing`` () =
     for other in others do
-        match Unifier.unify [ (Unifier.bottomType, other, Assignable, SourceSpan.none) ] with
+        match Solving.unify [ (Unifier.bottomType, other, Assignable, SourceSpan.none) ] with
         | Ok subst -> Assert.True(subst.IsEmpty, $"undefined given for {other} bound %A{subst}")
         | Error (message, _) -> Assert.Fail($"undefined given for {other}: {message}")
 
@@ -79,7 +79,7 @@ let ``No other type is assignable to undefined, nor equal to it`` () =
             [ (other, Unifier.bottomType, Assignable, SourceSpan.none)
               (Unifier.bottomType, other, Equal, SourceSpan.none)
               (other, Unifier.bottomType, Equal, SourceSpan.none) ] do
-            match Unifier.unify [ constraint' ] with
+            match Solving.unify [ constraint' ] with
             | Ok _ -> Assert.Fail($"%A{constraint'} was satisfied")
             | Error _ -> ()
 
@@ -90,7 +90,7 @@ let ``undefined given where a variable is expected binds nothing, so the variabl
     let bottom = (Unifier.bottomType, TyVar var, Assignable, SourceSpan.none)
     let given = (int, TyVar var, Assignable, SourceSpan.none)
     for constraints in [ [ bottom; given ]; [ given; bottom ] ] do
-        match Unifier.unify constraints with
+        match Solving.unify constraints with
         | Ok subst -> Assert.Equal(Some int, subst |> Map.tryFind var.Id)
         | Error (message, _) -> Assert.Fail(message)
 

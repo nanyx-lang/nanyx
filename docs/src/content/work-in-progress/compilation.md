@@ -43,8 +43,8 @@ Out of scope here, with their own workstreams:
 - **A parse error stops everything.** There is no error recovery, so one syntax error hides every problem after
   it. The language server needs recovery too. See [The parser](./parser).
 - **Some defs are still solved afresh.** The type checker holds one list of constraints for the
-  whole module and solves it again as it goes (`Unifier.unifyDetailed`). A list is solved on top of the last one
-  solved, or of the checkpoint the type checker made once it generalised the def before (`Unifier.checkpoint`), when
+  whole module and solves it again as it goes (`Solving.unifyDetailed`). A list is solved on top of the last one
+  solved, or of the checkpoint the type checker made once it generalised the def before (`Solving.checkpoint`), when
   that can't change the result. Defs that share a variable (mutual recursion, a use before the def is checked) and a
   module with a type error still solve afresh, newest first.
 

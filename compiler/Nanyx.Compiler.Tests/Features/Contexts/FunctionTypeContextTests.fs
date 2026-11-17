@@ -107,22 +107,22 @@ let private intFunc contexts = TyFunc(TyPrimitive "int", TyPrimitive "int", cont
 
 [<Fact>]
 let ``Two function types that must be the same require the same contexts`` () =
-    match Unifier.unify [ intFunc [ console ], intFunc [], Equal, SourceSpan.none ] with
+    match Solving.unify [ intFunc [ console ], intFunc [], Equal, SourceSpan.none ] with
     | Error (message, _) -> Assert.Contains("only the first requires 'Console'", message)
     | Ok _ -> failwith "Expected a context mismatch"
-    Assert.True(Unifier.unify [ intFunc [ console ], intFunc [ console ], Equal, SourceSpan.none ] |> Result.isOk)
+    Assert.True(Solving.unify [ intFunc [ console ], intFunc [ console ], Equal, SourceSpan.none ] |> Result.isOk)
 
 [<Fact>]
 let ``A context variable takes the contexts of the function given for it`` () =
     let c = TyVar (TyVar.ordinary 1 (Some "c"))
-    match Unifier.unify [ intFunc [ console ], intFunc [ c ], Assignable, SourceSpan.none ] with
+    match Solving.unify [ intFunc [ console ], intFunc [ c ], Assignable, SourceSpan.none ] with
     | Ok subst -> Assert.Equal("[Console] int -> int", Unifier.tyToString (Unifier.apply subst (intFunc [ c ])))
     | Error (message, _) -> failwith message
     // A pure function leaves alone a variable a type writes (#1701), and one inference made keeps room for more.
-    match Unifier.unify [ intFunc [], intFunc [ c ], Assignable, SourceSpan.none ] with
+    match Solving.unify [ intFunc [], intFunc [ c ], Assignable, SourceSpan.none ] with
     | Ok subst -> Assert.Equal("[c] int -> int", Unifier.tyToString (Unifier.apply subst (intFunc [ c ])))
     | Error (message, _) -> failwith message
     let made = TyVar (TyVar.ordinary 2 None)
-    match Unifier.unify [ intFunc [], intFunc [ made ], Assignable, SourceSpan.none ] with
+    match Solving.unify [ intFunc [], intFunc [ made ], Assignable, SourceSpan.none ] with
     | Ok subst -> Assert.Equal("int -> int", Unifier.tyToString (Unifier.apply subst (intFunc [ made ])))
     | Error (message, _) -> failwith message

@@ -26,7 +26,7 @@ let private checkAnnotationIsRigid (state: InferState) (name: Identifier) (span:
     else
         // A conflict is reported when the module's constraints are solved, and set aside here, so that it does not hide
         // this check of a def after it.
-        match Unifier.unify (Unifier.agreeing state.Constraints) with
+        match Solving.unify (Solving.agreeing state.Constraints) with
         | Error _ -> Ok ()
         | Ok subst ->
             let resolved = vars |> List.map (fun (varName, var) -> varName, Unifier.apply subst (TyVar var))
@@ -358,7 +358,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                             types <- types |> Map.add name declaredTy
                             emit (TypedDef (TypedValueDef(isExport, name, annotation, typedExpr)))
                             // The next def's constraints are solved on top of this one's where they share nothing.
-                            Unifier.checkpoint state.Constraints
+                            Solving.checkpoint state.Constraints
                 | Error err -> abandon isExport name expr err
         // A block is a module, not a program, so it has no top-level code.
         | Expr expr when (blockAround state.ModuleBlocks expr.Span).IsSome ->
