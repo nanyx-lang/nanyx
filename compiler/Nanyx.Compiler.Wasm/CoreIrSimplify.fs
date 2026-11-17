@@ -201,6 +201,114 @@ let private matchesOn (var: Var) (rest: Expr) =
         | Match(scrutinees, _) -> scrutinees |> List.exists (fun s -> names.Contains s.Id)
         | _ -> false)
 
+/// Whether what is known about a variable of type `ty` can tell something: not a number, a string or a `bool`, whose
+/// values the simplifier knows nothing of.
+let private carriesFacts (ty: IrType) =
+    match ty with
+    | IrInt
+    | IrSized _
+    | IrBool
+    | IrUnit
+    | IrString
+    | IrFloat
+    | IrF32 -> false
+    | _ -> true
+
+/// The sizes of a chain's links and who reads what in them, worked out once for the chain, so that the case-of-case
+/// rule can tell that copying the rest of the chain into each branch would grow it too much without going over the rest
+/// at each link: a chain of n tags made and matched took n² time (#1847). Places are the links' indexes, and `n` is
+/// what the chain ends in.
+type private ChainShape(links: Expr list, last: Expr) =
+    let links = Array.ofList links
+    let n = links.Length
+    let partAt place = if place = n then last else Chain.relink links.[place] (Expr.make (Atom AUnit) IrUnit)
+    // Each link's own nodes, without what follows it.
+    let own =
+        links
+        |> Array.map (fun link ->
+            match link.Kind with
+            | Let(_, value, _)
+            | Do(value, _) -> 1 + size value
+            | _ -> 1)
+    // The nodes from each place to the end of the chain.
+    let fromPlace =
+        let sizes = Array.zeroCreate (n + 1)
+        sizes.[n] <- size last
+        for place in n - 1 .. -1 .. 0 do
+            sizes.[place] <- own.[place] + sizes.[place + 1]
+        sizes
+    // The nodes of each link that a copy keeps whatever is known: none of a variable given another's value, which the
+    // simplifier reads as that other.
+    let kept =
+        links
+        |> Array.mapi (fun place link ->
+            match link.Kind with
+            | Let(_, { Kind = Atom _ }, _) -> 0
+            | _ -> own.[place])
+    let keptFrom =
+        let sizes = Array.zeroCreate (n + 1)
+        sizes.[n] <- size last
+        for place in n - 1 .. -1 .. 0 do
+            sizes.[place] <- kept.[place] + sizes.[place + 1]
+        sizes
+    // The variables each place reads, the places that read each variable, and the place that binds each variable.
+    let readsAt =
+        Array.init (n + 1) (fun place ->
+            let read = HashSet<int>()
+            for e in allExprs (partAt place) do
+                for atom in directAtoms e do
+                    match atom with
+                    | AVar v -> read.Add v.Id |> ignore
+                    | _ -> ()
+                for v in directVars e do
+                    read.Add v.Id |> ignore
+            read)
+    let readers = Dictionary<int, ResizeArray<int>>()
+    do
+        for place in 0..n do
+            for id in readsAt.[place] do
+                match readers.TryGetValue id with
+                | true, places -> places.Add place
+                | _ -> readers.[id] <- ResizeArray [ place ]
+    let binders = Dictionary<int, int>()
+    do
+        links
+        |> Array.iteri (fun place link ->
+            match link.Kind with
+            | Let(var, _, _) -> binders.[var.Id] <- place
+            | _ -> ())
+
+    /// Whether the chain from `start` on, copied into `branches` branches that each know the tag `var` is, could come
+    /// to no more than its own size and `limit` more. What may come to little in a copy is the places that read `var`,
+    /// or a variable such a place binds that facts can be known of, the places whose variable only those read, and the
+    /// variables given another's value; the rest is copied whole into each branch.
+    member _.MayCopy (var: Var) (start: int) (branches: int) (limit: int) : bool =
+        let changing = HashSet<int>()
+        let pending = Stack<int>([ var.Id ])
+        while pending.Count > 0 do
+            match readers.TryGetValue(pending.Pop()) with
+            | true, places ->
+                for place in places do
+                    if place >= start && changing.Add place && place < n then
+                        match links.[place].Kind with
+                        | Let(bound, _, _) when carriesFacts bound.Type -> pending.Push bound.Id
+                        | _ -> ()
+            | _ -> ()
+        let unread = Stack<int>(changing)
+        while unread.Count > 0 do
+            for id in readsAt.[unread.Pop()] do
+                match binders.TryGetValue id with
+                | true, binder when
+                    binder >= start
+                    && not (changing.Contains binder)
+                    && readers.[id] |> Seq.forall changing.Contains
+                    ->
+                    changing.Add binder |> ignore
+                    unread.Push binder
+                | _ -> ()
+        let unchanged = keptFrom.[start] - (changing |> Seq.sumBy (fun place -> if place = n then keptFrom.[n] else kept.[place]))
+        branches * unchanged <= fromPlace.[start] + limit
+
 /// One pass of the simplifier over the body of `f`, given the functions it may call.
 type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
     // How often each kind and name of variable is bound in the function: those of a variable that is the only one with
@@ -369,6 +477,10 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
         let rebuilt = ResizeArray<Expr -> Expr>()
         let mutable facts = facts
         let mutable remaining = links
+        // How many links are left: the rules below rewrite only the links at the head, so what follows the link being
+        // gone over is the chain's own links from place `links.Length - left` on.
+        let mutable left = links.Length
+        let shape = lazy (ChainShape(links, chainEnd))
         let mutable last = chainEnd
         let mutable branchedLast = None
         // The atom each variable bound in this chain to one is given.
@@ -387,6 +499,7 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
         while not remaining.IsEmpty do
             let link = renameLink remaining.Head
             remaining <- remaining.Tail
+            left <- left - 1
             match link.Kind, remaining with
             // A temporary given at once to a variable is that variable's value itself.
             | Let(temp, value, _), ({ Kind = Let(var, { Kind = Atom(AVar read) }, _) } as next) :: rest when temp.Kind = Temp && read.Id = temp.Id ->
@@ -400,6 +513,7 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
                 changed <- true
                 let local = { temp with Kind = Local }
                 remaining <- { link with Kind = Let(local, value, link) } :: { next with Kind = Let(var, { tag with Kind = MakeTag(name, AVar local) }, next) } :: rest
+                left <- left + 1
             // A variable given the value of another of its type is that other: what follows reads it instead. Not a
             // parameter on the heap, which its function may only borrow: the variable is what takes it over, so that a
             // match on it can reuse its memory (see `CoreIrReuse`).
@@ -413,10 +527,12 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
                 renamed.[var.Id] <- source
             | Let(var, value, _), _ ->
                 let value = this.Value facts value
-                let following, chainEnd = remaining, last
-                match this.Branched facts var value (fun () -> Chain.rebuild Chain.relink following chainEnd |> rename), last.Kind with
+                let following, chainEnd, start = remaining, last, links.Length - left
+                let mayCopy branches limit = shape.Value.MayCopy var start branches limit
+                match this.Branched facts var value mayCopy (fun () -> Chain.rebuild Chain.relink following chainEnd |> rename), last.Kind with
                 | Some branched, _ ->
                     remaining <- []
+                    left <- 0
                     branchedLast <- Some branched
                 // A chain that ends in the variable its last link binds ends in that link's value.
                 | None, Atom(AVar result) when remaining.IsEmpty && result.Id = var.Id && heldAlike value.Type last.Type ->
@@ -451,8 +567,9 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
     /// `let var = value in rest`, with `rest` copied into each branch of `value`, when `value` is a `match` or an `if`
     /// that gives a tag in some branch and `rest` matches on `var`: in each copy, which tag `var` is is known. It is
     /// done only when the copies, simplified, grow the code by no more than `copyLimit` nodes, as when all but one of
-    /// them come to little.
-    member this.Branched (facts: Map<int, Fact>) (var: Var) (value: Expr) (rest: unit -> Expr) : Expr option =
+    /// them come to little. `mayCopy` tells, from the chain's shape, whether they could (see `ChainShape`), so that
+    /// copies that cannot are never made.
+    member this.Branched (facts: Map<int, Fact>) (var: Var) (value: Expr) (mayCopy: int -> int -> bool) (rest: unit -> Expr) : Expr option =
         let rec givesTag (branch: Expr) =
             match (snd (Chain.split branch)).Kind with
             | MakeTag _
@@ -466,6 +583,7 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
             | If(_, ifTrue, ifFalse) -> [ ifTrue; ifFalse ]
             | _ -> []
         if trying || var.Kind = Temp || assigned.Contains var.Id || not (List.exists givesTag branches) then None
+        elif not (mayCopy branches.Length (size value + copyLimit)) then None
         else
             let rest = rest ()
             if not (matchesOn var rest) then None
