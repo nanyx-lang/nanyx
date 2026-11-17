@@ -8,14 +8,10 @@ open TranspilerWasmTestHelpers
 
 /// An app whose manifest is `manifest`, beside a library, acme.util, in a directory of its own.
 let private appWith (directory: TempDirectory) (manifest: string) =
-    let write (path: string) (text: string) =
-        let full = Path.Combine(directory.Path, path)
-        Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
-        File.WriteAllText(full, text.ReplaceLineEndings "\n")
-    write "util/util.nyxp" "(package = (name = \"acme.util\", version = \"0.3.0\"))\n"
-    write "util/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
-    write "app/app.nyxp" manifest
-    write "app/main.nyx" "module main\n\nimport acme.util/strings\n\n@entry\ndef main = { println(shout(\"hi\")) }\n"
+    directory.Write "util/util.nyxp" "(package = (name = \"acme.util\", version = \"0.3.0\"))\n"
+    directory.Write "util/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
+    directory.Write "app/app.nyxp" manifest
+    directory.Write "app/main.nyx" "module main\n\nimport acme.util/strings\n\n@entry\ndef main = { println(shout(\"hi\")) }\n"
     Path.Combine(directory.Path, "app")
 
 let private manifestOf (app: string) = File.ReadAllText(Path.Combine(app, "app.nyxp")).ReplaceLineEndings "\n"

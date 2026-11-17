@@ -7,11 +7,6 @@ open Xunit
 open NyxCompiler
 open TranspilerWasmTestHelpers
 
-let private write (directory: TempDirectory) (path: string) (text: string) =
-    let full = Path.Combine(directory.Path, path)
-    Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
-    File.WriteAllText(full, text)
-
 /// A store whose index, in `directory`, lists the package in `util` as it is now, packed by `nanyx pack`.
 let private published (directory: TempDirectory) =
     let index = Path.Combine(directory.Path, "index")
@@ -19,9 +14,8 @@ let private published (directory: TempDirectory) =
     let packed = nanyxInStore store directory.Path [ "pack"; "util"; "--out"; Path.Combine(index, "artifacts") ]
     Assert.Equal(0, packed.ExitCode)
     let hash = packed.StandardOutput.ReplaceLineEndings("\n").Split('\n') |> Array.find (fun line -> line.StartsWith "sha256 ") |> fun line -> line.Substring 7
-    write directory "index/config.json" """{ "format": 1, "index": "index/" }"""
-    write
-        directory
+    directory.Write "index/config.json" """{ "format": 1, "index": "index/" }"""
+    directory.Write
         "index/index/acme/acme.util.json"
         $$"""{ "name": "acme.util", "versions": [{ "version": "1.0.0", "url": "../../artifacts/acme.util-1.0.0.nyxpkg", "sha256": "{{hash}}", "yanked": false, "available": true }] }"""
     store
@@ -29,10 +23,10 @@ let private published (directory: TempDirectory) =
 [<Fact>]
 let ``A removed export bumps the major version, and the change is listed`` () =
     use directory = new TempDirectory()
-    write directory "util/util.nyxp" "(package = (name = \"acme.util\", version = \"1.0.0\"))\n"
-    write directory "util/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n\nexport def whisper = { s: string -> s }\n"
+    directory.Write "util/util.nyxp" "(package = (name = \"acme.util\", version = \"1.0.0\"))\n"
+    directory.Write "util/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n\nexport def whisper = { s: string -> s }\n"
     let store = published directory
-    write directory "util/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
+    directory.Write "util/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
     let outcome = nanyxInStore store (Path.Combine(directory.Path, "util")) [ "bump" ]
     Assert.Equal("", outcome.StandardError)
     Assert.Equal(
@@ -45,9 +39,9 @@ let ``A removed export bumps the major version, and the change is listed`` () =
 [<Fact>]
 let ``With no version published, the version stays`` () =
     use directory = new TempDirectory()
-    write directory "util/util.nyxp" "(package = (name = \"acme.util\", version = \"0.1.0\"))\n"
-    write directory "util/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
-    write directory "index/config.json" """{ "format": 1, "index": "index/" }"""
+    directory.Write "util/util.nyxp" "(package = (name = \"acme.util\", version = \"0.1.0\"))\n"
+    directory.Write "util/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
+    directory.Write "index/config.json" """{ "format": 1, "index": "index/" }"""
     let store = { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = GitHub.unsupported }
     let outcome = nanyxInStore store (Path.Combine(directory.Path, "util")) [ "bump" ]
     Assert.Equal("acme.util has no version published before 0.1.0, so there is nothing to compare: its version stays 0.1.0\n", outcome.StandardOutput.ReplaceLineEndings "\n")

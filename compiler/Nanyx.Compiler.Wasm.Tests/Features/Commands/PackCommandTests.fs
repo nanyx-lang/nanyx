@@ -6,16 +6,11 @@ open System.IO.Compression
 open Xunit
 open TranspilerWasmTestHelpers
 
-let private write (directory: TempDirectory) (path: string) (text: string) =
-    let full = Path.Combine(directory.Path, path)
-    Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
-    File.WriteAllText(full, text)
-
 [<Fact>]
 let ``A package is packed beside its manifest, with its SHA-256`` () =
     use directory = new TempDirectory()
-    write directory "util/util.nyxp" "(package = (name = \"acme.util\", version = \"0.3.0\"))\n"
-    write directory "util/src/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
+    directory.Write "util/util.nyxp" "(package = (name = \"acme.util\", version = \"0.3.0\"))\n"
+    directory.Write "util/src/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
     let outcome = nanyxIn (Path.Combine(directory.Path, "util")) [ "pack" ]
     Assert.Equal("", outcome.StandardError)
     let lines = outcome.StandardOutput.ReplaceLineEndings("\n").TrimEnd().Split('\n')
@@ -29,10 +24,10 @@ let ``A package is packed beside its manifest, with its SHA-256`` () =
 [<Fact>]
 let ``A package with a path dependency can't be packed`` () =
     use directory = new TempDirectory()
-    write directory "util/util.nyxp" "(package = (name = \"acme.util\", version = \"0.3.0\"))\n"
-    write directory "util/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
-    write directory "web/web.nyxp" "(package = (name = \"acme.web\", version = \"1.0.0\"), dependencies = [(package = \"acme.util\", path = \"../util\")])\n"
-    write directory "web/loud.nyx" "export module loud\n\nimport acme.util/strings\n\nexport def loud = { s: string -> shout(s) }\n"
+    directory.Write "util/util.nyxp" "(package = (name = \"acme.util\", version = \"0.3.0\"))\n"
+    directory.Write "util/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
+    directory.Write "web/web.nyxp" "(package = (name = \"acme.web\", version = \"1.0.0\"), dependencies = [(package = \"acme.util\", path = \"../util\")])\n"
+    directory.Write "web/loud.nyx" "export module loud\n\nimport acme.util/strings\n\nexport def loud = { s: string -> shout(s) }\n"
     let outcome = nanyxIn (Path.Combine(directory.Path, "web")) [ "pack" ]
     Assert.Contains("error NYX0023: The dependency 'acme.util' is found by its path, so 'acme.web' can't be packed", outcome.StandardError)
     Assert.False(File.Exists(Path.Combine(directory.Path, "web", "acme.web-1.0.0.nyxpkg")))
