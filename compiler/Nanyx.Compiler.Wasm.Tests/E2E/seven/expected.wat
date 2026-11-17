@@ -1,6 +1,5 @@
 (module
   (import "wasi_snapshot_preview1" "fd_write" (func $fd_write (param i32 i32 i32 i32) (result i32)))
-  (import "wasi_snapshot_preview1" "proc_exit" (func $proc_exit (param i32)))
   (memory 1)
   (export "memory" (memory 0))
 
@@ -24,6 +23,9 @@
     i32.const 8
     call $fd_write
     drop
+  )
+  (func $__nanyx_crashed
+    unreachable
   )
 
   (data (i32.const 256) "\00\00\00\00R\00\00\0012:27: error NYX0201: Type mismatch: 'bool' vs 'int' (deferred from compile time)\0a\00\00")
@@ -108,8 +110,7 @@
     i32.and
     i32.const 264
     call $__nanyx_write_stderr
-    i32.const 1
-    call $proc_exit
+    call $__nanyx_crashed
     unreachable
     i32.and
     local.get $c2_i64

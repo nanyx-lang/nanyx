@@ -264,9 +264,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     member this.Complex (scope: Scope) (expr: Expression) (k: Expr -> Expr) : Expr =
         // What fails once `expr` is lowered, in the expression around it, is reported there.
         let around = current
-        if not (SourceSpan.isNone expr.Span) then current <- Some expr.Span
+        // What is made from `expr` is at its place (see `Places`), and what is made after it at the place around it.
+        let aroundPlace = Places.Current
+        if not (SourceSpan.isNone expr.Span) then
+            current <- Some expr.Span
+            Places.Current <- Some { File = expr.Span.File; Line = expr.Span.StartLine + 1; InlinedAt = None }
         let k (value: Expr) =
             current <- around
+            Places.Current <- aroundPlace
             k value
         match expr.Kind with
         | UnitExpr -> k (Expr.make (Atom AUnit) IrUnit)

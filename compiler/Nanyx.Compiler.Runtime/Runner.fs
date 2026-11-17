@@ -18,8 +18,11 @@ type ArithmeticFault =
 type RunError =
     /// The WebAssembly text could not be parsed or validated.
     | InvalidModule of string
-    /// The program trapped (for example `unreachable` from a match with no matching arm) or failed to instantiate.
-    | Trapped of string
+    /// The program trapped or failed to instantiate: why, and the stack where it trapped, innermost first.
+    | Trapped of message: string * stack: Frame list
+    /// The program crashed, or reached an error deferred to run time: it wrote why to stderr, and stopped with the stack
+    /// given here, innermost first.
+    | Crashed of stack: Frame list
     /// The program asked for more memory than there is: its allocator trapped because a new block would end past
     /// 4 GB, or because the host would not grow its memory.
     | OutOfMemory
@@ -27,8 +30,8 @@ type RunError =
     /// source names, usually one that recurses in a call that is not in tail position.
     | StackOverflow of functionName: string option
     /// The program stopped at arithmetic it can't finish, in the function named here when there is one: the innermost
-    /// on the stack that the source names.
-    | ArithmeticError of fault: ArithmeticFault * functionName: string option
+    /// on the stack that the source names. The stack follows, innermost first.
+    | ArithmeticError of fault: ArithmeticFault * functionName: string option * stack: Frame list
     /// The program ended itself with a non-zero exit code, through WASI `proc_exit`: a deferred error does, once it
     /// has written itself to stderr.
     | Exited of int
@@ -163,19 +166,61 @@ module WasmRunner =
             | None -> Some(IntegerOverflow None)
         else None
 
-    /// What the trap `ex` means: out of memory when it is an `unreachable` in the allocator itself, out of stack when
-    /// the call stack is exhausted, and an arithmetic fault (see `ArithmeticFault`), each of the last two in the
-    /// innermost function on the stack that the source names.
-    let internal trapped (ex: WasmtimeException) =
+    /// The helper a crash, or an error deferred to run time, traps in once it has written why (see
+    /// `Transpiler.Wasm.WasmRuntime.Helpers.crashed`).
+    let private crashed = "__nanyx_crashed"
+
+    /// The name a stack shows for the function the backend named `name`: its name in the source (see `sourceName`),
+    /// `<lambda>` for a lambda and `<top level>` for a script's top-level code, which the compiler makes a def named
+    /// `__script` (see `NyxCompiler.Scripts.definitionName`); none for another function the compiler made, such as a
+    /// runtime helper or the start function, which runs the host, and which a stack leaves out.
+    let private shownName (name: string) =
+        match sourceName name with
+        | _ when isNull name -> None
+        | _ when name = "__script" || name = "__fn___script" -> Some "<top level>"
+        | Some name when name <> "" -> Some name
+        | _ when name.StartsWith "__lambda" -> Some "<lambda>"
+        | _ -> None
+
+    /// The program's stack where it trapped, innermost first, each frame with the file and line `table` gives its code,
+    /// if there is a table. A frame whose code was inlined from other functions is shown as the frames the calls would
+    /// have had, innermost first. A frame of a function the stack leaves out (see `shownName`) is left out.
+    let private stackOf (table: SpanTable option) (trap: TrapException) =
+        if isNull trap.Frames then []
+        else
+            trap.Frames
+            |> Seq.collect (fun frame ->
+                let place = table |> Option.map (fun table -> SpanTable.placeAt table (int frame.ModuleOffset)) |> Option.defaultValue []
+                match place with
+                | [] -> shownName frame.FunctionName |> Option.map (fun name -> { Name = name; Place = None }) |> Option.toList
+                | inlined ->
+                    inlined
+                    |> List.choose (fun (functionName, file, line) ->
+                        shownName (defaultArg functionName frame.FunctionName)
+                        |> Option.map (fun name -> { Name = name; Place = Some(file, line) })))
+            |> List.ofSeq
+
+    /// What the trap `ex` means, with the stack from `table`: out of memory when it is an `unreachable` in the allocator
+    /// itself, a crash when it is the trap in `crashed`, out of stack when the call stack is exhausted, and an arithmetic
+    /// fault (see `ArithmeticFault`), each of the last two in the innermost function on the stack that the source names.
+    let internal trapped (table: SpanTable option) (ex: WasmtimeException) =
         match ex with
         | :? TrapException as trap when trap.Type = TrapCode.Unreachable && List.tryHead (frameNames trap) = Some allocator ->
             OutOfMemory
+        | :? TrapException as trap when trap.Type = TrapCode.Unreachable && List.tryHead (frameNames trap) = Some crashed ->
+            Crashed(stackOf table trap)
         | :? TrapException as trap when trap.Type = TrapCode.StackOverflow -> StackOverflow(frameNames trap |> List.tryPick sourceName)
         | :? TrapException as trap ->
             match arithmeticFault trap with
-            | Some fault -> ArithmeticError(fault, frameNames trap |> List.tryPick sourceName)
-            | None -> Trapped ex.Message
-        | _ -> Trapped ex.Message
+            | Some fault -> ArithmeticError(fault, frameNames trap |> List.tryPick sourceName, stackOf table trap)
+            | None -> Trapped(ex.Message, stackOf table trap)
+        | _ -> Trapped(ex.Message, [])
+
+    /// The program's table of places, if it is in the binary format and has one (see `SpanTable`).
+    let internal spanTable (program: Program) =
+        match program with
+        | Binary wasm -> SpanTable.read wasm
+        | Text _ -> None
 
     /// What went wrong in the arithmetic fault `fault`, in the function `functionName` when it is known, as a
     /// sentence for the user.
@@ -188,6 +233,11 @@ module WasmRunner =
         | FloatNotAnInt ->
             $"a float that is NaN, infinite or out of the range of int converted to an int{where} (float.tryToInt gives #outOfRange for one)"
         | OutOfRange ty -> $"an int out of the range of {ty} converted to {ty}{where}"
+
+    /// The stack `stack` as the lines that follow what stopped the program, each frame on a line of its own after a
+    /// line break and two spaces, innermost first; nothing for no frames.
+    let stackText (stack: Frame list) =
+        stack |> List.map (fun frame -> $"\n  {frame}") |> String.concat ""
 
     /// `program` compiled for `engine`, or why it can't be.
     let internal compile (engine: Engine) (program: Program) : Result<Module, RunError> =
@@ -236,7 +286,7 @@ module WasmRunner =
                 with
                 | :? WasmtimeException as ex when exitedCleanly ex -> Ok (read None)
                 | :? WasmtimeException as ex when ex.ExitCode.HasValue -> Error (Exited ex.ExitCode.Value)
-                | :? WasmtimeException as ex -> Error (trapped ex)
+                | :? WasmtimeException as ex -> Error(trapped (spanTable program) ex)
             outcome, instantiated |> Option.map inspect
 
     /// `executeIn`, with the program's standard streams `io`, its command-line arguments `arguments`, its name first, and
@@ -308,6 +358,17 @@ module WasmRunner =
         (wat: string)
         : Result<int array, RunError> * HeapCounters option =
         counting io arguments directories start globals (Text wat)
+
+    /// `runCounting` for a module in the binary format, `wasm`.
+    let runCountingBinary
+        (io: ProgramIo)
+        (arguments: string list)
+        (directories: string list)
+        (start: string)
+        (globals: string array)
+        (wasm: byte array)
+        : Result<int array, RunError> * HeapCounters option =
+        counting io arguments directories start globals (Binary wasm)
 
     /// Runs the module described by `wat`, which exports its start function as `start` rather than running it when
     /// instantiated, and gives the values of its exported `i32` globals `globals` once `start` has returned. A global

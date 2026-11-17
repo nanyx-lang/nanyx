@@ -43,5 +43,5 @@ let ``A trap outside the allocator is not out of memory`` () =
 }
 """
     match runHost [ "test" ] (hostWatWith WasmOptions.Default source) with
-    | Error (Nanyx.Runtime.Trapped message) -> Assert.Contains("out of bounds", message)
+    | Error(Nanyx.Runtime.Trapped(message, _)) -> Assert.Contains("out of bounds", message)
     | other -> Assert.Fail $"Expected a trap, got {other}"

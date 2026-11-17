@@ -151,8 +151,9 @@ type private Inliner
     /// The body of `callee` for a call with `args`, at `loopDepth` loops deep: its parameters stand for the arguments
     /// that are variables of their types, and are new locals let-bound to the others (a lambda's environment, which it
     /// reads as a record, to the closure), and every variable it binds is new. It is of the callee's declared result,
-    /// which may have tags the body never makes (#1882).
-    member _.Instantiate (callee: Function) (args: Atom list) (loopDepth: int) : Expr =
+    /// which may have tags the body never makes (#1882). Each place in it says it was inlined at `site`, the call's place,
+    /// and code with no place of its own is at `site` (see `Place.InlinedAt`).
+    member _.Instantiate (callee: Function) (args: Atom list) (loopDepth: int) (site: Place option) : Expr =
         instances <- instances + 1
         let suffix = $"__in{instances}"
         let renamed = Dictionary<int, Var>()
@@ -171,7 +172,16 @@ type private Inliner
                 let fresh = { v with Id = newId (); Name = v.Name + suffix; Kind = (if v.Kind = Param then Local else v.Kind) }
                 renamed.[v.Id] <- fresh
                 fresh
-        let body = mapVars var (fun depth -> depth + loopDepth) callee.Body
+        let rec inlinedAt (place: Place) (site: Place) =
+            match place.InlinedAt with
+            | None -> { place with InlinedAt = Some(callee.Name, site) }
+            | Some(name, outer) -> { place with InlinedAt = Some(name, inlinedAt outer site) }
+        let place (own: Place option) =
+            match own, site with
+            | Some own, Some site -> Some(inlinedAt own site)
+            | None, _ -> site
+            | own, None -> own
+        let body = mapVarsAndPlaces var (fun depth -> depth + loopDepth) place callee.Body
         let body =
             if body.Type = callee.Result then body
             else
@@ -287,7 +297,7 @@ type private Inliner
                         waiting.Clear()
                         let args = args |> List.map (function AVar v when madeLocal.ContainsKey v.Id -> AVar madeLocal.[v.Id] | other -> other)
                         changed <- true
-                        this.Instantiate callee args loopDepth)
+                        this.Instantiate callee args loopDepth call.Place)
                 else None
             for link in links do
                 match link.Kind with

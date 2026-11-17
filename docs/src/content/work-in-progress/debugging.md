@@ -5,9 +5,10 @@ order: 8
 ---
 
 Today Nanyx has [`dbg`](../stdlib/console#dbg), which prints any value after where it was called and which a release
-build leaves out, and [deferred errors](../standard-tools/errors) that report their span when they're reached. There is
-no debugger and no source mapping. This page is the plan, agreed with the maintainer on 2026-11-17 and filed in stages
-([Plan](#plan)).
+build leaves out, and [deferred errors](../standard-tools/errors) that report their span when they're reached. A crash, a
+deferred error and a runtime error print the stack, with the file and line of each frame, in debug and release builds
+alike ([Crash stacks](../compiler-internals/crash-stacks)). There is no debugger. This page is the plan, agreed with the
+maintainer on 2026-11-17 and filed in stages ([Plan](#plan)).
 
 # Decisions
 
@@ -55,7 +56,7 @@ no debugger and no source mapping. This page is the plan, agreed with the mainta
 | Step | Issue | After |
 |---|---|---|
 | `dbg` prints its location; release builds strip it (done) | [#2038](https://github.com/nanyx-lang/nanyx/issues/2038) | |
-| Names and spans kept in release; crash stacks with file and line | [#2039](https://github.com/nanyx-lang/nanyx/issues/2039) | |
+| Names and spans kept in release; crash stacks with file and line (done) | [#2039](https://github.com/nanyx-lang/nanyx/issues/2039) | |
 | Debug probes, the shadow stack and locals | [#2040](https://github.com/nanyx-lang/nanyx/issues/2040) | |
 | The debug adapter: breakpoints, stepping and variables in VS Code | [#2041](https://github.com/nanyx-lang/nanyx/issues/2041) | #2040 |
 | Recording a run's effects and replaying it (Planning) | [#2042](https://github.com/nanyx-lang/nanyx/issues/2042) | |

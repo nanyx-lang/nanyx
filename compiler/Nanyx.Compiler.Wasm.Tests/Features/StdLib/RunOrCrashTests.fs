@@ -33,7 +33,7 @@ def main = {
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("1\n", outcome.StandardOutput)
-    Assert.Equal("crash: missing\n", outcome.StandardError)
+    Assert.Equal("crash: missing\n", withoutStack outcome.StandardError)
 
 [<Fact>]
 let ``Run - orCrash on a result's #error crashes with its message`` () =
@@ -57,4 +57,4 @@ def main = {
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("7\n", outcome.StandardOutput)
-    Assert.Equal("crash: Invalid number: 'x'\n", outcome.StandardError)
+    Assert.Equal("crash: Invalid number: 'x'\n", withoutStack outcome.StandardError)

@@ -21,5 +21,5 @@ let fieldsAsArguments (newTemp: IrType -> Var) (callee: string) (parameters: str
         | slot :: rest ->
             let temp = newTemp (snd fields.[slot])
             let body = load rest (AVar temp :: acc)
-            { Kind = Let(temp, { Kind = Field(record, slot); Type = temp.Type }, body); Type = body.Type }
+            Expr.make (Let(temp, Expr.make (Field(record, slot)) temp.Type, body)) body.Type
     load (List.mapi slotOf parameters) []

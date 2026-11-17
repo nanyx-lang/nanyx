@@ -109,6 +109,9 @@ module Helpers =
     let floatRem = "__nanyx_float_rem"
     let writeStderr = NyxCompiler.Intrinsics.writeStderr
     let exit = NyxCompiler.Intrinsics.exit
+    /// Ends the program once a crash or an error deferred to run time has written why: a trap in a function of this
+    /// name, which the runtime knows, so that it reports the stack under what was written rather than the trap.
+    let crashed = NyxCompiler.Intrinsics.crashed
     let stringLength = NyxCompiler.Intrinsics.stringLength
     let stringByteAt = NyxCompiler.Intrinsics.stringByteAt
     let stringSlice = NyxCompiler.Intrinsics.stringSlice
@@ -816,6 +819,11 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             $"  call ${Helpers.procExit}"
             "  unreachable"
             ")" ]
+      Helpers.crashed,
+      lines
+          [ $"(func ${Helpers.crashed}"
+            "  unreachable"
+            ")" ]
       // An int as a float: `f64.convert_i64_s` rounds to the nearest float, and is exact up to 2^53.
       Helpers.intToFloat,
       lines
@@ -1139,6 +1147,7 @@ let helperDependencies =
       Helpers.stringEquals, [ Helpers.stringLength ]
       Helpers.writeStderr, [ Helpers.stringLength ]
       Helpers.exit, [ Helpers.procExit ]
+      Helpers.crashed, []
       yield! storingDependencies Helpers.listCons (fun _ -> [ Helpers.newCell ])
       yield! storingDependencies Helpers.recordSet (fun _ -> [])
       Helpers.recordCopy, [ Helpers.newObject; Helpers.copyBytes ]
@@ -1183,6 +1192,7 @@ let private helpersWithoutMemory =
     set [ yield Helpers.stringSlice
           yield Helpers.stringConcat
           yield Helpers.exit
+          yield Helpers.crashed
           yield FloatText.bigMulPow10
           yield Helpers.floatSqrt
           yield Helpers.floatFloor
