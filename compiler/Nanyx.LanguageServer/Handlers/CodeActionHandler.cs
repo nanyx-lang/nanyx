@@ -67,8 +67,9 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
         }
 
         var only = request.Context?.Only?.ToList();
+        var quickFixes = Wanted(only, CodeActionKind.QuickFix);
         // Formatting needs only a parse, so its fixes are offered whether or not the text compiled.
-        var formatting = Wanted(only, CodeActionKind.QuickFix) && _settings.FormattingHints
+        var formatting = quickFixes && _settings.FormattingHints
             ? FormattingActions(uri, document, request.Range)
             : [];
         if (document.Compiled is not { } compiled)
@@ -83,6 +84,7 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
         var published = document.PublishedDiagnostics(uri);
         var actions = compiled.Diagnostics
             .Zip(published)
+            .Where(_ => quickFixes)
             .Where(pair => FSharpOption<Parser.Program.SourceSpan>.get_IsSome(pair.First.Span))
             .Where(pair => pair.First.Span.Value.File == document.FileName && Overlaps(pair.First.Span.Value, start, end))
             .SelectMany(pair => pair.First.Fixes.Select((fix, index) => ToAction(uri, document, fix, pair.Second, isPreferred: index == 0)))
@@ -99,7 +101,7 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             .Select(pair => pair.Second)
             .Where(diagnostic => diagnostic.Code?.String?.EndsWith("/" + NyxCompiler.UnusedImports.rule.Id) == true)
             .ToList();
-        if (unusedImports.Count > 0 && Wanted(only, CodeActionKind.QuickFix) && document.Typed)
+        if (unusedImports.Count > 0 && quickFixes && document.Typed)
         {
             foreach (var organise in OrganiseImports.at(document.RefactoringOptions(uri, _logger), document.FileName, document.Text, compiled, Recompile(uri)))
             {
