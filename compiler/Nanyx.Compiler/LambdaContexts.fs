@@ -173,10 +173,11 @@ let leaveSelf (selfTy: Ty) (valueTy: Ty) (state: InferState) : InferState =
     | _ -> state
 
 /// `state` with the contexts a lambda of type `lambdaTy` requires recorded as used: a lambda run where it is written,
-/// as a `for` loop's body is.
-let recordRunHere (lambdaTy: Ty) (state: InferState) : InferState =
+/// as a `for` loop's body is. A context a `use` around it supplies in `env`, inside the lambda it is run in, is not used
+/// (see `recordUnsupplied`).
+let recordRunHere (env: TypeEnv) (lambdaTy: Ty) (state: InferState) : InferState =
     match Unifier.unalias lambdaTy with
-    | TyFunc(_, _, contexts) -> record contexts state
+    | TyFunc(_, _, contexts) -> recordUnsupplied env contexts state
     | _ -> state
 
 /// `state` with the plain contexts among `written`, contexts as a def's type writes them, recorded as used (see
