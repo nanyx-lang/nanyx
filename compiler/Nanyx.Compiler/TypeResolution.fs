@@ -626,7 +626,9 @@ let private readTypeDefBody (state: InferState) (name: Identifier) (modifiers: T
               ContextVariable = None
               AssociatedTypes = []
               Symbol = None
-              Members = Map.empty }
+              Members = Map.empty
+              Doc = ""
+              FieldAttributes = Map.empty }
         let ty, next = typeExprToTy { state with TypeDefs = state.TypeDefs |> Map.add name self } body
         match RecursiveAliases.selfReferences ty with
         | true, false -> RecursiveAliases.close paramVars ty, { next with TypeDefs = next.TypeDefs |> Map.remove name }
@@ -717,6 +719,51 @@ let internal undeclaredHeldScopes (state: InferState) (name: Identifier) (modifi
             | _ -> diagnostic)
     | _ -> []
 
+/// The values of an attribute's argument on a field of a record type's definition, as text, by their fields' names or
+/// their positions (see `FieldAttribute`): a string's text, a number or a bool as written, a tag with its `#`, or a
+/// record or tuple of them. `None` for an argument with anything else in it.
+let internal fieldAttributeArguments (argument: Expression option) : (string * string) list option =
+    let literal (value: Expression) =
+        match value.Kind with
+        | LiteralExpr(StringLit text) -> Some text
+        | LiteralExpr(IntLit n) -> Some (string n)
+        | LiteralExpr(FloatLit x) -> Some (x.ToString("R", System.Globalization.CultureInfo.InvariantCulture))
+        | LiteralExpr(BoolLit b) -> Some (if b then "true" else "false")
+        | TagExpr(tag, None) -> Some $"#{tag}"
+        | _ -> None
+    let all (named: (string * Expression) list) =
+        let values = named |> List.map (fun (key, value) -> literal value |> Option.map (fun text -> key, text))
+        if values |> List.forall Option.isSome then Some (values |> List.choose id) else None
+    match argument with
+    | None -> Some []
+    | Some { Kind = RecordExpr fields } ->
+        fields
+        |> List.mapi (fun index field ->
+            match field with
+            | NamedField(fieldName, value) -> fieldName, value
+            | PositionalField value -> string index, value)
+        |> all
+    | Some { Kind = TupleExpr items } -> all (items |> List.mapi (fun index item -> string index, item))
+    | Some value -> all [ "0", value ]
+
+/// The attributes written before the fields of `body`, a record type's definition, by each field's name.
+let private fieldAttributesOf (body: TypeExpr) : Map<string, FieldAttribute list> =
+    match body.Kind with
+    | TypeRecord fields ->
+        TypeRecordField.withAttributes fields
+        |> List.choose (fun (attributes, field) ->
+            match field, attributes with
+            | _, [] -> None
+            | TypeField(fieldName, _, _, _), _ ->
+                let read =
+                    attributes
+                    |> List.map (fun (attributeName, argument, _) ->
+                        { Name = attributeName; Arguments = fieldAttributeArguments argument |> Option.defaultValue [] })
+                Some (fieldName, read)
+            | TypeFieldAttribute _, _ -> None)
+        |> Map.ofList
+    | _ -> Map.empty
+
 let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
     let originalTypeVars = state.TypeVars
     let mutable current = state
@@ -774,7 +821,9 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
           ContextVariable = contextVariable
           AssociatedTypes = []
           Symbol = None
-          Members = Map.empty }
+          Members = Map.empty
+          Doc = ""
+          FieldAttributes = Map.empty }
     let underlyingTy, next = readTypeDefBody stateWithParams name modifiers paramVars self body
     let selfReferences = if canReferToItself stateWithParams name modifiers then RecursiveAliases.namesOfItself name body |> List.map fst else []
     let nextNominals =
@@ -817,7 +866,9 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
           ContextVariable = contextVariable
           AssociatedTypes = TypeDefModifier.associatedTypes modifiers
           Symbol = symbol
-          Members = members }
+          Members = members
+          Doc = ""
+          FieldAttributes = if isContextDef modifiers then Map.empty else fieldAttributesOf body }
     // A name of the type in its own definition refers to it, as any other does.
     let next = selfReferences |> List.fold (fun state typeExpr -> recordTypeReference typeExpr info state) next
     { next with

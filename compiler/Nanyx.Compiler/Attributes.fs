@@ -162,13 +162,50 @@ module Attributes =
                 Diagnostics.at DiagnosticCodes.KeywordMemberType span
                     $"'{memberName}' is a `#{tag}` keyword, which passes the expression after it as a function of no parameters, so its type must be of the form {expected}")
 
-    /// The errors in the attributes of `module'`'s record types' fields. Only a member of a context declaration may
-    /// have one, and the only one it may have is `@customKeywordType`, with a kind from `WorkflowSyntax.keywordKinds`
-    /// that the member's type fits.
+    /// The attributes written before the fields of `module'`'s record type definitions, which a type's description
+    /// gives to a library (see `FieldAttribute`): each with its argument and span.
+    let private typeFieldAttributes (module': Module) =
+        let rec typeDefs (item: TopLevelItem) =
+            match item.Kind with
+            | Def (TypeDef(_, modifiers, _, body)) -> [ modifiers, body ]
+            | ModuleBlock(_, items) -> items |> List.collect typeDefs
+            | _ -> []
+        let localTypeDefs =
+            module'
+            |> List.collect SyntaxTree.ofItem
+            |> List.collect SyntaxTree.expressionsWithin
+            |> List.collect (fun expr ->
+                match expr.Kind with
+                | Block statements ->
+                    statements |> List.choose (fun statement ->
+                        match statement.Kind with
+                        | TypeDefStatement(_, modifiers, _, body) -> Some (modifiers, body)
+                        | _ -> None)
+                | _ -> [])
+        (module' |> List.collect typeDefs) @ localTypeDefs
+        |> List.collect (fun (modifiers, body) ->
+            match body.Kind with
+            | TypeRecord fields when not (List.contains Context modifiers) ->
+                fields |> List.choose (function TypeFieldAttribute(name, argument, span) -> Some (name, argument, span) | _ -> None)
+            | _ -> [])
+
+    /// The errors in the attributes of `module'`'s record types' fields. A member of a context declaration may have
+    /// only `@customKeywordType`, with a kind from `WorkflowSyntax.keywordKinds` that the member's type fits. A field of
+    /// a record type's definition may have any, whose argument is made of literals. No other record type's field may
+    /// have one.
     let private fieldAttributeErrors (module': Module) : Diagnostic list =
         let expressions = module' |> List.collect SyntaxTree.ofItem |> List.collect SyntaxTree.expressionsWithin
         let members = contextMemberAttributes module'
-        let onMembers = members |> List.map (fun ((_, _, span), _) -> span) |> Set.ofList
+        let onFields = typeFieldAttributes module'
+        let onMembers = (members |> List.map (fun ((_, _, span), _) -> span)) @ (onFields |> List.map (fun (_, _, span) -> span)) |> Set.ofList
+        let unreadable =
+            onFields
+            |> List.choose (fun (name, argument, span) ->
+                match TypeResolution.fieldAttributeArguments argument with
+                | Some _ -> None
+                | None ->
+                    Some (Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument span
+                              $"Attribute '@{name}' on a field takes literals: a string, a number, a bool or a tag, or a record or tuple of them, as in `@{name}(name = \"id\")`"))
         let types = (module' |> List.collect SyntaxTree.topLevelTypes) @ (expressions |> List.collect SyntaxTree.expressionTypes)
         let misplaced =
             types
@@ -180,7 +217,7 @@ module Attributes =
                     fields |> List.choose (function TypeFieldAttribute(name, _, span) when not (onMembers.Contains span) -> Some (name, span) | _ -> None)
                 | _ -> [])
             |> List.map (fun (name, span) ->
-                Diagnostics.at DiagnosticCodes.MisplacedAttribute span $"Attribute '@{name}' can only come before a member of a context declaration")
+                Diagnostics.at DiagnosticCodes.MisplacedAttribute span $"Attribute '@{name}' can only come before a field of a record type's definition or a member of a context declaration")
         let kinds = WorkflowSyntax.keywordKinds |> List.map (fun (kind, _) -> $"`#{kind}`") |> String.concat ", "
         let onMember ((name: Identifier, argument: Expression option, span: SourceSpan), field: TypeRecordField) =
             match argument, field with
@@ -192,7 +229,7 @@ module Attributes =
                 Some (Diagnostics.at DiagnosticCodes.UnknownKeywordKind span $"Unknown keyword kind '#{kind}': the kinds are {kinds}")
             | _ ->
                 Some (Diagnostics.at DiagnosticCodes.UnknownKeywordKind span $"Attribute '@{name}' takes the keyword's kind, as `@{name}(#bind)`: the kinds are {kinds}")
-        misplaced @ List.choose onMember members
+        misplaced @ unreadable @ List.choose onMember members
 
     /// The errors for the defs in `items` written with no value that no `@extern` declares a foreign function: those in
     /// module blocks, where no attribute applies, and those at the top level `applyAttributes` leaves as they are.

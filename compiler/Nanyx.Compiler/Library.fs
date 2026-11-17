@@ -138,8 +138,24 @@ module Compiler =
         | StandardLibraryModule name -> StandardLibrary.importPrefix + name
         | InMemory -> "<source>"
 
-    /// The file a module's syntax nodes are reported in.
-    let private sourceFileName (origin: ModuleOrigin) =
+    /// `typeDefs` with each type `origin` defines given the doc comment its definition has in `docs`, the doc comments of
+    /// `origin`'s file, which a type's description says of it (see `TypeDefInfo.Doc`).
+    let private withDocs (origin: ModuleOrigin) (docs: Lazy<FileDocComments>) (typeDefs: Map<string, TypeDefInfo>) =
+        if typeDefs |> Map.exists (fun _ info -> info.Home = origin && not info.IsContext) then
+            let docs = docs.Value
+            let declaredAt = docs.TopLevel |> Map.ofList
+            let textAt (span: SourceSpan) =
+                docs.Comments |> List.tryPick (fun comment -> match comment.Target with DocumentsDeclaration at when at = span -> Some comment.Text | _ -> None)
+            typeDefs
+            |> Map.map (fun name info ->
+                match declaredAt |> Map.tryFind name |> Option.bind textAt with
+                | Some text when info.Home = origin -> { info with Doc = text }
+                | _ -> info)
+        else typeDefs
+
+    /// The file a module's syntax nodes are reported in, which their spans name: how the backend tells whether code is in
+    /// a nominal type's home module (see `CoreIrLowerTypeMatch`).
+    let sourceFileName (origin: ModuleOrigin) =
         match origin with
         | SourceFile fullPath -> fullPath
         | StandardLibraryModule name -> StandardLibrary.importPrefix + name + ".nyx"
@@ -884,7 +900,7 @@ module Compiler =
                         { Module = inlined @ own
                           // The types of the imported definitions inlined for the backend, then the module's own.
                           Types = resolvedTypes |> Map.fold (fun acc name ty -> acc |> Map.add name ty) merged.InlinedTypes
-                          TypeDefs = resolvedTypeDefs
+                          TypeDefs = withDocs origin docComments resolvedTypeDefs
                           Items = lazy resolvedItems
                           // Filled in for the root module only, by `compileChecked`.
                           ExprTypes = Map.empty
@@ -1161,7 +1177,15 @@ module Compiler =
             for item in checkedModule.Inlined do
                 match item.Kind with
                 | Def (ValueDef(_, _, _, expr)) ->
-                    expr |> mapExpressionKinds (fun node kind -> inlinedNodes.Add node.Id |> ignore; kind) |> ignore
+                    expr
+                    |> mapExpressionKinds (fun node kind ->
+                        inlinedNodes.Add node.Id |> ignore
+                        // An arm of a match on a `Type` has the type it narrows `a` to at its pattern (see `TypeMatches`).
+                        match kind with
+                        | Match(_, arms) -> for patterns, _ in arms do for pattern in patterns do inlinedNodes.Add pattern.Id |> ignore
+                        | _ -> ()
+                        kind)
+                    |> ignore
                 | _ -> ()
             // Each module the compilation has is read only if a node inlined here is not in those before it.
             let imported = checkedModules.Imported |> List.map snd

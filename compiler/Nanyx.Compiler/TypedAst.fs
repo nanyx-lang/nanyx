@@ -248,6 +248,13 @@ type TypedTopLevelItem =
 /// is written. A context's `Members` are its members' symbols, by name; any other type has none. `Name` is the name
 /// the type is defined under in `Home`, the module that defines it, whatever it is written as elsewhere (`m.Email`
 /// under an alias): the two are a nominal type's identity (see `TypeDefInfo.nominalId`).
+/// An attribute written before a field of a record type's definition, `@json(name = "user_id")`: its name, and its
+/// argument's values as text, each by its field's name, or by its position in a tuple (`"0"` for a lone value). A
+/// type's description gives them to a library that reads the field (see `TypeValues.descriptionMembers`).
+type FieldAttribute =
+    { Name: string
+      Arguments: (string * string) list }
+
 type TypeDefInfo =
     { Name: string
       Home: ModuleOrigin
@@ -273,7 +280,11 @@ type TypeDefInfo =
       /// `AssociatedTypes`). Empty for any other type.
       AssociatedTypes: string list
       Symbol: SymbolId option
-      Members: Map<string, SymbolId> }
+      Members: Map<string, SymbolId>
+      /// The doc comment the definition has, as Markdown, or empty: what the type's description says of it.
+      Doc: string
+      /// The attributes written before each field of a record type's definition, by the field's name.
+      FieldAttributes: Map<string, FieldAttribute list> }
 
 module TypeDefInfo =
     /// The identity of the nominal type `info` defines.
