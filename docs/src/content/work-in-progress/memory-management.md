@@ -4,10 +4,9 @@ description: "How the compiler inserts Perceus reference counting, lays values o
 order: 25
 ---
 
-> **Status: implemented** in the WebAssembly backend. This page designs how compiled Nanyx programs free memory. It
-> is part of the [compilation](./compilation) workstream, and its issues carry the `compilation` and `wasm backend`
-> labels. The user-facing account is
-> [Reference counting](../foundations/reference-counting).
+This page says how the WebAssembly backend lays values out, counts references and reuses memory, and what is still
+open about it. What a user sees is in [Reference counting](../foundations/reference-counting). It is part of the
+[compilation](./compilation) workstream, and its issues carry the `compilation` and `wasm backend` labels.
 
 # Summary
 
@@ -17,18 +16,11 @@ Compiled programs free memory by reference counting in the style of
 ([Counting Immutable Beans](https://arxiv.org/abs/1908.05647), Ullrich and de Moura, 2019). The compiler inserts
 precise `dup` and `drop` operations, so an object is freed as soon as nothing refers to it. When a function takes
 apart a value it holds the only reference to and builds a new one of the same size, the old memory is reused in
-place. Generic code is monomorphised, so every object's layout is known when it is compiled.
+place. Generic code is monomorphised, so every object's layout is known when it is compiled. The host's garbage
+collector (WasmGC) is not used: it would give up reuse and deterministic freeing, and need hosts with GC support.
 
-# Where we are today
-
-The WebAssembly backend's allocator can free (`__nanyx_alloc` and `__nanyx_free` in
-`compiler/Nanyx.Compiler.Wasm/WasmAllocator.fs`; see Allocator below), every object on the heap has a reference count
-and a drop function for its type (see Object header below), and the compiler inserts `dup` and `drop` (see
-Inserting counts below), so a program frees each object once nothing refers to it, and reuses an object it takes
-apart and holds the only reference to for a new one of the same size.
-
-An `int` and a `U64` are `i64`s, and every other value an `i32` (see Value representation below). On the heap, after each object's
-header:
+An `int` and a `U64` are `i64`s, and every other value an `i32` (see [Value representation](#value-representation)).
+On the heap, after each object's header:
 
 | Value | Layout |
 |-------|--------|
@@ -43,77 +35,40 @@ String literals live in the data segment, with a header of their own. A tag with
 `(id << 1) | 1`. Codes are odd and allocations are 4-byte aligned, so a tag value is a code exactly when its low
 bit is set ([#181](https://github.com/nanyx-lang/nanyx/issues/181)).
 
-Code generation goes from the typed module through the core IR (see Core IR below) to WebAssembly text. Generic
-functions are specialised for each set of type arguments they are used at.
-
-# Why Perceus
-
-- **It fits the language.** Nanyx values are immutable (a record update makes a copy) and there are no mutable
-  references, so the heap cannot form cycles: reference counting alone frees everything.
-- **It keeps performance predictable,** as the [principles](../foundations/principles)
-  ask. Memory is freed at a point the program determines, with no collector pauses.
-- **Reuse turns functional updates into in-place ones.** Mapping over a list the caller no longer needs rewrites
-  its cells instead of allocating new ones. Nanyx code does this a lot.
-
-The alternative is WasmGC: describe objects as GC structs and let the host's collector free them. It is less work,
-but it gives up reuse and deterministic freeing, and ties the runtime to hosts with GC support.
+Code generation goes from the typed module through the [core IR](#core-ir) to WebAssembly text.
 
 # Design
 
 ## Monomorphisation
 
-`drop` has to recurse into the fields of an object it frees, so it has to know which fields are pointers. In
-generic code (a cons cell built by `list.map`, of type `List<a>`) nothing says whether a field is an integer or a
-pointer.
-
-**Decision: monomorphise.** The core IR compiles every generic function once for each set of concrete type
-arguments it is used at, so every value's type, and so every object's layout, is known at compile time. Each type
-gets a generated drop function (`drop` of a `List<string>` drops each head as a string and each tail as a list).
-Nothing at run time has to say what a field is.
-
-How other languages answer this, and why we chose this way:
-
-| Approach | Used by | Cost |
-|----------|---------|------|
-| Tag scalars in the low bit | OCaml, Erlang | 31-bit (or 63-bit) integers; a shift on arithmetic |
-| Box scalars where they cross into generic code | Koka, Lean 4, GHC | hidden allocations when a value passes through a generic function |
-| Pass type information to generic functions | Swift | an extra argument on every generic call |
-| Monomorphise | Rust, MLton, Roc | code size and compile time grow with the number of instantiations |
-
-- **Integers keep their full width.** Tagging would change what `int` means.
-- **No hidden boxing,** which is the kind of invisible cost the
-  [principles](../foundations/principles) warn about.
-- **Reuse gets better.** Perceus reuses a cell only for an allocation of the same size, and every size is now a
-  compile-time constant.
-- **It is what the language already describes.** Generic contexts such as `Num(a)` are synthesized when a generic
-  function is called at a concrete type ([contexts](../advanced/contexts)). A function that
-  reads fields of any record that has them is specialised per record layout, which also removes the run-time field
-  lookup (`__nanyx_open_field`).
-- **The compiler already sees the whole program.** The definitions a module reaches in the modules it imports (the
-  prelude included) are inlined into it before code generation (`Inlined` in `Library.fs`), so every generic
-  function's body is available to specialise. Roc, the closest language to Nanyx
-  (pure, reference counted with in-place reuse, compiling to WebAssembly), takes the same route.
+`drop` has to recurse into the fields of an object it frees, so it has to know which fields are pointers. The core IR
+compiles every generic function once for each set of concrete type arguments it is used at, so every value's type,
+and so every object's layout, is known at compile time. Each type gets a generated drop function (`drop` of a
+`List<string>` drops each head as a string and each tail as a list), and nothing at run time has to say what a field
+is. Integers keep their full width, nothing is boxed behind the program's back, and every size Perceus reuses is a
+compile-time constant. A function that reads fields of any record that has them is specialised per record layout. The
+definitions a module reaches in the modules it imports (the prelude included) are inlined into it before code
+generation (`Inlined` in `Library.fs`), so every generic function's body is available to specialise.
 
 Tags keep their odd codes: a value of type `#some(string) | #none` is still a code or a cell, decided at run time,
 and its drop function checks the low bit before reading the cell.
 
 If code size becomes a problem, the fallback is Koka and Lean's: box values only at the generic boundaries that are
-not specialised. Monomorphising first does not rule that out.
+not specialised (see [Open questions](#open-questions)).
 
 ## Value representation
 
-With every type known, values no longer have to fit one `i32`. Integers, floats and booleans are stored unboxed at
-their own width, in locals, fields and payloads alike, and a record's fields get a layout of their own. Floats stop
-being boxed.
+Every value is held at its own width, in locals, fields and payloads alike, except floats, which are still boxed.
+Unboxing them is still to do.
 
-**Implemented for `int`:** an `int` is an `i64` in locals, parameters and results, and takes 8 bytes in a field, a list
-cell's head, a tag's payload and a closure's captures, with the narrower sized integers in their own width and every
-other value in 4 (`CoreIrLayout.fs`). A local of an
-`int` is named with `_i64` after the variable's name, since variables of the same kind and name share a local. The
-runtime helpers that store a value (`listCons`, `tagBox`, `recordSet` and the rest) have an `_i64` variant, and a call
-through a closure uses a function type of the values it passes (`Wat.indirectTypeName`). Floats are still boxed.
+An `int` is an `i64` in locals, parameters and results, and takes 8 bytes in a field, a list cell's head, a tag's
+payload and a closure's captures, with the narrower sized integers in their own width and every other value in 4
+(`CoreIrLayout.fs`). A local of an `int` is named with `_i64` after the variable's name, since variables of the same
+kind and name share a local. The runtime helpers that store a value (`listCons`, `tagBox`, `recordSet` and the rest)
+have an `_i64` variant, and a call through a closure uses a function type of the values it passes
+(`Wat.indirectTypeName`).
 
-**Implemented for the sized integers:** a `U64` is held as an `int` is. `I8`, `I16`, `I32`, `U8`, `U16` and `U32` are
+A `U64` is held as an `int` is. `I8`, `I16`, `I32`, `U8`, `U16` and `U32` are
 `i32`s in locals, sign-extended or zero-extended from their width as they are signed or not. In a field, a list
 cell's head, a tag's payload and a closure's captures each takes its own width: an `I8` or a `U8` 1 byte, written
 with `i32.store8` and read with `i32.load8_s` or `i32.load8_u`, an `I16` or a `U16` 2, with `i32.store16` and
@@ -121,11 +76,6 @@ with `i32.store8` and read with `i32.load8_s` or `i32.load8_u`, an `I16` or a `U
 another with no padding, so an `int` after a `U8` is read unaligned, which WebAssembly allows. Each storing helper has
 a variant for each width, `_i8`, `_i16` and `_i64` after its name (`WasmRuntime.Storage`). An `F32` is boxed as a
 float is, in a 4-byte box holding the `f32`.
-
-`int` is a 64-bit integer on every target, and the language adds numbers of other fixed widths (`I32`, `U8`, `F32`
-and so on; see [Sized numbers](../advanced/sized-numbers)). Each maps to the Wasm
-type of its width: `I64` and `int` to `i64`, `F64` and `float` to `f64`, the narrower integers to `i32` in locals and
-to their own width in fields.
 
 Pointers stay 32-bit: linear memory stays `memory32`. A 64-bit address space (Wasm `memory64`) only matters past
 4 GB of heap, and would double the size of every pointer field.
@@ -152,7 +102,9 @@ one block per lifted function in the data segment, after the string literals, la
 (the count, the info word, the table slot), with an info word of 0, since nothing drops it. In the core IR it is an
 atom, `AStaticClosure`, so reference counting gives it no dup or drop, and making one is an `i32.const`.
 
-**Drop functions.** `CoreIrDrop.fs` generates one for each type on the heap that the module's functions use
+### Drop functions
+
+`CoreIrDrop.fs` generates one for each type on the heap that the module's functions use
 (`__nanyx_drop_list_string`, named by the type), together with the types of their fields. Each gives up a reference
 and, when it was the last, drops the fields that are on the heap and frees the object:
 
@@ -183,8 +135,8 @@ and, when it was the last, drops the fields that are on the heap and frees the o
 
 ## Allocator
 
-Segregated free lists by size class, falling back to bumping `$heap_ptr` (and growing memory) when a class's list
-has nothing to give ([#292](https://github.com/nanyx-lang/nanyx/issues/292), done). Most objects are a handful of
+`__nanyx_alloc` and `__nanyx_free` (`WasmAllocator.fs`) keep segregated free lists by size class, falling back to
+bumping `$heap_ptr` (and growing memory) when a class's list has nothing to give. Most objects are a handful of
 words, so a few small classes cover them; larger objects (long strings, wide records) take a general free list.
 
 - **Sizes.** `alloc(n)` rounds `n` up to a multiple of 4 (and at least 4), so blocks stay 4-byte aligned and
@@ -194,9 +146,8 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
   the count, then the info word (if any), then the fields, so the size word sits just before the count. For a
   string, say, that puts the count at `p - 8`, the length at `p - 4`, and the size at `p - 12`; for a list cell,
   the count at `p - 4` and the size at `p - 8`.
-  The drop functions will know each object's size from its type, so the size word could later go; it costs 4
-  bytes per object but keeps `free` independent of types, and lets the large list hand out a bigger block than
-  asked for and still take all of it back.
+  The word keeps `free` independent of types, and lets the large list hand out a bigger block than asked for and
+  still take all of it back.
 - **Classes.** Each size from 4 to 256 bytes (64 words) has its own list, so a freed block goes back to exactly the
   size Perceus will next ask for, without a search. Larger blocks share one list, searched first-fit. The classes
   reach 256 bytes so that the strings and records programs make most of never go on that list
@@ -207,26 +158,22 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
   8-byte aligned (`heapBaseAfter`); the module starts with enough pages of memory to hold them. A free block keeps the next block of its list in its first word. On a small size's list, `free` pushes onto the
   front and `alloc` takes from the front, so the most recently freed block is reused first.
 - **Large blocks.** `free` joins a large block with the free large blocks just before and after it, and a block that
-  then ends at `$heap_ptr` goes back to the heap instead ([#1290](https://github.com/nanyx-lang/nanyx/issues/1290),
-  done); otherwise it goes on the front of the large list. It finds those neighbours without walking the list, by
-  boundary tags ([#1614](https://github.com/nanyx-lang/nanyx/issues/1614), `WasmAllocator.SizeWordBits`): a free large
+  then ends at `$heap_ptr` goes back to the heap instead; otherwise it goes on the front of the large list. It finds
+  those neighbours without walking the list, by boundary tags (`WasmAllocator.SizeWordBits`): a free large
   block has its size in its last word as well as in its size word, and two bits of a size word, which a size never
   uses, say whether the block is a free large block and whether the block just before it is one. The block after
   ends where this one does, so its size word is read directly; the block before is found from the size at its end,
   when this block's bit says it is free. The list is doubly linked (a free large block's second word links back), so
   a neighbour is taken off it at once. `alloc` keeps the bits: it clears the bit of the block after a large block it
   hands out whole, and a small block's size word keeps the bit through being freed and handed out again. A free large
-  block never ends at `$heap_ptr` and never follows another, since `free` would have joined them. Eighty thousand
-  strings of 300 bytes, freed apart lowest first, took 12.3 s to drop when `free` walked a list kept in address
-  order, and take 11 ms now. `alloc` splits a block it takes from the list
+  block never ends at `$heap_ptr` and never follows another, since `free` would have joined them. `alloc` splits a block it takes from the list
   when the rest would be a large block too; otherwise the block keeps its own size. This is what a string grown
   by `++` needs: each copy is freed after the next is made, the copies before it join into a block the one after
   fits in, so the heap holds about two copies of the string, not every copy there was.
 - **Out of memory.** Past 4 GB, the end of a new block wraps around; `alloc` checks for that, and for `memory.grow`
   failing, and traps with `unreachable`. It writes no message itself, so a module that never prints imports nothing
-  for it; `nanyx run` reports an `unreachable` in `__nanyx_alloc` as `Runtime error: out of memory`
-  ([#1349](https://github.com/nanyx-lang/nanyx/issues/1349), done). A host other than the CLI does the same in its
-  own runtime.
+  for it; `nanyx run` reports an `unreachable` in `__nanyx_alloc` as `Runtime error: out of memory`. A host other
+  than the CLI does the same in its own runtime.
 
 Small free blocks are never joined, with each other or with large ones, and the heap never shrinks: memory once
 grown is not given back to the host. `alloc` still searches the large list first-fit, so many large free blocks too
@@ -235,7 +182,7 @@ small for a request are each passed over.
 ## Core IR
 
 Perceus works per variable: it inserts a `drop x` after the last use of `x`, and a `dup x` before every use but the
-last. That needs a program where every intermediate value has a name and a definite position. A new core IR sits
+last. That needs a program where every intermediate value has a name and a definite position, so the core IR sits
 between the typed AST and WebAssembly text:
 
 ```
@@ -244,9 +191,8 @@ source → AST → typed AST → core IR → WAT
 
 It has few constructs (`let`, call, `match`, allocate, read field, and the like), in A-normal form, with a
 concrete type on every node: generic functions are specialised as the IR is built (see Monomorphisation). Pipes,
-interpolation, `if ... is`, record updates, workflows and context calls are lowered into it. Code generation then
-works from the IR. This is worth doing for its own sake: later optimisations, a second
-backend and a simpler `CodeGen.fs` all benefit.
+interpolation, `if ... is`, record updates, workflows and context calls are lowered into it, and code generation
+works from it alone.
 
 **Shape.** The IR is in `compiler/Nanyx.Compiler.Wasm/CoreIr.fs`. A function has typed parameters, a result type and
 a body. Types are concrete (`int`, `bool`, `unit`, `string`, `float`, a union of tags, a record, a list, a function),
@@ -504,20 +450,8 @@ count of one: `__nanyx_list_cons_at`, `__nanyx_tag_box_at` and `__nanyx_reuse_ob
 block, and `UpdateRecord` when it updates the record in place. The runner reads the counters however the program
 stopped (`WasmRunner.runCounting`), so the report follows a trap, a failed check or a leak too.
 
-On the examples, from `nanyx run --memory examples/<name>.nyx` at the commit that added it (an earlier table, filled
-in by hand, compared the allocator before counting, with counting, and with reuse):
-
-| Example | Allocations | Reused in place | Bytes allocated | Peak live bytes | Peak heap |
-|---------|-------------|-----------------|-----------------|-----------------|-----------|
-| `directives` | 13 | 0 | 264 | 100 | 5,124 |
-| `money` | 6 | 0 | 128 | 112 | 4,956 |
-| `shop` | 1,618 | 392 | 31,408 | 824 | 9,260 |
-
 ## Things that need care
 
-- **Recursive local closures.** A local def that calls itself would be bound to a closure that captures itself, the
-  one cycle the language can make. Lambda lifting avoids it: the lifted function refers to itself through the
-  closure it is called with, which it does not capture.
 - **Closures and contexts.** Capturing a value duplicates it, and freeing a closure drops what it captured. Context
   members that are not known where a function is called are passed as closures and follow the same rules.
 - **Host calls.** Strings handed to the runtime (`dbg`, a deferred error) are borrowed for the call. The console host
@@ -529,17 +463,20 @@ in by hand, compared the allocator before counting, with counting, and with reus
   function that returns one made from its arguments, `CoreIrCounting.inferAddressResults`) as a use of the strings it
   is an address in (`addressFlow`): an instruction that reads it reads them last, and they live until it is done. A
   string made in the argument of `addressOf` is a temporary with no name to follow, and is dropped at once.
-- **Tail calls.** The language guarantees that a tail call uses no stack ([Tail calls](./tail-calls)), so a
-  variable that dies at a tail call is dropped before the call, and an argument the caller owns is passed owned:
-  if the callee only borrowed it, the caller would have to outlive the call.
+
+# Still to do
+
+- **Unbox floats.** A `float` or an `F32` is still a pointer to a box on the heap.
 
 # Open questions
 
-- **Code size.** Monomorphisation multiplies generic functions; how much does that grow the examples, and when
-  should the boxing fallback kick in?
+- **Code size.** Monomorphisation multiplies generic functions; how much does that grow programs, and when should
+  the boxing fallback kick in?
 - **Should reuse be visible?** Koka's `fip` annotation lets a function promise it runs fully in place, and the
-  compiler checks it. That would suit Nanyx's stance on predictable performance, but is not needed to start.
-- **Measuring.** Both, for now: every test program runs with the memory checks, the tests run long loops in
-  constant memory, and `nanyx run --memory` gives allocations, reuses and peak memory for any program, as the table
-  above does for the examples. The examples are small and mostly build strings; a benchmark that transforms large data
+  compiler checks it. That would suit Nanyx's stance on predictable performance.
+- **A benchmark for reuse.** The examples are small and mostly build strings; a benchmark that transforms large data
   structures would show what reuse is worth.
+- **The size word.** Each block keeps its size in a word before it, though the drop functions know each object's size
+  from its type. Dropping it would save 4 bytes an object, but tie `free` to types.
+- **Small free blocks and shrinking.** Small free blocks are never joined, with each other or with large ones, and
+  memory once grown is never given back to the host. Whether either is worth doing is open.
