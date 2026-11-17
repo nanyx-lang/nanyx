@@ -16,11 +16,9 @@ let rec plug (hole: Expr) (rest: Expr) (lowered: Expr) : Expr =
     else
         match lowered.Kind with
         | Let(var, value, body) ->
-            let body = plug hole rest body
-            { Kind = Let(var, value, body); Type = body.Type }
+            Expr.letIn var value (plug hole rest body)
         | Do(value, body) ->
-            let body = plug hole rest body
-            { Kind = Do(value, body); Type = body.Type }
+            Expr.doThen value (plug hole rest body)
         | _ -> internalError "a block's statement was lowered with the rest of the block somewhere other than after its lets"
 
 /// A block's `statements` lowered by `statement`, which lowers the first of the statements it is given around a hole,

@@ -138,3 +138,16 @@ println(force(counted([1, 2])))
 """
     for inlineCalls in [ true; false ] do
         runSourceWithOptions true inlineCalls "" (normalized source) |> assertRan "0\n2\n"
+
+[<Fact>]
+let ``Run - a def's result built by a call given a capturing lambda is adapted to its contexts`` () =
+    // #1949: the call's argument closes over `xs`, and its value was stored while the result waited to be adapted.
+    let source =
+        thunk
+        + """
+def countedInts: list(int) -> [Console] Thunk(int) = { xs -> map(pure, { x -> x + list.length(xs) }) }
+
+println(force(countedInts([1, 2])))
+"""
+    for inlineCalls in [ true; false ] do
+        runSourceWithOptions true inlineCalls "" (normalized source) |> assertRan "3\n"
