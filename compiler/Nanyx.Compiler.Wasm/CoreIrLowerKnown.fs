@@ -128,6 +128,7 @@ let usedOf (ids: Set<int>) (body: Expr) : Set<int> =
         | CallRuntime(_, atoms, _)
         | CallImport(_, atoms)
         | MakeClosure(_, _, atoms) -> List.iter atom atoms
+        | CopyArrayInto(target, at, source) -> List.iter atom [ target; at; source ]
         | MakeRecord fields -> fields |> List.iter (snd >> atom)
         | UpdateRecord(record, updates) -> atom record; updates |> List.iter (snd >> atom)
         | Assign(target, value)

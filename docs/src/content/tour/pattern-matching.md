@@ -56,6 +56,8 @@ match xs
   | _ -> "other"
 ```
 
+A nested match, or a `for` loop's arms, may also start on the outer arm's own line, as in `| #some(lines) -> for lines | line -> println(line)`. Its later arms must then start lines indented further than that one, so the outer match's next arm still ends it.
+
 A match written on one line takes every arm after it on that line, so a nested match in the middle of a one-line match needs brackets: `| [a] -> (match a | 0 -> "zero" | _ -> "one") | _ -> "other"`.
 
 # Destructuring

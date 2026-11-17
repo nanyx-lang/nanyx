@@ -72,14 +72,13 @@ let ``A dependency is read as its name and the directory it is in`` () =
     use package = new TempPackage(util @ [ app [ "acme.util", "util" ]; mainImporting "acme.util/strings" "ignore(shout(\"hi\"))" ])
     let read = okOf (Manifest.read (package.Path "app/app.nyxp"))
     Assert.Equal<string list>([ "acme.util" ], read.Dependencies |> List.map _.Name)
-    Assert.Equal(Path.GetFullPath(package.Path "util"), read.Dependencies.Head.Directory)
+    Assert.Equal(AtPath(Path.GetFullPath(package.Path "util")), read.Dependencies.Head.Source)
 
 [<Fact>]
 let ``A version is read as the versions it accepts, found through the lockfile`` () =
     let manifest = """(package = (name = "app", version = "0.1.0"), dependencies = [(package = "acme.util", version = "1.2")])"""
     let dependency = (okOf (Manifest.check "app.nyxp" manifest)).Dependencies |> List.exactlyOne
-    Assert.Equal("", dependency.Directory)
-    Assert.Equal(Some "1.2", dependency.Version |> Option.map string)
+    Assert.Equal(Some "1.2", (match dependency.Source with FromIndex requirement -> Some(string requirement) | _ -> None))
 
 [<Fact>]
 let ``A dependency without a path is an error`` () =

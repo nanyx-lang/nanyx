@@ -155,3 +155,12 @@ let ``A directory whose name is not a package name needs --name`` () =
     Assert.Contains("is not a package name, which must be lower case, with words separated by dots, as `acme.web`: give one with `--name`", outcome.StandardError)
     let named = nanyxIn directory.Path [ "migrate"; "--name"; "acme.scripts"; "My Scripts" ]
     Assert.Equal(0, named.ExitCode)
+
+[<Fact>]
+let ``A directive whose version isn't one is an error naming it`` () =
+    use directory = new TempDirectory()
+    let root = scripts directory "app" [ "app.nyx", "::dependency acme.util 1.x\n\nprintln(\"hi\")\n" ]
+    let outcome = nanyxIn directory.Path [ "migrate"; "app" ]
+    Assert.Contains("app.nyx:1: ::dependency acme.util 1.x: '1.x' is not a version, which must be a version, `1.2.0`, or its first numbers, `1.2`", outcome.StandardError)
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.False(File.Exists(Path.Combine(root, "app.nyxp")))

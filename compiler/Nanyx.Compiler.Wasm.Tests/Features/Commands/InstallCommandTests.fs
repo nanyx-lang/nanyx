@@ -89,3 +89,21 @@ let ``A package that isn't shipped needs a path or a version`` () =
     let outcome = nanyxIn app [ "install"; "acme.util" ]
     Assert.Equal("error: Neither `--path` nor `--version` was given: give the directory 'acme.util' is in with `--path`, or its version with `--version`\n", outcome.StandardError.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
+
+[<Fact>]
+let ``A version that isn't one is an error, and the manifest is left as it was`` () =
+    use directory = new TempDirectory()
+    let app = appWith directory plain
+    let outcome = nanyxIn app [ "install"; "acme.json"; "--version"; "1.x" ]
+    Assert.Equal("error: '1.x' is not a version, which must be a version, `1.2.0`, or its first numbers, `1.2`\n", outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal(plain, manifestOf app)
+[<Fact>]
+let ``A directory with two manifests is an error naming both`` () =
+    use directory = new TempDirectory()
+    let app = appWith directory plain
+    File.WriteAllText(Path.Combine(directory.Path, "util", "other.nyxp"), "(package = (name = \"acme.other\", version = \"0.1.0\"))\n")
+    let outcome = nanyxIn app [ "install"; "acme.util"; "--path"; "../util" ]
+    Assert.Contains("has more than one .nyxp manifest: 'other.nyxp' and 'util.nyxp'", outcome.StandardError)
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal(plain, manifestOf app)

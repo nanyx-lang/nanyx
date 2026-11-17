@@ -45,6 +45,7 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | SetField(record, _, value) -> [ value, Owned; AVar record, Borrowed ]
     | MakeList items -> all Owned items
     | CallRuntime(name, args, _) -> args |> List.mapi (fun index arg -> arg, Helpers.operandUse name index)
+    | CopyArrayInto(target, at, source) -> all Borrowed [ target; at; source ]
     // A float is passed as the number in its box, which is only read.
     | CallImport(_, args) -> all Borrowed args
     | MakeClosure(_, _, captured) -> all Owned captured
@@ -196,8 +197,8 @@ let private borrowedFrom (func: Function) (roots: Set<int>) : Set<int> =
 /// Whether an arm of a `match` in `func` on one of `borrowed` could reuse the block of the object it takes apart (see
 /// `CoreIrReuseSites`), or of one inside it, which only a function that owns the object can.
 let private couldReuse (func: Function) (borrowed: Set<int>) : bool =
-    let token = { Id = 0; Name = "__reuse"; Kind = Scratch; Type = IrWord }
-    let inner ty = { Id = 0; Name = "__inner"; Kind = Scratch; Type = ty }
+    let token = CoreIrReuseSites.reuseToken 0
+    let inner = CoreIrReuseSites.innerObject 0
     nodes func.Body
     |> Seq.exists (fun e ->
         match e.Kind with

@@ -87,12 +87,12 @@ let ``A file and a package on GitHub are read with the commit they are pinned to
     Assert.Equal(commit, file.Reference.Commit)
     let dependency = manifest.Dependencies |> List.exactlyOne
     Assert.Equal("acme.web", dependency.Name)
-    Assert.Equal(Some { Repository = { Owner = "acme"; Name = "web" }; File = None; Commit = commit }, dependency.GitHub)
+    Assert.Equal(OnGitHub { Repository = { Owner = "acme"; Name = "web" }; File = None; Commit = commit }, dependency.Source)
 
 [<Fact>]
 let ``A tag is pinned by the commit beside it`` () =
     let manifest = okOf (Manifest.check "app.nyxp" (manifestWith $"""(package = "acme.web", github = "acme/web", rev = "v1.0", commit = "{commit}")"""))
-    Assert.Equal(commit, manifest.Dependencies.Head.GitHub.Value.Commit)
+    Assert.Equal(Some commit, (match manifest.Dependencies.Head.Source with OnGitHub reference -> Some reference.Commit | _ -> None))
 
 [<Fact>]
 let ``A reference with no rev is not pinned`` () =
