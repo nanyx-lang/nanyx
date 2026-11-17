@@ -248,6 +248,27 @@ public sealed class CodeActionTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task A_match_offers_to_convert_to_an_if()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-match-to-if");
+        const string text = """
+            def pick = { (ok: bool) ->
+              match ok
+                | true -> 1
+                | false -> 2
+            }
+
+            """;
+
+        Open(uri, text.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var convert = Assert.Single(await CodeActionsIn(uri, new Range(1, 3, 1, 3)), action => action.Title == "Convert to if");
+        Assert.Equal(CodeActionKind.RefactorRewrite, convert.Kind);
+        Assert.Equal("def pick = { (ok: bool) ->\n  if ok then 1 else 2\n}\n", Applied(text.ReplaceLineEndings("\n"), Assert.Single(convert.Edit!.Changes![uri])));
+    }
+
+    [Fact]
     public async Task A_selected_expression_offers_to_introduce_a_function()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-introduce-function");
