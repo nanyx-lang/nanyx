@@ -34,6 +34,17 @@ match file.write(log, "started\n")
   | #error(e) -> eprintln("Couldn't write the log: {e}")
 ```
 
+`file.lines` reads a file a line at a time, lazily, so a file of any size is never held whole. It gives `#error` when
+the file can't be read, and otherwise a sequence that reads a chunk of the file each time it needs more:
+
+```nanyx fragment
+match file.lines(path.of("access.log"))
+  | #some(lines) ->
+    def errors = lines \seq.filter { line -> string.contains(line, " 500 ") }
+    println("{seq.fold(errors, 0, { count, _ -> count + 1 })} server errors")
+  | #error(e) -> eprintln("Couldn't read the log: {e}")
+```
+
 # Reference
 
 <!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->
@@ -93,5 +104,25 @@ def delete: [FileSystem] Path -> #ok | #error(FsError)
 ```
 
 Deletes the file at `at`. A directory is `#error(#isDirectory)`: this deletes only files.
+
+## `lines`
+
+```nanyx fragment
+def lines: [FileSystem] Path -> #some([FileSystem] seq(string)) | #error(FsError)
+```
+
+The lines of the file at `at`, read lazily, a chunk at a time: a file larger than memory is
+never held whole. Each line is without its line break, `\n` or `\r\n`, and a last line with none
+is a line too. The first chunk is read when this is called, and `#error` says why the file can't
+be read; after that, the file is opened, read and closed again for each chunk the sequence pulls,
+so a sequence abandoned before its end leaves nothing open. A read that fails partway, because the
+file was deleted, say, ends the sequence there.
+
+```nanyx fragment
+match file.lines(path.of("big.log"))
+  | #some(lines) ->
+    for lines | line -> println(line)
+  | #error(e) -> println("Couldn't read the log: {e}")
+```
 
 <!-- End of the generated reference. -->

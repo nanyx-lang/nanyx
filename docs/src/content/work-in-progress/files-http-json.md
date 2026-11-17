@@ -6,7 +6,7 @@ order: 5
 
 Reading and writing files, making and serving HTTP requests, and reading and writing JSON are the minimum for most
 useful programs. This page is their design, decided by the maintainer on 2026-11-17. The file system is built, but for
-`file.lines` and the check described under [Still open](#still-open-for-the-file-system), and so is the first layer of
+the check described under [Still open](#still-open-for-the-file-system), and so is the first layer of
 `nanyx.json`, the `Json` value with parsing and printing ([#1787](https://github.com/nanyx-lang/nanyx/issues/1787)).
 HTTP and JSON's encoders and decoders are not built yet.
 
@@ -52,9 +52,9 @@ match config
   string passed where a path was meant, and normalises separators.
 - **Functions:** `file.read`, `readBytes`, `write`, `append`, `exists` and `delete`, and `dir.list` and `dir.create`.
   `FsError` is `#notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)`.
-- **Lazily, line by line:** `file.lines(path)` is a `[FileSystem] seq(string)`
-  ([Lazy sequences](./lazy-sequences)), so a large file is never read whole. Not built yet
-  ([#1784](https://github.com/nanyx-lang/nanyx/issues/1784)).
+- **Lazily, line by line:** `file.lines(path)` gives `#some` of a `[FileSystem] seq(string)`
+  ([Lazy sequences](./lazy-sequences)), so a large file is never read whole, or `#error(FsError)` when the file
+  can't be read ([#1784](https://github.com/nanyx-lang/nanyx/issues/1784)). Each line is without its `\n` or `\r\n`.
 - **Scoped by default.** The console host implements it with WASI's file calls. `nanyx run` gives a program the
   current directory and nothing outside it unless `--allow-dir` adds more, and anything outside is
   `#permissionDenied`.
@@ -90,6 +90,19 @@ match config
   written with `/`. `nanyx run` passes the shell's directory and the one `--allow-dir` names (`Program.RunIn`); a
   directory that isn't there is a usage error. Output a test redirects is written by WASI to files of its own, then
   copied to the caller's streams, so that `fd_write` stays WASI's and writes to files too.
+
+- **`file.lines`** reads a chunk of 64 KB at a time through a member of its own, `readFileChunk(at, offset,
+  length)`, and splits it at `\n`, carrying a line that runs past the chunk into the next; the sequence is
+  `seq.unfold` over what is left (the lines split but not given yet, that carried start, and the offset of the next
+  chunk). Settled here:
+  - **Its errors.** A `seq(string)` has nowhere to put an `FsError`, so `file.lines` reads the first chunk when it is
+    called and gives `#some(lines)` or `#error(FsError)`, and the sequence it gives ends early when a later read
+    fails (the file was deleted, say).
+  - **Nothing is left open.** The console host opens the file, reads the chunk with `fd_pread` at its offset, and
+    closes it again, for each chunk, so a sequence abandoned before its end holds no file, and no drop hook is needed:
+    the open question of what dropping one does is gone. Reading at an offset, rather than on from where the last
+    read left off, also keeps a sequence a value: pulling it again reads the same lines again, as any sequence does.
+    A file changed between two chunks is read as it is when each chunk is read.
 
 ## Still open for the file system
 
@@ -168,7 +181,7 @@ be a compiler special case that a SQL or YAML library couldn't use.
 | Issue | What | After |
 |---|---|---|
 | [#1783](https://github.com/nanyx-lang/nanyx/issues/1783) | `nanyx.fs`: `FileSystem`, `Path`, the functions, in the console host: built, but for [#1811](https://github.com/nanyx-lang/nanyx/issues/1811) | |
-| [#1784](https://github.com/nanyx-lang/nanyx/issues/1784) | `file.lines` as a lazy `seq` | #1783 |
+| [#1784](https://github.com/nanyx-lang/nanyx/issues/1784) | `file.lines` as a lazy `seq` (done) | #1783 |
 | [#1785](https://github.com/nanyx-lang/nanyx/issues/1785) | `nanyx.http.core` and the client, through a runtime import | |
 | [#1786](https://github.com/nanyx-lang/nanyx/issues/1786) | The HTTP host, served locally by `nanyx run` | #1785 |
 | [#1787](https://github.com/nanyx-lang/nanyx/issues/1787) | `nanyx.json`: the `Json` value, parsing and printing (done) | |
@@ -177,7 +190,5 @@ be a compiler special case that a SQL or YAML library couldn't use.
 
 # Open questions
 
-- **A dropped `file.lines`.** Does dropping a sequence that wasn't read to its end close the file (a drop hook on a
-  value), or does it stay open until the program ends? Settled in #1784.
 - **Package names.** `nanyx.fs`, `nanyx.http.core`, `nanyx.http` and `nanyx.json` are working names, as the console
   packages' are.
