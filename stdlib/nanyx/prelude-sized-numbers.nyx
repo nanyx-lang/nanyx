@@ -36,6 +36,8 @@ export def I8.fromInt: int -> I8 = { n ->
   __nanyx_from_int(n)
 }
 
+export def I8.isInteger: bool = true
+
 export def I8.compare: I8, I8 -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
 }
@@ -77,6 +79,8 @@ export def I16.`%`: I16, I16 -> I16 = { x, y ->
 export def I16.fromInt: int -> I16 = { n ->
   __nanyx_from_int(n)
 }
+
+export def I16.isInteger: bool = true
 
 export def I16.compare: I16, I16 -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
@@ -120,6 +124,8 @@ export def I32.fromInt: int -> I32 = { n ->
   __nanyx_from_int(n)
 }
 
+export def I32.isInteger: bool = true
+
 export def I32.compare: I32, I32 -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
 }
@@ -161,6 +167,8 @@ export def U8.`%`: U8, U8 -> U8 = { x, y ->
 export def U8.fromInt: int -> U8 = { n ->
   __nanyx_from_int(n)
 }
+
+export def U8.isInteger: bool = true
 
 export def U8.compare: U8, U8 -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
@@ -204,6 +212,8 @@ export def U16.fromInt: int -> U16 = { n ->
   __nanyx_from_int(n)
 }
 
+export def U16.isInteger: bool = true
+
 export def U16.compare: U16, U16 -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
 }
@@ -246,6 +256,8 @@ export def U32.fromInt: int -> U32 = { n ->
   __nanyx_from_int(n)
 }
 
+export def U32.isInteger: bool = true
+
 export def U32.compare: U32, U32 -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
 }
@@ -287,6 +299,8 @@ export def U64.`%`: U64, U64 -> U64 = { x, y ->
 export def U64.fromInt: int -> U64 = { n ->
   __nanyx_from_int(n)
 }
+
+export def U64.isInteger: bool = true
 
 export def U64.compare: U64, U64 -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
@@ -332,6 +346,8 @@ export def F32.`%`: F32, F32 -> F32 = { x, y ->
 export def F32.fromInt: int -> F32 = { n ->
   __nanyx_from_int(n)
 }
+
+export def F32.isInteger: bool = false
 
 export def F32.compare: F32, F32 -> #less | #equal | #greater = { x, y ->
   __compare(x, y)

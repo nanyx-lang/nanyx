@@ -673,7 +673,19 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                     let constrained = addAssignableConstraint (TyTag(tagName, None)) scrutineeTy state'
                     Ok (env', constrained, mkTypedPattern pattern scrutineeTy)
                 | Some payload ->
-                    let payloadTy, nextState = freshVar state'
+                    // Where the scrutinee is a union that names the tag, as the arms' union does (`ArmUnion`), the
+                    // payload pattern matches its payload. A fresh variable would leave the tags a nested pattern
+                    // gives it to be solved after the scrutinee's own type reaches it, so two of them would meet
+                    // each other first (#1808).
+                    let knownPayload =
+                        match scrutineeTy with
+                        | TyTag(name, Some payloadTy) when name = tagName -> Some payloadTy
+                        | TyUnion items -> items |> List.tryPick (function TyTag(name, Some payloadTy) when name = tagName -> Some payloadTy | _ -> None)
+                        | _ -> None
+                    let payloadTy, nextState =
+                        match knownPayload with
+                        | Some payloadTy -> payloadTy, state'
+                        | None -> freshVar state'
                     let constrained = addAssignableConstraint (TyTag(tagName, Some payloadTy)) scrutineeTy nextState
                     match inferPattern armBody env' constrained payloadTy payload with
                     | Ok (nextEnv, nextState, _) ->

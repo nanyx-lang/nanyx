@@ -121,6 +121,7 @@ def main = {
     `/` = { x, y -> x }
     `%` = { x, y -> x }
     fromInt = { n -> "n" }
+    isInteger = false
   )
   add("1", "2")
 }

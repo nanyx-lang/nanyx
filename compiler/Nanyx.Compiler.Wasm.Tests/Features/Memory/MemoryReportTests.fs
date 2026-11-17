@@ -96,5 +96,5 @@ def main = {
     Assert.Equal(1, outcome.ExitCode)
     let errors = outcome.StandardError.ReplaceLineEndings "\n"
     Assert.StartsWith("Runtime error:", errors)
-    Assert.Contains("integer divide by zero", errors)
+    Assert.Contains("Runtime error: division by zero", errors)
     Assert.Contains("\nMemory\n  allocations        ", errors)

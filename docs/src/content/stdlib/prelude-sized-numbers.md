@@ -58,6 +58,12 @@ def I8.`%`: I8, I8 -> I8
 def I8.fromInt: int -> I8
 ```
 
+## `I8.isInteger`
+
+```nanyx fragment
+def I8.isInteger: bool
+```
+
 ## `I8.compare`
 
 ```nanyx fragment
@@ -122,6 +128,12 @@ def I16.`%`: I16, I16 -> I16
 
 ```nanyx fragment
 def I16.fromInt: int -> I16
+```
+
+## `I16.isInteger`
+
+```nanyx fragment
+def I16.isInteger: bool
 ```
 
 ## `I16.compare`
@@ -190,6 +202,12 @@ def I32.`%`: I32, I32 -> I32
 def I32.fromInt: int -> I32
 ```
 
+## `I32.isInteger`
+
+```nanyx fragment
+def I32.isInteger: bool
+```
+
 ## `I32.compare`
 
 ```nanyx fragment
@@ -254,6 +272,12 @@ def U8.`%`: U8, U8 -> U8
 
 ```nanyx fragment
 def U8.fromInt: int -> U8
+```
+
+## `U8.isInteger`
+
+```nanyx fragment
+def U8.isInteger: bool
 ```
 
 ## `U8.compare`
@@ -322,6 +346,12 @@ def U16.`%`: U16, U16 -> U16
 def U16.fromInt: int -> U16
 ```
 
+## `U16.isInteger`
+
+```nanyx fragment
+def U16.isInteger: bool
+```
+
 ## `U16.compare`
 
 ```nanyx fragment
@@ -386,6 +416,12 @@ def U32.`%`: U32, U32 -> U32
 
 ```nanyx fragment
 def U32.fromInt: int -> U32
+```
+
+## `U32.isInteger`
+
+```nanyx fragment
+def U32.isInteger: bool
 ```
 
 ## `U32.compare`
@@ -454,6 +490,12 @@ def U64.`%`: U64, U64 -> U64
 def U64.fromInt: int -> U64
 ```
 
+## `U64.isInteger`
+
+```nanyx fragment
+def U64.isInteger: bool
+```
+
 ## `U64.compare`
 
 ```nanyx fragment
@@ -518,6 +560,12 @@ def F32.`%`: F32, F32 -> F32
 
 ```nanyx fragment
 def F32.fromInt: int -> F32
+```
+
+## `F32.isInteger`
+
+```nanyx fragment
+def F32.isInteger: bool
 ```
 
 ## `F32.compare`

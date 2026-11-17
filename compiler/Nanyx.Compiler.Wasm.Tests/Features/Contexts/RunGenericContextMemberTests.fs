@@ -148,3 +148,25 @@ def main = {
 }
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "3 y 7\n"
+
+[<Fact>]
+let ``Run - a function a member generic in contexts hands back is called with the contexts it requires`` () =
+    // #1899: the member takes and returns the function without its contexts, so what it returns is adapted to take them.
+    let source = """context Later = (
+  later: [c] ([c] () -> int) -> ([c] () -> int)
+)
+
+def computed: [Console] int -> int = { n ->
+  println("computing {n}")
+  n * 2
+}
+
+@entry
+def main = {
+  use Later(later = { thunk -> thunk })
+  def pending = later({ computed(21) })
+  println("not yet")
+  println("{pending()}")
+}
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "not yet\ncomputing 21\n42\n"

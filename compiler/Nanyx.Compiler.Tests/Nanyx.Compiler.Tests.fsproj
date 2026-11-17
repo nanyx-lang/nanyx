@@ -89,6 +89,7 @@
     <Compile Include="Features\Hosts\ConsoleHostTests.fs" />
     <Compile Include="Features\Hosts\ExternTests.fs" />
     <Compile Include="Features\Hosts\ScriptEntryTests.fs" />
+    <Compile Include="Features\Hosts\UnprovidedContextTests.fs" />
     <Compile Include="Features\Imports\ImportTests.fs" />
     <Compile Include="Features\Imports\ImportFixTests.fs" />
     <Compile Include="Features\Imports\ImportHintTests.fs" />
@@ -168,12 +169,16 @@
     <Compile Include="Features\Strings\InterpolationTests.fs" />
     <Compile Include="Features\Refactorings\CallAndPipeTests.fs" />
     <Compile Include="Features\Refactorings\InlineTests.fs" />
+    <Compile Include="Features\Refactorings\InlineTypeAliasTests.fs" />
     <Compile Include="Features\Refactorings\IntroduceFunctionTests.fs" />
     <Compile Include="Features\Refactorings\IntroduceLocalTests.fs" />
+    <Compile Include="Features\Refactorings\IntroduceTypeAliasTests.fs" />
     <Compile Include="Features\Refactorings\OrganiseImportsTests.fs" />
     <Compile Include="Features\Refactorings\PackageRenameTests.fs" />
     <Compile Include="Features\Refactorings\RenameTests.fs" />
     <Compile Include="Features\Refactorings\SelectionRangeTests.fs" />
+    <Compile Include="Features\Refactorings\ShorthandLambdaTests.fs" />
+    <Compile Include="Features\Refactorings\WriteHoleTypesTests.fs" />
     <Compile Include="Features\Refactorings\WriteInferredTypeTests.fs" />
     <Compile Include="Features\Tooling\CompletionTests.fs" />
     <Compile Include="Features\Tooling\ContextFlowTests.fs" />

@@ -25,8 +25,6 @@ common errors offer fixes. What is left:
   replaces.
 - **Nominal types.** A mismatch with a nominal type outside its module is explained only when the shapes match
   ([#1804](https://github.com/nanyx-lang/nanyx/issues/1804)).
-- **Run-time errors.** Integer overflow, division by zero and a float too big for an int stop a program with
-  Wasmtime's backtrace rather than a message ([#1770](https://github.com/nanyx-lang/nanyx/issues/1770)).
 
 # Open questions
 
