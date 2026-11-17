@@ -45,6 +45,7 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | SetField(record, _, value) -> [ value, Owned; AVar record, Borrowed ]
     | MakeList items -> all Owned items
     | CallRuntime(name, args, _) -> args |> List.mapi (fun index arg -> arg, Helpers.operandUse name index)
+    | CopyArrayInto(target, at, source) -> all Borrowed [ target; at; source ]
     // A float is passed as the number in its box, which is only read.
     | CallImport(_, args) -> all Borrowed args
     | MakeClosure(_, _, captured) -> all Owned captured
