@@ -317,15 +317,13 @@ dbg: 1
 
 [<Fact>]
 let ``Run - an imported pattern runs as the module's own does`` () =
-    let directory = Directory.CreateTempSubdirectory "nanyx-patterns-"
-    try
-        let write name (text: string) = File.WriteAllText(Path.Combine(directory.FullName, name), text.ReplaceLineEndings "\n")
-        write "parity.nyx" """
+    use directory = new TempDirectory()
+    directory.Write "parity.nyx" """
 module parity
 
 export pattern int -> #Even | #Odd = { n -> if n % 2 == 0 then #Even else #Odd }
 """
-        write "main.nyx" """
+    directory.Write "main.nyx" """
 import parity
 
 def parityOf = { n: int ->
@@ -336,6 +334,4 @@ def parityOf = { n: int ->
 
 println(parityOf(3))
 """
-        runFile (Path.Combine(directory.FullName, "main.nyx")) |> assertRan "odd\n"
-    finally
-        directory.Delete true
+    runFile (Path.Combine(directory.Path, "main.nyx")) |> assertRan "odd\n"
