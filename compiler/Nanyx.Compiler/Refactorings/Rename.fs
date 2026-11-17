@@ -23,11 +23,13 @@ type ModuleFile = { Path: string; Source: string; Result: CompileResult }
 type Renaming = { Edits: (string * TextEdit list) list; Files: (string * string) list }
 
 /// What is renamed: a symbol (a context's member among them, which is also written where an instance of its context
-/// is), a record's field, which has no symbol, by the record it belongs to, or a module, by its name.
+/// is), a record's field, which has no symbol, by the record it belongs to, a module, by its name, or a `module name =`
+/// block of a file.
 type private Subject =
     | Named of Symbol
     | Field of name: string * FieldSites.Record
     | ModuleName of string
+    | ModuleBlock of ModuleSites.Block * file: string
 
 /// The part of `span`, written in `source`, that is `name`'s own part, if it ends with it.
 let private ownPart (source: string) (name: string) (span: SourceSpan) =
@@ -92,7 +94,7 @@ let private packageOf (file: string) =
 
 /// What is named at `offset` in `source`, the text of the root module of `result` compiled as `file`, with where it is
 /// written, or why it can't be renamed in `scope`: a module where its `module` line or an import of it names it, a
-/// context's member where an instance of its context names it, a symbol, or else a record's field. `None` where nothing
+/// `module name =` block likewise, a context's member where an instance of its context names it, a symbol, or else a record's field. `None` where nothing
 /// is named.
 let private subjectAt (scope: Scope) (file: string) (source: string) (result: CompileResult) (offset: int) : Result<Subject * SourceSpan, string> option =
     let moduleNamed =
@@ -107,6 +109,13 @@ let private subjectAt (scope: Scope) (file: string) (source: string) (result: Co
                     |> Option.exists (fun typed -> typed.ImportedFiles |> Map.exists (fun _ imported -> imported.Name = Some name && files |> List.exists (PackageModules.samePath imported.File))))
             declared |> Option.orElse imported |> Option.map (fun (name, span) -> Ok (ModuleName name, span))
         | _ -> None
+    // What a block exports may be used by another file, which rename can't find outside a package, as for an exported def.
+    let blockNamed () =
+        ModuleSites.blockAt source result offset
+        |> Option.map (fun block ->
+            if scope = Module && block.Exports then
+                Error "It exports names, and this file is in no package, so rename can't find the files that use them"
+            else Ok (ModuleBlock(block, file), block.NameSpan))
     let memberNamed () =
         FieldSites.members result |> List.tryFind (fun site -> touches offset site.Span) |> Option.map (fun site -> Ok (Named site.Member, site.Span))
     let symbolNamed () =
@@ -125,6 +134,7 @@ let private subjectAt (scope: Scope) (file: string) (source: string) (result: Co
             | FieldSites.NotARecord -> None
             | record -> Some (Ok (Field(site.Name, record), site.Span)))
     moduleNamed
+    |> Option.orElseWith blockNamed
     |> Option.orElseWith memberNamed
     |> Option.orElseWith symbolNamed
     |> Option.orElseWith fieldNamed
@@ -135,6 +145,7 @@ let private nameOf (subject: Subject) =
     | Named symbol -> Names.ownPart symbol.Name
     | Field(name, _) -> name
     | ModuleName name -> name
+    | ModuleBlock(block, _) -> block.Name
 
 /// The name at `offset` in `source`, the text of the root module of `result` compiled as `file`, that an editor can
 /// rename in `scope`, or why it can't. `None` where no name is, or where the module did not type-check.
@@ -269,6 +280,8 @@ let private planned (subject: Subject) (newName: string) (files: ModuleFile list
         | Some package ->
             let renamed = renamedFiles name newName files
             Ok (files |> List.map (fun file -> file, distinct (moduleEdits package name newName renamed file)), renamed)
+    | ModuleBlock(block, blockFile) ->
+        Ok (files |> List.map (fun file -> file, distinct (ModuleSites.blockEdits block blockFile newName file.Path file.Source file.Result)), [])
 
 /// The edits, file by file, that rename the name at `offset` in the file `file`, one of `files`, and every use of it in
 /// `files`, to `newName`, with the files renamed, or why it can't be. `files` are the module alone, for `Module`, or
@@ -279,7 +292,8 @@ let private planned (subject: Subject) (newName: string) (files: ModuleFile list
 /// part (`string.` in `string.shout`), and renaming a type renames that part of its attached definitions' names. A
 /// record's field is renamed wherever a record of the same type writes it, and refused where a field of its name is
 /// read from a record of a type not known; a module is renamed in its `module` line and each import of it, and its
-/// file with it where the file is named for it.
+/// file with it where the file is named for it; and a `module name =` block in its `module` line, each import of it and
+/// each name written with it.
 let editsIn
     (scope: Scope)
     (files: ModuleFile list)

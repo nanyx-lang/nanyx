@@ -163,3 +163,58 @@ let ``A module is renamed from an import of it`` () =
 [<Fact>]
 let ``A module renamed to the name of another module of the package is refused`` () =
     Assert.StartsWith("The renamed package would not compile", refusedBecause "shapes.nyx" "shapes" 0 0 "main")
+
+let private money =
+    withFinalNewline """module money
+
+module coins =
+  export type Coin = protected (pence: int)
+
+  export def Coin.of: int -> Coin = { pence -> Coin(pence = pence) }
+
+  export def penny: Coin = Coin.of(1)
+
+import coins
+
+def one: Coin = Coin.of(1)
+def two = money.coins.penny"""
+
+let private till =
+    withFinalNewline """module till
+
+import app/money
+
+def float = money.coins.Coin.of(500)"""
+
+[<Fact>]
+let ``A module block is renamed in its module line, each import of it and each name written with it`` () =
+    match renamedIn [ "money.nyx", money; "till.nyx", till ] "money.nyx" "coins" 0 0 "cents" with
+    | Ok (after, files) ->
+        Assert.Equal(money.Replace("coins", "cents"), after.["money.nyx"])
+        Assert.Equal(till.Replace("coins", "cents"), after.["till.nyx"])
+        Assert.Empty(files)
+    | Error reason -> failwithf "expected the rename, got: %s" reason
+
+/// Renaming the block `coins` at the `occurrence`th `text` (plus `within`) in `money.nyx`, beside `till.nyx`, to
+/// `newName`: each file's text after it, by name, or why it is refused.
+let private blockRenamed (text: string) (occurrence: int) (within: int) (newName: string) (files: (string * string) list) =
+    renamedIn files "money.nyx" text occurrence within newName |> Result.map fst
+
+[<Fact>]
+let ``A module block is renamed from an import of it`` () =
+    match blockRenamed "import coins" 0 8 "cents" [ "money.nyx", money; "till.nyx", till ] with
+    | Ok after -> Assert.Equal(money.Replace("coins", "cents"), after.["money.nyx"])
+    | Error reason -> failwithf "expected the rename, got: %s" reason
+
+[<Fact>]
+let ``A module block renamed to the name of a block beside it is refused`` () =
+    let withNotes = money.Replace("import coins", "module notes =\n  export def penny = 1\n\nimport coins")
+    match blockRenamed "coins" 0 0 "notes" [ "money.nyx", withNotes; "till.nyx", till ] with
+    | Error reason -> Assert.StartsWith("The renamed package would not compile", reason)
+    | Ok after -> failwithf "expected a refusal, got\n%A" after
+
+[<Fact>]
+let ``A module block's new name must be a name`` () =
+    match blockRenamed "coins" 0 0 "two.parts" [ "money.nyx", money; "till.nyx", till ] with
+    | Error reason -> Assert.Equal("`two.parts` is not a name", reason)
+    | Ok after -> failwithf "expected a refusal, got\n%A" after
