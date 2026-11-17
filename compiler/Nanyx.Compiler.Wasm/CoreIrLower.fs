@@ -1212,11 +1212,16 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let scope = { scope with Members = memberScope; Vars = parameterVars |> List.fold (fun acc (name, var) -> acc |> Map.add name var) scope.Vars }
             // A function value it results in is adapted to the type it declares (see `CoreIrLowerMembers.coerce`), and so
             // is a value of a type generic in contexts, whose type its value may carry fewer of than it declares, which
-            // is what its callers read: `def lines: () -> [Console] Stream(string) = { pure }`.
+            // is what its callers read: `def lines: () -> [Console] Stream(string) = { pure }`. A generic def's declared
+            // result is read as a plain one's once its type arguments are in, though its parameters may still have a
+            // variable, as a list's element type does in `list(a) -> [Console] Thunk(int)` called with `[]` (#1872).
             let resultTy =
                 match input.DefinitionTypes |> Map.tryFind name |> Option.map (substitute subst) with
-                | Some declared when (freeVars declared).IsEmpty -> snd (parameterTypes parameterNames declared isLambda)
-                | _ -> resultTy
+                | Some declared ->
+                    match snd (parameterTypes parameterNames declared isLambda) with
+                    | declaredResult when (freeVars declaredResult).IsEmpty -> declaredResult
+                    | _ -> resultTy
+                | None -> resultTy
             let result = toIrType resultTy
             let adapted (value: Expr) =
                 match value.Type with
