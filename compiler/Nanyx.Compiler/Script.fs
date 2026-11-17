@@ -47,19 +47,19 @@ type DirectiveSetting =
     | FormatSetting of key: DirectiveWord * value: DataValue
 
 module Script =
-    let private directiveList = "::host, ::dependency, ::linter, ::lint and ::format"
+    let private directiveList = "`::host`, `::dependency`, `::linter`, `::lint` and `::format`"
 
     let private invalid (span: SourceSpan) (message: string) = Diagnostics.at DiagnosticCodes.InvalidDirective span message
 
     /// What `::<name>` takes, as the error for a directive written wrong shows it.
     let private usage (name: string) =
         match name with
-        | "host" -> $"::host takes a host and where it is found: ::host {Hosts.consolePackage}, or ::host acme.server ../server"
+        | "host" -> $"`::host` takes a host and where it is found: write `::host {Hosts.consolePackage}`, or `::host acme.server ../server`"
         | "dependency" ->
-            "::dependency takes a package and where it is found: ::dependency acme.util ../util, or ::dependency nanyx.console.core, or ::dependency acme.web github:acme/web@<commit>; or a module name and a file on GitHub: ::dependency retry github:acme/snippets/retry.nyx@<commit>"
-        | "linter" -> "::linter takes a linter: ::linter nanyx.lint"
-        | "lint" -> "::lint takes a rule of the linter above it and a severity: ::lint unusedBindings #error"
-        | _ -> "::format takes a setting and its value: ::format lineWidth 100"
+            "`::dependency` takes a package and where it is found, or a module name and a file on GitHub: write `::dependency acme.util ../util`, `::dependency nanyx.console.core` or `::dependency acme.web github:acme/web@<commit>`, or `::dependency retry github:acme/snippets/retry.nyx@<commit>`"
+        | "linter" -> "`::linter` takes a linter: write `::linter nanyx.lint`"
+        | "lint" -> "`::lint` takes a rule of the linter above it and a severity: write `::lint unusedBindings #error`"
+        | _ -> "`::format` takes a setting and its value: write `::format lineWidth 100`"
 
     /// What a word that names a place on GitHub starts with.
     let private gitHubPrefix = "github:"
@@ -80,7 +80,7 @@ module Script =
         if word.Text.StartsWith gitHubPrefix then Result.Ok(AtGitHub word)
         elif Char.IsDigit word.Text[0] then Result.Ok(AtVersion word)
         elif word.Text[0] = '.' || word.Text[0] = '/' || word.Text[0] = '\\' || Path.IsPathRooted word.Text then Result.Ok(AtPath word)
-        else Result.Error(invalid word.Span $"'{word.Text}' is neither a version, which starts with a digit, 1.2.0, nor a directory, which starts with . or /, ../util")
+        else Result.Error(invalid word.Span $"'{word.Text}' is neither a version, which starts with a digit, as `1.2.0`, nor a directory, which starts with `.` or `/`, as `../util`")
 
     /// The package a `::host`, `::dependency` or `::linter` directive names, and where it is found.
     let private packageOf (directive: Directive) : Result<DirectiveWord * DirectivePlace, Diagnostic> =
@@ -95,7 +95,7 @@ module Script =
         match DataValue.ofWord word with
         | Some value -> Result.Ok value
         | None ->
-            Result.Error(invalid word.Span $"'{word.Text}' is not a value; a value is written as in a manifest: a tag, #error, a number, 4, or a string, \"text\". {usage directive.Name}")
+            Result.Error(invalid word.Span $"'{word.Text}' is not a value: write one as a manifest does, a tag, `#error`, a number, `4`, or a string, `\"text\"`; {usage directive.Name}")
 
     /// Whether the compiler ships the package `name`.
     let private isShipped (name: string) = Directory.Exists(ShippedPackages.directoryOf name)
@@ -142,13 +142,13 @@ module Script =
             { Diagnostics.at
                   DiagnosticCodes.OldFormDirective
                   directive.Span
-                  $"Directives are lines of words now, not a manifest's key and a TOML value: write {now.Replace('\n', ' ')}" with
+                  $"Directives are lines of words now, not a manifest's key and a TOML value: write `{now.Replace('\n', ' ')}`" with
                 Fixes = [ { Title = $"Write `{now.Replace('\n', ' ')}`"; Edits = [ { Span = { directive.Span with End = written }; NewText = now } ] } ] }
         | None ->
             Diagnostics.at
                 DiagnosticCodes.OldFormDirective
                 directive.Span
-                $"Directives are lines of words now, not a manifest's key and a TOML value: ::host {Hosts.consolePackage}, ::dependency acme.util ../util, ::linter nanyx.lint, ::lint unusedBindings #error, ::format lineWidth 100"
+                $"Directives are lines of words now, not a manifest's key and a TOML value: write them as `::host {Hosts.consolePackage}`, `::dependency acme.util ../util`, `::linter nanyx.lint`, `::lint unusedBindings #error` and `::format lineWidth 100`"
 
     /// The error for a `::lint` with no `::linter` above it, with a fix that turns on the official linter above it.
     let private lintWithoutLinter (directive: Directive) : Diagnostic =
@@ -156,7 +156,7 @@ module Script =
         { Diagnostics.at
               DiagnosticCodes.LintWithoutLinter
               directive.Span
-              $"::lint sets a rule of the linter of the nearest ::linter above it, but there is none: turn one on above it, ::linter {official}" with
+              $"`::lint` sets a rule of the linter of the nearest `::linter` above it, but there is none: turn one on above it, `::linter {official}`" with
             Fixes = [ { Title = $"Add `::linter {official}` above"; Edits = [ { Span = { directive.Span with End = directive.Span.Start }; NewText = $"::linter {official}\n" } ] } ] }
 
     /// What each of `directives` says, in order, or what is wrong with it. A `::lint` is for the linter of the nearest
@@ -170,15 +170,15 @@ module Script =
                     | _ when directive.IsOldForm -> Result.Error(oldFormError linterAbove directive), linter
                     | "host" ->
                         match packageOf directive with
-                        | Result.Ok (_, AtGitHub place) -> Result.Error(invalid place.Span "a host can't be found on GitHub yet: give the directory it is in, ::host acme.server ../server"), linter
+                        | Result.Ok (_, AtGitHub place) -> Result.Error(invalid place.Span "A host cannot be found on GitHub yet: give the directory it is in, as in `::host acme.server ../server`"), linter
                         | setting -> setting |> Result.map HostSetting, linter
                     | "dependency" -> packageOf directive |> Result.map DependencySetting, linter
                     | "linter" ->
                         match packageOf directive with
                         | Result.Ok (_, AtPath path) ->
-                            Result.Error(invalid path.Span "a linter can't be found by its directory yet: the linters are the ones the compiler ships, ::linter nanyx.lint"), linter
+                            Result.Error(invalid path.Span "A linter cannot be found by its directory yet: name one the compiler ships, as in `::linter nanyx.lint`"), linter
                         | Result.Ok (_, AtGitHub place) ->
-                            Result.Error(invalid place.Span "a linter can't be found on GitHub: the linters are the ones the compiler ships, ::linter nanyx.lint"), linter
+                            Result.Error(invalid place.Span "A linter cannot be found on GitHub: name one the compiler ships, as in `::linter nanyx.lint`"), linter
                         | Result.Ok (package, place) -> Result.Ok(LinterSetting(package, place)), Some package
                         | Result.Error error -> Result.Error error, linter
                     | "lint" ->
@@ -190,8 +190,8 @@ module Script =
                         match directive.Arguments with
                         | [ key; value ] -> valueOf directive value |> Result.map (fun value -> FormatSetting(key, value)), linter
                         | _ -> Result.Error(invalid directive.Span (usage "format")), linter
-                    | "" -> Result.Error(invalid directive.Span $"a directive is a name and the words it takes after '::': the directives are {directiveList}"), linter
-                    | name -> Result.Error(invalid directive.Words.Head.Span $"unknown directive ::{name}; the directives are {directiveList}"), linter
+                    | "" -> Result.Error(invalid directive.Span $"`::` has no directive's name after it: the directives are {directiveList}"), linter
+                    | name -> Result.Error(invalid directive.Words.Head.Span $"Unknown directive `::{name}`: the directives are {directiveList}"), linter
                 let linterAbove = linterAbove || linter.IsSome || (directive.IsOldForm && directive.Name.StartsWith "linters.")
                 (directive, setting), (linter, linterAbove))
             (None, false)
@@ -246,7 +246,7 @@ module Script =
             match place with
             | Shipped when not (isShipped package.Text) ->
                 let last = package.Text.Substring(package.Text.LastIndexOf '.' + 1)
-                [ invalid package.Span $"the compiler ships no package '{package.Text}': give the directory it is in, ../{last}" ]
+                [ invalid package.Span $"The compiler ships no package '{package.Text}': give the directory it is in, as in `../{last}`" ]
             | _ -> []
         let hosts = settings |> List.choose (function directive, HostSetting(package, place) -> Some (directive, package, place) | _ -> None)
         let dependencies = settings |> List.choose (function directive, DependencySetting(package, place) -> Some (directive, package, place) | _ -> None)
@@ -257,7 +257,7 @@ module Script =
             let twice =
                 hosts
                 |> List.skip (min 1 hosts.Length)
-                |> List.map (fun (directive, _, _) -> invalid directive.Span "a script runs under one host, which one ::host names")
+                |> List.map (fun (directive, _, _) -> invalid directive.Span "A script runs under one host, which an earlier `::host` names already: remove this one")
             let unshipped = (hosts |> List.truncate 1) @ dependencies |> List.collect (fun (_, package, place) -> notShipped package place)
             let host, hostErrors =
                 match hosts with

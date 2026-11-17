@@ -20,7 +20,7 @@ let bang: Parser<Identifier * SourceSpan, ParseState> =
     userStateSatisfies (fun state -> state.ImplicitArgumentNext.IsNone)
     >>. followedBy (pchar '!' >>. notFollowedBy (pchar '='))
     >>. getPosition
-    >>= fun position -> reportFocused position "There is no prefix `!` in Nanyx: logical not is the keyword `not`, as in `not x`"
+    >>= fun position -> reportFocused position "There is no prefix `!` in Nanyx: write the keyword `not`, as in `not x`"
 
 /// `&&` and `||` are not operators: Boolean operations are the keywords `and` and `or`. Either after an operand is
 /// reported as that, at the operator.
@@ -85,7 +85,7 @@ let private spacedAround (op: string) : Parser<unit, ParseState> =
             let position = Position(start.StreamName, start.Index - int64 op.Length, start.Line, start.Column - int64 op.Length)
             match misspaced.Value with
             | Some (first, _) when first.Index <= position.Index -> ()
-            | _ -> misspaced.Value <- Some (position, $"Operators are written with a space on each side: `x {op} y`, not `x{op}y`")
+            | _ -> misspaced.Value <- Some (position, $"`{op}` is not spaced: write an operator with a space on each side, as `x {op} y`, not `x{op}y`")
         Reply(())
 
 /// Adds every operator in `binaryOperators` to `table`, each taking `space` after it and building its term with

@@ -19,7 +19,7 @@ let private onlyDiagnostic (source: string) =
 [<Theory>]
 [<InlineData("def x = true && false", "`&&` is not an operator in Nanyx: write `and`", "&& false")>]
 [<InlineData("def x = true || false", "`||` is not an operator in Nanyx: write `or`", "|| false")>]
-[<InlineData("def x = !true", "There is no prefix `!` in Nanyx: logical not is the keyword `not`, as in `not x`", "!true")>]
+[<InlineData("def x = !true", "There is no prefix `!` in Nanyx: write the keyword `not`, as in `not x`", "!true")>]
 [<InlineData("def x = 1 < 2 < 3", "Comparisons do not chain: write `a < b and b < c`, or put one comparison in parentheses", "< 3")>]
 [<InlineData("def x = 1 == 1 == true", "Comparisons do not chain: write `a == b and b == c`, or put one comparison in parentheses", "== true")>]
 let ``Syntax Nanyx does not have is reported as what to write instead`` (source: string) (message: string) (at: string) =

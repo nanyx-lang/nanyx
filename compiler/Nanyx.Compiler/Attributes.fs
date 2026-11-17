@@ -185,7 +185,7 @@ module Attributes =
                     Diagnostics.at
                         DiagnosticCodes.EntryInLibrary
                         attribute.Span
-                        $"'{name}' is an entry point, but its package names no host, so it is a library, which has none: an application names the host its @entry runs under in its manifest, as host = (package = \"{Hosts.consolePackage}\", version = \"{Toolchain.version}\")"
+                        $"'{name}' is an entry point, but its package names no host, so it is a library, which has none: to make it an application, name the host its `@entry` runs under in its manifest, as `host = (package = \"{Hosts.consolePackage}\", version = \"{Toolchain.version}\")`"
                 loop rest (def :: acc) entries externs (error :: errors)
             | Kind (Attribute(attributeName, _)) as attribute :: (Kind (Def (ValueDef(_, name, _, value))) as def) :: rest when attributeName = entryAttribute ->
                 // The call is made up for the def, and reported there. The entry point passed to `run` is at the

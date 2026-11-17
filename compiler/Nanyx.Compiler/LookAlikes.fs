@@ -39,11 +39,11 @@ let private diagnostic (filePath: string) (original: string) (found: Confusables
             { Span = spanIn filePath original at (at + 1); NewText = written })
     let message, title =
         match found.Ascii with
-        | "" -> $"{Confusables.written found} can't be seen, and isn't whitespace Nanyx reads", $"Remove {Confusables.written found}"
-        | " " -> $"{Confusables.written found} looks like a space, but it isn't one", $"Replace {Confusables.written found} with a space"
+        | "" -> $"{Confusables.written found} can't be seen, and isn't whitespace Nanyx reads: remove it", $"Remove {Confusables.written found}"
+        | " " -> $"{Confusables.written found} looks like a space, but it isn't one: write a space", $"Replace {Confusables.written found} with a space"
         | ascii ->
             let pair = if offsets.Length > 1 then $" (and its pair, '{original.[List.last offsets]}')" else ""
-            $"{Confusables.written found}{pair} looks like '{ascii}' ({found.AsciiName}), but it isn't one",
+            $"{Confusables.written found}{pair} looks like `{ascii}` ({found.AsciiName}), but it isn't one: write `{ascii}`",
             $"Replace '{found.Character}' with '{ascii}'"
     { Diagnostics.at DiagnosticCodes.LookAlikeCharacter (spanIn filePath original offsets.Head (offsets.Head + 1)) message with
         Fixes = [ { Title = title; Edits = edits } ] }

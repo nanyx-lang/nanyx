@@ -49,15 +49,15 @@ module FileImports =
         if File.Exists fullPath then
             Ok (Path.GetFullPath fullPath)
         else
-            Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"Import not found: {rawPath}")
+            Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"There is no file '{rawPath}' to import")
 
     /// The error for a file-path import with no alias, which would bring the file's exports in unqualified.
     let missingAlias (item: ImportItem) : Diagnostic option =
         match item.Source, item.Alias with
         | PathImport path, None ->
             let stem = Path.GetFileNameWithoutExtension path
-            let example = if identifier.IsMatch stem then $""": write import "{path}" as {stem}""" else ""
-            Some (Diagnostics.at DiagnosticCodes.PathImportWithoutAlias item.Span $"An import of a file path must have an alias{example}")
+            let example = if identifier.IsMatch stem then $""": write `import "{path}" as {stem}`""" else ""
+            Some (Diagnostics.at DiagnosticCodes.PathImportWithoutAlias item.Span $"This import of a file path has no alias{example}")
         | _ -> None
 
     /// The errors for importing, with `item`, a file that declares the module name `name` (if any) and is `syntax` as
@@ -70,7 +70,7 @@ module FileImports =
         let named =
             match item.Source, name with
             | PathImport path, Some name ->
-                [ Diagnostics.at DiagnosticCodes.NamedModuleImportedByPath item.Span $"'{path}' declares the module name '{name}', so it must be imported by its name, not by file path: write import {name}" ]
+                [ Diagnostics.at DiagnosticCodes.NamedModuleImportedByPath item.Span $"'{path}' declares the module name '{name}', so it is imported by its name, not by file path: write `import {name}`" ]
             | _ -> []
         let entrypoint =
             if syntax |> List.exists (function Kind (Expr _) -> true | _ -> false) then

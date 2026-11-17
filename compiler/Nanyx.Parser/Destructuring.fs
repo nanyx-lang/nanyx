@@ -71,7 +71,7 @@ let destructuringDefWith (lineStart: Position) (exprParser: Parser<Expression, P
             |> List.fold (>>.) (preturn ())
             >>. (match names with (_, first) :: _ -> noteDocumentable lineStart first.Start | [] -> preturn ())
         match pattern.Kind with
-        | IdentifierPattern _ -> fail "a destructuring def needs a pattern, not a name"
+        | IdentifierPattern _ -> fail "A destructuring def takes a pattern, not a name"
         | _ ->
             match destructuringBindings position pattern value with
             | Some bindings -> declareBindings bindings >>% (isExport, bindings)

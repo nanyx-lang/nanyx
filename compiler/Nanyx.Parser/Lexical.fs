@@ -28,7 +28,7 @@ let escapeSequence: Parser<string, ParseState> =
                 | Some c when not (Char.IsControl c) -> $"`\\{c}` is not an escape"
                 | _ -> "A backslash on its own is not an escape"
             reportFocused position
-                $"{message}. The escapes in a double-quoted string are {StringEscapes.written}; write a backslash as `\\\\`, or use a single-quoted string, which is raw")
+                $"{message}: the escapes in a double-quoted string are {StringEscapes.written}, so write a backslash as `\\\\`, or use a single-quoted string, which is raw")
 
 /// The text of a double-quoted string up to its closing quote or, with `stops`, any of those characters.
 let internal doubleQuotedText (stops: string) : Parser<string, ParseState> =

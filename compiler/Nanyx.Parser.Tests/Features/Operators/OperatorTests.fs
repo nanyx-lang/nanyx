@@ -131,7 +131,7 @@ let ``comparisons in parentheses are not a chain`` () =
 [<Theory>]
 [<InlineData("def x = a && b", "&& b", "`&&` is not an operator in Nanyx: write `and`")>]
 [<InlineData("def x = {\n  a || b\n}", "|| b", "`||` is not an operator in Nanyx: write `or`")>]
-[<InlineData("def x = !a", "!a", "There is no prefix `!` in Nanyx: logical not is the keyword `not`")>]
+[<InlineData("def x = !a", "!a", "There is no prefix `!` in Nanyx: write the keyword `not`")>]
 [<InlineData("def x = {\n  f(!a)\n}", "!a)", "There is no prefix `!` in Nanyx")>]
 let ``&&, || and prefix ! are reported as what to write instead`` (source: string) (at: string) (message: string) =
     let reported, text = parseErrorOf source
