@@ -651,14 +651,14 @@ module WorkflowDesugaring =
         // sequences the body gives for each element, one after another, then what the rest of the block up to `next`
         // gives. Each is worked out when the sequence is pulled that far.
         //
-        //   seq.append(seq.concatMap(items, { item -> <body, then seq.empty()> }), seq.delay({ <rest of the block> }))
+        //   seq.append(seq.flatMap(items, { item -> <body, then seq.empty()> }), seq.delay({ <rest of the block> }))
         and desugarSequenceLoop (expr: Expression) iterable (loop: Expression) parameters (body: Expression) (rest: Statement list) next =
             let statements =
                 match body.Kind with
                 | Block statements -> statements
                 | _ -> [ Statement.from body (ExprStatement body) ]
             let bodyChain = desugarChain (statements |> List.collect liftStatementBinds) (endWith sequenceEnd)
-            let each = madeFor expr (FunctionCall(Seqs.concatMapFunction, None, [ desugarExpr iterable; { loop with Kind = Lambda(parameters, bodyChain, false) } ]))
+            let each = madeFor expr (FunctionCall(Seqs.flatMapFunction, None, [ desugarExpr iterable; { loop with Kind = Lambda(parameters, bodyChain, false) } ]))
             let restOfBlock = madeFor expr (FunctionCall(Seqs.delayFunction, None, [ madeFor expr (Lambda([], desugarChain rest next, false)) ]))
             madeFor expr (FunctionCall(Seqs.appendFunction, None, [ each; restOfBlock ]))
         // A statement followed by the rest of the chain, as a block made up for them that spans from the statement

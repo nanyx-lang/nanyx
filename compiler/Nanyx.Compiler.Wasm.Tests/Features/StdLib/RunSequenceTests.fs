@@ -90,11 +90,11 @@ first()
     |> assertRan "made\npull 1\ngot 10\n"
 
 [<Fact>]
-let ``Run - a function that requires a context is passed on to concatMap through a signature's context variable`` () =
+let ``Run - a function that requires a context is passed on to flatMap through a signature's context variable`` () =
     // #1908
     runSource """
 def flat: [c] list(a), ([c] a -> [c] seq(b)) -> list(b) = { xs, f ->
-  xs \list.toSeq \seq.concatMap(f) \seq.toList
+  xs \list.toSeq \seq.flatMap(f) \seq.toList
 }
 
 println(flat([1, 2], { x ->

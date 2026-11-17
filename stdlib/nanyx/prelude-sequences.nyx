@@ -135,17 +135,247 @@ export def seq.append: ([c] seq(a)), ([d] seq(a)) -> [c, d] seq(a) = { s, t ->
 }
 
 --| The elements of the sequences `f` gives for each element of `s`, one after another, when it is
-  pulled: `(1..3) \seq.concatMap { n -> seq.range(1, n) }` gives `1`, `1`, `2`, `1`, `2` and `3`.
-export def seq.concatMap: ([c] seq(a)), ([d] a -> [d] seq(b)) -> [c, d] seq(b) = { s, f ->
+  pulled: `(1..3) \seq.flatMap { n -> seq.range(1, n) }` gives `1`, `1`, `2`, `1`, `2` and `3`. Lazy:
+  `f` runs on an element only when the sequence is pulled that far.
+export def seq.flatMap: ([c] seq(a)), ([d] a -> [d] seq(b)) -> [c, d] seq(b) = { s, f ->
   Seq(
     next = {
       match s.next()
         | #next(x, rest) ->
-          def more = seq.append(f(x), seq.concatMap(rest, f))
+          def more = seq.append(f(x), seq.flatMap(rest, f))
           more.next()
         | #done -> #done
     }
   )
+}
+
+--| The elements of each sequence of `s`, one after another: `[[1, 2], [3]] \list.map(list.toSeq)
+  \list.toSeq \seq.flatten` gives `1`, `2` and `3`. Lazy: it pulls `s` one sequence at a time.
+export def seq.flatten: ([c] seq(seq(a))) -> [c] seq(a) = { s ->
+  seq.flatMap(s, { inner -> inner })
+}
+
+--| The values `f` yields for each element in turn, in the order it yields them, as
+  [`list.select`] gives them for a list: [`seq.flatMap`] for a lambda with `yield` in it. Lazy: the
+  code after a `yield` runs only when the sequence is pulled that far.
+export def seq.select: ([c] seq(a)), ([d] a -> [d] seq(b)) -> [c, d] seq(b) = { s, f ->
+  seq.flatMap(s, f)
+}
+
+--| The payload of each `#some` that `f` gives for the elements of `s`, skipping each `#skip`:
+  `(1..6) \seq.filterMap { n -> if n % 2 == 0 then #some(n * 10) else #skip }` gives `20`, `40` and
+  `60`. Lazy: pulling it pulls `s` until `f` gives a `#some`, in constant stack.
+export def seq.filterMap: ([c] seq(a)), ([d] a -> #some(b) | #skip) -> [c, d] seq(b) = { s, f ->
+  Seq(
+    next = {
+      match s.next()
+        | #next(x, rest) ->
+          def more = seq.filterMap(rest, f)
+
+          match f(x)
+            | #some(y) -> #next(y, more)
+            | #skip -> more.next()
+        | #done -> #done
+    }
+  )
+}
+
+--| `f` applied to each element of `s` and its position, counting from `index`.
+def seq.mapIndexedFrom: ([c] seq(a)), ([d] int, a -> b), int -> [c, d] seq(b) = { s, f, index ->
+  Seq(
+    next = {
+      match s.next()
+        | #next(x, rest) -> #next(f(index, x), seq.mapIndexedFrom(rest, f, index + 1))
+        | #done -> #done
+    }
+  )
+}
+
+--| `f` applied to the position of each element of `s`, counting from 0, and the element:
+  `["a", "b"] \list.toSeq \seq.mapIndexed { i, x -> "{i}{x}" }` gives `"0a"` and `"1b"`. Lazy.
+export def seq.mapIndexed: ([c] seq(a)), ([d] int, a -> b) -> [c, d] seq(b) = { s, f ->
+  seq.mapIndexedFrom(s, f, 0)
+}
+
+--| `s` from the first element for which `predicate` is false: `(1..5) \seq.skipWhile { < 3 }` gives
+  `3`, `4` and `5`. Lazy: the elements it skips are pulled when the sequence is first pulled.
+export def seq.skipWhile: ([c] seq(a)), ([d] a -> bool) -> [c, d] seq(a) = { s, predicate ->
+  Seq(
+    next = {
+      match s.next()
+        | #next(x, rest) ->
+          if predicate(x) then
+            def more = seq.skipWhile(rest, predicate)
+            more.next()
+          else #next(x, rest)
+        | #done -> #done
+    }
+  )
+}
+
+--| The running totals of a fold: `initial`, then each value [`seq.fold`] passes along:
+  `(1..3) \seq.scan(0) { + }` gives `0`, `1`, `3` and `6`. Lazy: each total is worked out when it is
+  pulled, so it works on an endless sequence.
+export def seq.scan: ([c] seq(a)), b, ([d] b, a -> b) -> [c, d] seq(b) = { s, initial, step ->
+  Seq(
+    next = {
+      #next(
+        initial
+        Seq(
+          next = {
+            match s.next()
+              | #next(x, rest) ->
+                def more = seq.scan(rest, step(initial, x), step)
+                more.next()
+              | #done -> #done
+          }
+        )
+      )
+    }
+  )
+}
+
+--| `f` applied to the elements of `s` and `t` in pairs, ending when either ends, as [`seq.zip`] does:
+  `seq.zipWith(1.., 10..12, { + })` gives `11`, `13` and `15`. Lazy.
+export def seq.zipWith
+  : ([c] seq(a)), ([d] seq(b)), ([e] a, b -> f) -> [c, d, e] seq(f)
+  = { s, t, f ->
+    seq.map(seq.zip(s, t), { (x, y) -> f(x, y) })
+  }
+
+--| `s` with `separator` between each pair of neighbouring elements: `(1..3) \seq.intersperse(0)`
+  gives `1`, `0`, `2`, `0` and `3`. Lazy.
+export def seq.intersperse: ([c] seq(a)), a -> [c] seq(a) = { s, separator ->
+  Seq(
+    next = {
+      match s.next()
+        | #next(x, rest) -> #next(x, seq.flatMap(rest, { y -> list.toSeq([separator, y]) }))
+        | #done -> #done
+    }
+  )
+}
+
+--| The first `size` elements of `s` as a list, last first, in front of `acc`, with the rest of `s`;
+  fewer when `s` ends first.
+def seq.takeList: [c] ([c] seq(a)), int, list(a) -> (list(a), ([c] seq(a))) = { s, size, acc ->
+  if size <= 0 then (list.reverse(acc), s) else
+    match s.next()
+      | #next(x, rest) -> seq.takeList(rest, size - 1, [x, ...acc])
+      | #done -> (list.reverse(acc), seq.empty())
+}
+
+--| `s` cut into lists of `size` elements, in order; the last is shorter when the sequence ends part
+  way through one: `(1..5) \seq.chunks(2)` gives `[1, 2]`, `[3, 4]` and `[5]`. Lazy: each list is
+  pulled when it is. A `size` below 1 crashes.
+export def seq.chunks: ([c] seq(a)), int -> [c] seq(list(a)) = { s, size ->
+  if size < 1 then crash("seq.chunks: the size must be 1 or more, but is {size}")
+
+  Seq(
+    next = {
+      def (chunk, rest) = seq.takeList(s, size, [])
+
+      match chunk
+        | [] -> #done
+        | _ -> #next(chunk, seq.chunks(rest, size))
+    }
+  )
+}
+
+--| Each run of `size` neighbouring elements after `window`, which holds the `size - 1` before them.
+def seq.windowsAfter: ([c] seq(a)), int, list(a) -> [c] seq(list(a)) = { s, size, window ->
+  Seq(
+    next = {
+      match s.next()
+        | #next(x, rest) ->
+          def full = list.append(window, x)
+          #next(full, seq.windowsAfter(rest, size, list.skip(full, 1)))
+        | #done -> #done
+    }
+  )
+}
+
+--| Every run of `size` neighbouring elements, in order: `(1..4) \seq.windows(2)` gives `[1, 2]`,
+  `[2, 3]` and `[3, 4]`, and a sequence shorter than `size` has none. Lazy: each window pulls one
+  more element. A `size` below 1 crashes.
+export def seq.windows: ([c] seq(a)), int -> [c] seq(list(a)) = { s, size ->
+  if size < 1 then crash("seq.windows: the size must be 1 or more, but is {size}")
+
+  Seq(
+    next = {
+      def (first, rest) = seq.takeList(s, size - 1, [])
+      def windows = seq.windowsAfter(rest, size, first)
+      if list.length(first) < size - 1 then #done else windows.next()
+    }
+  )
+}
+
+--| The elements of `s` not in `seen`, each the first of its kind, adding each to `seen`.
+def seq.distinctAfter: [Eq(a)] ([c] seq(a)), list(a) -> [c] seq(a) = { s, seen ->
+  Seq(
+    next = {
+      match s.next()
+        | #next(x, rest) ->
+          if list.contains(seen, x) then
+            def more = seq.distinctAfter(rest, seen)
+            more.next()
+          else #next(x, seq.distinctAfter(rest, [x, ...seen]))
+        | #done -> #done
+    }
+  )
+}
+
+--| The elements of `s` without repeats, each where it first appears, compared with `==`. Lazy, but it
+  remembers each element it has given, so its memory grows with the distinct elements, and finding
+  the next one compares with each of them.
+export def seq.distinct: [Eq(a)] ([c] seq(a)) -> [c] seq(a) = { s ->
+  seq.distinctAfter(s, [])
+}
+
+--| The elements of `s` whose key is not in `seen`, each the first with its key.
+def seq.distinctByAfter
+  : [Eq(b), Hash(b)] ([c] seq(a)), ([d] a -> b), set(b) -> [c, d] seq(a)
+  = { s, key, seen ->
+    Seq(
+      next = {
+        match s.next()
+          | #next(x, rest) ->
+            def k = key(x)
+
+            if set.contains(seen, k) then
+              def more = seq.distinctByAfter(rest, key, seen)
+              more.next()
+            else #next(x, seq.distinctByAfter(rest, key, set.insert(seen, k)))
+          | #done -> #done
+      }
+    )
+  }
+
+--| The elements of `s` without two of the same `key`, each where the first with its key appears. Lazy,
+  but it remembers each key it has seen, so its memory grows with the distinct keys.
+export def seq.distinctBy
+  : [Eq(b), Hash(b)] ([c] seq(a)), ([d] a -> b) -> [c, d] seq(a)
+  = { s, key ->
+    seq.distinctByAfter(s, key, set.empty)
+  }
+
+--| The sequence of `count` elements whose element at each position is `f` applied to the position:
+  `seq.init(3, { i -> i * 2 })` gives `0`, `2` and `4`. Lazy: `f` runs on a position when the
+  sequence is pulled that far. A `count` of zero or less gives no elements.
+export def seq.init: int, ([c] int -> a) -> [c] seq(a) = { count, f ->
+  seq.map(seq.range(0, count - 1), f)
+}
+
+--| `count` copies of `x`: `seq.replicate(0, count = 3)` gives `0`, `0` and `0`. A `count` of zero or
+  less gives none.
+export def seq.replicate: (a, count: int) -> seq(a) = { x, count ->
+  seq.map(seq.range(1, count), { _ -> x })
+}
+
+--| The first parts of the pairs of `pairs` and their second parts, each a sequence: the inverse of
+  [`seq.zip`]. Each side pulls `pairs` on its own, so a sequence whose steps have effects runs them
+  once for each side pulled.
+export def seq.unzip: [c] ([c] seq((a, b))) -> ([c] seq(a), ([c] seq(b))) = { pairs ->
+  (seq.map(pairs, { (x, _) -> x }), seq.map(pairs, { (_, y) -> y }))
 }
 
 --| The elements of `s` for which `predicate` is true. Pulling it pulls `s` until one is, in constant
@@ -238,4 +468,184 @@ export def list.fromSeq: [c] ([c] seq(a)) -> list(a) = { s ->
   `seq(block) \list.fromSeq`.
 export def list.build: [c, d] ([c] () -> [d] seq(a)) -> list(a) = { block ->
   list.fromSeq(seq(block))
+}
+
+-- Reading a sequence until the answer is known. These pull `s` now, and stop at the first element
+-- that settles the answer, so they end on an endless sequence that has one.
+
+--| The first element of `s` for which `matches` is true, or `#notFound`: `(1..) \seq.find { n -> n * n
+  > 50 }` is `#some(8)`. It pulls `s` up to that element.
+export def seq.find: [c, d] ([c] seq(a)), ([d] a -> bool) -> #some(a) | #notFound = { s, matches ->
+  match s.next()
+    | #next(x, rest) -> (if matches(x) then #some(x) else seq.find(rest, matches))
+    | #done -> #notFound
+}
+
+--| The position, from `index`, of the first element of `s` for which `matches` is true.
+def seq.findIndexFrom
+  : [c, d] ([c] seq(a)), ([d] a -> bool), int -> #some(int) | #notFound
+  = { s, matches, index ->
+    match s.next()
+      | #next(x, rest) -> (if matches(x)
+        then #some(index)
+        else seq.findIndexFrom(rest, matches, index + 1))
+      | #done -> #notFound
+  }
+
+--| The position, counting from 0, of the first element of `s` for which `matches` is true, or
+  `#notFound`. It pulls `s` up to that element.
+export def seq.findIndex
+  : [c, d] ([c] seq(a)), ([d] a -> bool) -> #some(int) | #notFound
+  = { s, matches ->
+    seq.findIndexFrom(s, matches, 0)
+  }
+
+--| The position, counting from 0, of the first element of `s` that is `== x`, or `#notFound`. It pulls
+  `s` up to that element.
+export def seq.indexOf: [Eq(a), c] ([c] seq(a)), a -> #some(int) | #notFound = { s, x ->
+  seq.findIndex(s, { y -> y == x })
+}
+
+--| Whether `s` has an element `== x`. It pulls `s` until it finds one.
+export def seq.contains: [Eq(a), c] ([c] seq(a)), a -> bool = { s, x ->
+  seq.any(s, { y -> y == x })
+}
+
+--| Whether `test` holds for any element of `s` (so `false` for an empty one). It pulls `s` until it
+  holds.
+export def seq.any: [c, d] ([c] seq(a)), ([d] a -> bool) -> bool = { s, test ->
+  match seq.find(s, test)
+    | #some(_) -> true
+    | #notFound -> false
+}
+
+--| Whether `test` holds for every element of `s` (so `true` for an empty one). It pulls `s` until it
+  doesn't.
+export def seq.all: [c, d] ([c] seq(a)), ([d] a -> bool) -> bool = { s, test ->
+  match seq.find(s, { x -> not test(x) })
+    | #some(_) -> false
+    | #notFound -> true
+}
+
+--| The first element of `s`, or `#emptyList` when it has none, as [`list.head`] says. It pulls one
+  element.
+export def seq.head: [c] ([c] seq(a)) -> #some(a) | #emptyList = { s ->
+  match s.next()
+    | #next(x, _) -> #some(x)
+    | #done -> #emptyList
+}
+
+--| The element of `s` at `index`, counting from 0, or `#outOfRange` when `index` is negative or `s`
+  ends before it. It pulls `s` up to that element.
+export def seq.get: [c] ([c] seq(a)), int -> #some(a) | #outOfRange = { s, index ->
+  if index < 0 then #outOfRange else
+    match s.next()
+      | #next(x, rest) -> (if index == 0 then #some(x) else seq.get(rest, index - 1))
+      | #done -> #outOfRange
+}
+
+--| Whether `s` has no elements. It pulls one element.
+export def seq.isEmpty: [c] ([c] seq(a)) -> bool = { s ->
+  match s.next()
+    | #next(_, _) -> false
+    | #done -> true
+}
+
+--| The first value `f` yields, running it on the elements in turn as [`seq.select`] does, or
+  `#notFound` when it yields none. It stops at the first yield.
+export def seq.selectOne
+  : [c, d] ([c] seq(a)), ([d] a -> [d] seq(b)) -> #some(b) | #notFound
+  = { s, f ->
+    def selected = seq.flatMap(s, f)
+
+    match selected.next()
+      | #next(y, _) -> #some(y)
+      | #done -> #notFound
+  }
+
+-- Reading the whole of a sequence. These pull every element of `s` now, so on an endless sequence
+-- they never return: cut it with `seq.take` first.
+
+--| How many elements of `s` `test` holds for. It pulls the whole of `s`.
+export def seq.count: [c, d] ([c] seq(a)), ([d] a -> bool) -> int = { s, test ->
+  seq.fold(s, 0, { n, x -> if test(x) then n + 1 else n })
+}
+
+--| How many elements `s` has. It pulls the whole of `s`.
+export def seq.length: [c] ([c] seq(a)) -> int = { s ->
+  seq.fold(s, 0, { n, _ -> n + 1 })
+}
+
+--| The last element of `s`, or `x` when it has none.
+def seq.lastAfter: [c] ([c] seq(a)), a -> a = { s, x ->
+  match s.next()
+    | #next(y, rest) -> seq.lastAfter(rest, y)
+    | #done -> x
+}
+
+--| The last element of `s`, or `#emptyList` when it has none. It pulls the whole of `s`.
+export def seq.last: [c] ([c] seq(a)) -> #some(a) | #emptyList = { s ->
+  match s.next()
+    | #next(x, rest) -> #some(seq.lastAfter(rest, x))
+    | #done -> #emptyList
+}
+
+--| `best`, or the element of `s` that `better` keeps over it and each of the others.
+def seq.bestAfter: [c, d] ([c] seq(a)), ([d] a, a -> bool), a -> a = { s, better, best ->
+  match s.next()
+    | #next(x, rest) -> seq.bestAfter(rest, better, if better(x, best) then x else best)
+    | #done -> best
+}
+
+--| The element of `s` that `better` keeps over each of the others, or `#emptyList`.
+def seq.bestOf: [c, d] ([c] seq(a)), ([d] a, a -> bool) -> #some(a) | #emptyList = { s, better ->
+  match s.next()
+    | #next(x, rest) -> #some(seq.bestAfter(rest, better, x))
+    | #done -> #emptyList
+}
+
+--| The largest element of `s`, or `#emptyList` when it has none; of equal ones, the first. It pulls the
+  whole of `s`.
+export def seq.max: [Ord(a), c] ([c] seq(a)) -> #some(a) | #emptyList = { s ->
+  seq.bestOf(s, { x, y -> x > y })
+}
+
+--| The smallest element of `s`, or `#emptyList` when it has none; of equal ones, the first. It pulls
+  the whole of `s`.
+export def seq.min: [Ord(a), c] ([c] seq(a)) -> #some(a) | #emptyList = { s ->
+  seq.bestOf(s, { x, y -> x < y })
+}
+
+--| The element of `s` whose `key` is largest, or `#emptyList` when it has none; of equal keys, the
+  first. It pulls the whole of `s`.
+export def seq.maxBy
+  : [Ord(b), c, d] ([c] seq(a)), ([d] a -> b) -> #some(a) | #emptyList
+  = { s, key ->
+    seq.bestOf(s, { x, y -> key(x) > key(y) })
+  }
+
+--| The element of `s` whose `key` is smallest, or `#emptyList` when it has none; of equal keys, the
+  first. It pulls the whole of `s`.
+export def seq.minBy
+  : [Ord(b), c, d] ([c] seq(a)), ([d] a -> b) -> #some(a) | #emptyList
+  = { s, key ->
+    seq.bestOf(s, { x, y -> key(x) < key(y) })
+  }
+
+--| The elements of `s` added up, from the element type's zero: `(1..4) \seq.sum` is `10`. It pulls
+  the whole of `s`.
+export def seq.sum: [Add(a), c] ([c] seq(a)) -> a = { s ->
+  seq.fold(s, zero, { total, x -> total + x })
+}
+
+--| The elements of `s` for which `test` holds, and those for which it doesn't, each a list in order. It
+  pulls the whole of `s`.
+export def seq.partition: [c, d] ([c] seq(a)), ([d] a -> bool) -> (list(a), list(a)) = { s, test ->
+  def (yes, no) = seq.fold(
+    s
+    ([], [])
+    { (yes, no), x -> if test(x) then ([x, ...yes], no) else (yes, [x, ...no]) }
+  )
+
+  (list.reverse(yes), list.reverse(no))
 }

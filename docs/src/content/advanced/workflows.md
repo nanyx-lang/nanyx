@@ -99,7 +99,7 @@ def items = seq({
 })
 ```
 
-`yield x` with the rest of the block after it is `seq.cons(x, { rest })`, and the end of the block, or of a branch that doesn't yield, is `seq.empty()`. A `for` loop whose body yields gives the sequences its body gives for each element, one after another, then goes on to the rest of the block: it's `seq.concatMap` over the loop's sequence, which must be a `seq`, a range included (walk a list with `\list.toSeq`).
+`yield x` with the rest of the block after it is `seq.cons(x, { rest })`, and the end of the block, or of a branch that doesn't yield, is `seq.empty()`. A `for` loop whose body yields gives the sequences its body gives for each element, one after another, then goes on to the rest of the block: it's `seq.flatMap` over the loop's sequence, which must be a `seq`, a range included (walk a list with `\list.toSeq`).
 
 ```nanyx
 def evens = seq {
