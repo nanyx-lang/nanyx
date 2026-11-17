@@ -84,6 +84,19 @@ def foldFrom: [c] Slice(a), int, b, ([c] b, a -> b) -> b = { s, index, acc, step
     | #none -> acc
 }
 
+--| The elements of `s`, in order, each read when the sequence is pulled. A slice is [`Iterable`] by
+  it, so a `for` loop walks one.
+export def Slice.toSeq: Slice(a) -> seq(a) = { s ->
+  seq.unfold(
+    0
+    { index ->
+      match Slice.at(s, index)
+        | #some(element) -> #some(element, index + 1)
+        | #none -> #done
+    }
+  )
+}
+
 --| The elements of `s`, in order, as a list.
 export def Slice.toList: Slice(a) -> list(a) = { s ->
   list.reverse(Slice.fold(s, [], { acc, element -> [element, ...acc] }))

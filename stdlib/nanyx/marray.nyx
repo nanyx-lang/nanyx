@@ -93,6 +93,12 @@ export def MArray.toArray: [Memory] MArray(a) -> Array(a) = { MArray(xs) ->
   copyOutFrom(xs, __nanyx_array_new(__nanyx_marray_length(xs)), 0)
 }
 
+--| The elements of `xs` now, in order, as a sequence: changing `xs` later doesn't change it. A
+  mutable array is [`Iterable`] by it, so a `for` loop walks one.
+export def MArray.toSeq: [Memory] MArray(a) -> seq(a) = { xs ->
+  list.toSeq(MArray.toList(xs))
+}
+
 --| The elements of `xs` now, in order, as a list.
 export def MArray.toList: [Memory] MArray(a) -> list(a) = { MArray(xs) ->
   __nanyx_marray_to_list(xs)

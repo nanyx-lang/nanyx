@@ -345,7 +345,21 @@ let internal ensureContextsExist (state: InferState) (name: Identifier) (span: S
 let internal ensureContextTypesDetermined (state: InferState) (name: Identifier) (typeOpt: TypeExpr option) : Result<unit, Diagnostic list> =
     match typeOpt with
     | Some (Kind (TypeWithContext(contexts, inner))) ->
-        let written = annotationVarNames inner |> Set.ofList
+        let associatedOf ctxName = tryFindTypeDef ctxName state |> Option.map _.AssociatedTypes.Length |> Option.defaultValue 0
+        // An associated type of a context the type determines is determined too: its instance fixes it, as `elem` in
+        // `[Iterable(c), ToString(elem)] c -> ()`.
+        let written =
+            let inType = annotationVarNames inner |> Set.ofList
+            contexts
+            |> List.collect (fun ctx ->
+                match ctx.Kind with
+                | TypeApply(ctxName, args) when associatedOf ctxName > 0 ->
+                    let chosenBy = List.truncate (args.Length - associatedOf ctxName) args |> List.collect annotationVarNames
+                    if chosenBy |> List.forall inType.Contains then List.skip (args.Length - associatedOf ctxName) args |> List.collect annotationVarNames
+                    else []
+                | _ -> [])
+            |> Set.ofList
+            |> Set.union inType
         let contextText ctxName (args: TypeExpr list) =
             let simple = args |> List.choose (fun arg -> match arg.Kind with TypeVar n | TypeName n -> Some n | _ -> None)
             if simple.Length = args.Length then $"""{ctxName}({String.concat ", " simple})""" else ctxName
@@ -354,8 +368,7 @@ let internal ensureContextTypesDetermined (state: InferState) (name: Identifier)
             |> List.collect (fun ctx ->
                 match ctx.Kind with
                 | TypeApply(ctxName, args) ->
-                    let associated = tryFindTypeDef ctxName state |> Option.map _.AssociatedTypes.Length |> Option.defaultValue 0
-                    let args = List.truncate (args.Length - associated) args
+                    let args = List.truncate (args.Length - associatedOf ctxName) args
                     args
                     |> List.collect annotationVarNames
                     |> List.distinct

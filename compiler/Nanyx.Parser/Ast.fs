@@ -446,6 +446,10 @@ module Expression =
 module ForSyntax =
     let builtIn = "__for"
 
+    /// What an iterable that is not a list, a sequence, a map or a set is read as: the prelude's function that gives its
+    /// sequence through its `Iterable`.
+    let toSeq = "__toSeq"
+
     /// The loop lambda's parameter for an element of the `position`th iterable (counted from 1). Like a shorthand
     /// lambda's parameter, no code can write it.
     let element (position: int) = if position = 1 then "__for_element" else $"__for_element{position}"

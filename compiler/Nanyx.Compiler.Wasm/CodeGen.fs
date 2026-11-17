@@ -626,10 +626,24 @@ let private coreIrContextParameters
             match defs |> List.tryFind (fun (defName, _, _) -> defName = name) with
             | Some (_, _, value) -> SyntaxTree.expressionsWithin value |> List.choose (fun expr -> exprTypes |> Map.tryFind expr.Id) |> List.collect namedVars
             | None -> [])
+    let contextTypes = functionContextTypes |> Map.tryFind name |> Option.defaultValue []
+    // The names of the associated types its contexts write, which another of its contexts may name too, as
+    // `ToString(elem)` does in `[Iterable(c), ToString(elem)] c -> ()`.
+    let associatedNames =
+        contextTypes
+        |> List.collect (fun ctxType ->
+            match ctxType.Kind with
+            | TypeApply(baseName, arguments) ->
+                match typeDefs |> Map.tryFind baseName with
+                | Some info when info.Parameters.Length = arguments.Length ->
+                    arguments
+                    |> List.skip (arguments.Length - info.AssociatedTypes.Length)
+                    |> List.choose (fun arg -> match arg.Kind with TypeVar varName -> Some varName | _ -> None)
+                | _ -> []
+            | _ -> [])
+        |> Set.ofList
     let memberTypes =
-        functionContextTypes
-        |> Map.tryFind name
-        |> Option.defaultValue []
+        contextTypes
         |> List.collect (fun ctxType ->
             let baseName, arguments =
                 match ctxType.Kind with
@@ -639,15 +653,15 @@ let private coreIrContextParameters
             let memberTy (memberName: string) =
                 match typeDefs |> Map.tryFind baseName with
                 | Some info when info.Parameters.Length = arguments.Length ->
-                    // An associated type the function's own type does not write, `elem` in `[Iter(c)] c -> int`, is the
-                    // variable of its name in its body's types, which each call binds (see
+                    // An associated type the function's own type does not write, `elem` in `[Iter(c)] c -> int`, whether
+                    // in its own context or another, is the variable of its name in its body's types, which each call binds (see
                     // `TypedModule.AssociatedArguments`), or, where the body has none, held boxed, as a member's own type
                     // variables are (see `CoreIrLowerTypes.boxOwnVariables`).
                     let argumentTys =
                         arguments
                         |> List.mapi (fun index arg ->
                             match argumentTy arg, arg.Kind with
-                            | None, TypeVar varName when index >= info.Parameters.Length - info.AssociatedTypes.Length ->
+                            | None, TypeVar varName when index >= info.Parameters.Length - info.AssociatedTypes.Length || associatedNames.Contains varName ->
                                 bodyVars.Value |> List.tryFind (fst >> (=) varName) |> Option.map snd |> Option.orElse (Some CoreIrLowerTypes.boxedTy)
                             | found, _ -> found)
                     if argumentTys |> List.forall Option.isSome then

@@ -104,6 +104,12 @@ export def MList.length: [Memory] MList(a) -> int = { MList(state) ->
   MRef.get(state).count
 }
 
+--| The elements of `items` now, in order, as a sequence: adding to `items` later doesn't change
+  it. A mutable list is [`Iterable`] by it, so a `for` loop walks one.
+export def MList.toSeq: [Memory] MList(a) -> seq(a) = { items ->
+  list.toSeq(MList.toList(items))
+}
+
 --| The elements of `items`, in order, as a list. When `items` isn't used afterwards, this takes no
   time: the list is the cells `items` built. Otherwise it copies them, so that adding to `items`
   later leaves the list as it is.

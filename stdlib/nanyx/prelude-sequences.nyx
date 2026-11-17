@@ -68,6 +68,22 @@ export def seq.unfold: b, ([c] b -> #some(a, b) | #done) -> [c] seq(a) = { state
   )
 }
 
+--| What can be iterated: a value of type `c` that gives a sequence of `elem`s. A `for` loop walks
+  anything `Iterable`, and the `seq` functions that read a sequence take one. A type gets it by
+  attaching `toSeq`, whose type fixes `elem`: `list.toSeq: list(a) -> seq(a)` makes the `elem` of a
+  `list(int)` an `int`. A signature that needs the element type fixes it by name,
+  `[Iterable(c, elem = string)]`. The sequence `toSeq` gives needs no contexts.
+export context Iterable(c) = (elem: type, toSeq: c -> seq(elem))
+
+--| `s` itself: a sequence is [`Iterable`].
+export def seq.toSeq: seq(a) -> seq(a) = { s -> s }
+
+--| The sequence of `xs`, through its [`Iterable`]: what a `for` loop walks when `xs` is not a list, a
+  sequence, a map or a set.
+export def __toSeq: [Iterable(c)] c -> seq(elem) = { xs ->
+  toSeq(xs)
+}
+
 --| The elements of `xs`, in order.
 export def list.toSeq: list(a) -> seq(a) = { xs ->
   Seq(

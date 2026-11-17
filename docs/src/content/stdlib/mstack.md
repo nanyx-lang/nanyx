@@ -103,6 +103,15 @@ def MStack.length: [Memory] MStack(a) -> int
 
 How many values are on `stack`.
 
+## `MStack.toSeq`
+
+```nanyx fragment
+def MStack.toSeq: [Memory] MStack(a) -> seq(a)
+```
+
+The values on `stack` now, the top one first, as a sequence: pushing or popping later doesn't
+change it. A mutable stack is `Iterable` by it, so a `for` loop walks one.
+
 ## `MStack.toList`
 
 ```nanyx fragment

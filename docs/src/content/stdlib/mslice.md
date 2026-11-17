@@ -211,6 +211,15 @@ def MArray.sortByDescending: [Memory, Ord(b), c] MArray(a), ([c] a -> b) -> ()
 Sorts the elements of `xs` in descending order of `key`, in place, as [`MSlice.sortByDescending`](#mslicesortbydescending)
 does.
 
+## `MSlice.toSeq`
+
+```nanyx fragment
+def MSlice.toSeq: [Memory] MSlice(a) -> seq(a)
+```
+
+The elements of `s` now, in order, as a sequence: changing them later doesn't change it. A
+mutable slice is `Iterable` by it, so a `for` loop walks one.
+
 ## `MSlice.toList`
 
 ```nanyx fragment

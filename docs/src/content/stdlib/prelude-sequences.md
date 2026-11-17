@@ -95,6 +95,29 @@ def seq.unfold: b, ([c] b -> #some(a, b) | #done) -> [c] seq(a)
 The elements `step` gives, starting from `state`: `#some(x, next)` gives `x` and carries on from
 `next`, and `#done` ends the sequence. `step` runs when the sequence is pulled.
 
+## `Iterable`
+
+```nanyx fragment
+context Iterable(c) = (
+  elem: type
+  toSeq: c -> seq(elem)
+)
+```
+
+What can be iterated: a value of type `c` that gives a sequence of `elem`s. A `for` loop walks
+anything `Iterable`, and the `seq` functions that read a sequence take one. A type gets it by
+attaching `toSeq`, whose type fixes `elem`: `list.toSeq: list(a) -> seq(a)` makes the `elem` of a
+`list(int)` an `int`. A signature that needs the element type fixes it by name,
+`[Iterable(c, elem = string)]`. The sequence `toSeq` gives needs no contexts.
+
+## `seq.toSeq`
+
+```nanyx fragment
+def seq.toSeq: seq(a) -> seq(a)
+```
+
+`s` itself: a sequence is [`Iterable`](#iterable).
+
 ## `list.toSeq`
 
 ```nanyx fragment

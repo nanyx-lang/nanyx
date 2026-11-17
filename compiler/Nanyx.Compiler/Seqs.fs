@@ -21,6 +21,9 @@ module Seqs =
     /// The tag a sequence's `next` gives when it has no more elements, `#done`.
     let doneTag = "done"
 
+    /// The prelude's context of what can be iterated, `Iterable(c)`, which a type gets by attaching `toSeq`.
+    let iterable = "Iterable"
+
     /// The element type of a sequence type.
     let (|SeqType|_|) (ty: Ty) =
         match ty with

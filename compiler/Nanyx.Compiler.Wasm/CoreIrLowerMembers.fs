@@ -30,8 +30,9 @@ type MemberTools =
       KnownOf: Var -> KnownMember option
       /// The members of the contexts a definition's context variables stand for where these bindings bind them.
       VariableMembers: string -> Map<int, Ty> -> (ContextMemberKey * IrType) list
-      /// What the type variables and context variables of a definition are where its type is this.
-      BindingsAt: string -> Ty -> Map<int, Ty>
+      /// What the type variables and context variables of a definition are where the call at this node has it at this
+      /// type, with the associated types of the contexts it requires as the call has them.
+      BindingsAt: NodeId -> string -> Ty -> Map<int, Ty>
       /// The names of a definition's parameters.
       ParameterNames: string -> string list
       /// The name to call a definition by at an instance type.
@@ -56,17 +57,17 @@ let valueOfKnown (tools: MemberTools) (knownMember: KnownMember) (k: Atom -> Exp
     | KnownValue(definition, ty) -> tools.BindTemp (Expr.make (Call(tools.Callee definition ty, [])) (tools.ToIrType ty)) k
     | KnownConstant(constant, _) -> k constant
 
-/// The members of the contexts `name` declares, and the type of each where it is called at `instanceTy`, where the
-/// function's type gives it.
-let private memberTypes (tools: MemberTools) (name: string) (instanceTy: Ty) : ContextParameter list * Ty option list =
+/// The members of the contexts `name` declares, and the type of each where the call at `node` calls it at `instanceTy`,
+/// where the function's type gives it.
+let private memberTypes (tools: MemberTools) (name: string) (node: NodeId) (instanceTy: Ty) : ContextParameter list * Ty option list =
     let contextParameters = tools.Input.ContextParameters |> Map.tryFind name |> Option.map fst |> Option.defaultValue []
-    let bindings = tools.BindingsAt name instanceTy
+    let bindings = tools.BindingsAt node name instanceTy
     contextParameters, contextParameters |> List.map (fun parameter -> parameter.Type |> Option.map (substitute bindings >> substitute (tools.Subst ())))
 
 /// The members of the contexts `name` declares that a call to it at the node `node` knows (see `CoreIrLowerKnown`).
 /// What cannot be found is left to `contextMembers` to report.
 let knownMembers (tools: MemberTools) (scope: Scope) (name: string) (node: NodeId) (instanceTy: Ty) =
-    let contextParameters, memberTys = memberTypes tools name instanceTy
+    let contextParameters, memberTys = memberTypes tools name node instanceTy
     match tools.Input.ContextArguments name node (scope.Members |> Map.keys |> Set.ofSeq) Set.empty with
     | Ok arguments when arguments.Length = contextParameters.Length ->
         let inScope key = scope.Members |> Map.tryFind key |> Option.bind tools.KnownOf
@@ -230,8 +231,8 @@ and private derivedClosure (tools: MemberTools) (scope: Scope) (wrapper: string)
 /// which the callers of the function's value pass instead, and those in `knownMembers`, which the callee is
 /// specialised on, but for a lambda's environment (`KnownMember.isPassed`).
 and contextMembers (tools: MemberTools) (scope: Scope) (name: string) (node: NodeId) (instanceTy: Ty) (passed: Set<ContextMemberKey>) (knownMembers: (ContextMemberKey * KnownMember) list) (k: (ContextMemberKey * Atom) list -> Expr) : Expr =
-    let contextParameters, memberTys = memberTypes tools name instanceTy
-    let variables = tools.VariableMembers name (tools.BindingsAt name instanceTy) |> List.filter (fst >> passed.Contains >> not)
+    let contextParameters, memberTys = memberTypes tools name node instanceTy
+    let variables = tools.VariableMembers name (tools.BindingsAt node name instanceTy) |> List.filter (fst >> passed.Contains >> not)
     match tools.Input.ContextArguments name node (scope.Members |> Map.keys |> Set.ofSeq) passed with
     | Error reason -> cannot reason
     | Ok arguments ->

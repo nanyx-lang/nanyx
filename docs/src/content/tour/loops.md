@@ -30,6 +30,28 @@ def data = [1, 2, 3]
 for data | item -> println(item)
 ```
 
+A `for` loop walks anything that can be iterated: a list, a sequence, a map, a set, an array, a stack, a queue, a slice or a mutable collection, and a type of your own that attaches a `toSeq`. Attaching one gives the type the prelude's [`Iterable`](../stdlib/prelude-sequences) context, whose element type, `elem`, is what `toSeq`'s sequence holds:
+
+```nanyx
+type Playlist = protected (songs: list(string))
+
+def Playlist.toSeq: Playlist -> seq(string) = { p ->
+  list.toSeq(p.songs)
+}
+
+for Playlist(songs = ["Intro", "Outro"]) | song -> println(song)
+```
+
+A function that loops over whatever it's given requires `Iterable` of it, and fixes the element type where it needs to:
+
+```nanyx
+def shout: [Console, Iterable(c, elem = string)] c -> () = { words ->
+  for words | word -> println(word ++ "!")
+}
+
+shout(["hello", "there"])
+```
+
 # Looping over several collections at once
 
 A `for` loop can walk several collections in step. List them separated by commas, and each arm takes one pattern per collection, in the same order:

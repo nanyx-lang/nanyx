@@ -122,7 +122,7 @@ println("{StringTrie.withPrefix(commands, "gi")}")
 
 A square-bracket literal of plain items, `[1, 2, 3]`, is a `list(a)`, and one of `key => value` entries, `["a" => 1]`, is a `map(k, v)`, unless something says it's another type: the type expected where it's written, or the type's name written before the brackets. See [Syntax](#syntax).
 
-Associated types for constrained collection capabilities are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
+Every collection can be iterated: it has the prelude's `Iterable` context, which a type gets by attaching `toSeq`, so a `for` loop walks it and a function can take any collection by requiring `Iterable(c)`. The context's associated type `elem` is the element type, and a function fixes it where it needs to, `[Iterable(c, elem = string)]` (see [Loops](./loops#looping-collections)).
 
 # Syntax
 

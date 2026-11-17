@@ -125,6 +125,15 @@ def Queue.length: Queue(a) -> int
 
 How many values are in `queue`.
 
+## `Queue.toSeq`
+
+```nanyx fragment
+def Queue.toSeq: Queue(a) -> seq(a)
+```
+
+The values in `queue`, the front one first, as a sequence. A queue is `Iterable` by it, so a
+`for` loop walks one.
+
 ## `Queue.toList`
 
 ```nanyx fragment

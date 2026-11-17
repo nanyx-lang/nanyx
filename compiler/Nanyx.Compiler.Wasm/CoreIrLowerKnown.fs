@@ -60,6 +60,9 @@ let rec private withoutOpenRests (ty: Ty) =
     | TyFunc(input, output, _) -> TyFunc(withoutOpenRests input, withoutOpenRests output, [])
     | TyContexts _ -> TyContexts []
     | TyOpenRecord _ -> ty
+    // A recursive type's closed definition is left as it is: the contexts it names are its own parameters (see
+    // `RecursiveNominals`).
+    | TyRecursive(body, args) -> TyRecursive(body, List.map withoutOpenRests args)
     | _ -> Ty.map withoutOpenRests ty
 
 /// The top-level function that `wrapper` wraps, and the type a closure over the wrapper is at as a context member of
