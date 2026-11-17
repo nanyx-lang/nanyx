@@ -722,7 +722,7 @@ module Compiler =
                 let desugared, rewriteErrors = CustomPatterns.rewrite patternScope desugared
                 let patternErrors = CustomPatterns.check patternScope desugared @ rewriteErrors
                 let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.InferModule.inferModuleWithEnv env state desugared
-                let subst, mismatches = Unifier.solveDetailed state.Constraints |> fun (subst, mismatches) -> Unifier.keepWrittenNames types.Values subst, mismatches
+                let subst, mismatches = Solving.solveDetailed state.Constraints |> fun (subst, mismatches) -> Unifier.keepWrittenNames types.Values subst, mismatches
                 // Every error in the module is reported: the items that failed to check, and each conflict among the
                 // constraints of those that did, in the order they are in the source rather than the order solving
                 // found them. The module is typed all the same, with what did check.

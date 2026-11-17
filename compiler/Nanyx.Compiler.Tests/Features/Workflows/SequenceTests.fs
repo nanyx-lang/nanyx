@@ -24,8 +24,7 @@ let ``A yield is seq.cons of its value and the rest of the block, and the block 
         match body.Kind with
         | Block [ Kind (ExprStatement (Kind (FunctionCall(cons, _, [ Kind (LiteralExpr _); Kind (Lambda([], rest, false)) ])))) ] when cons = Seqs.consFunction ->
             match rest.Kind with
-            | FunctionCall(cons, _, [ _; Kind (Lambda([], Kind (FunctionCall(delay, _, [ Kind (Lambda([], Kind (FunctionCall(empty, _, [])), _)) ])), false)) ])
-                when cons = Seqs.consFunction && delay = Seqs.delayFunction && empty = Seqs.emptyFunction -> ()
+            | FunctionCall(cons, _, [ _; Kind (Lambda([], Kind (FunctionCall(empty, _, [])), false)) ]) when cons = Seqs.consFunction && empty = Seqs.emptyFunction -> ()
             | other -> Assert.Fail $"Unexpected rest: %A{other}"
         | other -> Assert.Fail $"Unexpected body: %A{other}"
     | other -> Assert.Fail $"Unexpected value: %A{other}"

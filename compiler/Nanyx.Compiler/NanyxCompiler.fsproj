@@ -25,6 +25,7 @@
     <Compile Include="RecursiveNominals.fs" />
     <Compile Include="Seqs.fs" />
     <Compile Include="Unifier.fs" />
+    <Compile Include="Solving.fs" />
     <Compile Include="Lists.fs" />
     <Compile Include="Maps.fs" />
     <Compile Include="Sets.fs" />

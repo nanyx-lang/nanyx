@@ -113,7 +113,7 @@ let internal declaredType (typed: TypedModule) (symbol: Symbol) : (Ty * Ty list)
 let private withContextsAt (typed: TypedModule) (symbol: Symbol) (ty: Ty) : Ty * Ty list =
     match declaredType typed symbol with
     | Some (general, (_ :: _ as contexts)) ->
-        match Unifier.unify [ general, ty, Equal, SourceSpan.none ] with
+        match Solving.unify [ general, ty, Equal, SourceSpan.none ] with
         // A context variable stands for the contexts it is bound to here, if any.
         | Ok subst -> Unifier.apply subst ty, contexts |> List.map (Unifier.apply subst) |> FunctionContexts.flatten |> Unifier.writtenContexts
         | Error _ -> ty, []
@@ -277,7 +277,7 @@ let private instantiationOf (names: TypeNotation) (typed: TypedModule) (hovered:
             let contextVariables = FunctionContexts.variablesIn general
             // Each variable with what it is here: a type, or the contexts a context variable stands for, if any.
             let bound =
-                match Unifier.unify [ general, ty, Equal, SourceSpan.none ] with
+                match Solving.unify [ general, ty, Equal, SourceSpan.none ] with
                 | Ok subst ->
                     Unifier.displayedVars names (general :: contexts)
                     |> List.choose (fun (var, name) ->

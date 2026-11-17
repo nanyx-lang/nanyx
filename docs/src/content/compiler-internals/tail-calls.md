@@ -48,7 +48,7 @@ function, and exits with 1. The runner (`WasmRunner.trapped` in `Runner.fs`) rea
 the name the backend gave the function back to the source's, without a specialisation's type arguments (`count__int`
 is `count`) and with a local `rec`'s own name (`__rec_go_16` is `go`), and passes over lambdas and runtime helpers,
 whose names start with `__`. A library function keeps its module's prefix (`list_fold`). The CLI writes the message
-(`ReportRunError` in `Program.cs`). A host other than the CLI reads the trap in its own runtime.
+(`ReportRunError` in `RunProgram.cs`). A host other than the CLI reads the trap in its own runtime.
 
 # Checking tail position
 

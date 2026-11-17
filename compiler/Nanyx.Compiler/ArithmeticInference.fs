@@ -54,7 +54,7 @@ module internal ArithmeticInference =
         if state.PendingArithmetic.IsEmpty then generalizeDef state
         else
             let tentative, generalized = generalizeDef state
-            let subst = fst (Unifier.solve state.Constraints)
+            let subst = fst (Solving.solve state.Constraints)
             let isOwn (ty: Ty) =
                 match ty with
                 | TyVar v -> tentative.Quantified.Contains v.Id

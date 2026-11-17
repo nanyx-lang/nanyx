@@ -449,7 +449,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | IfExpr(cond, ifTrue, ifFalse) ->
             let ty = tyOf expr
             this.Atoms scope [ cond ] (fun atoms ->
-                k (Expr.make (If(atoms.Head, this.Tail scope ifTrue, this.Tail scope ifFalse)) ty))
+                k (Expr.make (If(atoms.Head, this.Branch scope ifTrue ty, this.Branch scope ifFalse ty)) ty))
         | Block statements -> this.Block scope (statements |> List.map _.Kind) k
         | ExpressionKind.Match(values, arms) -> this.Match scope expr values arms k
         | ContextMemberCall(contextType, memberName, args) ->
@@ -919,6 +919,15 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// Lowers `expr` in tail position: the whole of what is left to do.
     member this.Tail (scope: Scope) (expr: Expression) : Expr = this.Complex scope expr id
 
+    /// Lowers `expr`, a branch of an `if` or a `match` whose value is of type `ty`, in tail position. A branch whose
+    /// value carries fewer contexts than the whole, as the pure rest of a sequence in a `match` that gives a
+    /// `[Console] seq(a)`, is adapted to it (see `CoreIrLowerMembers.coerce`).
+    member this.Branch (scope: Scope) (expr: Expression) (ty: IrType) : Expr =
+        let value = this.Tail scope expr
+        if CoreIrLowerMembers.differInContexts value.Type ty then
+            bindTemp value (fun atom -> CoreIrLowerMembers.coerce this.MemberTools scope atom ty (fun atom -> Expr.make (Atom atom) ty))
+        else value
+
     /// Lowers `exprs` in order to atoms, binding each value that is not one to a temporary. An operand that stores to a
     /// local on the way to its value (see `storesBeforeValue`) is lowered whole, its stores with it, into one
     /// temporary: it is computed where it is used, so nothing computed before it waits on the stack across its stores.
@@ -1088,6 +1097,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           TypeOf = tyOf
           NominalTypes = input.NominalTypes
           Tail = this.Tail
+          Branch = this.Branch
           Complex = this.Complex }
 
     /// The start function: each top-level expression in turn, its value dropped. The start function returns nothing,
@@ -1202,11 +1212,16 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let scope = { scope with Members = memberScope; Vars = parameterVars |> List.fold (fun acc (name, var) -> acc |> Map.add name var) scope.Vars }
             // A function value it results in is adapted to the type it declares (see `CoreIrLowerMembers.coerce`), and so
             // is a value of a type generic in contexts, whose type its value may carry fewer of than it declares, which
-            // is what its callers read: `def lines: () -> [Console] Stream(string) = { pure }`.
+            // is what its callers read: `def lines: () -> [Console] Stream(string) = { pure }`. A generic def's declared
+            // result is read as a plain one's once its type arguments are in, though its parameters may still have a
+            // variable, as a list's element type does in `list(a) -> [Console] Thunk(int)` called with `[]` (#1872).
             let resultTy =
                 match input.DefinitionTypes |> Map.tryFind name |> Option.map (substitute subst) with
-                | Some declared when (freeVars declared).IsEmpty -> snd (parameterTypes parameterNames declared isLambda)
-                | _ -> resultTy
+                | Some declared ->
+                    match snd (parameterTypes parameterNames declared isLambda) with
+                    | declaredResult when (freeVars declaredResult).IsEmpty -> declaredResult
+                    | _ -> resultTy
+                | None -> resultTy
             let result = toIrType resultTy
             let adapted (value: Expr) =
                 match value.Type with

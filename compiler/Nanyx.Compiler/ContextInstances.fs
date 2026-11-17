@@ -85,7 +85,7 @@ let private namedVarsIn (general: Ty) (specific: Ty) : Map<string, Ty> = varsIn 
 let private sameType (a: Ty) (b: Ty) =
     a = b
     || ((TypeEnv.freeTyVars a).IsEmpty && (TypeEnv.freeTyVars b).IsEmpty
-        && Unifier.unify [ a, b, Equal, SourceSpan.none ] |> Result.isOk)
+        && Solving.unify [ a, b, Equal, SourceSpan.none ] |> Result.isOk)
 
 /// The members of the context `ctxName` with its parameters bound to `argTys`, each with its type.
 let private contextMemberTypes (state: InferState) (ctxName: Identifier) (argTys: Ty list) : (Identifier * Ty) list option =
@@ -382,8 +382,8 @@ let rec private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeNam
                 |> Result.bind (fun (bound, current: InferState) ->
                     let definition = definition.Value
                     let definitionTy, next = instantiate current (TypeEnv.tryFind definition env).Value
-                    // An error earlier in the module is set aside (see `Unifier.agreeing`).
-                    match Unifier.unify ((memberTy, definitionTy, Equal, span) :: Unifier.agreeing next.Constraints) with
+                    // An error earlier in the module is set aside (see `Solving.agreeing`).
+                    match Solving.unify ((memberTy, definitionTy, Equal, span) :: Solving.agreeing next.Constraints) with
                     | Ok _ -> Ok (bound @ [ memberName, definition, definitionTy ], addConstraintAt span memberTy definitionTy next)
                     | Error _ ->
                         fail $"{requirer} requires the context '{ctxText}', but '{definition}' has the type '{Unifier.tyToString (resolveSoFar next definitionTy)}', where '{memberName}' must be '{Unifier.tyToString (resolveSoFar next memberTy)}'")) (Ok ([], state))
@@ -521,7 +521,7 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                         // do not fit the callee are the error instead (see `inferExpr`).
                         | Error errors, scope when
                             argTys |> List.exists (TypeEnv.freeTyVars >> Set.isEmpty >> not)
-                            && not (snd (Unifier.solve current.Constraints) |> List.exists (snd >> SourceSpan.contains call.Span)) ->
+                            && not (snd (Solving.solve current.Constraints) |> List.exists (snd >> SourceSpan.contains call.Span)) ->
                             let annotatedDef =
                                 match scope with
                                 | DefScope(defName, _) -> Some defName

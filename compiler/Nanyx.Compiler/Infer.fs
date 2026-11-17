@@ -71,7 +71,7 @@ let private fieldTySoFar (state: InferState) (ty: Ty) (fieldName: string) : (Ty 
 let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeScheme * InferState =
     // A conflict among the constraints, in this def or an earlier one, is set aside, so a def after an error is
     // generalised as it would be without it (#1441).
-    let subst = fst (Unifier.solve state.Constraints)
+    let subst = fst (Solving.solve state.Constraints)
     let resolved = Unifier.apply subst ty
     let envVars = envVarsUnder subst env
     envVars.UnionWith(LambdaContexts.usedVars (Unifier.apply subst) state)
@@ -184,7 +184,7 @@ let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression)
             // is the error, which its constraints report, not the context (#1045).
             | FunctionCall(name, spanOpt, _) ->
                 match resolveCallInstances env next expr name (nameSpan spanOpt expr) with
-                | Error _ when snd (Unifier.solve next.Constraints) |> List.exists (snd >> SourceSpan.contains expr.Span) -> Ok next
+                | Error _ when snd (Solving.solve next.Constraints) |> List.exists (snd >> SourceSpan.contains expr.Span) -> Ok next
                 | resolved -> resolved
                 |> Result.bind (fun next -> resolveReferenceInstances env next expr)
                 |> Result.bind (fun next -> localFunctionArguments env next expr)
@@ -451,7 +451,7 @@ and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) 
                 // A definition that requires a parameterised context finds its instance as a call to it does (#1594).
                 let opSpan = match expr.Kind with BinaryOp(_, opSpan, _, _) -> opSpan | _ -> None
                 match requireOperatorContexts env called expr callee (nameSpan opSpan expr) |> Result.bind (fun called -> resolveCallInstances env called expr callee (nameSpan opSpan expr)) with
-                | Error _ when snd (Unifier.solve called.Constraints) |> List.exists (snd >> SourceSpan.contains expr.Span) -> Ok called
+                | Error _ when snd (Solving.solve called.Constraints) |> List.exists (snd >> SourceSpan.contains expr.Span) -> Ok called
                 | resolved -> resolved
                 |> Result.map (fun called -> mkTypedExpr expr resultTy None None None, called)
             | None ->
@@ -1272,7 +1272,7 @@ and private inferLookup (env: TypeEnv) (state: InferState) (expr: Expression) (l
 /// is: `dbg(g)` never calls it.
 and private localFunctionArguments (env: TypeEnv) (state: InferState) (call: Expression) : Result<InferState, Diagnostic list> =
     let settled (current: InferState) (ty: Ty) =
-        let subst = fst (Unifier.solve current.Constraints)
+        let subst = fst (Solving.solve current.Constraints)
         let envVars = envVarsUnder subst env
         TypeEnv.freeTyVars (Unifier.apply subst ty) |> Set.forall envVars.Contains
     match call.Kind with
@@ -1352,10 +1352,10 @@ and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression)
             | _ -> state
         inferExpr env state expr
         |> Result.map (fun (typed, next) ->
-            // An error earlier in the module is set aside (see `Unifier.agreeing`).
-            let agreeing = Unifier.agreeing next.Constraints
+            // An error earlier in the module is set aside (see `Solving.agreeing`).
+            let agreeing = Solving.agreeing next.Constraints
             let isOpen (input: Ty) =
-                match Unifier.unify agreeing with
+                match Solving.unify agreeing with
                 | Ok subst ->
                     match Unifier.unalias (Unifier.apply subst input) with
                     | TyVar _
@@ -1364,7 +1364,7 @@ and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression)
                 | Error _ -> false
             match annotation.AttachedInput, Unifier.unalias typed.Type with
             | Some attached, TyFunc(input, _, _) when
-                isOpen input && Unifier.unify ((input, attached, Equal, expr.Span) :: agreeing) |> Result.isOk
+                isOpen input && Solving.unify ((input, attached, Equal, expr.Span) :: agreeing) |> Result.isOk
                 ->
                 typed, addConstraintAt expr.Span input attached next
             | _ -> typed, next)

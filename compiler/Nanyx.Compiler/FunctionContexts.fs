@@ -224,5 +224,12 @@ module FunctionContexts =
                 match expectedVars |> List.filter (function TyVar v -> v.Name.IsNone | _ -> true) with
                 | [] -> Ok arguments
                 | unwritten -> Ok (arguments @ solveTo origin unwritten [ fresh () ])
+            // A variable made up to keep room for more takes what is given, and the variables the type of the def
+            // writes are left alone: a `[d] seq(b)` given where `[c, e] seq(b)` is expected, `e` made up beside the
+            // signature's `c`, goes into `e` (#1908).
+            | _ when expectedVars |> List.exists (function TyVar v -> v.Name.IsSome | _ -> false)
+                     && expectedVars |> List.exists (function TyVar v -> v.Name.IsNone | _ -> false) ->
+                let unwritten = expectedVars |> List.filter (function TyVar v -> v.Name.IsNone | _ -> true)
+                Ok (arguments @ solveTo origin unwritten (givenExtra @ givenVars @ [ fresh () ]))
             // The variable keeps room for more, so that a function given for it elsewhere can require others.
             | _ -> Ok (arguments @ solveTo origin expectedVars (givenExtra @ givenVars @ [ fresh () ]))

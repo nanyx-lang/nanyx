@@ -33,6 +33,12 @@ would otherwise leave, and reuse sees the simplified code. It is off with `WasmO
 `nanyx run` and `nanyx build`), which tells at once whether a misbehaving program is the inliner's doing; some tests
 run programs both ways and check they print the same. Debug and release builds inline alike.
 
+In a program with a start function it goes over only the functions the start reaches once calls are inlined into it,
+and leaves the rest for `CoreIrReach` to drop. A host's instance makes a closure over every member of its contexts,
+which inlining shows most programs never call: hello world is lowered to 148 functions and reaches 1. Before a call is
+looked at, the function it calls has been gone over, so each function is inlined into as it would be if every function
+were. A module with no start (a library) has every function gone over.
+
 It takes the functions so that each comes after those it calls, and goes over each one up to sixteen times, each time
 simplifying (`CoreIrSimplify.simplify`) and then inlining what the time before exposed, and simplifies it once more at
 the end. Once nothing more is inlined anywhere, each function's locals that are read once, at once, are made

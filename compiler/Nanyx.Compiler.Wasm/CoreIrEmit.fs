@@ -678,6 +678,24 @@ type private FunctionEmitter(context: EmitContext) =
                 $"local.get ${at}\n    {load listTy offset}\n    {dropValue listTy}"
                 $"local.get ${at}\n    local.get ${held}\n    {store listTy offset}"
                 "i32.const 0" ]
+        // A list cell's head is given up and the value, which the cell takes over, is stored in its place.
+        | CallRuntime(name, [ cell; value ], _) when name = Intrinsics.listSetHead ->
+            let element =
+                match atomType cell with
+                | IrList element -> element
+                | other -> internalError $"'{name}' on '{IrType.show other}', which is not a list"
+            let at = freshLocal "__cell" "i32"
+            let held = freshLocal "__head" (CoreIrLayout.valueType element)
+            let dropOld =
+                if CoreIrDrop.isHeapType element then $"local.get ${at}\n    {load element 0}\n    {dropValue element}" else ""
+            join "\n    " [
+                atoms [ cell ]
+                $"local.set ${at}"
+                atoms [ value ]
+                $"local.set ${held}"
+                dropOld
+                $"local.get ${at}\n    local.get ${held}\n    {store element 0}"
+                "i32.const 0" ]
         // Whether the reference the intrinsic takes over is the only one, read from the count before it is given up. An
         // immortal object's count is 0, so it is never held exclusively.
         | CallRuntime(name, [ value ], _) when name = Intrinsics.isExclusive ->
