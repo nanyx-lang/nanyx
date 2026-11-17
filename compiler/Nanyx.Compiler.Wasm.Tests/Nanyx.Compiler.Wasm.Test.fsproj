@@ -128,6 +128,7 @@
     <Compile Include="Features\Binary\WasmBinaryTests.fs" />
     <Compile Include="Features\Names\RunNameTests.fs" />
     <Compile Include="Features\Names\RunImportedTypeInstanceTests.fs" />
+    <Compile Include="Features\Names\RunAttachedThroughAliasTests.fs" />
     <Compile Include="Features\Nominals\RunNominalTests.fs" />
     <Compile Include="Features\Nominals\RunRecursiveNominalTests.fs" />
     <Compile Include="Features\Nominals\RunLocalTypeTests.fs" />

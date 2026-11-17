@@ -218,15 +218,17 @@ module SyntaxTree =
     let operatorFunction (op: string) =
         if op = ArithmeticOperators.power then Some ArithmeticOperators.powerFunction else CompositionOperators.functionFor op
 
+    /// The dotted name `expr` is written as, when it is a name or a chain of member accesses on one: `t.Encoder.string`.
+    let rec dottedName (expr: Expression) : string option =
+        match expr.Kind with
+        | IdentifierExpr name -> Some name
+        | MemberAccess(inner, memberName, _) -> dottedName inner |> Option.map (fun prefix -> $"{prefix}.{memberName}")
+        | _ -> None
+
     /// Every name an expression may refer to: identifiers, callees and pipe targets, the prelude function an operator
     /// is a call to, and for a member access `a.b.c` both the dotted name and the member as `.c`, since the backend
     /// may call a definition named either way. Shadowing is ignored, so this can only over-count.
     let rec referencedNames (expr: Expression) : string list =
-        let rec dottedName (current: Expression) =
-            match current.Kind with
-            | IdentifierExpr name -> Some name
-            | MemberAccess(inner, memberName, _) -> dottedName inner |> Option.map (fun prefix -> $"{prefix}.{memberName}")
-            | _ -> None
         match expr.Kind with
         | IdentifierExpr name -> [ name ]
         | FunctionCall(name, _, args) -> name :: (args |> List.collect referencedNames)

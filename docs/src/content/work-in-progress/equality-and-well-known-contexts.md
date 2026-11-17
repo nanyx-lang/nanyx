@@ -28,7 +28,7 @@ and [Extending a type](../advanced/attached-definitions#extending-a-type). Wheth
   signature's instance, the opposite of that order.
 - **Attached definitions through an import's alias.** A type's own definitions are in scope wherever its values are,
   but a module the importer imports itself is reached as the import says, so after `import nanyx/text as t` an owned
-  `string.trim` is `t.string.trim`, not in scope unqualified, and reaching one through the alias as a value fails
+  `string.trim` is `t.string.trim`, not in scope unqualified; it is reached through the alias as a value too
   ([#1833](https://github.com/nanyx-lang/nanyx/issues/1833)). Two visible types of one name (two modules' `Point`s)
   have their owned definitions left out, as an attached name says only the type's name.
 

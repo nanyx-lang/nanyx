@@ -47,8 +47,8 @@ instance: in a request handler, the HTTP host answers other requests meanwhile.
   derived today, was rejected: it would be a compiler special case that a SQL or YAML library couldn't use.
 - **Where the encoders live.** They are in a module of their own, `nanyx.json/encode`, because their names are the
   decoders' (`encode.string`, `json.string`). Attaching them to `Encoder` (`json.Encoder.string`) would keep one
-  module, but a type's attached definitions can't be reached through an import's alias yet
-  ([#1833](https://github.com/nanyx-lang/nanyx/issues/1833)).
+  module, now that a type's attached definitions are reached through an import's alias
+  ([#1833](https://github.com/nanyx-lang/nanyx/issues/1833)); whether to move them is open.
 - **The decoders' file.** They are in `json.typed.nyx`, part of the module `json`, because a partial module's file
   can't name a type from a file that sorts after it ([#1838](https://github.com/nanyx-lang/nanyx/issues/1838)).
 
