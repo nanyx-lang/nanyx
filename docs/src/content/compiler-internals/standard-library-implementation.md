@@ -76,7 +76,7 @@ and its explicit imports take precedence over the prelude's, so a module can def
 
 The prelude is split by topic across `prelude.nyx` and the files beside it that start `@partial module prelude`:
 `prelude-contexts.nyx` (equality, ordering, hashing, joining and text), `prelude-numbers.nyx` (`int` and `float`,
-`Add`, `Num`, powers and bitwise functions on ints), `prelude-sized-numbers.nyx`, `prelude-conversions.nyx`, `prelude-results.nyx` (results,
+`Add`, `Sub`, `Num`, powers and bitwise functions on ints), `prelude-sized-numbers.nyx`, `prelude-conversions.nyx`, `prelude-results.nyx` (results,
 options and `proc`), `prelude-lists.nyx`, `prelude-sequences.nyx` (lazy sequences and ranges), `prelude-maps.nyx`
 (maps and sets) and `prelude-arrays.nyx` (reading an array, and what collection literals are built with). `prelude.nyx` keeps the module's doc
 comment and what fits no topic: `crash`, `ignore`, booleans and memory blocks.

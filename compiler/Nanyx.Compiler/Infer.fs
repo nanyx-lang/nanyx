@@ -1012,11 +1012,11 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
         // A callee a module block keeps from here is checked on as if it were reached (see `FailedCalls`).
         let reachErrors = TypeEnv.tryFind name env |> Option.map (fun scheme -> referenceErrors name expr scheme state) |> Option.defaultValue []
         let state = if FailedCalls.calleeKnown reachErrors && not reachErrors.IsEmpty then FailedCalls.failed expr reachErrors state else state
-        match TypeEnv.tryFind name env with
+        // The callee's scheme, with the function a call of it is read as if it is a map or an array.
+        match TypeEnv.tryFind name env |> Option.map (fun scheme -> scheme, lookupOf state scheme.Type) with
         | Some _ when not (FailedCalls.calleeKnown reachErrors) -> Error reachErrors
-        | Some scheme when (lookupOf state scheme.Type).IsSome ->
-            inferLookup env state expr (lookupOf state scheme.Type).Value (Expression.from expr (IdentifierExpr name)) spanOpt args
-        | Some scheme ->
+        | Some (_, Some lookup) -> inferLookup env state expr lookup (Expression.from expr (IdentifierExpr name)) spanOpt args
+        | Some (scheme, None) ->
             let mutable current = state
             let funcTy, nextState = instantiate (recordReference expr scheme current) scheme
             let written = contextRequirementsOf env state name |> Option.defaultValue []
@@ -1063,14 +1063,14 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                         | _ -> None
                     | _ -> None
                 // `f(a, b)` passes its arguments as one tuple, whose items take the callee's parameters' types
-                // the same way.
-                let tupleParamTys (items: Expression list) =
-                    match paramTys with
-                    | Some [ declaredInput ] ->
+                // the same way: a tuple argument with its items and their types.
+                let (|TupleOfParameters|_|) (arg: Expression) =
+                    match arg, paramTys with
+                    | Kind (TupleExpr items), Some [ declaredInput ] ->
                         match Unifier.unalias declaredInput with
                         | TyRecord(fields, _) when fields.Count = items.Length ->
                             let tys = items |> List.mapi (fun index _ -> fields |> Map.tryFind (tupleFieldName index))
-                            if tys |> List.forall Option.isSome then Some (tys |> List.choose id) else None
+                            if tys |> List.forall Option.isSome then Some (items, tys |> List.choose id) else None
                         | _ -> None
                     | _ -> None
                 // A lambda can use the contexts its parameter's type requires, which the callee supplies.
@@ -1108,8 +1108,8 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                             match arg, paramTys |> Option.bind (List.tryItem index) with
                             | Kind (Lambda(lambdaArgs, lambdaBody, _)), Some paramTy ->
                                 inferLambda current arg lambdaArgs lambdaBody (LambdaArguments.expectedInput current (Some paramTy) arg lambdaArgs) paramTy
-                            | Kind (TupleExpr items), _ when (tupleParamTys items).IsSome ->
-                                LambdaArguments.inferTupleItems inferItem inferLambda current items (tupleParamTys items).Value
+                            | TupleOfParameters(items, itemTys), _ ->
+                                LambdaArguments.inferTupleItems inferItem inferLambda current items itemTys
                                 |> Result.map (fun (typedItems, next) ->
                                     mkTypedExpr arg (tupleRecordType (typedItems |> List.map (fun typedItem -> typedItem.Type))) None None None, next)
                                 |> recordExprType
@@ -1250,17 +1250,19 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                 let dot = name.LastIndexOf '.'
                 let receiver = if dot > 0 then name.Substring(0, dot) else ""
                 let field = name.Substring(dot + 1)
-                match TypeEnv.tryFind receiver env with
+                let receiverValue = if dot > 0 && not (receiver.Contains '.') then TypeEnv.tryFind receiver env else None
+                // The function a call of the field is read as, if it is a map or an array (see `lookupOf`).
+                let fieldLookup (scheme: TypeScheme) =
+                    recordFieldsOf (resolveSoFar state scheme.Type) |> Option.bind (Map.tryFind field) |> Option.bind (lookupOf state)
+                match receiverValue |> Option.map (fun scheme -> scheme, fieldLookup scheme) with
                 // `machine.inventory(name)`, where the field is a map or an array, is a lookup in it.
-                | Some scheme when dot > 0 && not (receiver.Contains '.')
-                                   && recordFieldsOf (resolveSoFar state scheme.Type) |> Option.bind (Map.tryFind field) |> Option.bind (lookupOf state) |> Option.isSome ->
-                    let lookup = recordFieldsOf (resolveSoFar state scheme.Type) |> Option.bind (Map.tryFind field) |> Option.bind (lookupOf state)
+                | Some (_, Some lookup) ->
                     let collection = Expression.from expr (MemberAccess(Expression.from expr (IdentifierExpr receiver), field, spanOpt))
-                    inferLookup env state expr lookup.Value collection spanOpt args
+                    inferLookup env state expr lookup collection spanOpt args
                 // `statement.setInt(position, value)`, where the field holds a function, calls it (see `FieldCalls`).
-                | Some scheme when dot > 0 && not (receiver.Contains '.') && FieldCalls.holdsFunction state scheme.Type field ->
+                | Some (scheme, None) when FieldCalls.holdsFunction state scheme.Type field ->
                     FieldCalls.infer (inferExpr env) state expr receiver field spanOpt args
-                | Some scheme when dot > 0 && not (receiver.Contains '.') ->
+                | Some (scheme, None) ->
                     let memberName = name.Substring(dot + 1)
                     let receiverTy = resolveSoFar state scheme.Type
                     let message =
@@ -1269,7 +1271,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                             $"'{receiver}' is a value, so '{name}' is not a function's name, but '{attached}' is attached to its type: call it with a pipe, as in `{receiver} \\{memberName}(...)`"
                         | None -> $"'{receiver}' is a value, so '{name}' is not a function's name, and '{Unifier.tyToString receiverTy}' has no '{memberName}' attached"
                     Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message ]
-                | _ -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" env.Names.Keys name ]
+                | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" env.Names.Keys name ]
 
 /// `expr`, a call of the map or array `collection` with `args`: a lookup, read as the call of `lookupName`,
 /// `map.get(m, args...)` or `array.at(xs, args...)` (see `lookupOf`), and recorded in `ReadAs` to be written as it. The
@@ -1351,10 +1353,11 @@ and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression)
     match expr.Kind with
     | Lambda(args, body, _) when annotation.ExpectedInput.IsSome || annotation.ExpectedReturn.IsSome ->
         inferLambdaWithExpected env state expr args body annotation.ExpectedInput annotation.ExpectedReturn
-    // A square-bracket literal builds the type the def is declared at, if it is one with a `fromArray`.
-    | _ when (annotation.Declared |> Option.bind (CollectionLiterals.targeted inferExpr env state expr)).IsSome ->
-        (annotation.Declared |> Option.bind (CollectionLiterals.targeted inferExpr env state expr)).Value
     | _ ->
+    // A square-bracket literal builds the type the def is declared at, if it is one with a `fromArray`.
+    match annotation.Declared |> Option.bind (CollectionLiterals.targeted inferExpr env state expr) with
+    | Some targeted -> targeted
+    | None ->
         // A literal that ends the def's block builds the declared type too: a long one is written on the lines under `=`.
         let state =
             match expr.Kind, annotation.Declared with

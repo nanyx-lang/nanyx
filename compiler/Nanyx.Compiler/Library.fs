@@ -1151,7 +1151,14 @@ module Compiler =
             { Phase = Typed
               Diagnostics =
                 if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped (checkedModules.FileName origin) source checkedModule.Syntax checkedModule.Lowered checkedModule.DocComments typed)
-                  else ImportFixes.add (normalizeSource source) checkedModule.Syntax checkedModule.Errors |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax
+                  else
+                      // A name another module of the package, or of a package it depends on, exports gets its import too.
+                      let packageExports =
+                          match checkedModules.Package, origin with
+                          | Some package, SourceFile path when PackageModules.contains package path -> PackageExports.importable package checkedModules.ReadFile path
+                          | _ -> []
+                      ImportFixes.add packageExports (normalizeSource source) checkedModule.Syntax checkedModule.Errors
+                      |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax
               Typed = Some typed
               TypeChecked = checkedModule.Errors.IsEmpty
               ErrorsDeferred = checkedModule.Undeferred.IsEmpty

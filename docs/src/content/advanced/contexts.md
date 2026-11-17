@@ -378,11 +378,11 @@ Inside `combineAll`, `empty` and `combine` are the members of the instance it is
 
 A call finds the instance from the types of its arguments and its result, so a type variable a context is applied to must also be the type of a parameter or of the result. `[ToString(a)] string -> ()` is an error (`NYX0236`): nothing a call passes says what `a` is.
 
-The operators read through contexts of the prelude in the same way: `x + y` on values of a type variable calls the `` `+` `` of [`Add`](#adda), `x ++ y` the `` `++` `` of [`Append`](#appenda), and `x == y` the `` `==` `` of [`Eq`](#eqa). On an `int`, a `float`, a `string` or a `bool`, an operator is always the built-in one, as `++` is on a list, so a counter's `n + 1` in a generic function still adds ints.
+The operators read through contexts of the prelude in the same way: `x + y` on values of a type variable calls the `` `+` `` of [`Add`](#adda), `x - y` the `` `-` `` of [`Sub`](#suba), `x ++ y` the `` `++` `` of [`Append`](#appenda), and `x == y` the `` `==` `` of [`Eq`](#eqa). On an `int`, a `float`, a `string` or a `bool`, an operator is always the built-in one, as `++` is on a list, so a counter's `n + 1` in a generic function still adds ints.
 
 ## Operators find their context
 
-An operator reads the context member of its name (prefix `-` reads `negate`), and its context is the prelude's context with the fewest members that has that member. `Add` and `Num` both have a `` `+` ``, and `Add` is the smaller, so `+` is read through `Add`; only `Num` has a `` `*` ``. Only the prelude's contexts are looked at: a context of your own with a `` `+` `` member is required by name.
+An operator reads the context member of its name (prefix `-` reads `negate`), and its context is the prelude's context with the fewest members that has that member. `Add` and `Num` both have a `` `+` ``, and `Add` is the smaller, so `+` is read through `Add`; in the same way `-` and prefix `-` are read through `Sub`, and only `Num` has a `` `*` ``. Only the prelude's contexts are looked at: a context of your own with a `` `+` `` member is required by name.
 
 So every member of the prelude's contexts has exactly one smallest context. A context that repeats a member of another is larger or smaller than it, never the same size, and a smaller one takes the operator over in every function whose type is inferred. The compiler checks this when it checks the prelude, and reports a tie as `NYX0006`.
 
@@ -392,9 +392,10 @@ A function that does not write its type requires the contexts its operators need
 def add = { x, y -> x + y } -- [Add(a)] a, a -> a
 def lerp = { a, b, t -> a + (b - a) * t } -- [Num(a)] a, a, a -> a
 def inc = { x -> x + 1 } -- int -> int: `1` is an int
+def diff = { x, y -> x + y - x } -- [Add(a), Sub(a)] a, a -> a
 ```
 
-Adding and multiplying values of one type needs `Num` alone, which has every member of `Add`. A function inside another function that doesn't write its type requires no contexts, so its arithmetic is on ints or floats. A top-level function passed as a value keeps its contexts: `add` in `xs \list.fold(0.0, add)` is passed with the `Add(float)` found where it is named.
+Adding, subtracting and multiplying values of one type needs `Num` alone, which has every member of `Add` and `Sub`. A function inside another function that doesn't write its type requires no contexts, so its arithmetic is on ints or floats. A top-level function passed as a value keeps its contexts: `add` in `xs \list.fold(0.0, add)` is passed with the `Add(float)` found where it is named.
 
 Operators on two of a function's type variables need the contexts of each, and each operator calls the member of its own variable's instance, though both members have one name:
 
@@ -592,15 +593,10 @@ A call that requires `Default` of a type with no `default`, such as a function, 
 
 ## Add(a)
 
-`Add(a)` is the standard library's context for values that add and subtract. `x + y` and `x - y` are read through it, and so is `-x`, which is its `negate`.
+`Add(a)` is the standard library's context for values that add. `x + y` is read through it.
 
 ```nanyx
-context Add(a) = (
-  zero: a
-  `+`: (a, a) -> a
-  `-`: (a, a) -> a
-  negate: a -> a
-)
+context Add(a) = (zero: a, `+`: (a, a) -> a)
 ```
 
 The compiler has its own for `int` and `float`. A function that adds values of one of its type variables requires `Add` of it, and in such a function a `0` added to one of those values is `zero`:
@@ -615,11 +611,27 @@ def orZero: [Add(a)] a -> a = { x ->
 }
 ```
 
-`list.sum` is `total`. A function that writes its type and adds without `[Add(a)]` is an error that says to add it. One that does not write its type has the requirement [inferred](#operators-find-their-context): `def add = { x, y -> x + y }` is `[Add(a)] a, a -> a`, while `def inc = { x -> x + 1 }` is still `int -> int`. Any other type gets an `Add` by attaching the four members (see [Context synthesis](#context-synthesis)).
+`list.sum` is `total`. A function that writes its type and adds without `[Add(a)]` is an error that says to add it. One that does not write its type has the requirement [inferred](#operators-find-their-context): `def add = { x, y -> x + y }` is `[Add(a)] a, a -> a`, while `def inc = { x -> x + 1 }` is still `int -> int`. Any other type gets an `Add` by attaching the two members (see [Context synthesis](#context-synthesis)), so a type that adds but doesn't subtract can be summed.
+
+## Sub(a)
+
+`Sub(a)` is the standard library's context for values that subtract. `x - y` is read through it, and so is `-x`, which is its `negate`.
+
+```nanyx
+context Sub(a) = (`-`: (a, a) -> a, negate: a -> a)
+```
+
+The compiler has its own for `int` and `float`, and any other type gets one by attaching the two members. `Add` and `Sub` share no member, so a function that adds and subtracts values of one type requires both:
+
+```nanyx
+def distance: [Add(a), Sub(a)] a, a, a -> a = { start, step, back ->
+  start + step - back
+}
+```
 
 ## Num(a)
 
-`Num(a)` is the context for numbers: it has every member of `Add(a)`, and `x * y`, `x / y` and `x % y` are read through it too.
+`Num(a)` is the context for numbers: it has every member of `Add(a)` and `Sub(a)`, and `x * y`, `x / y` and `x % y` are read through it too.
 
 ```nanyx
 context Num(a) = (
@@ -649,7 +661,7 @@ def mean: [Num(a)] list(a) -> a = { xs ->
 }
 ```
 
-`mean` calls `list.sum`, which requires `Add(a)`: contexts are structural, and a `Num` has every member an `Add` has, so the `Num` it is given serves. On `int`, `/` truncates and `%` takes the sign of the left operand, so `mean([1, 2, 4])` is `2`; on `float` they follow IEEE 754. A measured type, such as a length, is to have an `Add` but no `Num`, because multiplying two lengths gives an area ([units and dimensions](../work-in-progress/units-and-dimensions)).
+`mean` calls `list.sum`, which requires `Add(a)`: contexts are structural, and a `Num` has every member an `Add` has, so the `Num` it is given serves, as it would for a function that requires `Sub(a)`. On `int`, `/` truncates and `%` takes the sign of the left operand, so `mean([1, 2, 4])` is `2`; on `float` they follow IEEE 754. A measured type, such as a length, is to have an `Add` and a `Sub` but no `Num`, because multiplying two lengths gives an area ([units and dimensions](../work-in-progress/units-and-dimensions)).
 
 ## Append(a)
 
@@ -762,12 +774,7 @@ When a function requires a context, you don't always have to load or create one 
 For example, given the prelude's `Add` context:
 
 ```nanyx
-context Add(a) = (
-  zero: a
-  `+`: (a, a) -> a
-  `-`: (a, a) -> a
-  negate: a -> a
-)
+context Add(a) = (zero: a, `+`: (a, a) -> a)
 ```
 
 And a type with matching attached definitions:
@@ -778,13 +785,9 @@ type Point = (x: int, y: int)
 def Point.zero = Point(x = 0, y = 0)
 
 def Point.`+` = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }
-
-def Point.`-` = { a, b -> Point(x = a.x - b.x, y = a.y - b.y) }
-
-def Point.negate = { a -> Point(x = -a.x, y = -a.y) }
 ```
 
-You can call `list.sum` on a `list(Point)` without explicitly loading an `Add(Point)` context -- the compiler sees that `Point.zero`, ``Point.`+` ``, ``Point.`-` `` and `Point.negate` satisfy the context and synthesizes it. The attached `+` is also what `p + q` on two points calls:
+You can call `list.sum` on a `list(Point)` without explicitly loading an `Add(Point)` context -- the compiler sees that `Point.zero` and ``Point.`+` `` satisfy the context and synthesizes it. The attached `+` is also what `p + q` on two points calls:
 
 ```nanyx
 def points = [Point(x = 1, y = 2), Point(x = 3, y = 4), Point(x = 5, y = 6)]
@@ -795,7 +798,7 @@ def total = points \list.sum
 
 This is analogous to how Haskell derives typeclass instances or how Rust resolves trait implementations. The key difference is that in Nanyx the "instance" is just a collection of attached definitions -- there is no separate declaration required.
 
-This is also where the compiler's own `Add(int)` and `Add(float)` come from: the prelude attaches `zero`, `` `+` ``, `` `-` `` and `negate` to `int` and `float`, and a generic function called at `int` is passed those. A concrete expression like `1 + 2` is the built-in operator, not a call.
+This is also where the compiler's own `Add(int)`, `Sub(int)` and the rest come from: the prelude attaches `zero`, `` `+` ``, `` `-` ``, `negate` and `Num`'s other members to `int` and `float`, and a generic function called at `int` is passed those. A concrete expression like `1 + 2` is the built-in operator, not a call.
 
 ## When synthesis applies
 

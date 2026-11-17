@@ -19,8 +19,6 @@ def total = {
   use Add(Point)(
     zero = Point(x = 0, y = 0)
     `+` = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }
-    `-` = { a, b -> Point(x = a.x - b.x, y = a.y - b.y) }
-    negate = { a -> a }
   )
   points \list.sum
 }

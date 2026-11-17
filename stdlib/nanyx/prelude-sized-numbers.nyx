@@ -2,8 +2,8 @@
 
 -- Part of the prelude, which is prelude.nyx and each file beside it marked @partial.
 
--- The compiler's own `Add` and `Num` of the sized integers, and their `compare`, `hash` and
--- `toString`, as `int` has them. Arithmetic that does not fit the type stops the program, and so
+-- The compiler's own `Add`, `Sub` and `Num` of the sized integers, and their `compare`, `hash`
+-- and `toString`, as `int` has them. Arithmetic that does not fit the type stops the program, and so
 -- does `fromInt` of an `int` outside its range.
 
 export def I8.zero: I8 = 0
@@ -314,8 +314,8 @@ export def U64.toString: U64 -> string = { n ->
   "{n}"
 }
 
--- The compiler's own `Add` and `Num` of `F32`, and its `compare`, `hash` and `toString`, as `float`
--- has them. `fromInt` gives the nearest `F32`.
+-- The compiler's own `Add`, `Sub` and `Num` of `F32`, and its `compare`, `hash` and `toString`, as
+-- `float` has them. `fromInt` gives the nearest `F32`.
 
 export def F32.zero: F32 = 0.0
 

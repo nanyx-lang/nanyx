@@ -184,13 +184,13 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
             new DefinitionParams { TextDocument = new TextDocumentIdentifier(uri), Position = new Position(line, character) },
             _cancellation.Token))?.ToList() ?? [];
 
-    protected async Task<List<CodeAction>> CodeActionsIn(DocumentUri uri, Range range) =>
+    protected async Task<List<CodeAction>> CodeActionsIn(DocumentUri uri, Range range, IEnumerable<CodeActionKind>? only = null) =>
         (await _client.TextDocument.RequestCodeAction(
             new CodeActionParams
             {
                 TextDocument = new TextDocumentIdentifier(uri),
                 Range = range,
-                Context = new CodeActionContext { Diagnostics = new Container<Diagnostic>() }
+                Context = new CodeActionContext { Diagnostics = new Container<Diagnostic>(), Only = only is null ? null : new Container<CodeActionKind>(only) }
             },
             _cancellation.Token))?
         .Select(item => item.CodeAction!)
