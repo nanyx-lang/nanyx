@@ -57,8 +57,6 @@ let ``The HTTP interface package is shipped beside the compiler, with no depende
     Assert.Equal<string list>([ "client"; "http"; "request"; "response" ], (ShippedPackages.tryModules "nanyx.http.core").Value.PublicModules |> List.sort)
 
 [<Fact>]
-let ``The JSON package is shipped beside the compiler, with one public module and no dependencies`` () =
-=======
 let ``The JSON package is shipped beside the compiler, with its modules for values and for encoders, and no dependencies`` () =
     let manifest = manifestOf "nanyx.json"
     Assert.Equal(("nanyx.json", Toolchain.version), (manifest.Name, manifest.Version))
