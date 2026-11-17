@@ -209,6 +209,8 @@ module Compiler =
           /// Whether a module declares contexts the module's host provides, which importing it makes ambient (see
           /// `providesContexts`).
           ProvidesContexts: ModuleOrigin -> bool
+          /// The module's host's root module as an import names it (`nanyx.console/console.host`), if it has a host.
+          HostImport: string option
           /// The members of the ambient contexts carried in with imported functions, with the definitions that stand in for them.
           CarriedAmbientMembers: AmbientMember list
           /// The modules that bring each name in unqualified, by the module's key, with the name of the module.
@@ -400,7 +402,10 @@ module Compiler =
         // definitions, hidden, so a call to one is checked as a call needing the context is here: an ambient
         // one, and a parameterised one, whose instance each call finds (an attached `Point.show` for a
         // `Show(Point)`, say).
-        let carried, carriedParameterised =
+        // Under a host, one carried in neither way can only come from the host, and the host does not provide it: a call
+        // to a function that requires it is an error (see `InferState.UnprovidedContexts`). `HostRuntime`, which only a
+        // host may require, has an error of its own (see `Hosts`).
+        let carried, carriedParameterised, unprovided =
             let rec contextNames (ctx: TypeExpr) =
                 match ctx.Kind with
                 | TypeContext contexts -> contexts |> List.collect contextNames
@@ -414,18 +419,29 @@ module Compiler =
                 |> Seq.distinct
                 |> Seq.filter (fun name -> not (typeDefs.ContainsKey name) && not (state.ContextDefs.ContainsKey name))
                 |> List.ofSeq
-            unnamed |> List.choose (fun name -> imported.AmbientContexts |> Map.tryFind name |> Option.map (fun info -> name, info)),
-            unnamed
-            |> List.choose (fun name ->
-                imported.Typed.TypeDefs
-                |> Map.tryFind name
-                |> Option.filter (fun info -> info.IsContext && not info.Parameters.IsEmpty && not (imported.AmbientContexts.ContainsKey name))
-                |> Option.map (fun info -> name, info))
+            let carried = unnamed |> List.choose (fun name -> imported.AmbientContexts |> Map.tryFind name |> Option.map (fun info -> name, info))
+            let carriedParameterised =
+                unnamed
+                |> List.choose (fun name ->
+                    imported.Typed.TypeDefs
+                    |> Map.tryFind name
+                    |> Option.filter (fun info -> info.IsContext && not info.Parameters.IsEmpty && not (imported.AmbientContexts.ContainsKey name))
+                    |> Option.map (fun info -> name, info))
+            let unprovided =
+                match merged.HostImport with
+                | Some hostImport ->
+                    let carriedNames = carried @ carriedParameterised |> List.map fst |> Set.ofList
+                    unnamed
+                    |> List.filter (fun name -> not (carriedNames.Contains name) && name <> Hosts.runtimeContext)
+                    |> List.map (fun name -> name, hostImport)
+                | None -> []
+            carried, carriedParameterised, unprovided
         let state =
             { state with
                 TypeDefs = carried @ carriedParameterised |> List.fold (fun acc (name, info) -> acc |> Map.add name info) typeDefs
                 HiddenTypeNames = carried @ carriedParameterised |> List.fold (fun acc (name, _) -> acc |> Set.add name) hiddenTypeNames
                 CarriedAmbientContexts = carried |> List.fold (fun acc (name, _) -> acc |> Set.add name) state.CarriedAmbientContexts
+                UnprovidedContexts = unprovided |> List.fold (fun acc (name, hostImport) -> acc |> Map.add name hostImport) state.UnprovidedContexts
                 HostContexts =
                     if merged.ProvidesContexts importedOrigin then
                         exportedTypeDefs
@@ -639,6 +655,7 @@ module Compiler =
                   InlinedUseContexts = Map.empty
                   ImportedContextTypes = Map.empty
                   ProvidesContexts = providesContexts host hostModules
+                  HostImport = host |> Option.map _.Import
                   CarriedAmbientMembers = []
                   UnqualifiedSources = Map.empty
                   ImportedFiles = Map.empty

@@ -1140,6 +1140,16 @@ def main = {
 
 To fix it, load an instance of the context itself, or require it in the type of the definition around the call.
 
+A call to a library's function that requires a context the program's host doesn't provide is this error too, at the
+call: a library that writes `[Console]` or `[FileSystem]` can't be used under a host without them
+([Hosts](../advanced/hosts)).
+
+```text
+main.nyx:6:1: error NYX0205: 'greet' requires the context 'Console', which the host 'acme.quiet/quiet.host' does not provide
+```
+
+To fix it, run the program under a host that provides the context, or don't call the function.
+
 # NYX0206: Invalid workflow
 
 A builder block, such as `opt { ... }`, is not one its builder can run: the context the builder runs it under lacks a
