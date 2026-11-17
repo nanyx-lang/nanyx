@@ -31,6 +31,7 @@ public sealed record OpenDocument(
 
     private Lazy<ConvertedDiagnostics>? _converted;
     private Lazy<IReadOnlyList<FormattingHint>>? _formattingHints;
+    private Lazy<Nanyx.Formatter.Formatter.Options>? _refactoringOptions;
 
     /// <summary>Converts positions in <see cref="Text"/>, built once per change rather than on every request.</summary>
     public SourcePositions Positions { get; } = new(Text);
@@ -66,6 +67,15 @@ public sealed record OpenDocument(
     /// </summary>
     public IReadOnlyList<FormattingHint> FormattingHints(DocumentUri uri, ILogger logger) =>
         (_formattingHints ??= new Lazy<IReadOnlyList<FormattingHint>>(() => Nanyx.LanguageServer.FormattingHints.Of(uri, this, logger))).Value;
+
+    /// <summary>
+    /// The formatter's settings refactorings lay out what they write with (see <see cref="Handlers.FormattingHandler.SettingsFor"/>),
+    /// or the defaults where they can't be read. Read once, when first asked for, so that code actions, asked on every
+    /// move of the cursor, do not read the package's manifest each time.
+    /// </summary>
+    public Nanyx.Formatter.Formatter.Options RefactoringOptions(DocumentUri uri, ILogger logger) =>
+        (_refactoringOptions ??= new Lazy<Nanyx.Formatter.Formatter.Options>(() =>
+            Handlers.FormattingHandler.SettingsFor(this, uri, logger) ?? Nanyx.Formatter.Formatter.OptionsModule.defaults)).Value;
 
     /// <summary>The LSP diagnostics of this text's compile published on the document itself, at <paramref name="uri"/>.</summary>
     public IReadOnlyList<OmniSharp.Extensions.LanguageServer.Protocol.Models.Diagnostic> PublishedDiagnostics(DocumentUri uri) =>

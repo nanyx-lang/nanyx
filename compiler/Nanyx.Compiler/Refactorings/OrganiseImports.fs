@@ -114,7 +114,8 @@ let at (options: Formatter.Options) (file: string) (source: string) (result: Com
             if after = formatted options file source 0 source.Length then []
             elif hasComments then [ Refused(title, RefactoringKind.OrganiseImports, "The imports have comments among them, which organising would lose") ]
             else
-                match newError result (recompile (applied source edits)) with
-                | Some reason -> [ Refused(title, RefactoringKind.OrganiseImports, $"The organised module would not compile{reason}") ]
-                | None -> [ Available { Title = title; Kind = RefactoringKind.OrganiseImports; Edits = [ difference file source after ]; Rename = None } ]
+                [ Deferred(title, RefactoringKind.OrganiseImports, fun () ->
+                      match newError result (recompile (applied source edits)) with
+                      | Some reason -> Refused(title, RefactoringKind.OrganiseImports, $"The organised module would not compile{reason}")
+                      | None -> Available { Title = title; Kind = RefactoringKind.OrganiseImports; Edits = [ difference file source after ]; Rename = None }) ]
     | _ -> []

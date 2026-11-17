@@ -108,10 +108,11 @@ let at
         let wholeTitle (alias: Alias) = $"Inline `{alias.Name}`"
         let useTitle = "Inline this use"
         let offer (title: string) (edits: (int * int * string) list) =
-            let after = appliedAndFormatted options file source edits
-            match newError result (recompile after) with
-            | Some reason -> Refused(title, RefactoringKind.Inline, $"The result would not compile{reason}")
-            | None -> Available { Title = title; Kind = RefactoringKind.Inline; Edits = [ difference file source after ]; Rename = None }
+            Deferred(title, RefactoringKind.Inline, fun () ->
+                let after = appliedAndFormatted options file source edits
+                match newError result (recompile after) with
+                | Some reason -> Refused(title, RefactoringKind.Inline, $"The result would not compile{reason}")
+                | None -> Available { Title = title; Kind = RefactoringKind.Inline; Edits = [ difference file source after ]; Rename = None })
         let replace (alias: Alias) (used: TypeExpr) = used.Span.Start, used.Span.End, substituted source alias (usesOf alias.Name used).Value
         let refusal (alias: Alias) =
             if TypeDefModifier.isNominal alias.Modifiers then Some $"`{alias.Name}` is a nominal type, not an alias of its shape"

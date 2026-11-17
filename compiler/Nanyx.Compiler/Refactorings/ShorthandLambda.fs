@@ -98,19 +98,20 @@ let at
             | None -> []
             | Some (Error reason) -> [ Refused(title, RefactoringKind.Rewrite, reason) ]
             | Some (Ok (text, names)) ->
-                let after = appliedAndFormatted options file source [ lambda.Span.Start, lambda.Span.End, text ]
-                let compiled = recompile after
-                match newError result compiled with
-                | Some reason -> [ Refused(title, RefactoringKind.Rewrite, $"The lambda would not compile{reason}") ]
-                | None when lambdaTypeAt compiled lambda.Span.Start <> lambdaTypeAt result lambda.Span.Start ->
-                    [ Refused(title, RefactoringKind.Rewrite, "The lambda would have another type, its operator reading another context instance") ]
-                | None ->
-                    let rename =
-                        names
-                        |> List.tryHead
-                        |> Option.bind (fun name ->
-                            let found = after.IndexOf("{ " + name + " ", lambda.Span.Start, System.StringComparison.Ordinal)
-                            let found = if found < 0 then after.IndexOf("{ " + name + ",", lambda.Span.Start, System.StringComparison.Ordinal) else found
-                            if found < 0 then None else Some (found + 2))
-                    [ Available { Title = title; Kind = RefactoringKind.Rewrite; Edits = [ difference file source after ]; Rename = rename } ]
+                [ Deferred(title, RefactoringKind.Rewrite, fun () ->
+                      let after = appliedAndFormatted options file source [ lambda.Span.Start, lambda.Span.End, text ]
+                      let compiled = recompile after
+                      match newError result compiled with
+                      | Some reason -> Refused(title, RefactoringKind.Rewrite, $"The lambda would not compile{reason}")
+                      | None when lambdaTypeAt compiled lambda.Span.Start <> lambdaTypeAt result lambda.Span.Start ->
+                          Refused(title, RefactoringKind.Rewrite, "The lambda would have another type, its operator reading another context instance")
+                      | None ->
+                          let rename =
+                              names
+                              |> List.tryHead
+                              |> Option.bind (fun name ->
+                                  let found = after.IndexOf("{ " + name + " ", lambda.Span.Start, System.StringComparison.Ordinal)
+                                  let found = if found < 0 then after.IndexOf("{ " + name + ",", lambda.Span.Start, System.StringComparison.Ordinal) else found
+                                  if found < 0 then None else Some (found + 2))
+                          Available { Title = title; Kind = RefactoringKind.Rewrite; Edits = [ difference file source after ]; Rename = rename }) ]
     | _ -> []
