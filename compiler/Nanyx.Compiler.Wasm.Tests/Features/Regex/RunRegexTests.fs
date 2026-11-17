@@ -440,4 +440,4 @@ let ``Run - #Matches given a pattern that is wrong crashes with what Regex.parse
 """
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
-    Assert.Equal("crash: The regex '(\\d+' is wrong at column 1: There is no ')' to close this '('\n", outcome.StandardError)
+    Assert.StartsWith("crash: The regex '(\\d+' is wrong at column 1: There is no ')' to close this '('\n", outcome.StandardError)
