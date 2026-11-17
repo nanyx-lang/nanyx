@@ -605,7 +605,10 @@ let format (options: Options) (parsed: SourceModule) : string =
         | Def(ValueDef(isExport, n, t, value)) -> defDoc isExport "def" n t value
         | Def(TypeDef(n, modifiers, parameters, body)) -> typeDefDoc n modifiers parameters body
         | Import items -> importDoc i.Span.Start i.Span.End items
-        | ReExport item -> cat [ text "export "; imports.ImportSource item.Source; text " "; imports.ImportSelection (Option.defaultValue [] item.Selection) ]
+        | ReExport item ->
+            match item.Selection with
+            | Some selection -> cat [ text "export "; imports.ImportSource item.Source; text " "; imports.ImportSelection selection ]
+            | None -> cat [ text "export "; imports.ImportSource item.Source ]
         | Expr value -> expr statementPosition value
         | Attribute(n, argument) -> attributeDoc n argument i.Span
 

@@ -59,6 +59,13 @@ type PendingArithmetic =
       OperandTy: Ty
       At: SourceSpan }
 
+/// What an arithmetic operator in a def that writes its type needs of a type variable of that def, should its operands
+/// turn out to be of one: the prelude's context it reads (`Add` for `+`), and what it does, as a diagnostic says it.
+type OperandRequirement =
+    { Def: Identifier
+      Context: Identifier
+      Does: string }
+
 /// A number literal, whose type is a variable of its own until the code around it settles it (see `NumericLiterals`).
 type NumericLiteral =
     { /// The literal's type: its variable, until the constraints are solved.
@@ -71,7 +78,10 @@ type NumericLiteral =
       /// For the operands of an arithmetic operator rather than a literal: the operator, and the expression it is at
       /// `At`. Their type was still a variable when the operator was read, and they are `int`, as `Value` is, if
       /// nothing settles them.
-      Operator: (string * NodeId) option }
+      Operator: (string * NodeId) option
+      /// For the operands of an operator in a def that writes its type: what the operator needs of them, if they turn
+      /// out to be of one of the def's own variables, an associated type its signature names.
+      Requires: OperandRequirement option }
 
 /// A call that leaves out a type argument its callee takes, reported once the constraints say which type it should pass
 /// (see `TypeArguments`).
@@ -726,6 +736,23 @@ let internal resolveSoFar (state: InferState) (ty: Ty) : Ty =
     | TyPrimitive _ -> ty
     // A conflict elsewhere in the module does not stop the rest of the constraints saying what `ty` is.
     | _ -> Unifier.applySolved (fst (Solving.solve state.Constraints)) ty
+
+/// `ty`, resolved, with each variable that an associated type a signature names stands for (see `AssociatedVariables`)
+/// given that name, as a diagnostic writes it: the element of a `for` over an `[Iterable(i)] i` is a variable inference
+/// made up, which the constraints solve the signature's `elem` to.
+let internal withAssociatedNames (state: InferState) (ty: Ty) : Ty =
+    let names =
+        state.AssociatedVariables
+        |> List.choose (fun written ->
+            match resolveSoFar state (TyVar written) with
+            | TyVar({ Name = None } as solved) -> Some (solved.Id, written.Name)
+            | _ -> None)
+        |> Map.ofList
+    let rec rename (ty: Ty) =
+        match ty with
+        | TyVar v when names.ContainsKey v.Id -> TyVar { v with Name = names.[v.Id] }
+        | _ -> Ty.map rename ty
+    rename (resolveSoFar state ty)
 
 /// The type variables of the types of what is in scope in `env`, each resolved by `subst`: those a def's type shares
 /// with its surroundings, which generalising it must leave alone. Only the names whose schemes have free variables are

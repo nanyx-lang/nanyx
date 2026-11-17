@@ -56,3 +56,7 @@ let ``A selection written one name per line is printed on one`` () =
 [<Fact>]
 let ``A re-export is printed as written`` () =
     unchanged (lines [ "module c"; ""; "export util (double, triple)" ])
+
+[<Fact>]
+let ``A whole-module re-export is printed as written`` () =
+    unchanged (lines [ "module geometry"; ""; "export shapes"; "export collections.list (map)" ])

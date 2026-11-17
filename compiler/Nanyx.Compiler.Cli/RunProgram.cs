@@ -14,14 +14,15 @@ internal static partial class CliCommands
     /// <paramref name="arguments"/>, its name first, reporting what stops it to the shell's stderr, and gives the exit
     /// code. The program may read and write the shell's directory and each of <paramref name="allowedDirectories"/>, full
     /// paths. A program whose host answers HTTP requests is served on <paramref name="port"/> instead (see
-    /// <see cref="Serve"/>).
+    /// <see cref="Serve"/>). A package's program names its files from <paramref name="packageRoot"/> where it says
+    /// where it is, as <c>dbg</c> does.
     /// </summary>
-    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, int port = 3000)
+    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, int port = 3000, string? packageRoot = null)
     {
         var programArguments = ListModule.OfSeq(arguments ?? ["nanyx"]);
         var directories = ListModule.OfSeq<string>([shell.Directory, .. allowedDirectories ?? []]);
         var errors = shell.Error;
-        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls);
+        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot));
         if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred, timings))
         {
             return 1;
@@ -50,6 +51,10 @@ internal static partial class CliCommands
 
         return exitCode;
     }
+
+    /// <summary>The root a program names its files from (see <c>WasmOptions.SourceRoot</c>): none for a script.</summary>
+    private static FSharpOption<string> SourceRoot(string? packageRoot) =>
+        packageRoot is null ? FSharpOption<string>.None : FSharpOption<string>.Some(packageRoot);
 
     /// <summary>
     /// The exit code of a program run with memory checks that returned, given its <see cref="MemoryReport.Counters"/>:

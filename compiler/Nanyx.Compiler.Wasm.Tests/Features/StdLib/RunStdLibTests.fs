@@ -31,7 +31,7 @@ println("[" ++ string.repeat("ab", 0) ++ "]")
 println(string.substring("nanyx", start = 1, length = 3))
 println(string.substring("nanyx", start = 3, length = 10))
 """
-    runSource source |> assertRan "dbg: 0\ndbg: 5\nhello, nanyx!\n[padded]\n[]\nababab\n[]\nany\nyx\n"
+    runSource source |> withoutDbgLocations |> assertRan "0\n5\nhello, nanyx!\n[padded]\n[]\nababab\n[]\nany\nyx\n"
 
 [<Fact>]
 let ``Run - text startsWith, endsWith and contains`` () =
@@ -77,7 +77,7 @@ def main = {
 }
 """
     runSource source
-    |> assertRan (
+    |> withoutDbgLocations |> assertRan (
         withFinalNewline """#some(2)
 #some(2)
 #notFound
@@ -86,9 +86,9 @@ def main = {
 #some(4)
 #some(3)
 #notFound
-dbg: 2
-dbg: 2
-dbg: 0""")
+2
+2
+0""")
 
 [<Fact>]
 let ``Run - text replace, removePrefix, removeSuffix, padStart and padEnd`` () =
@@ -133,7 +133,7 @@ let ``Run - text lines and words`` () =
         "dbg(string.length(string.concat(string.lines(\"\"))))\n" +
         "println(string.join(string.words(\"  one two\tthree\n\"), \"|\"))\n" +
         (withFinalNewline """dbg(string.length(string.concat(string.words("   "))))""")
-    runSource source |> assertRan "a|b|c\na||b\ndbg: 0\none|two|three\ndbg: 0\n"
+    runSource source |> withoutDbgLocations |> assertRan "a|b|c\na||b\n0\none|two|three\n0\n"
 
 [<Fact>]
 let ``Run - text chars takes a string apart by code point`` () =

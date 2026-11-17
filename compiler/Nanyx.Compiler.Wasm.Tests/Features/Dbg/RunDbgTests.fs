@@ -1,6 +1,7 @@
 module TranspilerWasmTests.Features.Dbg.Run
 
 open Xunit
+open Transpiler.Wasm.CodeGen
 open TranspilerWasmTestHelpers
 
 /// Runs `source` with its memory checked, and asserts it printed `expected`. Both are normalised to `\n`, and the line break that starts `expected` is left out.
@@ -16,10 +17,10 @@ let ``Run - dbg as a pipe prints each kind of value`` () =
 #some(3) \dbg
 """
     |> printsAs """
-dbg: "hi"
-dbg: 5
-dbg: #ok
-dbg: #some(3)
+[main.nyx:2] "hi"
+[main.nyx:3] 5
+[main.nyx:4] #ok
+[main.nyx:5] #some(3)
 """
 
 [<Fact>]
@@ -31,9 +32,9 @@ for 1..3 | i ->
     show(i) \dbg
 """
     |> printsAs """
-dbg: "1"
-dbg: "2"
-dbg: "3"
+[main.nyx:5] "1"
+[main.nyx:5] "2"
+[main.nyx:5] "3"
 """
 
 [<Fact>]
@@ -48,12 +49,12 @@ dbg(flag)
 dbg(false)
 """
     |> printsAs """
-dbg: 42
-dbg: -7
-dbg: 1.5
-dbg: 2.0
-dbg: true
-dbg: false
+[main.nyx:3] 42
+[main.nyx:4] -7
+[main.nyx:5] 1.5
+[main.nyx:6] 2.0
+[main.nyx:7] true
+[main.nyx:8] false
 """
 
 [<Fact>]
@@ -65,7 +66,7 @@ def b = Point(x = 0, y = 0)
 dbg(a == b)
 dbg(1 == 2)
 """
-    |> printsAs "dbg: true\ndbg: false\n"
+    |> printsAs "[main.nyx:5] true\n[main.nyx:6] false\n"
 
 [<Fact>]
 let ``Run - dbg prints a string quoted and escaped`` () =
@@ -75,9 +76,9 @@ dbg("say \"hi\"\n\ttab\\")
 dbg("")
 """
     |> printsAs """
-dbg: "Ada"
-dbg: "say \"hi\"\n\ttab\\"
-dbg: ""
+[main.nyx:2] "Ada"
+[main.nyx:3] "say \"hi\"\n\ttab\\"
+[main.nyx:4] ""
 """
 
 [<Fact>]
@@ -93,13 +94,13 @@ dbg(#rect(width = 1.0, height = 2.0))
 dbg(#done(()))
 """
     |> printsAs """
-dbg: #some(5)
-dbg: #some("hi")
-dbg: #some(true)
-dbg: #yes(false)
-dbg: #pair(1, "a")
-dbg: #rect(height = 2.0, width = 1.0)
-dbg: #done()
+[main.nyx:3] #some(5)
+[main.nyx:4] #some("hi")
+[main.nyx:5] #some(true)
+[main.nyx:6] #yes(false)
+[main.nyx:7] #pair(1, "a")
+[main.nyx:8] #rect(height = 2.0, width = 1.0)
+[main.nyx:9] #done()
 """
 
 [<Fact>]
@@ -110,9 +111,9 @@ dbg((name = "Ada", age = 36))
 dbg(())
 """
     |> printsAs """
-dbg: (1, "a")
-dbg: (age = 36, name = "Ada")
-dbg: ()
+[main.nyx:2] (1, "a")
+[main.nyx:3] (age = 36, name = "Ada")
+[main.nyx:4] ()
 """
 
 [<Fact>]
@@ -129,12 +130,12 @@ def noInts: set(int) = set.empty
 dbg(noInts)
 """
     |> printsAs """
-dbg: [1, 2]
-dbg: []
-dbg: Map["tea" => 3, "cake" => 4]
-dbg: Map[]
-dbg: Set[3, 1]
-dbg: Set[]
+[main.nyx:3] [1, 2]
+[main.nyx:4] []
+[main.nyx:5] Map["tea" => 3, "cake" => 4]
+[main.nyx:7] Map[]
+[main.nyx:8] Set[3, 1]
+[main.nyx:10] Set[]
 """
 
 [<Fact>]
@@ -144,8 +145,8 @@ dbg([#some((1, ["x"])), #none])
 dbg((point = (x = 1.5, y = -2.0), tags = [#a, #b]))
 """
     |> printsAs """
-dbg: [#some(1, ["x"]), #none]
-dbg: (point = (x = 1.5, y = -2.0), tags = [#a, #b])
+[main.nyx:2] [#some(1, ["x"]), #none]
+[main.nyx:3] (point = (x = 1.5, y = -2.0), tags = [#a, #b])
 """
 
 [<Fact>]
@@ -155,7 +156,7 @@ type Tree = #leaf | #node(Tree, int, Tree)
 def tree: Tree = #node(#leaf, 1, #node(#leaf, 2, #leaf))
 dbg(tree)
 """
-    |> printsAs "dbg: #node(#leaf, 1, #node(#leaf, 2, #leaf))\n"
+    |> printsAs "[main.nyx:4] #node(#leaf, 1, #node(#leaf, 2, #leaf))\n"
 
 [<Fact>]
 let ``Run - dbg prints a nominal value by its name around its shape`` () =
@@ -165,7 +166,7 @@ type Point = protected (x: int, y: int)
 dbg(Money(250))
 dbg(Point(x = 1, y = 2))
 """
-    |> printsAs "dbg: Money(250)\ndbg: Point(x = 1, y = 2)\n"
+    |> printsAs "[main.nyx:4] Money(250)\n[main.nyx:5] Point(x = 1, y = 2)\n"
 
 [<Fact>]
 let ``Run - dbg prints a protected value's shape outside its module`` () =
@@ -176,7 +177,7 @@ module ids =
 
 dbg(ids.make(42))
 """
-    |> printsAs "dbg: ids.UserId(42)\n"
+    |> printsAs "[main.nyx:6] ids.UserId(42)\n"
 
 [<Fact>]
 let ``Run - dbg ignores the ToString a type has`` () =
@@ -190,7 +191,7 @@ def price = Money(250)
 dbg(price)
 dbg("{price}")
 """
-    |> printsAs "dbg: Money(250)\ndbg: \"£250\"\n"
+    |> printsAs "[main.nyx:8] Money(250)\n[main.nyx:9] \"£250\"\n"
 
 [<Fact>]
 let ``Run - dbg prints a value of a generic function's type at the type it is called at`` () =
@@ -199,9 +200,9 @@ def trace = { x -> dbg(x) }
 trace((trace(1), trace([#ok])))
 """
     |> printsAs """
-dbg: 1
-dbg: [#ok]
-dbg: (1, [#ok])
+[main.nyx:2] 1
+[main.nyx:2] [#ok]
+[main.nyx:2] (1, [#ok])
 """
 
 [<Fact>]
@@ -214,9 +215,9 @@ match #some((1, "x"))
   | #none -> (0, "")
 """
     |> printsAs """
-dbg: [1]
-dbg: [2, 3]
-dbg: (1, "x")
+[main.nyx:3] [1]
+[main.nyx:3] [2, 3]
+[main.nyx:5] (1, "x")
 """
 
 [<Fact>]
@@ -228,9 +229,9 @@ def again = dbg({ n: int -> "{n * 2}" })
 dbg(again(4))
 """
     |> printsAs """
-dbg: <function int -> int>
-dbg: <function int -> string>
-dbg: "8"
+[main.nyx:3] <function int -> int>
+[main.nyx:4] <function int -> string>
+[main.nyx:5] "8"
 """
 
 [<Fact>]
@@ -242,8 +243,55 @@ def names = dbg(["a", "b"])
 dbg(names)
 """
     |> printsAs """
-dbg: 3
-dbg: 4
-dbg: ["a", "b"]
-dbg: ["a", "b"]
+[main.nyx:2] 3
+[main.nyx:3] 4
+[main.nyx:4] ["a", "b"]
+[main.nyx:5] ["a", "b"]
 """
+
+[<Fact>]
+let ``Run - dbg piped at the end of a pipeline written over several lines names the line of the pipe`` () =
+    """
+def doubled =
+  [1, 2, 3]
+    \list.map({ n -> n * 2 })
+    \dbg
+println(list.length(doubled))
+"""
+    |> printsAs """
+[main.nyx:5] [2, 4, 6]
+3
+"""
+
+[<Fact>]
+let ``Run - dbg in a package names its file by its path in the package`` () =
+    let source = """
+module main
+
+@entry
+def main = {
+  dbg(42)
+}
+"""
+    fst (nanyxOnPackage [ "main.nyx", normalized source ] [ "run"; "{package}" ]) |> assertRan "[src/main.nyx:6] 42\n"
+
+/// `source` compiled as a release build is, and run: what it printed.
+let private releasePrints (expected: string) (source: string) =
+    let wat = transpileWatWith { WasmOptions.Default with Release = true } (normalized source)
+    Assert.DoesNotContain("$dbg_str", wat)
+    match runHost [ "main" ] wat with
+    | Ok output -> Assert.Equal(expected, output)
+    | Error error -> failwith $"The program failed: {error}"
+
+[<Fact>]
+let ``Run - a release build strips dbg, which evaluates its argument once and prints nothing`` () =
+    """
+def say = { text: string ->
+  println(text)
+  text
+}
+def shown = dbg(say("once"))
+println(shown)
+"piped" \dbg \println
+"""
+    |> releasePrints "once\nonce\npiped\n"

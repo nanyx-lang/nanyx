@@ -152,7 +152,7 @@ def main: [Console] () -> () = {
 }
 main()
 """
-    runSource (normalized source) |> assertRan "1\n2\n3\n(1, 2)\ndbg: <function () -> string>\n"
+    runSource (normalized source) |> withoutDbgLocations |> assertRan "1\n2\n3\n(1, 2)\n<function () -> string>\n"
 
 [<Fact>]
 let ``Run - a local function called at a variable of the def around it, in a lambda and passed as a value (#1397)`` () =

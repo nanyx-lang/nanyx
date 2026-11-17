@@ -113,4 +113,4 @@ def p = (2, 3)
 (1.5 <+> (2.0, 3.0)) \dbg
 (10 <*> p) \dbg
 """
-    runSource source |> assertRan "dbg: 7\ndbg: 7.5\ndbg: 8\n"
+    runSource source |> withoutDbgLocations |> assertRan "7\n7.5\n8\n"

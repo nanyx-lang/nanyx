@@ -219,7 +219,7 @@ def main = {
   dbg(twice)
 }
 """
-    runSource (normalized source) |> assertRan "dbg: <function () -> string>\n"
+    runSource (normalized source) |> withoutDbgLocations |> assertRan "<function () -> string>\n"
 
 [<Fact>]
 let ``Run - a local def whose value is such a function, never called`` () =
