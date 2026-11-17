@@ -316,6 +316,24 @@ public sealed class CodeActionTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task A_structural_type_s_name_offers_to_make_it_protected()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-make-protected");
+        const string text = "type Email = string\n";
+
+        Open(uri, text);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var actions = await CodeActionsIn(uri, new Range(0, 6, 0, 6));
+        Assert.Contains(actions, action => action.Title == "Make `Email` private");
+        var make = Assert.Single(actions, action => action.Title == "Make `Email` protected");
+        Assert.Equal(CodeActionKind.RefactorRewrite, make.Kind);
+        Assert.Equal(
+            "type Email = protected string\n\ndef Email.of: string -> Email = { value ->\n  Email(value)\n}\n",
+            Applied(text, Assert.Single(make.Edit!.Changes![uri])));
+    }
+
+    [Fact]
     public async Task A_selected_expression_offers_to_introduce_a_function()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-introduce-function");

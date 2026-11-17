@@ -247,7 +247,8 @@ variable does. `type a` in a signature is a `TypeArgument` type, read as the bui
 the expression `type Point` is a `TypeValue`, of type `Type(Point)` (`TypeArguments.infer`). `TypeArguments.rewrite`
 runs before `AssociatedTypes`: it writes each named parameter `into: type` of a def's signature as one of type
 `Type(into)`, and `into` wherever the def writes it as a type, in its signature and in the types written in its value
-(`type into` among them), as the type variable it is. It also reports a type parameter declared wrongly (NYX0270), and
+(`type into` among them), as the type variable it is. `AssociatedTypes` then reads the type in a `type Iter(c).elem` or
+`type elem` as it reads any type written in a def's value, so an associated type is a type argument too. It also reports a type parameter declared wrongly (NYX0270), and
 a `Type` value chosen with `if` or `match` or held in a list with another type's (NYX0272), each read then as the
 first, so that inference has no conflict among them to report again.
 
@@ -255,6 +256,11 @@ A call that leaves out a type argument (`TypeArguments.LeavesOut`, next to `Name
 callee's result type all the same, without checking its arguments, so the code around it fixes the type it should have
 passed; `TypeArguments.report` reports it (NYX0271) once the module's constraints are solved, naming that type. A
 `Type` value holds nothing at run time: the backend lays out `Type(a)` as unit and lowers `type Point` to `()`.
+
+The prelude's `Typed(a) = (typeOf: Type(a))` has an instance of the compiler's own for every type with no type
+variable in it (`TypeValues.passesBuiltIn`, checked in `ContextInstances` after an instance in scope and before
+synthesis from attached definitions): `InstanceSynthesized`, whose `typeOf` is the prelude's `__typeOf: Type(a) = type
+a`, specialised at the type as any generic value is. A type variable's `Typed` is required, as any context of one is.
 
 After specialising, the [inliner](./inlining) folds small functions such as `println` into their callers, and makes
 the members of a `use` it brings into the same function as their calls known.

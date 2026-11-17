@@ -49,7 +49,7 @@ Where each idea the docs described stands:
 | `Sequence.map`, `Gen.take` | | `seq.map`, `seq.take` and the rest, in the prelude |
 | `Iter(a)` with `next` and an associated `elem` type | The standard library's `iter` page, since deleted | The prelude's `Iterable(c)`, with `toSeq` and an associated `elem` ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802)) |
 | `getIterator` | [Sequences and queries](../advanced/sequences-and-queries) | Nothing, and nothing defines it |
-| `seq { yield ... }` | [Workflows](../advanced/workflows#yield-and-sequences), [Ranges](../tour/ranges) | The `#yield` keyword kind (`WorkflowDesugaring`), into the prelude's `seq.cons`, `seq.empty`, `seq.concatMap`, `seq.append` and `seq.delay` ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)) |
+| `seq { yield ... }` | [Workflows](../advanced/workflows#yield-and-sequences), [Ranges](../tour/ranges) | The `#yield` keyword kind (`WorkflowDesugaring`), into the prelude's `seq.cons`, `seq.empty`, `seq.flatMap`, `seq.append` and `seq.delay` ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)) |
 | `yield` in `list.select` | [Lists](../stdlib/prelude-lists), [Lambdas](../tour/lambdas-and-higher-order-functions#contextual-lambdas) | A lambda that yields is a sequence, which `list.select` flattens ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)) |
 
 A `for` loop walks a `list`, `seq`, `map` or `set` as it is, and reads anything else as the prelude's `__toSeq(xs)`,
@@ -214,7 +214,7 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
   time the sequence is pulled. So `yield` is a keyword of kind `#yield`, and any lambda with one in it, a block after
   `seq` included, is rewritten into the sequence itself (`WorkflowDesugaring`): `yield x` with the rest `k` is
   `seq.cons(x, { k })`, the end of the block `seq.empty()`, and a `for` loop whose body yields
-  `seq.append(seq.concatMap(items, body), seq.delay({ k }))`. `seq` is an ordinary prelude function, `seq.delay` by
+  `seq.append(seq.flatMap(items, body), seq.delay({ k }))`. `seq` is an ordinary prelude function, `seq.delay` by
   another name. Where the branches of an `if` join, a pure `seq.empty()` joins a branch whose sequence prints: the
   whole carries what any branch's sequence does
   ([#1908](https://github.com/nanyx-lang/nanyx/issues/1908)). There is no `yield` in a `while` loop: a `while` needs
@@ -258,7 +258,7 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
 3. ~~Give `seq(a)` its runtime representation, with ranges as values, and `for` loops over any sequence.~~ Done
    ([#192](https://github.com/nanyx-lang/nanyx/issues/192), [#1698](https://github.com/nanyx-lang/nanyx/issues/1698)).
 4. ~~The core functions.~~ Done: `seq.empty`, `range`, `from`, `unfold`, `map`, `filter`, `take`, `skip`, `takeWhile`,
-   `fold`, `toList`, `cons`, `delay`, `append`, `concatMap`, `zip`, and `list.toSeq`, `set.toSeq` and `map.toSeq`
+   `fold`, `toList`, `cons`, `delay`, `append`, `flatMap`, `zip`, and `list.toSeq`, `set.toSeq` and `map.toSeq`
    ([#1795](https://github.com/nanyx-lang/nanyx/issues/1795)).
 5. ~~`Iterable(c)`, with `for` loops taking it.~~ Done ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802)).
    The `seq` functions taking it is [#2005](https://github.com/nanyx-lang/nanyx/issues/2005).
@@ -266,3 +266,9 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
    Done ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)). Each collection type is made from a sequence
    with `fromSeq` and from a `yield` block with `build`, `Array.build { yield 1 }`
    ([#1906](https://github.com/nanyx-lang/nanyx/issues/1906)).
+7. ~~`list`'s functions on `seq`, with `list`'s names.~~ Done ([#2020](https://github.com/nanyx-lang/nanyx/issues/2020)):
+   `flatMap` (which was `concatMap`), `flatten`, `filterMap`, `select`, `mapIndexed`, `skipWhile`, `scan`,
+   `zipWith`, `intersperse`, `chunks`, `windows`, `distinct`, `distinctBy`, `init`, `replicate` and `unzip`, lazy;
+   `find`, `findIndex`, `indexOf`, `contains`, `any`, `all`, `head`, `get`, `isEmpty` and `selectOne`, which stop
+   at their answer; and `count`, `length`, `last`, `max`, `min`, `maxBy`, `minBy`, `sum` and `partition`, which read
+   the whole sequence. `reverse`, the `sort` family, `foldBack` and `dropLast` are left to `list` on purpose.

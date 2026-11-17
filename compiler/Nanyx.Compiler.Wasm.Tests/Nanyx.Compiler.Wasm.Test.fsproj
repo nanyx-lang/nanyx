@@ -49,6 +49,7 @@
     <Compile Include="Features\Contexts\RunContextArgumentTypeTests.fs" />
     <Compile Include="Features\Contexts\RunOperatorContextTests.fs" />
     <Compile Include="Features\Contexts\RunStructuralInstanceTests.fs" />
+    <Compile Include="Features\Contexts\RunTypedContextTests.fs" />
     <Compile Include="Features\Contexts\RunAttachedInstanceContextTests.fs" />
     <Compile Include="Features\Contexts\RunUseInstanceTests.fs" />
     <Compile Include="Features\Contexts\RunContextKeyTests.fs" />
@@ -179,6 +180,7 @@
     <Compile Include="Features\StdLib\RunFloatFormatTests.fs" />
     <Compile Include="Features\StdLib\RunAllSomeTests.fs" />
     <Compile Include="Features\StdLib\RunSequenceTests.fs" />
+    <Compile Include="Features\StdLib\RunSeqFunctionsTests.fs" />
     <Compile Include="Features\StdLib\RunStdLibTests.fs" />
     <Compile Include="Features\StdLib\RunStackSafeTests.fs" />
     <Compile Include="Features\StdLib\RunMathExpTests.fs" />

@@ -32,8 +32,12 @@ progress.
 - **Its output is formatted.** Edits are laid out as the formatter would lay out the result
   (`RangeFormatting.formatRange`), so applying a refactoring never leaves code `nanyx format` would change.
 - **Code action kinds** are the standard ones, so editors put them in the usual menus: `refactor.extract` (introduce
-  local, introduce function and introduce type alias), `refactor.inline` (inline a def or a type alias), `refactor.rewrite` (write the inferred type, write the types of the `_`s, call and pipe, shorthand lambdas, match and `if`, concatenation and interpolation, implement a context), and
+  local, introduce function and introduce type alias), `refactor.inline` (inline a def or a type alias), `refactor.rewrite` (write the inferred type, write the types of the `_`s, call and pipe, shorthand lambdas, match and `if`, concatenation and interpolation, implement a context, make a type protected or private), and
   `source.organizeImports`. Rename and selection ranges have their own LSP requests.
 - **A new name starts a rename.** A refactoring that invents a name (introduce local, introduce function, introduce type alias, a shorthand lambda's parameters) carries the
   command `nanyx.renameAt`, which the VS Code extension registers: after the edits, it puts the cursor on the name and
   starts a rename.
+- **Edits in other files** are TextEdits whose span names the file. A refactoring that changes the files of the
+  package, as making an exported type protected or private does, takes them compiled when it is decided (DocumentStore.CompilePackage) and a function that compiles the package again with new texts
+  (DocumentStore.RecompilePackage, which rename uses too), and CodeActionHandler places each file's edits in its
+  text, the editor's if it is open.

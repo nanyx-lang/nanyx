@@ -17,6 +17,8 @@ println((1..4) \seq.fold(0) { + })
 -- 10
 ```
 
+`seq` has `list`'s functions, with `list`'s names, argument order and results, where a sequence can give them: the ones that give back a sequence are lazy, the ones that find something, such as `seq.find`, `seq.any` and `seq.head`, stop pulling as soon as they have their answer, so they work on an endless sequence that has one, and the ones that read every element, such as `seq.length`, `seq.max` and `seq.partition`, never return on an endless sequence. Each function's comment says which it is. `reverse`, the `sort` family, `foldBack` and `dropLast` are left out on purpose: each would have to read and keep the whole sequence before giving anything, which is a list's job, so write `xs \seq.toList \list.sort`.
+
 # Reference
 
 <!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->
@@ -153,14 +155,158 @@ def seq.append: ([c] seq(a)), ([d] seq(a)) -> [c, d] seq(a)
 
 The elements of `s`, then those of `t`.
 
-## `seq.concatMap`
+## `seq.flatMap`
 
 ```nanyx fragment
-def seq.concatMap: ([c] seq(a)), ([d] a -> [d] seq(b)) -> [c, d] seq(b)
+def seq.flatMap: ([c] seq(a)), ([d] a -> [d] seq(b)) -> [c, d] seq(b)
 ```
 
 The elements of the sequences `f` gives for each element of `s`, one after another, when it is
-pulled: `(1..3) \seq.concatMap { n -> seq.range(1, n) }` gives `1`, `1`, `2`, `1`, `2` and `3`.
+pulled: `(1..3) \seq.flatMap { n -> seq.range(1, n) }` gives `1`, `1`, `2`, `1`, `2` and `3`. Lazy:
+`f` runs on an element only when the sequence is pulled that far.
+
+## `seq.flatten`
+
+```nanyx fragment
+def seq.flatten: ([c] seq(seq(a))) -> [c] seq(a)
+```
+
+The elements of each sequence of `s`, one after another: `[[1, 2], [3]] \list.map(list.toSeq)
+\list.toSeq \seq.flatten` gives `1`, `2` and `3`. Lazy: it pulls `s` one sequence at a time.
+
+## `seq.select`
+
+```nanyx fragment
+def seq.select: ([c] seq(a)), ([d] a -> [d] seq(b)) -> [c, d] seq(b)
+```
+
+The values `f` yields for each element in turn, in the order it yields them, as
+[`list.select`](prelude-lists#listselect) gives them for a list: [`seq.flatMap`](#seqflatmap) for a lambda with `yield` in it. Lazy: the
+code after a `yield` runs only when the sequence is pulled that far.
+
+## `seq.filterMap`
+
+```nanyx fragment
+def seq.filterMap: ([c] seq(a)), ([d] a -> #some(b) | #skip) -> [c, d] seq(b)
+```
+
+The payload of each `#some` that `f` gives for the elements of `s`, skipping each `#skip`:
+`(1..6) \seq.filterMap { n -> if n % 2 == 0 then #some(n * 10) else #skip }` gives `20`, `40` and
+`60`. Lazy: pulling it pulls `s` until `f` gives a `#some`, in constant stack.
+
+## `seq.mapIndexed`
+
+```nanyx fragment
+def seq.mapIndexed: ([c] seq(a)), ([d] (int, a) -> b) -> [c, d] seq(b)
+```
+
+`f` applied to the position of each element of `s`, counting from 0, and the element:
+`["a", "b"] \list.toSeq \seq.mapIndexed { i, x -> "{i}{x}" }` gives `"0a"` and `"1b"`. Lazy.
+
+## `seq.skipWhile`
+
+```nanyx fragment
+def seq.skipWhile: ([c] seq(a)), ([d] a -> bool) -> [c, d] seq(a)
+```
+
+`s` from the first element for which `predicate` is false: `(1..5) \seq.skipWhile { < 3 }` gives
+`3`, `4` and `5`. Lazy: the elements it skips are pulled when the sequence is first pulled.
+
+## `seq.scan`
+
+```nanyx fragment
+def seq.scan: ([c] seq(a)), b, ([d] (b, a) -> b) -> [c, d] seq(b)
+```
+
+The running totals of a fold: `initial`, then each value [`seq.fold`](#seqfold) passes along:
+`(1..3) \seq.scan(0) { + }` gives `0`, `1`, `3` and `6`. Lazy: each total is worked out when it is
+pulled, so it works on an endless sequence.
+
+## `seq.zipWith`
+
+```nanyx fragment
+def seq.zipWith: ([c] seq(a)), ([d] seq(b)), ([e] (a, b) -> f) -> [c, d, e] seq(f)
+```
+
+`f` applied to the elements of `s` and `t` in pairs, ending when either ends, as [`seq.zip`](#seqzip) does:
+`seq.zipWith(1.., 10..12, { + })` gives `11`, `13` and `15`. Lazy.
+
+## `seq.intersperse`
+
+```nanyx fragment
+def seq.intersperse: ([c] seq(a)), a -> [c] seq(a)
+```
+
+`s` with `separator` between each pair of neighbouring elements: `(1..3) \seq.intersperse(0)`
+gives `1`, `0`, `2`, `0` and `3`. Lazy.
+
+## `seq.chunks`
+
+```nanyx fragment
+def seq.chunks: ([c] seq(a)), int -> [c] seq(list(a))
+```
+
+`s` cut into lists of `size` elements, in order; the last is shorter when the sequence ends part
+way through one: `(1..5) \seq.chunks(2)` gives `[1, 2]`, `[3, 4]` and `[5]`. Lazy: each list is
+pulled when it is. A `size` below 1 crashes.
+
+## `seq.windows`
+
+```nanyx fragment
+def seq.windows: ([c] seq(a)), int -> [c] seq(list(a))
+```
+
+Every run of `size` neighbouring elements, in order: `(1..4) \seq.windows(2)` gives `[1, 2]`,
+`[2, 3]` and `[3, 4]`, and a sequence shorter than `size` has none. Lazy: each window pulls one
+more element. A `size` below 1 crashes.
+
+## `seq.distinct`
+
+```nanyx fragment
+def seq.distinct: [Eq(a)] seq(a) -> seq(a)
+```
+
+The elements of `s` without repeats, each where it first appears, compared with `==`. Lazy, but it
+remembers each element it has given, so its memory grows with the distinct elements, and finding
+the next one compares with each of them.
+
+## `seq.distinctBy`
+
+```nanyx fragment
+def seq.distinctBy: [Eq(b), Hash(b)] seq(a), (a -> b) -> seq(a)
+```
+
+The elements of `s` without two of the same `key`, each where the first with its key appears. Lazy,
+but it remembers each key it has seen, so its memory grows with the distinct keys.
+
+## `seq.init`
+
+```nanyx fragment
+def seq.init: int, ([c] int -> a) -> [c] seq(a)
+```
+
+The sequence of `count` elements whose element at each position is `f` applied to the position:
+`seq.init(3, { i -> i * 2 })` gives `0`, `2` and `4`. Lazy: `f` runs on a position when the
+sequence is pulled that far. A `count` of zero or less gives no elements.
+
+## `seq.replicate`
+
+```nanyx fragment
+def seq.replicate: (a, count: int) -> seq(a)
+```
+
+`count` copies of `x`: `seq.replicate(0, count = 3)` gives `0`, `0` and `0`. A `count` of zero or
+less gives none.
+
+## `seq.unzip`
+
+```nanyx fragment
+def seq.unzip: [c] ([c] seq((a, b))) -> ([c] seq(a), ([c] seq(b)))
+```
+
+The first parts of the pairs of `pairs` and their second parts, each a sequence: the inverse of
+[`seq.zip`](#seqzip). Each side pulls `pairs` on its own, so a sequence whose steps have effects runs them
+once for each side pulled.
 
 ## `seq.filter`
 
@@ -242,5 +388,171 @@ def list.build: [c, d] ([c] () -> [d] seq(a)) -> list(a)
 
 The list of what `block` yields: `list.build { yield 1  if more then yield 2 }`. The same as
 `seq(block) \list.fromSeq`.
+
+## `seq.find`
+
+```nanyx fragment
+def seq.find: [c, d] ([c] seq(a)), ([d] a -> bool) -> #some(a) | #notFound
+```
+
+The first element of `s` for which `matches` is true, or `#notFound`: `(1..) \seq.find { n -> n * n
+> 50 }` is `#some(8)`. It pulls `s` up to that element.
+
+## `seq.findIndex`
+
+```nanyx fragment
+def seq.findIndex: [c, d] ([c] seq(a)), ([d] a -> bool) -> #some(int) | #notFound
+```
+
+The position, counting from 0, of the first element of `s` for which `matches` is true, or
+`#notFound`. It pulls `s` up to that element.
+
+## `seq.indexOf`
+
+```nanyx fragment
+def seq.indexOf: [Eq(a), c] ([c] seq(a)), a -> #some(int) | #notFound
+```
+
+The position, counting from 0, of the first element of `s` that is `== x`, or `#notFound`. It pulls
+`s` up to that element.
+
+## `seq.contains`
+
+```nanyx fragment
+def seq.contains: [Eq(a), c] ([c] seq(a)), a -> bool
+```
+
+Whether `s` has an element `== x`. It pulls `s` until it finds one.
+
+## `seq.any`
+
+```nanyx fragment
+def seq.any: [c, d] ([c] seq(a)), ([d] a -> bool) -> bool
+```
+
+Whether `test` holds for any element of `s` (so `false` for an empty one). It pulls `s` until it
+holds.
+
+## `seq.all`
+
+```nanyx fragment
+def seq.all: [c, d] ([c] seq(a)), ([d] a -> bool) -> bool
+```
+
+Whether `test` holds for every element of `s` (so `true` for an empty one). It pulls `s` until it
+doesn't.
+
+## `seq.head`
+
+```nanyx fragment
+def seq.head: [c] ([c] seq(a)) -> #some(a) | #emptyList
+```
+
+The first element of `s`, or `#emptyList` when it has none, as [`list.head`](prelude-lists#listhead) says. It pulls one
+element.
+
+## `seq.get`
+
+```nanyx fragment
+def seq.get: [c] ([c] seq(a)), int -> #some(a) | #outOfRange
+```
+
+The element of `s` at `index`, counting from 0, or `#outOfRange` when `index` is negative or `s`
+ends before it. It pulls `s` up to that element.
+
+## `seq.isEmpty`
+
+```nanyx fragment
+def seq.isEmpty: [c] ([c] seq(a)) -> bool
+```
+
+Whether `s` has no elements. It pulls one element.
+
+## `seq.selectOne`
+
+```nanyx fragment
+def seq.selectOne: [c, d] ([c] seq(a)), ([d] a -> [d] seq(b)) -> #some(b) | #notFound
+```
+
+The first value `f` yields, running it on the elements in turn as [`seq.select`](#seqselect) does, or
+`#notFound` when it yields none. It stops at the first yield.
+
+## `seq.count`
+
+```nanyx fragment
+def seq.count: [c, d] ([c] seq(a)), ([d] a -> bool) -> int
+```
+
+How many elements of `s` `test` holds for. It pulls the whole of `s`.
+
+## `seq.length`
+
+```nanyx fragment
+def seq.length: [c] ([c] seq(a)) -> int
+```
+
+How many elements `s` has. It pulls the whole of `s`.
+
+## `seq.last`
+
+```nanyx fragment
+def seq.last: [c] ([c] seq(a)) -> #some(a) | #emptyList
+```
+
+The last element of `s`, or `#emptyList` when it has none. It pulls the whole of `s`.
+
+## `seq.max`
+
+```nanyx fragment
+def seq.max: [Ord(a), c] ([c] seq(a)) -> #some(a) | #emptyList
+```
+
+The largest element of `s`, or `#emptyList` when it has none; of equal ones, the first. It pulls the
+whole of `s`.
+
+## `seq.min`
+
+```nanyx fragment
+def seq.min: [Ord(a), c] ([c] seq(a)) -> #some(a) | #emptyList
+```
+
+The smallest element of `s`, or `#emptyList` when it has none; of equal ones, the first. It pulls
+the whole of `s`.
+
+## `seq.maxBy`
+
+```nanyx fragment
+def seq.maxBy: [Ord(b), c, d] ([c] seq(a)), ([d] a -> b) -> #some(a) | #emptyList
+```
+
+The element of `s` whose `key` is largest, or `#emptyList` when it has none; of equal keys, the
+first. It pulls the whole of `s`.
+
+## `seq.minBy`
+
+```nanyx fragment
+def seq.minBy: [Ord(b), c, d] ([c] seq(a)), ([d] a -> b) -> #some(a) | #emptyList
+```
+
+The element of `s` whose `key` is smallest, or `#emptyList` when it has none; of equal keys, the
+first. It pulls the whole of `s`.
+
+## `seq.sum`
+
+```nanyx fragment
+def seq.sum: [Add(a), c] ([c] seq(a)) -> a
+```
+
+The elements of `s` added up, from the element type's zero: `(1..4) \seq.sum` is `10`. It pulls
+the whole of `s`.
+
+## `seq.partition`
+
+```nanyx fragment
+def seq.partition: [c, d] ([c] seq(a)), ([d] a -> bool) -> (list(a), list(a))
+```
+
+The elements of `s` for which `test` holds, and those for which it doesn't, each a list in order. It
+pulls the whole of `s`.
 
 <!-- End of the generated reference. -->

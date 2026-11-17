@@ -32,6 +32,7 @@
     <Compile Include="Features\Calls\BuiltInCallTests.fs" />
     <Compile Include="Features\Contexts\AppendContextTests.fs" />
     <Compile Include="Features\Contexts\AssociatedTypeTests.fs" />
+    <Compile Include="Features\Contexts\TypedContextTests.fs" />
     <Compile Include="Features\Contexts\IterableTests.fs" />
     <Compile Include="Features\Contexts\AddContextFixTests.fs" />
     <Compile Include="Features\Contexts\ContextTests.fs" />
@@ -180,6 +181,7 @@
     <Compile Include="Features\Refactorings\IntroduceFunctionTests.fs" />
     <Compile Include="Features\Refactorings\IntroduceLocalTests.fs" />
     <Compile Include="Features\Refactorings\IntroduceTypeAliasTests.fs" />
+    <Compile Include="Features\Refactorings\MakeNominalTests.fs" />
     <Compile Include="Features\Refactorings\OrganiseImportsTests.fs" />
     <Compile Include="Features\Refactorings\PackageRenameTests.fs" />
     <Compile Include="Features\Refactorings\RenameTests.fs" />

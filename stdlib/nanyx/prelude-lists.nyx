@@ -217,7 +217,7 @@ export def list.select: [c, d] list(a), ([c] a -> [d] seq(b)) -> list(b) = { xs,
 export def list.selectOne
   : [c, d] list(a), ([c] a -> [d] seq(b)) -> #some(b) | #notFound
   = { xs, f ->
-    def selected = xs \list.toSeq \seq.concatMap(f)
+    def selected = xs \list.toSeq \seq.flatMap(f)
 
     match selected.next()
       | #next(y, _) -> #some(y)

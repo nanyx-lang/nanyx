@@ -302,6 +302,8 @@ module internal AssociatedTypes =
                 | Lambda(parameters, body, takesUnit) -> Lambda(parameters |> List.map (fun (name, typeOpt) -> name, typeOpt |> Option.map (typeExpr scope)), body, takesUnit)
                 | ContextMemberAccess(ctxType, memberName) -> ContextMemberAccess(typeExpr scope ctxType, memberName)
                 | ContextMemberCall(ctxType, memberName, args) -> ContextMemberCall(typeExpr scope ctxType, memberName, args)
+                // An associated type is also a type argument: `type Iter(c).elem`, or `type elem`.
+                | TypeValue written -> TypeValue(typeExpr scope written)
                 | ContextNames(names, body) -> ContextNames(names |> List.map (fun (name, typeOpt, span) -> name, typeOpt |> Option.map (typeExpr scope), span), body)
                 | Block statements ->
                     Block(

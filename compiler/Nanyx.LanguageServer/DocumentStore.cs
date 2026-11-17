@@ -279,6 +279,22 @@ public sealed class DocumentStore
         }
     }
 
+    /// <summary>
+    /// The package of the file at <paramref name="file"/> compiled again with <paramref name="texts"/>, each a full path
+    /// and its new text: the compile of each of them, in the order they are given. <c>null</c> if the compiler fails, or
+    /// one of them is not a source file of the package.
+    /// </summary>
+    public IReadOnlyList<NyxCompiler.CompileResult>? RecompilePackage(string file, IReadOnlyList<(string Path, string Text)> texts)
+    {
+        if (CompilePackage(file, texts.ToDictionary(entry => entry.Path, entry => entry.Text, FilePaths)) is not { } compiled)
+        {
+            return null;
+        }
+
+        var byPath = compiled.ToDictionary(entry => entry.Path, entry => entry.Result, FilePaths);
+        return texts.All(entry => byPath.ContainsKey(entry.Path)) ? texts.Select(entry => byPath[entry.Path]).ToList() : null;
+    }
+
     /// <summary>The file the compiler's spans name for a document: its full path, or empty if it is not on disk.</summary>
     internal static string FileNameOf(DocumentUri uri) =>
         uri.Scheme == "file" ? Path.GetFullPath(uri.GetFileSystemPath()) : string.Empty;
