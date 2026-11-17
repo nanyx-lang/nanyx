@@ -15,6 +15,20 @@ open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrLowerTypes
 
+/// What a `dbg` at `span` prints before its value in a debug build that names files from `root` (see `DbgBuild`):
+/// `[main.nyx:12] `, its line counted from 1.
+let location (root: string option) (span: Parser.Program.SourceSpan) =
+    let file =
+        match root with
+        | _ when span.File = "" -> ""
+        | Some root ->
+            let relative = System.IO.Path.GetRelativePath(root, span.File)
+            if relative.StartsWith ".." || System.IO.Path.IsPathRooted relative then System.IO.Path.GetFileName span.File
+            else relative.Replace('\\', '/')
+        | None -> System.IO.Path.GetFileName span.File
+    let line = span.StartLine + 1
+    if file = "" then $"[{line}] " else $"[{file}:{line}] "
+
 /// A function that writes values as text.
 type Printer =
     /// Writes a value of the type.

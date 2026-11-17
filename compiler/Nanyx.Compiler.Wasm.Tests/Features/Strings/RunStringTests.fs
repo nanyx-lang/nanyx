@@ -229,7 +229,7 @@ def main = {
 main()
 """
     runSource source
-    |> assertRan "n is 3, positive true, pick #yes\nn is -1, positive false, pick #no\nouter inner x end\ndbg: 2\ndbg: #some(2)\ndbg: #yes\n"
+    |> withoutDbgLocations |> assertRan "n is 3, positive true, pick #yes\nn is -1, positive false, pick #no\nouter inner x end\n2\n#some(2)\n#yes\n"
 
 [<Fact>]
 let ``Run - strings are copied with memory.copy, not a byte at a time`` () =

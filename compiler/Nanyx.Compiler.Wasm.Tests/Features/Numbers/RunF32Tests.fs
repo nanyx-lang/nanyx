@@ -26,7 +26,7 @@ def main = {
 }
 """
     runSource (source.ReplaceLineEndings "\n")
-    |> assertRan "0.1 16777216.0 -0.1 1.0 true 0.33333334\n0.2 NaN Infinity true\n1.1754944e-38 1.0e-45 Infinity\n#less true -3.0\ndbg: 0.1\n"
+    |> withoutDbgLocations |> assertRan "0.1 16777216.0 -0.1 1.0 true 0.33333334\n0.2 NaN Infinity true\n1.1754944e-38 1.0e-45 Infinity\n#less true -3.0\n0.1\n"
 
 [<Fact>]
 let ``Run - an F32 is kept in fields, payloads, lists and closures`` () =

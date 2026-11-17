@@ -33,4 +33,4 @@ def ints: list(#some(int) | #invalidInt) = readAll(["1", "x"])
 @entry
 def main = { dbg(ints) }
 """
-    runSource (source.ReplaceLineEndings "\n") |> assertRan "dbg: [#some(1), #invalidInt]\n"
+    runSource (source.ReplaceLineEndings "\n") |> withoutDbgLocations |> assertRan "[#some(1), #invalidInt]\n"

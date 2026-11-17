@@ -28,11 +28,11 @@ let ``Run - dbg prints integers, strings and tags in order`` () =
 
 main()
 """
-    runSource source |> assertRan (withFinalNewline """dbg: 42
-dbg: -7
-dbg: "text"
-dbg: #ok
-dbg: #some(5)
+    runSource source |> withoutDbgLocations |> assertRan (withFinalNewline """42
+-7
+"text"
+#ok
+#some(5)
 done""")
 
 [<Fact>]
@@ -55,11 +55,11 @@ def main = {
 main()
 """
     runSource source
-    |> assertRan (withFinalNewline """dbg: #some("first")
-dbg: #none
-dbg: #err
-dbg: #some("first")
-dbg: #some("first")
+    |> withoutDbgLocations |> assertRan (withFinalNewline """#some("first")
+#none
+#err
+#some("first")
+#some("first")
 done""")
 
 [<Fact>]

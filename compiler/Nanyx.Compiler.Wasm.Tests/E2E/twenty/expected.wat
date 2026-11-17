@@ -2,20 +2,16 @@
   (import "wasi_snapshot_preview1" "fd_write" (func $fd_write (param i32 i32 i32 i32) (result i32)))
   (memory 1)
   (export "memory" (memory 0))
-  (data (i32.const 128) "dbg: ")
   (data (i32.const 224) "\0a")
-  (func $dbg_str (param $ptr i32)
-    (local $len i32)
-    local.get $ptr
+  (func $dbg_str (param $location i32) (param $text i32)
+    i32.const 0
+    local.get $location
+    i32.store
+    i32.const 4
+    local.get $location
     i32.const 4
     i32.sub
     i32.load
-    local.set $len
-    i32.const 0
-    i32.const 128
-    i32.store
-    i32.const 4
-    i32.const 5
     i32.store
     i32.const 1
     i32.const 0
@@ -24,10 +20,13 @@
     call $fd_write
     drop
     i32.const 0
-    local.get $ptr
+    local.get $text
     i32.store
     i32.const 4
-    local.get $len
+    local.get $text
+    i32.const 4
+    i32.sub
+    i32.load
     i32.store
     i32.const 1
     i32.const 0
@@ -700,9 +699,10 @@
   (type $ctx_fn_2_i32_i64_to_i32 (func (param i32 i64) (result i32)))
   (table $ctx_table 0 funcref)
 
-  (data (i32.const 256) "\00\00\00\00\09\00\00\00xString: \00\00\00")
-  (data (i32.const 276) "\00\00\00\00\0b\00\00\00, yString: \00")
-  (data (i32.const 296) "\00\00\00\00\04\00\00\00fake\00\00\00\00")
+  (data (i32.const 256) "\00\00\00\00\04\00\00\00[9] \00\00\00\00")
+  (data (i32.const 272) "\00\00\00\00\09\00\00\00xString: \00\00\00")
+  (data (i32.const 292) "\00\00\00\00\0b\00\00\00, yString: \00")
+  (data (i32.const 312) "\00\00\00\00\04\00\00\00fake\00\00\00\00")
 
   (func $compareStrings__int__string (param $x_i64 i64) (param $y i32) (param $__ctx_Describe_a_describe i32) (param $__ctx_Describe_b_describe i32) (result i32) (local $xString i32) (local $yString i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32)
     local.get $__ctx_Describe_a_describe
@@ -718,8 +718,9 @@
     call_indirect (type $ctx_fn_2)
     local.set $yString
     i32.const 264
+    i32.const 280
     local.get $xString
-    i32.const 284
+    i32.const 300
     local.get $yString
     call $__nanyx_string_concat
     local.tee $__owned_3
@@ -750,13 +751,14 @@
   )
 
   (func $main (result i32) (local $y__in1 i32) (local $xString__in1 i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32)
-    i32.const 304
+    i32.const 320
     local.set $y__in1
-    i32.const 304
+    i32.const 320
     local.set $xString__in1
     i32.const 264
+    i32.const 280
     local.get $xString__in1
-    i32.const 284
+    i32.const 300
     local.get $y__in1
     call $__nanyx_string_concat
     local.tee $__owned_3
@@ -788,7 +790,7 @@
   (export "main" (func $main))
 
   (func $__lambda_1 (param $__env i32) (param $i_i64 i64) (result i32)
-    i32.const 304
+    i32.const 320
   )
   (export "__lambda_1" (func $__lambda_1))
 

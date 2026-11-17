@@ -55,4 +55,4 @@ def main = {
 }
 """
 
-    runSource source |> assertRan "dbg: 2\n"
+    runSource source |> withoutDbgLocations |> assertRan "2\n"

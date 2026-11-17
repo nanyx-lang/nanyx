@@ -22,7 +22,7 @@ def main = {
   dbg(1.5 + 2.25)
 }
 """
-    runSource source |> assertRan "6.28\n4.0 -1.5 0.3333333333333333 2.5 1234567.25\ncmp ok\ndbg: 3.75\n"
+    runSource source |> withoutDbgLocations |> assertRan "6.28\n4.0 -1.5 0.3333333333333333 2.5 1234567.25\ncmp ok\n3.75\n"
 
 [<Fact>]
 let ``Run - an operator on a type that attaches it calls the attached definition`` () =
