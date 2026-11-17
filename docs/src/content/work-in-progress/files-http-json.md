@@ -153,10 +153,8 @@ How the first layer is built, in `packages/nanyx.json/src/json.nyx`, in Nanyx:
   `float.fromString`. `print` writes a whole number below 10^15 without a fraction (`42`), any other as
   `float.toString` does, and NaN and infinity, which JSON can't write, as `null`.
 - **Imported under a name.** `import nanyx.json/json as json`: a plain import would bring in a `print` that clashes with
-  the console's. Two compiler bugs show up in use: a derived `==` or `ToString` of a `Json` or `JsonError` needs the
-  types imported by name too ([#1796](https://github.com/nanyx-lang/nanyx/issues/1796)), and a `Json` literal whose
-  lists hold different tags must name the inner values first
-  ([#1798](https://github.com/nanyx-lang/nanyx/issues/1798)).
+  the console's. A compiler bug shows up in use: a `Json` literal whose lists hold different tags must name the inner
+  values first ([#1798](https://github.com/nanyx-lang/nanyx/issues/1798)).
 
 How the second layer is built, in `packages/nanyx.json/src/json.typed.nyx` (part of the module `json`) and
 `encode.nyx`:

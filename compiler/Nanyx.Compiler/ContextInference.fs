@@ -42,9 +42,11 @@ module internal ContextInference =
             v.Id, (if index < 26 then letter else $"{letter}{index / 26}"))
         |> Map.ofList
 
-    /// `ty` as an annotation writes it, with its variables named by `names`. `None` for a type an annotation cannot
-    /// write: a type that failed to check, or a variable `names` does not name.
-    let rec typeExprOf (names: Map<int, string>) (ty: Ty) : TypeExpr option =
+    /// `ty` as an annotation writes it, with its variables named by `names`, a nominal type by `nominalName` of it and
+    /// an alias by `aliasName` of the name it was defined under. `None` for a type an annotation cannot write: a type
+    /// that failed to check, or a variable `names` does not name.
+    let rec typeExprWith (nominalName: NominalId -> string) (aliasName: string -> string) (names: Map<int, string>) (ty: Ty) : TypeExpr option =
+        let typeExprOf = typeExprWith nominalName aliasName
         let all (tys: Ty list) =
             let written = tys |> List.map (typeExprOf names)
             if written |> List.forall Option.isSome then Some (written |> List.map Option.get) else None
@@ -61,12 +63,12 @@ module internal ContextInference =
             // leaves out the variables of one, so `names` never names them.
             | TyNominal(nominal, args, _, _) ->
                 let args = args |> List.filter (function FunctionContexts.ScopedContext _ -> false | _ -> true)
-                if args.IsEmpty || not (args |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty)) then Some (TypeName nominal.Name)
-                else all args |> Option.map (fun args -> TypeApply(nominal.Name, args))
-            | TyPrimitive name
-            | TyAlias(name, [], _) -> Some (TypeName name)
+                if args.IsEmpty || not (args |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty)) then Some (TypeName(nominalName nominal))
+                else all args |> Option.map (fun args -> TypeApply(nominalName nominal, args))
+            | TyPrimitive name -> Some (TypeName name)
+            | TyAlias(name, [], _) -> Some (TypeName(aliasName name))
             | FunctionContexts.CellType(held, _) -> typeExprOf names held |> Option.map (fun held -> TypeApply(CellPassingSyntax.typeName, [ held ]))
-            | TyAlias(name, args, _)
+            | TyAlias(name, args, _) -> all args |> Option.map (fun args -> TypeApply(aliasName name, args))
             | TyApply(name, args) -> all args |> Option.map (fun args -> TypeApply(name, args))
             | TyFunc(arg, ret, contexts) ->
                 // A context is written by its name alone when it has no arguments: `Console`, not `Console()`.
@@ -102,6 +104,10 @@ module internal ContextInference =
             | TyScope _
             | TyContexts _ -> None
         kind |> Option.map TypeExpr.synthetic
+
+    /// `ty` as an annotation in the module that defines each type it names writes it (see `typeExprWith`).
+    let typeExprOf (names: Map<int, string>) (ty: Ty) : TypeExpr option =
+        typeExprWith (fun nominal -> nominal.Name) id names ty
 
     /// The annotation an unannotated def of the type `defTy` would write to require `contexts`, each a context's name
     /// with the variables of `defTy` it is required at: the contexts, each applied to its variables, and the type

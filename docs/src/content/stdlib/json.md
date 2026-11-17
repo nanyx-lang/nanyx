@@ -56,9 +56,6 @@ match json.parse("[1, 2")
 -- 1:6: Expected ',' or ']' after an element of an array, found the end of the text
 ```
 
-Comparing `Json` values with `==`, or writing a `JsonError` with `println`, needs the types imported by name as well,
-`import nanyx.json/json as (Json, JsonError)`, until [#1796](https://github.com/nanyx-lang/nanyx/issues/1796) is fixed.
-
 To read a document into types of your own, and write them back, use the [decoders](json-typed) and
 [encoders](encode).
 
