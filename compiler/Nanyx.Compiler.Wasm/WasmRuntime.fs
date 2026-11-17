@@ -7,7 +7,7 @@ open Transpiler.Wasm.WasmAllocator
 /// How a value of the program's is written in memory: the WebAssembly value type it is held in, and how many bytes of
 /// it are written (see `CoreIrLayout.storage`).
 type Storage =
-    /// An `i32` in 4 bytes: a pointer, a code, a bool, a boxed float, an `I32` or a `U32`.
+    /// An `i32` in 4 bytes: a pointer, a code, a bool, a boxed `F32`, an `I32` or a `U32`.
     | Word
     /// An `i64` in 8 bytes: an int or a `U64`.
     | Wide
@@ -15,11 +15,14 @@ type Storage =
     | Byte
     /// The low 2 bytes of an `i32`: an `I16` or a `U16`.
     | Half
+    /// An `f64` in 8 bytes: a float.
+    | Double
 
     /// The WebAssembly value type the value is held in, in locals and on the stack.
     member this.ValueType =
         match this with
         | Wide -> "i64"
+        | Double -> "f64"
         | Word
         | Byte
         | Half -> "i32"
@@ -30,7 +33,8 @@ type Storage =
         | Byte -> 1
         | Half -> 2
         | Word -> 4
-        | Wide -> 8
+        | Wide
+        | Double -> 8
 
     /// The instruction that writes the value at the address under it on the stack.
     member this.Store =
@@ -39,6 +43,7 @@ type Storage =
         | Half -> "i32.store16"
         | Word -> "i32.store"
         | Wide -> "i64.store"
+        | Double -> "f64.store"
 
     /// An instruction that reads the value's bits back, zero-extended: enough to copy it, not to compute with it, which
     /// `CoreIrLayout.load` is for.
@@ -48,16 +53,17 @@ type Storage =
         | Half -> "i32.load16_u"
         | Word -> "i32.load"
         | Wide -> "i64.load"
+        | Double -> "f64.load"
 
     /// Every way a value is stored, each with its own variant of the storing helpers.
-    static member All = [ Word; Wide; Byte; Half ]
+    static member All = [ Word; Wide; Byte; Half; Double ]
 
 /// Where a tag cell's payload is: after its code (see the memory model at `runtimeHelpers`).
 let tagPayloadOffset = 4
 
 /// The header in front of an object on the heap, before its pointer (see the memory model at `runtimeHelpers`).
 module Header =
-    /// A list cell's, a tag cell's or a float box's: its count. `newCell` makes it.
+    /// A list cell's, a tag cell's or an `F32`'s box's: its count. `newCell` makes it.
     let countOnly = 4
 
     /// A string's, a record's or a closure's: its count, then its info word. `newObject` makes it.
@@ -95,9 +101,8 @@ module Helpers =
     let valueCompare = NyxCompiler.Intrinsics.compare
     /// Not a helper: the hash intrinsic, which calls the hash function of its operand's type (see `CoreIrHashing`).
     let valueHash = NyxCompiler.Intrinsics.hash
-    let floatBox = "__nanyx_float_box"
     let floatToString = "__nanyx_float_to_string"
-    /// An `F32` is boxed as a float is, in a block of 4 bytes, and written as text by a helper of its own.
+    /// An `F32` is boxed, in a block of 4 bytes, and written as text by a helper of its own.
     let f32Box = "__nanyx_f32_box"
     let f32ToString = "__nanyx_f32_to_string"
     /// `%` on floats, which WebAssembly has no instruction for.
@@ -176,6 +181,7 @@ module Helpers =
         | Wide -> $"{name}_i64"
         | Byte -> $"{name}_i8"
         | Half -> $"{name}_i16"
+        | Double -> $"{name}_f64"
 
 /// A function `name` for `a ++ b` on lists: it copies the cells of `a`, in order, in front of `b`, which it takes
 /// over and shares (lists being immutable). `copyHead` runs on each head before it goes into its copy, to take a
@@ -757,19 +763,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "    i32.load"
             "  end"
             ")" ]
-      // A float is boxed: an 8-byte block holding the f64, passed around by pointer.
-      Helpers.floatBox,
-      lines
-          [ $"(func ${Helpers.floatBox} (param $value f64) (result i32)"
-            "  (local $box i32)"
-            "  i32.const 8"
-            $"  call ${Helpers.newCell}"
-            "  local.set $box"
-            "  local.get $box"
-            "  local.get $value"
-            "  f64.store"
-            "  local.get $box"
-            ")" ]
+      // An `F32` is boxed: a 4-byte block holding the f32, passed around by pointer.
       Helpers.f32Box,
       lines
           [ $"(func ${Helpers.f32Box} (param $value f32) (result i32)"
@@ -782,7 +776,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  f32.store"
             "  local.get $box"
             ")" ]
-      // Formats a boxed float, or a boxed `F32`, as the shortest decimal that reads back as the same value (see
+      // Formats a float, or a boxed `F32`, as the shortest decimal that reads back as the same value (see
       // `FloatText`).
       yield!
           FloatText.helpers
@@ -793,7 +787,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
                 Free = Helpers.free
                 CopyBytes = Helpers.copyBytes }
           |> List.map (fun (name, body) -> name, lines body)
-      // The float intrinsics that are one WebAssembly instruction on the unboxed value, boxed again.
+      // The float intrinsics that are one WebAssembly instruction.
       yield!
           [ Helpers.floatSqrt, "f64.sqrt"
             Helpers.floatFloor, "f64.floor"
@@ -802,18 +796,15 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
           |> List.map (fun (name, instruction) ->
               name,
               lines
-                  [ $"(func ${name} (param $box i32) (result i32)"
-                    "  local.get $box"
-                    "  f64.load"
+                  [ $"(func ${name} (param $value f64) (result f64)"
+                    "  local.get $value"
                     $"  {instruction}"
-                    $"  call ${Helpers.floatBox}"
                     ")" ])
-      // A boxed float as an int: `i64.trunc_f64_s` traps on NaN, an infinity or a value out of the range of `int`.
+      // A float as an int: `i64.trunc_f64_s` traps on NaN, an infinity or a value out of the range of `int`.
       Helpers.floatToInt,
       lines
-          [ $"(func ${Helpers.floatToInt} (param $box i32) (result i64)"
-            "  local.get $box"
-            "  f64.load"
+          [ $"(func ${Helpers.floatToInt} (param $value f64) (result i64)"
+            "  local.get $value"
             "  i64.trunc_f64_s"
             ")" ]
       // Ends the program through WASI's `proc_exit`, which never returns. Its result, `undefined`, is an i32 like every
@@ -825,13 +816,12 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             $"  call ${Helpers.procExit}"
             "  unreachable"
             ")" ]
-      // An int as a boxed float: `f64.convert_i64_s` rounds to the nearest float, and is exact up to 2^53.
+      // An int as a float: `f64.convert_i64_s` rounds to the nearest float, and is exact up to 2^53.
       Helpers.intToFloat,
       lines
-          [ $"(func ${Helpers.intToFloat} (param $value i64) (result i32)"
+          [ $"(func ${Helpers.intToFloat} (param $value i64) (result f64)"
             "  local.get $value"
             "  f64.convert_i64_s"
-            $"  call ${Helpers.floatBox}"
             ")" ]
       Helpers.intAdd, checkedIntHelper Helpers.intAdd "i64.add" [ "local.get $a"; "local.get $r"; "i64.xor"; "local.get $b"; "local.get $r"; "i64.xor"; "i64.and"; "i64.const 0"; "i64.lt_s" ]
       Helpers.intSub, checkedIntHelper Helpers.intSub "i64.sub" [ "local.get $a"; "local.get $b"; "i64.xor"; "local.get $a"; "local.get $r"; "i64.xor"; "i64.and"; "i64.const 0"; "i64.lt_s" ]
@@ -1155,7 +1145,6 @@ let helperDependencies =
       Helpers.recordCopy, [ Helpers.newObject; Helpers.copyBytes ]
       yield! storingDependencies Helpers.tagBox (fun _ -> [ Helpers.newCell ])
       Helpers.tagCode, []
-      Helpers.floatBox, [ Helpers.newCell ]
       Helpers.floatToString, floatTextDependencies
       Helpers.f32Box, [ Helpers.newCell ]
       Helpers.f32ToString, floatTextDependencies
@@ -1169,12 +1158,12 @@ let helperDependencies =
       Helpers.reuseObject, [ Helpers.newObject ]
       yield! storingDependencies Helpers.listConsAt (fun storage -> [ Helpers.forStorage Helpers.listCons storage ])
       yield! storingDependencies Helpers.tagBoxAt (fun storage -> [ Helpers.forStorage Helpers.tagBox storage ])
-      Helpers.floatSqrt, [ Helpers.floatBox ]
-      Helpers.floatFloor, [ Helpers.floatBox ]
-      Helpers.floatCeil, [ Helpers.floatBox ]
-      Helpers.floatTrunc, [ Helpers.floatBox ]
+      Helpers.floatSqrt, []
+      Helpers.floatFloor, []
+      Helpers.floatCeil, []
+      Helpers.floatTrunc, []
       Helpers.floatToInt, []
-      Helpers.intToFloat, [ Helpers.floatBox ]
+      Helpers.intToFloat, []
       Helpers.floatRem, []
       Helpers.escapeByte, []
       Helpers.stringQuote, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.escapeByte ]
@@ -1196,6 +1185,11 @@ let private helpersWithoutMemory =
           yield Helpers.stringConcat
           yield Helpers.exit
           yield FloatText.bigMulPow10
+          yield Helpers.floatSqrt
+          yield Helpers.floatFloor
+          yield Helpers.floatCeil
+          yield Helpers.floatTrunc
+          yield Helpers.floatToInt
           yield Helpers.intToFloat
           yield Helpers.floatRem
           yield Helpers.escapeByte

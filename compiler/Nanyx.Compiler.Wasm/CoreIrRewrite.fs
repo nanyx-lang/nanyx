@@ -43,7 +43,7 @@ let directAtoms (e: Expr) : Atom list =
     | UpdateRecord(record, updates) -> record :: List.map snd updates
     | ForEach loop -> ForLoop.sourceAtoms loop
     | Interpolate _
-    | BoxFloat _
+    | FloatConstant _
     | Crash _
     | While _
     | Let _
@@ -111,7 +111,7 @@ let rec mapVars (var: Var -> Var) (depth: int -> int) (e: Expr) : Expr =
         | CallClosure(closure, args, entry) -> CallClosure(var closure, atoms args, entry)
         | Interpolate parts -> Interpolate(parts |> List.map (function Hole(v, holeType) -> Hole(var v, holeType) | text -> text))
         | Dbg value -> Dbg(atom value)
-        | BoxFloat _
+        | FloatConstant _
         | Crash _ -> e.Kind
         | ForEach loop ->
             ForEach

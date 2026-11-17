@@ -162,6 +162,37 @@ let ``An exported def is refused, as other modules may use it`` () =
     Assert.StartsWith("It is exported", refusedBecause "two" "export def o$$ne: int = 1\n")
 
 [<Fact>]
+let ``A module block that exports nothing is renamed in its module line and each import of it`` () =
+    Assert.Equal(
+        normalized
+            """module steps =
+  def step = 1
+
+import steps
+
+def total = 2
+""",
+        renamedTo
+            "steps"
+            """module coun$$ting =
+  def step = 1
+
+import counting
+
+def total = 2
+""")
+
+[<Fact>]
+let ``A module block that exports names is refused, as other modules may use them`` () =
+    Assert.StartsWith(
+        "It exports names, and this file is in no package",
+        refusedBecause
+            "count"
+            """module ta$$lly =
+  export def total = 2
+""")
+
+[<Fact>]
 let ``A standard library name can't be renamed`` () =
     let source, offset = unmark "def n = [1, 2] \\su$$m\n"
     let result = Compiler.compile source

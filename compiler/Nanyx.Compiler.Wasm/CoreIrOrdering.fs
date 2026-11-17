@@ -56,16 +56,17 @@ let private compareBody (ty: IrType) : string list * string list =
     | IrUnit -> [], sign (both "i32.gt_s") (both "i32.lt_s")
     | IrFloat
     | IrF32 ->
-        // An `F32` is ordered as a float is, as an `f32`.
+        // An `F32` is ordered as a float is, as an `f32`, read from its box.
         let width = if ty = IrF32 then "f32" else "f64"
+        let unbox = if ty = IrF32 then [ "f32.load" ] else []
         let isNaN var = [ $"local.get ${var}"; $"local.get ${var}"; $"{width}.ne" ]
         let floats instruction = [ "local.get $x"; "local.get $y"; instruction ]
         [ $"(local $x {width})"; $"(local $y {width})" ],
         [ "local.get $a"
-          $"{width}.load"
+          yield! unbox
           "local.set $x"
           "local.get $b"
-          $"{width}.load"
+          yield! unbox
           "local.set $y"
           // NaN comes after every other float, and is equal to itself.
           yield! isNaN "x"

@@ -286,7 +286,7 @@ def total: list(int) -> int = { xs ->
     let wat, report = compileWithReport source
     Assert.Equal<string list>([ "area"; "size"; "double"; "total" ], withoutPrinters report.Functions)
     Assert.Contains("loop $__for_next_0", wat)
-    Assert.Contains("f64.mul\n    call $__nanyx_float_box", wat)
+    Assert.Contains("f64.mul", wat)
 
 [<Fact>]
 let ``The start function and errors deferred to run time go through the core IR`` () =

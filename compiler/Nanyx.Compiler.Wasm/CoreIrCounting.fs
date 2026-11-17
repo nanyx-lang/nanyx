@@ -57,7 +57,7 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | Dbg text -> [ text, Borrowed ]
     | ForEach loop -> all Borrowed (ForLoop.sourceAtoms loop)
     | If(cond, _, _) -> [ cond, Borrowed ]
-    | BoxFloat _
+    | FloatConstant _
     | Crash _
     | While _
     | Match _
