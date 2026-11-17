@@ -1,0 +1,105 @@
+--| Encoders: a value of a type of your own written as JSON, the other way from `json`'s decoders.
+
+  An [`Encoder(a)`](json#encoder) is a function from an `a` to a `Json` value, so any such
+  function is one. The encoders here write one kind of value each ([`string`], [`int`],
+  [`float`], [`bool`]), and the rest build larger ones from smaller: [`list`], [`dict`],
+  [`optional`], and [`object`], which writes a record a member at a time, each a [`field`] or an
+  [`optionalField`]. `json.encode` writes a value as JSON text by an encoder.
+
+  ```nanyx fragment
+  type User = (name: string, age: int)
+
+  def user: json.Encoder(User) = encode.object(
+    [
+      encode.field("name", { u -> u.name }, encode.string)
+      encode.field("age", { u -> u.age }, encode.int)
+    ]
+  )
+
+  json.encode(User(name = "Ada", age = 36), user)
+  ```
+
+  The encoders are in a module of their own, `nanyx.json/encode`, imported `as encode`, since their
+  names are the decoders' in `nanyx.json/json`.
+export module encode
+
+import json
+
+--| Writes a string.
+export def string: Encoder(string) = { s ->
+  #string(s)
+}
+
+--| Writes an `int` as a number.
+export def int: Encoder(int) = { n ->
+  #number(int.toFloat(n))
+}
+
+--| Writes a `float` as a number. NaN and infinity, which JSON can't write, are printed as `null`.
+export def float: Encoder(float) = { x ->
+  #number(x)
+}
+
+--| Writes `true` or `false`.
+export def bool: Encoder(bool) = { b ->
+  #bool(b)
+}
+
+--| Writes a list as an array, each element by `encoder`.
+export def list: Encoder(a) -> Encoder(list(a)) = { encoder ->
+  { xs -> #array(list.map(xs, encoder)) }
+}
+
+--| Writes a map as an object, each value by `encoder`, in the map's order.
+export def dict: Encoder(a) -> Encoder(map(string, a)) = { encoder ->
+  { m -> #object(map.map(m, encoder)) }
+}
+
+--| Writes `#none` as `null`, and `#some(x)` as `encoder` writes `x`.
+export def optional: Encoder(a) -> Encoder(#some(a) | #none) = { encoder ->
+  {
+    | #some(x) -> encoder(x)
+    | #none -> #null
+  }
+}
+
+--| A member of an object that [`object`] writes for a value of type `a`: its name, and its value,
+  or none, for a member that is left out.
+export type Member(a) = private (name: string, write: a -> #some(Json) | #none)
+
+--| The member `name`, whose value is `encoder` of `get` of the value: `encode.field("age", { u ->
+  u.age }, encode.int)`.
+export def field: string, (a -> b), Encoder(b) -> Member(a) = { name, get, encoder ->
+  Member(name = name, write = { x -> #some(encoder(get(x))) })
+}
+
+--| The member `name`, written as [`field`] writes one when `get` gives `#some`, and left out when
+  it gives `#none`: for an optional member, which [`optional`] would write as `null` instead.
+export def optionalField
+  : string, (a -> #some(b) | #none), Encoder(b) -> Member(a)
+  = { name, get, encoder ->
+    def write = { x ->
+      match get(x)
+        | #some(y) -> #some(encoder(y))
+        | #none -> #none
+    }
+
+    Member(name = name, write = write)
+  }
+
+--| The members of `members` that write a value for `x`, in front of `acc`, last first.
+def written: list(Member(a)), a, list((string, Json)) -> list((string, Json)) = { members, x, acc ->
+  match members
+    | [] -> acc
+    | [m, ...rest] ->
+      def write = m.write
+
+      match write(x)
+        | #some(v) -> written(rest, x, [(m.name, v), ...acc])
+        | #none -> written(rest, x, acc)
+}
+
+--| Writes a value as an object of `members`, in their order.
+export def object: list(Member(a)) -> Encoder(a) = { members ->
+  { x -> #object(map.fromList(list.reverse(written(members, x, [])))) }
+}

@@ -421,6 +421,37 @@ module internal StructuralInstances =
                 typeExpr (TypeWithContext(contexts, signature))
         TopLevelItem.at span (Def (ValueDef(false, name, Some annotation, body)))
 
+    /// The name `state`'s module sees a type by, of those `fits` says are it: `name` if the module sees it by that
+    /// name, else the first other name it sees it by, as an import's alias qualifies it (`lib.Pair`). A name only an
+    /// aliased import brings in is not seen (see `tryFindTypeDef`).
+    let private seenName (state: InferState) (fits: TypeDefInfo -> bool) (name: string) : string option =
+        let seen key info = fits info && not (state.HiddenTypeNames.Contains key)
+        match state.TypeDefs |> Map.tryFind name with
+        | Some info when seen name info -> Some name
+        | _ -> state.TypeDefs |> Map.tryPick (fun key info -> if seen key info then Some key else None)
+
+    /// Whether `info` defines the nominal type `nominal`.
+    let private definesNominal (nominal: NominalId) (info: TypeDefInfo) = TypeDefInfo.nominalId info = nominal
+
+    /// Whether `info` defines the alias defined as `name`.
+    let private definesAlias (name: string) (info: TypeDefInfo) = not info.IsNominal && info.Name = name
+
+    /// `ty` as the annotation of a definition derived in `state`'s module writes it, each type it names by a name the
+    /// module sees it by (see `seenName`), with its variables named by `names`.
+    let private writtenIn (state: InferState) (names: Map<int, string>) (ty: Ty) : TypeExpr option =
+        let nameOf fits name = seenName state fits name |> Option.defaultValue name
+        ContextInference.typeExprWith (fun nominal -> nameOf (definesNominal nominal) nominal.Name) (fun alias -> nameOf (definesAlias alias) alias) names ty
+
+    /// `state` with a made-up name the module sees for each type `ty` names that it sees by no name, as one a selective
+    /// import left out, so the definition derived for `ty` can write it (see `writtenIn`).
+    let private namingUnseen (names: Map<int, string>) (ty: Ty) (state: InferState) : InferState =
+        let mutable unseen: (string * TypeDefInfo) list = []
+        let note fits name =
+            if (seenName state fits name).IsNone then
+                state.TypeDefs |> Map.tryPick (fun _ info -> if fits info then Some info else None) |> Option.iter (fun info -> unseen <- (name, info) :: unseen)
+            name
+        ContextInference.typeExprWith (fun nominal -> note (definesNominal nominal) nominal.Name) (fun alias -> note (definesAlias alias) alias) names ty |> ignore
+        { state with TypeDefs = unseen |> List.distinctBy fst |> List.fold (fun typeDefs (name, info) -> typeDefs |> Map.add $"__{name}_{NodeId.next ()}" info) state.TypeDefs }
     /// The definition that is the derived instance of `ctxName` for a value of the type `ty`, if one can be derived
     /// (see `derivable`), with the variables of `ty` it requires the context of, in the order it requires them. It
     /// is written the first time it is asked for, to be inferred with the module's other definitions, and is
@@ -429,7 +460,8 @@ module internal StructuralInstances =
         derivable rigid ctxName ty
         |> Option.bind (fun (ty, shape, vars) ->
             let names = ContextInference.varNames ty
-            ContextInference.typeExprOf names ty
+            let state = namingUnseen names ty state
+            writtenIn state names ty
             |> Option.map (fun written ->
                 match state.DerivedInstances |> Map.tryFind (ctxName, written) with
                 | Some name -> name, vars, state

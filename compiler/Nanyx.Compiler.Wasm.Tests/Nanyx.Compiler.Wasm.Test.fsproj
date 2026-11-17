@@ -90,6 +90,7 @@
     <Compile Include="Features\Hosts\ChooseHostTests.fs" />
     <Compile Include="Features\Hosts\RunScriptTests.fs" />
     <Compile Include="Features\Json\RunJsonTests.fs" />
+    <Compile Include="Features\Json\RunJsonDecodeTests.fs" />
     <Compile Include="Features\Lists\RunListTests.fs" />
     <Compile Include="Features\Lists\RunListKeyTests.fs" />
     <Compile Include="Features\Maps\RunMapTests.fs" />
@@ -123,6 +124,7 @@
     <Compile Include="Features\Memory\OutOfMemoryTests.fs" />
     <Compile Include="Features\Binary\WasmBinaryTests.fs" />
     <Compile Include="Features\Names\RunNameTests.fs" />
+    <Compile Include="Features\Names\RunImportedTypeInstanceTests.fs" />
     <Compile Include="Features\Nominals\RunNominalTests.fs" />
     <Compile Include="Features\Nominals\RunRecursiveNominalTests.fs" />
     <Compile Include="Features\Nominals\RunLocalTypeTests.fs" />

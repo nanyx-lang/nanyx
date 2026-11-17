@@ -58,11 +58,13 @@ let ``The HTTP interface package is shipped beside the compiler, with no depende
 
 [<Fact>]
 let ``The JSON package is shipped beside the compiler, with one public module and no dependencies`` () =
+=======
+let ``The JSON package is shipped beside the compiler, with its modules for values and for encoders, and no dependencies`` () =
     let manifest = manifestOf "nanyx.json"
     Assert.Equal(("nanyx.json", Toolchain.version), (manifest.Name, manifest.Version))
     Assert.Equal(None, manifest.Declares)
     Assert.Empty(manifest.Dependencies)
-    Assert.Equal<string list>([ "json" ], (ShippedPackages.tryModules "nanyx.json").Value.PublicModules)
+    Assert.Equal<string list>([ "encode"; "json" ], (ShippedPackages.tryModules "nanyx.json").Value.PublicModules)
 
 [<Fact>]
 let ``A library uses Console by depending on the console's interface package and importing it`` () =

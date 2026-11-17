@@ -398,7 +398,7 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
 # Open questions
 
 - **Host configuration typing.** The `settings` of the manifest's `host` should be checked against a record type the host exports, so that misspelt keys are errors.
-- **Async and workflows.** Can a host change how the entry runs, for example by running it as a [workflow](../advanced/workflows) or on an event loop, without changing the entry's written type?
+- **Async and workflows.** Can a host change how the entry runs, for example by running it as a [workflow](../advanced/workflows) or on an event loop, without changing the entry's written type? [Concurrency and crash boundaries](./concurrency-and-crash-boundaries) proposes that a host provides an `Async` context or doesn't, and the entry's type says whether it needs one.
 - **Naming a host and its interface.** Does the host take the short name (`nanyx.console`, with `nanyx.console.core` for
   the interface), or the interface (`nanyx.http`, with `nanyx.http.host`)? See
   [Libraries for a host](#libraries-for-a-host). The console's are `nanyx.console` and `nanyx.console.core` for now:

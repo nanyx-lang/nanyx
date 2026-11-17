@@ -29,23 +29,21 @@ Import its module under a name, `json`, so that its `print` doesn't clash with t
 `map(string, Json)`, so `map.get` looks a key up:
 
 ```nanyx
-module main
+::dependency nanyx.json
 
 import nanyx.json/json as json
 
-@entry
-def main = {
-  -- A single-quoted string is raw, so the braces are not interpolated
-  def data = '{"name": "Alice", "age": 30}'
+-- A single-quoted string is raw, so the braces are not interpolated
+def data = '{"name": "Alice", "age": 30}'
 
-  match json.parse(data)
-    | #some(#object(user)) ->
-      match map.get(user, "name")
-        | #some(#string(name)) -> println("Hello, {name}!")
-        | _ -> println("Who are you?")
-    | #some(_) -> println("Expected an object")
-    | #error(e) -> println("Invalid JSON at line {e.line}, column {e.column}: {e.message}")
-}
+match json.parse(data)
+  | #some(#object(user)) -> (match map.get(user, "name")
+    | #some(#string(name)) -> println("Hello, {name}!")
+    | _ -> println("Who are you?"))
+  | #some(_) -> println("Expected an object")
+  | #error(e) -> println("Invalid JSON at line {e.line}, column {e.column}: {e.message}")
+
+-- Hello, Alice!
 ```
 
 # Writing JSON
@@ -81,6 +79,39 @@ println(json.print(#array(names)))
 
 # Decoding into records
 
-Reading a `Json` value into a record of your own, with decoders that say where a document didn't fit
-(`users[2].age`), is planned ([Files, HTTP and JSON](../work-in-progress/files-http-json#json-nanyxjson)). Until then,
-match on the value as above.
+A decoder reads a `Json` value into a type of your own, and says where a document didn't fit. `json.record` reads a
+record a member at a time, each with `try`, and an encoder from `nanyx.json/encode` writes it back:
+
+```nanyx
+::dependency nanyx.json
+
+import (
+  nanyx.json/encode as encode
+  nanyx.json/json as json
+)
+
+type User = (name: string, age: int)
+
+def user: json.Decoder(User) = json.record {
+  def name = try json.field("name", json.string)
+  def age = try json.field("age", json.int)
+  return User(name = name, age = age)
+}
+
+def userEncoder: json.Encoder(User) = encode.object(
+  [
+    encode.field("name", { u -> u.name }, encode.string)
+    encode.field("age", { u -> u.age }, encode.int)
+  ]
+)
+
+def data = '{"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": "25"}]}'
+
+match json.decode(data, json.field("users", json.list(user)))
+  | #some(users) -> println(json.encode(users, encode.list(userEncoder)))
+  | #error(e) -> println(json.describe(e))
+
+-- users[1].age: Expected a whole number, found a string
+```
+
+The [decoders](../stdlib/json-typed) page lists the rest: lists, maps, optional members, tagged unions and more.
