@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.FSharp.Collections;
 using Microsoft.FSharp.Core;
 using Newtonsoft.Json.Linq;
 using NyxCompiler.Refactorings;
@@ -20,7 +21,7 @@ namespace Nanyx.LanguageServer.Handlers;
 /// (<c>NyxCompiler.ImportFixes</c>), which a request for refactorings alone lists as refactorings too. A fix that would edit another
 /// file is not offered. It also offers the refactorings at the range (see <c>NyxCompiler.Refactorings</c>), in a
 /// document whose text type-checked: writing the inferred type of the name at its start, or of the <c>_</c>s in an annotation, inlining the def or type alias it names,
-/// converting the call or pipe it names to the other, the lambda it is in to its shorthand or back, the match or <c>if</c> whose keyword it is on to the other, the <c>++</c> chain or interpolated string it is in to the other, implementing a context for the type whose definition it names, introducing a local or a function for what it selects, and a type
+/// converting the call or pipe it names to the other, the lambda it is in to its shorthand or back, the match or <c>if</c> whose keyword it is on to the other, the <c>++</c> chain or interpolated string it is in to the other, implementing a context for the type whose definition it names or making that type protected or private, introducing a local or a function for what it selects, and a type
 /// alias for a type it selects; and
 /// organising the document's imports, which is also a quick fix of an unused import. Each is laid out with the
 /// document's formatter settings, and only the kinds a request asks for are computed. One the compiler refuses there is
@@ -223,6 +224,25 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
     private static bool Wanted(List<CodeActionKind>? only, CodeActionKind kind) =>
         only is null || only.Any(wanted => kind.ToString() == wanted.ToString() || kind.ToString().StartsWith(wanted + "."));
 
+    /// <summary>Every source file of the document's package, compiled, when a refactoring asks for them; none for a file in no package.</summary>
+    private FSharpFunc<Unit, FSharpOption<FSharpList<Rename.ModuleFile>>> PackageFiles(OpenDocument document) =>
+        FuncConvert.FromFunc((Unit _) =>
+            _documents.CompilePackage(document.FileName) is { } files
+                ? FSharpOption<FSharpList<Rename.ModuleFile>>.Some(ListModule.OfSeq(files))
+                : FSharpOption<FSharpList<Rename.ModuleFile>>.None);
+
+    /// <summary>
+    /// Compiles texts of files, each a full path and a text, as a refactoring that edits several files checks what it
+    /// would make: the document's package with them, or the document alone for a file in no package.
+    /// </summary>
+    private FSharpFunc<FSharpList<Tuple<string, string>>, FSharpList<NyxCompiler.CompileResult>> RecompileFiles(DocumentUri uri, OpenDocument document) =>
+        FuncConvert.FromFunc((FSharpList<Tuple<string, string>> texts) =>
+            ListModule.OfSeq(
+                texts is [var only] && only.Item1 == document.FileName && (document.FileName.Length == 0 || NyxCompiler.PackageModule.sourceFilesOf(document.FileName) is null)
+                    ? [_documents.Compile(uri, only.Item2).Compiled ?? throw new InvalidOperationException("The compiler failed on the refactored text")]
+                    : _documents.RecompilePackage(document.FileName, texts.Select(text => (text.Item1, text.Item2)).ToList())
+                        ?? throw new InvalidOperationException("The compiler failed on the refactored package")));
+
     /// <summary>Compiles a text of the document at <paramref name="uri"/>, as a refactoring checks what it would make.</summary>
     private Microsoft.FSharp.Core.FSharpFunc<string, NyxCompiler.CompileResult> Recompile(DocumentUri uri) =>
         Microsoft.FSharp.Core.FuncConvert.FromFunc((string text) =>
@@ -300,6 +320,11 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             yield return implement;
         }
 
+        foreach (var make in MakeNominal.at(options, document.FileName, document.Text, compiled, start, PackageFiles(document), RecompileFiles(uri, document)))
+        {
+            yield return make;
+        }
+
         // An unknown name's imports are its quick fixes already, so they are listed again only for a request for
         // refactorings alone, as the editor's Refactor menu makes.
         if (only is not null)
@@ -336,8 +361,11 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
     /// </summary>
     public const string RenameAtCommand = "nanyx.renameAt";
 
-    /// <summary>The action for <paramref name="offer"/>, which is decided.</summary>
-    private static CodeAction ToAction(DocumentUri uri, OpenDocument document, Offer offer) =>
+    /// <summary>
+    /// The action for <paramref name="offer"/>, which is decided. An edit of another file than the document, which a
+    /// refactoring across the package makes, is placed in that file's text: the editor's, if it is open.
+    /// </summary>
+    private CodeAction ToAction(DocumentUri uri, OpenDocument document, Offer offer) =>
         offer switch
         {
             Offer.Available { Item: var refactoring } => new CodeAction
@@ -346,14 +374,21 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
                 Kind = KindOf(refactoring.Kind),
                 Edit = new WorkspaceEdit
                 {
-                    Changes = new Dictionary<DocumentUri, IEnumerable<TextEdit>>
-                    {
-                        [uri] = refactoring.Edits.Select(edit => new TextEdit
-                        {
-                            Range = document.Positions.ToRange(edit.Span.Start, edit.Span.End),
-                            NewText = edit.NewText
-                        }).ToList()
-                    }
+                    Changes = refactoring.Edits
+                        .GroupBy(edit => edit.Span.File == document.FileName || edit.Span.File.Length == 0 ? document.FileName : edit.Span.File, DocumentStore.FilePaths)
+                        .ToDictionary(
+                            file => file.Key == document.FileName ? uri : _documents.TryGetFile(file.Key)?.Uri ?? DocumentUri.FromFileSystemPath(file.Key),
+                            file =>
+                            {
+                                var positions = file.Key == document.FileName
+                                    ? document.Positions
+                                    : new SourcePositions(_documents.TryGetFile(file.Key)?.Document.Text ?? File.ReadAllText(file.Key));
+                                return (IEnumerable<TextEdit>)file.Select(edit => new TextEdit
+                                {
+                                    Range = positions.ToRange(edit.Span.Start, edit.Span.End),
+                                    NewText = edit.NewText
+                                }).ToList();
+                            })
                 },
                 Command = refactoring.Rename?.Value is { } rename ? RenameAt(uri, document, refactoring, rename) : null
             },
