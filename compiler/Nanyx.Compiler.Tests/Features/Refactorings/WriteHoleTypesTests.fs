@@ -97,3 +97,15 @@ let ``A _ that failed to check is refused`` () =
 let ``Nothing is offered on a def that writes no _`` () =
     let _, _, offers = offersAt "def add$$: int, int -> int = { a, b -> a + b }\n"
     Assert.Empty(offers)
+
+[<Fact>]
+let ``A _ in a module block is written`` () =
+    Assert.Equal(
+        normalized
+            """module shapes =
+  export def xs: list(int) = [1, 2]
+""",
+        one
+            """module shapes =
+  export def xs: list($$_) = [1, 2]
+""")
