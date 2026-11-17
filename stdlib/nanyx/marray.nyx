@@ -33,6 +33,17 @@ export def MArray.fromList: [Memory] list(a) -> MArray(a) = { xs ->
   MArray(__nanyx_marray_of_list(xs))
 }
 
+--| A new array of the elements of `s`, pulled now, in order. It requires the contexts the
+  sequence's steps do.
+export def MArray.fromSeq: [Memory, c] ([c] seq(a)) -> MArray(a) = { s ->
+  MArray(__nanyx_marray_of_list(seq.toList(s)))
+}
+
+--| A new array of what `block` yields. The same as `seq(block) \MArray.fromSeq`.
+export def MArray.build: [Memory, c, d] ([c] () -> [d] seq(a)) -> MArray(a) = { block ->
+  MArray.fromSeq(seq(block))
+}
+
 --| A new array of a copy of the elements of `xs`, in order: changing it leaves `xs` as it is.
 export def MArray.fromArray: [Memory] Array(a) -> MArray(a) = { xs ->
   MArray(__nanyx_marray_of_list(__nanyx_array_to_list(xs)))

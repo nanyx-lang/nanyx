@@ -192,4 +192,22 @@ def seq.toList: [c] ([c] seq(a)) -> list(a)
 The elements of `s`, pulled now, as a list: `(1..3) \seq.toList` is `[1, 2, 3]`. Stack-safe, but
 an endless sequence never ends.
 
+## `list.fromSeq`
+
+```nanyx fragment
+def list.fromSeq: [c] ([c] seq(a)) -> list(a)
+```
+
+The elements of `s`, pulled now, as a list: `(1..3) \list.fromSeq` is `[1, 2, 3]`. It requires
+the contexts the sequence's steps do. An endless sequence never ends: cut it with [`seq.take`](#seqtake).
+
+## `list.build`
+
+```nanyx fragment
+def list.build: [c, d] ([c] () -> [d] seq(a)) -> list(a)
+```
+
+The list of what `block` yields: `list.build { yield 1  if more then yield 2 }`. The same as
+`seq(block) \list.fromSeq`.
+
 <!-- End of the generated reference. -->

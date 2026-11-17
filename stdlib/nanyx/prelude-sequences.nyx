@@ -195,3 +195,15 @@ export def seq.reduce: [Default(a), c, d] ([c] seq(a)), ([d] a, a -> a) -> a = {
 export def seq.toList: [c] ([c] seq(a)) -> list(a) = { s ->
   seq.fold(s, [], { acc, x -> [x, ...acc] }) \list.reverse
 }
+
+--| The elements of `s`, pulled now, as a list: `(1..3) \list.fromSeq` is `[1, 2, 3]`. It requires
+  the contexts the sequence's steps do. An endless sequence never ends: cut it with [`seq.take`].
+export def list.fromSeq: [c] ([c] seq(a)) -> list(a) = { s ->
+  seq.toList(s)
+}
+
+--| The list of what `block` yields: `list.build { yield 1  if more then yield 2 }`. The same as
+  `seq(block) \list.fromSeq`.
+export def list.build: [c, d] ([c] () -> [d] seq(a)) -> list(a) = { block ->
+  list.fromSeq(seq(block))
+}

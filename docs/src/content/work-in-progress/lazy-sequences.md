@@ -247,4 +247,6 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
    ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802), after associated types,
    [#1800](https://github.com/nanyx-lang/nanyx/issues/1800)).
 6. ~~The `seq { }` builder, by the `#yield` keyword kind, with `yield` written bare and `list.select` moved to it.~~
-   Done ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)).
+   Done ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)). Each collection type is made from a sequence
+   with `fromSeq` and from a `yield` block with `build`, `Array.build { yield 1 }`
+   ([#1906](https://github.com/nanyx-lang/nanyx/issues/1906)).

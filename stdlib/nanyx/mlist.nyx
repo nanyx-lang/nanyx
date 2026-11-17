@@ -36,6 +36,19 @@ export def MList.fromArray: [Memory] Array(a) -> MList(a) = { xs ->
   MList.fromList(list.fromArray(xs))
 }
 
+--| A new list holding the elements of `s`, pulled now, in order. It requires the contexts the
+  sequence's steps do.
+export def MList.fromSeq: [Memory, c] ([c] seq(a)) -> MList(a) = { s ->
+  def items = MList.empty()
+  seq.fold(s, (), { _, x -> MList.add(items, x) })
+  items
+}
+
+--| A new list of what `block` yields. The same as `seq(block) \MList.fromSeq`.
+export def MList.build: [Memory, c, d] ([c] () -> [d] seq(a)) -> MList(a) = { block ->
+  MList.fromSeq(seq(block))
+}
+
 --| Adds `value` at the end of `items`.
 export def MList.add: [Memory] MList(a), a -> () = { MList(state), value ->
   def held = MRef.get(state)

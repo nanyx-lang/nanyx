@@ -64,6 +64,23 @@ def Stack.fromArray: array(a) -> Stack(a)
 A stack holding `xs`, the first of them on top. What a literal builds a stack with,
 `Stack[3, 2, 1]`, or `[3, 2, 1]` where a stack is expected.
 
+## `Stack.fromSeq`
+
+```nanyx fragment
+def Stack.fromSeq: [c] ([c] seq(a)) -> Stack(a)
+```
+
+A stack holding the elements of `s`, pulled now, the first of them on top. It requires the
+contexts the sequence's steps do.
+
+## `Stack.build`
+
+```nanyx fragment
+def Stack.build: [c, d] ([c] () -> [d] seq(a)) -> Stack(a)
+```
+
+A stack of what `block` yields, the first on top. The same as `seq(block) \Stack.fromSeq`.
+
 ## `Stack.push`
 
 ```nanyx fragment

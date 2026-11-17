@@ -69,6 +69,23 @@ def MArray.fromList: [Memory] list(a) -> MArray(a)
 
 A new array of the elements of `xs`, in order.
 
+## `MArray.fromSeq`
+
+```nanyx fragment
+def MArray.fromSeq: [Memory, c] ([c] seq(a)) -> MArray(a)
+```
+
+A new array of the elements of `s`, pulled now, in order. It requires the contexts the
+sequence's steps do.
+
+## `MArray.build`
+
+```nanyx fragment
+def MArray.build: [Memory, c, d] ([c] () -> [d] seq(a)) -> MArray(a)
+```
+
+A new array of what `block` yields. The same as `seq(block) \MArray.fromSeq`.
+
 ## `MArray.fromArray`
 
 ```nanyx fragment
