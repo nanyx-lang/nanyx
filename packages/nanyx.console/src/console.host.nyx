@@ -1,9 +1,11 @@
 --| The console host: it runs a command-line program's entry point.
 
   A program's `@entry` is passed to [`run`], which runs it in the contexts this host provides:
-  [`Console`], which reads and writes the standard streams, [`Env`], and [`FileSystem`], which reads and writes files. All three are
-  written on WASI's functions, which the host declares with `@extern` and calls with the [`HostRuntime`] the toolchain
-  provides to it, passing their buffers in memory with `nanyx/host.memory`.
+  [`Console`], which reads and writes the standard streams, [`Env`], [`FileSystem`], which reads
+  and writes files, and [`Http`], which makes HTTP requests. The first three are written on WASI's
+  functions, and `Http` on the `nanyx` runtime's own `nanyx:http`, since WASI preview 1 has no
+  networking. The host declares them with `@extern` and calls them with the [`HostRuntime`] the
+  toolchain provides to it, passing their buffers in memory with `nanyx/host.memory`.
 export module console.host
 
 import (
@@ -16,6 +18,9 @@ import (
   nanyx.fs/filesystem as (FileSystem, FsError)
   nanyx.fs/path as (Path)
   nanyx.fs/path as path
+  nanyx.http.core/client as (Http, HttpError)
+  nanyx.http.core/request as (Method, Request)
+  nanyx.http.core/response as (Response)
 )
 
 @extern("wasi_snapshot_preview1", "fd_write")
@@ -42,7 +47,8 @@ def procExit: [HostRuntime] I32 -> ()
 -- The host keeps its state in the block the module sets aside for it (see `hostState`): at 4 and 8,
 -- where what is left of the standard input it has read starts and ends in its buffer; at 12, an
 -- iovec, the address and length of the bytes to write or read; at 20, the count of bytes written or
--- read; and from 64 to the end of the block, the buffer standard input is read into.
+-- read; at 40, what kind of answer an HTTP request had; and from 64 to the end of the block, the buffer
+-- standard input is read into.
 
 --| The address `offset` bytes into the host's state.
 def stateAt: [HostRuntime] I32 -> I32 = { offset ->
@@ -518,11 +524,98 @@ def deleteAt: [HostRuntime] Path -> #ok | #error(FsError) = { at ->
         )
 }
 
+@extern("nanyx:http", "send")
+def httpSend: [HostRuntime] I32, I32, I32 -> I32
+
+@extern("nanyx:http", "receive")
+def httpReceive: [HostRuntime] I32 -> ()
+
+-- A request is passed to `nanyx:http` as lines, each ended by `\n`: the method, the URL, the timeout
+-- in milliseconds, the number of headers and each header's name and value, then the body; a response
+-- comes back in the same way: the status, the number of headers, each header's name and value, then
+-- the body. What kind of answer `send` had, a response or why there is none, it writes at 40 in the
+-- host's state.
+
+--| `method`'s name, as HTTP writes it: `GET` for `#get`.
+def methodName: Method -> string = {
+  | #get -> "GET"
+  | #post -> "POST"
+  | #put -> "PUT"
+  | #delete -> "DELETE"
+  | #patch -> "PATCH"
+  | #head -> "HEAD"
+  | #options -> "OPTIONS"
+}
+
+--| `request` as `nanyx:http` reads it.
+def wireOf: Request -> string = { request ->
+  def headers = request.headers \fold(
+    ""
+    { lines, header -> lines ++ header.0 ++ "\n" ++ header.1 ++ "\n" }
+  )
+
+  def count = request.headers \length
+
+  "{methodName(request.method)}\n{request.url}\n{request.timeout}\n{count}\n{headers}{request.body}"
+}
+
+--| The headers written in `text`, `count` of them, after `headers` (the latest first), in order, with
+  what follows them.
+def headersIn
+  : string, int, list((string, string)) -> #some(list((string, string)), string) | #malformed
+  = { text, count, headers ->
+    if count <= 0 then #some(headers \reverse, text) else
+      match string.splitOnce(text, on = "\n")
+        | #notFound -> #malformed
+        | #some(name, rest) ->
+          match string.splitOnce(rest, on = "\n")
+            | #notFound -> #malformed
+            | #some(value, after) -> headersIn(after, count - 1, [(name, value), ...headers])
+  }
+
+--| The response written in `text`.
+def responseOf: string -> #some(Response) | #error(HttpError) = { text ->
+  def malformed = #error(#other("the runtime's answer to the request was malformed"))
+
+  match string.splitOnce(text, on = "\n")
+    | #notFound -> malformed
+    | #some(status, rest) ->
+      match (int.fromString(status), string.splitOnce(rest, on = "\n"))
+        | (#some(code), #some(count, after)) ->
+          match int.fromString(count)
+            | #invalidInt -> malformed
+            | #some(headerCount) ->
+              match headersIn(after, headerCount, [])
+                | #malformed -> malformed
+                | #some(headers, body) -> #some(
+                  Response(status = code, headers = headers, body = body)
+                )
+        | _ -> malformed
+}
+
+--| Sends `request` through `nanyx:http`, and gives its response, or why there is none.
+def sendThroughRuntime: [HostRuntime] Request -> #some(Response) | #error(HttpError) = { request ->
+  def wire = wireOf(request)
+  def length = httpSend(addressOf(wire), byteLength(wire), stateAt(40))
+  keepAlive(wire)
+  def buffer = allocate(length + 1)
+  httpReceive(buffer)
+  def answer = stringAt(buffer, length)
+  free(buffer)
+
+  match readI32(stateAt(40))
+    | 0 -> responseOf(answer)
+    | 1 -> #error(#timeout)
+    | 2 -> #error(#connectionFailed(answer))
+    | 3 -> #error(#invalidUrl)
+    | _ -> #error(#other(answer))
+}
+
 --| Runs `entry`, the program's entry point, with a `Console` that reads and writes the standard
   streams, an `Env` that reads what the program was started with, and a `FileSystem` that reads and
   writes the directories the runtime opened for it. What `entry`
   returns is ignored.
-export def run: [HostRuntime] ([Console, Env, FileSystem] () -> a) -> () = { entry ->
+export def run: [HostRuntime] ([Console, Env, FileSystem, Http] () -> a) -> () = { entry ->
   use Console(
     write = { text -> writeTo(1, text) }
     writeError = { text -> writeTo(2, text) }
@@ -549,6 +642,8 @@ export def run: [HostRuntime] ([Console, Env, FileSystem] () -> a) -> () = { ent
       atPath(at, { directory, address, length -> pathCreateDirectory(directory, address, length) })
     }
   )
+
+  use Http(sendRequest = { request -> sendThroughRuntime(request) })
 
   ignore(entry())
 }

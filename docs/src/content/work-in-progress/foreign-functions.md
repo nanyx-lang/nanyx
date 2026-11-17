@@ -59,8 +59,27 @@ Done: `@extern` ([#1424](https://github.com/nanyx-lang/nanyx/issues/1424)), host
   float result boxed; an import that returns nothing leaves unit. The module declares each import a call reaches once
   (`CoreIrFacts.Imports`, `CoreIrEmit.importDeclaration`), as `$import_<module>_<name>`, before every other import,
   and exports its memory.
-- **Running it.** `nanyx run` links Wasmtime's WASI, so an extern of a WASI preview 1 function runs. Any other import
-  fails when the module is instantiated, with Wasmtime's message naming it.
+- **Running it.** `nanyx run` links Wasmtime's WASI, so an extern of a WASI preview 1 function runs, and the runtime's
+  own imports (below). Any other import fails when the module is instantiated, with Wasmtime's message naming it.
+- **The runtime's own imports.** What WASI preview 1 lacks, the `nanyx` runtime supplies under a module name of its
+  own, `nanyx:<area>`, until the backend emits components and can use the standard interface instead. A program that
+  imports one runs under `nanyx run`, and fails to load under another WASI runtime, which is accurate: it needs what
+  only this runtime gives it. There is one so far, `nanyx:http` (`Nanyx.Runtime.HttpImport`), which the console host
+  implements `Http` on ([#1785](https://github.com/nanyx-lang/nanyx/issues/1785)), and which `wasi:http` replaces later
+  with no change to programs, since they see only `Http`:
+  - `send(request: i32, length: i32, kind: i32) -> i32` makes the request written in the `length` bytes at `request`
+    with .NET's `HttpClient`, blocking until it is answered or its timeout passes, keeps the answer, writes what kind
+    of answer it is at `kind` (0 a response, 1 a timeout, 2 a connection that failed, 3 a URL that isn't an absolute
+    `http` or `https` one, 4 anything else) and gives the answer's length in bytes;
+  - `receive(destination: i32)` copies the kept answer to `destination`, where the program has allocated that many
+    bytes, and forgets it.
+
+  A request is written as lines ended by `\n`: the method, the URL, the timeout in milliseconds, the number of headers
+  and each header's name and value, then the body as it is. A response comes back the same way: the status, the number
+  of headers, each header's name, in lower case, and value (several values of one header joined with `, `), then the
+  body; a failed connection's and another failure's answer is the message saying why. The answer is kept per store,
+  so between the two calls nothing else may send. Two calls rather than one let the program allocate the answer's
+  room itself, with the allocator every object uses, rather than the runtime writing into memory it doesn't own.
 - **Host memory.** `nanyx/host.memory` is written over intrinsics of its own, private to the standard library as the
   others are (`__nanyx_memory_allocate`, `__nanyx_memory_read_i32`, `__nanyx_string_address`, ...): a read or a
   write is the one instruction that does it (`CoreIrEmit`'s `memoryAccesses`), a block comes from the allocator every

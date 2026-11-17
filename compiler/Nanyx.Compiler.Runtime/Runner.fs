@@ -153,6 +153,7 @@ module WasmRunner =
             use linker = new Linker(engine)
             use store = new Store(engine)
             linker.DefineWasi()
+            HttpImport.define linker
             configure store
             let mutable instantiated = None
             let outcome =
