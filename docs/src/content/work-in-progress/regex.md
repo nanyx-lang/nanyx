@@ -7,7 +7,8 @@ order: 7
 This page is the design of regular expressions, agreed with the maintainer on 2026-11-17 and filed in three stages
 ([Plan](#plan)). The first and the third are built: the shipped package `nanyx.regex`, with its `#Matches` and `#MatchesRegex`
 patterns for `match` arms, described on its [reference page](../stdlib/regex) and in the
-[cookbook](../cookbook/regular-expressions). Checking literal patterns at compile time is still to come.
+[cookbook](../cookbook/regular-expressions). Checking literal patterns at compile time waits for linters written in
+Nanyx ([below](#patterns-checked-at-compile-time)).
 
 # Decisions
 
@@ -47,9 +48,15 @@ def digits = Regex.parse('[0-9]+') \orCrash("bad pattern")   -- #some(Regex) | #
 # Patterns checked at compile time
 
 A bad pattern written as a literal should be an error where it's written, not a crash when it runs. Nanyx doesn't
-evaluate code at compile time, but its [linters](../advanced/linters) run Nanyx code at compile time, so a linter rule
-calls `Regex.parse` on each literal passed to it and reports the `RegexError` at the column inside the literal. A
-pattern built at run time still gives `#error`. No compiler special case is needed.
+evaluate code at compile time, so the check is to be a linter rule that calls the package's own `Regex.parse` on each
+literal passed to it, or to `#Matches`, and reports the `RegexError` at the column inside the literal. A pattern built
+at run time still gives `#error`. No compiler special case is needed.
+
+This waits for linters written in Nanyx ([#107](https://github.com/nanyx-lang/nanyx/issues/107),
+[#1343](https://github.com/nanyx-lang/nanyx/issues/1343)): today's [linters](../advanced/linters) are F#, compiled into
+the compiler, and can't run Nanyx code. Porting the pattern reader to F# would make a second parser that drifts from
+the package's, and compiling and running the package from the F# linter would be machinery thrown away once the
+contract exists. Until then, a wrong literal gives `#error` from `Regex.parse`, and `#Matches` crashes with it.
 
 # Regexes in `match`
 
@@ -89,5 +96,5 @@ payload.
 | Step | Issue | After |
 |---|---|---|
 | `nanyx.regex`: the engine and the API (done) | [#2032](https://github.com/nanyx-lang/nanyx/issues/2032) | |
-| A linter rule that checks literal patterns at compile time | [#2033](https://github.com/nanyx-lang/nanyx/issues/2033) | #2032 |
+| A linter rule that checks literal patterns at compile time | [#2033](https://github.com/nanyx-lang/nanyx/issues/2033) | #2032, #107, #1343 |
 | `#Matches`, a custom pattern for `match` arms (done) | [#2034](https://github.com/nanyx-lang/nanyx/issues/2034) | #2032 |
