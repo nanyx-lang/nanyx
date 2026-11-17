@@ -1,6 +1,11 @@
 /// The error reference (docs/src/content/standard-tools/errors.md) has a section for every code in `DiagnosticCodes`,
 /// headed with its code and title, and each ```nanyx block in a section is a program that reports that section's code.
-/// The conventions are in docs/src/content/work-in-progress/error-messages.md#the-error-reference.
+/// Each block is compiled as a script and must report errors of its section's code and no other; the backend compiles it
+/// too when the type checker finds nothing, so `NYX03xx` examples work the same way. A block of several files starts each
+/// with a line `-- file: <name>`, and the first is the one compiled; a file `app.nyxp` among them makes the others a
+/// package, and a block whose first line is `-- file: demo.nyxp` is a manifest on its own, read by the manifest checker.
+/// The fences `fragment` and `skip=#<issue>` mean what they do in the tour. A heading that starts with a code gets the
+/// code as its anchor (`#nyx0201`), from `rehypeDiagnosticCodeIds` in docs/site/rehype-plugins.mjs.
 module TranspilerWasmTests.Features.Docs.ErrorReference
 
 open System

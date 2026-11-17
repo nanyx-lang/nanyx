@@ -1,14 +1,13 @@
 ---
 title: "Formatter"
-description: "How nanyx format is built, and the decisions behind its style"
+description: "How nanyx format is built"
 order: 31
 ---
 
 > The formatter is built. Its style, settings and command are described for users on
 > [Formatter](../standard-tools/formatter), and its editor features on
-> [VS Code extension](../standard-tools/vs-code-extension#formatting). This page keeps how it is built and why its
-> style is what it is. Work is tracked under the [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting)
-> label.
+> [VS Code extension](../standard-tools/vs-code-extension#formatting). This page keeps how it is built. Work is
+> tracked under the [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) label.
 
 There is one official formatter, `nanyx format`, so that there is one layout for Nanyx code and nobody argues about
 it. This page is about what the user's page leaves out: how the formatter keeps comments the parser would throw away,
@@ -55,7 +54,7 @@ construct are written once, as documents, and the printer decides where to break
   ([#1628](https://github.com/nanyx-lang/nanyx/issues/1628)).
 - Literals are stored by value (`IntLit of int`, a decoded `StringLit`), so they are printed from their source text,
   through their spans, and `0xFF`, `1_000` and escapes survive. The text between the holes of an interpolated string
-  has no span of its own: `writtenStringText` finds it in the source after the opening quote or the hole before it,
+  has no span of its own: `SourceText.WrittenStringText` finds it in the source after the opening quote or the hole before it,
   and keeps it if `StringEscapes.decode` gives back the parsed text.
 - Identifiers, operators and keywords are printed as written; the formatter never renames.
 - A table literal is parsed as the list of records it stands for, so the formatter tells it from one by its source
@@ -137,34 +136,3 @@ A block fenced ` ```nanyx fragment `, ` ```nanyx skip=#<issue> ` or ` ```nanyx u
 formatting, as on the Formatter page) is not checked, and nor is one with an `-- error` comment, whose code is wrong on
 purpose (the formatter would write NYX0032's `&` as `,`) and laid out to put the comment on the line it is about. The
 style examples on the Formatter page are tested (`StyleExampleTests`).
-
-# Decided
-
-On 2026-11-07, in [#215](https://github.com/nanyx-lang/nanyx/issues/215):
-
-- **Configuration.** `lineWidth` and `indentSize`, for now, in the `formatter` field of `.nyxp`.
-- **Blank lines.** A construct that spans several lines gets a blank line before and after it, at every level;
-  between single-line constructs, the author's single blank lines are kept.
-- **Trailing commas.** A non-issue: Nanyx separates the elements of a multi-line record or list with newlines, not
-  commas.
-- **Imports.** Sorted, within each run of consecutive imports. On 2026-11-09, imports in a row became one bracketed
-  import.
-- **Unparseable files.** Refused.
-- **Layout.** A lambda's `}` goes back to its line's indent, so two closing braces never line up; an `if` that doesn't
-  fit puts `then` and `else` on lines of their own; a lambda's body goes on the line after a typed def's `->` unless
-  it is only a name or a literal; a record type of more than three fields puts each on its own line.
-
-On 2026-11-16:
-
-- **The style rules** on the [Formatter](../standard-tools/formatter#the-style) page are adopted as written
-  ([#855](https://github.com/nanyx-lang/nanyx/issues/855)). The `mapSome` example first showed its cases hung from the
-  `{`'s column, `= { | ...`, with the `}` after the last one; that measured indent from a column rather than the
-  line's start and contradicted the typed-def lambda rule decided on 2026-11-07, so it now shows the cases on the
-  lines after the `{`, as the formatter writes them.
-- **Alignment.** None beyond the `|`s of a match's cases: aligning `=` or `->` across lines makes one edit change many
-  lines in a diff ([#856](https://github.com/nanyx-lang/nanyx/issues/856)). On 2026-11-17 a table literal's columns
-  became the one exception: a table is written to be read as a grid ([#1255](https://github.com/nanyx-lang/nanyx/issues/1255)).
-- **Highlighting differences in the editor** as described under [The editor](#the-editor)
-  ([#705](https://github.com/nanyx-lang/nanyx/issues/705)).
-- **A field named by a number is positional,** so `` (`0`: a, x: int) `` is printed `(a, x: int)`; the formatter
-  normalises to the positional form ([#1430](https://github.com/nanyx-lang/nanyx/issues/1430)).

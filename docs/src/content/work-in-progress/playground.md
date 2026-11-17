@@ -5,8 +5,8 @@ order: 3
 ---
 
 This page proposes a playground at `nanyx.dev/playground`: an editor, a Run button, the program's output, and a link
-that shares what you wrote. It is the first thing to build once Nanyx programs can run in a page. Nothing of it exists
-yet.
+that shares what you wrote. It is the first thing to build once Nanyx programs can run in a page. Only the measurement of
+the compiler in the browser exists so far.
 
 # What it does
 
@@ -30,8 +30,10 @@ version, and programs that read input. The [Nim demo](./nim-demo) is planned as 
 
 A playground program is a console program, so the page stands in for the terminal. This is the "`ConsoleHost` in a
 page" case on the [Hosts](./hosts#consolehost-in-a-page) page, not the [browser host](./hosts#a-browser-host). The
-program keeps its `Console` and its `@entry`, and only the embedder changes. The module the backend emits already
-imports just `fd_write`, `fd_read` and `proc_exit`, which a page can provide in a few lines of JavaScript. The Hosts
+program keeps its `Console` and its `@entry`, and only the embedder changes. The console host declares the WASI
+functions it calls with `@extern` (`packages/nanyx.console`): `fd_write`, `fd_read` and `proc_exit` for a program
+that prints and reads, which a page can provide in a few lines of JavaScript, and others for arguments, the
+environment, files and HTTP, which a page would have to provide or stub. The Hosts
 page lists what stands in the way, and each of those is a step of the plan below:
 
 - Done: **the toolchain writes `.wasm`.** A browser loads only the binary format. The compiler assembles its
@@ -146,10 +148,11 @@ Open `http://localhost:8123/` to see the times, or `http://localhost:8123/?run=c
 the cache when it is done. `serve.mjs` serves each file with brotli and appends each load's report to `results.jsonl`
 in the directory it runs in. `Nanyx.Browser/measure.ps1` runs the rounds above: it opens the page headless in each
 browser it is given, with a fresh profile, and waits for the reports (`-Library none` leaves out the checked library).
-**Building it.** The docs site is built on Vercel, which has no .NET SDK, so it can't build the compiler. The
-Compiler workflow's `Release` job also publishes the browser build as a release asset, `nanyx-browser.zip`, and the
-docs build downloads the release it names. The playground is then pinned to a compiler release and names it, and
-moving it on to a newer release is a one-line change.
+
+**Building it.** The docs site is built on Vercel, which has no .NET SDK, so it can't build the compiler. Proposed:
+the Compiler workflow's `Release` job publishes the browser build as a release asset, `nanyx-browser.zip`, and the
+docs build downloads the release it names; neither does so yet. The playground is then pinned to a compiler release
+and names it, and moving it on to a newer release is a one-line change.
 
 # The editor
 
