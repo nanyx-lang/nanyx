@@ -15,6 +15,33 @@ export def array.fromList: list(a) -> array(a) = { xs ->
   __nanyx_array_of_list(xs)
 }
 
+--| An array of the elements of `s`, pulled now, in order: `(1..5) \Array.fromSeq` is
+  `[1, 2, 3, 4, 5]`. It requires the contexts the sequence's steps do. An endless sequence never
+  ends: cut it with [`seq.take`].
+export def array.fromSeq: [c] ([c] seq(a)) -> array(a) = { s ->
+  -- An array's length is fixed when it is made, so the elements are held, last first, until the
+  -- sequence ends, then written into an array of their number from the back.
+  def reversed = seq.fold(s, [], { acc, x -> [x, ...acc] })
+  def count = list.length(reversed)
+  writeBackFrom(__nanyx_array_new(count), count - 1, reversed)
+}
+
+--| An array of what `block` yields: `Array.build { yield 1  if more then yield 2 }`. The same as
+  `seq(block) \array.fromSeq`.
+export def array.build: [c, d] ([c] () -> [d] seq(a)) -> array(a) = { block ->
+  array.fromSeq(seq(block))
+}
+
+-- `made`, a new array, once each of `reversed` is written into it, the first at `index` and each
+-- after it one index before.
+def writeBackFrom: array(a), int, list(a) -> array(a) = { made, index, reversed ->
+  match reversed
+    | [] -> made
+    | [x, ...rest] ->
+      __nanyx_array_write(made, index, x)
+      writeBackFrom(made, index - 1, rest)
+}
+
 --| The elements of `xs`, in order, as a list.
 export def array.toList: array(a) -> list(a) = { xs ->
   __nanyx_array_to_list(xs)

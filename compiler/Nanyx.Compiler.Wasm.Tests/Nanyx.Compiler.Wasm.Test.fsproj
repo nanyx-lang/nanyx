@@ -121,6 +121,7 @@
     <Compile Include="Features\Memory\RunMRefTests.fs" />
     <Compile Include="Features\Memory\RunMutableCollectionTests.fs" />
     <Compile Include="Features\Memory\MListHandOverTests.fs" />
+    <Compile Include="Features\Memory\MListSetTests.fs" />
     <Compile Include="Features\Memory\RunMArrayTests.fs" />
     <Compile Include="Features\Memory\StaticClosureTests.fs" />
     <Compile Include="Features\Memory\ClosureEntryTests.fs" />
@@ -158,6 +159,7 @@
     <Compile Include="Features\Arrays\RunArrayTests.fs" />
     <Compile Include="Features\Arrays\RunArrayCallTests.fs" />
     <Compile Include="Features\Arrays\ArrayAllocationTests.fs" />
+    <Compile Include="Features\Arrays\MArrayAllocationTests.fs" />
     <Compile Include="Features\Arrays\RunSliceTests.fs" />
     <Compile Include="Features\Arrays\RunMArraySortTests.fs" />
     <Compile Include="Features\Collections\RunCollectionLiteralTests.fs" />
@@ -186,6 +188,8 @@
     <Compile Include="Features\StdLib\RunStackTests.fs" />
     <Compile Include="Features\StdLib\RunQueueTests.fs" />
     <Compile Include="Features\StdLib\RunReduceTests.fs" />
+    <Compile Include="Features\StdLib\RunFromSeqBuildTests.fs" />
+    <Compile Include="Features\StdLib\RunSeqZipToSeqTests.fs" />
     <Compile Include="Features\StdLib\RunTrieTests.fs" />
     <Compile Include="Features\StdLib\RunCollectionLengthTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />

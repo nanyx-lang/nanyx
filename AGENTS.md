@@ -112,6 +112,20 @@ those files workable. Problems with the code's structure are tracked as GitHub i
 - **Show what differed.** A failing comparison should print the difference: use `Assert.Equal(expected,
   actual)`, not `failwith "mismatch"`.
 
+## Releasing the compiler
+
+- **A version bump is a release.** Merging a change to `<Version>` in `compiler/Directory.Build.props` makes `main`
+  tag `compiler/<version>` and publish the binaries.
+- **The PR that bumps the version writes its changelog section.** Add a `# <version>` section at the top of the
+  [Changelog](docs/src/content/overview/changelog.md), with the date under it in italics. The release job uses that
+  section as the GitHub release's notes, and the Compiler workflow fails if there isn't one.
+- **Write it from the PRs, not from memory.** List what has merged since the last release with
+  `git log --format=%s compiler/<last version>..origin/main`, and read the bodies of the PRs that matter with
+  `gh pr view <n>`. Open with a sentence or two on what the release is about, then the changes a user would notice,
+  under bold **Language**, **Standard library**, **Tools**, **Performance** and **Fixes** labels, leaving out the
+  empty ones. Link each change to the docs page that describes it. Leave out refactors, test-only and docs-only
+  changes, CI, and the extension, which has releases of its own.
+
 ## Refactoring
 
 - **Keep refactors apart from behaviour changes.** A move is pure cut and paste. Behaviour, generated WAT,

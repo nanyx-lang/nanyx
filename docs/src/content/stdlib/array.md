@@ -50,6 +50,25 @@ def array.fromList: list(a) -> array(a)
 
 An array of the elements of `xs`, in order.
 
+## `array.fromSeq`
+
+```nanyx fragment
+def array.fromSeq: [c] ([c] seq(a)) -> array(a)
+```
+
+An array of the elements of `s`, pulled now, in order: `(1..5) \Array.fromSeq` is
+`[1, 2, 3, 4, 5]`. It requires the contexts the sequence's steps do. An endless sequence never
+ends: cut it with `seq.take`.
+
+## `array.build`
+
+```nanyx fragment
+def array.build: [c, d] ([c] () -> [d] seq(a)) -> array(a)
+```
+
+An array of what `block` yields: `Array.build { yield 1  if more then yield 2 }`. The same as
+`seq(block) \array.fromSeq`.
+
 ## `array.toList`
 
 ```nanyx fragment

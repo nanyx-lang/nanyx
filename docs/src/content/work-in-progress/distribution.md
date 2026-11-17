@@ -27,7 +27,8 @@ made with the published binary, so an archive without them fails.
 
 Merging a change to the compiler's version on `main` is the release: the `Release` job tags the commit
 `compiler/<version>` and attaches the archives it has just built and tested to a GitHub release, unless that tag
-already exists. Nothing is rebuilt for a release. The binaries aren't signed, so macOS quarantines a browser
+already exists. Nothing is rebuilt for a release. The release's notes are the version's section of the
+[Changelog](../overview/changelog), and the workflow fails when there is no section for the version. The binaries aren't signed, so macOS quarantines a browser
 download until the user removes the flag.
 
 ## Scoop

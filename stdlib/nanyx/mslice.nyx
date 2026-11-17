@@ -304,5 +304,14 @@ def toListFrom: [Memory] MSlice(a), int, list(a) -> list(a) = { s, index, acc ->
 --| A copy of the elements of `s` now, in order, as an `Array`, which later changes to the array `s`
   views leave as it is.
 export def MSlice.toArray: [Memory] MSlice(a) -> Array(a) = { s ->
-  Array[...MSlice.toList(s)]
+  copyOutFrom(s, __nanyx_array_new(s.length), 0)
+}
+
+-- `made`, a new array as long as `s`, once each element of `s` from `index` on is written into it.
+def copyOutFrom: [Memory] MSlice(a), array(a), int -> array(a) = { s, made, index ->
+  match MSlice.at(s, index)
+    | #some(element) ->
+      __nanyx_array_write(made, index, element)
+      copyOutFrom(s, made, index + 1)
+    | #none -> made
 }

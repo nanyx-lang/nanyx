@@ -67,6 +67,24 @@ def Queue.fromArray: array(a) -> Queue(a)
 A queue holding `xs`, the first of them at the front. What a literal builds a queue with,
 `Queue[1, 2, 3]`, or `[1, 2, 3]` where a queue is expected.
 
+## `Queue.fromSeq`
+
+```nanyx fragment
+def Queue.fromSeq: [c] ([c] seq(a)) -> Queue(a)
+```
+
+A queue holding the elements of `s`, pulled now, the first of them at the front. It requires the
+contexts the sequence's steps do.
+
+## `Queue.build`
+
+```nanyx fragment
+def Queue.build: [c, d] ([c] () -> [d] seq(a)) -> Queue(a)
+```
+
+A queue of what `block` yields, the first at the front. The same as
+`seq(block) \Queue.fromSeq`.
+
 ## `Queue.enqueue`
 
 ```nanyx fragment

@@ -64,9 +64,26 @@ export def map.fromArray: [Eq(k), Hash(k)] array((k, v)) -> map(k, v) = { entrie
   insertAll(map.empty, list.fromArray(entries))
 }
 
+--| The map holding each of the entries of `s`, pulled now, in order: of two entries with the same
+  key, the later wins, as in [`map.fromList`]. It requires the contexts the sequence's steps do.
+export def map.fromSeq: [Eq(k), Hash(k), c] ([c] seq((k, v))) -> map(k, v) = { s ->
+  seq.fold(s, map.empty, { m, entry -> map.insert(m, entry.0, entry.1) })
+}
+
+--| The map of the entries `block` yields: `map.build { yield ("a", 1) }`. The same as
+  `seq(block) \map.fromSeq`.
+export def map.build: [Eq(k), Hash(k), c, d] ([c] () -> [d] seq((k, v))) -> map(k, v) = { block ->
+  map.fromSeq(seq(block))
+}
+
 --| The entries of `m`, each a key and its value, in the order the keys were first added.
 export def map.toList: map(k, v) -> list((k, v)) = { m ->
   __nanyx_map_entries(m)
+}
+
+--| The entries of `m` as a sequence of key-value pairs, in the order [`map.toList`] gives them.
+export def map.toSeq: map(k, v) -> seq((k, v)) = { m ->
+  list.toSeq(__nanyx_map_entries(m))
 }
 
 --| The value `m` holds for `key`, or `#notFound`. Calling the map, `m(key)`, is the same.
@@ -244,9 +261,26 @@ export def set.fromArray: [Eq(a), Hash(a)] array(a) -> set(a) = { xs ->
   set.fromList(list.fromArray(xs))
 }
 
+--| The set of the elements of `s`, pulled now, each once, in the order they first appear. It
+  requires the contexts the sequence's steps do.
+export def set.fromSeq: [Eq(a), Hash(a), c] ([c] seq(a)) -> set(a) = { s ->
+  set.fromList(seq.toList(s))
+}
+
+--| The set of what `block` yields: `set.build { yield 1  yield 1 }` holds one `1`. The same as
+  `seq(block) \set.fromSeq`.
+export def set.build: [Eq(a), Hash(a), c, d] ([c] () -> [d] seq(a)) -> set(a) = { block ->
+  set.fromSeq(seq(block))
+}
+
 --| The elements of `s`, in the order they were first added.
 export def set.toList: set(a) -> list(a) = { s ->
   __nanyx_set_elements(s)
+}
+
+--| The elements of `s` as a sequence, in the order [`set.toList`] gives them.
+export def set.toSeq: set(a) -> seq(a) = { s ->
+  list.toSeq(__nanyx_set_elements(s))
 }
 
 --| Whether `s` holds `x`.

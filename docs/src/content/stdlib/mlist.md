@@ -64,6 +64,23 @@ def MList.fromArray: [Memory] array(a) -> MList(a)
 A new list holding `xs`, in order. What a literal builds a list with, `MList[1, 2, 3]`, or
 `[1, 2, 3]` where an `MList` is expected.
 
+## `MList.fromSeq`
+
+```nanyx fragment
+def MList.fromSeq: [Memory, c] ([c] seq(a)) -> MList(a)
+```
+
+A new list holding the elements of `s`, pulled now, in order. It requires the contexts the
+sequence's steps do.
+
+## `MList.build`
+
+```nanyx fragment
+def MList.build: [Memory, c, d] ([c] () -> [d] seq(a)) -> MList(a)
+```
+
+A new list of what `block` yields. The same as `seq(block) \MList.fromSeq`.
+
 ## `MList.add`
 
 ```nanyx fragment

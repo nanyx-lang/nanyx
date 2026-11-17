@@ -168,11 +168,16 @@ let ``A request is answered while another's handler waits on a request of its ow
     let slowPort = freePort ()
     slow.Prefixes.Add $"http://localhost:{slowPort}/"
     slow.Start()
+    // The slow server holds its answer until the quick request has been answered, so the order of the answers is
+    // what the test checks, not how long either took.
+    use received = new ManualResetEventSlim()
+    use release = new ManualResetEventSlim()
     let answeringSlowly =
         Task.Run(fun () ->
             try
                 let context = slow.GetContext()
-                Thread.Sleep 3000
+                received.Set()
+                release.Wait()
                 let bytes = Text.Encoding.UTF8.GetBytes "late"
                 context.Response.OutputStream.Write(bytes, 0, bytes.Length)
                 context.Response.Close()
@@ -194,13 +199,15 @@ def main = {{ request: Request ->
 }}
 """
     serving directory.Path port (fun client ->
-        let waiting = client.GetStringAsync "/wait"
-        Thread.Sleep 500
-        let started = Diagnostics.Stopwatch.StartNew()
-        Assert.Equal((200, "quick"), get client "/quick")
-        Assert.True(started.ElapsedMilliseconds < 2000L, $"The second request took {started.ElapsedMilliseconds} ms")
-        Assert.False(waiting.IsCompleted)
-        Assert.Equal("late", waiting.GetAwaiter().GetResult()))
+        try
+            let waiting = client.GetStringAsync "/wait"
+            Assert.True(received.Wait(TimeSpan.FromSeconds 30.0), "The handler of /wait never made its request")
+            Assert.Equal((200, "quick"), get client "/quick")
+            Assert.False(waiting.IsCompleted)
+            release.Set()
+            Assert.Equal("late", waiting.GetAwaiter().GetResult())
+        finally
+            release.Set())
     |> ignore
     slow.Stop()
     answeringSlowly.Wait()
