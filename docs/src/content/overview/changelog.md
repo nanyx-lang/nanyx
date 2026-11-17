@@ -8,6 +8,99 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.29.0
+
+*17 November 2026*
+
+Packages arrive: a manifest written in Nanyx, path and GitHub dependencies, a lock file, and shipped packages for
+files, JSON and HTTP, including a host that serves a web handler. The standard library gains arrays, slices and
+mutable collections, the language gains custom patterns and associated types, and the editor gains a set of
+refactorings. Several changes break existing code; they are marked below.
+
+**Language**
+
+- Custom patterns: declare total and partial patterns, give them arguments, and compose them with `&`
+  ([Custom patterns](../advanced/custom-patterns)).
+- Associated types: a context can have a member of kind type, as `FromString(a)` does for its failure type; generic
+  values can be context members, and a type can be generic in contexts ([Contexts](../advanced/contexts)).
+- Square-bracket literals build any collection type through `fromArray`, and an array can be called: `xs(i)` is
+  `array.at(xs, i)` ([Collections](../tour/collections)).
+- `seq { }` with a bare `yield`, and a `for` loop walks a `seq` ([Sequences and queries](../advanced/sequences-and-queries)).
+- `Async` marks a function that can wait; the console and HTTP hosts provide it ([Async](../stdlib/async)).
+- Foreign functions are declared with `@extern`, and hosts get typed access to linear memory ([Hosts](../advanced/hosts)).
+- A type can be declared inside a block, and `+=` is a spare operator (`MList` attaches it to append).
+- **This breaks code** that separates contexts with `&`: contexts are separated with `,`, as in `[Eq(a), Hash(a)]`.
+- **This breaks code** that writes a context as a type or holds an instance in a def: a context's instance is written
+  only in a `use`. A scoped context must be protected or private.
+- **This breaks code** that requires `Add(a)` for `-`: `Add(a)` has `zero` and `+`, and the new `Sub(a)` has `-` and
+  `negate`.
+- **This breaks code** that lists `publicModules` in a manifest: a module is made public with `export module`.
+- Errors are rewritten in one house style across the parser, the type checker and the backend, and a look-alike
+  character such as U+2212 for `-` is named, with a fix ([Errors](../standard-tools/errors)).
+- A program that crashes says why: integer overflow, division by zero, a float that can't be an int, a negative
+  power, running out of stack (naming the function) or out of memory.
+
+**Standard library**
+
+- `Array`, `Slice`, `MSlice` and `StringSlice`, and the mutable `MRef`, `MArray`, `MStack` and `MList`
+  ([Array](../stdlib/array), [Slice](../stdlib/slice), [MArray](../stdlib/marray), [MList](../stdlib/mlist)).
+- Immutable `Stack`, `Queue`, `Trie` and `StringTrie` ([Stack](../stdlib/stack), [Queue](../stdlib/queue),
+  [Trie](../stdlib/trie)).
+- `seq` has a runtime form; `seq.zip`, `set.toSeq`, `map.toSeq`, and `fromSeq`, `build` and `reduce` on every
+  collection type ([Sequences](../stdlib/prelude-sequences)).
+- `MArray.sort` and its family sort in place, stably.
+- `list.zipWith`, `intersperse`, `chunks`, `windows`, `scan`, `sortDescending`, `sortByDescending` and `sortWith`;
+  `allSome`; `float.format`; `Default(a)` ([Lists](../stdlib/prelude-lists)).
+- Trigonometry, base-10 and base-2 logarithms, `infinity`, `nan` and its tests, and bitwise functions on ints
+  ([Math](../stdlib/math)).
+- Shipped packages: `nanyx.fs` for files and directories (`file.lines` reads lazily), `nanyx.json` with decoders and
+  encoders, and `nanyx.http.core` with an HTTP client ([File system](../stdlib/filesystem), [JSON](../stdlib/json),
+  [HTTP](../stdlib/http)).
+- **This breaks code** that calls `panic`: it is `crash`, and `orCrash` joins it.
+- **This breaks code** that calls `count` for a size: maps, sets, `MList` and `MStack` have `length`, as every other
+  collection does.
+- **This breaks code** that imports `nanyx/console`: `Console` and `Env` come from the console host's
+  `nanyx.console.core` ([Console](../stdlib/console)).
+
+**Tools**
+
+- The package manifest is a `.nyxp` file holding a Nanyx record, not TOML. **This breaks** every `.toml` manifest,
+  which the compiler recognises and reports ([Packages](../tour/packages)).
+- Dependencies on a directory, a file or a GitHub repository pinned to a commit; `nanyx.lock`, `.nyxpkg` packs and a
+  package cache, with `nanyx pull` and `nanyx install`; `nanyx migrate` turns scripts into a package
+  ([Packages](../tour/packages)).
+- Any package can be a host. The HTTP host serves a `Request -> Response` handler with `nanyx run`
+  ([Hosts](../advanced/hosts), [HTTP server](../cookbook/http-server)).
+- Scripts name their host and dependencies with `::host` and `::dependency` lines
+  ([Files and projects](../getting-started/files-and-projects)).
+- `nanyx bump` compares a package's API with its last version and picks the next one; `nanyx search` finds library
+  functions by name and type; `nanyx format --stdin`; `nanyx run --memory`; and the compiler writes `.wasm` binary
+  ([The nanyx command](../standard-tools/command-line)).
+- The linter has `@allow(rule, ...)` and the rules `uselessExpressions`, `unreachableCode` and an unexported nominal
+  type ([Official linter](../standard-tools/official-linter)).
+- In the editor: rename and find references across a package, workspace symbols, semantic tokens, expand selection,
+  format a range, and refactorings that introduce a local, a function or a type alias, inline one, write an inferred
+  type, convert between a call and a pipe, a match and an if, a lambda and its shorthand, and `++` and an
+  interpolated string, organise imports, and write stubs for a context's missing definitions
+  ([VS Code extension](../standard-tools/vs-code-extension)).
+
+**Performance**
+
+- The standard library and shipped packages are checked when the compiler is built, and a module is checked in
+  linear time.
+- The inliner reaches only what the start reaches, takes a function called once whatever its size, and specialises a
+  function on a lambda it is given ([Compiler optimisations](../foundations/compiler-optimisations)).
+- Functions borrow what they only read, cells taken apart by a pattern are reused, and `MList.set` allocates nothing.
+- Small blocks have free lists, and large ones boundary tags, so freeing never walks the heap.
+- A program imports only the WASI functions it uses.
+
+**Fixes**
+
+- Many type-checker fixes around contexts: point-free functions, lambdas that require contexts, imported aliases,
+  recursive sequence types, and errors that no longer cascade after an earlier one.
+- A literal is checked against the type expected of it, through tags, lists and maps.
+- Derived `ToString` and `==` work for a type seen only under an import's alias.
+
 # 0.28.0
 
 *14 November 2026*

@@ -4,7 +4,7 @@ description: "Associated types on contexts, types passed as arguments, and inspe
 order: 4
 ---
 
-This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), and what is left of them here is how they meet type arguments and the prelude contexts that move to them. **Type arguments** let a function take a type as a parameter and inspect its structure; their design is still early. The proposal is that both are the same thing: a record member whose value is a type. The sections below separate what has been decided from the current direction and the open questions.
+This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), and what is left of them here is how they meet type arguments and the prelude contexts that move to them. **Type arguments** let a function take a type as a parameter and inspect its structure; their design was decided on 2026-11-17 and is filed in stages ([Plan](#plan)), none built yet. Both are the same thing: a record member whose value is a type.
 
 # The problems
 
@@ -44,7 +44,7 @@ def iterStrings: [Iter(c, a)] c -> () = { items -> ... }
 # Decisions
 
 - **Contexts have associated types,** described on the [Contexts](../advanced/contexts#associated-types) page.
-- **A type can be passed as an argument.** The caller writes the type at the call site. The argument fixes a type variable, and the function's body receives a value that stands for the type. The syntax is part of the [current direction](#a-type-argument-is-a-type-member-of-the-parameters).
+- **A type can be passed as an argument.** The caller writes the type at the call site. The argument fixes a type variable, and the function's body receives a value that stands for the type. The syntax is [below](#a-type-argument-is-a-type-member-of-the-parameters).
 - **Generic code can inspect a type argument**: whether it is a record or a union, and what its fields or cases are.
 - **Generic code is checked once, not per instantiation.** Nanyx does not adopt compile-time templates, at least for now. In Zig's `comptime` and in C++ templates, generic code is type-checked separately for each type it is used at, and errors appear inside library code. Inspection in Nanyx is type-checked once, when the generic function is defined, as all generic code is today.
 
@@ -58,9 +58,17 @@ Associated types are built: a context's member of kind `type`, named `Iter(c).el
 
 Every prelude context whose later parameter is fixed by its first is a context with an associated type: `FromString(a)` has its `failure` ([#1801](https://github.com/nanyx-lang/nanyx/issues/1801)), and `Iterable(c)` its `elem` ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802)). No other context in the prelude or the shipped packages has that shape.
 
-# Current direction
+# Type arguments
 
-These points follow from the decisions above. They have been proposed but not agreed.
+Decided by the maintainer on 2026-11-17:
+
+- **Both forms** below, positional `type a` and named `into: type`, with the pun the named form brings.
+- **`type` is always written at the call site,** and **a type argument is never left out,** even where the result type would say it.
+- **A nominal type is read-only to reflection outside its home module:** there its description is `#nominal`, with its name and module but no structure and no `build`. Its encoding comes from its attached definitions or a context its module provides. Deserialisation-only constructors are logged for later ([#2001](https://github.com/nanyx-lang/nanyx/issues/2001)).
+- **Narrowing on a `Type` match only,** not full GADTs, and **a `build` the compiler provides** for decoding, not rank-2 functions in the language.
+- **A description contains** field and case names and types, the type's name and module, its type parameters, attributes on fields and doc comments.
+- **Customising an encoding:** a type that provides the library's context itself wins over walking its description, as an explicit instance already wins over synthesis, and attributes on fields cover renames without one.
+- **`dbg`, interpolation and `==` become library code over descriptions, eventually,** once reflection is proven and measured ([#2000](https://github.com/nanyx-lang/nanyx/issues/2000)).
 
 ## A type argument is a type member of the parameters
 
@@ -125,11 +133,11 @@ Decoding builds a record instead of taking one apart. It needs a function that w
 | #record(r) -> r.build { f -> decode(obj \json.field(f.name), f.type) }
 ```
 
-The type system would need three additions:
+The type system needs three additions, as decided:
 
-- **Narrowing on a `Type` match.** In the `#int` arm, `a` is known to be `int`. General GADTs provide this; a smaller feature would narrow only when matching on a `Type` value, much as TypeScript and Kotlin narrow on type tests.
+- **Narrowing on a `Type` match** only: in the `#int` arm, `a` is known to be `int`, as TypeScript and Kotlin narrow on type tests. Not general GADTs.
 - **Packaged types** (existential types) for fields and union cases.
-- **Rank-2 functions** for `build`, because the function passed to it must work for every field type. Only decoding needs this.
+- **A `build` the compiler provides** for each record description and union case. The function given to it must work for every field type, a rank-2 type, which users never write.
 
 Precedents: Jane Street's `typerep` for OCaml, GHC's `Type.Reflection`, and the "Scrap your boilerplate" approach (`Data`). Swift's `Mirror` and Go's `reflect` have a similar shape but are not typed.
 
@@ -155,7 +163,7 @@ This is the implicit counterpart of a type argument, as Haskell's `Typeable` is 
 - **It doesn't replace type arguments.** In `[Typed(a)] string -> a`, nothing at the call site fixes `a`, so the ambiguity in [types only in output position](#types-only-in-output-position) remains. `Typed` helps only where a value of type `a` is passed in.
 - **The walker stays explicit.** When `encodeAt` recurses into a record's fields, each field's type is one the checker never learns, so there is no `Typed` instance for it; only `f.type`. A library therefore takes `Typed(a)` in its public function and passes the type explicitly in the code that walks it, as `encode` and `encodeAt` do above.
 
-Synthesis makes the [nominal types question](#open-questions) more pressing. With explicit arguments, a caller has to write `type Email` to hand over a description of `Email`. With `Typed`, any generic function that asks for `Typed(a)` gets one without the caller writing anything. One answer is to synthesise `Typed` only for structural types, and let a nominal type's home module provide its instance.
+`Typed` is synthesised for nominal types too: outside the type's home module its description is the read-only `#nominal`, so synthesis gives nothing away.
 
 # Alternatives considered
 
@@ -193,12 +201,18 @@ C#'s source generators run user code at compile time that emits more source. The
 
 # Open questions
 
-- **Nominal types.** A [nominal type](../advanced/nominal-and-protected-types) such as `Email` can only be created by its home module. Its description must not offer `build` elsewhere, or decoding could create values that bypass the type's invariants. Does a nominal type appear as a closed case (for example `#nominal(name)`) whose encoding must come from attached definitions or a context, or does it expose its structure only for reading? Is `Typed` synthesised for it at all?
-- **One name in two namespaces.** In `(string, into: type) -> into`, `into` is a type in the signature, and a field holding a `Type(into)` value at the call site. Is that pun clear enough?
-- **`type` at the call site.** A constraint writes `Iter(c, elem = string)`, but a call writes `into = type Point`. The keyword is needed because arguments are expressions and `Point` could be a value or a constructor. Can the checker do without it when the parameter is known to be a type member, or is the difference worth keeping?
-- **Customisation.** How does a type change how it is encoded, for example to rename a field or use a different representation? This probably ties in with attached definitions and with explicit `use` taking priority over synthesis.
-- **Rank-2 types.** Are rank-2 functions acceptable for `build`, or should decoding be limited to an applicative-style `build` that the compiler provides?
-- **How much narrowing.** Is narrowing on `Type` matches enough, or would full GADTs be needed?
-- **Omitting type arguments.** Can a caller leave out `type Point` when the result type is already known, as in `def p: Point = deserialise(text)`? Requiring it keeps calls explicit and fits [no overloading](../foundations/principles#no-overloading); allowing it saves passing type arguments through layers of generic code.
-- **What a description contains.** Field names and types, case names and payloads, certainly. Should it also include attributes on fields, the type's name and module, and its type parameters?
-- **Built-in intrinsics.** Should `dbg`, interpolation and `==` be reimplemented as ordinary library code over type descriptions once they exist?
+- **Deserialisation-only constructors** for nominal types, logged for later ([#2001](https://github.com/nanyx-lang/nanyx/issues/2001)).
+- **The description's exact shape:** the case names and the fields of `#record`, `#union` and `#nominal`, settled as [#1996](https://github.com/nanyx-lang/nanyx/issues/1996) is built.
+
+# Plan
+
+| Step | Issue | After |
+|---|---|---|
+| Type arguments: `type a`, `into: type`, `Type(a)` values | [#1995](https://github.com/nanyx-lang/nanyx/issues/1995) | |
+| Type descriptions, matched with narrowing | [#1996](https://github.com/nanyx-lang/nanyx/issues/1996) | #1995 |
+| A compiler-provided `build` for decoding | [#1997](https://github.com/nanyx-lang/nanyx/issues/1997) | #1996 |
+| `Typed(a)`, synthesised for every type | [#1998](https://github.com/nanyx-lang/nanyx/issues/1998) | #1995 |
+| An associated type as a `Type` value | [#1999](https://github.com/nanyx-lang/nanyx/issues/1999) | #1995 |
+| JSON for any record, on reflection | [#1789](https://github.com/nanyx-lang/nanyx/issues/1789) | #1996, #1997, #1998 |
+| `dbg`, interpolation and `==` as library code (Planning) | [#2000](https://github.com/nanyx-lang/nanyx/issues/2000) | #1997, #1998 |
+| Deserialisation-only constructors (Planning) | [#2001](https://github.com/nanyx-lang/nanyx/issues/2001) | #1997 |
