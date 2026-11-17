@@ -71,6 +71,38 @@ let ``An if whose every branch never returns is a statement that never returns``
     Assert.Equal<(string * string) list>([ "This code never runs: the statement before it never gives a value", "1" ], reported source)
 
 [<Fact>]
+let ``The arguments after one that never returns are reported, and the call is never made`` () =
+    let source =
+        withFinalNewline
+            """def g: () -> int = { -> 2 }
+def f: int, int, int -> int = { a, b, c -> a + b + c }
+def h: () -> int = { -> f(1, crash("a"), g()) }"""
+    match diagnostics source with
+    | [ diagnostic, text ] ->
+        Assert.Equal("This code never runs: `crash` never returns, so the arguments after it are never evaluated and `f` is never called", diagnostic.Message)
+        Assert.Equal("g()", text)
+        let related = diagnostic.Related |> List.map (fun (span, message) -> source.Substring(span.Start, span.End - span.Start), message)
+        Assert.Equal<(string * string) list>([ """crash("a")""", "never gives a value" ], related)
+        Assert.Empty(diagnostic.Fixes)
+    | other -> Assert.Fail($"Expected one report, got %A{other}")
+
+[<Fact>]
+let ``A piped value that never returns makes the pipe's arguments unreachable`` () =
+    let source =
+        withFinalNewline
+            """def f: int, int, int -> int = { a, b, c -> a + b + c }
+def h: () -> int = { -> crash("a") \f(1, 2) }"""
+    Assert.Equal<string list>([ "1, 2" ], reported source |> List.map snd)
+
+[<Fact>]
+let ``A last argument that never returns leaves nothing after it to report`` () =
+    let source =
+        withFinalNewline
+            """def f: int, int -> int = { a, b -> a + b }
+def h: () -> int = { -> f(1, crash("a")) }"""
+    Assert.Empty(reported source)
+
+[<Fact>]
 let ``A crash as a block's last statement, or in only one branch, is not reported`` () =
     Assert.Empty(reported (withFinalNewline """def f: int -> int = { x ->
   def y = x + 1
