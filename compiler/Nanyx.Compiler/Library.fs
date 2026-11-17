@@ -825,7 +825,7 @@ module Compiler =
                     | Some (entry, lambda) ->
                         let entryTy =
                             state.ExprTypes |> Map.tryFind lambda |> Option.map (Unifier.apply subst) |> Option.defaultValue Unifier.errorType
-                            |> Scripts.withAmbientContextsOnly (state.AmbientMembers |> Map.values |> Seq.map snd |> Set.ofSeq)
+                            |> Scripts.withAmbientContextsOnly (Contexts.ambientContexts state)
                         let own, named = Scripts.asDefinition entry state.ScriptEntryValues entryTy own
                         own, resolvedTypes |> Map.add Scripts.definitionName entryTy, { state with ExprTypes = state.ExprTypes |> Map.add named entryTy }
                     | None -> own, resolvedTypes, state
@@ -893,7 +893,7 @@ module Compiler =
                           ContextTypes = contextTypes
                           LocalContexts = state.LocalContextRequirements
                           ImportedContextTypes = merged.ImportedContextTypes
-                          AmbientContexts = state.AmbientMembers |> Map.values |> Seq.map snd |> Seq.distinct |> Seq.sort |> List.ofSeq
+                          AmbientContexts = Contexts.ambientContexts state |> Set.toList
                           AmbientMembers = ambientMembers state merged.CarriedAmbientMembers
                           ImportedFiles = merged.ImportedFiles
                           // Filled in for the root module only, by `compileChecked`.
@@ -925,10 +925,7 @@ module Compiler =
                      ContextSignatures = state.ContextSignatures |> Map.filter (fun name _ -> exported.Contains name)
                      CheckedRests = state.CheckedRests
                      AmbientContexts =
-                        state.AmbientMembers
-                        |> Map.values
-                        |> Seq.map snd
-                        |> Set.ofSeq
+                        Contexts.ambientContexts state
                         |> Set.union state.CarriedAmbientContexts
                         |> Seq.choose (fun name -> state.TypeDefs |> Map.tryFind name |> Option.map (fun info -> name, info))
                         |> Map.ofSeq

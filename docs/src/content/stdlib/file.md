@@ -59,7 +59,7 @@ directories the host gave the program is `#error(#permissionDenied)`. Import the
 ## `read`
 
 ```nanyx fragment
-def read: [FileSystem] Path -> #some(string) | #error(FsError)
+def read: [Async, FileSystem] Path -> #some(string) | #error(FsError)
 ```
 
 The text of the file at `at`, read as UTF-8.
@@ -67,7 +67,7 @@ The text of the file at `at`, read as UTF-8.
 ## `readBytes`
 
 ```nanyx fragment
-def readBytes: [FileSystem] Path -> #some(array(U8)) | #error(FsError)
+def readBytes: [Async, FileSystem] Path -> #some(array(U8)) | #error(FsError)
 ```
 
 The bytes of the file at `at`.
@@ -75,7 +75,7 @@ The bytes of the file at `at`.
 ## `write`
 
 ```nanyx fragment
-def write: [FileSystem] Path, string -> #ok | #error(FsError)
+def write: [Async, FileSystem] Path, string -> #ok | #error(FsError)
 ```
 
 Writes `text` to the file at `at` in UTF-8, in place of what it held, and makes the file when
@@ -84,7 +84,7 @@ there is none. Its directory must be there already.
 ## `append`
 
 ```nanyx fragment
-def append: [FileSystem] Path, string -> #ok | #error(FsError)
+def append: [Async, FileSystem] Path, string -> #ok | #error(FsError)
 ```
 
 Writes `text` to the end of the file at `at` in UTF-8, and makes the file when there is none.
@@ -92,7 +92,7 @@ Writes `text` to the end of the file at `at` in UTF-8, and makes the file when t
 ## `exists`
 
 ```nanyx fragment
-def exists: [FileSystem] Path -> bool
+def exists: [Async, FileSystem] Path -> bool
 ```
 
 Whether there is a file or a directory at `at` that the program may reach.
@@ -100,7 +100,7 @@ Whether there is a file or a directory at `at` that the program may reach.
 ## `delete`
 
 ```nanyx fragment
-def delete: [FileSystem] Path -> #ok | #error(FsError)
+def delete: [Async, FileSystem] Path -> #ok | #error(FsError)
 ```
 
 Deletes the file at `at`. A directory is `#error(#isDirectory)`: this deletes only files.
@@ -108,7 +108,7 @@ Deletes the file at `at`. A directory is `#error(#isDirectory)`: this deletes on
 ## `lines`
 
 ```nanyx fragment
-def lines: [FileSystem] Path -> #some([FileSystem] seq(string)) | #error(FsError)
+def lines: [Async, FileSystem] Path -> #some([Async, FileSystem] seq(string)) | #error(FsError)
 ```
 
 The lines of the file at `at`, read lazily, a chunk at a time: a file larger than memory is

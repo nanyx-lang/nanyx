@@ -128,7 +128,12 @@ module WasmServer =
                     try
                         while not stop.IsCancellationRequested do
                             let context = listener.GetContextAsync().WaitAsync(stop).GetAwaiter().GetResult()
-                            let task = Task.Run(fun () -> answer engine module' io arguments gate report context)
+                            // Each instance runs on a thread of its own, so that one whose handler waits, on an
+                            // outbound request say, holds only that thread, not one the listener needs.
+                            let task =
+                                Task.Factory.StartNew(
+                                    (fun () -> answer engine module' io arguments gate report context),
+                                    TaskCreationOptions.LongRunning)
                             answering.TryAdd(task, ()) |> ignore
                             task.ContinueWith(fun (finished: Task) -> answering.TryRemove finished |> ignore) |> ignore
                     with :? OperationCanceledException -> ()

@@ -8,10 +8,12 @@
   `nanyx run` serves the program on the port the host's `port` setting gives, 3000 by default.
 
   The host provides [`Http`], for requests the handler makes, written on the runtime's
-  `nanyx:http`, and nothing else: no `Console` and no `FileSystem`.
+  `nanyx:http`, and `Async`, so that the handler can wait on them, and nothing else: no `Console`
+  and no `FileSystem`.
 export module http.host
 
 import (
+  nanyx/async as (Async)
   nanyx/host.memory
   nanyx/host.runtime
   nanyx.http.core/client as (Http, HttpError)
@@ -81,7 +83,7 @@ def answer: [HostRuntime] Response -> () = { response ->
 --| Answers the request this instance was started for with `handle`, the program's entry point, in
   an `Http` that makes requests through the runtime. A request the runtime wrote wrongly is answered
   with a 400.
-export def run: [HostRuntime] ([Http] Request -> Response) -> () = { handle ->
+export def run: [HostRuntime, Async] ([Async, Http] Request -> Response) -> () = { handle ->
   use Http(sendRequest = { request -> sendThroughRuntime(request) })
 
   match incoming()

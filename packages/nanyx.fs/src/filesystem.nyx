@@ -1,6 +1,6 @@
 --| The file system, as a context a host provides.
 
-  Code that reads or writes files declares `[FileSystem]` and calls the functions of
+  Code that reads or writes files declares `[Async, FileSystem]` and calls the functions of
   [`file`](file) and [`dir`](dir), which come from whichever `FileSystem` instance its caller
   supplies. The console host (`nanyx.console`) supplies one to the program's entry point, on WASI's
   file functions, which sees the current directory and those `nanyx run --allow-dir` adds; a host
@@ -8,7 +8,10 @@
   depends on `nanyx.fs` and imports `nanyx.fs/filesystem`.
 export module filesystem
 
-import nanyx.fs/path as (Path)
+import (
+  nanyx/async as (Async)
+  nanyx.fs/path as (Path)
+)
 
 --| Why a file or directory couldn't be read, written, deleted or made: there is nothing at the path;
   the program may not reach it (a path outside the directories the host gave it is this too); it
@@ -20,24 +23,24 @@ export type FsError = #notFound | #permissionDenied | #isDirectory | #notDirecto
   calls the functions of [`file`](file) and [`dir`](dir), which are written on them.
 export context FileSystem = (
   --| The text of the file at `at`, read as UTF-8.
-  readFile: Path -> #some(string) | #error(FsError)
+  readFile: [Async] Path -> #some(string) | #error(FsError)
   --| The bytes of the file at `at`.
-  readFileBytes: Path -> #some(Array(U8)) | #error(FsError)
+  readFileBytes: [Async] Path -> #some(Array(U8)) | #error(FsError)
   --| Up to `length` bytes of the file at `at`, from byte `offset` on: fewer at its end, and none
     past it, but for an `offset` past its end, which is an error: the file is shorter than it was.
     The file is opened for each call, and closed before it returns.
-  readFileChunk: (Path, int, int) -> #some(string) | #error(FsError)
+  readFileChunk: [Async] (Path, int, int) -> #some(string) | #error(FsError)
   --| Writes `text` to the file at `at` in UTF-8, in place of what it held, making it when there is
     none.
-  writeFile: (Path, string) -> #ok | #error(FsError)
+  writeFile: [Async] (Path, string) -> #ok | #error(FsError)
   --| Writes `text` to the end of the file at `at` in UTF-8, making it when there is none.
-  appendFile: (Path, string) -> #ok | #error(FsError)
+  appendFile: [Async] (Path, string) -> #ok | #error(FsError)
   --| Whether there is a file or a directory at `at` that the program may reach.
-  pathExists: Path -> bool
+  pathExists: [Async] Path -> bool
   --| Deletes the file at `at`.
-  deleteFile: Path -> #ok | #error(FsError)
+  deleteFile: [Async] Path -> #ok | #error(FsError)
   --| The names of what the directory at `at` holds, in no order, without `.` and `..`.
-  listDirectory: Path -> #some(list(string)) | #error(FsError)
+  listDirectory: [Async] Path -> #some(list(string)) | #error(FsError)
   --| Makes the directory `at`, in a directory that is there already.
-  createDirectory: Path -> #ok | #error(FsError)
+  createDirectory: [Async] Path -> #ok | #error(FsError)
 )

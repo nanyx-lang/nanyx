@@ -1,6 +1,6 @@
 --| Outbound HTTP, as a context a host provides.
 
-  Code that makes requests declares `[Http]` and calls the functions of [`http`](http), which come
+  Code that makes requests declares `[Async, Http]` and calls the functions of [`http`](http), which come
   from whichever `Http` instance its caller supplies. The console host (`nanyx.console`) supplies
   one to the program's entry point; a host that doesn't provide it guarantees that nothing in the
   program reaches the network. A library depends on `nanyx.http.core` and imports
@@ -8,6 +8,7 @@
 export module client
 
 import (
+  nanyx/async as (Async)
   nanyx.http.core/request as (Request)
   nanyx.http.core/response as (Response)
 )
@@ -21,5 +22,5 @@ export type HttpError = #timeout | #connectionFailed(string) | #invalidUrl | #ot
   functions of [`http`](http), which are written on it.
 export context Http = (
   --| Sends `request`, waiting for its response. Only the instance that sends it waits.
-  sendRequest: Request -> #some(Response) | #error(HttpError)
+  sendRequest: [Async] Request -> #some(Response) | #error(HttpError)
 )

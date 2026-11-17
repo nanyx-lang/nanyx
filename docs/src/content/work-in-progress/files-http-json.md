@@ -13,8 +13,9 @@ for `nanyx.fs`; [client](../stdlib/client), [http](../stdlib/http), [request](..
 [Hosts](../compiler-internals/hosts#how-its-built) and [Foreign functions](../compiler-internals/foreign-functions#whats-built). This page keeps what is still
 open.
 
-Every call blocks, for now. In a request handler, only that request's instance waits. When async comes, the calls
-that wait require it ([Concurrency and crash boundaries](./concurrency-and-crash-boundaries)).
+The calls that wait, `nanyx.http.core`'s and `nanyx.fs`'s, require `Async`, which the console and HTTP hosts provide
+([Concurrency and crash boundaries](./concurrency-and-crash-boundaries)). A call that waits holds only its own
+instance: in a request handler, the HTTP host answers other requests meanwhile.
 
 # The file system
 

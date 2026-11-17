@@ -85,6 +85,7 @@
     <Compile Include="Features\Equality\AttachedEqualityTests.fs" />
     <Compile Include="Features\Except\ExceptTests.fs" />
     <Compile Include="Features\Hashing\HashTests.fs" />
+    <Compile Include="Features\Hosts\AsyncTests.fs" />
     <Compile Include="Features\Hosts\ConsoleHostTests.fs" />
     <Compile Include="Features\Hosts\ExternTests.fs" />
     <Compile Include="Features\Hosts\ScriptEntryTests.fs" />

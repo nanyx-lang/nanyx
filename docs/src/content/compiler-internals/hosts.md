@@ -99,7 +99,7 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   backend reads the layout of the context's own name (`CodeGen.layoutOf`), and a member called under the alias,
   `c.write`, is written by its own name for the backend (`ModuleLinking.writeMemberAliases`).
 - **`Env`** is declared in `nanyx.console.core/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, with
-  `FileSystem` and `Http` (see below), so its parameter is `[Console, Env, FileSystem, Http] () -> a`; an entry that requires fewer
+  `FileSystem` and `Http` (see below), so its parameter is `[Async, Console, Env, FileSystem, Http] () -> a`; an entry that requires fewer
   contexts fits. The host's prelude re-exports
   `Env`, so its members are ambient names in every module of the program. Its members are functions of the host's own
   over WASI's `args_sizes_get` and `args_get`, `environ_sizes_get` and `environ_get`, and `proc_exit`, declared with
@@ -137,6 +137,18 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   length)`, which opens the file, reads the chunk with `fd_pread` and closes it again, so a sequence abandoned before
   its end holds no file, and pulling a sequence again reads the same lines again. The host's `readFileChunk` gives an
   error, not an empty chunk, for an offset past the file's end, so a file cut short between chunks is caught.
+- **`Async`** marks a function that can wait. It is declared in the standard library's `nanyx/async` as
+  `protected ()`, so no `use` outside that module can make one, and it has no members. Both hosts provide it: each
+  prelude re-exports it, and each `run` requires it in its own type, `[HostRuntime, Async]`, and passes it to the
+  entry, whose parameter type requires it. A context with no members that a host's prelude exports is ambient by its
+  name, as one whose members the prelude stands in for is by theirs (`Contexts.isAmbientMemberless`): the program's top
+  level has it, and supplies it to the start's call of `run` as the runtime supplies `HostRuntime`; an unannotated def
+  that calls something requiring it infers it; and an annotated def that doesn't declare it is `NYX0211`. A memberless
+  context has nothing to pass at run time, so `Async` costs nothing in the generated code. `nanyx.http.core`'s
+  `sendRequest` and `nanyx.fs`'s members, and the functions written on them, require it. Waits are blocking host
+  calls, each in its instance's own thread: the console host has one instance, and the HTTP host runs each request's
+  instance on a thread of its own (`WasmServer.serve`), so a handler that waits on an outbound request holds only its
+  own (see [Concurrency and crash boundaries](../work-in-progress/concurrency-and-crash-boundaries#how-it-runs)).
 - **`Http`** is declared in the shipped package `nanyx.http.core`, which the console host depends on; its prelude
   re-exports `Http` and `HttpError`, with `Request`, `Method` and `Response`. Its one member, `sendRequest`, is written
   on the runtime's own import `nanyx:http`, not on WASI, which has no networking (see
@@ -148,7 +160,7 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   request the runtime wrote wrongly is answered with a 400 without calling the handler. The host imports the
   runtime's own `nanyx:serve`, and `nanyx run` serves any program whose module imports it (`WasmServer.serves`),
   whatever its host: it compiles the module once, listens on `http://localhost:<port>/` with .NET's `HttpListener`,
-  and answers each request in a store and an instance of its own, on a task of its own. An instance that traps or
+  and answers each request in a store and an instance of its own, on a thread of its own. An instance that traps or
   exits without responding is answered with a 500, the reason goes to standard error, and the server carries on.
   `Request.path` takes the path from the whole URL the runtime passes.
 - **Host settings.** A host declares the settings it takes, with their defaults, in its own manifest's `host`; a

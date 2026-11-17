@@ -8,8 +8,9 @@ order: 15.1
 provides it, and its prelude brings `FileSystem`, `Path` and `FsError` into every module of a program; the
 functions that use it are in [`file`](./file) and [`dir`](./dir), and paths are made with [`path`](./path). A
 script names the package with `::dependency nanyx.fs`, and a package lists it in its manifest's `dependencies` at the
-compiler's version. Any function that reads or writes files declares `[FileSystem]` in its type, as a library's do:
-a library gets the context, and `FsError`, by importing `nanyx.fs/filesystem`.
+compiler's version. Any function that reads or writes files declares `[Async, FileSystem]` in its type, as a
+library's do, since a call waits for the file system: a library gets `FileSystem`, and `FsError`, by importing
+`nanyx.fs/filesystem`, and `Async` by importing `nanyx/async`.
 
 ```nanyx
 ::dependency nanyx.fs
@@ -19,7 +20,7 @@ import (
   nanyx.fs/path as path
 )
 
-def colour: [FileSystem] () -> string = {
+def colour: [Async, FileSystem] () -> string = {
   match file.read(path.of("colour.txt"))
     | #some(text) -> text
     | #error(_) -> "blue"
@@ -39,7 +40,7 @@ Under `nanyx run`, a program reaches the current directory and what is in it, an
 
 The file system, as a context a host provides.
 
-Code that reads or writes files declares `[FileSystem]` and calls the functions of
+Code that reads or writes files declares `[Async, FileSystem]` and calls the functions of
 [`file`](file) and [`dir`](dir), which come from whichever `FileSystem` instance its caller
 supplies. The console host (`nanyx.console`) supplies one to the program's entry point, on WASI's
 file functions, which sees the current directory and those `nanyx run --allow-dir` adds; a host
@@ -61,15 +62,15 @@ already. Anything else is `#other`, with what the host said.
 
 ```nanyx fragment
 context FileSystem = (
-  readFile: Path -> #some(string) | #error(FsError)
-  readFileBytes: Path -> #some(array(U8)) | #error(FsError)
-  readFileChunk: Path, int, int -> #some(string) | #error(FsError)
-  writeFile: Path, string -> #ok | #error(FsError)
-  appendFile: Path, string -> #ok | #error(FsError)
-  pathExists: Path -> bool
-  deleteFile: Path -> #ok | #error(FsError)
-  listDirectory: Path -> #some(list(string)) | #error(FsError)
-  createDirectory: Path -> #ok | #error(FsError)
+  readFile: [Async] Path -> #some(string) | #error(FsError)
+  readFileBytes: [Async] Path -> #some(array(U8)) | #error(FsError)
+  readFileChunk: [Async] Path, int, int -> #some(string) | #error(FsError)
+  writeFile: [Async] Path, string -> #ok | #error(FsError)
+  appendFile: [Async] Path, string -> #ok | #error(FsError)
+  pathExists: [Async] Path -> bool
+  deleteFile: [Async] Path -> #ok | #error(FsError)
+  listDirectory: [Async] Path -> #some(list(string)) | #error(FsError)
+  createDirectory: [Async] Path -> #ok | #error(FsError)
 )
 ```
 
