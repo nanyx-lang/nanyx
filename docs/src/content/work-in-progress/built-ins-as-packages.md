@@ -16,7 +16,7 @@ workstream.
   should be able to write one that works exactly as the official one does. If the official ones use privileges no
   package has, the public contract for linters and hosts is never really tested.
 - **Nanyx should be enough to write Nanyx's tools.** A linter written in Nanyx exercises the language, the standard
-  library and the [semantic model](./linters#3-the-semantic-model) that every other linter will use.
+  library and the [semantic model](./linters#what-a-linter-sees) that every other linter will use.
 - **The compiler gets smaller.** Its job becomes running linter packages and hosts, not containing them.
 
 # The official linter
