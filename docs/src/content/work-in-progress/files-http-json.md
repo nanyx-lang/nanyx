@@ -5,7 +5,9 @@ order: 5
 ---
 
 Reading and writing files, making and serving HTTP requests, and reading and writing JSON are the minimum for most
-useful programs. This page is their design, decided by the maintainer on 2026-11-17. None of it is built yet.
+useful programs. This page is their design, decided by the maintainer on 2026-11-17. Only the first layer of
+`nanyx.json`, the `Json` value with parsing and printing, is built yet
+([#1787](https://github.com/nanyx-lang/nanyx/issues/1787)).
 
 # What they share
 
@@ -77,12 +79,35 @@ whose entry is a `Request -> Response` handler. It runs each request in a fresh 
 
 Two layers.
 
-1. **A `Json` value, with parsing and printing:**
+1. **A `Json` value, with parsing and printing** (built, [#1787](https://github.com/nanyx-lang/nanyx/issues/1787)):
    `#null | #bool(bool) | #number(float) | #string(string) | #array(list(Json)) | #object(map(string, Json))`, with
-   `json.parse`, `json.print` and `json.printPretty`.
+   `json.parse`, `json.print` and `json.printPretty(value, indent = 2)`. Its reference is the [json](../stdlib/json)
+   page.
 2. **Typed encoding and decoding with combinators,** as the [JSON cookbook](../cookbook/json-parsing) shows:
    `json.record(name = json.field("name", json.string), ...)`, with errors that name where they failed
    (`users[2].age`). Numbers are `float`, and `json.int` checks that one is whole.
+
+How the first layer is built, in `packages/nanyx.json/src/json.nyx`, in Nanyx:
+
+- **An object keeps its keys in the order they were written.** `#object` holds a `map(string, Json)`, and a map keeps
+  its keys in the order they were first added, so `parse` adds them as the text writes them and `print` writes them
+  back in that order. A key written twice holds its last value, in the place it was first written. Two objects with
+  the same members in another order are still `==`, as maps are.
+- **Errors say where.** `JsonError` is `(position: int, line: int, column: int, message: string)`: the byte, and its
+  line and column (in characters), each from 1. The messages follow the compiler's [house style](./error-messages#house-style):
+  `Expected ',' or ']' after an element of an array, found the end of the text`.
+- **Text is read a byte at a time,** through a `StringSlice` without copying it, and a string's run between escapes is
+  copied once. `\uXXXX` escapes are decoded, with surrogate pairs joined and a lone surrogate an error. Each function
+  calls itself in tail position along an array or an object, so a document is read and written in time in proportion
+  to its size (a test reads and writes one of over 100,000 values); only nesting takes stack.
+- **Numbers.** `parse` checks JSON's grammar for a number (no leading `0`, no `+`, digits after a `.`) and reads it with
+  `float.fromString`. `print` writes a whole number below 10^15 without a fraction (`42`), any other as
+  `float.toString` does, and NaN and infinity, which JSON can't write, as `null`.
+- **Imported under a name.** `import nanyx.json/json as json`: a plain import would bring in a `print` that clashes with
+  the console's. Two compiler bugs show up in use: a derived `==` or `ToString` of a `Json` or `JsonError` needs the
+  types imported by name too ([#1796](https://github.com/nanyx-lang/nanyx/issues/1796)), and a `Json` literal whose
+  lists hold different tags must name the inner values first
+  ([#1798](https://github.com/nanyx-lang/nanyx/issues/1798)).
 
 **Encoding and decoding any record automatically** is decided to wait for type reflection
 ([Type members and reflection](./type-members-and-reflection)), which lets any library walk a type's structure, not
@@ -97,7 +122,7 @@ be a compiler special case that a SQL or YAML library couldn't use.
 | [#1784](https://github.com/nanyx-lang/nanyx/issues/1784) | `file.lines` as a lazy `seq` | #1783 |
 | [#1785](https://github.com/nanyx-lang/nanyx/issues/1785) | `nanyx.http.core` and the client, through a runtime import | |
 | [#1786](https://github.com/nanyx-lang/nanyx/issues/1786) | The HTTP host, served locally by `nanyx run` | #1785 |
-| [#1787](https://github.com/nanyx-lang/nanyx/issues/1787) | `nanyx.json`: the `Json` value, parsing and printing | |
+| [#1787](https://github.com/nanyx-lang/nanyx/issues/1787) | `nanyx.json`: the `Json` value, parsing and printing (done) | |
 | [#1788](https://github.com/nanyx-lang/nanyx/issues/1788) | `nanyx.json`: encoders and decoders | #1787 |
 | [#1789](https://github.com/nanyx-lang/nanyx/issues/1789) | Automatic encoding and decoding, on type reflection (Planning) | #1788, reflection |
 
@@ -105,7 +130,5 @@ be a compiler special case that a SQL or YAML library couldn't use.
 
 - **A dropped `file.lines`.** Does dropping a sequence that wasn't read to its end close the file (a drop hook on a
   value), or does it stay open until the program ends? Settled in #1784.
-- **The order of an object's keys.** Does `Json`'s `#object` keep the order they were written in, or is it a plain
-  map? Settled in #1787.
 - **Package names.** `nanyx.fs`, `nanyx.http.core`, `nanyx.http` and `nanyx.json` are working names, as the console
   packages' are.

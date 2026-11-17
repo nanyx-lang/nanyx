@@ -41,6 +41,14 @@ let ``The console's interface package is shipped beside the compiler, and the co
     Assert.Equal<string list>([ "console"; "env" ], modules.Dependencies.Head.PublicModules)
 
 [<Fact>]
+let ``The JSON package is shipped beside the compiler, with one public module and no dependencies`` () =
+    let manifest = manifestOf "nanyx.json"
+    Assert.Equal(("nanyx.json", Toolchain.version), (manifest.Name, manifest.Version))
+    Assert.Equal(None, manifest.Declares)
+    Assert.Empty(manifest.Dependencies)
+    Assert.Equal<string list>([ "json" ], (ShippedPackages.tryModules "nanyx.json").Value.PublicModules)
+
+[<Fact>]
 let ``A library uses Console by depending on the console's interface package and importing it`` () =
     let library (dependencies: string) =
         [ "acme.greet.nyxp",
