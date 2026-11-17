@@ -182,6 +182,7 @@
     <Compile Include="Features\Strings\RunStringTests.fs" />
     <Compile Include="Features\Strings\RunInterpolationTests.fs" />
     <Compile Include="Features\Tags\RunTagTests.fs" />
+    <Compile Include="Features\Tags\RunExpectedPayloadTests.fs" />
     <Compile Include="Features\Tags\RunRecursiveAliasTests.fs" />
     <Compile Include="Features\TailCalls\RunTailCallTests.fs" />
     <Compile Include="Features\TailCalls\StackOverflowTests.fs" />

@@ -277,7 +277,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 |> Result.map (fun next -> mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name)
         | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownIdentifier expr.Span $"Unknown identifier '{name}'" env.Names.Keys name ]
     | SpreadSyntax.Call parts -> RecordSpread.infer inferExpr env state expr parts
-    | FunctionCall(name, spanOpt, args) -> inferCall env state expr name spanOpt args
+    | FunctionCall(name, spanOpt, args) -> inferCall env (ExpectedLiterals.intoMapEntries state expr) expr name spanOpt args
     | Lambda(args, body, _) ->
         let expectedInput, expectedReturn =
             match state.ExpectedLambdaTypes |> Map.tryFind expr.Id with
@@ -332,6 +332,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             let namedFieldsMap = List.zip (List.map fst named) (namedExprs |> List.map _.Type)
             mkTypedExpr expr (TyRecord(Map.ofList (positionalFieldsMap @ namedFieldsMap), FieldOrder.ofList named)) None None None, current)
     | ListExpr items ->
+        // Checked against a `list(a)`, the items are checked against `a`, and the list is one (see `ExpectedLiterals`).
+        let expectedElement = ExpectedLiterals.elementOf state expr
+        let state = expectedElement |> Option.fold (fun state element -> items |> List.fold (ExpectedLiterals.expect element) state) state
         inferAll env state items
         |> Result.map (fun (typedItems, current) ->
             match typedItems with
@@ -341,12 +344,18 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | typedItems ->
                 // The elements are joined as an `if`'s branches are, so `[#red, #green]` is a `list(#red | #green)`.
                 let elementTy, constrained = joinBranchTypes Set.empty current (typedItems |> List.map _.Type)
-                mkTypedExpr expr (listType elementTy) None None None, constrained)
+                match expectedElement with
+                | Some element -> mkTypedExpr expr (listType element) None None None, addConstraint elementTy element constrained
+                | None -> mkTypedExpr expr (listType elementTy) None None None, constrained)
     | TagExpr(name, payloadOpt) ->
         match payloadOpt with
         | None -> Ok (mkTypedExpr expr (TyTag(name, None)) None None None, state)
         | Some payload ->
-            match inferExpr env state payload with
+            // Checked against a union, the payload is checked against what the union's tag holds.
+            let expected = ExpectedLiterals.payloadOf state expr name
+            let state = expected |> Option.fold (fun state ty -> ExpectedLiterals.expect ty state payload) state
+            let inferred = expected |> Option.bind (CollectionLiterals.targeted inferExpr env state payload) |> Option.defaultWith (fun () -> inferExpr env state payload)
+            match inferred with
             | Ok (payloadExpr, next) -> Ok (mkTypedExpr expr (TyTag(name, Some payloadExpr.Type)) None None None, next)
             | Error err -> Error err
     | IfExpr(condition, thenExpr, elseExpr) ->
@@ -1057,8 +1066,10 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                             let ty = TyFunc(input, output, used @ instances |> List.distinct)
                             { typedLambda with Type = ty }, { next with ExprTypes = next.ExprTypes |> Map.add lambda.Id ty }
                         | _ -> typedLambda, next)
-                // A square-bracket literal builds the type its parameter takes, if it is one with a `fromArray`.
+                // A square-bracket literal builds the type its parameter takes, if it is one with a `fromArray`, and any
+                // literal is checked against that type (see `ExpectedLiterals`).
                 let inferItem state item paramTy =
+                    let state = ExpectedLiterals.expect paramTy state item
                     CollectionLiterals.targeted inferExpr env state item paramTy |> Option.defaultWith (fun () -> inferExpr env state item)
                 let argResults =
                     args
@@ -1318,6 +1329,7 @@ and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression)
                 match List.tryLast statements with
                 | Some { Kind = ExprStatement last } -> { state with ExpectedBlockResults = state.ExpectedBlockResults |> Map.add last.Id declared }
                 | _ -> state
+            | _, Some declared -> ExpectedLiterals.expect declared state expr
             | _ -> state
         inferExpr env state expr
         |> Result.map (fun (typed, next) ->

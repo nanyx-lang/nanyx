@@ -234,15 +234,11 @@ let ``Run - json.printPretty writes each element and member on a line of its own
 [<Fact>]
 let ``Run - What json.print and json.printPretty write, json.parse reads back as the same value`` () =
     runJson
-        """-- Each array is named first, until a tag's payload is checked against the declared type (#1798).
-def numbers: json.Json = #array([#number(0.0), #number(-2.5), #number(1.5e-7), #number(1.0e21), #number(123456.789)])
-def flags: json.Json = #array([#bool(true), #bool(false), #null])
-
-def value: json.Json = #object([
+        """def value: json.Json = #object([
   "name" => #string("Ada \"the first\" \\ Lovelace\n\u{e9}\u{1F600}\u{1}")
-  "numbers" => numbers
-  "flags" => flags
-  "empty" => #object(map.empty)
+  "numbers" => #array([#number(0.0), #number(-2.5), #number(1.5e-7), #number(1.0e21), #number(123456.789)])
+  "flags" => #array([#bool(true), #bool(false), #null])
+  "empty" => #object([])
   "nested" => #object(["a" => #array([#array([]), #object(["b" => #string("")])])])
 ])
 

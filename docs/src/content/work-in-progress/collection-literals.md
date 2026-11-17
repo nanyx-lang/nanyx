@@ -26,6 +26,12 @@ chosen by the expected type (`def a: Array(int) = [1, 2]`) or by the type's name
   literal that is the last statement of a typed def's block, as one written on the lines under the `=` is, takes the
   def's declared type too: `inferDefValue` records the type in `ExpectedBlockResults` by the statement's node, and
   `inferBlock` reads it there ([#1776](https://github.com/nanyx-lang/nanyx/issues/1776)).
+- **Inside a literal.** The expected type reaches into what a literal holds (`ExpectedLiterals`, recorded by node in
+  `ExpectedTypes`): a list literal expected to be a `list(a)` checks its items against `a` and is one, a tag expected as
+  one of a union's checks its payload against what the union's tag holds, and a map literal expected to be a
+  `map(k, v)` checks its values against `v`. So `def v: T = #arr([#arr([#n(1)]), #arr([#b(true)])])`, whose inner lists
+  would each be inferred as a list of its own tag, and lists are invariant, checks as declared, and `#obj([])` in a
+  payload that holds a map is the empty map ([#1798](https://github.com/nanyx-lang/nanyx/issues/1798)).
 - **Spreads.** `__spreadItems(x)` is read as the prelude's `__spreadArray(x)` for an array and `__spreadList(x)` for a
   list (`CollectionLiterals.inferSpread`); anything else is NYX0258.
 - **The standard library.** `fromArray` is attached to `list`, `set`, `map` and `Array` in the prelude, and to `MStack`,

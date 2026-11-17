@@ -204,6 +204,9 @@ type InferState =
             /// The type a typed def is declared at, by the node of the last statement of the block that is its value:
             /// a square-bracket literal there builds that type, as one written on the def's line does (#1776).
             ExpectedBlockResults: Map<NodeId, Ty>;
+            /// The type a literal is checked against, by its node, where what it is written in expects one: a typed def's
+            /// value, an argument, and inside them an element, a tag's payload or a map's value (see `ExpectedLiterals`).
+            ExpectedTypes: Map<NodeId, Ty>;
             /// The callee's type at each call (and pipe), by the call's node: the function's type instantiated
             /// at that call site, which a call's own type (its result) does not show.
             CalleeTypes: Map<NodeId, Ty>;
@@ -387,6 +390,7 @@ let emptyState =
             ExprTypes = Map.empty;
             ExpectedLambdaTypes = Map.empty;
             ExpectedBlockResults = Map.empty;
+            ExpectedTypes = Map.empty;
             CalleeTypes = Map.empty;
             Declared = Map.empty;
             ModuleBlocks = [];
