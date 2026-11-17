@@ -106,7 +106,8 @@ let ``The checked library has the shipped packages' modules, with paths beside t
     Assert.Equal<string list>(
         [ "nanyx.console.core/src/console.nyx"
           "nanyx.console.core/src/env.nyx"
-          "nanyx.console/src/console.host.nyx"
+          // A module split across files is checked, and kept, under the first of them by name.
+          "nanyx.console/src/console.host.files.nyx"
           "nanyx.console/src/console.prelude.nyx"
           "nanyx.fs/src/dir.nyx"
           "nanyx.fs/src/file.nyx"
@@ -128,7 +129,8 @@ let ``A compile of a loose script takes the console host's modules from the chec
     let result = Compiler.compileReporting recording Linters.none """dbg("hello")"""
     Assert.True(result.TypeChecked, sprintf "%A" result.Diagnostics)
     Assert.Equal<string list>([ "start <source>" ], recording.Events |> Seq.filter (fun event -> event.StartsWith "start ") |> List.ofSeq)
-    Assert.Contains($"reused {consoleHostFile}", recording.Events)
+    // The console host's module is kept under its first file by name (see the test above).
+    Assert.Contains($"""reused {Path.Combine(Path.GetDirectoryName consoleHostFile, "console.host.files.nyx")}""", recording.Events)
 
 [<Fact>]
 let ``A shipped module whose files have changed is not taken from the checked library`` () =

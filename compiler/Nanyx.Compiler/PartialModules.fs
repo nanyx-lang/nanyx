@@ -29,11 +29,16 @@ type EditedLibraryFile =
 module PartialModules =
     /// The other files that declare the module `name` that the file from `origin` declares: in a package, the
     /// package's other files that declare it (see `PackageModules`); in the standard library, its other files, or, for
-    /// the file `edited` names, every file of its module but that one. A package's files are read by `readFile`.
-    let otherFragments (readFile: string -> string) (package: PackageModules option) (edited: EditedLibraryFile option) (origin: ModuleOrigin) (name: string) : ModuleFragments =
-        match origin, package with
-        | SourceFile path, Some build when (PackageModules.ownerOf build path).IsSome ->
-            let modules = (PackageModules.ownerOf build path).Value
+    /// the file `edited` names, every file of its module but that one. The package is the one of `packages` (the
+    /// build's and its host's, each with the packages it depends on) the file is in. A package's files are read by
+    /// `readFile`.
+    let otherFragments (readFile: string -> string) (packages: PackageModules list) (edited: EditedLibraryFile option) (origin: ModuleOrigin) (name: string) : ModuleFragments =
+        let owner =
+            match origin with
+            | SourceFile path -> packages |> List.tryPick (fun build -> PackageModules.ownerOf build path)
+            | _ -> None
+        match origin, owner with
+        | SourceFile path, Some modules ->
             let others =
                 modules.Modules
                 |> Map.tryFind name

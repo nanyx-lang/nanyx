@@ -64,7 +64,7 @@ nanyx format --stdin < src/file1.nyx
 
 ## Files and exit codes
 
-A directory means every `.nyx` file under it, leaving out `bin`, `obj`, `node_modules` and hidden directories. Each file keeps its line endings.
+A directory means every `.nyx` file under it, leaving out `bin`, `obj` and `node_modules`, whatever their case, and hidden directories. Each file keeps its line endings.
 
 A file that does not parse is left as it is and its syntax error is reported. The formatter also parses its own output before writing it, and leaves a file alone if the result would not mean exactly the same as before.
 
