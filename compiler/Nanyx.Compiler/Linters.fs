@@ -991,8 +991,96 @@ module Semicolons =
                   Fixes = fixes }))
         |> List.sortBy (fun report -> report.Span.Start)
 
-/// Where `@allow` suppresses linter rules: before a def, a local one too, it suppresses the diagnostics of the rules it
-/// names within the def (see `Attributes.allowAttribute`). The host applies it to every linter's diagnostics, and the
+/// The official linter's `unconstructibleType` rule: an exported `protected` or `private` type that nothing its module
+/// exports gives out, so that code outside the module can name the type but never get a value of it. An exported def
+/// gives one out when the type is in an output position of its type: its result, a value of it, an argument of a
+/// callback the caller passes, a field of a protected type it gives out, or an argument of a context instance. A
+/// context, a type the module does not export and a structural type are never reported. The rule sees one module at a
+/// time, so a type another module of the package gives out is reported too. Its fix adds an exported `of` that wraps the
+/// type's representation.
+module UnconstructibleTypes =
+    let rule =
+        { Id = "unconstructibleType"
+          Title = "Exported type no one outside its module can get"
+          DefaultSeverity = Severity.Error
+          Description =
+            "An exported `protected` or `private` type that nothing its module exports gives out, so no code outside the module can get a value of it. Export a function that returns one." }
+
+    /// Whether the nominal type `target` is in an output position of `ty`: one its holder gives out when `positive`, and
+    /// one its holder is given when not. A protected type's fields can be read anywhere, so a nominal type that is not
+    /// private gives out what its fields hold; `seen` are those already looked into.
+    let rec private givesOut (target: NominalId) (seen: Set<NominalId>) (positive: bool) (ty: Ty) : bool =
+        match ty with
+        | TyNominal(id, _, _, _) when id = target -> positive
+        | TyNominal(id, args, underlying, isPrivate) ->
+            args |> List.exists (givesOut target seen positive)
+            || (not isPrivate && not (seen.Contains id) && givesOut target (seen.Add id) positive underlying)
+        | TyFunc(input, output, contexts) ->
+            givesOut target seen (not positive) input
+            || givesOut target seen positive output
+            || contexts |> List.exists (givesOut target seen positive)
+        | _ -> Ty.exists (givesOut target seen positive) ty
+
+    /// The type definitions and value defs of each module the file writes, the file's own and each `module name =`
+    /// block's, with the module's name where it has one.
+    let rec private modulesOf (name: string option) (items: TopLevelItem list) : (string option * TopLevelItem list) list =
+        let blocks = items |> List.collect (function Kind (ModuleBlock(block, blockItems)) -> modulesOf (Some block) blockItems | _ -> [])
+        (name, items |> List.filter (function Kind (Def _) -> true | _ -> false)) :: blocks
+
+    /// The fix: an exported `of` after the type's declaration that takes its representation, as written, and wraps it.
+    let private ofStub (model: SemanticModel) (item: TopLevelItem) (name: string) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
+        let indent = String(' ', item.Span.StartColumn)
+        let representation = model.Source.Substring(body.Span.Start, body.Span.End - body.Span.Start)
+        let applied =
+            match parameters with
+            | [] -> name
+            | _ -> $"""{name}({parameters |> List.map fst |> String.concat ", "})"""
+        let stub = $"export def {name}.of: {representation} -> {applied} = {{ value -> {name}(value) }}"
+        { Title = $"Export `{name}.of`, which makes a `{name}`"
+          Edits = [ { Span = TextEdit.spanBetween model.Source item.Span item.Span.End item.Span.End; NewText = $"\n\n{indent}{stub}" } ] }
+
+    let lint (model: SemanticModel) : Report list =
+        let symbolWithin (item: TopLevelItem) (kind: SymbolKind) =
+            model.Symbols |> Map.values |> Seq.filter (fun symbol -> symbol.Kind = kind && SourceSpan.contains item.Span symbol.Declaration) |> List.ofSeq
+        modulesOf (model.Syntax |> List.tryPick (function Kind (ModuleDecl(_, name)) -> Some name | _ -> None)) model.Syntax
+        |> List.collect (fun (moduleName, items) ->
+            let exportedTypes =
+                items
+                |> List.filter (function Kind (Def (TypeDef _)) -> true | _ -> false)
+                |> List.collect (fun item -> symbolWithin item TypeDefinition |> List.map (fun symbol -> item, symbol))
+            let exportedValues =
+                items
+                |> List.filter (function Kind (Def (ValueDef _)) -> true | _ -> false)
+                |> List.collect (fun item -> symbolWithin item TopLevelValue)
+                |> List.filter _.IsExported
+                |> List.choose (fun symbol -> model.SymbolTypes |> Map.tryFind symbol.Id)
+            exportedTypes
+            |> List.choose (fun (item, symbol) ->
+                match item.Kind with
+                | Def (TypeDef(qualified, modifiers, parameters, body)) when
+                    symbol.IsExported && symbol.Name = qualified && TypeDefModifier.isNominal modifiers && not (List.contains Context modifiers)
+                    ->
+                    // A block's type is declared as `block.Name`, but written by its own name.
+                    let name = qualified.Substring(qualified.LastIndexOf '.' + 1)
+                    model.TypeDefs
+                    |> Map.values
+                    |> Seq.tryFind (fun info -> info.Symbol = Some symbol.Id)
+                    |> Option.filter (fun info ->
+                        let target = TypeDefInfo.nominalId info
+                        not (exportedValues |> List.exists (givesOut target Set.empty true)))
+                    |> Option.map (fun info ->
+                        let kind = if info.IsPrivate then "private" else "protected"
+                        let owner = moduleName |> Option.map (fun moduleName -> $"'{moduleName}'") |> Option.defaultValue "its module"
+                        { Rule = rule.Id
+                          Span = symbol.Declaration
+                          Message = $"'{name}' is {kind}, and nothing {owner} exports returns one, so no code outside {owner} can get a '{name}'."
+                          Related = []
+                          Fixes = [ ofStub model item name parameters body ] })
+                | _ -> None))
+        |> List.sortBy (fun report -> report.Span.Start)
+
+/// Where `@allow` suppresses linter rules: before a def, a local one too, or a top-level type, it suppresses the
+/// diagnostics of the rules it names within the def (see `Attributes.allowAttribute`). The host applies it to every linter's diagnostics, and the
 /// official linter's `unusedAllows` rule reports a rule an `@allow` names that suppressed nothing.
 module Allows =
     let rule =
@@ -1024,7 +1112,7 @@ module Allows =
                     rest
                     |> List.skipWhile (function Kind (Attribute _) -> true | _ -> false)
                     |> List.tryHead
-                    |> Option.bind (function Kind (Def (ValueDef _)) as def -> Some def.Span | _ -> None)
+                    |> Option.bind (function Kind (Def _) as def -> Some def.Span | _ -> None)
                 Option.toList (allowOf attribute.Span name argument def) @ ofItems rest
             | Kind (ModuleBlock(_, blockItems)) :: rest -> ofItems blockItems @ ofItems rest
             | _ :: rest -> ofItems rest
@@ -1071,13 +1159,14 @@ module Linters =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
               UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule
               UnannotatedExports.rule; UnusedResults.rule; UselessExpressions.rule; ShadowedPreludeNames.rule; Semicolons.rule
-              Allows.rule ]
+              UnconstructibleTypes.rule; Allows.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
                 @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
                 @ StrayDocComments.lint model @ UnannotatedExports.lint model
-                @ UnusedResults.lint model @ UselessExpressions.lint model @ ShadowedPreludeNames.lint model @ Semicolons.lint model }
+                @ UnusedResults.lint model @ UselessExpressions.lint model @ ShadowedPreludeNames.lint model @ Semicolons.lint model
+                @ UnconstructibleTypes.lint model }
 
     /// The linters the compiler has, which a manifest's `linters` or a script's `::linter` directives can turn on.
     let all = [ official ]

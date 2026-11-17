@@ -76,7 +76,7 @@ See [Foreign functions](../advanced/hosts#foreign-functions).
 
 ## `@allow(...)`
 
-Lets a definition break [linter](../standard-tools/official-linter) rules: before a def, a local one too, it suppresses the diagnostics of the rules it names inside that def. Each rule is written as its linter and its name, with no spaces around the `/`, and several are separated by commas. It is the only attribute a block can hold.
+Lets a definition break [linter](../standard-tools/official-linter) rules: before a def, a local one too, or a top-level type, it suppresses the diagnostics of the rules it names inside that definition. Each rule is written as its linter and its name, with no spaces around the `/`, and several are separated by commas. It is the only attribute a block can hold.
 
 ```nanyx fragment
 @allow(default/unusedBindings, default/unusedResults)
