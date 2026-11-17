@@ -115,10 +115,13 @@ A and B both put "this can wait" in the type; the difference is who pays for it.
   in the workflow too.
 - **With B,** the prelude's higher-order functions are already generic in contexts (`[c] a -> b`), so
   `urls \map { url -> http.get(url) }` works, and is `[Async]` because its lambda is.
-- **What B still costs: a function stored in data.** A record field typed `string -> int` can't hold an `[Async]`
-  function. The field has to be generic in contexts, `[k] string -> int`, in a type declared `[k]`, as `seq`'s pull
-  function is. That's a price `seq` already pays, but library authors will meet it more often once functions that
-  wait are common.
+- **A function stored in data, in both.** A record field typed `string -> int` can hold neither A's
+  `string -> Task(int)` nor B's `[Async] string -> int`. What differs is the fix. In A the field is made generic in
+  its result, `type Handler(r) = (run: string -> r)`, and whoever calls `run` gets a `Task(int)` from one handler and
+  an `int` from another, so every consumer is written twice. In B the field is made generic in contexts,
+  `type Handler = [k] (run: [k] string -> int)`, as `seq`'s pull function is; whoever calls `run` gets an `int`
+  either way, and only needs `k` in scope. B's extra demand is that library authors know `[k]`-generic types, which
+  are less familiar than a type parameter.
 - **What B costs at run time** is suspending: nothing extra per call in a host that suspends instances or switches
   stacks, but about half again in code size under Asyncify, which is why that's only the fallback. A pays a closure
   allocated per `await!`, which in-place reuse can't remove.
