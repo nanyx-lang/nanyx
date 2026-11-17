@@ -157,6 +157,14 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
         |> Map.ofList
     let topLevelFunctions = topLevelArities |> Map.filter (fun _ arity -> arity > 0)
 
+    // The name of every top-level definition.
+    let topLevelNames =
+        module'
+        |> List.choose (function
+            | Kind (Def (ValueDef(_, name, _, _))) -> Some name
+            | _ -> None)
+        |> Set.ofList
+
     // Every top-level record value, by name, for `use ctx` where `ctx` is one of them.
     let topLevelRecords =
         module'
@@ -446,6 +454,11 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
         | MemberAccess(Kind (IdentifierExpr qualifier), field, _) when
             topLevelArities.ContainsKey $"{qualifier}.{field}" && not (scope.Contains qualifier) ->
             closureOf expr (wrapperOf $"{qualifier}.{field}") []
+        // A value attached to a type, `map.empty`, has nothing to lift, though a top-level function bears the type's
+        // name: the `map` in it is the type's, not that function (#1841).
+        | MemberAccess(Kind (IdentifierExpr qualifier), field, _) when
+            topLevelNames.Contains $"{qualifier}.{field}" && not (scope.Contains qualifier) ->
+            expr
         // `use value in body` is the block `{ use value; body }`: what it loads is in scope for `body` only.
         | UseIn(value, body) ->
             recur { expr with Kind = Block [ Statement.from value (UseStatement value); Statement.from body (ExprStatement body) ] }

@@ -333,11 +333,19 @@ let private derivedInstance
         | StructuralInstances.OpenToCaller -> [ missingContext (InterpolationHoles.openToCaller calleeName argTys.Head annotatedDef) ]))
 
 /// The definition `qualifier.field` names, as `math.max` or `int.toString` do, with its scheme: none when it reads a
-/// field of the value `qualifier`. A value named as a built-in type, as `list` in `{ list -> list.length }`, is not
-/// the type.
-let internal qualifiedDefinition (env: TypeEnv) (qualifier: Identifier) (field: Identifier) : (Identifier * TypeScheme) option =
+/// field of the value `qualifier`. A local value named as a built-in type, as `list` in `{ list -> list.length }`, is
+/// not the type. A top-level def of that name is not a local, so `map.empty` is the map's still where a program defines
+/// a `map`, and so is a library function's that is checked in the program's module (#1841).
+let internal qualifiedDefinition (env: TypeEnv) (state: InferState) (qualifier: Identifier) (field: Identifier) : (Identifier * TypeScheme) option =
     let qualifiedName = $"{qualifier}.{field}"
-    if isBuiltInTypeName qualifier && (TypeEnv.tryFind qualifier env).IsSome then None
+    let isLocalValue =
+        match TypeEnv.tryFind qualifier env with
+        | Some scheme ->
+            match scheme.Symbol |> Option.bind (fun id -> state.Symbols |> Map.tryFind id) with
+            | Some symbol -> symbol.Kind <> TopLevelValue
+            | None -> true
+        | None -> false
+    if isBuiltInTypeName qualifier && isLocalValue then None
     else TypeEnv.tryFind qualifiedName env |> Option.map (fun scheme -> qualifiedName, scheme)
 
 /// The context `ctxName` at the arguments of the instance of it nearest in scope in `env`, when that is for a type with
@@ -630,7 +638,7 @@ let internal resolveValueInstances (env: TypeEnv) (state: InferState) (value: Ex
     match value.Kind with
     | IdentifierExpr name -> resolve name
     | MemberAccess(Kind (IdentifierExpr qualifier), field, _) ->
-        match qualifiedDefinition env qualifier field with
+        match qualifiedDefinition env state qualifier field with
         | Some (name, _) -> resolve name
         | None -> Ok state
     | _ -> Ok state
