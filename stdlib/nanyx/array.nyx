@@ -55,7 +55,7 @@ def fillFrom: [c] array(a), int, ([c] int -> a) -> array(a) = { made, index, f -
 -- on.
 def fillWithDefaultFrom: [Default(a)] array(a), int -> array(a) = { made, index ->
   if index < __nanyx_array_length(made) then
-    __nanyx_array_write(made, index, default())
+    __nanyx_array_write(made, index, default)
     fillWithDefaultFrom(made, index + 1)
   else made
 }

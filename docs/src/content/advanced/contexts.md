@@ -513,16 +513,16 @@ As with `==`, only a nominal type can attach `hash`. The built-in types have the
 
 ## Default(a)
 
-`Default(a)` is the prelude's context for a fallback value of a type: a function that needs one requires it.
+`Default(a)` is the prelude's context for a fallback value of a type: a function that needs one requires it. Its member is a value, not a function of no arguments: a member that's a constant is written as a value, `default: a`, and read as one, `default`. It may be generic, as `list.default: list(a)` is.
 
 ```nanyx
-context Default(a) = (default: () -> a)
+context Default(a) = (default: a)
 ```
 
 ```nanyx
 def valueOrDefault: [Default(a)] (#some(a) | #none) -> a = {
   | #some(v) -> v
-  | #none -> default()
+  | #none -> default
 }
 ```
 
@@ -531,7 +531,7 @@ Each built-in type has one: `int`'s default is `0`, `float`'s `0.0`, `string`'s 
 ```nanyx
 type Point = (x: int, y: int)
 
-def Point.default = { Point(x = 0, y = 0) }
+def Point.default = Point(x = 0, y = 0)
 ```
 
 A call that requires `Default` of a type with no `default`, such as a function, is an error.

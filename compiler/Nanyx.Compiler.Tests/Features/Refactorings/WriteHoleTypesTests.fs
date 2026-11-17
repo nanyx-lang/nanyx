@@ -55,7 +55,7 @@ let ``A function in a parameter is bracketed`` () =
     // The function's context variable is not one of the def's contexts, so it is left out, as the `_` did not need it.
     Assert.StartsWith(
         "def reduce: [Default(a)] list(a), (a, a -> a) -> a = ",
-        one "def reduce: [Default(a)] list(a), $$_ -> a = { xs, f -> xs \\fold(default(), f) }\n")
+        one "def reduce: [Default(a)] list(a), $$_ -> a = { xs, f -> xs \\fold(default, f) }\n")
 
 [<Fact>]
 let ``A type variable the annotation names keeps its name`` () =

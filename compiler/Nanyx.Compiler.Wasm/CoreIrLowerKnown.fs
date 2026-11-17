@@ -68,11 +68,13 @@ let wrapperTypeArguments (input: LowerInput) (toIrType: Ty -> IrType) (wrapped: 
     | Some ty when (freeVars ty).IsEmpty -> []
     | _ -> [ toIrType at ]
 
-/// The member that is the value of the top-level definition `definition` (`Point.`0``).
-let knownValue (input: LowerInput) (definition: string) : KnownMember =
-    match input.DefinitionTypes |> Map.tryFind definition with
-    | Some ty when (freeVars ty).IsEmpty -> KnownValue(definition, ty)
-    | _ -> cannot $"passing the generic value '{definition}' as a context member"
+/// The member that is the value of the top-level definition `definition` (`Point.`0``), as a context member of type
+/// `memberTy`: the value at its own type, or, for a generic value (`list.default: list(a)`), at `memberTy`.
+let knownValue (input: LowerInput) (definition: string) (memberTy: Ty option) : KnownMember =
+    match input.DefinitionTypes |> Map.tryFind definition, memberTy |> Option.map (withoutOpenRests >> unconstrainedAsUnit) with
+    | Some ty, _ when (freeVars ty).IsEmpty -> KnownValue(definition, ty)
+    | Some _, Some ty -> KnownValue(definition, ty)
+    | _ -> cannot $"passing the generic value '{definition}' as a context member where the type it is needed at is not known"
 
 /// What a call finds known among the members of `parameters`, each found as `arguments` says, at the types in
 /// `memberTys`. A member in scope is known when `inScope` says what it is.
@@ -83,7 +85,7 @@ let knownAmong (input: LowerInput) (parameters: ContextParameter list) (argument
         | ClosureOverWrapper wrapper ->
             let wrapped, at = wrappedAt input wrapper memberTy
             Some (parameter.Key, KnownFunction(wrapper, wrapped, at))
-        | DefinitionValue definition -> Some (parameter.Key, knownValue input definition)
+        | DefinitionValue definition -> Some (parameter.Key, knownValue input definition memberTy)
         | MemberInScope key -> inScope key |> Option.map (fun known -> parameter.Key, known)
         | DerivedClosure _
         | PassedByCaller

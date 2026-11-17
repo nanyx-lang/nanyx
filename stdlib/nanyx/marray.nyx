@@ -25,7 +25,7 @@ export def MArray.init: [Memory, c] int, ([c] int -> a) -> MArray(a) = { count, 
 --| A new array of `count` elements, each the [`Default`] of its type: `MArray.create(3)` of ints
   holds three `0`s. A `count` of 0 or less makes an empty array.
 export def MArray.create: [Memory, Default(a)] int -> MArray(a) = { count ->
-  MArray(__nanyx_marray_of_list(list.init(count, { _ -> default() })))
+  MArray(__nanyx_marray_of_list(list.init(count, { _ -> default })))
 }
 
 --| A new array of the elements of `xs`, in order.

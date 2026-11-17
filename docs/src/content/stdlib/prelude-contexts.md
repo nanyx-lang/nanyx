@@ -278,18 +278,18 @@ gives back `#some(int) | #invalidInt`. A type gets one by attaching a `fromStrin
 
 ```nanyx fragment
 context Default(a) = (
-  default: () -> a
+  default: a
 )
 ```
 
 A value of type `a` to fall back on, or to fill with: `def valueOrDefault: [Default(a)] #some(a) |
-#none -> a`. A type gets one by attaching a `default`, `def Point.default = { -> Point(x = 0, y = 0) }`,
+#none -> a`. A type gets one by attaching a `default` value, `def Point.default = Point(x = 0, y = 0)`,
 as each built-in type does.
 
 ## `int.default`
 
 ```nanyx fragment
-def int.default: () -> int
+def int.default: int
 ```
 
 `0`.
@@ -297,7 +297,7 @@ def int.default: () -> int
 ## `float.default`
 
 ```nanyx fragment
-def float.default: () -> float
+def float.default: float
 ```
 
 `0.0`.
@@ -305,7 +305,7 @@ def float.default: () -> float
 ## `string.default`
 
 ```nanyx fragment
-def string.default: () -> string
+def string.default: string
 ```
 
 `""`, the empty string.
@@ -313,7 +313,7 @@ def string.default: () -> string
 ## `bool.default`
 
 ```nanyx fragment
-def bool.default: () -> bool
+def bool.default: bool
 ```
 
 `false`.
@@ -321,7 +321,7 @@ def bool.default: () -> bool
 ## `list.default`
 
 ```nanyx fragment
-def list.default: () -> list(a)
+def list.default: list(a)
 ```
 
 `[]`, the empty list.

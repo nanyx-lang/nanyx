@@ -8,7 +8,7 @@ let private valueOrDefault =
     """
 def valueOrDefault: [Default(a)] #some(a) | #none -> a = {
   | #some(v) -> v
-  | #none -> default()
+  | #none -> default
 }
 """
 
@@ -41,7 +41,7 @@ let ``Run - a type of a user's gets a Default by attaching default`` () =
     $"""{valueOrDefault}
 type Point = (x: int, y: int)
 
-def Point.default = {{ -> Point(x = 1, y = 2) }}
+def Point.default = Point(x = 1, y = 2)
 
 @entry
 def main = {{

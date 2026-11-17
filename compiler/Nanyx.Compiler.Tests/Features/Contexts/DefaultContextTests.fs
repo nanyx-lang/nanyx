@@ -8,7 +8,7 @@ let private valueOrDefault =
     """
 def valueOrDefault: [Default(a)] #some(a) | #none -> a = {
   | #some(v) -> v
-  | #none -> default()
+  | #none -> default
 }
 """
 
