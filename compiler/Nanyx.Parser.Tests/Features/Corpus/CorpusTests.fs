@@ -7,6 +7,14 @@ open Parser.Program
 open Nanyx.Parser
 open Nanyx.Parser.Corpus
 
+/// Each piece of the corpus with its parse, parsed once, in parallel, for every test that reads it.
+let private parses =
+    lazy
+        (Corpus.all.Value
+         |> Array.ofList
+         |> Array.Parallel.map (fun piece -> piece, parseModuleWithTrivia piece.Name piece.Source)
+         |> List.ofArray)
+
 [<Fact>]
 let ``The corpus has the files, the docs' code blocks and the tests' sources`` () =
     let count origin = Corpus.all.Value |> List.filter (fun piece -> origin piece.Origin) |> List.length
@@ -18,10 +26,10 @@ let ``The corpus has the files, the docs' code blocks and the tests' sources`` (
 [<Fact>]
 let ``Every file of the standard library and the packages parses`` () =
     let failures =
-        Corpus.files.Value
-        |> List.filter (fun piece -> piece.Name.StartsWith "stdlib" || piece.Name.StartsWith "packages")
-        |> List.choose (fun piece ->
-            match parseModuleWithTrivia piece.Name piece.Source with
+        parses.Value
+        |> List.filter (fun (piece, _) -> piece.Origin = SourceFile && (piece.Name.StartsWith "stdlib" || piece.Name.StartsWith "packages"))
+        |> List.choose (fun (piece, parse) ->
+            match parse with
             | Result.Error error -> Some $"{piece.Name}: {error.Message}"
             | Result.Ok _ -> None)
     Assert.Equal<string list>([], failures)
@@ -63,9 +71,9 @@ let private lexedComments (source: string) (lexed: Lexer.Lexed) =
 [<Fact>]
 let ``The lexer reads every piece that parses without an error, and finds the comments the parser does`` () =
     let parsed =
-        Corpus.all.Value
-        |> List.choose (fun piece ->
-            match parseModuleWithTrivia piece.Name piece.Source with
+        parses.Value
+        |> List.choose (fun (piece, parse) ->
+            match parse with
             | Result.Ok parsed -> Some(piece.Name, parsed)
             | Result.Error _ -> None)
     let failures =
@@ -87,5 +95,7 @@ let ``The lexer reads every piece that parses without an error, and finds the co
 [<Fact>]
 let ``The parser reads the whole corpus the same way every time`` () =
     let pieces = Corpus.all.Value
-    let found = Differential.differences parseModuleWithTrivia parseModuleWithTrivia pieces
+    // The parse every test shares is the reference, so each piece is parsed once more here, not twice.
+    let first = parses.Value |> List.map (fun (piece, parse) -> (piece.Name, piece.Source), parse) |> Map.ofList
+    let found = Differential.differences (fun name source -> first[(name, source)]) parseModuleWithTrivia pieces
     Assert.True(found.IsEmpty, Differential.report 10 pieces.Length found)

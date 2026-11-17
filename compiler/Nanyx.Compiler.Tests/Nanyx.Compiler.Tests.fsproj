@@ -127,6 +127,7 @@
     <Compile Include="Features\Linters\UselessExpressionsTests.fs" />
     <Compile Include="Features\Linters\ShadowedPreludeNamesTests.fs" />
     <Compile Include="Features\Linters\SemicolonsTests.fs" />
+    <Compile Include="Features\Linters\UnconstructibleTypeTests.fs" />
     <Compile Include="Features\Linters\AllowTests.fs" />
     <Compile Include="Features\Loops\ForLoopTests.fs" />
     <Compile Include="Features\Loops\WhileLoopTests.fs" />
@@ -183,6 +184,7 @@
     <Compile Include="Features\Refactorings\ShorthandLambdaTests.fs" />
     <Compile Include="Features\Refactorings\MatchAndIfTests.fs" />
     <Compile Include="Features\Refactorings\InterpolationTests.fs" />
+    <Compile Include="Features\Refactorings\ImplementContextTests.fs" />
     <Compile Include="Features\Refactorings\WriteHoleTypesTests.fs" />
     <Compile Include="Features\Refactorings\WriteInferredTypeTests.fs" />
     <Compile Include="Features\Tooling\CompletionTests.fs" />

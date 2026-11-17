@@ -129,7 +129,8 @@ type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string
 
     /// The body of `callee` for a call with `args`, at `loopDepth` loops deep: its parameters stand for the arguments
     /// that are variables of their types, and are new locals let-bound to the others (a lambda's environment, which it
-    /// reads as a record, to the closure), and every variable it binds is new.
+    /// reads as a record, to the closure), and every variable it binds is new. It is of the callee's declared result,
+    /// which may have tags the body never makes (#1882).
     member _.Instantiate (callee: Function) (args: Atom list) (loopDepth: int) : Expr =
         instances <- instances + 1
         let suffix = $"__in{instances}"
@@ -150,6 +151,11 @@ type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string
                 renamed.[v.Id] <- fresh
                 fresh
         let body = mapVars var (fun depth -> depth + loopDepth) callee.Body
+        let body =
+            if body.Type = callee.Result then body
+            else
+                let links, last = Chain.split body
+                Chain.rebuild (fun link following -> { Chain.relink link following with Type = callee.Result }) links { last with Type = callee.Result }
         Seq.foldBack (fun (local, arg) rest -> Expr.make (Let(local, Expr.make (Atom arg) local.Type, rest)) rest.Type) bindings body
 
     /// One time over `body`: each call that is to be inlined is.
@@ -205,7 +211,7 @@ type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string
                     && callee.Params.Length = args.Length
                     && typed callee args
                     && callee.Result = call.Type
-                    && callee.Body.Type = callee.Result
+                    && heldAlike callee.Result callee.Body.Type
                     && grown < growthLimit
                     ->
                     let calleeSize = size callee.Body

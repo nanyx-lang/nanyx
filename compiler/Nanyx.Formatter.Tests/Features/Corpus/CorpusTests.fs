@@ -19,18 +19,33 @@ let private corpus =
 let private parsed =
     lazy
         corpus.Value
-        |> List.choose (fun (name, source) ->
+        |> Array.ofList
+        |> Array.Parallel.choose (fun (name, source) ->
             match parseModuleWithTrivia name source with
             | Result.Ok parsed -> Some(name, source, parsed)
             | Result.Error _ -> None)
+        |> List.ofArray
 
 let private format (parsed: SourceModule) = Formatter.format Formatter.Options.defaults parsed
 
+/// A piece that parses, formatted: its name, its parse, the formatted code and the parse of that. Each piece is
+/// formatted and parsed again once, in parallel, for every test that looks at it.
+type private Formatted = { Name: string; Tree: SourceModule; Formatted: string; Again: Result<SourceModule, ParseError> }
+
+let private formatted =
+    lazy
+        parsed.Value
+        |> Array.ofList
+        |> Array.Parallel.map (fun (name, _, tree) ->
+            let formatted = format tree
+            { Name = name; Tree = tree; Formatted = formatted; Again = parseModuleWithTrivia name formatted })
+        |> List.ofArray
+
 /// Fails listing every piece `check` finds a problem with.
-let private everyPiece (check: string -> string -> SourceModule -> string option) =
-    let failures = parsed.Value |> List.choose (fun (name, source, tree) -> check name source tree |> Option.map (fun problem -> $"{name}: {problem}"))
+let private everyPiece (check: Formatted -> string option) =
+    let failures = formatted.Value |> List.choose (fun piece -> check piece |> Option.map (fun problem -> $"{piece.Name}: {problem}"))
     if not failures.IsEmpty then
-        failwith ($"{failures.Length} of {parsed.Value.Length} pieces:\n\n" + String.concat "\n\n" failures)
+        failwith ($"{failures.Length} of {formatted.Value.Length} pieces:\n\n" + String.concat "\n\n" failures)
 
 [<Fact>]
 let ``The corpus has Nanyx in it, most of which parses`` () =
@@ -39,21 +54,19 @@ let ``The corpus has Nanyx in it, most of which parses`` () =
 
 [<Fact>]
 let ``Formatted code parses to the same tree`` () =
-    everyPiece (fun name _ tree ->
-        let formatted = format tree
-        match parseModuleWithTrivia name formatted with
-        | Result.Error error -> Some $"the formatted code does not parse: {error.Message}\n---\n{formatted}"
-        | Result.Ok again when not (Syntax.same tree.Items again.Items) -> Some $"the formatted code parses differently:\n---\n{formatted}"
+    everyPiece (fun piece ->
+        match piece.Again with
+        | Result.Error error -> Some $"the formatted code does not parse: {error.Message}\n---\n{piece.Formatted}"
+        | Result.Ok again when not (Syntax.same piece.Tree.Items again.Items) -> Some $"the formatted code parses differently:\n---\n{piece.Formatted}"
         | Result.Ok _ -> None)
 
 [<Fact>]
 let ``Formatting keeps every comment, in order`` () =
-    everyPiece (fun name _ tree ->
-        let formatted = format tree
+    everyPiece (fun piece ->
         let commentsOf = FormatCommand.commentsOf
-        match parseModuleWithTrivia name formatted with
-        | Result.Ok again when commentsOf again <> commentsOf tree ->
-            Some $"comments changed from %A{commentsOf tree} to %A{commentsOf again}\n---\n{formatted}"
+        match piece.Again with
+        | Result.Ok again when commentsOf again <> commentsOf piece.Tree ->
+            Some $"comments changed from %A{commentsOf piece.Tree} to %A{commentsOf again}\n---\n{piece.Formatted}"
         | _ -> None)
 
 /// The docs' code blocks that are whole programs, as their name and source: those fenced ```nanyx alone, not
@@ -91,10 +104,9 @@ let ``The examples and the docs' code blocks are formatted`` () =
 
 [<Fact>]
 let ``Formatting formatted code changes nothing`` () =
-    everyPiece (fun name _ tree ->
-        let formatted = format tree
-        match parseModuleWithTrivia name formatted with
+    everyPiece (fun piece ->
+        match piece.Again with
         | Result.Ok again ->
             let twice = format again
-            if twice <> formatted then Some $"formatting again changed it:\n---\n{formatted}\n---\n{twice}" else None
+            if twice <> piece.Formatted then Some $"formatting again changed it:\n---\n{piece.Formatted}\n---\n{twice}" else None
         | Result.Error _ -> None)

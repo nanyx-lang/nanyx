@@ -22,12 +22,13 @@ Each rule's diagnostics have the code `default/<rule>`, such as `default/unusedB
 | [`noTagInCommon`](#comparison-that-is-always-false) | warning | `==` or `!=` on two unions with no tag in common |
 | [`useInBraces`](#use--in-with-a-body-in-braces) | warning | `use ... in { ... }`, whose body is a function, not a block |
 | [`strayDocComments`](#doc-comment-that-documents-nothing) | warning | a doc comment that documents nothing |
-| [`unreachableCode`](#unreachable-code-path) | warning | statements after one that never gives a value |
+| [`unreachableCode`](#unreachable-code-path) | warning | statements, or a call's arguments, after one that never gives a value |
 | [`nonTailRecursion`](#recursion-not-in-tail-position) | info | a function calling itself other than in tail position |
 | [`unusedResults`](#unused-return-value) | error | a statement whose value is thrown away |
 | [`uselessExpressions`](#expression-that-does-nothing) | error | a pure statement whose value is thrown away |
 | [`shadowedPreludeNames`](#name-that-hides-a-prelude-member) | warning | a name that hides one the prelude brings into scope |
 | [`semicolons`](#statements-separated-by-) | warning | statements separated by `;` |
+| [`unconstructibleType`](#exported-type-no-one-can-get) | error | an exported nominal type nothing its module exports gives out |
 | [`unusedAllows`](#allow-that-suppresses-nothing) | warning | an `@allow` that suppresses nothing |
 | [`linterFailed`](#when-the-linter-fails) | warning | the linter could not check a module |
 
@@ -154,6 +155,8 @@ def f: int -> int = { x ->
 
 The rule (`unreachableCode`) reports the statements of a block that come after one that never gives a value: a statement whose type is [`undefined`](../tour/types#top-and-bottom-types), such as a call to `crash`, a call to a function you have annotated to return `undefined`, or an `if` whose every branch is one of those. It reports the first statement that never runs, through the end of the block, and points at the statement that stops the block. Its fix removes the statements that never run, unless the statement before them is a def, since a block can't end with a def.
 
+Arguments are evaluated left to right, so in `f(crash("a"), g())` neither `g()` nor the call to `f` ever runs. The rule reports the arguments of a call that come after one whose type is `undefined`, once per call, and points at the argument that stops it; in a pipe, `crash("a") \f(g())`, the piped value is the first argument. It has no fix, since leaving the arguments out would change the call.
+
 ## Recursion not in tail position
 
 ```nanyx
@@ -224,6 +227,24 @@ The rule (`semicolons`) reports every `;` that separates two statements on one l
 linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (semicolons = #off)))]
 ```
 
+## Exported type no one can get
+
+```nanyx
+module noms =
+  -- Linter error: 'UserId' is private, and nothing 'noms' exports returns one, so no code outside 'noms' can get a 'UserId'.
+  export type UserId = private int
+
+  export def UserId.toString: UserId -> string = { id -> "user" }
+```
+
+Only its home module can make a value of a [nominal type](../advanced/nominal-and-protected-types). When nothing that module exports gives one out, every other module can name the type but never get a value of it, which is almost always an oversight: the author meant to export a `UserId.parse` or a `UserId.of` and forgot. The rule (`unconstructibleType`) reports an exported `protected` or `private` type like this, at its name. It is an error by default.
+
+An exported def gives the type out when the type is in an output position of the def's type: a function's result, however deep in it (`string -> #some(UserId) | #invalid`, `() -> list(UserId)`); a value of the type, or of one that holds it; an argument of a callback the caller passes (`withUser: (UserId -> a) -> a`); or a field of a protected type the module gives out, since anyone can read that. A def that only takes the type, as `UserId.toString` does, doesn't count. A type the module doesn't export, an ordinary structural type and a context are never reported.
+
+Its fix adds an exported `of` after the type, which takes the type's representation and wraps it: `export def UserId.of: int -> UserId = { value -> UserId(value) }`.
+
+The linter sees one module at a time, so a type that another module of the same package gives out is reported too. Write `@allow(default/unconstructibleType)` before the type for it, and for a type with no values on purpose, such as a marker used only as a type argument.
+
 ## `@allow` that suppresses nothing
 
 ```nanyx
@@ -240,7 +261,7 @@ If the linter itself fails on a module, a bug in the linter, the module still co
 
 # Suppressing a rule in one place
 
-A project's manifest turns a rule off everywhere. To let one definition break a rule, write `@allow` before it, naming the rules it may break: their diagnostics inside that def, a local one too, are left out.
+A project's manifest turns a rule off everywhere. To let one definition break a rule, write `@allow` before it, naming the rules it may break: their diagnostics inside that def, a local one too, or that top-level type, are left out.
 
 ```nanyx fragment
 def total: () -> int = { ->
