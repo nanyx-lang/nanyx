@@ -59,17 +59,93 @@ compiles it.
 1. **In the browser.** .NET compiles to WebAssembly (the `browser-wasm` runtime), so the compiler can run in the same
    worker as the program, or a second one. The site stays static, so Vercel serves it as it serves the docs today.
    It works offline, costs nothing per compile, and has no server to abuse. Diagnostics as you type need no round
-   trip. The cost is the download: the .NET runtime, FSharp.Core, FParsec and the compiler, trimmed. Starting it the
-   first time is slow, and it is cached after that. Neither cost has been measured.
+   trip. The cost is the download: the .NET runtime, FSharp.Core, FParsec and the compiler, trimmed, and a slow first
+   compile. Both are measured below.
 2. **On a server.** A small compile service returns the `.wasm` and the diagnostics. The page stays light, but the
    service needs hosting that runs .NET (Vercel's functions don't), limits on time, memory and request rate, and
    someone to look after it. Every keystroke's diagnostics is a request.
 3. **Both.** Start with the server and move to the browser once the bundle is small enough.
 
-**Proposed: in the browser**, if step 1 of the plan measures it as acceptable: say, a bundle under 10 MB compressed,
-and a first compile of a tour example in under a few seconds on a laptop. Otherwise, the server. Wasmtime, which runs
-programs for the CLI, isn't needed in either case: the browser runs the program's WebAssembly itself.
+**Decided: in the browser.** The bar was a bundle under 10 MB compressed and a first compile of a tour example in a few
+seconds on a laptop. Measured on 2026-11-17 ([#1234](https://github.com/nanyx-lang/nanyx/issues/1234)), the compiler
+in the browser is a 5.5 MB download with brotli, ready to compile a third of a second after the page starts loading (from
+localhost), and compiles its first program in about 2.2 seconds and each one after that in 0.2 to 0.8 seconds.
+Wasmtime, which runs programs for the CLI, isn't needed: the browser runs the program's WebAssembly itself.
 
+## The measurement
+
+`compiler/Nanyx.Browser` is the compiler's compile path, `Compiler.compile`, `CodeGen.tryTranspileTypedModuleWith`
+and `WasmBinary.assemble`, as `nanyx wasm` runs them, built for .NET 10's `browser-wasm` runtime with the
+`Microsoft.NET.Sdk.WebAssembly` SDK. Its `BrowserCompiler.Compile` takes a program's source and gives its `.wasm`, its
+diagnostics and how long each stage took. Its page, `wwwroot/index.html`, loads the runtime, hands the compiler the
+files it reads from beside itself (below), and compiles a hello world and three examples (`fizzbuzzbaz.nyx`, 28
+lines; `Nim.nyx`, 181; `shop.nyx`, 377) twice each, checking that each `.wasm` validates. Every one did.
+
+It was measured on a laptop with an Intel Core Ultra 9 285HX, in Chrome 157 and Edge 157, headless, each with a fresh
+profile, served from localhost with brotli, three rounds of a cold load and then a load from the cache. The times
+below are the medians, in milliseconds. Firefox wasn't measured: it isn't installed on that machine.
+
+| | Chrome | Edge |
+| --- | --- | --- |
+| Ready to compile, cold | 310 | 388 |
+| Ready to compile, cached | 143 | 167 |
+| Hello world, first compile | 2,221 | 2,369 |
+| Hello world, second compile | 175 | 178 |
+| `fizzbuzzbaz.nyx`, first and second | 233, 198 | 266, 217 |
+| `Nim.nyx`, first and second | 534, 417 | 579, 462 |
+| `shop.nyx`, first and second | 822, 733 | 912, 830 |
+
+"Ready" is from the start of the page's load to the runtime started and the compiler's files handed over. From
+localhost it is mostly starting the runtime; over a network, the download comes first: 5.5 MB is about a second at
+50 Mbit/s and four and a half at 10. Loaded from the cache, the first compile takes as long as it does cold: it is
+the compiler's own warm-up, not the download. For comparison, `nanyx wasm` on the same machine takes 1.5 to 1.7 s for
+each of these programs, most of which is starting the process.
+
+**The download**, as the page's resources report it, is 5.46 MB transferred with brotli, 17.8 MB once
+decompressed; the page and the examples are a few kilobytes of it. The largest pieces, with brotli: FSharp.Core 988 KB, the runtime's native code 954 KB, `NanyxCompiler` 913 KB, `System.Private.CoreLib`
+514 KB, the checked standard library 486 KB, the backend 381 KB and the parser 212 KB.
+
+**The first compile** is most of the wait. Of its 2.2 s, checking takes about 1.9 and lowering 0.25, against 0.08
+and 0.09 for a second compile of the same program: the first check reads the checked standard library (`CheckedLibrary.fs`), 2.9 MB that
+`BinaryData` reads back through reflection, under the runtime's interpreter. Without the checked library
+(`?library=none`) the download is 0.5 MB smaller and the first compile takes 4.1 s, checking the library from its
+source, so the library is worth its download. The page can hide most of the wait by compiling a hello world as soon as
+the compiler is ready, while you read the example or start typing.
+
+**What had to change.**
+
+- **Threads.** `LargeStack.run` runs the checker on a thread with a 1 GB stack. The browser runs .NET on one thread
+  and can't start another, so in the browser it runs the work on the calling thread instead. That thread's stack is
+  the runtime's, much smaller, so code nested thousands deep, which the large stack is there for, may run out of
+  stack in the browser. None of the examples came near it.
+- **Files.** The compiler reads the checked library and the packages it ships (`ShippedPackages`, the console host a
+  program's `println` comes from) from beside itself, `AppContext.BaseDirectory`, which in the browser is the
+  runtime's in-memory file system. The SDK has no way to put files there, so the page fetches them and passes each to
+  `BrowserCompiler.AddFile`, which writes it there before the first compile. The standard library's sources are
+  embedded in the compiler, as they are for the CLI.
+- **Trimming.** Only the framework is trimmed (`TrimMode` `partial`). Reading the checked library reflects over the
+  compiler's F# types, which trimming the compiler's assemblies would break. Trimming them, with what `BinaryData`
+  reads kept, would shrink `NanyxCompiler`, the backend and FSharp.Core; how much hasn't been measured.
+- **No `wasm-tools`.** The build needs only the .NET SDK. Without the `wasm-tools` workload the compiler runs under the
+  runtime's interpreter, and the runtime isn't relinked to drop what the compiler doesn't use. With it, ahead-of-time
+  compilation (`RunAOTCompilation`) would make compiles several times faster and the download larger. That is the
+  next thing to try if the first compile is too slow, and it wasn't measured here.
+- **Globalization.** The compiler runs with invariant globalization, so no culture data is downloaded.
+
+**Reproducing it.** From `compiler/`, with the .NET 10 SDK:
+
+```bash
+dotnet publish Nanyx.Browser/Nanyx.Browser.csproj -c Release
+```
+
+```bash
+node Nanyx.Browser/serve.mjs Nanyx.Browser/bin/Release/net10.0/publish/wwwroot 8123
+```
+
+Open `http://localhost:8123/` to see the times, or `http://localhost:8123/?run=cold`, which loads the page again from
+the cache when it is done. `serve.mjs` serves each file with brotli and appends each load's report to `results.jsonl`
+in the directory it runs in. `Nanyx.Browser/measure.ps1` runs the rounds above: it opens the page headless in each
+browser it is given, with a fresh profile, and waits for the reports (`-Library none` leaves out the checked library).
 **Building it.** The docs site is built on Vercel, which has no .NET SDK, so it can't build the compiler. The
 Compiler workflow's `Release` job also publishes the browser build as a release asset, `nanyx-browser.zip`, and the
 docs build downloads the release it names. The playground is then pinned to a compiler release and names it, and
@@ -95,9 +171,10 @@ The first version has no input: a program that reads it gets an end of input, an
 
 # Plan
 
-1. **Measure the compiler in the browser.** Publish the CLI's compile path for `browser-wasm`, trimmed, and measure
-   the download, the start-up and the compile time of a few tour examples. This decides "Where the compiler runs"
-   ([#1234](https://github.com/nanyx-lang/nanyx/issues/1234)).
+1. Done: **Measure the compiler in the browser.** The compile path built for `browser-wasm` (`compiler/Nanyx.Browser`)
+   is a 5.5 MB download with brotli, and compiles a first program in about 2.2 s and the next ones in under a second, so the
+   compiler runs in the browser (see "Where the compiler runs";
+   [#1234](https://github.com/nanyx-lang/nanyx/issues/1234)).
 2. Done: **Write `.wasm`.** The compiler writes the binary format, for `nanyx build` too, with tests that the binary runs as
    the text does ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).
 3. **An entry the page can call.** The module exports its entry, or imports its memory, and `proc_exit` unwinds. A
