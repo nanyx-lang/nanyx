@@ -132,9 +132,50 @@ type InterpolationPart =
     /// A hole, already evaluated into its local.
     | Hole of Var * HoleType
 
+/// Where the source an expression was lowered from is written: its file, as its span names it, and its line, from 1.
+/// What a crash's stack reports for the code made from it (see `CoreIrEmit`'s markers). A place is not part of what an
+/// expression is: every place equals every other, so two expressions that differ only in where they were written
+/// compare equal, as the passes that compare expressions expect.
+[<CustomEquality; CustomComparison>]
+type Place =
+    { File: string
+      Line: int
+      /// For code inlined from a function, that function's name and the place of the call it was inlined at (see
+      /// `CoreIrInline`), so that a stack shows the frame the call would have had.
+      InlinedAt: (string * Place) option }
+
+    override _.Equals(other) = other :? Place
+    override _.GetHashCode() = 0
+
+    interface System.IComparable with
+        member _.CompareTo _ = 0
+
+/// The place the expressions made now come from: set by the lowering as it lowers each source expression, so that
+/// `Expr.make` gives every expression made from one its place; none outside the lowering.
+type Places private () =
+    [<System.ThreadStatic; DefaultValue>]
+    static val mutable private current: Place option
+
+    static member Current
+        with get () = Places.current
+        and set (place: Place option) = Places.current <- place
+
+/// The name a program shows for the source file at `file`, a path as a span names it: its path from `root`, the root of
+/// its package, with `/` between its parts; its name alone without a root (a script) or when it is outside the root.
+let shownFile (root: string option) (file: string) =
+    match root with
+    | _ when file = "" -> ""
+    | Some root ->
+        let relative = System.IO.Path.GetRelativePath(root, file)
+        if relative.StartsWith ".." || System.IO.Path.IsPathRooted relative then System.IO.Path.GetFileName file
+        else relative.Replace('\\', '/')
+    | None -> System.IO.Path.GetFileName file
+
 type Expr =
     { Kind: ExprKind
-      Type: IrType }
+      Type: IrType
+      /// Where the source it was lowered from is written; none for what a pass after the lowering made.
+      Place: Place option }
 
 and ExprKind =
     | Atom of Atom
@@ -181,7 +222,8 @@ and ExprKind =
     | Dbg of location: Atom * text: Atom
     /// A float constant: an `f64`, or an `f32` in a box of its own where the expression is an `F32`.
     | FloatConstant of float
-    /// An error deferred to run time: writes these messages to stderr and ends the program.
+    /// An error deferred to run time, or a crash: writes these messages to stderr and ends the program, with a trap in
+    /// `Helpers.crashed`, from which the runtime reports the stack.
     | Crash of string list
     /// A `for` loop: evaluates its body for each element, and is unit.
     | ForEach of ForLoop
@@ -469,8 +511,8 @@ let atomType (atom: Atom) =
 /// and `captured`: a block allocated as it runs, or static data when it captures nothing.
 let closureOver (name: string) (arity: int) (captured: Atom list) (ty: IrType) : Expr =
     match captured with
-    | [] -> { Kind = Atom(AStaticClosure(name, arity, ty)); Type = ty }
-    | _ -> { Kind = MakeClosure(name, arity, captured); Type = ty }
+    | [] -> { Kind = Atom(AStaticClosure(name, arity, ty)); Type = ty; Place = Places.Current }
+    | _ -> { Kind = MakeClosure(name, arity, captured); Type = ty; Place = Places.Current }
 
 module ForLoop =
     /// The atoms a loop's streams start from, in the order its code reads them.
@@ -538,8 +580,8 @@ module Pattern =
         | _ -> parts pattern |> List.collect binds
 
 module Expr =
-    /// The expression of `kind`, of type `ty`.
-    let make (kind: ExprKind) (ty: IrType) : Expr = { Kind = kind; Type = ty }
+    /// The expression of `kind`, of type `ty`, at the place the lowering is at (see `Places`).
+    let make (kind: ExprKind) (ty: IrType) : Expr = { Kind = kind; Type = ty; Place = Places.Current }
 
     /// `var` bound to `value` for `body`, of `body`'s type.
     let letIn (var: Var) (value: Expr) (body: Expr) : Expr = make (Let(var, value, body)) body.Type

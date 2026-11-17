@@ -120,7 +120,7 @@ let directArguments (bindTemp: Expr -> (Atom -> Expr) -> Expr) (count: int) (inp
             |> List.mapi (fun index ((slot, _), atom) -> slot, (string index, atom))
             |> List.sortBy fst
             |> List.map snd
-        bindTemp { Kind = MakeRecord fields; Type = input } (fun tuple -> k [ tuple ])
+        bindTemp (Expr.make (MakeRecord fields) input) (fun tuple -> k [ tuple ])
     | _ -> k atoms
 
 /// Which of the variables of `ids` `body` names anywhere.

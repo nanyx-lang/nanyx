@@ -63,6 +63,10 @@ outside them is `#error(#permissionDenied)`, whichever user runs it.
 [Deferred errors](../tour/error-handling#deferred-errors)). An error that can't be deferred, such as a syntax error,
 stops it before the program starts.
 
+A program that crashes, reaches a deferred error or stops at a runtime error, such as division by zero, writes why to
+standard error with the stack under it: each function it was in, with the file and line it had reached, innermost
+first (see [Crash stacks](../compiler-internals/crash-stacks)). It exits with 1.
+
 A package runs under the host its manifest's `host` names. A package without a `host` is a library, which can't be
 run. A script runs under the console host, `nanyx.console`, unless a `::host` directive names another.
 

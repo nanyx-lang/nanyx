@@ -43,9 +43,10 @@ and so on.
 def crash: string -> undefined
 ```
 
-Stops the program: writes `crash: ` and `message` on a line to standard error, and exits with
-code 1. It never returns, so its result is `undefined` and a call fits wherever a value of any
-type is expected: `if n > 0 then n else crash("n must be positive")` is an `int`.
+Stops the program: writes `crash: ` and `message` on a line to standard error, then the stack, a
+line for each function the program was in, innermost first, and exits with code 1. It never
+returns, so its result is `undefined` and a call fits wherever a value of any type is expected:
+`if n > 0 then n else crash("n must be positive")` is an `int`.
 
 ## `orCrash`
 

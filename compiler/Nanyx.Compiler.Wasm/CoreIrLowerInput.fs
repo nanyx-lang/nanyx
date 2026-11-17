@@ -49,9 +49,8 @@ type ContextArgument =
 
 /// What a call to `dbg` compiles to.
 type DbgBuild =
-    /// A debug build's: it prints the value after where it was called, `[main.nyx:12] `. The file is named by its path
-    /// from this directory, the package's root, with `/` between its parts; by its name alone without one (a script) or
-    /// when the file is outside it.
+    /// A debug build's: it prints the value after where it was called, `[main.nyx:12] `, with the file named from this
+    /// directory, the package's root (see `shownFile`).
     | PrintedFrom of root: string option
     /// A release build's: `dbg(x)` is `x`, which prints nothing.
     | Stripped

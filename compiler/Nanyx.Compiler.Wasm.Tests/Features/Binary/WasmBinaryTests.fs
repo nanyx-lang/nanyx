@@ -24,12 +24,14 @@ let private run (program: Nanyx.Runtime.Program) =
             match outcome with
             | Ok () -> "ok"
             // A trap's message has a backtrace whose offsets differ between the two; what trapped, and where, does not.
-            | Error(Nanyx.Runtime.Trapped message) ->
+            | Error(Nanyx.Runtime.Trapped(message, _)) ->
                 let lines = message.ReplaceLineEndings("\n").Split '\n'
                 let caused = lines |> Array.tryFind (fun line -> line.Contains "wasm trap") |> Option.defaultValue ""
                 let frames = lines |> Array.filter (fun line -> line.Contains "!") |> Array.map (fun line -> line.Substring(line.IndexOf '!'))
                 let at = String.concat ", " frames
                 $"trapped: {caused.Trim()} at {at}"
+            // Only the binary has a table of places to give the stack the files and lines of.
+            | Error(Nanyx.Runtime.ArithmeticError(fault, functionName, _)) -> $"ArithmeticError %A{(fault, functionName)}"
             | Error error -> $"%A{error}"
         Text.Encoding.UTF8.GetString(output.ToArray()), Text.Encoding.UTF8.GetString(error.ToArray()), ended
     finally

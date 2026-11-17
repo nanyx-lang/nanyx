@@ -46,8 +46,8 @@ module PackageModules =
 
     /// The module name each file read so far declares, and whether it exports it, by full path, with the time it was
     /// written and its length when it was read, so the language server, which builds the table on every change, reads
-    /// only files that changed.
-    let private declaredNames = ConcurrentDictionary<string, DateTime * int64 * (string * bool) option>()
+    /// only files that changed. None for a file that does not parse.
+    let private declaredNames = ConcurrentDictionary<string, DateTime * int64 * (string * bool) option option>()
 
     /// The name the file at `filePath`, whose text is `source`, declares, with the span of its declaration, whether
     /// it exports it, and the file as parsed; None if it does not parse, which compiling it reports.
@@ -56,20 +56,28 @@ module PackageModules =
         | Result.Ok (syntax, _, moduleBlocks) -> Some (FileImports.declaration moduleBlocks syntax, FileImports.exportsModule moduleBlocks syntax, syntax)
         | Result.Error _ -> None
 
-    /// The module name the file at `filePath` declares as it is on disk, and whether it exports it.
-    let internal declaredModule (filePath: string) =
+    /// The module name the file at `filePath` declares as it is on disk, and whether it exports it; None if it declares
+    /// none, and None in the outer option if it does not parse.
+    let private readDeclaration (filePath: string) =
         let info = FileInfo filePath
         match declaredNames.TryGetValue filePath with
         | true, (written, length, declared) when written = info.LastWriteTimeUtc && length = info.Length -> declared
         | _ ->
             let declared =
                 parse filePath (File.ReadAllText filePath)
-                |> Option.bind (fun (declaration, exported, _) -> declaration |> Option.map (fun (name, _) -> name, exported))
+                |> Option.map (fun (declaration, exported, _) -> declaration |> Option.map (fun (name, _) -> name, exported))
             declaredNames.[filePath] <- (info.LastWriteTimeUtc, info.Length, declared)
             declared
 
+    /// The module name the file at `filePath` declares as it is on disk, and whether it exports it.
+    let internal declaredModule (filePath: string) = readDeclaration filePath |> Option.flatten
+
     /// The module name the file at `filePath` declares as it is on disk.
     let private declaredName (filePath: string) = declaredModule filePath |> Option.map fst
+
+    /// Whether the file at `filePath`, as it is on disk, parses. One not on disk yet (an editor's new buffer) has
+    /// nothing to fail.
+    let private parses (filePath: string) = not (File.Exists filePath) || (readDeclaration filePath).IsSome
 
     /// `modules` with the modules `declared` gives its files, each module name and whether it is exported with the file
     /// that declares it, and the modules of the files from GitHub it depends on. A module split across files is public
@@ -194,18 +202,27 @@ module PackageModules =
             | _ ->
                 // A file named for the module that declares another name, or none, is most likely the one meant.
                 let lastSegment = moduleName.Substring(moduleName.LastIndexOf '.' + 1)
-                let namedFor =
-                    modules.Files
-                    |> List.filter (fun file -> Path.GetFileNameWithoutExtension file = lastSegment)
-                    |> List.map (fun file ->
-                        match declaredName file with
-                        | Some declared -> $"'{display modules file}' declares the module name '{declared}', not '{moduleName}'"
-                        | None -> $"'{display modules file}' declares no module name")
-                let hint =
-                    match namedFor with
-                    | [] -> NameSuggestions.question (NameSuggestions.closest modules.Modules.Keys moduleName)
-                    | found -> ", but " + Diagnostics.listed found
-                notFound $"The package '{modules.Package}' has no module '{moduleName}'{hint}"
+                let namedFor = modules.Files |> List.filter (fun file -> Path.GetFileNameWithoutExtension file = lastSegment)
+                match namedFor |> List.tryFind (parses >> not) with
+                // One that doesn't parse can't say what it declares: it is imported, and its parse error reported.
+                | Some file -> Ok file
+                | None ->
+                    let hint =
+                        match namedFor, modules.Files |> List.filter (parses >> not) with
+                        | [], [] -> NameSuggestions.question (NameSuggestions.closest modules.Modules.Keys moduleName)
+                        | [], unparsed ->
+                            let files = unparsed |> List.map (fun file -> $"'{display modules file}'")
+                            let parse = if files.Length = 1 then "doesn't parse" else "don't parse"
+                            $", though it may be declared by {Diagnostics.listed files}, which {parse}"
+                        | found, _ ->
+                            let declarations =
+                                found
+                                |> List.map (fun file ->
+                                    match declaredName file with
+                                    | Some declared -> $"'{display modules file}' declares the module name '{declared}', not '{moduleName}'"
+                                    | None -> $"'{display modules file}' declares no module name")
+                            ", but " + Diagnostics.listed declarations
+                    notFound $"The package '{modules.Package}' has no module '{moduleName}'{hint}"
 
     /// The file of the module `name`, by its name alone or after the package's name, among the modules of `modules`
     /// alone, for the import `item`: how a host's import, and the imports in a host's own files, are resolved (see

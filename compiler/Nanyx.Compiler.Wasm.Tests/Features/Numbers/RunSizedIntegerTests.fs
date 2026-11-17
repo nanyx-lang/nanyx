@@ -140,7 +140,7 @@ def main = {{
     let outcome = runSource (source.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("before\n", outcome.StandardOutput)
-    Assert.Equal($"Runtime error: {message}\n", outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Equal($"Runtime error: {message}\n", withoutStack outcome.StandardError)
 
 [<Fact>]
 let ``Run - sized integer arithmetic that comes close to not fitting does not stop the program`` () =

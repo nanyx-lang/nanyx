@@ -68,9 +68,14 @@ type WasmOptions =
       Release: bool
       /// The root of the package the module is in, which a debug build's `dbg` names its file from (see
       /// `CoreIrLowerInput.DbgBuild`); none for a script, whose `dbg` names its file alone.
-      SourceRoot: string option }
+      SourceRoot: string option
+      /// Mark the code with the places in the source it was made from (see `CoreIrEmit.placeMarker`), which `WasmBinary`
+      /// writes into the module's table of places, so a crash's stack names the file and line of each frame. Debug and
+      /// release builds both have it: the command line turns it on for every program it writes or runs. Off in
+      /// `Default`, so that the text a test reads is the code alone.
+      Places: bool }
 
-    static member Default = { CheckMemory = false; Inline = true; Release = false; SourceRoot = None }
+    static member Default = { CheckMemory = false; Inline = true; Release = false; SourceRoot = None; Places = false }
 
 /// The names a module compiled with `CheckMemory` exports.
 module CheckedExports =
@@ -835,7 +840,8 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
           IndirectCall = ignore
           Signature = (fun _ -> None)
           HostState = 0
-          CheckMemory = false }
+          CheckMemory = false
+          ShownFile = None }
     let lowered =
         let input: CoreIrLowerInput.LowerInput =
             { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
@@ -895,7 +901,9 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
                 |> Map.filter (fun _ info -> not info.IsContext)
                 |> Map.map (fun _ info -> TyNominal(TypeDefInfo.nominalId info, info.Parameters |> List.map TyVar, info.Underlying, info.IsPrivate))
               Dbg = if options.Release then CoreIrLowerInput.Stripped else CoreIrLowerInput.PrintedFrom options.SourceRoot }
-        CoreIrLowerModule.lowerModule input (emitFromCoreIr functionContextRequirements probeContext Set.empty >> ignore)
+        try CoreIrLowerModule.lowerModule input (emitFromCoreIr functionContextRequirements probeContext Set.empty >> ignore)
+        // What the passes after the lowering make has no place, even after a lowering that stopped part way.
+        finally CoreIr.Places.Current <- None
 
     // The first thing that cannot be compiled is reported where it is written.
     match lowered.Failures with
@@ -1126,7 +1134,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           IndirectCall = functionTable.IndirectSignatures.Add >> ignore
           Signature = fun name -> signatures |> Map.tryFind name
           HostState = hostStateAddress
-          CheckMemory = options.CheckMemory }
+          CheckMemory = options.CheckMemory
+          ShownFile = if options.Places then Some(CoreIr.shownFile options.SourceRoot) else None }
 
     let specialisations = lowered.Specialisations |> Map.values |> Seq.concat |> Seq.map (fun (func, _) -> func.Name) |> Set.ofSeq
 
