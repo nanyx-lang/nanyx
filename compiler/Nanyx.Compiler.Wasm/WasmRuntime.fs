@@ -1100,9 +1100,8 @@ let stringDataBaseOffset = 256
 /// when the program starts.
 let hostStateSize = 4096
 
-let dbgDataBaseOffset = 128
-
-let dbgStrNewlineOffset = dbgDataBaseOffset + 96  // the newline byte, at 224
+/// Where the newline byte `dbg` writes after its value lives, below the string literals.
+let dbgStrNewlineOffset = 224
 
 /// What the helpers that write a float or an `F32` as text call.
 let private floatTextDependencies =
@@ -1215,49 +1214,26 @@ let rec closeHelpers (acc: Set<string>) (pending: string list) =
             |> Option.defaultValue []
         closeHelpers (acc.Add name) (deps @ rest)
 
-// `$dbg_str` prints a string after "dbg: ", then a newline: what `dbg` prints (see `CoreIrLowerDbg`).
+// `$dbg_str` prints its second string after its first, where the `dbg` was called, then a newline: what `dbg` prints
+// (see `CoreIrLowerDbg`). Each is a write of its own, from the buffer described at address 0: WASI may write only the
+// first of several buffers given at once.
 let dbgFunctions =
-        [ "  (func $dbg_str (param $ptr i32)"
-          "    (local $len i32)"
-          "    local.get $ptr"
-          $"    i32.const {Header.infoBefore}"
-          "    i32.sub"
-          "    i32.load"
-          "    local.set $len"
-          "    i32.const 0"
-          $"    i32.const {dbgDataBaseOffset}"
-          "    i32.store"
-          "    i32.const 4"
-          "    i32.const 5"
-          "    i32.store"
-          "    i32.const 1"
-          "    i32.const 0"
-          "    i32.const 1"
-          "    i32.const 8"
-          "    call $fd_write"
-          "    drop"
-          "    i32.const 0"
-          "    local.get $ptr"
-          "    i32.store"
-          "    i32.const 4"
-          "    local.get $len"
-          "    i32.store"
-          "    i32.const 1"
-          "    i32.const 0"
-          "    i32.const 1"
-          "    i32.const 8"
-          "    call $fd_write"
-          "    drop"
-          "    i32.const 0"
-          $"    i32.const {dbgStrNewlineOffset}"
-          "    i32.store"
-          "    i32.const 4"
-          "    i32.const 1"
-          "    i32.store"
-          "    i32.const 1"
-          "    i32.const 0"
-          "    i32.const 1"
-          "    i32.const 8"
-          "    call $fd_write"
-          "    drop"
+        let write (pointer: string) (length: string) =
+            [ "    i32.const 0"
+              $"    {pointer}"
+              "    i32.store"
+              "    i32.const 4"
+              $"    {length}"
+              "    i32.store"
+              "    i32.const 1"
+              "    i32.const 0"
+              "    i32.const 1"
+              "    i32.const 8"
+              "    call $fd_write"
+              "    drop" ]
+        let lengthOf (string: string) = $"local.get {string}\n    i32.const {Header.infoBefore}\n    i32.sub\n    i32.load"
+        [ "  (func $dbg_str (param $location i32) (param $text i32)"
+          yield! write "local.get $location" (lengthOf "$location")
+          yield! write "local.get $text" (lengthOf "$text")
+          yield! write $"i32.const {dbgStrNewlineOffset}" "i32.const 1"
           "  )" ]

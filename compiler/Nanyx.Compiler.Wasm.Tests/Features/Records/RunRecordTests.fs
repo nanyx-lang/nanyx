@@ -177,7 +177,7 @@ def main = {
 main()
 """
     // The last line covers #31: a record built through a type constructor at the top level.
-    runSource source |> assertRan "dbg: 3\ndbg: 4\ndeep\ndbg: 0\ndbg: 2\n"
+    runSource source |> withoutDbgLocations |> assertRan "3\n4\ndeep\n0\n2\n"
 
 [<Fact>]
 let ``Run - fields of a record bound by a match pattern`` () =

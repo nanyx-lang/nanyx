@@ -340,21 +340,26 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // One the type checker added (the last arm of a match that does not handle every case) has no type.
             let ty = if input.ExprTypes.ContainsKey expr.Id then tyOf expr else IrError
             k (Expr.make (Crash [ message ]) ty)
-        | FunctionCall(name, _, args) when name = DbgSyntax.builtIn && not (scope.Vars.ContainsKey name) && not (definitions.ContainsKey name) ->
+        | FunctionCall(name, nameSpan, args) when name = DbgSyntax.builtIn && not (scope.Vars.ContainsKey name) && not (definitions.ContainsKey name) ->
             // Prints the value's text, which the printer of its type writes, and leaves the value.
             // The one argument, which may be a tuple, as the type checker has it.
             let value =
                 match args with
                 | [ single ] -> single
                 | _ -> cannot "`dbg` of more than one value"
-            let valueTy = unconstrainedAsUnit (substitute subst input.ExprTypes.[expr.Id])
-            let printer = printerTools.PrinterOf (CoreIrLowerDbg.Showing valueTy)
-            this.Complex scope value (fun lowered ->
-                let held = newVar (uniqueName "__dbg_value") Local lowered.Type
-                let text = newTemp IrString
-                let rest = k (Expr.make (Atom(AVar held)) held.Type)
-                let printed = Expr.make (Let(text, Expr.make (Call(printer, [ AVar held ])) IrString, Expr.make (Dbg(AVar text)) IrUnit)) IrUnit
-                Expr.make (Let(held, lowered, Expr.make (Do(printed, rest)) rest.Type)) rest.Type)
+            match input.Dbg with
+            | Stripped -> this.Complex scope value k
+            | PrintedFrom root ->
+                let valueTy = unconstrainedAsUnit (substitute subst input.ExprTypes.[expr.Id])
+                let printer = printerTools.PrinterOf (CoreIrLowerDbg.Showing valueTy)
+                // Where `dbg` is written, which for `\dbg` at the end of a pipeline is not where the call starts.
+                let location = AString (CoreIrLowerDbg.location root (nameSpan |> Option.defaultValue expr.Span))
+                this.Complex scope value (fun lowered ->
+                    let held = newVar (uniqueName "__dbg_value") Local lowered.Type
+                    let text = newTemp IrString
+                    let rest = k (Expr.make (Atom(AVar held)) held.Type)
+                    let printed = Expr.make (Let(text, Expr.make (Call(printer, [ AVar held ])) IrString, Expr.make (Dbg(location, AVar text)) IrUnit)) IrUnit
+                    Expr.make (Let(held, lowered, Expr.make (Do(printed, rest)) rest.Type)) rest.Type)
         | WithSyntax.Call(record, Kind (RecordExpr updates)) ->
             // `record with f = v, ...`: a copy of the record with those fields replaced.
             let ty = tyOf expr

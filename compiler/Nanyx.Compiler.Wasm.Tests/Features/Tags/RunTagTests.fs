@@ -106,7 +106,7 @@ show(#none)
 println("{#some(70000) == #some(70000)} {#some(70000) == #some(4464)} {#some(1) != #some(2)}")
 dbg(#some(-17))
 """
-    runSource source |> assertRan "#some(-17)\nseventy thousand\n#some(4464)\n#none\ntrue false true\ndbg: #some(-17)\n"
+    runSource source |> withoutDbgLocations |> assertRan "#some(-17)\nseventy thousand\n#some(4464)\n#none\ntrue false true\n#some(-17)\n"
 
 [<Fact>]
 let ``Run - a tag's string payload allocated past 64 KB of heap`` () =
