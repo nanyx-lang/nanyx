@@ -332,7 +332,7 @@ def list.default: list(a)
 
 ```nanyx fragment
 context Yield(a) = (
-  yield: a -> Seq(a)
+  yield: a -> seq(a)
 )
 ```
 

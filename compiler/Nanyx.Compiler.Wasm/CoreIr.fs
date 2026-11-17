@@ -159,6 +159,10 @@ and ExprKind =
     /// A call to a runtime helper (see `WasmRuntime.Helpers`): an intrinsic, or the helper an operator on strings, lists
     /// or tags needs. One that returns nothing (an intrinsic whose result is unit) leaves unit, as every value must.
     | CallRuntime of string * Atom list * returnsValue: bool
+    /// Copies the elements of the array in `source` into the array in `target` from the index `at`, each with a reference
+    /// of its own, as a collection literal's spread is (see `CoreIrLowerArrayLiterals`), and is unit. It is written out
+    /// where it is used, a loop over the two blocks in step.
+    | CopyArrayInto of target: Atom * at: Atom * source: Atom
     /// A call to a foreign function (see `ExternSyntax`): the module's import of it, with the atoms as its arguments,
     /// each a number of the value type it takes. One that returns nothing leaves unit.
     | CallImport of Extern * Atom list
@@ -573,6 +577,7 @@ module Expr =
         | SetField _
         | MakeList _
         | CallRuntime _
+        | CopyArrayInto _
         | CallImport _
         | MakeClosure _
         | CallClosure _
@@ -611,6 +616,7 @@ module Expr =
             | SetField _
             | MakeList _
             | CallRuntime _
+            | CopyArrayInto _
             | CallImport _
             | MakeClosure _
             | CallClosure _
@@ -720,6 +726,7 @@ module Print =
         | SetField(record, slot, value) -> $"{record.Name}[{slot}] := {atom value}"
         | MakeList items -> $"[{atoms items}]"
         | CallRuntime(name, args, _) -> $"{name}({atoms args})"
+        | CopyArrayInto(target, at, source) -> $"copyInto({atoms [ target; at; source ]})"
         | CallImport(declared, args) -> $"import {declared.Module}.{declared.Name}({atoms args})"
         | MakeClosure(name, _, captured) -> $"closure {name}({atoms captured})"
         | CallClosure(v, args, Borrowing) -> $"{v.Name}({atoms args})"
