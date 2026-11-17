@@ -22,11 +22,9 @@ type Installed = { Manifest: string; ToDownload: (string * string) option }
 module PackageDependencies =
     let private isShipped (name: string) = Directory.Exists(ShippedPackages.directoryOf name)
 
-    let private normalize (text: string) = text.Replace("\r\n", "\n").Replace("\r", "\n")
-
     /// The manifest at `manifestPath`, read as data, with its text, line breaks `\n`; or why it can't be.
     let private readData (manifestPath: string) : Result<string * DataField list, string> =
-        let text = normalize (File.ReadAllText manifestPath)
+        let text = Manifest.normalized (File.ReadAllText manifestPath)
         match DataValue.read manifestPath text with
         | Result.Ok { Data = DataRecord fields } -> Result.Ok(text, fields)
         | _ -> Result.Error $"'{manifestPath}' is not a manifest: run `nanyx check` on it to see why"
@@ -95,20 +93,16 @@ module PackageDependencies =
                                         elif PackageModules.samePath dependency.Manifest.Root (PackageStore.directoryOf store name (SemanticVersion.tryParse version).Value) then
                                             if wasCached |> List.exists (fun locked -> locked.Name = name) then "in the cache" else "downloaded"
                                         else
-                                            Path.GetRelativePath(root, dependency.Manifest.Root).Replace('\\', '/')
+                                            PackageModules.relativePath root dependency.Manifest.Root
                                     $"{name} {version} ({where})"))))
 
     /// The name of the package whose manifest is in `directory`, or why there is none.
     let private packageIn (directory: string) : Result<string, string> =
-        if not (Directory.Exists directory) then
-            Result.Error $"'{directory}' is not a directory"
-        else
-            match Directory.GetFiles(directory, "*" + Manifest.extension) |> Array.sort with
-            | [||] -> Result.Error $"'{directory}' holds no package, since it has no {Manifest.extension} manifest"
-            | manifests ->
-                match Manifest.read manifests[0] with
-                | Result.Ok manifest -> Result.Ok manifest.Name
-                | Result.Error errors -> Result.Error(errors |> List.map Manifest.describe |> String.concat "\n")
+        Manifest.manifestIn directory
+        |> Result.bind (fun path ->
+            match Manifest.read path with
+            | Result.Ok manifest -> Result.Ok manifest.Name
+            | Result.Error errors -> Result.Error(errors |> List.map Manifest.describe |> String.concat "\n"))
 
     /// `text` with `entry` added to the end of the manifest's `dependencies` (`fields` are its top level, read from
     /// `text`), laid out as the list is: on a line of its own when the last entry is, and after a comma when not. A

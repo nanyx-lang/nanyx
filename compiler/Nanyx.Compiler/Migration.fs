@@ -32,15 +32,10 @@ module Migration =
           Syntax: Module
           ModuleBlocks: (ModuleName * SourceSpan) list }
 
-    let private normalize (text: string) = text.Replace("\r\n", "\n").Replace("\r", "\n")
-
-    /// `path`, relative to `root`, with forward slashes, as a manifest writes it.
-    let private relative (root: string) (path: string) = Path.GetRelativePath(root, path).Replace('\\', '/')
-
     /// A directive as an error names it: its file, relative to `root`, its line and its text.
     let private located (root: string) (script: Script) (directive: Directive) =
         let text = script.Source.Substring(directive.Span.Start, directive.Span.End - directive.Span.Start)
-        $"{relative root script.Path}:{directive.Span.StartLine + 1}: {text}"
+        $"{PackageModules.relativePath root script.Path}:{directive.Span.StartLine + 1}: {text}"
 
     /// A value a directive sets, written as the manifest writes it.
     let private dataText (value: DataValue) : string =
@@ -282,14 +277,14 @@ module Migration =
     /// wrong. What a directive names that can't be had yet, a package to download or a directory that isn't there, is
     /// written to the manifest all the same, to be reported when the package is built.
     let private readScript (root: string) (path: string) : Result<Script, string list> =
-        let source = normalize (File.ReadAllText path)
+        let source = Manifest.normalized (File.ReadAllText path)
         let refused = [ DiagnosticCodes.InvalidDirective; DiagnosticCodes.OldFormDirective; DiagnosticCodes.LintWithoutLinter ] |> List.map _.Code
         let wrong = (Script.read path source).Diagnostics |> List.filter (fun problem -> List.contains problem.Code refused)
         match wrong, parseModuleFileWithNames path source with
         | [], Result.Ok (syntax, _, moduleBlocks) ->
             Result.Ok { Path = path; Source = source; Directives = Directives.read path source; Syntax = syntax; ModuleBlocks = moduleBlocks }
-        | [], Result.Error _ -> Result.Error [ $"'{relative root path}' doesn't parse: fix it, then migrate again" ]
-        | problems, _ -> Result.Error(problems |> List.map (fun problem -> $"{relative root path}:{(problem.Span |> Option.map _.StartLine |> Option.defaultValue 0) + 1}: {problem.Message}"))
+        | [], Result.Error _ -> Result.Error [ $"'{PackageModules.relativePath root path}' doesn't parse: fix it, then migrate again" ]
+        | problems, _ -> Result.Error(problems |> List.map (fun problem -> $"{PackageModules.relativePath root path}:{(problem.Span |> Option.map _.StartLine |> Option.defaultValue 0) + 1}: {problem.Message}"))
 
     /// The values of the entry script at `path` that need a context, so run in its entry point, and whether its last
     /// statement gives `()`, as checking it finds them. A script that doesn't check moves only its statements.
@@ -313,7 +308,7 @@ module Migration =
     let migrate (toolVersion: string) (target: string) (name: string option) : Result<Migration, string list> =
         scriptsIn target
         |> Result.bind (fun (root, paths) ->
-            let existing = Directory.GetFiles(root, "*" + Manifest.extension) |> Array.sort
+            let existing = Manifest.manifestsIn root
             let packageName = name |> Option.defaultValue (Path.GetFileName root)
             if existing.Length > 0 then
                 Result.Error [ $"'{root}' is already a package, with the manifest '{Path.GetFileName existing[0]}'" ]
@@ -331,7 +326,7 @@ module Migration =
                     let withStatements = scripts |> List.filter (fun script -> script.Syntax |> List.exists isStatement)
                     match withStatements with
                     | _ :: _ :: _ ->
-                        let names = withStatements |> List.map (fun script -> $"'{relative root script.Path}'") |> Diagnostics.listed
+                        let names = withStatements |> List.map (fun script -> $"'{PackageModules.relativePath root script.Path}'") |> Diagnostics.listed
                         Result.Error
                             [ $"The scripts {names} each have top-level statements, but a package runs from one `@entry`: migrate them one at a time, with `nanyx migrate <file>`, or make all but one of them modules first" ]
                     | entryScripts ->
@@ -342,7 +337,7 @@ module Migration =
                             let modules = scripts |> List.map (fun script -> script.Path, (if isEntry script then "main" else moduleNameOf script))
                             match modules |> List.groupBy snd |> List.filter (fun (_, files) -> files.Length > 1) with
                             | (moduleName, files) :: _ ->
-                                let names = files |> List.map (fun (path, _) -> $"'{relative root path}'") |> Diagnostics.listed
+                                let names = files |> List.map (fun (path, _) -> $"'{PackageModules.relativePath root path}'") |> Diagnostics.listed
                                 Result.Error [ $"The files {names} would each be the module '{moduleName}', but a package has one module of each name: rename all but one first" ]
                             | [] ->
                                 let exports = entryScript.IsNone
@@ -352,7 +347,7 @@ module Migration =
                                     |> List.map (fun script ->
                                         let entry = if isEntry script then Some (entryOf script) else None
                                         script.Path, rewrite exports moduleMap entry script)
-                                let sources = if paths.Length = 1 && File.Exists(Path.GetFullPath target) then [ relative root paths.Head ] else [ "**/*.nyx" ]
+                                let sources = if paths.Length = 1 && File.Exists(Path.GetFullPath target) then [ PackageModules.relativePath root paths.Head ] else [ "**/*.nyx" ]
                                 let downloads =
                                     settings
                                     |> List.choose (function

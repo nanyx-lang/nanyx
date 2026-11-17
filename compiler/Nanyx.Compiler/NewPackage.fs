@@ -40,7 +40,7 @@ def main = {
         elif File.Exists full then
             Result.Error $"'{full}' is a file, not a directory"
         elif Directory.Exists full && not (Seq.isEmpty (Directory.EnumerateFileSystemEntries full)) then
-            match Directory.GetFiles(full, "*" + Manifest.extension) |> Array.sort with
+            match Manifest.manifestsIn full with
             | [||] -> Result.Error $"'{full}' is not empty, and a new package is made in a new or empty directory: give another directory"
             | manifests -> Result.Error $"'{full}' is already a package, with the manifest '{Path.GetFileName manifests[0]}'"
         else

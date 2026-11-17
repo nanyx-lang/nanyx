@@ -47,7 +47,7 @@ module PackageArchive =
             let root = package.Manifest.Root
             let entries =
                 (package.Manifest.Path :: package.Sources
-                 |> List.map (fun file -> Path.GetRelativePath(root, file).Replace('\\', '/'), lazy File.ReadAllBytes file))
+                 |> List.map (fun file -> PackageModules.relativePath root file, lazy File.ReadAllBytes file))
                 @ (extra |> List.map (fun (name, bytes) -> name, lazy bytes))
                 |> List.sortWith (fun (a, _) (b, _) -> String.CompareOrdinal(a, b))
             use stream = new MemoryStream()

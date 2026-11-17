@@ -55,16 +55,6 @@ module Package =
     /// The packages a build has read so far, by name, each with its manifest's path: a build has one of each.
     type private Reached = Collections.Generic.Dictionary<string, string>
 
-    /// The manifest of the package in `directory`, the one `.nyxp` file there, or what is wrong.
-    let private manifestIn (directory: string) : Result<string, string> =
-        if not (Directory.Exists directory) then
-            Result.Error $"'{directory}' is not a directory"
-        else
-            match Directory.GetFiles(directory, "*" + Manifest.extension) |> Array.sort with
-            | [| manifest |] -> Result.Ok(Path.GetFullPath manifest)
-            | [||] -> Result.Error $"'{directory}' has no {Manifest.extension} manifest"
-            | several -> Result.Error $"""'{directory}' has more than one {Manifest.extension} manifest: {several |> Array.map (Path.GetFileName >> sprintf "'%s'") |> List.ofArray |> Diagnostics.listed}"""
-
     /// What is wrong with a package of a build: a diagnostic at the place in a manifest it is about, or one about the
     /// package as a whole, with its code.
     type private Problem =
@@ -206,7 +196,7 @@ module Package =
         | Some entry ->
             let error message = Result.Error [ AtManifest(Diagnostics.at DiagnosticCodes.InvalidManifestValue entry.Span message) ]
             let directory = entry.Path |> Option.defaultWith (fun () -> ShippedPackages.directoryOf entry.Package)
-            match manifestIn directory with
+            match Manifest.manifestIn directory with
             | Result.Error _ when entry.Path.IsNone -> error $"The compiler ships no package '{entry.Package}'"
             | Result.Error message -> error $"The host '{entry.Package}' can't be read: {message}"
             | Result.Ok path ->
@@ -239,7 +229,7 @@ module Package =
             | AtPath directory -> Result.Ok directory
             | Shipped -> Result.Ok(ShippedPackages.directoryOf dependency.Name)
         let read (dependency: Dependency) (directory: string) =
-            match manifestIn directory with
+            match Manifest.manifestIn directory with
             | Result.Error message -> error DiagnosticCodes.InvalidManifestValue dependency.SourceSpan $"The dependency '{dependency.Name}' can't be read: {message}"
             | Result.Ok path ->
                 match Manifest.read path with
@@ -335,7 +325,7 @@ module Package =
         let full = Path.GetFullPath(name, directory)
         let entry =
             if Directory.Exists full then
-                let packageName = match manifestIn full with Result.Ok path -> Path.GetFileNameWithoutExtension path | Result.Error _ -> name
+                let packageName = match Manifest.manifestIn full with Result.Ok path -> Path.GetFileNameWithoutExtension path | Result.Error _ -> name
                 { Package = packageName; Path = Some full; Span = SourceSpan.none; Settings = [] }
             else
                 { Package = name; Path = None; Span = SourceSpan.none; Settings = [] }

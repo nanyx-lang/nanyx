@@ -113,10 +113,26 @@ module Manifest =
           "hint", Some Severity.Hint
           "off", None ]
 
+    /// `text` with its line breaks `\n`, as a manifest or a script is read.
+    let internal normalized (text: string) = text.Replace("\r\n", "\n").Replace("\r", "\n")
+
+    /// The manifests in `directory`, in order: a package's directory has one.
+    let internal manifestsIn (directory: string) = Directory.GetFiles(directory, "*" + extension) |> Array.sort
+
+    /// The manifest of the package in `directory`, the one `.nyxp` file there, by its full path, or what is wrong.
+    let internal manifestIn (directory: string) : Result<string, string> =
+        if not (Directory.Exists directory) then
+            Result.Error $"'{directory}' is not a directory"
+        else
+            match manifestsIn directory with
+            | [| manifest |] -> Result.Ok(Path.GetFullPath manifest)
+            | [||] -> Result.Error $"'{directory}' has no {extension} manifest"
+            | several -> Result.Error $"""'{directory}' has more than one {extension} manifest: {several |> Array.map (Path.GetFileName >> sprintf "'%s'") |> List.ofArray |> Diagnostics.listed}"""
+
     /// The manifest in `directory` or the nearest directory above it that has one, or an error if that directory
     /// has more than one.
     let rec tryFind (directory: string) : Result<string option, string> =
-        match Directory.GetFiles(directory, "*" + extension) |> Array.sort with
+        match manifestsIn directory with
         | [| manifest |] -> Result.Ok(Some manifest)
         | [||] ->
             match Path.GetDirectoryName directory with
@@ -644,7 +660,7 @@ module Manifest =
     /// A reference with no commit yet is written with no `rev`, which the build's fix pins.
     let entryText (toolVersion: string) (root: string) (name: string) (source: DependencySource) : string =
         match source with
-        | AtPath directory -> $"(package = {quotedString name}, path = {quotedString (Path.GetRelativePath(root, directory).Replace('\\', '/'))})"
+        | AtPath directory -> $"(package = {quotedString name}, path = {quotedString (PackageModules.relativePath root directory)})"
         | Shipped -> $"(package = {quotedString name}, version = {quotedString toolVersion})"
         | FromIndex requirement -> $"(package = {quotedString name}, version = {quotedString (string requirement)})"
         | OnGitHub reference ->
