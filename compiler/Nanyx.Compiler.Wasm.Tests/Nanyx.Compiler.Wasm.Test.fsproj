@@ -93,6 +93,7 @@
     <Compile Include="Features\Hosts\RunHttpHostTests.fs" />
     <Compile Include="Features\Hosts\RunHostMemoryTests.fs" />
     <Compile Include="Features\Hosts\ChooseHostTests.fs" />
+    <Compile Include="Features\Hosts\RunPartialHostTests.fs" />
     <Compile Include="Features\Hosts\RunScriptTests.fs" />
     <Compile Include="Features\Json\RunJsonTests.fs" />
     <Compile Include="Features\Json\RunJsonDecodeTests.fs" />

@@ -25,29 +25,13 @@ let declaration (source: string) (result: CompileResult) : (string * SourceSpan)
             | _ -> None)
     | _ -> None
 
-/// Every import in `syntax`: at the top level, in module blocks and in blocks, and every re-export.
-let private importsIn (syntax: Module) : ImportItem list =
-    let rec ofItem (item: TopLevelItem) =
-        match item.Kind with
-        | Import items -> items
-        | ReExport item -> [ item ]
-        | ModuleBlock(_, items) -> items |> List.collect ofItem
-        | _ -> []
-    let inBlocks =
-        Hover.allExpressions syntax
-        |> List.collect (fun expr ->
-            match expr.Kind with
-            | Block statements -> statements |> List.collect (fun statement -> match statement.Kind with ImportStatement items -> items | _ -> [])
-            | _ -> [])
-    (syntax |> List.collect ofItem) @ inBlocks
-
 /// The module of the package `package` that an import in the compiled root module `result`, whose text is `source`,
 /// names at `offset`, and where its name is written there: `shapes` in `import shapes` or `import app/shapes`, not an
 /// import of another package's module.
 let importAt (package: string) (source: string) (result: CompileResult) (offset: int) : (string * SourceSpan) option =
     match result.Syntax with
     | Some syntax ->
-        importsIn syntax
+        SyntaxTree.allImports syntax
         |> List.tryPick (fun item ->
             match item.Source with
             | ModuleImport name when not (SourceSpan.isNone item.Span) ->
@@ -79,7 +63,7 @@ let imports
     : TextEdit list =
     match result.Syntax with
     | Some syntax ->
-        importsIn syntax
+        SyntaxTree.allImports syntax
         |> List.filter (fun item -> not (SourceSpan.isNone item.Span))
         |> List.choose (fun item ->
             let text = SourceSpan.textIn source item.Span

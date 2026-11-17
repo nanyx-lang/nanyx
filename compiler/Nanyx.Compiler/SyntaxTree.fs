@@ -132,41 +132,84 @@ module SyntaxTree =
         | ReExport _
         | Attribute _ -> []
 
-    /// The types written in a definition: its annotation, or a type definition's parameters' constraints and body.
-    let private definitionTypes (definition: Definition) : TypeExpr list =
-        match definition with
-        | ValueDef(_, _, typeOpt, _) -> Option.toList typeOpt
-        | TypeDef(_, _, parameters, body) -> (parameters |> List.choose snd) @ [ body ]
+    /// What a type written in a module is written as.
+    type WrittenAs =
+        /// The annotation of a def, top-level or local, named `name`, which is written at `definition`.
+        | DefAnnotation of name: Identifier * definition: SourceSpan
+        /// The body of the type definition, top-level or local, named `name`.
+        | TypeBody of name: Identifier
+        /// The constraint on a type definition's parameter.
+        | ParameterConstraint
+        /// A lambda parameter's annotation.
+        | LambdaParameter
+        /// A context an expression names: in a list of contexts it brings into scope, or the one whose member it reads.
+        | ContextNamed
 
-    /// The types written directly in `expr` (not in the expressions inside it): its lambda's parameters' annotations,
-    /// its block's defs' annotations and type definitions, the context it names.
-    let expressionTypes (expr: Expression) : TypeExpr list =
+    /// A type written in a module, as `writtenTypes` finds it: what it is written as, and the top-level item it is
+    /// written in, an item of a module block for one in a block.
+    type WrittenType =
+        { Type: TypeExpr
+          As: WrittenAs
+          Item: TopLevelItem }
+
+    /// The types a type definition named `name` writes: its parameters' constraints, then its body.
+    let private typeDefinitionTypes (name: Identifier) (parameters: (string * TypeExpr option) list) (body: TypeExpr) =
+        (parameters |> List.choose snd |> List.map (fun constraint' -> constraint', ParameterConstraint)) @ [ body, TypeBody name ]
+
+    /// The types written in `item`'s definition, at `span`: its annotation, or a type definition's parameters'
+    /// constraints and body.
+    let private definitionWrittenTypes (span: SourceSpan) (definition: Definition) =
+        match definition with
+        | ValueDef(_, name, typeOpt, _) -> typeOpt |> Option.map (fun annotation -> annotation, DefAnnotation(name, span)) |> Option.toList
+        | TypeDef(name, _, parameters, body) -> typeDefinitionTypes name parameters body
+
+    /// The types written directly in `expr`, as `expressionTypes` gives them, with what each is written as.
+    let private expressionWrittenTypes (expr: Expression) : (TypeExpr * WrittenAs) list =
         match expr.Kind with
-        | Lambda(parameters, _, _) -> parameters |> List.choose snd
-        | ContextNames(names, _) -> names |> List.choose (fun (_, context, _) -> context)
+        | Lambda(parameters, _, _) -> parameters |> List.choose snd |> List.map (fun annotation -> annotation, LambdaParameter)
+        | ContextNames(names, _) -> names |> List.choose (fun (_, context, _) -> context) |> List.map (fun context -> context, ContextNamed)
         | Block statements ->
             statements
             |> List.collect (fun statement ->
                 match statement.Kind with
-                | DefStatement(_, _, typeOpt, _) -> Option.toList typeOpt
-                | TypeDefStatement(_, _, parameters, body) -> (parameters |> List.choose snd) @ [ body ]
+                | DefStatement(_, name, typeOpt, _) -> typeOpt |> Option.map (fun annotation -> annotation, DefAnnotation(name, statement.Span)) |> Option.toList
+                | TypeDefStatement(name, _, parameters, body) -> typeDefinitionTypes name parameters body
                 | UseStatement _
                 | ExprStatement _
                 | ImportStatement _
                 | AttributeStatement _ -> [])
         | ContextMemberAccess(context, _)
-        | ContextMemberCall(context, _, _) -> [ context ]
+        | ContextMemberCall(context, _, _) -> [ context, ContextNamed ]
         | _ -> []
+
+    /// The types written directly in `expr` (not in the expressions inside it): its lambda's parameters' annotations,
+    /// its block's defs' annotations and type definitions, the context it names.
+    let expressionTypes (expr: Expression) : TypeExpr list = expressionWrittenTypes expr |> List.map fst
 
     let rec topLevelTypes (item: TopLevelItem) : TypeExpr list =
         match item.Kind with
-        | Def definition -> definitionTypes definition
+        | Def definition -> definitionWrittenTypes item.Span definition |> List.map fst
         | ModuleBlock(_, items) -> items |> List.collect topLevelTypes
         | Expr _
         | ModuleDecl _
         | Import _
         | ReExport _
         | Attribute _ -> []
+
+    /// Every type written in `module'`, item by item, in module blocks too, each with what it is written as: an item's
+    /// own, then those written in the expressions of its value, in the order `expressionsWithin` gives them.
+    let rec writtenTypes (module': Module) : WrittenType list =
+        module'
+        |> List.collect (fun item ->
+            match item.Kind with
+            | ModuleBlock(_, items) -> writtenTypes items
+            | _ ->
+                let own =
+                    match item.Kind with
+                    | Def definition -> definitionWrittenTypes item.Span definition
+                    | _ -> []
+                let inValue = ofItem item |> List.collect expressionsWithin |> List.collect expressionWrittenTypes
+                (own @ inValue) |> List.map (fun (written, writtenAs) -> { Type = written; As = writtenAs; Item = item }))
 
     /// The names of the values `module'` exports: each `export def`.
     let exportedValueNames (module': Module) : Set<Identifier> =
@@ -340,3 +383,20 @@ module SyntaxTree =
             | Kind (ReExport item) -> Some [ item ]
             | _ -> None)
         |> List.collect id
+
+    /// Every import in `module'`, a re-export's among them: at the top level and in module blocks, in the order they are
+    /// written, then those in blocks.
+    let allImports (module': Module) : ImportItem list =
+        let rec ofTopLevel (item: TopLevelItem) =
+            match item.Kind with
+            | ModuleBlock(_, items) -> items |> List.collect ofTopLevel
+            | _ -> collectImports [ item ]
+        let inBlocks =
+            module'
+            |> List.collect ofItem
+            |> List.collect expressionsWithin
+            |> List.collect (fun expr ->
+                match expr.Kind with
+                | Block statements -> statements |> List.collect (fun statement -> match statement.Kind with ImportStatement items -> items | _ -> [])
+                | _ -> [])
+        (module' |> List.collect ofTopLevel) @ inBlocks

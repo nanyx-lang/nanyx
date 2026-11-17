@@ -9,7 +9,7 @@ open TranspilerWasmTestHelpers
 /// A host whose start calls `main`, with `nanyx/host.memory` imported, `writeStdout` (see `hostWriteStdout`), and
 /// `definitions` before it.
 let private host (definitions: string) =
-    $"""module console.host
+    $"""module test.host
 
 import (
   nanyx/host.memory

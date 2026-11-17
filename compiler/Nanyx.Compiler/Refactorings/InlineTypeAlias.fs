@@ -51,14 +51,11 @@ let private isFunction (typeExpr: TypeExpr) =
     | TypeWithContext _ -> true
     | _ -> false
 
-/// Each type variable in `typeExpr`, with whether a function written in its place needs brackets: everywhere but the
-/// result of a function and the type after a list of contexts.
-let rec private variablesIn (takesFunction: bool) (typeExpr: TypeExpr) =
-    match typeExpr.Kind with
-    | TypeVar name -> [ typeExpr, name, not takesFunction ]
-    | TypeFunc(input, result) -> variablesIn false input @ variablesIn true result
-    | TypeWithContext(contexts, inner) -> (contexts |> List.collect (variablesIn false)) @ variablesIn takesFunction inner
-    | _ -> TypeExpr.children typeExpr |> List.collect (variablesIn false)
+/// Each type variable in `typeExpr`, with whether a function written in its place needs brackets (see
+/// `TypeExpr.withBracketing`).
+let private variablesIn (takesFunction: bool) (typeExpr: TypeExpr) =
+    TypeExpr.withBracketing takesFunction typeExpr
+    |> List.choose (fun (part, needsBrackets) -> match part.Kind with TypeVar name -> Some (part, name, needsBrackets) | _ -> None)
 
 /// The text of `alias`'s body with its parameters replaced by `arguments`, as written in `source`, in brackets if it is
 /// a function.

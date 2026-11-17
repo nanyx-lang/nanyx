@@ -994,15 +994,26 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
         | None -> Ok state
         |> Result.bind (fun current -> checkContextUse (Some expr.Id) env current (canonicalName env state name) calleeSpan)
     match contextCheck with
-    | Error err -> Error err
+    // A call missing a context gives back what its callee's type says (see `FailedCalls`). It is not checked on, as the
+    // lambda around it would then use the context too.
+    | Error errors ->
+        match TypeEnv.tryFind name env |> Option.map (fun scheme -> instantiate (recordReference expr scheme state) scheme) with
+        | Some (funcTy, next) ->
+            match Unifier.unalias funcTy with
+            | TyFunc(input, output, _) -> Ok (FailedCalls.result expr input output errors next)
+            | _ -> Error errors
+        | None -> Error errors
     | Ok state ->
         // What the callee requires is used where the call runs, by the lambda around it if any (see `LambdaContexts`).
         let state =
             let written = contextRequirementsOf env state name |> Option.defaultValue []
             let ofMember = LambdaContexts.contextOfMember env state name |> Option.map (fun ctx -> TyApply(ctx, [])) |> Option.toList
             state |> LambdaContexts.recordWritten env written |> LambdaContexts.recordUnsupplied env ofMember
+        // A callee a module block keeps from here is checked on as if it were reached (see `FailedCalls`).
+        let reachErrors = TypeEnv.tryFind name env |> Option.map (fun scheme -> referenceErrors name expr scheme state) |> Option.defaultValue []
+        let state = if FailedCalls.calleeKnown reachErrors && not reachErrors.IsEmpty then FailedCalls.failed expr reachErrors state else state
         match TypeEnv.tryFind name env with
-        | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
+        | Some _ when not (FailedCalls.calleeKnown reachErrors) -> Error reachErrors
         | Some scheme when (lookupOf state scheme.Type).IsSome ->
             inferLookup env state expr (lookupOf state scheme.Type).Value (Expression.from expr (IdentifierExpr name)) spanOpt args
         | Some scheme ->
@@ -1119,9 +1130,12 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                         match Unifier.unalias (resolveSoFar current funcTy) with
                         | TyFunc(input, _, _) -> NamedArguments.check current expr name input args typedArgs
                         | _ -> None
-                    match positionalForNamed with
-                    | Some diagnostic -> Error [ diagnostic ]
-                    | None ->
+                    match positionalForNamed, Unifier.unalias funcTy with
+                    // What checking the arguments against the callee found is dropped, as it would only report this
+                    // error again.
+                    | Some diagnostic, TyFunc(input, output, _) -> Ok (FailedCalls.result expr input output [ diagnostic ] state)
+                    | Some diagnostic, _ -> Error [ diagnostic ]
+                    | None, _ ->
                     let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
                     let current = WorkflowRests.noteCall name argTys current
                     // A function value requires the contexts its type says where it is called. One whose type is
