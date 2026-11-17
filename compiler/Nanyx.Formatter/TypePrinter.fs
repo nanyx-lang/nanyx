@@ -117,6 +117,9 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
             cat [ text n; text " :: "; typeExpr baseType; text " where "; expression predicate ]
         | TypeWhere(baseType, predicate) -> cat [ typeExpr baseType; text " where "; expression predicate ]
         | TypeOf value -> cat [ text "typeof "; expression value ]
+        | TypeKeyword -> text "type"
+        | TypeNamedArgument(n, value) -> cat [ text n; text " = "; unionType value ]
+        | TypeAssociated(context, n) -> cat [ atomType context; text ("." + n) ]
         | TypeFunc _
         | TypeUnion _
         | TypeIntersection _

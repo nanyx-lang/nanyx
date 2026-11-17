@@ -208,5 +208,25 @@ How it is built:
 This is what Rust does for generic functions, as against `dyn` trait objects, and what GHC's specialisation does for
 type class dictionaries.
 
+## Associated types
+
+A context's [associated types](../advanced/contexts#associated-types) are its last parameters, which a signature
+doesn't write. `AssociatedTypes.fs` writes the module that way before inference: `context Iter(c) = (elem: type, ...)`
+declares `Iter(c, elem)` (`TypeDefModifier.AssociatedTypes`, `TypeDefInfo.AssociatedTypes`), `[Iter(c)]` in a
+signature is `[Iter(c, elem)]` over a type variable of the signature named `elem` (or `Iter(c).elem` where another
+context in scope has one of that name), `Iter(c, elem = string)` is `Iter(c, string)`, and a context written as a type,
+as a `use Iter(Bag)(...)` writes it, is given a `_` for each. The type checker then needs little that is new: an
+instance is chosen by the arguments but its associated types, and fixes those (`ContextInstances.nearestOf`); one built
+from attached definitions fixes them by its members' types, as it settled `FromString(int, e)`'s failure before, or by
+an attached alias, `type Bag.elem = int`, and leaving one unfixed or fixing it two ways is an error.
+
+A function's type need not write its associated types, as `elem` in `countAll: [Iter(c)] c -> int`, though its body has
+values of them, whose layout depends on what they are. So the type checker records what each one is at each call, by
+the name the callee's signature gives it (`TypedModule.AssociatedArguments`), and keeps those names on the variables
+when the constraints are solved (`InferState.AssociatedVariables`). The backend binds the callee's variables of those
+names to them where it specialises it (`CoreIrLower.withAssociatedArguments`), so `countAll` at a `Bag` of ints reads
+the `int` in `#some(elem, c)`. A context member's type that names an associated type the function's type doesn't fix
+is boxed, as a member's own type variables are (`coreIrContextParameters` in `CodeGen.fs`).
+
 After specialising, the [inliner](./inlining) folds small functions such as `println` into their callers, and makes
 the members of a `use` it brings into the same function as their calls known.

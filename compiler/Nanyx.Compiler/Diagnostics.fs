@@ -185,6 +185,11 @@ module DiagnosticCodes =
     let PatternRequiresContexts = code 262 "Custom pattern that requires a context" Severity.Error
     let NoMatchOutsidePattern = code 263 "`_` as a value outside a pattern's body" Severity.Error
     let PatternArguments = code 264 "Custom pattern given arguments wrongly" Severity.Error
+    let InvalidAssociatedType = code 265 "Associated type declared wrongly" Severity.Error
+    let AmbiguousAssociatedType = code 266 "Associated type named by more than one context" Severity.Error
+    let UnknownAssociatedType = code 267 "Associated type the context does not have" Severity.Error
+    let UnfixedAssociatedType = code 268 "Instance that leaves an associated type unfixed" Severity.Error
+    let AssociatedTypeFixedTwice = code 269 "Instance that fixes an associated type two ways" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -213,6 +218,7 @@ module DiagnosticCodes =
           InvalidExtern; ExternWithoutHostRuntime; ConflictingExterns; PrivateContextMember; ContextNameAsValue; UnknownContextName
           ContextAsType; InstanceOutsideUse; UseOfNonInstance; OwnInstanceReplaced; OperatorRequiredByMember; InvalidTypeScope; ContextsOnValueType; AttachedDefinitionInScope; OperatorArity
           UndeclaredTypeScope; NoFromArray; InvalidCollectionSpread; UnionWithTwoRests; ProtectedShape; PatternInsidePattern; PatternRequiresContexts; NoMatchOutsidePattern; PatternArguments
+          InvalidAssociatedType; AmbiguousAssociatedType; UnknownAssociatedType; UnfixedAssociatedType; AssociatedTypeFixedTwice
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

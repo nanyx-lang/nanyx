@@ -74,7 +74,7 @@ let internal read
         |> Result.bind (fun () -> operatorArity)
         |> Result.bind (fun () -> contextsExist)
         |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt)
-        |> Result.bind (fun () -> ensureContextTypesDetermined name typeOpt)
+        |> Result.bind (fun () -> ensureContextTypesDetermined state name typeOpt)
         |> Result.bind (fun () -> MemoryCells.checkCellTypes state name typeOpt)
     let typeOfsInferred =
         match typeOpt with

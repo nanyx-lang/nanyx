@@ -389,6 +389,7 @@ let private lowerInput (typed: TypedModule) : CoreIrLowerInput.LowerInput =
       Externs = Map.empty
       ExprTypes = typed.ExprTypes
       CalleeTypes = typed.CalleeTypes
+      AssociatedArguments = Map.empty
       DefinitionTypes = typed.Types
       ContextParameters = Map.empty
       ContextArguments = fun _ _ _ _ -> Ok []

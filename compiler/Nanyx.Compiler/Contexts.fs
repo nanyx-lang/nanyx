@@ -340,8 +340,9 @@ let internal ensureContextsExist (state: InferState) (name: Identifier) (span: S
 
 /// Whether each type variable a context in `typeOpt`, the annotation of `name`, is applied to is written in its type
 /// too, as `a` in `[ToString(a)] a -> ()`. No call can say what a variable written only in the contexts stands for, so
-/// none could find the context's instance. An annotation of only contexts is not checked: its type is inferred.
-let internal ensureContextTypesDetermined (name: Identifier) (typeOpt: TypeExpr option) : Result<unit, Diagnostic list> =
+/// none could find the context's instance. An annotation of only contexts is not checked: its type is inferred. A
+/// context's associated types are not checked: its instance fixes them (see `AssociatedTypes`).
+let internal ensureContextTypesDetermined (state: InferState) (name: Identifier) (typeOpt: TypeExpr option) : Result<unit, Diagnostic list> =
     match typeOpt with
     | Some (Kind (TypeWithContext(contexts, inner))) ->
         let written = annotationVarNames inner |> Set.ofList
@@ -353,6 +354,8 @@ let internal ensureContextTypesDetermined (name: Identifier) (typeOpt: TypeExpr 
             |> List.collect (fun ctx ->
                 match ctx.Kind with
                 | TypeApply(ctxName, args) ->
+                    let associated = tryFindTypeDef ctxName state |> Option.map _.AssociatedTypes.Length |> Option.defaultValue 0
+                    let args = List.truncate (args.Length - associated) args
                     args
                     |> List.collect annotationVarNames
                     |> List.distinct

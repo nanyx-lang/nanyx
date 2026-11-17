@@ -170,10 +170,17 @@ let typeDefCore: Parser<Definition, ParseState> =
         let kind = followedBy (attempt ((pstring "protected" <|> pstring "private") .>> keywordEnd))
         opt (attempt (contexts .>> ws .>> kind)) |>> Option.map InScopeOf
 
+    // `Bag.elem`: an associated type attached to the type it is for, as a definition is (see `AssociatedTypes`).
+    let typeDefName =
+        pipe2 typeNameIdentifier (opt (attempt (pchar '.' >>. identifierNoWs))) (fun name memberOpt ->
+            match memberOpt with
+            | Some memberName -> $"{name}.{memberName}"
+            | None -> name)
+
     let typeDefWithModifiers defStart =
         pipe5
             typeModifiers
-            (pstring "type" >>. ws >>. (getPosition .>>. typeNameIdentifier))
+            (pstring "type" >>. ws >>. (getPosition .>>. typeDefName))
             (opt (attempt (wsInline >>. typeParams)))
             (wsInline >>. pstring "=" >>. ws >>. (inScopeOf .>>. kindModifier))
             typeExprWithWhere
@@ -666,7 +673,14 @@ let workflowKeywordExpr =
 // `UseInstanceSyntax`). `use C(T) = expr`, an older way to load an instance, fails at the context's name, saying what to
 // write instead.
 let useValue =
-    let typeArgs = between (pstring "(") (pstring ")") (sepBy1 (ws >>. typeExpr) (pstring "," .>> ws))
+    // An associated type fixed by name, `use Sized(Bag, elem = int)(...)`, as in a signature's contexts.
+    let namedArgument =
+        spannedType (
+            pipe2
+                (identifierNoWs .>> wsInline .>> pstring "=" .>> notFollowedBy (anyOf "=>") .>> ws)
+                typeExpr
+                (fun name value -> TypeNamedArgument(name, value)))
+    let typeArgs = between (pstring "(") (pstring ")") (sepBy1 (ws >>. (attempt namedArgument <|> typeExpr)) (pstring "," .>> ws))
     let instanceHead = withSkippedString (fun head _ -> head) (identifierNoWs .>> opt typeArgs)
     let oldInstance =
         getPosition .>>. lookAhead (instanceHead .>> ws .>> pstring "=" .>> notFollowedBy (anyOf "=>"))

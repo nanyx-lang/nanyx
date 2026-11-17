@@ -1,0 +1,293 @@
+module Nanyx.Compiler.Tests.Features.AssociatedTypes
+
+open Xunit
+open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
+
+// Associated types: a context's member of kind `type`, which a signature names, a constraint fixes by name, and an
+// instance's members fix (see `AssociatedTypes`).
+
+let private iter =
+    """context Iter(c) = (elem: type, next: c -> #some(elem, c) | #done)
+
+type Bag = protected (items: list(int))
+
+def Bag.next: Bag -> #some(int, Bag) | #done = { bag ->
+  match bag.items
+    | [] -> #done
+    | [first, ...rest] -> #some(first, Bag(items = rest))
+}
+"""
+
+let private withIter (source: string) = normalized (iter + source)
+
+[<Fact>]
+let ``A context's associated type is its last parameter, which its members name`` () =
+    let typed = compileClean (withIter "")
+    let info = typed.TypeDefs |> Map.find "Iter"
+    Assert.Equal<string list>([ "elem" ], info.AssociatedTypes)
+    Assert.Equal<string option list>([ Some "c"; Some "elem" ], info.Parameters |> List.map _.Name)
+    match Unifier.unalias info.Underlying with
+    | TyRecord(members, _) -> Assert.Equal<string list>([ "next" ], members.Keys |> List.ofSeq)
+    | other -> failwith $"Expected the context's members, got %A{other}"
+
+[<Fact>]
+let ``A signature names an associated type bare, and a call's instance fixes it`` () =
+    let source =
+        withIter
+            """
+def headOr: [Iter(c)] (c, elem) -> elem = { items, fallback ->
+  match next(items)
+    | #some(value, _) -> value
+    | #done -> fallback
+}
+
+def first = headOr(Bag(items = [1]), 0)
+"""
+    let typed = compileClean source
+    Assert.Equal("int", Unifier.tyToString typed.Types.["first"])
+
+[<Fact>]
+let ``The instance fixes an associated type the call's arguments don't`` () =
+    let source =
+        withIter
+            """
+def firstOf: [Iter(c)] c -> #some(elem) | #none = { items ->
+  match next(items)
+    | #some(value, _) -> #some(value)
+    | #done -> #none
+}
+
+def first = firstOf(Bag(items = [1]))
+"""
+    let typed = compileClean source
+    Assert.Equal("#some(int) | #none", Unifier.tyToString typed.Types.["first"])
+
+[<Fact>]
+let ``Iter(c).elem names the associated type of that context`` () =
+    let source =
+        withIter
+            """
+def firstPair: [Iter(c), Iter(d)] (c, d) -> #some((Iter(c).elem, Iter(d).elem)) | #none = { xs, ys ->
+  match Iter(c).next(xs), Iter(d).next(ys)
+    | #some(x, _), #some(y, _) -> #some((x, y))
+    | _, _ -> #none
+}
+
+def pair = firstPair(Bag(items = [1]), Bag(items = [2]))
+"""
+    let typed = compileClean source
+    Assert.Equal("#some(int, int) | #none", Unifier.tyToString typed.Types.["pair"])
+
+[<Fact>]
+let ``A constraint fixes an associated type by name`` () =
+    let source =
+        withIter
+            """
+def joinAll: [Iter(c, elem = string)] c -> string = { items ->
+  match next(items)
+    | #some(item, rest) -> item ++ joinAll(rest)
+    | #done -> ""
+}
+"""
+    compileClean source |> ignore
+
+[<Fact>]
+let ``A call whose instance fixes the associated type otherwise than the constraint is an error`` () =
+    let source =
+        withIter
+            """
+def joinAll: [Iter(c, elem = string)] c -> string = { items -> "" }
+
+def joined = joinAll(Bag(items = [1]))
+"""
+    let result = Compiler.compile source
+    let diagnostic = Assert.Single result.Diagnostics
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+    Assert.Contains("'Iter(Bag, elem = string)'", diagnostic.Message)
+
+[<Fact>]
+let ``A bare name two contexts have is an error that shows the qualified names`` () =
+    let source = withIter "\ndef both: [Iter(c), Iter(d)] (c, d) -> elem = { xs, ys -> ??? }\n"
+    let result = Compiler.compile source
+    let diagnostic = result.Diagnostics |> List.find (fun diagnostic -> diagnostic.Code = DiagnosticCodes.AmbiguousAssociatedType.Code)
+    Assert.Equal(
+        "'elem' is an associated type of 'Iter(c)' and 'Iter(d)': write which one, as `Iter(c).elem` or `Iter(d).elem`",
+        diagnostic.Message)
+    Assert.Equal("elem", textAt source (spanOf diagnostic))
+
+[<Fact>]
+let ``A bare name no context has is still a reserved name`` () =
+    let code, text = singleError (withIter "\ndef f: [Iter(c)] c -> item = { xs -> ??? }\n")
+    Assert.Equal(DiagnosticCodes.InvalidTypeName.Code, code)
+    Assert.Equal("item", text)
+
+[<Fact>]
+let ``Fixing an associated type the context doesn't have is an error`` () =
+    let code, text = singleError (withIter "\ndef f: [Iter(c, item = int)] c -> () = { xs -> () }\n")
+    Assert.Equal(DiagnosticCodes.UnknownAssociatedType.Code, code)
+    Assert.Equal("item = int", text)
+
+[<Fact>]
+let ``Fixing a member that is not a type is an error`` () =
+    let result = Compiler.compile (withIter "\ndef f: [Iter(c, next = int)] c -> () = { xs -> () }\n")
+    let diagnostic = Assert.Single result.Diagnostics
+    Assert.Equal(DiagnosticCodes.UnknownAssociatedType.Code, diagnostic.Code)
+    Assert.Equal(
+        "'next' is a member of 'Iter', not one of its associated types: only an associated type is fixed by name in a context's arguments",
+        diagnostic.Message)
+
+[<Fact>]
+let ``Naming the associated type of a context the signature doesn't require is an error`` () =
+    let result = Compiler.compile (withIter "\ndef f: [Iter(c)] c -> Iter(d).elem = { xs -> ??? }\n")
+    Assert.Contains(result.Diagnostics, fun diagnostic -> diagnostic.Code = DiagnosticCodes.UnknownAssociatedType.Code)
+
+[<Fact>]
+let ``An instance whose members leave an associated type unfixed is an error`` () =
+    let source =
+        withIter
+            """
+context Sized(c) = (elem: type, size: c -> int)
+
+def Bag.size: Bag -> int = { bag -> 0 }
+
+def total: [Sized(c)] c -> int = { xs -> size(xs) }
+
+def n = total(Bag(items = []))
+"""
+    let result = Compiler.compile source
+    let diagnostic = Assert.Single result.Diagnostics
+    Assert.Equal(DiagnosticCodes.UnfixedAssociatedType.Code, diagnostic.Code)
+    Assert.Equal(
+        "The instance 'Sized(Bag)' leaves its associated type 'elem' unfixed: no member's type says what it is, so declare it, as in `type Bag.elem = ...`",
+        diagnostic.Message)
+
+[<Fact>]
+let ``An attached alias fixes an associated type no member mentions`` () =
+    let source =
+        withIter
+            """
+context Sized(c) = (elem: type, size: c -> int)
+
+def Bag.size: Bag -> int = { bag -> 0 }
+
+type Bag.elem = int
+
+def total: [Sized(c)] c -> int = { xs -> size(xs) }
+
+def n = total(Bag(items = []))
+"""
+    compileClean source |> ignore
+
+[<Fact>]
+let ``An instance whose members fix an associated type two ways is an error`` () =
+    let source =
+        withIter
+            """
+context Two(c) = (elem: type, first: c -> elem, second: c -> elem)
+
+def Bag.first: Bag -> int = { bag -> 0 }
+
+def Bag.second: Bag -> string = { bag -> "" }
+
+def go: [Two(c)] c -> () = { xs -> () }
+
+def ran = go(Bag(items = []))
+"""
+    let result = Compiler.compile source
+    let diagnostic = Assert.Single result.Diagnostics
+    Assert.Equal(DiagnosticCodes.AssociatedTypeFixedTwice.Code, diagnostic.Code)
+    Assert.Equal(
+        "The instance 'Two(Bag)' fixes its associated type 'elem' two ways: 'Bag.second' makes it 'string', where it is already 'int'",
+        diagnostic.Message)
+
+[<Fact>]
+let ``An instance a use loads that leaves an associated type unfixed is an error`` () =
+    let source =
+        withIter
+            """
+context Sized(c) = (elem: type, size: c -> int)
+
+def f: Bag -> int = { bag ->
+  use Sized(Bag)(size = { x -> 1 })
+  1
+}
+"""
+    let result = Compiler.compile source
+    let diagnostic = Assert.Single result.Diagnostics
+    Assert.Equal(DiagnosticCodes.UnfixedAssociatedType.Code, diagnostic.Code)
+    Assert.EndsWith("so fix it by name, as in `use Sized(Bag, elem = ...)(...)`", diagnostic.Message)
+
+[<Fact>]
+let ``A use fixes an associated type by name`` () =
+    let source =
+        withIter
+            """
+context Sized(c) = (elem: type, size: c -> int)
+
+def total: [Sized(c)] c -> int = { xs -> size(xs) }
+
+def f: Bag -> int = { bag ->
+  use Sized(Bag, elem = int)(size = { x -> 1 })
+  total(bag)
+}
+"""
+    compileClean source |> ignore
+
+[<Fact>]
+let ``An associated type can't have a default`` () =
+    let code, _ = singleError "context D(c) = (elem: type = int, get: c -> elem)\n"
+    Assert.Equal(DiagnosticCodes.InvalidAssociatedType.Code, code)
+
+[<Fact>]
+let ``A built-in type's name can't be an associated type's`` () =
+    let result = Compiler.compile "context D(c) = (list: type, get: c -> list)\n"
+    let diagnostic = result.Diagnostics |> List.find (fun diagnostic -> diagnostic.Code = DiagnosticCodes.InvalidAssociatedType.Code)
+    Assert.Equal("'list' is a built-in type, so it can't be the name of an associated type", diagnostic.Message)
+
+[<Fact>]
+let ``type is only an associated type's type`` () =
+    let code, text = singleError "type R = (x: type)\n"
+    Assert.Equal(DiagnosticCodes.InvalidAssociatedType.Code, code)
+    Assert.Equal("type", text)
+
+[<Fact>]
+let ``An imported context's associated type is named and fixed as a local one's is`` () =
+    let library =
+        """module mod
+
+export context Iter(c) = (elem: type, next: c -> #some(elem, c) | #done)
+
+export def headOr: [Iter(c)] c, elem -> elem = { items, fallback ->
+  match next(items)
+    | #some(value, _) -> value
+    | #done -> fallback
+}
+"""
+    let main =
+        """import mod
+
+type Bag = protected (items: list(int))
+
+def Bag.next: Bag -> #some(int, Bag) | #done = { bag -> #done }
+
+def strings: [Iter(c, elem = string)] c -> string = { items -> headOr(items, "") }
+
+def first = headOr(Bag(items = []), 0)
+"""
+    let result = compileImporting (normalized library) (normalized main)
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    Assert.Equal("int", Unifier.tyToString result.Typed.Value.Types.["first"])
+
+[<Fact>]
+let ``A signature's associated type is undetermined by its parameters, and that is fine`` () =
+    let source =
+        withIter
+            """
+def countAll: [Iter(c)] c -> int = { items ->
+  match next(items)
+    | #some(_, rest) -> 1 + countAll(rest)
+    | #done -> 0
+}
+"""
+    compileClean source |> ignore

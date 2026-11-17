@@ -4,7 +4,7 @@ description: "Associated types on contexts, types passed as arguments, and inspe
 order: 4
 ---
 
-This page records the design for two related features, neither of which is implemented. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable. Their design was decided on 2026-11-17 ([#1800](https://github.com/nanyx-lang/nanyx/issues/1800)). **Type arguments** let a function take a type as a parameter and inspect its structure; their design is still early. The proposal is that both are the same thing: a record member whose value is a type. The sections below separate what has been decided from the current direction and the open questions.
+This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), and what is left of them here is how they meet type arguments and the prelude contexts that move to them. **Type arguments** let a function take a type as a parameter and inspect its structure; their design is still early. The proposal is that both are the same thing: a record member whose value is a type. The sections below separate what has been decided from the current direction and the open questions.
 
 # The problems
 
@@ -43,48 +43,15 @@ def iterStrings: [Iter(c, a)] c -> () = { items -> ... }
 
 # Decisions
 
-- **Contexts have associated types,** described [below](#associated-types).
+- **Contexts have associated types,** described on the [Contexts](../advanced/contexts#associated-types) page.
 - **A type can be passed as an argument.** The caller writes the type at the call site. The argument fixes a type variable, and the function's body receives a value that stands for the type. The syntax is part of the [current direction](#a-type-argument-is-a-type-member-of-the-parameters).
 - **Generic code can inspect a type argument**: whether it is a record or a union, and what its fields or cases are.
 - **Generic code is checked once, not per instantiation.** Nanyx does not adopt compile-time templates, at least for now. In Zig's `comptime` and in C++ templates, generic code is type-checked separately for each type it is used at, and errors appear inside library code. Inspection in Nanyx is type-checked once, when the generic function is defined, as all generic code is today.
 
 # Associated types
 
-Decided by the maintainer on 2026-11-17, and not built yet ([#1800](https://github.com/nanyx-lang/nanyx/issues/1800)).
+Associated types are built: a context's member of kind `type`, named `Iter(c).elem` or `elem` in a signature and fixed by name in a constraint, `[Iter(c, elem = string)]`, is described on the [Contexts](../advanced/contexts#associated-types) page. What is still open:
 
-A context can declare a member whose value is a type, written `name: type`. Other members refer to it by name:
-
-```nanyx fragment
-context Iter(c) = (elem: type, next: c -> #some(elem, c) | #done)
-```
-
-A function then constrains only the container type. Without associated types, the element type would be a second parameter, `Iter(c, a)`, carried through every signature that uses the context even though `c` always determines it.
-
-- **A signature names it `Iter(c).elem`,** or just `elem` when exactly one context in the signature's list has a member of that name. When two do, the bare name is an error that names both, and the signature qualifies it:
-
-  ```nanyx fragment
-  def headOr: [Iter(c)] (c, elem) -> elem = { items, fallback ->
-    match next(items)
-      | #some(value, _) -> value
-      | #done -> fallback
-  }
-
-  def firsts: [Iter(c), Iter(d)] (c, d) -> list((Iter(c).elem, Iter(d).elem))
-  ```
-
-- **A constraint fixes one with a named argument,** as a function call names one:
-
-  ```nanyx fragment
-  def iterStrings: [Iter(c, elem = string)] c -> () = { items ->
-    for items | item -> dbg(item)
-  }
-  ```
-
-- **An instance's associated type is inferred from its members.** Synthesis already finds a type's attached definitions by name, and their types fix the associated type by unification. `int.fromString: string -> #some(int) | #invalidInt` makes `FromString(int).failure` the tag `#invalidInt`. The same holds for an instance written in a `use`. Where no member mentions an associated type, the type declares it with an attached type alias, `type Bag.elem = int`. An instance that leaves one unfixed, or whose members fix it two ways, is an error.
-- **There are no defaults.** A context declaration can't give an associated type a default, so an instance never gets a type its author didn't write or imply.
-- **Its name is lowercase and longer than one letter,** which [type names](../tour/types#type-names) reserve for associated types. A built-in type's name, such as `list`, can't be one.
-- **Each associated type lives on the context that owns the operation,** so a function asks only for the capabilities it uses: `context Indexed(c) = (elem: type, get: (c, int) -> elem)`.
-- **It costs nothing at run time.** Types are erased, and a generic function is monomorphised at each instance as usual.
 - **It is also a value of type `Type(elem)`,** as a [type argument](#x-type-is-a-value-of-type-typex) is, so `Iter(c).elem` can be passed wherever a type argument is expected. That part is built with type arguments, not before.
 
 ## The prelude moves to them
