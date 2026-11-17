@@ -34,4 +34,4 @@ def main = {
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("2\n", outcome.StandardOutput)
-    Assert.Equal("crash: odd: 3\n", outcome.StandardError)
+    Assert.Equal("crash: odd: 3\n", withoutStack outcome.StandardError)

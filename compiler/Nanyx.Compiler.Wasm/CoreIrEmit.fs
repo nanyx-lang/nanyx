@@ -40,7 +40,58 @@ type EmitContext =
       HostState: int
       /// Whether the module is compiled with memory checks (see `WasmAllocator.MemoryChecks`), which count the records
       /// updated in place.
-      CheckMemory: bool }
+      CheckMemory: bool
+      /// The name a program shows for the source file at this path, as a span names it (see `CoreIr.shownFile`), when
+      /// the code is marked with the places it was made from (see `placeMarker`); none when it isn't.
+      ShownFile: (string -> string) option }
+
+/// The marker that says the code after it, up to the next one, was made from source at `place`: a line comment,
+/// `;;@ main.nyx:12`, that `WasmBinary` writes into the module's table of places (see `WatSyntax.Placed`). Code inlined
+/// from a function says which, and where the call was, for each call it was inlined through, innermost first:
+/// `;;@ prelude.nyx:18 | crash | main.nyx:12`.
+let placeMarker (shownFile: string -> string) (place: Place) =
+    let rec frames (place: Place) =
+        let here = $"{shownFile place.File}:{place.Line}"
+        match place.InlinedAt with
+        | Some(name, site) -> $"{here} | {name} | {frames site}"
+        | None -> here
+    $";;@ {frames place}"
+
+/// Whether the code of an expression of `kind` gets a marker of where it was written: what calls or can trap, which a
+/// stack names the line of.
+let private marked (kind: ExprKind) =
+    match kind with
+    | Prim _
+    | Call _
+    | MakeTag _
+    | MakeRecord _
+    | UpdateRecord _
+    | MakeList _
+    | CallRuntime _
+    | CopyArrayInto _
+    | CallImport _
+    | MakeClosure _
+    | CallClosure _
+    | Interpolate _
+    | Dbg _
+    | Crash _ -> true
+    | Atom _
+    | Field _
+    | Assign _
+    | SetField _
+    | FloatConstant _
+    | ForEach _
+    | While _
+    | Let _
+    | Do _
+    | If _
+    | Match _
+    | Dup _
+    | Drop _
+    | DropAfter _
+    | Release _
+    | Reuse _
+    | FreeToken _ -> false
 
 /// A function as WebAssembly text, the runtime helpers (see `WasmRuntime.Helpers`) it calls, and whether its own code
 /// reads or writes linear memory.
@@ -217,6 +268,9 @@ type private FunctionEmitter(context: EmitContext) =
 
     // Whether the code reads or writes linear memory itself, besides what the helpers it calls do.
     let mutable usesMemory = false
+
+    // The place marker of the value whose code is being written, if it has one (see `Value`).
+    let mutable currentMarker: string option = None
 
     let helper (name: string) =
         helpers.Add name |> ignore
@@ -397,8 +451,20 @@ type private FunctionEmitter(context: EmitContext) =
         | "" -> this.Sequence tail expr
         | converted -> $"{this.Sequence false expr}\n    {converted}"
 
-    /// The code of a value that is not a `Let` or `Do`.
+    /// The code of a value that is not a `Let` or `Do`, after the marker of where it was written when it calls or can
+    /// trap (see `placeMarker`).
     member this.Value (tail: bool) (deferred: Dictionary<int, Expr>) (onStack: HashSet<int>) (expr: Expr) : string =
+        match expr.Place, context.ShownFile with
+        | Some place, Some shownFile when marked expr.Kind ->
+            let marker = placeMarker shownFile place
+            let around = currentMarker
+            currentMarker <- Some marker
+            let code = this.UnmarkedValue tail deferred onStack expr
+            currentMarker <- around
+            $"{marker}\n    {code}"
+        | _ -> this.UnmarkedValue tail deferred onStack expr
+
+    member private this.UnmarkedValue (tail: bool) (deferred: Dictionary<int, Expr>) (onStack: HashSet<int>) (expr: Expr) : string =
         // The code of each atom in order. A temporary already on the stack has none, so it has to come before anything
         // that pushes a value (`pushedBefore`, or an earlier atom), or the values would be in the wrong order.
         let atomsAfter (pushedBefore: bool) (items: Atom list) =
@@ -477,10 +543,10 @@ type private FunctionEmitter(context: EmitContext) =
         | FloatConstant value when expr.Type = IrF32 -> $"f32.const {wasmFloatConst value}\n    call ${helper Helpers.f32Box}"
         | FloatConstant value -> $"f64.const {wasmFloatConst value}"
         | Crash messages ->
-            // Writes each message to stderr and exits with 1. `unreachable` after the exit, which never returns, lets
-            // the code stand wherever a value is expected.
+            // Writes each message to stderr and traps in `Helpers.crashed`, so the runtime reports the stack. `unreachable`
+            // after it, which is never reached, lets the code stand wherever a value is expected.
             let writes = messages |> List.map (fun message -> $"i32.const {context.StringOffset message}\n    call ${helper Helpers.writeStderr}")
-            writes @ [ "i32.const 1"; $"call ${helper Helpers.procExit}"; "unreachable" ] |> String.concat "\n    "
+            writes @ [ $"call ${helper Helpers.crashed}"; "unreachable" ] |> String.concat "\n    "
         | ForEach loop -> this.ForLoop loop (fun atom -> atoms [ atom ])
         | While loop -> this.WhileLoop loop
         | Call(name, args) ->
@@ -596,6 +662,8 @@ type private FunctionEmitter(context: EmitContext) =
         // A string is the address of its bytes, with its length in the word before them.
         | CallRuntime(name, [ text ], _) when name = Intrinsics.stringAddress -> atoms [ text ]
         | CallRuntime(name, _, _) when name = Intrinsics.hostState -> touching $"i32.const {context.HostState}"
+        // Never returns: `unreachable` lets the call stand wherever a value of any type is expected.
+        | CallRuntime(name, _, _) when name = Intrinsics.crashed -> $"call ${helper Helpers.crashed}\n    unreachable"
         | CallRuntime(name, [ text ], _) when name = Intrinsics.keepAlive -> join "\n    " [ atoms [ text ]; "drop"; "i32.const 0" ]
         | CallRuntime(name, [ text ], _) when name = Intrinsics.stringByteLength ->
             join "\n    " [ atoms [ text ]; $"call ${helper Helpers.stringLength}" ]
@@ -924,9 +992,13 @@ type private FunctionEmitter(context: EmitContext) =
             match deferred.TryGetValue v.Id with
             | true, value ->
                 deferred.Remove v.Id |> ignore
+                // The value's code has markers of its own, so what follows it, the code of the value it is an operand
+                // of, is marked again with that value's place.
+                let code = this.Value false deferred onStack value
+                let code = match currentMarker with Some marker -> $"{code}\n    {marker}" | None -> code
                 match droppedTemps.TryGetValue v.Id with
-                | true, local -> $"{this.Value false deferred onStack value}\n    local.tee ${local}"
-                | _ -> this.Value false deferred onStack value
+                | true, local -> $"{code}\n    local.tee ${local}"
+                | _ -> code
             | _ -> internalError "a temporary in the core IR is used twice"
         | AVar v -> $"local.get ${localName v}"
         | AInt value -> $"i64.const {value}"
@@ -1180,10 +1252,23 @@ let private declaredLocals (body: Expr) : (string * string) list =
 let private localDeclarations (locals: (string * string) list) =
     locals |> List.map (fun (name, valueType) -> $"(local ${name} {valueType})") |> String.concat " "
 
+/// `code` without each place marker that says what the one before it said (see `placeMarker`).
+let private withoutRepeatedMarkers (code: string) =
+    let mutable last = ""
+    code.Split('\n')
+    |> Array.filter (fun line ->
+        let trimmed = line.Trim()
+        if not (trimmed.StartsWith ";;@") then true
+        elif trimmed = last then false
+        else
+            last <- trimmed
+            true)
+    |> String.concat "\n"
+
 /// `func` as a WebAssembly function, exported under `exportName` if given.
 let emitFunction (context: EmitContext) (func: Function) (exportName: string option) : Emitted =
     let emitter = FunctionEmitter(context)
-    let bodyCode = emitter.SequenceAs true func.Result func.Body
+    let bodyCode = emitter.SequenceAs true func.Result func.Body |> withoutRepeatedMarkers
     let header =
         [ func.Params |> List.map (fun p -> $"(param ${localName p} {CoreIrLayout.valueType p.Type})") |> String.concat " "
           $"(result {CoreIrLayout.valueType func.Result})"
@@ -1200,7 +1285,8 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
 /// them, each value dropped, then the code `after`. It takes nothing and returns nothing, and makes no tail call.
 let emitStart (context: EmitContext) (func: Function) (after: string list) : Emitted =
     let emitter = FunctionEmitter(context)
-    let bodyCode = $"{emitter.Sequence false func.Body}\n    {dropValue func.Body.Type}" :: after |> String.concat "\n    "
+    let bodyCode =
+        $"{emitter.Sequence false func.Body}\n    {dropValue func.Body.Type}" :: after |> String.concat "\n    " |> withoutRepeatedMarkers
     let header =
         match localDeclarations (declaredLocals func.Body @ emitter.ExtraLocals) with
         | "" -> ""

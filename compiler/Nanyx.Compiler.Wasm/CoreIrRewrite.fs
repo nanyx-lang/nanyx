@@ -66,9 +66,10 @@ let directVars (e: Expr) : Var list =
     | Interpolate parts -> parts |> List.choose (function Hole(var, _) -> Some var | Text _ -> None)
     | _ -> []
 
-/// `e` with each variable, bound or read, replaced as `var` says, and each loop's depth as `depth` says.
-let rec mapVars (var: Var -> Var) (depth: int -> int) (e: Expr) : Expr =
-    let go = mapVars var depth
+/// `e` with each variable, bound or read, replaced as `var` says, each loop's depth as `depth` says, and each
+/// expression's place as `place` says.
+let rec mapVarsAndPlaces (var: Var -> Var) (depth: int -> int) (place: Place option -> Place option) (e: Expr) : Expr =
+    let go = mapVarsAndPlaces var depth place
     let atom (a: Atom) =
         match a with
         | AVar v -> AVar(var v)
@@ -133,8 +134,8 @@ let rec mapVars (var: Var -> Var) (depth: int -> int) (e: Expr) : Expr =
                 links
                 |> List.map (fun link ->
                     match link.Kind with
-                    | Let(v, value, _) -> { link with Kind = Let(var v, go value, link) }
-                    | Do(value, _) -> { link with Kind = Do(go value, link) }
+                    | Let(v, value, _) -> { link with Kind = Let(var v, go value, link); Place = place link.Place }
+                    | Do(value, _) -> { link with Kind = Do(go value, link); Place = place link.Place }
                     | _ -> internalError "rewriting the core IR after reference counting")
             (Chain.rebuild Chain.relink mapped (go last)).Kind
         | If(condition, ifTrue, ifFalse) -> If(atom condition, go ifTrue, go ifFalse)
@@ -146,7 +147,10 @@ let rec mapVars (var: Var -> Var) (depth: int -> int) (e: Expr) : Expr =
         | Release _
         | Reuse _
         | FreeToken _ -> internalError "rewriting the core IR after reference counting"
-    { e with Kind = kind }
+    { e with Kind = kind; Place = place e.Place }
+
+/// `e` with each variable, bound or read, replaced as `var` says, and each loop's depth as `depth` says.
+let mapVars (var: Var -> Var) (depth: int -> int) (e: Expr) : Expr = mapVarsAndPlaces var depth id e
 
 /// `e` with `f` applied to each expression directly inside it that is not what follows a link of a chain.
 let mapNested (f: Expr -> Expr) (e: Expr) : Expr =

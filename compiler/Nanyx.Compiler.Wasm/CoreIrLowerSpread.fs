@@ -31,9 +31,9 @@ let record (newLocal: IrType -> Var) (lower: Expression -> (Expr -> Expr) -> Exp
                 | Choice1Of2 var -> None, (name, AVar var)
                 | Choice2Of2 (var, slot, fieldTy) ->
                     let read = newLocal fieldTy
-                    Some (read, { Kind = Field(AVar var, slot); Type = fieldTy }), (name, AVar read))
+                    Some (read, Expr.make (Field(AVar var, slot)) fieldTy), (name, AVar read))
             |> List.unzip
-        List.foldBack (fun (var, value) body -> Expr.letIn var value body) (List.choose id reads) (k { Kind = MakeRecord fieldAtoms; Type = ty })
+        List.foldBack (fun (var, value) body -> Expr.letIn var value body) (List.choose id reads) (k (Expr.make (MakeRecord fieldAtoms) ty))
     let rec go held remaining =
         match remaining with
         | [] -> made held

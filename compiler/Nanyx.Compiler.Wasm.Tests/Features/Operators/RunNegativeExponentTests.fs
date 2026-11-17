@@ -26,7 +26,7 @@ println(2 ** -1)
 """
     let outcome = runSource source
     Assert.Equal("before\n", outcome.StandardOutput.ReplaceLineEndings "\n")
-    Assert.Equal(message, outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Equal(message, withoutStack outcome.StandardError)
     Assert.Equal(1, outcome.ExitCode)
 
 [<Theory>]
@@ -44,5 +44,5 @@ let ``Run - every integer type raised to a negative power stops the program`` (e
 println({expression})
 """
     let outcome = runSource (source.ReplaceLineEndings "\n")
-    Assert.Equal(message, outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Equal(message, withoutStack outcome.StandardError)
     Assert.Equal(1, outcome.ExitCode)

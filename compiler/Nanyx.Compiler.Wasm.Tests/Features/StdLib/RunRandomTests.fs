@@ -107,7 +107,7 @@ def main = {
 """
     let outcome = runSource (source.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Equal("crash: random.below needs a count of at least 1, and was given 0\n", outcome.StandardError)
+    Assert.Equal("crash: random.below needs a count of at least 1, and was given 0\n", withoutStack outcome.StandardError)
 
 [<Fact>]
 let ``Run - the console host gives the entry point a Random from the operating system`` () =

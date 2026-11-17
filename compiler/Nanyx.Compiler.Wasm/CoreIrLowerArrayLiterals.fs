@@ -64,10 +64,10 @@ let arrayOf
                     let length = newLocal "__spread_length" IrInt
                     let value =
                         match part with
-                        | SpreadList _ -> { Kind = CallRuntime(Intrinsics.arrayOfList, [ atom ], true); Type = ty }
-                        | _ -> { Kind = Atom atom; Type = ty }
+                        | SpreadList _ -> Expr.make (CallRuntime(Intrinsics.arrayOfList, [ atom ], true)) ty
+                        | _ -> Expr.make (Atom atom) ty
                     let body = spreads rest ((part, atom, Some (source, length)) :: held)
-                    Expr.letIn source value (Expr.letIn length { Kind = CallRuntime(Intrinsics.arrayLength, [ AVar source ], true); Type = IrInt } body)
+                    Expr.letIn source value (Expr.letIn length (Expr.make (CallRuntime(Intrinsics.arrayLength, [ AVar source ], true)) IrInt) body)
             // The array at its length, each part written at its place in turn.
             and build (held: (Part * Atom * (Var * Var) option) list) =
                 let sum (left: Atom) (right: Atom) (k: Atom -> Expr) =
@@ -75,7 +75,7 @@ let arrayOf
                     | AInt a, AInt b -> k (AInt(a + b))
                     | _ ->
                         let total = newLocal "__at" IrInt
-                        Expr.letIn total { Kind = Prim(Binary "+", [ left; right ]); Type = IrInt } (k (AVar total))
+                        Expr.letIn total (Expr.make (Prim(Binary "+", [ left; right ])) IrInt) (k (AVar total))
                 let rec length (remaining: (Part * Atom * (Var * Var) option) list) (acc: Atom) (k: Atom -> Expr) =
                     match remaining with
                     | [] -> k acc
@@ -85,12 +85,12 @@ let arrayOf
                     let array = newLocal "__literal" ty
                     let rec write (remaining: (Part * Atom * (Var * Var) option) list) (at: Atom) =
                         match remaining with
-                        | [] -> k { Kind = Atom(AVar array); Type = ty }
+                        | [] -> k (Expr.make (Atom(AVar array)) ty)
                         | (_, item, None) :: rest ->
-                            let written = { Kind = CallRuntime(Intrinsics.arrayWrite, [ AVar array; at; item ], false); Type = IrUnit }
+                            let written = Expr.make (CallRuntime(Intrinsics.arrayWrite, [ AVar array; at; item ], false)) IrUnit
                             sum at (AInt 1L) (fun next -> Expr.doThen written (write rest next))
                         | (_, _, Some (source, spreadLength)) :: rest ->
-                            let copied = { Kind = CopyArrayInto(AVar array, at, AVar source); Type = IrUnit }
+                            let copied = Expr.make (CopyArrayInto(AVar array, at, AVar source)) IrUnit
                             sum at (AVar spreadLength) (fun next -> Expr.doThen copied (write rest next))
-                    Expr.letIn array { Kind = CallRuntime(Intrinsics.arrayNew, [ total ], true); Type = ty } (write held (AInt 0L)))
+                    Expr.letIn array (Expr.make (CallRuntime(Intrinsics.arrayNew, [ total ], true)) ty) (write held (AInt 0L)))
             spreads paired []))
