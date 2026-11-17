@@ -22,7 +22,7 @@ def read: [Decode(a)] (string, type a) -> a = { text, t -> decode(text) }
 """
 
 let private run (source: string) (expected: string) =
-    runSource ((decode + source).ReplaceLineEndings "\n") |> assertRan expected
+    runSource (decode + source) |> assertRan expected
 
 [<Fact>]
 let ``Run - a positional and a named type argument choose the context`` () =
