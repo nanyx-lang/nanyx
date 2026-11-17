@@ -3,7 +3,7 @@
 #
 #   changelog.sh <path> <tag prefix> <version> <out dir> [footer]
 #
-# Each release is a tag `<tag prefix><version>`. A release's section lists the commits between the release before it
+# <path> is from the repository's root, and <out dir> from where it is run. Each release is a tag `<tag prefix><version>`. A release's section lists the commits between the release before it
 # and its own tag that changed a file under <path>, one line each: its title and a link to its pull request (a squash
 # merge's subject ends `(#n)`), or to the commit when it has none. <version>, the release being made, takes the commits
 # since the last tag up to HEAD. [footer], if given, ends every section.
@@ -20,6 +20,9 @@ footer=${5:-}
 repository=${GITHUB_REPOSITORY:-nanyx-lang/nanyx}
 
 mkdir -p "$out"
+# <out dir> is where it is called from; <path> is from the repository's root.
+out=$(cd "$out" && pwd)
+cd "$(git rev-parse --show-toplevel)"
 
 # The versions released before <version>, oldest first.
 mapfile -t earlier < <(git tag -l "${prefix}*" | sed "s|^${prefix}||" | grep -vxF "$version" | sort -V)
