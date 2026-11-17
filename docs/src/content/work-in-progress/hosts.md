@@ -373,7 +373,10 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
   but the inliner inlines `run` and the entry into the start ([#1469](https://github.com/nanyx-lang/nanyx/issues/1469)),
   so a member nothing calls is never built, and a program contains only the members it calls and imports only what
   they call ([#1497](https://github.com/nanyx-lang/nanyx/issues/1497)): hello world imports `fd_write` alone. A
-  program that reads `args()` still imports `environ_get`, as `entriesOf` serves both lists. `nanyx run` passes what follows the
+  program that reads `args()` imports no `environ_*` function, and one that reads only `variable` no `args_*` one
+  ([#1766](https://github.com/nanyx-lang/nanyx/issues/1766)): `entriesOf`, which reads either list, is passed the
+  list's two WASI functions, each wrapped in a lambda the inliner removes, rather than a tag it matches on, which
+  built both lists' code into every caller. `nanyx run` passes what follows the
   file or package as the arguments, after the program's name, and the process's environment variables (see
   [`nanyx run`](../standard-tools/command-line#nanyx-run)); an `exit(0)` part-way is a clean end, which `--check-memory` doesn't
   count as a leak. A script's entry point requires only the plain contexts that are ambient in its module

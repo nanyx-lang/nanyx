@@ -126,3 +126,16 @@ def main = { println("hi") }""")
     Assert.DoesNotContain("proc_exit", wat)
     Assert.DoesNotContain("fd_read", wat)
     Assert.DoesNotContain("console_host", wat)
+
+[<Fact>]
+let ``A program that reads only its arguments imports nothing for the environment, and the other way round`` () =
+    let argsOnly = transpileWat (withFinalNewline """@entry
+def main = { println(args()) }""")
+    Assert.Contains("\"args_get\"", argsOnly)
+    Assert.DoesNotContain("environ_sizes_get", argsOnly)
+    Assert.DoesNotContain("environ_get", argsOnly)
+    let variableOnly = transpileWat (withFinalNewline """@entry
+def main = { println(variable("HOME")) }""")
+    Assert.Contains("\"environ_get\"", variableOnly)
+    Assert.DoesNotContain("args_sizes_get", variableOnly)
+    Assert.DoesNotContain("args_get", variableOnly)
