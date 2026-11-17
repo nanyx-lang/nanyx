@@ -5,11 +5,9 @@ open TranspilerWasmTestHelpers
 
 // #1642: the immutable two-list `Queue(a)` in `nanyx/queue`.
 
-let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
-
 [<Fact>]
 let ``Run - a queue gives its values out in the order they went in`` () =
-    run
+    runSource
         """
 import nanyx/queue
 
@@ -28,7 +26,7 @@ println(Queue.toString(q))
 
 [<Fact>]
 let ``Run - the empty queue has nothing to dequeue or peek at`` () =
-    run
+    runSource
         """
 import nanyx/queue
 
@@ -45,7 +43,7 @@ println(Queue.toString(q))
 
 [<Fact>]
 let ``Run - dequeuing past the front list reverses the back list into it`` () =
-    run
+    runSource
         """
 import nanyx/queue
 
@@ -67,7 +65,7 @@ println("{Queue.peek(afterTwo)} {Queue.toList(afterTwo)} {Queue.length(afterTwo)
 
 [<Fact>]
 let ``Run - an old queue reads the same after a new one is made from it`` () =
-    run
+    runSource
         """
 import nanyx/queue
 
@@ -84,7 +82,7 @@ println("{Queue.toList(q)} {Queue.toList(longer)} {Queue.toList(shorter)}")
 
 [<Fact>]
 let ``Run - queues holding the same values are equal and hash alike, however they split them`` () =
-    run
+    runSource
         """
 import nanyx/queue
 

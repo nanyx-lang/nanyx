@@ -84,8 +84,9 @@ public sealed class CodeActionTests : LanguageServerTestBase
         Open(uri, text);
         Assert.Single((await NextPublished(uri)).Diagnostics!);
 
-        var import = Assert.Single(await CodeActionsIn(uri, new Range(0, 10, 0, 10), [CodeActionKind.Refactor]), action => action.Kind == CodeActionKind.RefactorRewrite);
-        Assert.Equal("Add `import nanyx/math`", import.Title);
+        // The quick fix that makes the same edit is not listed: the request asks for refactorings only.
+        var import = Assert.Single(await CodeActionsIn(uri, new Range(0, 10, 0, 10), [CodeActionKind.Refactor]));
+        Assert.Equal(("Add `import nanyx/math`", CodeActionKind.RefactorRewrite), (import.Title, import.Kind));
         Assert.Equal(
             "import nanyx/math\n\ndef s = max(1, 2)\n",
             Applied(text, Assert.Single(import.Edit!.Changes![uri])));

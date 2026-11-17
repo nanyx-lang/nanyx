@@ -22,13 +22,7 @@ let private rewrittenBy (title: string) (marked: string) =
     let source, offers = offersAt marked
     match offers |> List.tryPick (function Available refactoring when refactoring.Title = title -> Some refactoring | _ -> None) with
     | Some refactoring ->
-        let after = applyEdits source refactoring.Edits
-        let result = Compiler.compile after
-        Assert.True(result.Diagnostics.IsEmpty, sprintf "%s\n%A" after result.Diagnostics)
-        match FormatCommand.formatText Formatter.Options.defaults "" after with
-        | FormatCommand.Formatting.Formatted formatted -> Assert.Equal(formatted, after)
-        | other -> failwithf "%A" other
-        after
+        refactoredText source refactoring
     | None -> failwithf "expected %s, got %A" title offers
 
 /// The reason the offer titled `title` at `$$` is refused.

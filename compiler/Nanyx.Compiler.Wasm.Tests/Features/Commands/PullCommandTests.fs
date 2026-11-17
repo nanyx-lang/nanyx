@@ -9,14 +9,10 @@ open TranspilerWasmTestHelpers
 
 /// An app beside a library, acme.util, in a directory of its own; the app's manifest lists `dependencies`.
 let private appWith (directory: TempDirectory) (dependencies: string) =
-    let write (path: string) (text: string) =
-        let full = Path.Combine(directory.Path, path)
-        Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
-        File.WriteAllText(full, text)
-    write "util/util.nyxp" "(package = (name = \"acme.util\", version = \"0.3.0\"))\n"
-    write "util/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
-    write "app/app.nyxp" $"(\n  package = (name = \"app\", version = \"0.1.0\")\n  {consoleHostEntry}\n  dependencies = [{dependencies}]\n)\n"
-    write "app/main.nyx" "module main\n\n@entry\ndef main = { println(\"hi\") }\n"
+    directory.Write "util/util.nyxp" "(package = (name = \"acme.util\", version = \"0.3.0\"))\n"
+    directory.Write "util/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
+    directory.Write "app/app.nyxp" $"(\n  package = (name = \"app\", version = \"0.1.0\")\n  {consoleHostEntry}\n  dependencies = [{dependencies}]\n)\n"
+    directory.Write "app/main.nyx" "module main\n\n@entry\ndef main = { println(\"hi\") }\n"
     Path.Combine(directory.Path, "app")
 
 [<Fact>]

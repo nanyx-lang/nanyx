@@ -14,16 +14,6 @@ let private version text = (SemanticVersion.tryParse text).Value
 
 let private requirement text = (VersionRequirement.tryParse text).Value
 
-let private okOf result =
-    match result with
-    | Result.Ok value -> value
-    | Result.Error errors -> failwith $"%A{errors}"
-
-let private errorsOf result =
-    match result with
-    | Result.Error errors -> errors
-    | Result.Ok _ -> failwith "Expected errors"
-
 [<Fact>]
 let ``Versions are ordered as semantic versioning orders them`` () =
     let ordered = [ "0.9.0"; "1.0.0-alpha"; "1.0.0-alpha.1"; "1.0.0-alpha.beta"; "1.0.0-beta.2"; "1.0.0-beta.11"; "1.0.0"; "1.2.0"; "1.10.0"; "2.0.0" ]
@@ -107,34 +97,13 @@ import acme.util/strings
 @entry
 def run = { () -> ignore(shout("hi")) }""" ]
 
-let private storeOf (package: TempPackage) =
-    { Cache = package.Path "cache"; Index = package.Path "index"; GitHub = GitHub.unsupported }
-
 /// Packs the package whose manifest is at `manifest` into the index's `artifacts` directory, lists it in the index, and
 /// gives its locked entry.
 let private publish (package: TempPackage) (manifest: string) : LockedPackage =
     let found = okOf (Package.ofManifestFrom (storeOf package) (package.Path manifest))
-    let bytes = okOf (PackageArchive.pack found)
-    let name, version' = found.Manifest.Name, found.Manifest.Version
-    let artifact = package.Path $"index/artifacts/{PackageArchive.fileName found.Manifest}"
-    Directory.CreateDirectory(Path.GetDirectoryName artifact) |> ignore
-    File.WriteAllBytes(artifact, bytes)
-    let hash = PackageArchive.sha256 bytes
-    File.WriteAllText(package.Path "index/config.json", """{ "format": 1, "index": "index/" }""")
-    let listing = package.Path $"index/index/acme/{name}.json"
-    Directory.CreateDirectory(Path.GetDirectoryName listing) |> ignore
-    let earlier =
-        if File.Exists listing then
-            let text = File.ReadAllText listing
-            text.Substring(text.IndexOf '[' + 1, text.LastIndexOf ']' - text.IndexOf '[' - 1).Trim() + ","
-        else
-            ""
-    File.WriteAllText(
-        listing,
-        $$"""{ "name": "{{name}}", "versions": [{{earlier}} { "version": "{{version'}}", "url": "../../artifacts/{{Path.GetFileName artifact}}", "sha256": "{{hash}}", "yanked": false, "available": true }] }"""
-    )
-    { Name = name
-      Version = version version'
+    let hash = publishToIndex package found (okOf (PackageArchive.pack found))
+    { Name = found.Manifest.Name
+      Version = version found.Manifest.Version
       Sha256 = hash
       Dependencies = found.Dependencies |> List.map _.Manifest.Name }
 

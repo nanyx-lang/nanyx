@@ -745,7 +745,7 @@ let private lowerTypedModule (typed: TypedModule) : LoweredModule =
         match checkedTypes |> Map.tryFind lambda.Id with
         | Some (TyFunc(_, _, contexts)) -> CoreIrLowerTypes.contextMembersOf contextLayouts contexts |> List.map fst |> Set.ofList
         | _ -> Set.empty
-    let module', liftedOrigins, functionWrappers, useKeys, useBindingContexts = LambdaLifting.lift synthesizedMembers memberCaptures requiresContexts passedMembers typed.UseContexts (typed.AmbientMembers |> List.map _.Definition) module'
+    let module', liftedOrigins, functionWrappers, useKeys, useBindingContexts = LambdaLifting.lift (externs |> Map.map (fun _ declared -> declared.Parameters.Length)) synthesizedMembers memberCaptures requiresContexts passedMembers typed.UseContexts (typed.AmbientMembers |> List.map _.Definition) module'
     let localContexts = localContextsOf typed checkedTypes liftedOrigins
     let withLocalContexts (exprTypes: Map<NodeId, Ty>) =
         localContexts

@@ -62,16 +62,6 @@ let private web = $"""(package = "acme.web", github = "acme/web", rev = "{commit
 let private manifestWith (entry: string) =
     $"""(package = (name = "app", version = "0.1.0"), dependencies = [{entry}])"""
 
-let private errorsOf result =
-    match result with
-    | Result.Error errors -> errors
-    | Result.Ok _ -> failwith "Expected errors"
-
-let private okOf result =
-    match result with
-    | Result.Ok value -> value
-    | Result.Error errors -> failwith (String.concat "\n" (errors |> Seq.map string))
-
 /// The one error checking the manifest whose `dependencies` hold `entry` reports.
 let private manifestError (entry: string) =
     match errorsOf (Manifest.check "app.nyxp" (manifestWith entry)) with

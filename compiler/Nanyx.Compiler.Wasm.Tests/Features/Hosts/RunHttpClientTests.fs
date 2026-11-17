@@ -125,16 +125,23 @@ PUT é yes
 
 [<Fact>]
 let ``A request with no answer in its timeout is #timeout`` () =
+    // The server holds its answer until the program has ended, however long that takes, so the request can only time
+    // out.
+    use release = new ManualResetEventSlim()
     use server =
         new TestServer(fun _ _ _ _ ->
-            Thread.Sleep 3000
+            release.Wait()
             200, [], "late")
-    run $"""match http.send(Request.of(#get, "{server.Url}/slow") with timeout = 200)
+    let outcome =
+        try
+            run $"""match http.send(Request.of(#get, "{server.Url}/slow") with timeout = 200)
   | #some(_) -> println("answered")
   | #error(#timeout) -> println("timed out")
   | #error(_) -> println("another error")
 """
-    |> assertPrinted "timed out\n"
+        finally
+            release.Set()
+    outcome |> assertPrinted "timed out\n"
 
 [<Fact>]
 let ``A server that isn't there, or a URL that isn't one, is an error saying so`` () =

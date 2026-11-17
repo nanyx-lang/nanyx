@@ -6,11 +6,9 @@ module TranspilerWasmTests.Features.Arrays.Slices
 open Xunit
 open TranspilerWasmTestHelpers
 
-let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
-
 [<Fact>]
 let ``Run - a slice of an array, and a slice of that, view its elements`` () =
-    run
+    runSource
         """
 import nanyx/slice
 
@@ -28,7 +26,7 @@ println("{Slice.map(inner, { x -> x * 10 })}")
 
 [<Fact>]
 let ``Run - a slice's bounds clamp, and reading past its end is none`` () =
-    run
+    runSource
         """
 import nanyx/slice
 
@@ -45,7 +43,7 @@ println(Slice.length(Slice.slice(xs \slice(1, 3), 1, 10)))
 
 [<Fact>]
 let ``Run - a slice keeps the array it views alive as long as it is used`` () =
-    run
+    runSource
         """
 import nanyx/slice
 
@@ -60,7 +58,7 @@ println(Slice.at(kept, 1))
 
 [<Fact>]
 let ``Run - a mutable slice is sorted, set, reversed and filled in place, in the array it views`` () =
-    run
+    runSource
         """
 import nanyx/marray
 import nanyx/mslice
@@ -83,7 +81,7 @@ println("{result}")
 
 [<Fact>]
 let ``Run - a mutable slice's toArray is a copy that later changes leave alone`` () =
-    run
+    runSource
         """
 import nanyx/marray
 import nanyx/mslice
@@ -102,7 +100,7 @@ println("{copied}")
 
 [<Fact>]
 let ``Run - a string slice views part of a string without copying it`` () =
-    run
+    runSource
         """
 import nanyx/text
 
@@ -121,7 +119,7 @@ println(StringSlice.toString(StringSlice.slice(rest, 0, 2)))
 
 [<Fact>]
 let ``Run - a string slice finds a needle among the bytes it views`` () =
-    run
+    runSource
         """
 import nanyx/text
 

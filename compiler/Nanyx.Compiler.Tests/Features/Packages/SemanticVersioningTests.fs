@@ -11,11 +11,6 @@ open Nanyx.Compiler.Tests.TestSupport
 
 let private version text = (SemanticVersion.tryParse text).Value
 
-let private okOf result =
-    match result with
-    | Result.Ok value -> value
-    | Result.Error errors -> failwith $"%A{errors}"
-
 let private def name signature = { Kind = ApiDef; Name = name; Signature = signature }
 let private typeNamed name definition = { Kind = ApiType; Name = name; Signature = definition }
 
@@ -142,9 +137,6 @@ let private library (version: string) (body: string) =
       "util/strings.nyx", withFinalNewline body
       "util/secrets.nyx", withFinalNewline "module secrets\n\nexport def hidden = 1" ]
 
-let private storeOf (package: TempPackage) =
-    { Cache = package.Path "cache"; Index = package.Path "index"; GitHub = GitHub.unsupported }
-
 let private found (package: TempPackage) = okOf (Package.ofManifestFrom (storeOf package) (package.Path "util/acme.util.nyxp"))
 
 [<Fact>]
@@ -176,16 +168,7 @@ let ``A packed package holds its api.json`` () =
 /// Publishes the package in `util` to the index on disk, as a release would: packed with its API, and listed.
 let private publish (package: TempPackage) =
     let packageFound = found package
-    let bytes = okOf (PackageApi.pack packageFound)
-    let artifact = package.Path $"index/artifacts/{PackageArchive.fileName packageFound.Manifest}"
-    Directory.CreateDirectory(Path.GetDirectoryName artifact) |> ignore
-    File.WriteAllBytes(artifact, bytes)
-    File.WriteAllText(package.Path "index/config.json", """{ "format": 1, "index": "index/" }""")
-    Directory.CreateDirectory(package.Path "index/index/acme") |> ignore
-    File.WriteAllText(
-        package.Path "index/index/acme/acme.util.json",
-        $$"""{ "name": "acme.util", "versions": [{ "version": "{{packageFound.Manifest.Version}}", "url": "../../artifacts/{{Path.GetFileName artifact}}", "sha256": "{{PackageArchive.sha256 bytes}}", "yanked": false, "available": true }] }"""
-    )
+    publishToIndex package packageFound (okOf (PackageApi.pack packageFound)) |> ignore
 
 let private bumpTo (package: TempPackage) (body: string) =
     File.WriteAllText(package.Path "util/strings.nyx", withFinalNewline body)
