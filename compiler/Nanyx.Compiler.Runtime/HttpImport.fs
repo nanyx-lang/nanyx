@@ -120,6 +120,8 @@ module HttpImport =
                 let body = response.Content.ReadAsByteArrayAsync(cancel.Token).GetAwaiter().GetResult()
                 Answer.Response, written response body
             with
+            // A timeout that ends the request while it connects can fail it as a connection that failed.
+            | _ when cancel.IsCancellationRequested -> Answer.Timeout, [||]
             | :? OperationCanceledException -> Answer.Timeout, [||]
             | :? HttpRequestException as ex -> Answer.ConnectionFailed, Encoding.UTF8.GetBytes ex.Message
             | ex -> Answer.Other, Encoding.UTF8.GetBytes ex.Message
