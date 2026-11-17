@@ -168,7 +168,7 @@ none. The module lays out one block for each such function after its string lite
 `CodeGen.fs`): a count of 0, an info word of 0, since nothing ever drops it, and the function's table slot. The tests
 are in `Features/Memory/StaticClosureTests.fs`.
 
-In the `proc` measurement on [Context escape](./context-escape#measured-before-the-change), variant C goes from 9 allocations per block
+In the `proc` measurement made for [#1035](https://github.com/nanyx-lang/nanyx/issues/1035), variant C, a `proc` written as a context and a handler that runs its block under a `use`, goes from 9 allocations per block
 to 7, as predicted.
 
 ## Specialising on known members

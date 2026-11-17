@@ -3,7 +3,7 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// Which types may attach the members of the well-known contexts (see "Equality and well-known contexts" in the docs'
+/// Which types may attach the members of the well-known contexts (\r?\n/// )
 /// work in progress). A structural type always compares by its structure, so that `(x = 1, y = 2)` compares the same
 /// whether or not the alias it is written with is known: only a nominal type, `type Email = protected string`, may attach its
 /// own `==`, `compare` or `hash`. `!=` is never attached by anything: it is always `not (a == b)`. A built-in type's

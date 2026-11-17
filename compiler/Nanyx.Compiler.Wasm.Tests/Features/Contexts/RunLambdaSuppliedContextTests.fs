@@ -44,7 +44,7 @@ withPrefix("app", { log("started") })
     runSource source |> assertRan "[log] direct\n[log] in brackets\n[app] started\n"
 
 [<Fact>]
-let ``Run - the Context escape page's reusable handler`` () =
+let ``Run - the Contexts page's reusable handler`` () =
     let source = """context Log = (log: string -> ())
 
 def greet: [Log] string -> () = { name ->

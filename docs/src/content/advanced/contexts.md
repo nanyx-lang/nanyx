@@ -382,7 +382,9 @@ The operators read through contexts of the prelude in the same way: `x + y` on v
 
 ## Operators find their context
 
-An operator reads the context member of its name (prefix `-` reads `negate`), and its context is the prelude's context with the fewest members that has that member. `Add` and `Num` both have a `` `+` ``, and `Add` is the smaller, so `+` is read through `Add`; only `Num` has a `` `*` ``.
+An operator reads the context member of its name (prefix `-` reads `negate`), and its context is the prelude's context with the fewest members that has that member. `Add` and `Num` both have a `` `+` ``, and `Add` is the smaller, so `+` is read through `Add`; only `Num` has a `` `*` ``. Only the prelude's contexts are looked at: a context of your own with a `` `+` `` member is required by name.
+
+So every member of the prelude's contexts has exactly one smallest context. A context that repeats a member of another is larger or smaller than it, never the same size, and a smaller one takes the operator over in every function whose type is inferred. The compiler checks this when it checks the prelude, and reports a tie as `NYX0006`.
 
 A function that does not write its type requires the contexts its operators need, of each of its own type variables they are used on:
 
@@ -413,6 +415,8 @@ Contexts with associated types, members whose value is a type, are a work in pro
 # Common contexts
 
 In practice, a small set of capability contexts appears frequently in generic APIs.
+
+Four of them, `Eq`, `Ord`, `Hash` and `ToString`, are known to the compiler by name. It reads syntax through them (`==` and `!=`, the ordering operators, and interpolation holes), and it derives their instances from a type's structure: an `Eq` of a record from the `Eq` of each field. No other context is derived from structure, and a library can't add one to the list: its own contexts are [synthesized](#context-synthesis) from attached definitions by name, loaded with `use`, or required by a signature.
 
 ## Eq(a)
 

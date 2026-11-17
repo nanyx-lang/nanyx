@@ -111,7 +111,7 @@ To fix it, import one of the modules the message lists. The [standard library](.
 A module of the standard library is broken: it declares a different module name from the one it is imported by, it
 imports something other than the standard library, or the prelude's contexts share a member in a way that leaves an
 operator with no one context to be read through
-([Operator contexts](../work-in-progress/operator-contexts)).
+([Operators find their context](../advanced/contexts#operators-find-their-context)).
 
 A program cannot cause this error. It is reported when the standard library itself is changed, and it is fixed there.
 

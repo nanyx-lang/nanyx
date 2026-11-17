@@ -21,7 +21,7 @@ order: 25
   Asking does not change anything, so a sequence is an ordinary immutable value.
 - A sequence whose steps need contexts says so in its type, `[k] seq(a)`: `seq` is declared generic in contexts,
   `type Seq(a) = [k] protected (...)`, as any user's type can be
-  ([Context-qualified types](./context-qualified-types#a-context-variable-the-type-is-generic-in-contexts),
+  ([Types generic in contexts](../advanced/contexts#types-generic-in-contexts),
   [#1525](https://github.com/nanyx-lang/nanyx/issues/1525), done). Its tail, `seq(a)` in its own body, is a
   `[k] seq(a)` too: a protected type can name itself ([#1663](https://github.com/nanyx-lang/nanyx/issues/1663), done).
   So a sequence whose steps wait would be an `[Async] seq(a)`, which is what Kotlin calls a flow
@@ -116,7 +116,7 @@ What it costs:
 
 ## Effects
 
-A sequence whose steps use a context has a [context-qualified type](./context-qualified-types): reading lines gives a
+A sequence whose steps use a context has a [type generic in contexts](../advanced/contexts#types-generic-in-contexts): reading lines gives a
 `[FileSystem] seq(string)`, and it can be pulled only where `FileSystem` is available. No second sequence type is
 needed for impure sequences.
 
@@ -135,7 +135,7 @@ value, can make a `[Console] seq(int)` with `seq.map`, and whatever pulls it nee
 `[Console] seq(int)` is expected, either of `[c, d]` may be the one that requires `Console`.
 
 A sequence whose steps read a `mut` cell requires `Memory`, so it can't leave its `memory` block
-([Context escape](./context-escape)). The `range` example on the Ranges page, which builds a sequence from a `while`
+([Memory](../advanced/memory#values-cannot-escape-memory-scope)). The `range` example on the Ranges page, which builds a sequence from a `while`
 loop over a cell, can never return; it becomes a `Seq.unfold`.
 
 ## Taking anything that can be iterated
@@ -154,7 +154,7 @@ def Seq.toSeq: seq(a) -> seq(a) = { s -> s }
 
 - **A type gets the context by attaching `toSeq`.** The compiler builds an instance from a type's attached definitions
   by member name, as it builds `ToString(a)` from an attached `toString`
-  ([Equality and well-known contexts](./equality-and-well-known-contexts)).
+  ([Context synthesis](../advanced/contexts#context-synthesis)).
 - **The element type is an [associated type](./type-members-and-reflection#associated-types),** `elem`, decided on
   2026-11-17 ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802)). An instance's `toSeq` fixes it by
   unification: `List.toSeq: list(x) -> seq(x)` makes `Iterable(list(int)).elem` an `int`. A signature constrains only

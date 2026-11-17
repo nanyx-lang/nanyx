@@ -27,7 +27,7 @@ rows and handlers" (TyDe 2016), reworked for Nanyx contexts:
 
 It compiles and runs with `nanyx run examples/Nim.nyx`. The strategies were once named instances of `Move`
 (`def perfect = Move(move = ...)`, then `use perfect`), but the WebAssembly backend compiles only a `use` of a
-constructor written in place ([#1137](https://github.com/nanyx-lang/nanyx/issues/1137)). Since [contexts are not types](./context-escape#contexts-are-not-types),
+constructor written in place ([#1137](https://github.com/nanyx-lang/nanyx/issues/1137)). Since [contexts are not types](../advanced/contexts#declaring-a-context),
 a named instance is an error ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)), and a reusable strategy is a
 handler function.
 

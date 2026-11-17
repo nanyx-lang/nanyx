@@ -216,7 +216,7 @@ source names (a block's `def`) is made one too: `y` in `def y = x + 1` followed 
 
 ## What it costs
 
-Measured as the [Context escape](./context-escape#what-it-costs) page measures it, by the allocation counter of a
+Measured by the allocation counter of a
 `--check-memory` build over 100 blocks, a `proc` block of three `try`s and a `return` on `int` payloads makes 29
 allocations a block without inlining, and none with it (`A proc block allocates fewer inlined` in `InliningTests.fs`).
 `proc`, the block, the members, the continuations and `getA` are inlined, none of them is a closure, and nothing is

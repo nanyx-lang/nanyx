@@ -4,7 +4,7 @@ open Parser.Program
 open NyxCompiler.InferState
 
 /// Instances of `ToString`, `Eq` and `Hash` the compiler derives from a type's structure, part by part (see "Printing values"
-/// and "Equality and well-known contexts" in the docs' work in progress).
+/// and "Common contexts" on the docs' Contexts page).
 ///
 /// A tag union, a tuple, a record, a list, a map or a set has no `toString` attached, so a hole of such a
 /// type, or a call that requires `ToString` of it, finds an instance written from its parts: `#some(a)` is written
