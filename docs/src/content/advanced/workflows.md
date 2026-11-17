@@ -146,7 +146,7 @@ def retrying: [c] int, ([Retry, c] () -> Attempt(a)) -> Attempt(a) = { times, bl
 |---------|-------------|
 | `#bind`  | The keyword takes a value and a continuation function. The workflow will call the continuation with the result of the keyword operation. |
 
-`#bind` is the only kind for now, and a member without the attribute is a `#bind` keyword too. Any other kind is a compile error at the attribute, as is the attribute anywhere but before a member of a `context` declaration.
+`#bind` is the only kind for now, and a member without the attribute is a `#bind` keyword too. Two more are planned ([#1879](https://github.com/nanyx-lang/nanyx/issues/1879)) for keywords that take a computation rather than a value: `#bindF`, which passes the expression as a lambda along with the continuation (`defer! cleanUp()` would be `defer({ cleanUp() }, ...)`), and `#delay`, which passes only the lambda and rewrites nothing else (`start! e` would be `start({ e })`). Any other kind is a compile error at the attribute, as is the attribute anywhere but before a member of a `context` declaration.
 
 # Workflow keywords
 
