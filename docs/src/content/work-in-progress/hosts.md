@@ -55,7 +55,7 @@ A host provides the contexts the program's entry may require, and only those. Th
 
 | Host | Entry shape | Provides |
 | --- | --- | --- |
-| `ConsoleHost` | `() -> ()` | `Console & Env & FileSystem & Http`; `Clock` and `Random` as they are added |
+| `ConsoleHost` | `() -> ()` | `Console & Env & FileSystem & Http & Random`; `Clock` as it is added |
 | HTTP host | `Request -> Response` | `Log & Clock & Env & Random & Http` (see [Serving HTTP](#serving-http)) |
 | Browser host | a record of `init`, `update` and `view` | `Dom & Fetch & Clock & Log` |
 | Plugin / sandbox host | host-defined | only what the embedder grants |
@@ -270,8 +270,8 @@ The composite host runs each part under the right sub-host and coordinates start
 Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host (#1247), hosts on foreign functions
 (#1424, #1425, #1426), and any package as a host, with `::host` and `::dependency` (#1344, #1504).
 
-1. **More contexts for the console host**, as they are added: [`Random`](https://github.com/nanyx-lang/nanyx/issues/1237),
-   then `Clock`. `FileSystem` is done ([Files, HTTP and JSON](./files-http-json), [#1783](https://github.com/nanyx-lang/nanyx/issues/1783)),
+1. **More contexts for the console host**, as they are added: `Clock`. [`Random`](../stdlib/random) is done
+   ([#1237](https://github.com/nanyx-lang/nanyx/issues/1237)), and so is `FileSystem` ([Files, HTTP and JSON](./files-http-json), [#1783](https://github.com/nanyx-lang/nanyx/issues/1783)),
    and so is `Http` ([#1785](https://github.com/nanyx-lang/nanyx/issues/1785)).
 2. **Console in a page**, for the [playground](./playground): the embedder changes in "`ConsoleHost` in a page"
    above; writing `.wasm` is done ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).

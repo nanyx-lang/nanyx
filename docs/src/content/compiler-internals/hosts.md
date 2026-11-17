@@ -106,7 +106,7 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   host (`Contexts.ensureContextAvailable`, [#1811](https://github.com/nanyx-lang/nanyx/issues/1811)). `HostRuntime`,
   which only a host may require, is left out: it has an error of its own, `NYX0238`.
 - **`Env`** is declared in `nanyx.console.core/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, with
-  `FileSystem` and `Http` (see below), so its parameter is `[Async, Console, Env, FileSystem, Http] () -> a`; an entry that requires fewer
+  `FileSystem`, `Http` (see below) and `Random`, so its parameter is `[Async, Console, Env, FileSystem, Http, Random] () -> a`; an entry that requires fewer
   contexts fits. The host's prelude re-exports
   `Env`, so its members are ambient names in every module of the program. Its members are functions of the host's own
   over WASI's `args_sizes_get` and `args_get`, `environ_sizes_get` and `environ_get`, and `proc_exit`, declared with
@@ -162,6 +162,11 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   on the runtime's own import `nanyx:http`, not on WASI, which has no networking (see
   [Foreign functions](./foreign-functions#whats-built)). `nanyx.http.core`'s module `wire` writes and reads requests
   and responses as the runtime's imports pass them, so the console host and the HTTP host share it.
+- **`Random`** is declared in the standard library's `nanyx/random`, and both hosts' preludes re-export it. Each host
+  writes its one member, `bits`, on WASI's `random_get`, which fills 8 bytes of the host's state that `readI64` then
+  reads; only a host's root module may call a foreign function, so the two hosts each have their own `systemBits`.
+  `random.seeded` is the library's own `Random`, SplitMix64 over a `mut` cell, so a test host, when there is one, can
+  give its tests a fixed seed by running each under it.
 - **The HTTP host.** `packages/nanyx.http` declares itself a host with `host = (root = "http.host", prelude =
   "http.prelude", settings = (port = 3000))`. Its `run` takes the handler, `use`s an `Http` written on `nanyx:http` as
   the console host's is, takes the request from the runtime, calls the handler, and gives the runtime the response; a

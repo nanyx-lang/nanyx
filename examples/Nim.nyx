@@ -12,6 +12,7 @@ module nim
 
 import (
   nanyx/math as math
+  nanyx/random as random
   nanyx/text
 )
 
@@ -137,8 +138,10 @@ def exampleRound: bool -> Outcome = { cheats ->
 -- Both outcomes, by running the game once per choice
 def exampleChoose = { [true, false] \map(exampleRound) } -- [#cheated(#bob), #won(#alice)]
 
--- Bob's choices, one per round, until there is a `Random` context to flip a coin with
-def bobsChoices = [true, false, false, true, false, true, true, false, false, false]
+-- Bob's choices, one per round: he flips a coin for each
+def bobsChoices: [Random] int -> list(bool) = { rounds ->
+  list.init(rounds, { _ -> random.coinToss() })
+}
 
 -- Scoreboard --------------------------------------------------------------
 
@@ -170,12 +173,12 @@ def examplePrint: [Console] list(bool) -> () = { choices ->
 }
 
 @entry
-def main: [Console] () -> () = {
+def main: [Console, Random] () -> () = {
   println(examplePerfect1() \show)
   println(examplePerfect2() \show)
   println(exampleGameTree())
   println("{exampleCheck()}")
   println("{exampleCheat()}")
   println("{exampleChoose()}")
-  examplePrint(bobsChoices)
+  examplePrint(bobsChoices(10))
 }

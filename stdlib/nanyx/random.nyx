@@ -1,0 +1,101 @@
+--| Random numbers: a function that needs them requires [`Random`], and draws them with the functions
+  here.
+
+  A host provides `Random` to the program's entry point, as it provides `Console`: the console and
+  HTTP hosts draw its bits from the operating system's random source. [`seeded`] runs a function
+  under a `Random` that a seed decides, so a program, or a test, can give the same numbers every
+  time it runs.
+
+  Import it with `import nanyx/random as random` to call `random.between(1, 6)` as the docs do.
+module random
+
+import nanyx/marray
+
+--| A source of random bits. A host supplies one, and [`seeded`] makes one from a seed; a `use` of
+  `Random(bits = ...)` makes any other, such as one that gives the numbers a test needs.
+export context Random = (
+  --| 64 random bits, as an `int`: each of its values as likely as any other.
+  bits: () -> int
+)
+
+--| A random `int` from 0 up to `count`, not including it: `random.below(6)` is one of 0 to 5, each as
+  likely as the others. A `count` below 1 stops the program, as [`crash`] does.
+export def below: [Random] int -> int = { count ->
+  if count < 1 then crash("random.below needs a count of at least 1, and was given {count}")
+  belowFrom(count, int.shiftRightUnsigned(bits(), 1))
+}
+
+--| A random `int` below `count` from `drawn`, 63 random bits, or from the next draw when taking the
+  remainder of `drawn` would favour some numbers over others.
+def belowFrom: [Random] int, int -> int = { count, drawn ->
+  def remainder = drawn % count
+
+  if drawn - remainder <= 9_223_372_036_854_775_807 - (count - 1)
+    then remainder
+    else belowFrom(count, int.shiftRightUnsigned(bits(), 1))
+}
+
+--| A random `int` from `low` to `high`, both included: `random.between(1, 6)` rolls a die. A `high`
+  below `low` stops the program, as [`crash`] does.
+export def between: [Random] int, int -> int = { low, high ->
+  if high < low
+    then crash("random.between needs a high of at least its low, and was given {low} and {high}")
+
+  low + below(high - low + 1)
+}
+
+--| A random `float` from 0.0 up to 1.0, not including 1.0, every one of the 2⁵³ evenly spaced
+  values in between as likely as any other.
+export def fraction: [Random] () -> float = { _ ->
+  int.toFloat(int.shiftRightUnsigned(bits(), 11)) / 9_007_199_254_740_992.0
+}
+
+--| `true` or `false`, each as likely as the other.
+export def coinToss: [Random] () -> bool = { _ ->
+  bits() < 0
+}
+
+--| An element of `xs` chosen at random, each as likely as the others, or `#empty` when it has none.
+export def choose: [Random] list(a) -> #some(a) | #empty = { xs ->
+  if list.isEmpty(xs) then #empty else
+    match list.get(xs, below(list.length(xs)))
+      | #some(x) -> #some(x)
+      | #outOfRange -> #empty
+}
+
+--| The elements of `xs` in a random order, each order as likely as any other.
+export def shuffle: [Random] list(a) -> list(a) = { xs ->
+  memory {
+    def items = MArray.fromList(xs)
+    def count = MArray.length(items)
+    for 0..count - 2 | i -> ignore(MArray.swap(items, i, i + below(count - i)))
+    MArray.toList(items)
+  }
+}
+
+--| What `body` gives, run with a `Random` whose bits `seed` decides: the same seed gives the same
+  bits, in the same order, on every run. The bits are SplitMix64's, which are fast and pass the
+  usual statistical tests, but can be predicted from a few of them: they are no use for keys or
+  passwords.
+export def seeded: [c] int, ([c, Random] () -> a) -> a = { seed, body ->
+  memory {
+    mut state = seed
+
+    use Random(
+      bits = { _ ->
+        state := int.wrappingAdd(state, -7_046_029_254_386_353_131)
+        splitMix(state)
+      }
+    )
+
+    body()
+  }
+}
+
+--| SplitMix64's output for the state `z`: its bits mixed, so that states one step apart give bits
+  that look unrelated.
+def splitMix: int -> int = { z ->
+  def a = int.wrappingMul(int.bitXor(z, int.shiftRightUnsigned(z, 30)), -4_658_895_280_553_007_687)
+  def b = int.wrappingMul(int.bitXor(a, int.shiftRightUnsigned(a, 27)), -7_723_592_293_110_705_685)
+  int.bitXor(b, int.shiftRightUnsigned(b, 31))
+}

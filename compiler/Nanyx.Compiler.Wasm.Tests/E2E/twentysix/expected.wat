@@ -620,7 +620,7 @@
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
   (type $ctx_fn_2_i32_i64_to_i32 (func (param i32 i64) (result i32)))
   (table $ctx_table 1 funcref)
-  (elem (i32.const 0) $__lambda_45)
+  (elem (i32.const 0) $__lambda_47)
 
   (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
 
@@ -811,14 +811,14 @@
   )
   (export "items" (func $items))
 
-  (func $__lambda_45 (param $__env i32) (param $-3C-arg-3E-_i64 i64) (result i32)
+  (func $__lambda_47 (param $__env i32) (param $-3C-arg-3E-_i64 i64) (result i32)
     local.get $-3C-arg-3E-_i64
     i64.const 2
     i64.rem_s
     i64.const 0
     i64.eq
   )
-  (export "__lambda_45" (func $__lambda_45))
+  (export "__lambda_47" (func $__lambda_47))
 
   (func $__nanyx_drop_list_int (param $p i32)
     ;; list(int)
