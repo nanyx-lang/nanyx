@@ -80,6 +80,44 @@ let ``A module of another package cannot be imported`` () =
     Assert.Equal(DiagnosticCodes.ImportNotFound.Code, code)
     Assert.StartsWith("There is no package 'acme.core' to import from", message)
 
+/// A module whose third line doesn't parse (#2025).
+let private unparsed (name: string) =
+    $"""
+module {name}
+
+export shapes
+"""
+
+[<Fact>]
+let ``A module of the package that doesn't parse is reported once, at its own file, not as declaring no name`` () =
+    let code, file, _ = Assert.Single(buildOf [ "src/greetings.nyx", unparsed "greetings"; "src/main.nyx", main "greetings" ])
+    Assert.Equal(DiagnosticCodes.SyntaxError.Code, code)
+    Assert.Equal(Some "src/greetings.nyx", file)
+
+[<Fact>]
+let ``Compiling the file that imports a module that doesn't parse reports the module's parse error`` () =
+    use package =
+        new TempPackage(
+            [ "acme.web.nyxp", manifest
+              "src/greetings.nyx", (unparsed "greetings").ReplaceLineEndings "\n"
+              "src/main.nyx", (main "greetings").ReplaceLineEndings "\n" ]
+        )
+    let mainFile = package.Path "src/main.nyx"
+    let result = Package.compileSourceWith Linters.none mainFile (File.ReadAllText mainFile)
+    let diagnostic = Assert.Single result.Diagnostics
+    Assert.Equal(DiagnosticCodes.SyntaxError.Code, diagnostic.Code)
+    Assert.Equal(Some (Path.GetFullPath(package.Path "src/greetings.nyx")), diagnostic.Span |> Option.map _.File)
+    // `export shapes`, the fourth line, after the blank one the text starts with.
+    Assert.Equal(Some 3, diagnostic.Span |> Option.map _.StartLine)
+
+[<Fact>]
+let ``An unknown module names the package's files that don't parse`` () =
+    let diagnostics = buildOf [ "src/shapes.nyx", unparsed "greetings"; "src/main.nyx", main "greetings" ]
+    Assert.Contains(diagnostics, fun (code, file, _) -> code = DiagnosticCodes.SyntaxError.Code && file = Some "src/shapes.nyx")
+    let _, file, message = Assert.Single(diagnostics |> List.filter (fun (code, _, _) -> code = DiagnosticCodes.ImportNotFound.Code))
+    Assert.Equal(Some "src/main.nyx", file)
+    Assert.Equal("The package 'acme.web' has no module 'greetings', though it may be declared by 'src/shapes.nyx', which doesn't parse", message)
+
 [<Fact>]
 let ``A source file of a package without a module name is an error naming the file`` () =
     let code, file, message = Assert.Single(buildOf [ "src/main.nyx", plainMain; "src/util.nyx", """export def one = 1""" ])
