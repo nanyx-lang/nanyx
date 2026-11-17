@@ -53,6 +53,30 @@ def main = { println("ok") }""")
     Assert.True(wat.Length < 20000, $"the module is {wat.Length} bytes of WAT")
 
 [<Fact>]
+let ``An entry over the size limit that ends in a match is inlined into the start, which calls write directly`` () =
+    // The module calls the entry once, so it is inlined whatever its size or its last statement (#1883).
+    let lines = [ for i in 1..8 -> $"  def x{i} = collatz({i} + 26, 0)\n  println(if x{i} > 100 then \"long\" else \"short\")" ]
+    let source =
+        $"""def collatz: int, int -> int = {{ n, steps ->
+  if n == 1 then steps else collatz(if n %% 2 == 0 then n / 2 else 3 * n + 1, steps + 1)
+}}
+
+@entry
+def main = {{
+{String.concat "\n" lines}
+  match x1 > 100
+    | true -> println("done, long")
+    | false -> println("done, short")
+}}
+"""
+    let wat = transpileWat source
+    Assert.DoesNotContain("(func $main", wat)
+    Assert.Equal(0, countOccurrences "call_indirect" wat)
+    Assert.DoesNotContain("fd_read", wat)
+    Assert.DoesNotContain("console_host_read", wat)
+    runSource source |> assertRan "long\nshort\nshort\nshort\nlong\nshort\nshort\nshort\ndone, long\n"
+
+[<Fact>]
 let ``An entry point that does not write its type is passed the host's instance`` () =
     let source =
         """module main

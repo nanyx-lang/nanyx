@@ -113,6 +113,7 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   `@extern`, with their buffers allocated with `nanyx/host.memory` (see
   [Foreign functions](./foreign-functions#whats-built)). `run` passes the members of both contexts to every entry,
   but the inliner inlines `run` and the entry into the start ([#1469](https://github.com/nanyx-lang/nanyx/issues/1469)),
+  the entry whatever its size, since the module calls it once ([#1883](https://github.com/nanyx-lang/nanyx/issues/1883)),
   so a member nothing calls is never built, and a program contains only the members it calls and imports only what
   they call ([#1497](https://github.com/nanyx-lang/nanyx/issues/1497)): hello world imports `fd_write` alone. A
   program that reads `args()` imports no `environ_*` function, and one that reads only `variable` no `args_*` one

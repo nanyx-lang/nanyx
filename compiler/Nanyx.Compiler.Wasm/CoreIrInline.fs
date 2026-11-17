@@ -1,7 +1,7 @@
 /// Inlining in the core IR, after lowering and specialising and before reference counting (see
 /// `docs/src/content/compiler-internals/inlining.md`). A call is replaced by the body of the function it calls when the
 /// function is a handler called once (or one called more often that is not large), or is a lambda's and the closure over
-/// it is called once, or is small. A function in a cycle of
+/// it is called once, or is small, or is called once in the whole module and never closed over. A function in a cycle of
 /// calls is never inlined, so inlining ends.
 ///
 /// The callee's body is placed where the call was, with its parameters bound to the call's arguments and every variable
@@ -114,9 +114,30 @@ let private calleesFirst (wanted: string -> bool) (edges: Map<string, string lis
                 | name, [] -> order.Add name
     List.ofSeq order
 
+/// The functions that the whole module calls once and makes no closure over, by name: inlining one grows nothing, since
+/// its body only moves to where it is called (#1883).
+let private calledOnce (functions: Map<string, Function>) : Set<string> =
+    let calledAt = Dictionary<string, int>()
+    let closedOver = HashSet<string>()
+    for f in functions.Values do
+        for e in allExprs f.Body do
+            match e.Kind with
+            | Call(name, _) -> calledAt.[name] <- (match calledAt.TryGetValue name with | true, n -> n + 1 | _ -> 1)
+            | MakeClosure(name, _, _) -> closedOver.Add name |> ignore
+            | _ -> ()
+            for atom in directAtoms e do
+                match atom with
+                | AStaticClosure(name, _, _) -> closedOver.Add name |> ignore
+                | _ -> ()
+    calledAt |> Seq.choose (fun pair -> if pair.Value = 1 && not (closedOver.Contains pair.Key) then Some pair.Key else None) |> Set.ofSeq
+
 /// Inlines calls into one function, `f`, given the functions it may call as they are by now, and `prepare`, which
-/// inlines calls into a function before a call to it is looked at.
-type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string>, prepare: string -> unit, f: Function) =
+/// inlines calls into a function before a call to it is looked at. `once` are the functions the module calls once
+/// (see `calledOnce`), and `placed` those inlined somewhere already: one of `once` is inlined whatever its size the
+/// first time, and by the other rules after that, since the function it was inlined into may itself be inlined in
+/// several places.
+type private Inliner
+    (functions: Dictionary<string, Function>, cyclic: Set<string>, once: Set<string>, placed: HashSet<string>, prepare: string -> unit, f: Function) =
     let mutable nextId =
         let mutable highest = f.Params |> List.fold (fun acc p -> max acc p.Id) 0
         mapVars (fun v -> highest <- max highest v.Id; v) id f.Body |> ignore
@@ -217,10 +238,15 @@ type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string
                     let calleeSize = size callee.Body
                     // A handler called once here is inlined whatever its size, and so is a lambda this body makes and
                     // calls once. A handler called more than once is inlined only up to `handlerLimit`: one that calls
-                    // another twice would otherwise be copied twice at each level (#1664).
-                    let once = calls.[name] = 1
-                    let always = (isHandler callee && (once || calleeSize <= handlerLimit)) || (closures.Contains name && once)
+                    // another twice would otherwise be copied twice at each level (#1664). A function the module calls
+                    // only here is inlined whatever its size, as an `@entry` is into the start function (#1883).
+                    let onceHere = calls.[name] = 1
+                    let always =
+                        (isHandler callee && (onceHere || calleeSize <= handlerLimit))
+                        || (closures.Contains name && onceHere)
+                        || (once.Contains name && not (placed.Contains name))
                     if always || calleeSize <= sizeLimit then
+                        placed.Add name |> ignore
                         grown <- grown + calleeSize
                         Some(callee, args)
                     else None
@@ -321,6 +347,8 @@ let inlineCalls (start: string option) (kept: Set<string>) (functions: Function 
     let edges = byName |> Map.map (fun _ f -> references f.Body)
     let cyclic = inCycles byName edges + kept + Set.ofList (Option.toList start)
     let callEdges = byName |> Map.map (fun _ f -> calls f.Body)
+    let once = calledOnce byName
+    let placed = HashSet<string>()
     let current = Dictionary<string, Function>()
     for f in functions do
         current.[f.Name] <- f
@@ -328,7 +356,7 @@ let inlineCalls (start: string option) (kept: Set<string>) (functions: Function 
     let rec inlineInto (name: string) =
         if inlined.Add name then
             let f = current.[name]
-            let inliner = Inliner(current, cyclic, prepare, f)
+            let inliner = Inliner(current, cyclic, once, placed, prepare, f)
             let mutable body = f.Body
             let mutable round = 0
             let mutable changed = true
