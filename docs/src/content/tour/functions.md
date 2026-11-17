@@ -174,6 +174,53 @@ def magnitude: (x: int, y: int) -> float = { x = innerX, y = innerY ->
 }
 ```
 
+## Type arguments
+
+A function can take a type as an argument. This is how a caller says which type it wants where nothing else says it, as for a function that only gives back a value of the type, such as a decoder. A positional parameter that takes a type is written `type a`, and the caller passes the type with `type` in front of it:
+
+```nanyx
+context Decode(a) = (decode: string -> a)
+
+def int.decode: string -> int = { text ->
+  text.length
+}
+
+def bool.decode: string -> bool = { text ->
+  text == "yes"
+}
+
+def deserialise: [Decode(a)] type a, string -> a = { t, text ->
+  decode(text)
+}
+
+println(deserialise(type int, "abc")) -- 3
+println(deserialise(type bool, "yes")) -- true
+```
+
+The parameter is a value of type `Type(a)`, and `a` is a type variable like any other: the expression `type int` has type `Type(int)`, and passing it fixes `a` as `int`, which picks the [context](../advanced/contexts) instance `Decode(int)`. Inside generic code, `type a` passes on a type variable of its own.
+
+A named parameter that takes a type is written `into: type`. Like any [named parameter](#named-parameters), it is passed by name, `into = type int`, and the lambda names it as the field. Its name is the type variable, so the signature uses it as one, in its contexts and its result:
+
+```nanyx
+context Decode(a) = (decode: string -> a)
+
+def int.decode: string -> int = { text ->
+  text.length
+}
+
+def parse: [Decode(into)] (string, into: type) -> into = { text, into ->
+  decode(text)
+}
+
+println(parse("abcd", into = type int)) -- 4
+```
+
+The type's name can't be a built-in type's, as `list: type` would be (NYX0270).
+
+`type` is always written at the call, and a type argument is never left out, even where the type the call gives back would say what it is: `def n: int = deserialise("abc")` is an error that says to pass `type int` (NYX0271). A function that takes a type argument is otherwise a function like any other, so it can be piped into, wrapped in a lambda and passed as a value.
+
+A type argument is known at compile time: it is never chosen with `if` or `match`, and a list never holds two of different types (NYX0272). It costs nothing when the program runs.
+
 # Callable values
 
 Any value with a function type can be called like a function. A [map](../stdlib/prelude-maps) can be called too, and calling it is a lookup, which gives `#some(v) | #notFound`:

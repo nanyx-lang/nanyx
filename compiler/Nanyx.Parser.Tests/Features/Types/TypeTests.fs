@@ -173,8 +173,6 @@ let ``a record field's name may start with a keyword`` () =
     annotationOf "def r: (typeName: string) = r" |> should equal (ty (TypeRecord [ field "typeName" false ]))
     annotationOf "def r: (mutable: string) = r" |> should equal (ty (TypeRecord [ field "mutable" false ]))
     annotationOf "def r: (mut typeName: string) = r" |> should equal (ty (TypeRecord [ field "typeName" true ]))
-    annotationOf "def r: (type Item = int, typeName: string) = r"
-    |> should equal (ty (TypeRecord [ TypeMember ("Item", Some (named "int")); field "typeName" false ]))
 
 [<Fact>]
 let ``typeof in a module block names the block's own value`` () =

@@ -19,7 +19,8 @@ let rec private children (expr: Expression) : Expression list =
     | LiteralExpr _
     | UnitExpr
     | IdentifierExpr _
-    | ContextMemberAccess _ -> []
+    | ContextMemberAccess _
+    | TypeValue _ -> []
     | FunctionCall(_, _, args)
     | ContextMemberCall(_, _, args) -> args
     | Lambda(_, body, _)

@@ -4,7 +4,7 @@ description: "Associated types on contexts, types passed as arguments, and inspe
 order: 4
 ---
 
-This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), and what is left of them here is how they meet type arguments and the prelude contexts that move to them. **Type arguments** let a function take a type as a parameter and inspect its structure; their design was decided on 2026-11-17 and is filed in stages ([Plan](#plan)), none built yet. Both are the same thing: a record member whose value is a type.
+This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), and what is left of them here is how they meet type arguments and the prelude contexts that move to them. **Type arguments** let a function take a type as a parameter and inspect its structure; their design was decided on 2026-11-17 and is filed in stages ([Plan](#plan)). Passing a type is built ([Type arguments](../tour/functions#type-arguments)); inspecting it is not yet. Both are the same thing: a record member whose value is a type.
 
 # The problems
 
@@ -44,7 +44,7 @@ def iterStrings: [Iter(c, a)] c -> () = { items -> ... }
 # Decisions
 
 - **Contexts have associated types,** described on the [Contexts](../advanced/contexts#associated-types) page.
-- **A type can be passed as an argument.** The caller writes the type at the call site. The argument fixes a type variable, and the function's body receives a value that stands for the type. The syntax is [below](#a-type-argument-is-a-type-member-of-the-parameters).
+- **A type can be passed as an argument,** built and described on the [Functions](../tour/functions#type-arguments) page.
 - **Generic code can inspect a type argument**: whether it is a record or a union, and what its fields or cases are.
 - **Generic code is checked once, not per instantiation.** Nanyx does not adopt compile-time templates, at least for now. In Zig's `comptime` and in C++ templates, generic code is type-checked separately for each type it is used at, and errors appear inside library code. Inspection in Nanyx is type-checked once, when the generic function is defined, as all generic code is today.
 
@@ -52,7 +52,7 @@ def iterStrings: [Iter(c, a)] c -> () = { items -> ... }
 
 Associated types are built: a context's member of kind `type`, named `Iter(c).elem` or `elem` in a signature and fixed by name in a constraint, `[Iter(c, elem = string)]`, is described on the [Contexts](../advanced/contexts#associated-types) page. What is still open:
 
-- **It is also a value of type `Type(elem)`,** as a [type argument](#x-type-is-a-value-of-type-typex) is, so `Iter(c).elem` can be passed wherever a type argument is expected. That part is built with type arguments, not before.
+- **It is also a value of type `Type(elem)`,** as a [type argument](../tour/functions#type-arguments) is, so `Iter(c).elem` can be passed wherever a type argument is expected, and a generic function over iterables can inspect its element type ([#1999](https://github.com/nanyx-lang/nanyx/issues/1999)).
 
 ## The prelude moves to them
 
@@ -60,51 +60,19 @@ Every prelude context whose later parameter is fixed by its first is a context w
 
 # Type arguments
 
+Passing a type is built: a parameter `type a` or `into: type` of type `Type(a)`, the value `type Point` of type `Type(Point)`, always written at the call and never left out, and known at compile time, as the [Functions](../tour/functions#type-arguments) page describes. It is the same idea as Haskell's `Proxy a`, Scala's `ClassTag` and Kotlin's `KClass<T>`. A `Type` value holds nothing at run time yet. What is open is inspecting one.
+
 Decided by the maintainer on 2026-11-17:
 
-- **Both forms** below, positional `type a` and named `into: type`, with the pun the named form brings.
-- **`type` is always written at the call site,** and **a type argument is never left out,** even where the result type would say it.
 - **A nominal type is read-only to reflection outside its home module:** there its description is `#nominal`, with its name and module but no structure and no `build`. Its encoding comes from its attached definitions or a context its module provides. Deserialisation-only constructors are logged for later ([#2001](https://github.com/nanyx-lang/nanyx/issues/2001)).
 - **Narrowing on a `Type` match only,** not full GADTs, and **a `build` the compiler provides** for decoding, not rank-2 functions in the language.
 - **A description contains** field and case names and types, the type's name and module, its type parameters, attributes on fields and doc comments.
 - **Customising an encoding:** a type that provides the library's context itself wins over walking its description, as an explicit instance already wins over synthesis, and attributes on fields cover renames without one.
 - **`dbg`, interpolation and `==` become library code over descriptions, eventually,** once reflection is proven and measured ([#2000](https://github.com/nanyx-lang/nanyx/issues/2000)).
 
-## A type argument is a type member of the parameters
+## Descriptions are in the module only when used
 
-Since a function's parameters are a [record](../tour/records), a type argument is a parameter declared the way a context declares an associated type:
-
-```nanyx
-def deserialise: [Decode(into)] (string, into: type) -> into = { text, t -> ... }
-
-def p = deserialise('{"x": 1, "y": 2}', into = type Point)
-```
-
-The call site matches the constraint syntax: `into = type Point` fixes a parameter's type member as `Iter(c, elem = string)` fixes a context's. One concept covers both features: a record member of kind `type`.
-
-Like any named field, `into` is [passed by name](../tour/functions), so `deserialise(text, type Point)` is an error for this signature. A function whose callers should pass the type positionally declares a positional type parameter instead, written `type a`:
-
-```nanyx
-def deserialise: [Decode(a)] (string, type a) -> a = { text, t -> ... }
-
-def p = deserialise('{"x": 1, "y": 2}', type Point)
-```
-
-The two forms follow the record rule for every other field. A named field is `name: T` and a positional field is just `T`; likewise a named type member is `into: type` and a positional one is `type a`. A positional field has no name of its own, so the type variable `a` is the only name, and it is a single letter like any other type variable. The signature is written the way the call is: `type a` in the signature, `type Point` at the call site. As with any parameter, the function's author chooses one form, and the caller follows it.
-
-A type member's name can't clash with a built-in type. [Built-in type names](../tour/types#type-names) such as `int`, `string`, `bool` and `list` are reserved by the language, so `(string, list: type) -> list` is an error.
-
-## `x: type` is a value of type `Type(x)`
-
-`into: type` is shorthand for a parameter `into: Type(into)`, and the positional `type a` for a positional parameter of type `Type(a)`. In both, the name, `into` or `a`, is an ordinary type variable, quantified over the whole signature as `a` is today. The expression `type Point` has type `Type(Point)`. Type inference treats type arguments like any other: unifying `Type(Point)` with `Type(into)` solves `into = Point`. This is why `into` can be used in the result type and in the `[Decode(into)]` constraint to its left with no new scoping rule. No dependent types are needed, and partial application, pipes and passing the function around all keep working. Inside generic code, `type a` with a type variable `a` is allowed, and monomorphisation resolves it.
-
-This is the same idea as Haskell's `Proxy a`, Scala's `ClassTag` and Kotlin's `KClass<T>`.
-
-The same reading applies to associated types, as decided: a context's `elem: type` member is also a value of type `Type(elem)`, so `Iter(c).elem` can be passed wherever a type argument is expected, and a generic function over iterables can inspect its element type.
-
-## Type arguments are known at compile time
-
-A `Type` value must be known at compile time: it cannot be computed at runtime, stored in a list of different types, or chosen with `if`. Otherwise a function's return type would depend on a runtime value. This keeps reflection out of the runtime, which matters for a single WebAssembly module whose unused code is removed:
+Since a `Type` value is known at compile time, reflection stays out of the runtime, which matters for a single WebAssembly module whose unused code is removed:
 
 - The module contains a description only of the types that are written as `type X` somewhere in the program, or that need a [`Typed` instance](#a-synthesised-typeda-context). Nothing has to be kept just in case it is reflected over.
 - Because every `Type` value is a constant after monomorphisation, the compiler can specialise code that walks a type's description. The output is close to what a template would produce, while the checking stays that of ordinary generic code. This is an optimisation, not part of the semantics.
@@ -114,7 +82,7 @@ A `Type` value must be known at compile time: it cannot be computed at runtime, 
 The leading design gives `Type(a)` a structure that can be matched. Each case tells the type checker more about the type:
 
 ```nanyx
-def encodeAt: (a, type a) -> Json = { value, t ->
+def encodeAt: a, type a -> Json = { value, t ->
   match t
     | #int -> json.int(value)              -- here a = int
     | #string -> json.string(value)
@@ -208,7 +176,7 @@ C#'s source generators run user code at compile time that emits more source. The
 
 | Step | Issue | After |
 |---|---|---|
-| Type arguments: `type a`, `into: type`, `Type(a)` values | [#1995](https://github.com/nanyx-lang/nanyx/issues/1995) | |
+| Type arguments: `type a`, `into: type`, `Type(a)` values (built) | [#1995](https://github.com/nanyx-lang/nanyx/issues/1995) | |
 | Type descriptions, matched with narrowing | [#1996](https://github.com/nanyx-lang/nanyx/issues/1996) | #1995 |
 | A compiler-provided `build` for decoding | [#1997](https://github.com/nanyx-lang/nanyx/issues/1997) | #1996 |
 | `Typed(a)`, synthesised for every type | [#1998](https://github.com/nanyx-lang/nanyx/issues/1998) | #1995 |

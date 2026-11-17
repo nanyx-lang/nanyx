@@ -120,6 +120,7 @@ module internal BuiltinTypeNames =
                 | Lambda(parameters, body, takesUnit) -> Lambda(parameters |> List.map (fun (name, typeOpt) -> name, typeOpt |> Option.map typeExpr), body, takesUnit)
                 | ContextMemberAccess(ctxType, memberName) -> ContextMemberAccess(typeExpr ctxType, memberName)
                 | ContextMemberCall(ctxType, memberName, args) -> ContextMemberCall(typeExpr ctxType, memberName, args)
+                | TypeValue written -> TypeValue(typeExpr written)
                 | Block statements ->
                     Block(
                         statements

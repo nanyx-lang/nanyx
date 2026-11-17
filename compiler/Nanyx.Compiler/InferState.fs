@@ -73,6 +73,17 @@ type NumericLiteral =
       /// nothing settles them.
       Operator: (string * NodeId) option }
 
+/// A call that leaves out a type argument its callee takes, reported once the constraints say which type it should pass
+/// (see `TypeArguments`).
+type LeftOutTypeArgument =
+    { Call: NodeId
+      At: SourceSpan
+      Callee: string
+      /// The named parameter left out, or None for a positional one.
+      Parameter: Identifier option
+      /// The type the argument would stand for: a variable, until the constraints are solved.
+      StandsFor: Ty }
+
 /// An import of a `module name =` block written in the same file (`import money`), rather than of another file.
 type BlockImport =
     { Import: ImportItem
@@ -166,6 +177,8 @@ type InferState =
             NumericLiterals: NumericLiteral list;
             /// The number literals no def's generalising has settled yet, the latest first.
             UnsettledLiterals: NumericLiteral list;
+            /// The calls of the module that leave out a type argument, the latest first (see `TypeArguments`).
+            LeftOutTypeArguments: LeftOutTypeArgument list;
             /// The names of the prelude's contexts, as they are in `TypeDefs`: the only ones an operator on a value of
             /// a type variable is read through (see `OperatorContexts`). A module checked without the prelude has none.
             PreludeContexts: Set<Identifier>;
@@ -389,6 +402,7 @@ let emptyState =
             PendingArithmetic = [];
             NumericLiterals = [];
             UnsettledLiterals = [];
+            LeftOutTypeArguments = [];
             PreludeContexts = Set.empty;
             HoleScopes = Map.empty;
             LocalComparisons = Map.empty;

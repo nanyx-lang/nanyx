@@ -725,8 +725,11 @@ module Compiler =
                 let patternScope = CustomPatterns.scopeOf env ambiguousImports desugared
                 let desugared, rewriteErrors = CustomPatterns.rewrite patternScope desugared
                 let patternErrors = CustomPatterns.check patternScope desugared @ rewriteErrors
-                // A context's associated types are written as its last parameters (see `AssociatedTypes`).
+                // A parameter that takes a type is written as one of type `Type(a)` (see `TypeArguments`), and a
+                // context's associated types as its last parameters (see `AssociatedTypes`).
+                let desugared, typeArgumentErrors = TypeArguments.rewrite desugared
                 let desugared, associatedErrors = AssociatedTypes.rewrite state.TypeDefs desugared
+                let associatedErrors = typeArgumentErrors @ associatedErrors
                 let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.InferModule.inferModuleWithEnv env state desugared
                 let subst, mismatches = Solving.solveLeavingUnknown state.Constraints |> fun (subst, mismatches) -> Unifier.keepWrittenNames (Seq.append types.Values (state.AssociatedVariables |> Seq.map TyVar)) subst, mismatches
                 // Every error in the module is reported: the items that failed to check, and each conflict among the

@@ -2072,6 +2072,47 @@ def ran = go(Bag(items = []))  -- error NYX0269: The instance 'Pair(Bag)' fixes 
 
 To fix it, make the members agree on the associated type.
 
+# NYX0270: Type parameter declared wrongly
+
+A function's named [type parameter](../tour/functions#type-arguments), `into: type`, has the name of a built-in type,
+a default, or `mut`. The name is a type variable of the signature, so it can't be `list` or `string`, and the caller
+always passes the type.
+
+```nanyx
+def count: (string, list: type) -> int = { text, list -> text.length }  -- error NYX0270: 'list' is a built-in type, so it can't be the name of a type parameter
+```
+
+To fix it, give the type parameter another name, such as `into`, and leave out its default.
+
+# NYX0271: Type argument left out
+
+A call leaves out a [type argument](../tour/functions#type-arguments) its function takes. A type argument is never
+left out, even where the type the call gives back says what it is.
+
+```nanyx
+context Decode(a) = (decode: string -> a)
+
+def int.decode: string -> int = { text -> text.length }
+
+def deserialise: [Decode(a)] type a, string -> a = { t, text -> decode(text) }
+
+def n: int = deserialise("abc")  -- error NYX0271: 'deserialise' takes a type argument, which this call leaves out: a type argument is never left out, so pass `type int`
+```
+
+To fix it, pass the type, as the message says: `deserialise(type int, "abc")`.
+
+# NYX0272: Type value not known at compile time
+
+A [type argument](../tour/functions#type-arguments) is chosen with `if` or `match`, or a list holds `Type` values of
+different types. A `Type` value is known at compile time, so it can't depend on a value the program has only when it
+runs.
+
+```nanyx
+def chosen = { big -> if big then type int else type string }  -- error NYX0272: A type argument can't be chosen with `if`: a `Type` value is known at compile time, so pass `type X` where it is used
+```
+
+To fix it, call the function that takes the type argument in each branch, passing each its own type.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

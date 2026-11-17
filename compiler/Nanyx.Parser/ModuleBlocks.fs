@@ -65,6 +65,7 @@ let private rewriteExpressionInModule (valueMap: Map<string, string>) (typeMap: 
         | MemberAccess(baseExpr, field, range) -> MemberAccess(rewrite baseExpr, field, range)
         | ContextMemberAccess(ctxType, field) -> ContextMemberAccess(rewriteType ctxType, field)
         | ContextMemberCall(ctxType, field, args) -> ContextMemberCall(rewriteType ctxType, field, args |> List.map rewrite)
+        | TypeValue written -> TypeValue(rewriteType written)
         | UseIn(value, body) -> UseIn(rewrite value, rewrite body)
         | WorkflowBindExpr(name, value) -> WorkflowBindExpr(name, rewrite value)
         | WorkflowReturnExpr value -> WorkflowReturnExpr (rewrite value)

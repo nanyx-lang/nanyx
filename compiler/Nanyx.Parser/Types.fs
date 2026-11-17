@@ -24,11 +24,17 @@ let internal fillTypeRefs () =
                 elif Names.isTypeVariable name then TypeVar name
                 else TypeName name)
 
-    let typeMemberField =
-        pipe2
-            (pstring "type" >>. keywordEnd >>. ws >>. identifierNoWs .>> wsInline)
-            (opt (attempt (pstring "=" >>. wsInline >>. typeExpr)))
-            (fun name typeOpt -> TypeMember(name, typeOpt))
+    // `type a`, a positional parameter that takes a type argument (see `TypeArgument`). Its operand is the type variable
+    // the argument fixes, so it is a single lowercase letter.
+    let typeArgument =
+        spannedType (
+            attempt (pstring "type" >>. keywordEnd >>. wsInline >>. getPosition .>>. typeIdentifier)
+            >>= fun (start, operand) ->
+                match operand.Kind with
+                | TypeVar _ -> preturn (TypeArgument operand)
+                | _ ->
+                    reportFocused start
+                        "A positional type parameter is written with a type variable, as in `type a`: a named one is written `into: type`")
 
     // `name?: T` and `T?` are not Nanyx: a value that may be absent has its absence in its type, as everywhere else
     // (`#some(T) | #none`). They are reported, so that whoever writes them is told what to write instead.
@@ -71,7 +77,7 @@ let internal fillTypeRefs () =
         |>> fun ((name, argument), span) -> TypeFieldAttribute(name, argument, span)
 
     let namedTypeField =
-        pipe2 (many (attempt fieldAttribute)) (attempt typeMemberField <|> typeField) (fun attributes field -> attributes @ [ field ])
+        pipe2 (many (attempt fieldAttribute)) typeField (fun attributes field -> attributes @ [ field ])
 
     let namedTypeFields =
         pipe2
@@ -235,6 +241,7 @@ let internal fillTypeRefs () =
     let typeAtom =
         choice [
             attempt typeOf
+            typeArgument
             attempt typeConstraint
             attempt typeTag
             attempt typeApplyOrAssociated
@@ -298,6 +305,7 @@ let internal fillTypeRefs () =
         <|> (typeList |>> typeListToType)
 
     parameterTypeRef := typeUnion
+    typeOperandRef := typePostfix
     ()
 
 /// A lambda parameter with an optional annotation of the type `annotation` parses: a `parameterType` where the `->`

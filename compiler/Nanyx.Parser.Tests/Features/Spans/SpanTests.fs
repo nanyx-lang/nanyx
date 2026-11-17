@@ -212,6 +212,7 @@ let rec private expressionsOfKind (kind: ExpressionKind) : Expression list =
     | UnitExpr
     | IdentifierExpr _
     | ContextMemberAccess _ -> []
+    | TypeValue written -> expressionsOfType written
     | FunctionCall (_, _, args) -> args |> List.collect expressions
     | Lambda (parameters, body, _) ->
         (parameters |> List.collect (snd >> Option.toList >> List.collect expressionsOfType)) @ expressions body
@@ -281,7 +282,8 @@ and private expressionsOfType (typeExpr: TypeExpr) =
     | TypeUnit
     | TypeKeyword -> []
     | TypeNamedArgument (_, inner)
-    | TypeAssociated (inner, _) -> expressionsOfType inner
+    | TypeAssociated (inner, _)
+    | TypeArgument inner -> expressionsOfType inner
     | TypeTuple types
     | TypeUnion types
     | TypeIntersection types
@@ -293,7 +295,6 @@ and private expressionsOfType (typeExpr: TypeExpr) =
             | TypeField (_, _, fieldType, defaultValue) ->
                 (fieldType |> Option.toList |> List.collect expressionsOfType)
                 @ (defaultValue |> Option.toList |> List.collect expressions)
-            | TypeMember (_, memberType) -> memberType |> Option.toList |> List.collect expressionsOfType
             | TypeFieldAttribute (_, argument, _) -> argument |> Option.toList |> List.collect expressions)
     | TypeFunc (input, output) -> expressionsOfType input @ expressionsOfType output
     | TypeTag (_, payload) -> payload |> Option.toList |> List.collect expressionsOfType
@@ -355,6 +356,7 @@ let private typesOfExpression (expr: Expression) =
     | Lambda (parameters, _, _) -> parameterTypes parameters
     | ContextMemberAccess (contextType, _)
     | ContextMemberCall (contextType, _, _) -> [ contextType ]
+    | TypeValue written -> [ written ]
     | _ -> []
 
 /// The type expressions a statement itself is written with.
@@ -390,7 +392,8 @@ let rec private typesWithin (typeExpr: TypeExpr) : TypeExpr list =
         | TypeKeyword
         | TypeOf _ -> []
         | TypeNamedArgument (_, inner)
-        | TypeAssociated (inner, _) -> typesWithin inner
+        | TypeAssociated (inner, _)
+        | TypeArgument inner -> typesWithin inner
         | TypeTuple types
         | TypeUnion types
         | TypeIntersection types
@@ -399,8 +402,7 @@ let rec private typesWithin (typeExpr: TypeExpr) : TypeExpr list =
         | TypeRecord fields
         | TypeOpenRecord (fields, _) ->
             fields |> List.collect (function
-                | TypeField (_, _, fieldType, _)
-                | TypeMember (_, fieldType) -> fieldType |> Option.toList |> List.collect typesWithin
+                | TypeField (_, _, fieldType, _) -> fieldType |> Option.toList |> List.collect typesWithin
                 | TypeFieldAttribute _ -> [])
         | TypeFunc (input, output) -> typesWithin input @ typesWithin output
         | TypeTag (_, payload) -> payload |> Option.toList |> List.collect typesWithin

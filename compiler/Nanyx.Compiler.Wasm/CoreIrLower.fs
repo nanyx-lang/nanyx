@@ -270,6 +270,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             k value
         match expr.Kind with
         | UnitExpr -> k (Expr.make (Atom AUnit) IrUnit)
+        // A `Type` value is known at compile time, so it holds nothing at run time (see `TypeValues`).
+        | TypeValue _ -> k (Expr.make (Atom AUnit) IrUnit)
         | LiteralExpr(IntLit value) -> k (Expr.make (Atom(intAtom value (tyOf expr))) (tyOf expr))
         | LiteralExpr(BoolLit value) -> k (Expr.make (Atom(ABool value)) IrBool)
         | LiteralExpr(StringLit value) -> k (Expr.make (Atom(AString value)) IrString)
