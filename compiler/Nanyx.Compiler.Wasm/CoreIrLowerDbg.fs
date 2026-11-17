@@ -92,7 +92,6 @@ let key (printer: Printer) : string =
 let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Function =
     let text (parts: InterpolationPart list) = Expr.make (Interpolate parts) IrString
     let local (prefix: string) (ty: IrType) = tools.NewVar prefix Local ty
-    let bind (var: Var) (value: Expr) (body: Expr) = Expr.make (Let(var, value, body)) body.Type
 
     /// Passes `k` the text of `value`, a value of `ty`: a local that holds it, or a constant's text.
     let show (ty: Ty) (value: Atom) (k: InterpolationPart -> Expr) : Expr =
@@ -100,7 +99,7 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
         | Some constant -> k (Text constant)
         | None ->
             let written = local "__dbg_part" IrString
-            bind written (Expr.make (Call(tools.PrinterOf (Showing ty), [ value ])) IrString) (k (Hole(written, HoleString)))
+            Expr.letIn written (Expr.make (Call(tools.PrinterOf (Showing ty), [ value ])) IrString) (k (Hole(written, HoleString)))
 
     /// The text of `value`, a value of `ty`, after `prefix`: in brackets unless it has its own.
     let wrapped (prefix: string) (ty: Ty) (value: Atom) : Expr =
@@ -117,7 +116,7 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
             | (fieldName, ty) :: rest ->
                 let slot = slots |> List.findIndex ((=) fieldName)
                 let field = tools.NewTemp (tools.ToIrType ty)
-                bind field (Expr.make (Field(AVar record, slot)) field.Type) (show ty (AVar field) (fun part -> next rest (part :: acc)))
+                Expr.letIn field (Expr.make (Field(AVar record, slot)) field.Type) (show ty (AVar field) (fun part -> next rest (part :: acc)))
         next fields []
 
     /// `parts`, with `, ` between each two.
@@ -127,7 +126,7 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
     /// Matches `value`, a parameter, against `arms`, as a `match` holds its scrutinee.
     let matching (value: Var) (arms: Arm list) (resultTy: IrType) =
         let scrutinee = tools.NewVar "__match_tmp_0" MatchTemp value.Type
-        bind scrutinee (Expr.make (Atom(AVar value)) value.Type) (Expr.make (Match([ scrutinee ], arms)) resultTy)
+        Expr.letIn scrutinee (Expr.make (Atom(AVar value)) value.Type) (Expr.make (Match([ scrutinee ], arms)) resultTy)
 
     let bound (prefix: string) (ty: IrType) = tools.NewVar prefix PatternBound ty
 
@@ -145,8 +144,8 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
             first head (fun parts ->
                 let written = local "__dbg_first" IrString
                 let others = local "__dbg_rest" IrString
-                bind written (text parts) (
-                    bind others (Expr.make (Call(tools.PrinterOf rest, [ AVar tail; AVar written ])) IrString) (
+                Expr.letIn written (text parts) (
+                    Expr.letIn others (Expr.make (Call(tools.PrinterOf rest, [ AVar tail; AVar written ])) IrString) (
                         text [ Text $"{prefix}["; Hole(others, HoleString); Text "]" ])))
         matching list
             [ { Patterns = [ PList([], None) ]; Body = Expr.make (Atom(AString $"{prefix}[]")) IrString }
@@ -182,7 +181,7 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
         let next =
             element (fun parts ->
                 let longer = local "__dbg_text" IrString
-                bind longer (text (Hole(written, HoleString) :: Text ", " :: parts)) (
+                Expr.letIn longer (text (Hole(written, HoleString) :: Text ", " :: parts)) (
                     Expr.make (Call(name, [ AVar tail; AVar longer ])) IrString))
         make
             [ list; written ]
@@ -236,7 +235,7 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
             // An array is written as the list of its elements is, after its type's name.
             | Arrays.ArrayType elementTy ->
                 let elements = local "__dbg_elements" (IrList(tools.ToIrType elementTy))
-                bind elements (Expr.make (CallRuntime(Intrinsics.arrayToList, [ AVar value ], true)) elements.Type) (
+                Expr.letIn elements (Expr.make (CallRuntime(Intrinsics.arrayToList, [ AVar value ], true)) elements.Type) (
                     listText elements elementTy "Array" (showElement elementTy) (ShowingRest(elementTy, false)))
             | other -> cannot $"`dbg` of a value of type '{Unifier.tyToString other}'"
         make [ value ] body
