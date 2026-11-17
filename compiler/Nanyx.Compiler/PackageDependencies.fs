@@ -159,12 +159,17 @@ module PackageDependencies =
                                 if found <> name then
                                     Result.Error $"The package in '{directory}' is named '{found}', not '{name}': make the names match"
                                 else
-                                    let path = Path.GetRelativePath(Path.GetDirectoryName manifestPath, directory).Replace('\\', '/')
-                                    Result.Ok($"(package = \"{name}\", path = \"{path}\")", None))
-                        | None, Some version -> Result.Ok($"(package = \"{name}\", version = \"{version}\")", (if isShipped name then None else Some (name, version)))
-                        | None, None when isShipped name -> Result.Ok($"(package = \"{name}\", version = \"{toolVersion}\")", None)
+                                    Result.Ok(DependencySource.AtPath directory, None))
+                        | None, Some version ->
+                            match VersionRequirement.tryParse version with
+                            | Some requirement -> Result.Ok(FromIndex requirement, (if isShipped name then None else Some (name, version)))
+                            | None -> Result.Error $"'{version}' is not a version, which must be {VersionRequirement.rule}"
+                        | None, None when isShipped name -> Result.Ok(DependencySource.Shipped, None)
                         | None, None -> Result.Error $"Neither `--path` nor `--version` was given: give the directory '{name}' is in with `--path`, or its version with `--version`"
-                    added |> Result.map (fun (entry, download) -> { Manifest = withEntry text fields entry; ToDownload = download }))
+                    added
+                    |> Result.map (fun (source, download) ->
+                        let entry = Manifest.entryText toolVersion (Path.GetDirectoryName manifestPath) name source
+                        { Manifest = withEntry text fields entry; ToDownload = download }))
 
     /// What `nanyx install` says of the package `name` it added at `version`, which has to be downloaded.
     let notDownloaded (name: string, version: string) = cantDownload name version

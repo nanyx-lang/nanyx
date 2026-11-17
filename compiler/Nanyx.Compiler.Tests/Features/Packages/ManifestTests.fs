@@ -243,9 +243,9 @@ let ``A linter or host must be named at the version the compiler ships, exactly`
 let ``A dependency the compiler ships is named at its version, and found beside the compiler`` () =
     let manifest =
         okOf $"""(package = (name = "demo", version = "0.1.0"), dependencies = [(package = "nanyx.console.core", version = "{Toolchain.version}")])"""
-    Assert.Equal<(string * string) list>(
-        [ "nanyx.console.core", ShippedPackages.directoryOf "nanyx.console.core" ],
-        manifest.Dependencies |> List.map (fun dependency -> dependency.Name, dependency.Directory))
+    Assert.Equal<(string * DependencySource) list>(
+        [ "nanyx.console.core", Shipped ],
+        manifest.Dependencies |> List.map (fun dependency -> dependency.Name, dependency.Source))
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.VersionNotShipped.Code,
           $"The compiler ships 'nanyx.console.core' {Toolchain.version}, not 99.0.0: name a package the compiler ships at its version exactly"
@@ -285,3 +285,8 @@ let ``A dependency listed twice is an error at the repeat`` () =
 [<Fact>]
 let ``The compiler's version is its release, with no commit`` () =
     Assert.Matches(@"^\d+\.\d+\.\d+$", Toolchain.version)
+
+[<Fact>]
+let ``An entry is written with its strings escaped`` () =
+    let reference = { Repository = { Owner = "acme"; Name = "web" }; File = None; Commit = "v\"1\\2" }
+    Assert.Equal("""(package = "acme.web", github = "acme/web", rev = "v\"1\\2")""", Manifest.entryText Toolchain.version "" "acme.web" (OnGitHub reference))

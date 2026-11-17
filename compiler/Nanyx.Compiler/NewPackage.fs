@@ -7,10 +7,11 @@ module NewPackage =
     /// The manifest of a new package called `name`: its sources are under `src`, the official linter is on with every
     /// rule at its default, and the console host runs it. Both are the release `toolVersion` of the compiler making it.
     let manifest (name: string) (toolVersion: string) =
+        let shipped package = Manifest.entryText toolVersion "" package Shipped
         $"""(
-  package = (name = "{name}", version = "0.1.0", sources = ["src/**/*.nyx"])
-  linters = [(package = "nanyx.lint", version = "{toolVersion}")]
-  host = (package = "nanyx.console", version = "{toolVersion}")
+  package = (name = {Manifest.quotedString name}, version = "0.1.0", sources = ["src/**/*.nyx"])
+  linters = [{shipped "nanyx.lint"}]
+  host = {shipped Hosts.consolePackage}
 )
 """
             .ReplaceLineEndings "\n"

@@ -25,11 +25,11 @@ module PackageArchive =
     let packErrors (manifest: Manifest) : Diagnostic list =
         let byPath =
             manifest.Dependencies
-            |> List.filter (fun dependency -> dependency.GitHub.IsNone && dependency.Version.IsNone && dependency.Directory <> ShippedPackages.directoryOf dependency.Name)
+            |> List.filter (fun dependency -> match dependency.Source with AtPath _ -> true | Shipped | FromIndex _ | OnGitHub _ -> false)
             |> List.map (fun dependency ->
                 Diagnostics.at
                     DiagnosticCodes.InvalidManifestValue
-                    dependency.PathSpan
+                    dependency.SourceSpan
                     $"The dependency '{dependency.Name}' is found by its path, so '{manifest.Name}' can't be packed, since the directory isn't there once the package is unpacked elsewhere: depend on a version of it, `version = \"1.0\"`")
         byPath @ Manifest.publishErrors manifest
 

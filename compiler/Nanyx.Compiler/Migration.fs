@@ -42,45 +42,39 @@ module Migration =
         let text = script.Source.Substring(directive.Span.Start, directive.Span.End - directive.Span.Start)
         $"{relative root script.Path}:{directive.Span.StartLine + 1}: {text}"
 
-    let private quoted (text: string) = "\"" + text.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""
-
     /// A value a directive sets, written as the manifest writes it.
     let private dataText (value: DataValue) : string =
         match value.Data with
-        | DataString text -> quoted text
+        | DataString text -> Manifest.quotedString text
         | DataInt n -> string n
         | DataFloat n -> n.ToString("R", CultureInfo.InvariantCulture)
         | DataBool flag -> if flag then "true" else "false"
         | DataTag(name, _) -> "#" + name
         | _ -> DataValue.describe value
 
-    /// The entry the package a `::host`, `::dependency` or `::linter` directive names is in the manifest:
-    /// `(package = "<name>", path = "<directory>")`, its directory, relative to the script, made relative to the package's
-    /// `root`. A package the compiler ships, named with neither, is at the compiler's version, `toolVersion`. One on
-    /// GitHub is `(package = "<name>", github = "<repository>", rev = "<commit>")`, and a file on GitHub the same with
-    /// `module` for `package`.
-    let private packageEntry (toolVersion: string) (scriptDirectory: string) (root: string) (package: DirectiveWord) (place: DirectivePlace) =
+    /// Where the package a `::host` or `::dependency` directive names is found, as the manifest says it: a directory
+    /// relative to the script, `scriptDirectory`; the compiler's, for a package named with no place; a version; or a
+    /// GitHub reference, pinned to the `rev` it gives, if any. Or what is wrong with the version or the reference.
+    let private sourceOf (scriptDirectory: string) (place: DirectivePlace) : Result<DependencySource, string> =
         match place with
+        | DirectivePlace.Shipped -> Result.Ok DependencySource.Shipped
+        | DirectivePlace.AtPath path -> Result.Ok(DependencySource.AtPath(Path.GetFullPath(path.Text, scriptDirectory)))
+        | AtVersion version ->
+            match VersionRequirement.tryParse version.Text with
+            | Some requirement -> Result.Ok(FromIndex requirement)
+            | None -> Result.Error $"'{version.Text}' is not a version, which must be {VersionRequirement.rule}"
         | AtGitHub place ->
-            let github, rev, isFile = Script.gitHubPlace place
-            let rev = rev |> Option.map (fun rev -> $", rev = {quoted rev}") |> Option.defaultValue ""
-            $"""({(if isFile then "module" else "package")} = {quoted package.Text}, github = {quoted github}{rev})"""
-        | _ ->
-            let where =
-                match place with
-                | AtVersion version -> $"version = {quoted version.Text}"
-                | AtPath path -> $"path = {quoted (relative root (Path.GetFullPath(path.Text, scriptDirectory)))}"
-                | Shipped
-                | AtGitHub _ -> $"version = {quoted toolVersion}"
-            $"(package = {quoted package.Text}, {where})"
+            let github, rev, _ = Script.gitHubPlace place
+            GitHub.parse github
+            |> Result.map (fun (repository, file) -> OnGitHub { Repository = repository; File = file; Commit = defaultArg rev "" })
 
     /// What a directive says, as the manifest writes it: the key it sets, which two files must agree on, and the value.
     type private Setting =
         | LinterOn of linter: string
         | RuleSeverity of linter: string * rule: string * severity: string
         | FormatterSetting of key: string * value: string
-        | HostEntry of entry: string
-        | DependencyEntry of name: string * entry: string
+        | HostEntry of name: string * source: DependencySource
+        | DependencyEntry of name: string * source: DependencySource
 
     let private settingKey (setting: Setting) =
         match setting with
@@ -90,41 +84,48 @@ module Migration =
         | HostEntry _ -> "host"
         | DependencyEntry(name, _) -> $"dependency {name}"
 
-    /// What `setting`, one of `script`'s, says in the manifest. `Script.read` has checked it.
-    let private settingOf (toolVersion: string) (root: string) (script: Script) (setting: DirectiveSetting) : Setting =
+    /// What `setting`, one of `script`'s, says in the manifest, or what is wrong with the place it names a package at.
+    /// `Script.read` has checked the rest.
+    let private settingOf (script: Script) (setting: DirectiveSetting) : Result<Setting, string> =
         let scriptDirectory = Path.GetDirectoryName script.Path
         match setting with
-        | LinterSetting(package, _) -> LinterOn package.Text
-        | LintSetting(linter, rule, severity) -> RuleSeverity(linter.Text, rule.Text, dataText severity)
-        | FormatSetting(key, value) -> FormatterSetting(key.Text, dataText value)
-        | HostSetting(package, place) -> HostEntry(packageEntry toolVersion scriptDirectory root package place)
-        | DependencySetting(package, place) -> DependencyEntry(package.Text, packageEntry toolVersion scriptDirectory root package place)
+        | LinterSetting(package, _) -> Result.Ok(LinterOn package.Text)
+        | LintSetting(linter, rule, severity) -> Result.Ok(RuleSeverity(linter.Text, rule.Text, dataText severity))
+        | FormatSetting(key, value) -> Result.Ok(FormatterSetting(key.Text, dataText value))
+        | HostSetting(package, place) -> sourceOf scriptDirectory place |> Result.map (fun source -> HostEntry(package.Text, source))
+        | DependencySetting(package, place) -> sourceOf scriptDirectory place |> Result.map (fun source -> DependencyEntry(package.Text, source))
 
     /// Each setting the scripts' directives make, once, with the first directive that makes it; or an error for each key
-    /// two directives set to different values, naming both, and for the second `::host` that names another host.
-    let private settings (toolVersion: string) (root: string) (scripts: Script list) : Result<Setting list, string list> =
+    /// two directives set to different values, naming both, for the second `::host` that names another host, and for a
+    /// directive whose version or GitHub reference is wrong.
+    let private settings (root: string) (scripts: Script list) : Result<Setting list, string list> =
         let made =
             scripts
             |> List.collect (fun script ->
                 Script.settings script.Directives
                 |> List.choose (function
-                    | directive, Result.Ok setting -> Some (settingOf toolVersion root script setting, located root script directive)
+                    | directive, Result.Ok setting ->
+                        let location = located root script directive
+                        Some(settingOf script setting |> Result.map (fun setting -> setting, location) |> Result.mapError (fun message -> $"{location}: {message}"))
                     | _, Result.Error _ -> None))
-        let byKey = made |> List.groupBy (fst >> settingKey)
-        let conflicts =
-            byKey
-            |> List.choose (fun (_, settings) ->
-                match settings |> List.distinctBy fst with
-                | (_, first) :: (_, second) :: _ -> Some $"{first} and {second} disagree: a package has one manifest, so make them say the same, then migrate again"
-                | _ -> None)
-        match conflicts with
-        | [] -> Result.Ok(byKey |> List.map (fun (_, settings) -> fst settings.Head))
-        | errors -> Result.Error errors
+        match made |> List.choose (function Result.Error message -> Some message | Result.Ok _ -> None) with
+        | _ :: _ as wrong -> Result.Error wrong
+        | [] ->
+            let byKey = made |> List.choose Result.toOption |> List.groupBy (fst >> settingKey)
+            let conflicts =
+                byKey
+                |> List.choose (fun (_, settings) ->
+                    match settings |> List.distinctBy fst with
+                    | (_, first) :: (_, second) :: _ -> Some $"{first} and {second} disagree: a package has one manifest, so make them say the same, then migrate again"
+                    | _ -> None)
+            match conflicts with
+            | [] -> Result.Ok(byKey |> List.map (fun (_, settings) -> fst settings.Head))
+            | errors -> Result.Error errors
 
-    /// The manifest of the package `name`, whose sources are `sources`, made of `settings`. A package with an entry runs
-    /// under the console host at the compiler's version, `toolVersion`, unless a `::host` names another.
-    let private manifestText (toolVersion: string) (name: string) (sources: string list) (hasEntry: bool) (settings: Setting list) =
-        let quotedSources = sources |> List.map (sprintf "\"%s\"") |> String.concat ", "
+    /// The manifest of the package `name`, in `root`, whose sources are `sources`, made of `settings`. A package with an
+    /// entry runs under the console host at the compiler's version, `toolVersion`, unless a `::host` names another.
+    let private manifestText (toolVersion: string) (root: string) (name: string) (sources: string list) (hasEntry: bool) (settings: Setting list) =
+        let quotedSources = sources |> List.map Manifest.quotedString |> String.concat ", "
         let linters =
             settings
             |> List.choose (function LinterOn linter -> Some linter | RuleSeverity(linter, _, _) -> Some linter | _ -> None)
@@ -134,16 +135,18 @@ module Migration =
                     settings
                     |> List.choose (function RuleSeverity(linter, rule, severity) when linter = package -> Some $"{rule} = {severity}" | _ -> None)
                 match rules with
-                | [] -> $"(package = \"{package}\", version = \"{toolVersion}\")"
-                | rules -> $"""(package = "{package}", version = "{toolVersion}", settings = (rules = ({String.concat ", " rules})))""")
+                | [] -> Manifest.entryText toolVersion root package DependencySource.Shipped
+                | rules ->
+                    $"""(package = {Manifest.quotedString package}, version = {Manifest.quotedString toolVersion}, settings = (rules = ({String.concat ", " rules})))""")
         let host =
             settings
-            |> List.tryPick (function HostEntry entry -> Some entry | _ -> None)
-            |> Option.orElse (if hasEntry then Some $"(package = \"{Hosts.consolePackage}\", version = \"{toolVersion}\")" else None)
-        let dependencies = settings |> List.choose (function DependencyEntry(_, entry) -> Some entry | _ -> None)
+            |> List.tryPick (function HostEntry(name, source) -> Some(name, source) | _ -> None)
+            |> Option.orElse (if hasEntry then Some(Hosts.consolePackage, DependencySource.Shipped) else None)
+            |> Option.map (fun (name, source) -> Manifest.entryText toolVersion root name source)
+        let dependencies = settings |> List.choose (function DependencyEntry(name, source) -> Some(Manifest.entryText toolVersion root name source) | _ -> None)
         let formatter = settings |> List.choose (function FormatterSetting(key, value) -> Some $"{key} = {value}" | _ -> None)
         [ yield "("
-          yield $"  package = (name = \"{name}\", version = \"0.1.0\", sources = [{quotedSources}])"
+          yield $"  package = (name = {Manifest.quotedString name}, version = \"0.1.0\", sources = [{quotedSources}])"
           if not linters.IsEmpty then yield $"""  linters = [{String.concat ", " linters}]"""
           match host with
           | Some host -> yield $"  host = {host}"
@@ -227,11 +230,13 @@ module Migration =
         // What comes before the first item: comments, without the `#!` line and the directives.
         let firstStart = match units with first :: _ -> first.Span.Start | [] -> source.Length
         let header =
-            textBetween 0 firstStart
-            |> fun text -> text.Split '\n'
-            |> Array.filter (fun line -> not (line.StartsWith "::") && not (line.StartsWith "#!"))
-            |> String.concat "\n"
-            |> trimmedLines
+            let lineEnd (start: int) = match source.IndexOf('\n', start) with -1 -> source.Length | at -> at + 1
+            let removed =
+                (if source.StartsWith "#!" then [ 0 ] else []) @ (script.Directives |> List.map _.Span.Start)
+                |> List.filter (fun start -> start < firstStart)
+                |> List.map (fun start -> start, min firstStart (lineEnd start))
+            let kept, last = removed |> List.fold (fun (kept, from) (start, finish) -> kept + textBetween from start, finish) ("", 0)
+            trimmedLines (kept + textBetween last firstStart)
         // Each unit with the comments and blank lines before it, after the item before it.
         let pieces =
             units
@@ -330,7 +335,7 @@ module Migration =
                         Result.Error
                             [ $"The scripts {names} each have top-level statements, but a package runs from one `@entry`: migrate them one at a time, with `nanyx migrate <file>`, or make all but one of them modules first" ]
                     | entryScripts ->
-                        settings toolVersion root scripts
+                        settings root scripts
                         |> Result.bind (fun settings ->
                             let entryScript = List.tryHead entryScripts
                             let isEntry (script: Script) = entryScript |> Option.exists (fun entry -> entry.Path = script.Path)
@@ -351,12 +356,11 @@ module Migration =
                                 let downloads =
                                     settings
                                     |> List.choose (function
-                                        | DependencyEntry(dependency, entry) when entry.Contains "version =" && not (Directory.Exists(ShippedPackages.directoryOf dependency)) ->
-                                            Some dependency
+                                        | DependencyEntry(dependency, FromIndex _) when not (Directory.Exists(ShippedPackages.directoryOf dependency)) -> Some dependency
                                         | _ -> None)
                                 Result.Ok
                                     { ManifestPath = Path.Combine(root, packageName + Manifest.extension)
-                                      Manifest = manifestText toolVersion packageName sources entryScript.IsSome settings
+                                      Manifest = manifestText toolVersion root packageName sources entryScript.IsSome settings
                                       Files = files
                                       Notes =
                                         downloads
