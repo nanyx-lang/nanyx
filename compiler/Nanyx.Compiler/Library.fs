@@ -727,7 +727,7 @@ module Compiler =
                 // A context's associated types are written as its last parameters (see `AssociatedTypes`).
                 let desugared, associatedErrors = AssociatedTypes.rewrite state.TypeDefs desugared
                 let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.InferModule.inferModuleWithEnv env state desugared
-                let subst, mismatches = Solving.solveDetailed state.Constraints |> fun (subst, mismatches) -> Unifier.keepWrittenNames (Seq.append types.Values (state.AssociatedVariables |> Seq.map TyVar)) subst, mismatches
+                let subst, mismatches = Solving.solveLeavingUnknown state.Constraints |> fun (subst, mismatches) -> Unifier.keepWrittenNames (Seq.append types.Values (state.AssociatedVariables |> Seq.map TyVar)) subst, mismatches
                 // Every error in the module is reported: the items that failed to check, and each conflict among the
                 // constraints of those that did, in the order they are in the source rather than the order solving
                 // found them. The module is typed all the same, with what did check.
