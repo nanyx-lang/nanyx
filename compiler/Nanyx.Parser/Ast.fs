@@ -892,9 +892,21 @@ module CellSyntax =
     let unbox = "__cell_unbox"
     let setBox = "__cell_set"
 
+/// How a workflow keyword takes the expression after it, as `@customKeywordType(#kind)` on its member says (see the
+/// workflows page). `k! e` is `k(e, { rest of the block })` for `Bind`, `k({ e }, { rest of the block })` for `BindF`,
+/// and `k({ e })` for `Delay`, which rewrites nothing else and needs no builder.
+[<RequireQualifiedAccess>]
+type KeywordKind =
+    | Bind
+    | BindF
+    | Delay
+
 /// The workflow keywords the language reserves (see the workflows page): `try x`, a `WorkflowBindExpr` of `tryKeyword`,
 /// and `return x`, a `WorkflowReturnExpr`. In a builder's block each calls the builder's member of the same name.
 module WorkflowSyntax =
+    /// The kinds `@customKeywordType` takes, each by the tag that names it: `@customKeywordType(#delay)`.
+    let keywordKinds = [ "bind", KeywordKind.Bind; "bindF", KeywordKind.BindF; "delay", KeywordKind.Delay ]
+
     let tryKeyword = "try"
     let returnKeyword = "return"
     /// The member that is the value of a builder's block that ends without `return`.

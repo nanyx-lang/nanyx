@@ -100,6 +100,7 @@ module DiagnosticCodes =
     let SeveralEntryPoints = code 43 "More than one entry point in a package" Severity.Error
     let InvalidLockfile = code 44 "Lockfile that can't be read" Severity.Error
     let NothingToRun = code 45 "Package with nothing to run" Severity.Error
+    let KeywordMemberType = code 46 "Keyword member whose type doesn't fit its kind" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -198,7 +199,7 @@ module DiagnosticCodes =
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
           ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped; DefinitionWithoutValue; EntryInLibrary; ContextsJoined
-          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; PackageNotDownloaded; NoSourceFiles; SeveralEntryPoints; InvalidLockfile; NothingToRun; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
+          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; PackageNotDownloaded; NoSourceFiles; SeveralEntryPoints; InvalidLockfile; NothingToRun; KeywordMemberType; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField; UnknownPattern; AmbiguousPattern
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
