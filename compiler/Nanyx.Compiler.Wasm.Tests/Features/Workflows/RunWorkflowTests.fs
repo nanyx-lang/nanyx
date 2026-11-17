@@ -341,3 +341,42 @@ def main = {
 }
 """
     runSource source |> assertRan "half of 10 is 5\nshown\nodd\n"
+
+[<Fact>]
+let ``Run - a builder imported from another module gives its keywords their own types, at each use`` () =
+    // The context's members are numbered by the module that declares it; here they are fresh, so `try` binds an `int`
+    // and then a `string`, and isn't the prelude's `try` for results.
+    let lib =
+        """module box
+
+export type Box(a) = private (v: a)
+
+export def box: a -> Box(a) = { x -> Box(v = x) }
+
+export def unbox: Box(a) -> a = { b -> b.v }
+
+export context Boxed = (
+  try: [c] (Box(a), ([c] a -> Box(b))) -> Box(b)
+  return: a -> Box(a)
+)
+
+export def boxed: [c] ([Boxed, c] () -> Box(b)) -> Box(b) = { block ->
+  use Boxed(try = { b, continue -> continue(b.v) }, return = { x -> Box(v = x) }) in block()
+}
+"""
+    let main =
+        """import box
+
+def r = boxed {
+  def n = try box(1)
+  def s = try box("a")
+  return "{s}{n}"
+}
+
+println(unbox(r))
+"""
+    use directory = new TempDirectory()
+    File.WriteAllText(Path.Combine(directory.Path, "box.nyx"), lib.ReplaceLineEndings "\n")
+    let mainPath = Path.Combine(directory.Path, "main.nyx")
+    File.WriteAllText(mainPath, main.ReplaceLineEndings "\n")
+    runFile mainPath |> assertRan "a1\n"

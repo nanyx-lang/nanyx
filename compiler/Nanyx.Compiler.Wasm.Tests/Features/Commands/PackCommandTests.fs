@@ -34,6 +34,6 @@ let ``A package with a path dependency can't be packed`` () =
     write directory "web/web.nyxp" "(package = (name = \"acme.web\", version = \"1.0.0\"), dependencies = [(package = \"acme.util\", path = \"../util\")])\n"
     write directory "web/loud.nyx" "export module loud\n\nimport acme.util/strings\n\nexport def loud = { s: string -> shout(s) }\n"
     let outcome = nanyxIn (Path.Combine(directory.Path, "web")) [ "pack" ]
-    Assert.Contains("error NYX0023: the dependency acme.util is found by its path, so acme.web can't be packed", outcome.StandardError)
+    Assert.Contains("error NYX0023: The dependency 'acme.util' is found by its path, so 'acme.web' can't be packed", outcome.StandardError)
     Assert.False(File.Exists(Path.Combine(directory.Path, "web", "acme.web-1.0.0.nyxpkg")))
     Assert.Equal(1, outcome.ExitCode)

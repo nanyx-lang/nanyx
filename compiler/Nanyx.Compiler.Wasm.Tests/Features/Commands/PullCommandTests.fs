@@ -50,7 +50,7 @@ let ``A dependency named by its version can't be downloaded yet`` () =
     let app = appWith directory """(package = "acme.json", version = "1.2.0")"""
     let outcome = nanyxIn app [ "pull" ]
     Assert.Equal(
-        "error: acme.json 1.2.0 is named by its version, but it isn't locked in nanyx.lock, and choosing a version to lock isn't supported yet: give the directory it is in, with path\n",
+        "error: 'acme.json' 1.2.0 is named by its version, but it isn't locked in 'nanyx.lock', and choosing a version to lock isn't supported yet: give the directory it is in, with `path`\n",
         outcome.StandardError.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
 
@@ -59,8 +59,8 @@ let ``A dependency whose directory holds a package of another name is an error, 
     use directory = new TempDirectory()
     let app = appWith directory """(package = "acme.tools", path = "../util")"""
     let outcome = nanyxIn app [ "pull" ]
-    Assert.Contains("error NYX0023: the package in", outcome.StandardError)
-    Assert.Contains("is named acme.util, not acme.tools: the names must match", outcome.StandardError)
+    Assert.Contains("error NYX0023: The package in", outcome.StandardError)
+    Assert.Contains("is named 'acme.util', not 'acme.tools': make the names match", outcome.StandardError)
     Assert.Equal(1, outcome.ExitCode)
 
 [<Fact>]

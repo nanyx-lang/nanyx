@@ -98,7 +98,7 @@ module VersionRequirement =
     let private partial = Regex(@"^(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?$")
 
     /// What a requirement must be, to finish "must be ...".
-    let rule = "a version, 1.2.0, or its first numbers, 1.2"
+    let rule = "a version, `1.2.0`, or its first numbers, `1.2`"
 
     /// The requirement `text` writes, if it is one: a version, `1.2.0`, or its first numbers, `1` or `1.2`, which is
     /// the version with zeros for the rest.

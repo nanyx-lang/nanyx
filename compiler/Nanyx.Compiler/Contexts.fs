@@ -72,6 +72,21 @@ let internal extendEnvWithRecordFields (provider: ContextProvider) (state: Infer
         | _ -> env
     | _ -> env
 
+/// `tys` with each of their type variables but those in `keep` made a fresh one, the same one wherever it is. A fresh
+/// variable is never one being replaced, since `Unifier.apply` follows a variable to what it is replaced by.
+let private withFreshVars (keep: Set<int>) (state: InferState) (tys: Ty list) : Ty list * InferState =
+    let replaced = Set.difference (tys |> List.map TypeEnv.freeTyVars |> Set.unionMany) keep
+    let rec fresh current =
+        match freshVar current with
+        | TyVar var, next when replaced.Contains var.Id -> fresh next
+        | made -> made
+    let substitution, state =
+        replaced
+        |> Seq.fold (fun (substitution, current) id ->
+            let var, next = fresh current
+            substitution |> Map.add id var, next) (Map.empty, state)
+    tys |> List.map (Unifier.apply substitution), state
+
 /// The members of the context `ctxExpr` names, each with its type and its symbol, if the context declares one.
 let rec private collectContextMembers (state: InferState) (ctxExpr: TypeExpr) : (Identifier * Ty * SymbolId option) list * InferState =
     match ctxExpr.Kind with
@@ -113,7 +128,9 @@ let rec private collectContextMembers (state: InferState) (ctxExpr: TypeExpr) : 
             | Some info -> members |> List.map (fun (memberName, ty, _) -> memberName, ty, info.Members |> Map.tryFind memberName)
             | None -> members
         // The members of the type `info` defines, with the context's parameters the types it is applied to here: an
-        // imported context's own variables are another module's, and mean nothing in this one.
+        // imported context's own variables are another module's, and mean nothing in this one. So are the variables of
+        // a member's own (`a` and `b` in `try: [c] (Box(a), ([c] a -> Box(b))) -> Box(b)`), which are numbered by the
+        // module that declares the context and may stand for anything here, so each is made a fresh one.
         let appliedMembers (info: TypeDefInfo) =
             match Unifier.unalias info.Underlying with
             | TyRecord(fields, _) ->
@@ -121,7 +138,9 @@ let rec private collectContextMembers (state: InferState) (ctxExpr: TypeExpr) : 
                     match ctxExpr.Kind with
                     | TypeApply(_, args) when args.Length = info.Parameters.Length -> args |> List.mapFold typeExprToTy state
                     | _ -> [], state
-                Some (fields |> Map.toList |> List.map (fun (memberName, ty) -> memberName, Unifier.applyToParameters info.Parameters argTys ty, None) |> withSymbols, state)
+                let names, tys = fields |> Map.toList |> List.map (fun (memberName, ty) -> memberName, Unifier.applyToParameters info.Parameters argTys ty) |> List.unzip
+                let tys, state = withFreshVars (argTys |> List.map TypeEnv.freeTyVars |> Set.unionMany) state tys
+                Some (List.map2 (fun memberName ty -> memberName, ty, None) names tys |> withSymbols, state)
             | _ -> None
         // `Ask(int)`'s `ask` is the definition's `() -> a` with `a` the `int` it is applied to.
         let applied =

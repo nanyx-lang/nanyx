@@ -58,23 +58,29 @@ module Package =
     /// The manifest of the package in `directory`, the one `.nyxp` file there, or what is wrong.
     let private manifestIn (directory: string) : Result<string, string> =
         if not (Directory.Exists directory) then
-            Result.Error $"{directory} is not a directory"
+            Result.Error $"'{directory}' is not a directory"
         else
             match Directory.GetFiles(directory, "*" + Manifest.extension) |> Array.sort with
             | [| manifest |] -> Result.Ok(Path.GetFullPath manifest)
-            | [||] -> Result.Error $"{directory} has no {Manifest.extension} manifest"
-            | several -> Result.Error $"""{directory} has more than one {Manifest.extension} manifest: {several |> Array.map Path.GetFileName |> String.concat ", "}"""
+            | [||] -> Result.Error $"'{directory}' has no {Manifest.extension} manifest"
+            | several -> Result.Error $"""'{directory}' has more than one {Manifest.extension} manifest: {several |> Array.map (Path.GetFileName >> sprintf "'%s'") |> List.ofArray |> Diagnostics.listed}"""
 
-    /// What is wrong with a package of a build: a diagnostic at the place in a manifest it is about, or a message
-    /// about the package as a whole.
+    /// What is wrong with a package of a build: a diagnostic at the place in a manifest it is about, or one about the
+    /// package as a whole, with its code.
     type private Problem =
         | AtManifest of Diagnostic
-        | AboutPackage of string
+        | AboutPackage of DiagnosticCode * string
 
     let private describe (problem: Problem) =
         match problem with
         | AtManifest diagnostic -> Manifest.describe diagnostic
-        | AboutPackage message -> message
+        | AboutPackage(code, message) -> Manifest.describe (Diagnostics.general code message)
+
+    /// `problem` as a diagnostic, one about the package as a whole at `span`.
+    let private diagnosticOf (span: SourceSpan) (problem: Problem) =
+        match problem with
+        | AtManifest diagnostic -> diagnostic
+        | AboutPackage(code, message) -> Diagnostics.at code span message
 
     /// The errors of each of `results`, or the values of all of them.
     let private all (results: Result<'a, Problem list> list) : Result<'a list, Problem list> =
@@ -88,13 +94,14 @@ module Package =
     /// `@entry` and no host at all is an error of its own (`EntryInLibrary`).
     let private exportErrors (manifest: Manifest) (files: string list) : Diagnostic list =
         let isLibrary = manifest.Host.IsNone && not (files |> List.exists declaresEntry)
-        if not isLibrary || not (PackageModules.ofFiles manifest.Name manifest.Root None files).PublicModules.IsEmpty then
+        // A package with no source files is an error of its own (`NoSourceFiles`).
+        if files.IsEmpty || not isLibrary || not (PackageModules.ofFiles manifest.Name manifest.Root None files).PublicModules.IsEmpty then
             []
         else
             [ Diagnostics.at
                   DiagnosticCodes.LibraryExportsNothing
                   manifest.PackageSpan
-                  $"{manifest.Name} is a library, since its manifest names no host, but it exports no module: a library must export at least one, by declaring it with export module" ]
+                  $"'{manifest.Name}' is a library, since its manifest names no host, but it exports no module: export at least one, by declaring it with `export module`" ]
 
     /// The problem with the GitHub reference `what`, written at `span`, that `failure` kept from being fetched.
     let private notFetched (span: SourceSpan) (what: string) (failure: FetchFailure) : Problem =
@@ -111,7 +118,7 @@ module Package =
         |> List.map (fun file ->
             let reference = file.Reference
             match fetcher.FetchFile reference.Repository reference.Commit (defaultArg reference.File "") with
-            | Result.Error failure -> Result.Error [ notFetched file.GitHubSpan $"the module {file.Module}" failure ]
+            | Result.Error failure -> Result.Error [ notFetched file.GitHubSpan $"The module '{file.Module}'" failure ]
             | Result.Ok path ->
                 match PackageModules.declaredModule path with
                 | Some (declared, _) ->
@@ -120,7 +127,7 @@ module Package =
                               Diagnostics.at
                                   DiagnosticCodes.InvalidReferencedFile
                                   file.Span
-                                  $"{reference} declares the module name '{declared}', but a file from GitHub must declare none: the manifest names it, {file.Module}, and no package can export it"
+                                  $"'{reference}' declares the module name '{declared}', but a file from GitHub declares none, since the manifest names it '{file.Module}' and no package can export it: use a file that declares no module name"
                           ) ]
                 | None when own.ContainsKey file.Module ->
                     Result.Error
@@ -128,7 +135,7 @@ module Package =
                               Diagnostics.at
                                   DiagnosticCodes.DuplicateModule
                                   file.Span
-                                  $"the package's own files declare the module {file.Module} already: give the file from GitHub another name"
+                                  $"The package's own files declare the module '{file.Module}' already: give the file from GitHub another name"
                           ) ]
                 | None -> Result.Ok(file.Module, path))
         |> all
@@ -146,11 +153,11 @@ module Package =
         | None ->
             error
                 DiagnosticCodes.UnsupportedManifestField
-                $"the dependency {dependency.Name} {requirement} is not locked in {Lockfile.fileName}, and choosing a version to lock isn't supported yet: give the directory the package is in, with path"
+                $"The dependency '{dependency.Name}' {requirement} is not locked in '{Lockfile.fileName}', and choosing a version to lock isn't supported yet: give the directory the package is in, with `path`"
         | Some locked when not (VersionRequirement.accepts requirement locked.Version) ->
             error
                 DiagnosticCodes.InvalidManifestValue
-                $"{Lockfile.fileName} locks {dependency.Name} {locked.Version}, which this dependency doesn't accept: it accepts {requirement} and the versions compatible with it"
+                $"'{Lockfile.fileName}' locks '{dependency.Name}' {locked.Version}, but this dependency accepts only {requirement} and the versions compatible with it"
         | Some locked ->
             let directory = PackageStore.directoryOf lookup.Store dependency.Name locked.Version
             if Directory.Exists directory then
@@ -158,7 +165,7 @@ module Package =
             else
                 error
                     DiagnosticCodes.PackageNotDownloaded
-                    $"{Lockfile.fileName} locks {dependency.Name} {locked.Version}, but it isn't in the package cache, {lookup.Store.Cache}: run nanyx pull to download it"
+                    $"'{Lockfile.fileName}' locks '{dependency.Name}' {locked.Version}, but it isn't in the package cache, '{lookup.Store.Cache}': run `nanyx pull` to download it"
 
     /// The package `manifest` describes, with the packages it depends on, found through `lookup`. `chain` is the manifests
     /// of the packages that led to it, nearest first, each with its package's name, and `reached` every package the
@@ -168,13 +175,13 @@ module Package =
         let display (file: string) = Path.GetRelativePath(manifest.Root, file)
         let entry =
             if files.IsEmpty then
-                Result.Error [ AboutPackage $"""{manifest.Path}: no source files match {manifest.Sources |> List.map (sprintf "'%s'") |> String.concat ", "}""" ]
+                Result.Error [ AboutPackage(DiagnosticCodes.NoSourceFiles, $"""'{manifest.Path}' selects its sources with {manifest.Sources |> List.map (sprintf "'%s'") |> Diagnostics.listed}, which match no file""") ]
             else
                 match files |> List.filter declaresEntry with
                 | [] -> Result.Ok None
                 | [ entry ] -> Result.Ok(Some entry)
                 | several ->
-                    Result.Error [ AboutPackage $"""{manifest.Path}: a package can have one @entry, but these files each declare one: {several |> List.map display |> String.concat ", "}""" ]
+                    Result.Error [ AboutPackage(DiagnosticCodes.SeveralEntryPoints, $"""More than one file of '{manifest.Path}' declares an `@entry`, {several |> List.map (display >> sprintf "'%s'") |> Diagnostics.listed}, but a package has one: keep one of them""") ]
         let exports = exportErrors manifest files |> List.map AtManifest
         let referenced = referencedFiles lookup.Store.GitHub (PackageModules.ofFiles manifest.Name manifest.Root None files).Modules manifest.Files
         match entry, dependenciesIn lookup reached ((manifest.Path, manifest.Name) :: chain) manifest.Dependencies, hostIn lookup reached manifest.Host with
@@ -200,13 +207,13 @@ module Package =
             let error message = Result.Error [ AtManifest(Diagnostics.at DiagnosticCodes.InvalidManifestValue entry.Span message) ]
             let directory = entry.Path |> Option.defaultWith (fun () -> ShippedPackages.directoryOf entry.Package)
             match manifestIn directory with
-            | Result.Error _ when entry.Path.IsNone -> error $"the compiler ships no package '{entry.Package}'"
-            | Result.Error message -> error $"the host {entry.Package} can't be read: {message}"
+            | Result.Error _ when entry.Path.IsNone -> error $"The compiler ships no package '{entry.Package}'"
+            | Result.Error message -> error $"The host '{entry.Package}' can't be read: {message}"
             | Result.Ok path ->
                 match Manifest.read path with
                 | Result.Error errors -> Result.Error(errors |> List.map AtManifest)
                 | Result.Ok found when found.Name <> entry.Package ->
-                    error $"the package in {directory} is named {found.Name}, not {entry.Package}: the names must match"
+                    error $"The package in '{directory}' is named '{found.Name}', not '{entry.Package}': make the names match"
                 | Result.Ok found ->
                     match found.Declares with
                     | None -> error (HostPackages.notAHost entry.Package)
@@ -225,12 +232,12 @@ module Package =
             | Some reference, _ ->
                 lookup.Store.GitHub.FetchTree reference.Repository reference.Commit
                 |> Result.map (fun directory -> { dependency with Directory = directory })
-                |> Result.mapError (fun failure -> [ notFetched dependency.PathSpan $"the dependency {dependency.Name}" failure ])
+                |> Result.mapError (fun failure -> [ notFetched dependency.PathSpan $"The dependency '{dependency.Name}'" failure ])
             | None, Some requirement -> locked lookup dependency requirement
             | None, None -> Result.Ok dependency
         let read (dependency: Dependency) =
             match manifestIn dependency.Directory with
-            | Result.Error message -> error DiagnosticCodes.InvalidManifestValue dependency.PathSpan $"the dependency {dependency.Name} can't be read: {message}"
+            | Result.Error message -> error DiagnosticCodes.InvalidManifestValue dependency.PathSpan $"The dependency '{dependency.Name}' can't be read: {message}"
             | Result.Ok path ->
                 match Manifest.read path with
                 | Result.Error errors -> Result.Error(errors |> List.map AtManifest)
@@ -238,17 +245,17 @@ module Package =
                     error
                         DiagnosticCodes.InvalidManifestValue
                         dependency.NameSpan
-                        $"the package in {dependency.Directory} is named {found.Name}, not {dependency.Name}: the names must match"
+                        $"The package in '{dependency.Directory}' is named '{found.Name}', not '{dependency.Name}': make the names match"
                 | Result.Ok found when chain |> List.exists (fst >> PackageModules.samePath path) ->
                     let names = (chain |> List.rev |> List.map snd) @ [ found.Name ]
-                    error DiagnosticCodes.PackageCycle dependency.NameSpan $"""packages can't depend on each other in a cycle: {String.concat " -> " names}"""
+                    error DiagnosticCodes.PackageCycle dependency.NameSpan $"""Packages can't depend on each other in a cycle: {names |> List.map (sprintf "'%s'") |> String.concat " -> "}"""
                 | Result.Ok found ->
                     match reached.TryGetValue found.Name with
                     | true, other when not (PackageModules.samePath other path) ->
                         error
                             DiagnosticCodes.PackageReachedTwice
                             dependency.PathSpan
-                            $"the build reaches the package {found.Name} by two paths, {Path.GetDirectoryName other} and {dependency.Directory}; a build has one of each package"
+                            $"The build reaches the package '{found.Name}' by two paths, '{Path.GetDirectoryName other}' and '{dependency.Directory}', but a build has one of each package"
                     | _ ->
                         reached.[found.Name] <- path
                         ofManifestIn lookup reached chain found
@@ -306,17 +313,13 @@ module Package =
                 let lookup, lockfileErrors =
                     match lookupFor store manifest with
                     | Result.Ok lookup -> lookup, []
-                    | Result.Error messages -> { Store = store; Locked = Lockfile.empty }, messages |> List.map AboutPackage
+                    | Result.Error messages -> { Store = store; Locked = Lockfile.empty }, messages |> List.map (fun message -> AboutPackage(DiagnosticCodes.InvalidLockfile, message))
                 let problems =
                     lockfileErrors
                     @ errorsOf (referencedFiles store.GitHub (PackageModules.ofFiles manifest.Name manifest.Root None (sources manifest)).Modules manifest.Files)
                     @ errorsOf (dependenciesIn lookup reached [ manifest.Path, manifest.Name ] manifest.Dependencies)
                     @ errorsOf (hostIn lookup reached manifest.Host)
-                let dependencyErrors =
-                    problems
-                    |> List.map (function
-                        | AtManifest diagnostic -> diagnostic
-                        | AboutPackage message -> Diagnostics.at DiagnosticCodes.InvalidManifestValue manifest.Value.Location message)
+                let dependencyErrors = problems |> List.map (diagnosticOf manifest.Value.Location)
                 exportErrors manifest (sources manifest) @ dependencyErrors
         { notCompiled with Diagnostics = diagnostics }
 
@@ -346,10 +349,10 @@ module Package =
         elif Directory.Exists full then
             match Manifest.tryFind full with
             | Result.Ok (Some manifest) -> ofManifestFrom store manifest
-            | Result.Ok None -> Result.Error [ $"No {Manifest.extension} manifest in {full} or any directory above it" ]
+            | Result.Ok None -> Result.Error [ $"There is no {Manifest.extension} manifest in '{full}' or any directory above it" ]
             | Result.Error message -> Result.Error [ message ]
         else
-            Result.Error [ $"Not a directory or a {Manifest.extension} manifest: {path}" ]
+            Result.Error [ $"'{path}' is neither a directory nor a {Manifest.extension} manifest" ]
 
     /// `findIn` the user's store.
     let find (path: string) : Result<Package, string list> = findIn (PackageStore.user ()) path
@@ -368,11 +371,11 @@ module Package =
     let directiveErrors (manifestPath: string) (filePath: string) (source: string) : Diagnostic list =
         Directives.read (Path.GetFullPath filePath) source
         |> List.map (fun directive ->
-            let name = if directive.Name = "" then "a :: line" else $"::{directive.Name}"
+            let name = if directive.Name = "" then "A `::` line" else $"`::{directive.Name}`"
             Diagnostics.at
                 DiagnosticCodes.DirectiveInPackage
                 directive.Span
-                $"{name} is a directive for a script, but this file is in a package: say it in the package's manifest, {manifestPath}")
+                $"{name} is a directive for a script, but this file is in a package: say it in the package's manifest, '{manifestPath}'")
 
     /// The modules of `package`, by the names its source files declare, with those of the packages it depends on and
     /// of its host's package.
@@ -435,7 +438,7 @@ module Package =
         let reached = Reached()
         let lookup = { Store = store; Locked = Lockfile.empty }
         let diagnostics problems =
-            problems |> List.map (function AtManifest diagnostic -> diagnostic | AboutPackage message -> Diagnostics.at DiagnosticCodes.InvalidManifestValue span message)
+            problems |> List.map (diagnosticOf span)
         match hostIn lookup reached (Some host), dependenciesIn lookup reached [] dependencies, referencedFiles store.GitHub Map.empty files with
         | Result.Ok (Some (host, hostPackage)), Result.Ok dependencies, Result.Ok referenced ->
             Result.Ok(

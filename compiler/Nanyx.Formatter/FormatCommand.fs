@@ -94,7 +94,7 @@ let findFiles (currentDirectory: string) (paths: string list) : Result<string li
     let paths = if List.isEmpty paths then [ "." ] else paths
     let resolve (path: string) = Path.GetFullPath(Path.Combine(currentDirectory, path))
     match paths |> List.filter (fun path -> not (File.Exists(resolve path) || Directory.Exists(resolve path))) with
-    | missing :: _ -> Result.Error $"No such file or directory: {missing}"
+    | missing :: _ -> Result.Error $"There is no file or directory '{missing}'"
     | [] ->
         paths
         |> List.collect (fun path ->

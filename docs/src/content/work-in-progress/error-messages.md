@@ -47,8 +47,10 @@ type with content.
   value is a `NYX0201` on the name, saying what it takes (`the function 'shout' in scope takes 'int', not
   'string'`), rather than a mismatch over the whole pipe. A definition two imports attach is `NYX0106`, naming both
   modules.
-- **Wording is inconsistent.** Messages range from `Unknown identifier 'x'` to `dbg expects a single argument`
-  and `` `with` updates fields by name``; quoting, capitalisation and voice vary.
+- **Wording follows the [house style](#house-style)** throughout: the parser, the type checker, the backend,
+  packages and the CLI. The CLI's own errors about its arguments, such as two paths where it takes one, have no
+  code: they are not errors in a program. One about the program it is given has its code: a file that is not there
+  is `NYX0002`, and a package with no `@entry` to run is `NYX0045`.
 - **The CLI shows each diagnostic with its source** ([#880](https://github.com/nanyx-lang/nanyx/issues/880)):
   `file:line:col: error NYX0201: message`, then the line the span starts on, after its number, with the span
   underlined in carets (to the end of that line when the span goes on past it), as `SourceExcerpt.cs` lays it out.
@@ -99,7 +101,8 @@ little beyond the title.
   read by the manifest checker, as the `NYX0020` to `NYX0024` examples are. The fences `fragment` and `skip=#<issue>` mean what they do in
   [the tour](./compilation#tour-examples).
 - Every section has an example, except those of the codes no program can report: `NYX0002` (the file given to
-  `nanyx` is missing), `NYX0006` (a broken standard library module) and `NYX0302` (a bug in the backend).
+  `nanyx` is missing), `NYX0006` (a broken standard library module), `NYX0045` (a package `nanyx run` is given with nothing to run) and
+  `NYX0302` (a bug in the backend).
 
 The language server sets each compiler diagnostic's `codeDescription.href` to the code's section on nanyx.dev, from
 `DiagnosticCodes.referenceUrl`, so that an editor shows the code as a link. A linter's code has none.
@@ -115,10 +118,10 @@ have, written down.
   which 'calculate' does not declare: add [Memory] to the type of 'calculate'".
 - No "I" or "you", and no blame.
 
-[Principles](../foundations/principles#friendly-errors) says the same. What's left of #879 is rewriting the messages of
-packages and the CLI that break it. The parser's, the type checker's and the backend's messages, and those for
-directives, attributes and imports, are done. A syntax error the parser has no message of its own for is still FParsec's report ("Expecting: ..."), which the
-recursive-descent parser ([#846](https://github.com/nanyx-lang/nanyx/issues/846)) replaces.
+[Principles](../foundations/principles#friendly-errors) says the same, and every message was rewritten
+to it in #879. A message about a manifest may start with what it is about, "package" or "a dependency", and starts
+with a capital letter however it is written (`Problems.Add` in `Manifest.fs`). A syntax error the parser has no
+message of its own for is still FParsec's report ("Expecting: ..."), which the recursive-descent parser ([#846](https://github.com/nanyx-lang/nanyx/issues/846)) replaces.
 
 # Goals
 
@@ -135,7 +138,7 @@ Done: the inventory of errors as [the error reference](#the-error-reference)
 rendering ([#880](https://github.com/nanyx-lang/nanyx/issues/880)), and suggestions and fixes
 ([#881](https://github.com/nanyx-lang/nanyx/issues/881)); see [Where the compiler is today](#where-the-compiler-is-today).
 
-1. **Codes and wording.** Every error has a code. What is left is to rewrite the messages to the house style
+1. **Codes and wording.** Done: every error has a code, and every message follows the house style
    ([#879](https://github.com/nanyx-lang/nanyx/issues/879)).
 
 # Open questions

@@ -30,7 +30,7 @@ module PackageArchive =
                 Diagnostics.at
                     DiagnosticCodes.InvalidManifestValue
                     dependency.PathSpan
-                    $"the dependency {dependency.Name} is found by its path, so {manifest.Name} can't be packed: the directory isn't there once the package is unpacked elsewhere, so depend on a version of it, version = \"1.0\"")
+                    $"The dependency '{dependency.Name}' is found by its path, so '{manifest.Name}' can't be packed, since the directory isn't there once the package is unpacked elsewhere: depend on a version of it, `version = \"1.0\"`")
         byPath @ Manifest.publishErrors manifest
 
     /// When every entry of a packed package was written: the earliest time a zip can hold, so it says nothing about the

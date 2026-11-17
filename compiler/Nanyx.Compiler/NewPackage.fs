@@ -35,13 +35,13 @@ def main = {
     let create (name: string) (toolVersion: string) (directory: string) : Result<string, string> =
         let full = Path.GetFullPath directory
         if not (Manifest.namePattern.IsMatch name) then
-            Result.Error $"""The package name "{name}" must be {Manifest.nameRule}"""
+            Result.Error $"""The package name '{name}' must be {Manifest.nameRule}"""
         elif File.Exists full then
-            Result.Error $"{full} is a file, not a directory"
+            Result.Error $"'{full}' is a file, not a directory"
         elif Directory.Exists full && not (Seq.isEmpty (Directory.EnumerateFileSystemEntries full)) then
             match Directory.GetFiles(full, "*" + Manifest.extension) |> Array.sort with
-            | [||] -> Result.Error $"{full} is not empty: a new package is made in a new or empty directory"
-            | manifests -> Result.Error $"{full} is already a package: it has {Path.GetFileName manifests[0]}"
+            | [||] -> Result.Error $"'{full}' is not empty, and a new package is made in a new or empty directory: give another directory"
+            | manifests -> Result.Error $"'{full}' is already a package, with the manifest '{Path.GetFileName manifests[0]}'"
         else
             Directory.CreateDirectory(Path.Combine(full, "src")) |> ignore
             let manifestPath = Path.Combine(full, name + Manifest.extension)

@@ -42,7 +42,7 @@ let ``A host the compiler doesn't ship, with no path, is an error saying how to 
     let outcome = onPackage $"""host = (package = "nanyx.nope", version = "{Toolchain.version}")""" main [ "check" ]
     Assert.Equal(1, outcome.ExitCode)
     Assert.Contains(
-        """app.nyxp:3:21: error NYX0023: the compiler ships no package 'nanyx.nope': a host the compiler doesn't ship is found by its path, as host = (package = "nanyx.nope", path = "../nanyx.nope")""",
+        """app.nyxp:3:21: error NYX0023: The compiler ships no package 'nanyx.nope': give the path of a host the compiler doesn't ship, as `host = (package = "nanyx.nope", path = "../nanyx.nope")`""",
         outcome.StandardError)
 
 [<Fact>]
@@ -66,13 +66,13 @@ let ``A package whose manifest doesn't declare it a host is not one`` () =
 let ``A host's settings are an error at the field, until hosts take settings`` () =
     let outcome = onPackage $"""host = (package = "nanyx.console", version = "{Toolchain.version}", settings = (port = 3000))""" main [ "build" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("app.nyxp:3:58: error NYX0024: a host takes no settings yet", outcome.StandardError)
+    Assert.Contains("app.nyxp:3:58: error NYX0024: A host takes no settings yet", outcome.StandardError)
 
 [<Fact>]
 let ``A host without a package is an error`` () =
     let outcome = onPackage $"""host = (version = "{Toolchain.version}")""" main [ "run" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("error NYX0022: the host has no package, which it needs", outcome.StandardError)
+    Assert.Contains("error NYX0022: The host has no package, which it needs", outcome.StandardError)
 [<Theory>]
 [<InlineData("run")>]
 [<InlineData("build")>]
@@ -87,7 +87,7 @@ let ``--host naming a package the compiler doesn't ship is a usage error naming 
     let outcome = onPackage "" main [ "run"; "--host"; "nanyx.nope" ]
     Assert.Equal(2, outcome.ExitCode)
     Assert.StartsWith("--host: ", outcome.StandardError.Trim())
-    Assert.Contains("the compiler ships no package 'nanyx.nope'", outcome.StandardError)
+    Assert.Contains("The compiler ships no package 'nanyx.nope'", outcome.StandardError)
 
 [<Fact>]
 let ``--host takes the directory of a host package`` () =
@@ -104,7 +104,7 @@ let ``--host on a script is a usage error: a script names its host with ::host``
     let outcome = nanyxIn directory.Path [ "run"; "--host"; Hosts.consolePackage; path ]
     Assert.Equal(2, outcome.ExitCode)
     Assert.Equal(
-        """--host chooses a package's host: a script names its own with a ::host directive, ::host acme.server ../server, and runs under nanyx.console without one.""",
+        """`--host` chooses a package's host, and a script names its own with a `::host` directive, as `::host acme.server ../server`, or runs under 'nanyx.console' without one: leave out `--host`""",
         outcome.StandardError.Trim())
 
 [<Fact>]
