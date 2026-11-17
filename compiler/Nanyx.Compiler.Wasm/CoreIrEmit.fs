@@ -101,6 +101,17 @@ let private arrayElement (ty: IrType) =
     | IrArray element -> element
     | other -> internalError $"an array intrinsic on '{IrType.show other}', which is not an array"
 
+/// The intrinsics on arrays, which `FunctionEmitter.ArrayIntrinsic` writes out where they are used.
+let private arrayIntrinsics =
+    set [
+        Intrinsics.arrayLength
+        Intrinsics.marraySet
+        Intrinsics.arrayWrite
+        Intrinsics.arrayNew
+        Intrinsics.arrayGet
+        Intrinsics.arrayOfList
+        Intrinsics.arrayToList ]
+
 /// The operators that give a number, where the others on numbers give a bool.
 let private arithmetic = set [ "+"; "-"; "*"; "/"; "%" ]
 
@@ -583,85 +594,8 @@ type private FunctionEmitter(context: EmitContext) =
         | CallRuntime(name, [ text ], _) when name = Intrinsics.keepAlive -> join "\n    " [ atoms [ text ]; "drop"; "i32.const 0" ]
         | CallRuntime(name, [ text ], _) when name = Intrinsics.stringByteLength ->
             join "\n    " [ atoms [ text ]; $"call ${helper Helpers.stringLength}" ]
-        // An array's length is the first word of its block, and its element at an index, which the standard library has
-        // checked is in range, is after it, with a reference of its own taken (see `CoreIrArrays`).
-        | CallRuntime(name, [ array ], _) when name = Intrinsics.arrayLength ->
-            join "\n    " [ atoms [ array ]; touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"; "i64.extend_i32_u" ]
-        // A mutable array's element at an index, which the standard library has checked is in range, is given up and
-        // the value, which the array takes over, is stored in its place, as `SetField` does. A new array's element is
-        // written the same way, with nothing to give up, since it was never written.
-        | CallRuntime(name, [ array; index; value ], _) when name = Intrinsics.marraySet || name = Intrinsics.arrayWrite ->
-            let element = arrayElement (atomType array)
-            let offset = CoreIrLayout.arrayElementOffset element 0
-            let slot = freshLocal "__slot" "i32"
-            let held = freshLocal "__set" (CoreIrLayout.valueType element)
-            let dropOld =
-                if name = Intrinsics.marraySet && CoreIrDrop.isHeapType element then $"local.get ${slot}\n    {load element offset}\n    {dropValue element}"
-                else ""
-            join "\n    " [
-                atoms [ array; index ]
-                "i32.wrap_i64"
-                $"i32.const {CoreIrLayout.size element}"
-                "i32.mul"
-                "i32.add"
-                $"local.set ${slot}"
-                atoms [ value ]
-                $"local.set ${held}"
-                dropOld
-                $"local.get ${slot}\n    local.get ${held}\n    {store element offset}"
-                "i32.const 0" ]
-        // A new array: a block of its length, none for a length of 0 or less, then room for its elements, which the
-        // standard library writes before anything reads them.
-        | CallRuntime(name, [ count ], _) when name = Intrinsics.arrayNew ->
-            let element = arrayElement expr.Type
-            let requested = freshLocal "__count" "i64"
-            let length = freshLocal "__length" "i32"
-            let array = freshLocal "__array" "i32"
-            join "\n    " [
-                atoms [ count ]
-                $"local.tee ${requested}"
-                "i64.const 0"
-                $"local.get ${requested}\n    i64.const 0\n    i64.gt_s"
-                "select"
-                "i32.wrap_i64"
-                $"local.tee ${length}"
-                $"i32.const {CoreIrLayout.size element}\n    i32.mul"
-                $"i32.const {CoreIrLayout.arrayElementOffset element 0}\n    i32.add"
-                $"call ${helper Helpers.newCell}"
-                $"local.tee ${array}"
-                $"local.get ${length}"
-                touching $"i32.store offset={CoreIrLayout.arrayLengthOffset}"
-                $"local.get ${array}" ]
-        // A spread array's elements copied into a new one from an index, a loop over the two blocks in step, each element
-        // with a reference of its own.
-        | CopyArrayInto(target, at, source) ->
-            let element = arrayElement (atomType source)
-            let size = CoreIrLayout.size element
-            let first = CoreIrLayout.arrayElementOffset element 0
-            let into = freshLocal "__into" "i32"
-            let from = freshLocal "__from" "i32"
-            let left = freshLocal "__left" "i32"
-            join "\n    " [
-                atoms [ target; at ]
-                $"i32.wrap_i64\n    i32.const {size}\n    i32.mul\n    i32.add"
-                $"local.set ${into}"
-                atoms [ source ]
-                $"local.tee ${from}"
-                touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"
-                $"local.set ${left}"
-                $"block ${into}_done"
-                $"loop ${into}_copy"
-                $"local.get ${left}\n    i32.eqz\n    br_if ${into}_done"
-                $"local.get ${into}\n    local.get ${from}\n    {load element first}"
-                (if CoreIrDrop.isHeapType element then $"call ${CoreIrDrop.dupName element}" else "")
-                store element first
-                $"local.get ${into}\n    i32.const {size}\n    i32.add\n    local.set ${into}"
-                $"local.get ${from}\n    i32.const {size}\n    i32.add\n    local.set ${from}"
-                $"local.get ${left}\n    i32.const 1\n    i32.sub\n    local.set ${left}"
-                $"br ${into}_copy"
-                "end"
-                "end"
-                "i32.const 0" ]
+        | CallRuntime(name, args, _) when arrayIntrinsics.Contains name -> this.ArrayIntrinsic atoms expr.Type name args
+        | CopyArrayInto(target, at, source) -> this.CopyArrayInto atoms target at source
         // A list cell's tail is given up and the list, which the cell takes over, is stored in its place.
         | CallRuntime(name, [ cell; tail ], _) when name = Intrinsics.listSetTail ->
             let listTy = atomType cell
@@ -717,20 +651,6 @@ type private FunctionEmitter(context: EmitContext) =
                 $"local.set ${result}"
                 $"local.get ${held}\n    {dropValue ty}"
                 $"local.get ${result}" ]
-        | CallRuntime(name, [ array; index ], _) when name = Intrinsics.arrayGet ->
-            let element = arrayElement (atomType array)
-            join "\n    " [
-                atoms [ array; index ]
-                "i32.wrap_i64"
-                $"i32.const {CoreIrLayout.size element}"
-                "i32.mul"
-                "i32.add"
-                load element (CoreIrLayout.arrayElementOffset element 0)
-                (if CoreIrDrop.isHeapType element then $"call ${CoreIrDrop.dupName element}" else "") ]
-        | CallRuntime(name, [ list ], _) when name = Intrinsics.arrayOfList ->
-            join "\n    " [ atoms [ list ]; $"call ${CoreIrArrays.ofListName (arrayElement expr.Type)}" ]
-        | CallRuntime(name, [ array ], _) when name = Intrinsics.arrayToList ->
-            join "\n    " [ atoms [ array ]; $"call ${CoreIrArrays.toListName (arrayElement (atomType array))}" ]
         | CallImport(declared, args) ->
             // Each argument as the value type the import takes, a float out of its box; a float it returns is boxed, and
             // an import that returns nothing leaves unit, 0.
@@ -829,6 +749,106 @@ type private FunctionEmitter(context: EmitContext) =
             join "\n    " [ this.Value false deferred onStack body; dropVars localOf vars ]
         | Let _
         | Do _ -> this.Sequence tail expr
+
+    /// The code of the array intrinsic `name` (one of `arrayIntrinsics`) on `args`, whose code `atoms` gives, for a value
+    /// of type `ty` (see `CoreIrArrays`).
+    member _.ArrayIntrinsic (atoms: Atom list -> string) (ty: IrType) (name: string) (args: Atom list) : string =
+        match args with
+        // An array's length is the first word of its block, and its element at an index, which the standard library has
+        // checked is in range, is after it, with a reference of its own taken (see `CoreIrArrays`).
+        | [ array ] when name = Intrinsics.arrayLength ->
+            join "\n    " [ atoms [ array ]; touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"; "i64.extend_i32_u" ]
+        // A mutable array's element at an index, which the standard library has checked is in range, is given up and
+        // the value, which the array takes over, is stored in its place, as `SetField` does. A new array's element is
+        // written the same way, with nothing to give up, since it was never written.
+        | [ array; index; value ] when name = Intrinsics.marraySet || name = Intrinsics.arrayWrite ->
+            let element = arrayElement (atomType array)
+            let offset = CoreIrLayout.arrayElementOffset element 0
+            let slot = freshLocal "__slot" "i32"
+            let held = freshLocal "__set" (CoreIrLayout.valueType element)
+            let dropOld =
+                if name = Intrinsics.marraySet && CoreIrDrop.isHeapType element then $"local.get ${slot}\n    {load element offset}\n    {dropValue element}"
+                else ""
+            join "\n    " [
+                atoms [ array; index ]
+                "i32.wrap_i64"
+                $"i32.const {CoreIrLayout.size element}"
+                "i32.mul"
+                "i32.add"
+                $"local.set ${slot}"
+                atoms [ value ]
+                $"local.set ${held}"
+                dropOld
+                $"local.get ${slot}\n    local.get ${held}\n    {store element offset}"
+                "i32.const 0" ]
+        // A new array: a block of its length, none for a length of 0 or less, then room for its elements, which the
+        // standard library writes before anything reads them.
+        | [ count ] when name = Intrinsics.arrayNew ->
+            let element = arrayElement ty
+            let requested = freshLocal "__count" "i64"
+            let length = freshLocal "__length" "i32"
+            let array = freshLocal "__array" "i32"
+            join "\n    " [
+                atoms [ count ]
+                $"local.tee ${requested}"
+                "i64.const 0"
+                $"local.get ${requested}\n    i64.const 0\n    i64.gt_s"
+                "select"
+                "i32.wrap_i64"
+                $"local.tee ${length}"
+                $"i32.const {CoreIrLayout.size element}\n    i32.mul"
+                $"i32.const {CoreIrLayout.arrayElementOffset element 0}\n    i32.add"
+                $"call ${helper Helpers.newCell}"
+                $"local.tee ${array}"
+                $"local.get ${length}"
+                touching $"i32.store offset={CoreIrLayout.arrayLengthOffset}"
+                $"local.get ${array}" ]
+        | [ array; index ] when name = Intrinsics.arrayGet ->
+            let element = arrayElement (atomType array)
+            join "\n    " [
+                atoms [ array; index ]
+                "i32.wrap_i64"
+                $"i32.const {CoreIrLayout.size element}"
+                "i32.mul"
+                "i32.add"
+                load element (CoreIrLayout.arrayElementOffset element 0)
+                (if CoreIrDrop.isHeapType element then $"call ${CoreIrDrop.dupName element}" else "") ]
+        | [ list ] when name = Intrinsics.arrayOfList ->
+            join "\n    " [ atoms [ list ]; $"call ${CoreIrArrays.ofListName (arrayElement ty)}" ]
+        | [ array ] when name = Intrinsics.arrayToList ->
+            join "\n    " [ atoms [ array ]; $"call ${CoreIrArrays.toListName (arrayElement (atomType array))}" ]
+        | _ -> internalError $"the array intrinsic '{name}' with {args.Length} arguments"
+
+    /// The code that copies a spread array's elements, in `source`, into a new one, in `target`, from the index `at`: a loop
+    /// over the two blocks in step, each element with a reference of its own. `atoms` gives the atoms' code.
+    member _.CopyArrayInto (atoms: Atom list -> string) (target: Atom) (at: Atom) (source: Atom) : string =
+        let element = arrayElement (atomType source)
+        let size = CoreIrLayout.size element
+        let first = CoreIrLayout.arrayElementOffset element 0
+        let into = freshLocal "__into" "i32"
+        let from = freshLocal "__from" "i32"
+        let left = freshLocal "__left" "i32"
+        join "\n    " [
+            atoms [ target; at ]
+            $"i32.wrap_i64\n    i32.const {size}\n    i32.mul\n    i32.add"
+            $"local.set ${into}"
+            atoms [ source ]
+            $"local.tee ${from}"
+            touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"
+            $"local.set ${left}"
+            $"block ${into}_done"
+            $"loop ${into}_copy"
+            $"local.get ${left}\n    i32.eqz\n    br_if ${into}_done"
+            $"local.get ${into}\n    local.get ${from}\n    {load element first}"
+            (if CoreIrDrop.isHeapType element then $"call ${CoreIrDrop.dupName element}" else "")
+            store element first
+            $"local.get ${into}\n    i32.const {size}\n    i32.add\n    local.set ${into}"
+            $"local.get ${from}\n    i32.const {size}\n    i32.add\n    local.set ${from}"
+            $"local.get ${left}\n    i32.const 1\n    i32.sub\n    local.set ${left}"
+            $"br ${into}_copy"
+            "end"
+            "end"
+            "i32.const 0" ]
 
     /// The code of `record with` the `updates`, each a field's slot in `fields` and its new value, written by `atomsAfter`
     /// and stored by the helpers `storing` names. The update takes the record over. When it holds the only reference, it
