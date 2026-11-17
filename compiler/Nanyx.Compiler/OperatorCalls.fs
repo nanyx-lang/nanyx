@@ -30,8 +30,8 @@ module internal OperatorCalls =
         | _ ->
             let funcTy, next = instantiate state scheme
             let resultTy, next = freshVar next
-            // An error earlier in the module is set aside (see `Unifier.agreeing`).
-            Unifier.unify ((funcTy, TyFunc(input, resultTy, []), Equal, SourceSpan.none) :: Unifier.agreeing next.Constraints) |> Result.isOk
+            // An error earlier in the module is set aside (see `Solving.agreeing`).
+            Solving.unify ((funcTy, TyFunc(input, resultTy, []), Equal, SourceSpan.none) :: Solving.agreeing next.Constraints) |> Result.isOk
 
     /// The definition the operator `expr` calls with its operands (`input`, as a call's arguments are typed), if it
     /// calls one, and the name it calls it by. On a built-in type, that of its left operand (`leftTy`) as far as it is
