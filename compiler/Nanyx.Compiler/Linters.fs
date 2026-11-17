@@ -593,14 +593,15 @@ module NoTagInCommon =
 
 /// The official linter's `unreachableCode` rule: the statements of a block after one that never gives a value, whose
 /// type is `undefined` (a call to `crash`, say). They can never run. It is reported once per block, at the statements
-/// from the first that never runs to the end of the block.
+/// from the first that never runs to the end of the block. The arguments of a call after one whose type is
+/// `undefined` are reported the same way, once per call.
 module UnreachableCode =
     let rule =
         { Id = "unreachableCode"
           Title = "Unreachable code"
           DefaultSeverity = Severity.Warning
           Description =
-            "Statements of a block after one that never gives a value, such as a call to `crash`, whose type is `undefined`. They can never run." }
+            "Statements of a block after one that never gives a value, such as a call to `crash`, whose type is `undefined`, and the arguments of a call after one that never gives a value. They can never run." }
 
     /// Why `expr`, whose type is `undefined`, means what follows never runs.
     let private whyNever (expr: Expression) =
@@ -609,11 +610,41 @@ module UnreachableCode =
         | Pipe(_, name, _, _) -> $"`{name}` never returns"
         | _ -> "the statement before it never gives a value"
 
+    /// The arguments of a call after one that never gives a value: arguments are evaluated left to right, so neither
+    /// they nor the call itself ever run. Reported once per call, from the first that never runs to its last. A pipe's
+    /// piped value is its first argument, and a call of several arguments is given them as one tuple.
+    let private afterArguments (never: Expression -> bool) (expr: Expression) : Report option =
+        let spread (arguments: Expression list) =
+            match arguments with
+            | [ Kind (TupleExpr items) ] -> items
+            | _ -> arguments
+        let call =
+            match expr.Kind with
+            | FunctionCall(name, _, arguments) -> Some (name, spread arguments)
+            | Pipe(piped, name, _, arguments) -> Some (name, piped :: spread arguments)
+            | ContextMemberCall(_, name, arguments) -> Some (name, spread arguments)
+            | _ -> None
+        call
+        |> Option.bind (fun (name, arguments) ->
+            arguments
+            |> List.tryFindIndex never
+            |> Option.filter (fun index -> index < arguments.Length - 1)
+            |> Option.map (fun index ->
+                let diverging = arguments.[index]
+                let unreachable = arguments |> List.skip (index + 1)
+                let callee = if MadeUpNames.isMadeUp name then "the call" else $"`{name}`"
+                { Rule = rule.Id
+                  Span = SourceSpan.between (List.head unreachable).Span (List.last unreachable).Span
+                  Message = $"This code never runs: {whyNever diverging}, so the arguments after it are never evaluated and {callee} is never called"
+                  Related = [ diverging.Span, "never gives a value" ]
+                  Fixes = [] }))
+
     let lint (model: SemanticModel) : Report list =
         let never (expr: Expression) =
             model.Types |> Map.tryFind expr.Id |> Option.exists Unifier.isBottom
-        model.Syntax
-        |> List.collect SyntaxTree.ofItem
+        let items = model.Syntax |> List.collect SyntaxTree.ofItem
+        let ofArguments = items |> List.collect SyntaxTree.expressionsWithin |> List.choose (afterArguments never)
+        items
         |> List.collect SyntaxTree.blocksWithin
         |> List.choose (fun statements ->
             statements
@@ -635,6 +666,7 @@ module UnreachableCode =
                   Message = $"This code never runs: {whyNever value}"
                   Related = [ diverging.Span, "never gives a value" ]
                   Fixes = fixes }))
+        |> List.append ofArguments
         |> List.sortBy (fun report -> report.Span.Start)
 
 /// The official linter's `useInBraces` rule: `use X in { ... }`, where the body is a lambda of no arguments written

@@ -22,7 +22,7 @@ Each rule's diagnostics have the code `default/<rule>`, such as `default/unusedB
 | [`noTagInCommon`](#comparison-that-is-always-false) | warning | `==` or `!=` on two unions with no tag in common |
 | [`useInBraces`](#use--in-with-a-body-in-braces) | warning | `use ... in { ... }`, whose body is a function, not a block |
 | [`strayDocComments`](#doc-comment-that-documents-nothing) | warning | a doc comment that documents nothing |
-| [`unreachableCode`](#unreachable-code-path) | warning | statements after one that never gives a value |
+| [`unreachableCode`](#unreachable-code-path) | warning | statements, or a call's arguments, after one that never gives a value |
 | [`nonTailRecursion`](#recursion-not-in-tail-position) | info | a function calling itself other than in tail position |
 | [`unusedResults`](#unused-return-value) | error | a statement whose value is thrown away |
 | [`uselessExpressions`](#expression-that-does-nothing) | error | a pure statement whose value is thrown away |
@@ -154,6 +154,8 @@ def f: int -> int = { x ->
 ```
 
 The rule (`unreachableCode`) reports the statements of a block that come after one that never gives a value: a statement whose type is [`undefined`](../tour/types#top-and-bottom-types), such as a call to `crash`, a call to a function you have annotated to return `undefined`, or an `if` whose every branch is one of those. It reports the first statement that never runs, through the end of the block, and points at the statement that stops the block. Its fix removes the statements that never run, unless the statement before them is a def, since a block can't end with a def.
+
+Arguments are evaluated left to right, so in `f(crash("a"), g())` neither `g()` nor the call to `f` ever runs. The rule reports the arguments of a call that come after one whose type is `undefined`, once per call, and points at the argument that stops it; in a pipe, `crash("a") \f(g())`, the piped value is the first argument. It has no fix, since leaving the arguments out would change the call.
 
 ## Recursion not in tail position
 
