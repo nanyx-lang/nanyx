@@ -78,9 +78,9 @@ How it works:
 - The parser reads `[k]` as it reads `[Tx]` (`TypeDefModifier.InScopeOf`); a name that is a type variable
   (`Names.isTypeVariable`) is a context variable, kept as `TypeDefInfo.ContextVariable`, which the body's function types
   read as theirs. Two context variables, or one with a scoped context, are NYX0252 (`TypeResolution.typeScopeErrors`).
-- A value carries its contexts as the last argument of its `TyNominal`, after a scope if it has one: a function type
-  that requires them (`FunctionContexts.carried`), so that two of them agree, and one fits another, as function types
-  do (`FunctionContexts.agree`, `fit`). `tyToString` writes them in front. `nominalType` puts them in for the body's
+- A value carries its contexts as the last argument of its `TyNominal`, after a scope if it has one: a `TyContexts`
+  (`FunctionContexts.carried`, [#1759](https://github.com/nanyx-lang/nanyx/issues/1759)). Two of them agree, and one
+  fits another, as function types' contexts do (`FunctionContexts.agree`, `fit`). `tyToString` writes them in front. `nominalType` puts them in for the body's
   variable. A type written without contexts carries none, and `[C] T` in a use is read by `typeExprToTy`; on a value
   def's annotation they are the type's, not the def's (`Contexts.extractDefContexts`). In a list of types without
   `->`, which is a tuple, the parser gives contexts in front of the list to its first item (`typeSignature`), and

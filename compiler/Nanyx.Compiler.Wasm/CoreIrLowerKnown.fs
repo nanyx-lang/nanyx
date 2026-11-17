@@ -45,6 +45,7 @@ let rec private withoutOpenRests (ty: Ty) =
     match ty with
     | TyUnion items -> TyUnion(items |> List.filter (function TyVar _ -> false | _ -> true) |> List.map withoutOpenRests)
     | TyFunc(input, output, _) -> TyFunc(withoutOpenRests input, withoutOpenRests output, [])
+    | TyContexts _ -> TyContexts []
     | TyOpenRecord _ -> ty
     | _ -> Ty.map withoutOpenRests ty
 

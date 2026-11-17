@@ -53,19 +53,16 @@ module FunctionContexts =
         | TyApply(name, [ ScopeType scope ]) -> Some (name, scope)
         | _ -> None
 
-    /// What a type generic in contexts carries them in (see `carried`). No type written in source is it.
-    let private carriedTag = "@contexts"
-
     /// `contexts` as a type generic in contexts carries them (`type Stream(a) = [k] protected (...)`, see
-    /// `TypeDefInfo.ContextVariable`): the last argument of its nominal type, a function type that requires them, so that
-    /// two such types' contexts agree as two function types' do, and one with fewer fits where one with more is expected.
-    /// A reader writes them in front of the type, `[FileSystem] Stream(string)`.
-    let carried (contexts: Ty list) : Ty = TyFunc(TyPrimitive carriedTag, TyPrimitive "unit", contexts)
+    /// `TypeDefInfo.ContextVariable`): the last argument of its nominal type, a `TyContexts`. Two such types' contexts
+    /// agree as two function types' do, and one with fewer fits where one with more is expected. A reader writes them in
+    /// front of the type, `[FileSystem] Stream(string)`.
+    let carried (contexts: Ty list) : Ty = TyContexts contexts
 
     /// The contexts a type generic in contexts carries (see `carried`).
     let (|Carried|_|) (ty: Ty) : Ty list option =
         match ty with
-        | TyFunc(TyPrimitive tag, _, contexts) when tag = carriedTag -> Some contexts
+        | TyContexts contexts -> Some contexts
         | _ -> None
 
     /// The name of a context that takes no arguments a reader writes: `Console`, or a scoped context, whose scope is not
@@ -106,13 +103,15 @@ module FunctionContexts =
         | TyVar _ -> true
         | _ -> false
 
-    /// The context variables of the function types in `ty`, by id, each with its name if it has one.
+    /// The context variables of the function types in `ty`, and of the contexts its types generic in contexts carry, by
+    /// id, each with its name if it has one.
     let rec variablesIn (ty: Ty) : Map<int, string option> =
         let all (tys: Ty list) = tys |> List.fold (fun acc ty -> Map.fold (fun acc id name -> Map.add id name acc) acc (variablesIn ty)) Map.empty
+        let ownOf (contexts: Ty list) = contexts |> List.choose (function TyVar v -> Some (v.Id, v.Name) | _ -> None) |> Map.ofList
         match ty with
         | TyFunc(input, output, contexts) ->
-            let own = contexts |> List.choose (function TyVar v -> Some (v.Id, v.Name) | _ -> None) |> Map.ofList
-            Map.fold (fun acc id name -> Map.add id name acc) own (all (input :: output :: contexts))
+            Map.fold (fun acc id name -> Map.add id name acc) (ownOf contexts) (all (input :: output :: contexts))
+        | TyContexts contexts -> Map.fold (fun acc id name -> Map.add id name acc) (ownOf contexts) (all contexts)
         | TyOpenRecord(fields, _) -> all (List.ofSeq fields.Values)
         | _ -> all (Ty.children ty)
 

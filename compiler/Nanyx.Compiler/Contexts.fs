@@ -33,21 +33,15 @@ let internal checkMemberRequirements (state: InferState) (typeOpt: TypeExpr opti
     | None -> Ok ()
 
 /// Whether `info` is a protected or private context with no members: no member says whether an instance of it is
-/// there, so the environment binds a name for it where one is (see `withSupplied`). A scoped one is the call's that
-/// supplies it (see `ScopedCalls`), and `HostRuntime`, which the toolchain gives a host, is checked by `Hosts`.
+/// there, so the environment holds it where one is (see `withSupplied`). A scoped one is the call's that supplies it
+/// (see `ScopedCalls`), and `HostRuntime`, which the toolchain gives a host, is checked by `Hosts`.
 let private isMemberless (info: TypeDefInfo) =
     info.IsContext && info.IsNominal && info.Members.IsEmpty && info.Parameters.IsEmpty && not info.IsScoped
     && info.Home <> StandardLibraryModule "host.runtime"
 
-/// The name the environment binds where an instance of `info`, a context with no members, is supplied (#1479). No code
-/// can write it.
-let private suppliedKey (info: TypeDefInfo) =
-    let id = TypeDefInfo.nominalId info
-    $"@supplied {id.Home}/{id.Name}"
-
-/// `env` where an instance of `info` is supplied, if it is a context with no members.
+/// `env` where an instance of `info` is supplied, if it is a context with no members (#1479): `TypeEnv.Supplied` holds it.
 let private withSupplied (info: TypeDefInfo) (env: TypeEnv) : TypeEnv =
-    if isMemberless info then TypeEnv.extend (suppliedKey info) (TypeEnv.mono (TyPrimitive "unit")) env else env
+    if isMemberless info then { env with Supplied = env.Supplied.Add(TypeDefInfo.nominalId info) } else env
 
 /// `env` with the members of the instance a `use` of a value of type `ty` loads, each bound by its name. When the
 /// type names a plain context, as `Foo(bar = ...)`'s does, each member has the symbol the context's definition
@@ -705,7 +699,7 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
                 match ctx.Kind with
                 | TypeName ctxName ->
                     tryFindTypeDef ctxName state
-                    |> Option.exists (fun info -> isMemberless info && (TypeEnv.tryFind (suppliedKey info) env).IsNone)
+                    |> Option.exists (fun info -> isMemberless info && not (env.Supplied.Contains(TypeDefInfo.nominalId info)))
                 | _ -> false
             match members |> List.filter (fun memberName -> TypeEnv.tryFind memberName env |> Option.isNone) with
             | [] when unsupplied -> Some (ctx, [])
