@@ -112,6 +112,16 @@ def seq.map: ([c] seq(a)), ([d] a -> b) -> [c, d] seq(b)
 `f` applied to each element of `s`, when it is pulled: `(1..3) \seq.map { * 2 }` gives `2`, `4`
 and `6`.
 
+## `seq.zip`
+
+```nanyx fragment
+def seq.zip: ([c] seq(a)), ([d] seq(b)) -> [c, d] seq((a, b))
+```
+
+Pairs the elements of `s` and `t` in order, ending when either ends, as `list.zip` stops at the
+shorter list: `seq.zip(0.., list.toSeq(["a", "b"]))` gives `(0, "a")` and `(1, "b")`. Each pair
+pulls one element from each side, and nothing more.
+
 ## `seq.append`
 
 ```nanyx fragment

@@ -81,6 +81,11 @@ export def map.toList: map(k, v) -> list((k, v)) = { m ->
   __nanyx_map_entries(m)
 }
 
+--| The entries of `m` as a sequence of key-value pairs, in the order [`map.toList`] gives them.
+export def map.toSeq: map(k, v) -> seq((k, v)) = { m ->
+  list.toSeq(__nanyx_map_entries(m))
+}
+
 --| The value `m` holds for `key`, or `#notFound`. Calling the map, `m(key)`, is the same.
 export def map.get: [Eq(k), Hash(k)] map(k, v), k -> #some(v) | #notFound = { m, key ->
   findEntry(__nanyx_map_entries(m), key)
@@ -271,6 +276,11 @@ export def set.build: [Eq(a), Hash(a), c, d] ([c] () -> [d] seq(a)) -> set(a) = 
 --| The elements of `s`, in the order they were first added.
 export def set.toList: set(a) -> list(a) = { s ->
   __nanyx_set_elements(s)
+}
+
+--| The elements of `s` as a sequence, in the order [`set.toList`] gives them.
+export def set.toSeq: set(a) -> seq(a) = { s ->
+  list.toSeq(__nanyx_set_elements(s))
 }
 
 --| Whether `s` holds `x`.

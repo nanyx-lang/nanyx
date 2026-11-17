@@ -91,6 +91,22 @@ export def seq.map: ([c] seq(a)), ([d] a -> b) -> [c, d] seq(b) = { s, f ->
   )
 }
 
+--| Pairs the elements of `s` and `t` in order, ending when either ends, as `list.zip` stops at the
+  shorter list: `seq.zip(0.., list.toSeq(["a", "b"]))` gives `(0, "a")` and `(1, "b")`. Each pair
+  pulls one element from each side, and nothing more.
+export def seq.zip: ([c] seq(a)), ([d] seq(b)) -> [c, d] seq((a, b)) = { s, t ->
+  Seq(
+    next = {
+      match s.next()
+        | #next(x, rest) ->
+          match t.next()
+            | #next(y, more) -> #next((x, y), seq.zip(rest, more))
+            | #done -> #done
+        | #done -> #done
+    }
+  )
+}
+
 --| The elements of `s`, then those of `t`.
 export def seq.append: ([c] seq(a)), ([d] seq(a)) -> [c, d] seq(a) = { s, t ->
   Seq(
