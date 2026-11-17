@@ -6,9 +6,9 @@ order: 5
 
 Reading and writing files, making and serving HTTP requests, and reading and writing JSON are the minimum for most
 useful programs. This page is their design, decided by the maintainer on 2026-11-17. The file system is built, but for
-`file.lines` and the check described under [Still open](#still-open-for-the-file-system), and so is the first layer of
-`nanyx.json`, the `Json` value with parsing and printing ([#1787](https://github.com/nanyx-lang/nanyx/issues/1787)).
-HTTP and JSON's encoders and decoders are not built yet.
+`file.lines` and the check described under [Still open](#still-open-for-the-file-system), and so is `nanyx.json`: the
+`Json` value with parsing and printing ([#1787](https://github.com/nanyx-lang/nanyx/issues/1787)), and its decoders
+and encoders ([#1788](https://github.com/nanyx-lang/nanyx/issues/1788)). HTTP is not built yet.
 
 # What they share
 
@@ -132,9 +132,9 @@ Two layers.
    `#null | #bool(bool) | #number(float) | #string(string) | #array(list(Json)) | #object(map(string, Json))`, with
    `json.parse`, `json.print` and `json.printPretty(value, indent = 2)`. Its reference is the [json](../stdlib/json)
    page.
-2. **Typed encoding and decoding with combinators,** as the [JSON cookbook](../cookbook/json-parsing) shows:
-   `json.record(name = json.field("name", json.string), ...)`, with errors that name where they failed
-   (`users[2].age`). Numbers are `float`, and `json.int` checks that one is whole.
+2. **Typed encoding and decoding with combinators** (built, [#1788](https://github.com/nanyx-lang/nanyx/issues/1788)),
+   with errors that name where they failed (`users[2].age`). Numbers are `float`, and `json.int` checks that one is
+   whole. Its reference is the [decoders](../stdlib/json-typed) and [encoders](../stdlib/encode) pages.
 
 How the first layer is built, in `packages/nanyx.json/src/json.nyx`, in Nanyx:
 
@@ -158,6 +158,30 @@ How the first layer is built, in `packages/nanyx.json/src/json.nyx`, in Nanyx:
   lists hold different tags must name the inner values first
   ([#1798](https://github.com/nanyx-lang/nanyx/issues/1798)).
 
+How the second layer is built, in `packages/nanyx.json/src/json.typed.nyx` (part of the module `json`) and
+`encode.nyx`:
+
+- **A record is read by a workflow, not a record of decoders.** The design sketched
+  `json.record(name = json.field("name", json.string), ...)`, but no Nanyx type can take a record of decoders and give a
+  decoder of the record. `json.record { ... }` is a builder instead, whose `try` reads by a decoder and `return` gives
+  the value: `def name = try json.field("name", json.string)`. It reads a tagged union too, as a `try` can read by a
+  decoder an earlier one chose.
+- **`Decoder(a)` is private,** a function from `Json` to the value or a failure with its path, which each combinator
+  extends on the way out (`#field(name)`, `#index(i)`), so a path costs nothing until something fails. A missing member
+  is an error but for `json.optional`, which reads it, and `null`, as `#none`.
+- **`DecodeError` is `(path: list(PathStep), message: string)`;** `json.pathText` writes the path and `json.describe`
+  the whole error. Text that isn't JSON is an error at the root, whose message gives the line and column.
+- **Encoders are in a module of their own,** `nanyx.json/encode`, because their names are the decoders'
+  (`encode.string`, `json.string`). An `Encoder(a)` is any function `a -> Json`; `json.encode(value, encoder)` prints
+  what one writes. Attaching them to `Encoder` (`json.Encoder.string`) would have kept one module, but a type's attached
+  definitions can't be reached through an import's alias yet
+  ([#1833](https://github.com/nanyx-lang/nanyx/issues/1833)).
+- **`json.convert`, not `json.map`,** maps what a decoder read: a `def map` in the module would hide `map.empty` and the
+  other attached definitions of maps from the module's own code.
+- **Compiler bugs found on the way:** an imported builder's keywords had another module's type variables (#1818, fixed);
+  a partial module's file can't name a type from a file that sorts after it
+  ([#1838](https://github.com/nanyx-lang/nanyx/issues/1838)), which is why the decoders are in `json.typed.nyx`.
+
 **Encoding and decoding any record automatically** is decided to wait for type reflection
 ([Type members and reflection](./type-members-and-reflection)), which lets any library walk a type's structure, not
 just JSON's. Deriving a JSON context in the compiler, as `Eq` and `ToString` are derived today, was rejected: it would
@@ -172,7 +196,7 @@ be a compiler special case that a SQL or YAML library couldn't use.
 | [#1785](https://github.com/nanyx-lang/nanyx/issues/1785) | `nanyx.http.core` and the client, through a runtime import | |
 | [#1786](https://github.com/nanyx-lang/nanyx/issues/1786) | The HTTP host, served locally by `nanyx run` | #1785 |
 | [#1787](https://github.com/nanyx-lang/nanyx/issues/1787) | `nanyx.json`: the `Json` value, parsing and printing (done) | |
-| [#1788](https://github.com/nanyx-lang/nanyx/issues/1788) | `nanyx.json`: encoders and decoders | #1787 |
+| [#1788](https://github.com/nanyx-lang/nanyx/issues/1788) | `nanyx.json`: encoders and decoders (done) | #1787 |
 | [#1789](https://github.com/nanyx-lang/nanyx/issues/1789) | Automatic encoding and decoding, on type reflection (Planning) | #1788, reflection |
 
 # Open questions
