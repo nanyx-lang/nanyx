@@ -129,14 +129,14 @@ module PackageIndex =
                             |> Result.mapError (fun message -> $"The download of {named} can't be unpacked: {message}")
                             |> Result.bind (fun () ->
                                 // What was unpacked must be the package it was downloaded as.
-                                match Directory.GetFiles(directory, "*" + Manifest.extension) with
-                                | [| manifestPath |] ->
+                                match Manifest.manifestIn directory with
+                                | Result.Ok manifestPath ->
                                     match Manifest.read manifestPath with
                                     | Result.Ok manifest when manifest.Name = locked.Name && manifest.Version = string locked.Version -> Result.Ok directory
                                     | found ->
                                         Directory.Delete(directory, true)
                                         let what = match found with Result.Ok manifest -> $"{manifest.Name} {manifest.Version}" | Result.Error _ -> "a manifest that doesn't read"
                                         Result.Error $"The download of {named} holds {what}"
-                                | _ ->
+                                | Result.Error message ->
                                     Directory.Delete(directory, true)
-                                    Result.Error $"The download of {named} has no manifest")))
+                                    Result.Error $"The download of {named} isn't a package: {message}")))
