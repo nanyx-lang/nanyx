@@ -72,26 +72,24 @@ A builder can take parameters before its block, and can require contexts of its 
 
 # Yield and collection builders
 
-A `seq` builder could provide `yield`, letting you build sequences with a clean syntax:
+A `seq` builder will provide `yield`, letting you build sequences with a clean syntax. It's planned
+([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)), with `yield` written without `!`, as `try` and `return`
+are:
 
 ```nanyx fragment
 def numbers = seq {
-  yield! 1
-  yield! 2
-  yield! 3
+  yield 1
+  yield 2
+  yield 3
 }
 ```
 
-Under the single desugaring rule this becomes:
+It isn't an ordinary workflow, because a lazy sequence runs the rest of the block only when it's pulled, after the
+builder has returned. Instead its `yield` member is of a planned keyword kind, `#yield`, which rewrites the block into
+the sequence itself, with nothing left that needs the builder's context:
 
 ```nanyx fragment
-seq({
-  yield(1, {
-    yield(2, {
-      yield(3, { })
-    })
-  })
-})
+seq.cons(1, { seq.cons(2, { seq.cons(3, { seq.empty() }) }) })
 ```
 
 # Async and custom keywords
@@ -146,7 +144,7 @@ def retrying: [c] int, ([Retry, c] () -> Attempt(a)) -> Attempt(a) = { times, bl
 |---------|-------------|
 | `#bind`  | The keyword takes a value and a continuation function. The workflow will call the continuation with the result of the keyword operation. |
 
-`#bind` is the only kind for now, and a member without the attribute is a `#bind` keyword too. Two more are planned ([#1879](https://github.com/nanyx-lang/nanyx/issues/1879)) for keywords that take a computation rather than a value: `#bindF`, which passes the expression as a lambda along with the continuation (`defer! cleanUp()` would be `defer({ cleanUp() }, ...)`), and `#delay`, which passes only the lambda and rewrites nothing else (`start! e` would be `start({ e })`). Any other kind is a compile error at the attribute, as is the attribute anywhere but before a member of a `context` declaration.
+`#bind` is the only kind for now, and a member without the attribute is a `#bind` keyword too. Two more are planned ([#1879](https://github.com/nanyx-lang/nanyx/issues/1879)) for keywords that take a computation rather than a value: `#bindF`, which passes the expression as a lambda along with the continuation (`defer! cleanUp()` would be `defer({ cleanUp() }, ...)`), and `#delay`, which passes only the lambda and rewrites nothing else (`start! e` would be `start({ e })`). A third, `#yield` ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)), rewrites a block into a lazy sequence, as [below](#yield-and-collection-builders). Any other kind is a compile error at the attribute, as is the attribute anywhere but before a member of a `context` declaration.
 
 # Workflow keywords
 

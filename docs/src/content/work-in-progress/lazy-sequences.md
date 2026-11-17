@@ -186,11 +186,29 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
 
 - **`Seq.unfold`** takes a state and a step that gives `#some(element, nextState)` or `#done`, the same step as
   `list.unfold`. `list.unfold` becomes `Seq.unfold(...) \Seq.toList`.
-- **`seq { ... }`** is a [workflow](../advanced/workflows) whose `yield` keyword produces an element. A keyword
-  receives the rest of the block as its continuation, and that continuation becomes the rest of the sequence, so the
-  code after a `yield` doesn't run until the next element is pulled. Laziness comes from the workflow rewrite with no
-  extra machinery. A loop inside the block whose body yields is run by the builder's `for` member (see
-  [Keywords in loops](../advanced/workflows#keywords-in-loops)), so `seq` needs one.
+- **`seq { ... }`** is a block whose `yield` produces an element, and the code after a `yield` doesn't run until the
+  next element is pulled. Decided by the maintainer on 2026-11-17
+  ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)):
+
+  ```nanyx fragment
+  def items = seq {
+    println("Yielding 1")
+    yield 1
+    println("Yielding 2")
+    yield 2
+  }
+  ```
+
+  - **Not an ordinary workflow.** Under the one desugaring rule, `yield x` is `yield(x, rest)`, and `rest` needs the
+    builder's context, which is gone by the time the sequence is pulled: the sequence would carry the context.
+  - **A keyword kind, `#yield`,** rewrites a block run under a context whose member has it, leaving no context in it:
+    `yield x` with the rest `k` becomes `seq.cons(x, { k })`, the end of the block `seq.empty()`, and a `for` loop
+    whose body yields `seq.concatMap`. Laziness comes from the closures. `seq` stays an ordinary prelude definition,
+    since the member's kind chooses the rewrite, not the builder's name. It joins the planned `#delay` and `#bindF`
+    kinds ([#1879](https://github.com/nanyx-lang/nanyx/issues/1879)).
+  - **`yield` is written without `!`,** as `try` and `return` are.
+  - **No `yield` in a `while` loop.** A `while` needs a cell, and a sequence that reads one can't leave its `memory`
+    block anyway.
 - **Ranges** give sequences: `1..10` and `0..` are both `seq(int)` values that can be passed around and stored, not
   only walked by a `for` loop.
 
@@ -220,12 +238,11 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
   `Iterable` reads well in signatures; `ToSeq` would sit beside `ToString` and `FromString`.
 - **Walking an unbounded range.** A default-linter rule for a `for` over only an unbounded range literal, or nothing,
   as for `while true`.
-- **One `yield`.** The docs have three: the `seq { }` keyword, the `Yield(b)` context of `list.select`
-  ([#478](https://github.com/nanyx-lang/nanyx/issues/478)), and the `ListBuilder` member behind
-  [literal builders](../tour/collections#syntax). The last two are handler-style. `Yield(b)` is in the prelude now:
-  `list.select` loads one whose `yield` adds to a `mut` list in a `memory` block, and `list.selectOne` is its first
-  value, not an early exit. With sequences, `select` could be a `flatMap` whose body is a `seq { }`, and a literal
-  builder could take a `seq(a)`, leaving one `yield`.
+- ~~**One `yield`.**~~ Decided ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)): the prelude's `Yield(b)`,
+  which `list.select` uses today as a call, `yield(x)`, becomes the `#yield` context. `list.select` becomes a
+  `flatMap` whose lambda is rewritten the same way, so it's written `xs \list.select { x -> if x > 0 then yield x }`,
+  and the call form goes. The `ListBuilder` member behind [literal builders](../tour/collections#syntax) goes too if
+  a builder can take a `seq(a)` instead; #1699 says which.
 
 # Plan
 
@@ -242,4 +259,5 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
 5. `Iterable(c)`, with `for` loops and the `Seq` functions that consume a sequence taking it
    ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802), after associated types,
    [#1800](https://github.com/nanyx-lang/nanyx/issues/1800)).
-6. The `seq { }` builder.
+6. The `seq { }` builder, by the `#yield` keyword kind, with `yield` written bare and `list.select` moved to it
+   ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699), Ready).
