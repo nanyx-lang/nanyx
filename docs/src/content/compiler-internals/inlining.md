@@ -63,7 +63,9 @@ temporaries (`CoreIrSimplify.withTemporaries`).
   a local with the caller's: variables of the same kind and name share one. A parameter is the caller's variable when
   the argument is one of its type, and a new local let-bound to the argument otherwise (a lambda's environment, which
   it reads as a record, is bound to the closure, a tag to a parameter whose type has other tags, and a function that
-  gives or takes tags to one whose type has other tags there, since tags are held alike). A call is inlined as what a
+  gives or takes tags to one whose type has other tags there, since tags are held alike). A body whose type has fewer
+  tags than the function declares, as one that declares an error it never makes, is inlined too, and given the
+  declared type ([#1882](https://github.com/nanyx-lang/nanyx/issues/1882)). A call is inlined as what a
   chain ends in or as a `let`'s or `do`'s value, a temporary's among them (`acc + double(n)`). Every temporary of the
   chain still waiting to be used becomes a local first, since the inlined body stores before it reads what it is
   given, and nothing may be stored while a temporary waits; temporaries are bound in the order they are evaluated, so

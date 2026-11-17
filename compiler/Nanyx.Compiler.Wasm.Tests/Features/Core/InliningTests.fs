@@ -220,6 +220,27 @@ def run: int -> int = { n ->
     Assert.Equal(0, inlinedAllocations)
 
 [<Fact>]
+let ``A function whose declared result has tags its body never makes is inlined`` () =
+    let source =
+        normalized """def half: int -> #some(int) | #error(#odd | #negative) = { n ->
+  if n % 2 == 1 then #error(#odd) else #some(n / 2)
+}
+
+def run: int -> int = { n ->
+  match half(n)
+    | #some(h) -> h
+    | #error(_) -> 0
+}
+"""
+    Assert.DoesNotContain("call $half", functionText "run" (transpileWat source))
+    use inlined = instantiateWasm source []
+    let allocations, result = allocationsOf inlined "run" 100
+    Assert.Equal(50, result)
+    // `half` makes only `#odd` of the two errors it declares. Inlined all the same, its `if` meets the match, and no tag
+    // is made (#1882).
+    Assert.Equal(0, allocations)
+
+[<Fact>]
 let ``A proc block compiles to the nested match written by hand`` () =
     let getA = "def getA: int -> #some(int) | #none = { n -> if n > 0 then #some(n) else #none }\n\n"
     let procBlock =
