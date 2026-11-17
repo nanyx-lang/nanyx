@@ -52,8 +52,20 @@ module WorkflowDesugaring =
     /// block falls off its end without `return`, for its `zero`, and a loop whose body uses a keyword, for its `for`;
     /// and the expressions of the desugared module made up for each node of `module'`, in the order they were made: a
     /// workflow bind's are the call to its builder's member and the continuation passed to it.
-    let desugarWithDiagnostics (module': Module) : Module * Diagnostic list * Map<NodeId, SourceSpan * Identifier> * Map<NodeId, NodeId list> =
+    ///
+    /// A keyword's kind is the one `@customKeywordType` gives the member of its name in `module'`'s context declarations,
+    /// else in `imported`'s (the keywords of the modules it imports, see `Attributes.keywordKinds`), else `#bind`. A
+    /// `#delay` keyword `k! e` is `k({ e })` wherever it is, with nothing else rewritten, so it needs no builder; a
+    /// `#bindF` keyword is a `#bind` keyword whose value is passed as `{ e }`.
+    let desugarWithDiagnostics (imported: Map<Identifier, KeywordKind>) (module': Module) : Module * Diagnostic list * Map<NodeId, SourceSpan * Identifier> * Map<NodeId, NodeId list> =
         let isReturnKeyword keyword = keyword = WorkflowSyntax.returnKeyword
+        let kinds = imported |> Attributes.withKeywordKinds (Attributes.keywordKinds module')
+        let kindOf keyword = kinds |> Map.tryFind keyword |> Option.defaultValue KeywordKind.Bind
+        // A workflow bind whose keyword takes the rest of the block: one whose keyword is not `#delay`.
+        let (|Bind|_|) (kind: ExpressionKind) =
+            match kind with
+            | WorkflowBindExpr(keyword, value) when kindOf keyword <> KeywordKind.Delay -> Some (keyword, value)
+            | _ -> None
         let diagnostics = ResizeArray<Diagnostic>()
         let mutable memberPlaces: Map<NodeId, SourceSpan * Identifier> = Map.empty
 
@@ -138,8 +150,10 @@ module WorkflowDesugaring =
                 | TypeDefStatement _
                 | AttributeStatement _ -> false
             match expr.Kind with
-            | WorkflowBindExpr _
+            | Bind _
             | WorkflowReturnExpr _ -> true
+            // A `#delay` keyword's expression is in a lambda.
+            | WorkflowBindExpr _
             | Lambda _
             | ContextNames _ -> false
             // A loop's body is a lambda, but a keyword in it is the block's (see `desugarLoop`).
@@ -185,12 +199,12 @@ module WorkflowDesugaring =
                 List.collect fst lifted, List.map snd lifted
             let rebuild kind = { expr with Kind = kind }
             match expr.Kind with
-            | WorkflowBindExpr(keyword, value) when not (isReturnKeyword keyword) ->
+            | Bind(keyword, value) when not (isReturnKeyword keyword) ->
                 let prefix, value' = liftBinds value
                 let name = freshName keyword
                 prefix @ [ Statement.from expr (DefStatement(false, name, None, { expr with Kind = WorkflowBindExpr(keyword, value') })) ],
                 madeFor expr (IdentifierExpr name)
-            | WorkflowBindExpr(keyword, value) ->
+            | Bind(keyword, value) ->
                 let prefix, value' = liftBinds value
                 prefix, rebuild (WorkflowBindExpr(keyword, value'))
             | WorkflowReturnExpr value ->
@@ -259,6 +273,8 @@ module WorkflowDesugaring =
                             let prefix, value' = liftBinds value
                             prefix, StringExpr value')
                 List.collect fst lifted, rebuild (InterpolatedString(List.map snd lifted))
+            // A `#delay` keyword's expression is in a lambda.
+            | WorkflowBindExpr _
             | TagExpr(_, None)
             | Lambda _
             | ContextNames _
@@ -291,7 +307,7 @@ module WorkflowDesugaring =
         let liftStatementBinds (statement: Statement) : Statement list =
             let liftValue (value: Expression) =
                 match value.Kind with
-                | WorkflowBindExpr(keyword, bound) when not (isReturnKeyword keyword) ->
+                | Bind(keyword, bound) when not (isReturnKeyword keyword) ->
                     let prefix, bound' = liftBinds bound
                     prefix, { value with Kind = WorkflowBindExpr(keyword, bound') }
                 | IfExpr _
@@ -318,6 +334,11 @@ module WorkflowDesugaring =
             | WorkflowBindExpr _
             | WorkflowReturnExpr _ -> madeFor expr (desugarKind expr)
             | _ -> { expr with Kind = desugarKind expr }
+        // `{ value }`, desugared: how a `#delay` or `#bindF` keyword passes the expression after it.
+        and desugarThunk (value: Expression) = desugarExpr (madeFor value (Lambda([], value, false)))
+        // The value a bind of `keyword` passes its member along with the continuation.
+        and boundArgument (keyword: Identifier) (value: Expression) =
+            if kindOf keyword = KeywordKind.BindF then desugarThunk value else desugarExpr value
         and desugarKind expr =
             match expr.Kind with
             // A block written after a builder's name, `proc { ... }` or `retrying(3) { ... }`: the call it is, with
@@ -384,6 +405,9 @@ module WorkflowDesugaring =
             | ContextMemberAccess(ctxType, field) -> ContextMemberAccess(ctxType, field)
             | ContextMemberCall(ctxType, field, args) -> ContextMemberCall(ctxType, field, args |> List.map desugarExpr)
             | UseIn(value, body) -> UseIn(desugarExpr value, desugarExpr body)
+            // A `#delay` keyword's call, which takes no rest of the block, so it can be anywhere.
+            | WorkflowBindExpr(keyword, value) when kindOf keyword = KeywordKind.Delay ->
+                FunctionCall(keyword, None, [ desugarThunk value ])
             // A keyword the rest of its builder's block cannot follow is an error; the value stands in for it, as
             // nothing is checked once desugaring fails.
             | WorkflowBindExpr(keyword, value) ->
@@ -391,7 +415,7 @@ module WorkflowDesugaring =
                 | Some builderName, Some place ->
                     reportUnreachable expr keyword builderName place
                     (desugarExpr value).Kind
-                | _ -> (workflowCall expr keyword [desugarExpr value]).Kind
+                | _ -> (workflowCall expr keyword [boundArgument keyword value]).Kind
             | WorkflowReturnExpr value ->
                 match builder, unreachable with
                 | Some builderName, Some place ->
@@ -452,25 +476,25 @@ module WorkflowDesugaring =
                 match statement.Kind with
                 | DefStatement(isExport, name, typeOpt, expr) ->
                     match expr.Kind with
-                    | WorkflowBindExpr(keyword, bindExpr) when isReturnKeyword keyword ->
+                    | Bind(keyword, bindExpr) when isReturnKeyword keyword ->
                         workflowCall expr WorkflowSyntax.returnKeyword [desugarExpr bindExpr]
-                    | WorkflowBindExpr(keyword, bindExpr) ->
-                        workflowCall expr keyword [desugarExpr bindExpr; madeFor expr (Lambda([name, None], restOfChain (), false))]
+                    | Bind(keyword, bindExpr) ->
+                        workflowCall expr keyword [boundArgument keyword bindExpr; madeFor expr (Lambda([name, None], restOfChain (), false))]
                     | _ when branchesUseKeywords expr -> desugarBranching expr (Some name) rest next
                     | _ ->
                         chainBlock statement (restOfChain ()) { statement with Kind = DefStatement(isExport, name, typeOpt, desugarExpr expr) }
                 | ExprStatement expr ->
                     match expr.Kind with
                     | WorkflowReturnExpr value -> workflowCall expr WorkflowSyntax.returnKeyword [desugarExpr value]
-                    | WorkflowBindExpr(keyword, bindExpr) when isReturnKeyword keyword ->
+                    | Bind(keyword, bindExpr) when isReturnKeyword keyword ->
                         workflowCall expr WorkflowSyntax.returnKeyword [desugarExpr bindExpr]
                     // The last statement's bound value is the chain's value.
-                    | WorkflowBindExpr(keyword, bindExpr) when rest.IsEmpty ->
+                    | Bind(keyword, bindExpr) when rest.IsEmpty ->
                         let value = freshName "value"
                         let continuation = next (Some (madeFor expr (IdentifierExpr value)))
-                        workflowCall expr keyword [desugarExpr bindExpr; madeFor expr (Lambda([value, None], continuation, false))]
-                    | WorkflowBindExpr(keyword, bindExpr) ->
-                        workflowCall expr keyword [desugarExpr bindExpr; madeFor expr (Lambda([("_", None)], restOfChain (), false))]
+                        workflowCall expr keyword [boundArgument keyword bindExpr; madeFor expr (Lambda([value, None], continuation, false))]
+                    | Bind(keyword, bindExpr) ->
+                        workflowCall expr keyword [boundArgument keyword bindExpr; madeFor expr (Lambda([("_", None)], restOfChain (), false))]
                     | _ when branchesUseKeywords expr -> desugarBranching expr None rest next
                     | ForSyntax.Call([ iterable ], loop, parameters, body) when builder.IsSome && usesKeyword body ->
                         desugarLoop expr iterable loop parameters body rest next
@@ -570,8 +594,8 @@ module WorkflowDesugaring =
             let startsChain (statement: Statement) =
                 (unreachable.IsNone || builder.IsNone)
                 && (match statement.Kind with
-                    | DefStatement(_, _, _, Kind (WorkflowBindExpr _))
-                    | ExprStatement (Kind (WorkflowBindExpr _))
+                    | DefStatement(_, _, _, Kind (Bind _))
+                    | ExprStatement (Kind (Bind _))
                     | ExprStatement (Kind (WorkflowReturnExpr _)) -> true
                     | ExprStatement (Kind (ForSyntax.Call([ _ ], _, _, body))) -> builder.IsSome && usesKeyword body
                     | DefStatement(_, _, _, value)
@@ -602,6 +626,7 @@ module WorkflowDesugaring =
             |> Map.filter (fun _ made -> not made.IsEmpty)
         desugared, List.ofSeq diagnostics, memberPlaces, lowered
 
+    /// `module'` desugared, with no keywords imported (see `desugarWithDiagnostics`).
     let desugar (module': Module) : Module =
-        let desugared, _, _, _ = desugarWithDiagnostics module'
+        let desugared, _, _, _ = desugarWithDiagnostics Map.empty module'
         desugared

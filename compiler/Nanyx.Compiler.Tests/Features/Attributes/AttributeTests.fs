@@ -73,11 +73,41 @@ def result = logged {
 
 [<Fact>]
 let ``An unknown keyword kind is an error, reported at the attribute`` () =
-    let source = "context C = (\n  @customKeywordType(#bindF)\n  step: int\n)"
+    let source = "context C = (\n  @customKeywordType(#later)\n  step: int\n)"
     let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.UnknownKeywordKind.Code, diagnostic.Code)
-    Assert.Equal("Unknown keyword kind '#bindF': the kinds are `#bind`", diagnostic.Message)
+    Assert.Equal("Unknown keyword kind '#later': the kinds are `#bind`, `#bindF`, `#delay`", diagnostic.Message)
     Assert.Equal((16, 42), (diagnostic.Span.Value.Start, diagnostic.Span.Value.End))
+
+[<Theory>]
+[<InlineData("delay", "start: [c] ([c] () -> a) -> Task(a)")>]
+[<InlineData("delay", "start: [Async] (() -> a) -> Task(a)")>]
+[<InlineData("bindF", "defer: [c] (([c] () -> ()), ([c] () -> int)) -> int")>]
+let ``A #delay or #bindF member whose type takes a function of no parameters is accepted`` (kind: string, field: string) =
+    let source =
+        $"""type Task(a) = (value: a)
+context Async = (x: int)
+context C = (
+  @customKeywordType(#{kind})
+  {field}
+)
+"""
+    let result = Compiler.compile (source.ReplaceLineEndings "\n")
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+
+[<Theory>]
+[<InlineData("delay", "start", "int -> int")>]
+[<InlineData("delay", "start", "int")>]
+[<InlineData("delay", "start", "(int -> int) -> int")>]
+[<InlineData("delay", "start", "((() -> int), int) -> int")>]
+[<InlineData("bindF", "defer", "(int, (int -> int)) -> int")>]
+[<InlineData("bindF", "defer", "(() -> int) -> int")>]
+let ``A #delay or #bindF member whose type doesn't take a function of no parameters is an error at the attribute`` (kind: string, name: string, memberType: string) =
+    let source = $"context C = (\n  @customKeywordType(#{kind})\n  {name}: {memberType}\n)"
+    let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
+    Assert.Equal(DiagnosticCodes.KeywordMemberType.Code, diagnostic.Code)
+    Assert.StartsWith($"'{name}' is a `#{kind}` keyword", diagnostic.Message)
+    Assert.Equal(16, diagnostic.Span.Value.Start)
 
 [<Fact>]
 let ``A keyword type without a kind is an error`` () =

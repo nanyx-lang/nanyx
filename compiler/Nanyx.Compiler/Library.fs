@@ -551,6 +551,39 @@ module Compiler =
             | SourceFile path when checkedModules.Package |> Option.exists (fun package -> not (PackageModules.isProgramFile package path)) -> None
             | SourceFile _
             | InMemory -> buildHost
+        let preludeKey = originKey (StandardLibraryModule StandardLibrary.preludeModuleName)
+        // The imports of `module'`, whose `module name =` blocks are `moduleBlocks`. Every module but the prelude imports
+        // it first, so that anything it imports or defines itself wins. An import of a `module name =` block of this file
+        // is not of another file: inference resolves it.
+        let importsOf moduleBlocks (module': Module) =
+            let blockImported = NyxCompiler.Infer.blockImports moduleBlocks module' |> List.map _.Import
+            let fileImports = SyntaxTree.collectImports module' |> List.filter (fun item -> not (List.contains item blockImported))
+            // Then the host's prelude, in a module of the program (see `Host.Prelude`).
+            let hostPrelude =
+                host
+                |> Option.bind _.PreludeImport
+                |> Option.map (fun prelude -> ImportItem.synthetic (ModuleImport prelude) None)
+                |> Option.toList
+            if key = preludeKey then
+                fileImports
+            else
+                ImportItem.synthetic (ModuleImport (StandardLibrary.importPrefix + StandardLibrary.preludeModuleName)) None
+                :: hostPrelude
+                @ fileImports
+        // The module an import brings in, checked, with where it is from; each import is checked once.
+        let importedModules = System.Collections.Generic.Dictionary<ImportItem, Result<ModuleOrigin * CheckedModule, Diagnostic list>>(HashIdentity.Structural)
+        let importModule (item: ImportItem) : Result<ModuleOrigin * CheckedModule, Diagnostic list> =
+            match importedModules.TryGetValue item with
+            | true, imported -> imported
+            | false, _ ->
+                let imported = checkImportItem checkedModules origin key hostModules inHostPackage visited item
+                importedModules.[item] <- imported
+                imported
+        // The kinds of the workflow keywords the modules `imports` bring in declare (see `CheckedModule.KeywordKinds`).
+        let importedKeywordKinds (imports: ImportItem list) =
+            imports
+            |> List.choose (fun item -> match importModule item with Ok (_, imported) -> Some imported.KeywordKinds | Error _ -> None)
+            |> List.fold (fun kinds imported -> Attributes.withKeywordKinds imported kinds) Map.empty
         let resolved =
             parseWithDocs (checkedModules.FileName origin) source
             // A module split across files is checked as one: its other files' items join this one's.
@@ -564,7 +597,7 @@ module Compiler =
                 | [] -> Ok parsed
                 | errors -> Error (Parsed, errors))
             |> Result.bind (fun (ast, docComments, (items, declared, moduleBlocks)) ->
-                match WorkflowDesugaring.desugarWithDiagnostics items with
+                match WorkflowDesugaring.desugarWithDiagnostics (importedKeywordKinds (importsOf moduleBlocks items)) items with
                 | _, (_ :: _ as errors), _, _ -> Error (Desugared, errors)
                 | desugaredAst, [], memberPlaces, lowered ->
                     Attributes.applyAttributes host desugaredAst
@@ -582,24 +615,7 @@ module Compiler =
         match resolved with
         | Result.Error failure -> Error failure
         | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, script, nameErrors) ->
-            let preludeKey = originKey (StandardLibraryModule StandardLibrary.preludeModuleName)
-            // Every module but the prelude imports it first, so that anything it imports or defines itself wins.
-            // An import of a `module name =` block of this file is not of another file: inference resolves it.
-            let blockImported = NyxCompiler.Infer.blockImports moduleBlocks desugared |> List.map _.Import
-            let fileImports = SyntaxTree.collectImports desugared |> List.filter (fun item -> not (List.contains item blockImported))
-            // Then the host's prelude, in a module of the program (see `Host.Prelude`).
-            let hostPrelude =
-                host
-                |> Option.bind _.PreludeImport
-                |> Option.map (fun prelude -> ImportItem.synthetic (ModuleImport prelude) None)
-                |> Option.toList
-            let imports =
-                if key = preludeKey then
-                    fileImports
-                else
-                    ImportItem.synthetic (ModuleImport (StandardLibrary.importPrefix + StandardLibrary.preludeModuleName)) None
-                    :: hostPrelude
-                    @ fileImports
+            let imports = importsOf moduleBlocks desugared
             let initial =
                 { Env =
                     match origin with
@@ -632,70 +648,9 @@ module Compiler =
             let merged =
                 imports
                 |> List.fold (fun (merged: MergedImports) item ->
-                    let fail diagnostics = { merged with Errors = merged.Errors @ diagnostics }
-                    // An import of a module that is still being checked, because it imports this one, is a cycle.
-                    let checkImport (importOrigin: ModuleOrigin) (readSource: unit -> string) =
-                        let importKey = originKey importOrigin
-                        if importKey = key || visited.Contains importKey then
-                            Error (Typed, [ Diagnostics.at DiagnosticCodes.ImportCycle item.Span $"'{importKey}' imports this module, directly or through others, so the imports make a cycle" ])
-                        else
-                            // The imported module's errors name this import as the one that brings them in, in place
-                            // of the one in that module that brought them into it.
-                            let throughThis = List.map (fun (diagnostic: Diagnostic) -> { diagnostic with Import = Some item.Span })
-                            match typecheckImport checkedModules importOrigin readSource (visited.Add key) with
-                            // A module with errors fails each importer with them.
-                            | Ok imported when not imported.Errors.IsEmpty -> Error (Typed, throughThis imported.Errors)
-                            | Error (phase, diagnostics) -> Error (phase, throughThis diagnostics)
-                            | checkedImport -> checkedImport
-                    // The import of the host is of its package's modules, and an import in a file of the host's package, or
-                    // of a package it depends on, is resolved in that package.
-                    let inHostPackage =
-                        match hostModules, item.Source, origin with
-                        | Some modules, ModuleImport name, _ when name.StartsWith(modules.Package + "/") -> Some (PackageModules.resolveWithin modules item name)
-                        | Some modules, ModuleImport _, SourceFile path when inHostPackage path && StandardLibrary.tryModuleName item = None ->
-                            Some (PackageModules.resolveImport (Some modules) path item)
-                        | _ -> None
-                    match StandardLibrary.tryModuleName item, inHostPackage with
-                    | None, Some resolved ->
-                        match resolved with
-                        | Error diag -> fail [ diag ]
-                        | Ok importPath ->
-                            match checkImport (SourceFile importPath) (fun () -> checkedModules.ReadFile importPath) with
-                            | Error (_, diags) -> fail diags
-                            | Ok imported -> mergeWritten preludeKey reExportItems (SourceFile importPath) item imported merged
-                    | Some moduleName, _ ->
-                        match StandardLibrary.tryLoadSource moduleName with
-                        | None ->
-                            let available = Diagnostics.listed (StandardLibrary.moduleNames |> List.map (fun name -> $"'{StandardLibrary.importPrefix}{name}'"))
-                            fail [ Diagnostics.at DiagnosticCodes.UnknownStandardLibraryModule item.Span $"Unknown standard library module '{StandardLibrary.importPrefix}{moduleName}': the modules are {available}" ]
-                        | Some moduleSource ->
-                            match checkImport (StandardLibraryModule moduleName) (fun () -> moduleSource) with
-                            | Error (_, diags) -> fail diags
-                            | Ok imported when imported.Name <> Some moduleName ->
-                                let declared = imported.Name |> Option.defaultValue "(none)"
-                                fail [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"The standard library module '{StandardLibrary.importPrefix}{moduleName}' declares the module name '{declared}'" ]
-                            | Ok imported -> mergeWritten preludeKey reExportItems (StandardLibraryModule moduleName) item imported merged
-                    | None, None ->
-                        match origin with
-                        | SourceFile fullPath ->
-                            match FileImports.missingAlias item, PackageModules.resolveImport checkedModules.Package fullPath item with
-                            | Some diag, _
-                            | None, Error diag -> fail [ diag ]
-                            | None, Ok importPath ->
-                                match checkImport (SourceFile importPath) (fun () -> checkedModules.ReadFile importPath) with
-                                | Error (_, diags) -> fail diags
-                                | Ok imported ->
-                                    match FileImports.importedFile item imported.Name imported.Syntax with
-                                    | [] -> mergeWritten preludeKey reExportItems (SourceFile importPath) item imported merged
-                                    | diags -> fail diags
-                        | StandardLibraryModule name ->
-                            fail [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"The standard library module '{name}' imports a module outside the standard library: import only other standard library modules" ]
-                        | InMemory ->
-                            let shown =
-                                match item.Source with
-                                | PathImport path -> path
-                                | ModuleImport name -> name
-                            fail [ Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"'{shown}' cannot be imported by source that has no file: import only standard library modules here" ]) initial
+                    match importModule item with
+                    | Error diagnostics -> { merged with Errors = merged.Errors @ diagnostics }
+                    | Ok (importOrigin, imported) -> mergeWritten preludeKey reExportItems importOrigin item imported merged) initial
             // Then the definitions owned by the types the imports bring in, from their modules (see `OwnedDefinitions`).
             // The standard library imports what it uses itself.
             let merged =
@@ -932,7 +887,75 @@ module Compiler =
                         |> Set.union state.CarriedAmbientContexts
                         |> Seq.choose (fun name -> state.TypeDefs |> Map.tryFind name |> Option.map (fun info -> name, info))
                         |> Map.ofSeq
-                     ReExports = merged.ReExports }
+                     ReExports = merged.ReExports
+                     KeywordKinds =
+                        merged.ReExports
+                        |> List.fold (fun kinds reExported -> Attributes.withKeywordKinds reExported.Module.KeywordKinds kinds) Map.empty
+                        |> Attributes.withKeywordKinds (Attributes.keywordKinds desugared) }
+
+    /// The module `item` imports into the module `origin` (whose `originKey` is `key`), checked, with where it is from;
+    /// or why it cannot be imported. `hostModules` are the build's host package's modules, and `inHostPackage` says
+    /// whether a file is of that package or one it depends on.
+    and private checkImportItem (checkedModules: CheckedModules) (origin: ModuleOrigin) (key: string) (hostModules: PackageModules option) (inHostPackage: string -> bool) (visited: Set<string>) (item: ImportItem) : Result<ModuleOrigin * CheckedModule, Diagnostic list> =
+        // An import of a module that is still being checked, because it imports this one, is a cycle.
+        let checkImport (importOrigin: ModuleOrigin) (readSource: unit -> string) =
+            let importKey = originKey importOrigin
+            if importKey = key || visited.Contains importKey then
+                Error [ Diagnostics.at DiagnosticCodes.ImportCycle item.Span $"'{importKey}' imports this module, directly or through others, so the imports make a cycle" ]
+            else
+                // The imported module's errors name this import as the one that brings them in, in place
+                // of the one in that module that brought them into it.
+                let throughThis = List.map (fun (diagnostic: Diagnostic) -> { diagnostic with Import = Some item.Span })
+                match typecheckImport checkedModules importOrigin readSource (visited.Add key) with
+                // A module with errors fails each importer with them.
+                | Ok imported when not imported.Errors.IsEmpty -> Error (throughThis imported.Errors)
+                | Error (_, diagnostics) -> Error (throughThis diagnostics)
+                | Ok imported -> Ok (importOrigin, imported)
+        // The import of the host is of its package's modules, and an import in a file of the host's package, or
+        // of a package it depends on, is resolved in that package.
+        let inHostPackage =
+            match hostModules, item.Source, origin with
+            | Some modules, ModuleImport name, _ when name.StartsWith(modules.Package + "/") -> Some (PackageModules.resolveWithin modules item name)
+            | Some modules, ModuleImport _, SourceFile path when inHostPackage path && StandardLibrary.tryModuleName item = None ->
+                Some (PackageModules.resolveImport (Some modules) path item)
+            | _ -> None
+        match StandardLibrary.tryModuleName item, inHostPackage with
+        | None, Some resolved ->
+            match resolved with
+            | Error diag -> Error [ diag ]
+            | Ok importPath -> checkImport (SourceFile importPath) (fun () -> checkedModules.ReadFile importPath)
+        | Some moduleName, _ ->
+            match StandardLibrary.tryLoadSource moduleName with
+            | None ->
+                let available = Diagnostics.listed (StandardLibrary.moduleNames |> List.map (fun name -> $"'{StandardLibrary.importPrefix}{name}'"))
+                Error [ Diagnostics.at DiagnosticCodes.UnknownStandardLibraryModule item.Span $"Unknown standard library module '{StandardLibrary.importPrefix}{moduleName}': the modules are {available}" ]
+            | Some moduleSource ->
+                match checkImport (StandardLibraryModule moduleName) (fun () -> moduleSource) with
+                | Ok (_, imported) when imported.Name <> Some moduleName ->
+                    let declared = imported.Name |> Option.defaultValue "(none)"
+                    Error [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"The standard library module '{StandardLibrary.importPrefix}{moduleName}' declares the module name '{declared}'" ]
+                | checkedImport -> checkedImport
+        | None, None ->
+            match origin with
+            | SourceFile fullPath ->
+                match FileImports.missingAlias item, PackageModules.resolveImport checkedModules.Package fullPath item with
+                | Some diag, _
+                | None, Error diag -> Error [ diag ]
+                | None, Ok importPath ->
+                    match checkImport (SourceFile importPath) (fun () -> checkedModules.ReadFile importPath) with
+                    | Ok (_, imported) as checkedImport ->
+                        match FileImports.importedFile item imported.Name imported.Syntax with
+                        | [] -> checkedImport
+                        | diags -> Error diags
+                    | failed -> failed
+            | StandardLibraryModule name ->
+                Error [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"The standard library module '{name}' imports a module outside the standard library: import only other standard library modules" ]
+            | InMemory ->
+                let shown =
+                    match item.Source with
+                    | PathImport path -> path
+                    | ModuleImport name -> name
+                Error [ Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"'{shown}' cannot be imported by source that has no file: import only standard library modules here" ]
 
     /// An imported module, checked the first time this compilation imports it; its source is only read then. A
     /// standard-library module is checked once per process (see `checkedStandardLibrary`), and a source file's module
