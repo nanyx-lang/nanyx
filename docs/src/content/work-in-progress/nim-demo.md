@@ -22,8 +22,8 @@ rows and handlers" (TyDe 2016), reworked for Nanyx contexts:
 - `checkedGame` wraps every move in a check, so an illegal move ends the game with `#cheated(player)`.
 - `bobChooses` is a strategy that requires another context, `Choose`, so the same game runs once per choice.
 - `gameTree` builds the tree of every possible game, as figure 1 of the paper shows it.
-- A scoreboard plays a round for each of Bob's choices and counts wins. Until there is a `Random` context, Bob's
-  choices are a fixed list rather than coin flips.
+- A scoreboard plays a round for each of Bob's choices and counts wins. Bob flips a coin for each choice, with
+  [`random.coinToss`](../stdlib/random).
 
 It compiles and runs with `nanyx run examples/Nim.nyx`. The strategies were once named instances of `Move`
 (`def perfect = Move(move = ...)`, then `use perfect`), but since [contexts are not types](../advanced/contexts#declaring-a-context),
@@ -33,8 +33,7 @@ handler function.
 # The demo
 
 **In the playground** (a console program): the example as it is, fixed, as one of the playground's examples. You edit
-a strategy, press Run and see who wins, the game tree and the scoreboard. This needs only the playground, and a
-`Random` context (below).
+a strategy, press Run and see who wins, the game tree and the scoreboard. This needs only the playground.
 
 **In a page of its own** (a browser app): `nanyx.dev/demos/nim`.
 
@@ -64,9 +63,8 @@ click. So the page version is a state machine:
 This is a useful thing for the demo to show in itself: the strategies don't change between the console and the page,
 only the loop around them.
 
-**A `Random` context.** The standard library has none. It needs one, supplied by each host: from the operating
-system under the CLI, from `crypto.getRandomValues` in a page, and seeded in tests so a game is reproducible. That is
-worth an issue of its own; the demo is one user.
+**`Random` in a page.** The console and HTTP hosts provide [`Random`](../stdlib/random) from the operating system; the
+browser host will provide it from `crypto.getRandomValues`.
 
 **Small pieces of `Dom` and `Clock`**: buttons, text, a few shapes for the sticks and the tree, and a timer.
 
@@ -74,9 +72,8 @@ worth an issue of its own; the demo is one user.
 
 1. ~~**Make `examples/Nim.nyx` compile and run** on the current language, without `Random` at first (Bob chooses from
    a fixed list)~~ ([#1238](https://github.com/nanyx-lang/nanyx/issues/1238)). Done.
-2. **A `Random` context** in the standard library, supplied by the CLI's host and seedable in tests
-   ([#1237](https://github.com/nanyx-lang/nanyx/issues/1237)). Then the coin-flip
-   scoreboard comes back.
+2. ~~**A `Random` context** in the standard library, supplied by the CLI's host and seedable in tests~~
+   ([#1237](https://github.com/nanyx-lang/nanyx/issues/1237)). Done, and the coin-flip scoreboard is back.
 3. **Nim in the playground**, as one of its examples, once the playground exists.
 4. **The page version**, on the browser host: the menus, human moves, the "Check moves" switch and the scoreboard.
 5. **The game tree view**, and the source pane with its playground link.

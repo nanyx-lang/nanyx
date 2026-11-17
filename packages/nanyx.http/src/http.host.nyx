@@ -8,14 +8,15 @@
   `nanyx run` serves the program on the port the host's `port` setting gives, 3000 by default.
 
   The host provides [`Http`], for requests the handler makes, written on the runtime's
-  `nanyx:http`, and `Async`, so that the handler can wait on them, and nothing else: no `Console`
-  and no `FileSystem`.
+  `nanyx:http`, `Async`, so that the handler can wait on them, and [`Random`], which draws from the
+  operating system's random source, and nothing else: no `Console` and no `FileSystem`.
 export module http.host
 
 import (
   nanyx/async as (Async)
   nanyx/host.memory
   nanyx/host.runtime
+  nanyx/random as (Random)
   nanyx.http.core/client as (Http, HttpError)
   nanyx.http.core/request as (Request)
   nanyx.http.core/response as (Response)
@@ -37,8 +38,19 @@ def requestInto: [HostRuntime] I32 -> ()
 @extern("nanyx:serve", "respond")
 def respond: [HostRuntime] I32, I32 -> ()
 
--- The host keeps one thing in the block the module sets aside for it (see `hostState`): at 0, what
--- kind of answer a request the handler made had.
+@extern("wasi_snapshot_preview1", "random_get")
+def randomGet: [HostRuntime] I32, I32 -> I32
+
+-- The host keeps two things in the block the module sets aside for it (see `hostState`): at 0, what
+-- kind of answer a request the handler made had; and at 8, the bits `random_get` last gave.
+
+--| 64 bits from the operating system's random source, through WASI's `random_get`. The console
+  host does the same, for the reason `sendThroughRuntime` gives.
+def systemBits: [HostRuntime] () -> int = { _ ->
+  def at = I32.wrappingAdd(hostState(), 8)
+  ignore(randomGet(at, 8))
+  readI64(at)
+}
 
 --| Sends `request` through `nanyx:http`, and gives its response, or why there is none. The console
   host does the same: only a host's root module may call foreign functions, so the two can't share
@@ -81,10 +93,11 @@ def answer: [HostRuntime] Response -> () = { response ->
 }
 
 --| Answers the request this instance was started for with `handle`, the program's entry point, in
-  an `Http` that makes requests through the runtime. A request the runtime wrote wrongly is answered
-  with a 400.
-export def run: [HostRuntime, Async] ([Async, Http] Request -> Response) -> () = { handle ->
+  an `Http` that makes requests through the runtime and a `Random` that draws from the operating
+  system. A request the runtime wrote wrongly is answered with a 400.
+export def run: [HostRuntime, Async] ([Async, Http, Random] Request -> Response) -> () = { handle ->
   use Http(sendRequest = { request -> sendThroughRuntime(request) })
+  use Random(bits = { _ -> systemBits() })
 
   match incoming()
     | #some(request) -> answer(handle(request))

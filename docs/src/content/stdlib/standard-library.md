@@ -25,6 +25,7 @@ The standard library is the modules under `nanyx/`. The [prelude](./prelude) is 
 - [text](./text) — functions on strings (`nanyx/text`)
 - [math](./math) — numeric functions and constants (`nanyx/math`)
 - [async](./async) — `Async`, the context of the functions that can wait (`nanyx/async`)
+- [random](./random) — `Random`, random numbers from the host or from a seed (`nanyx/random`)
 - [host.runtime](./host-runtime) — the privileged layer a host is written on (`nanyx/host.runtime`)
 - [host.memory](./host-memory) — a host's access to linear memory, for the foreign functions it calls (`nanyx/host.memory`)
 

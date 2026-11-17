@@ -2,8 +2,9 @@
 
   A program's `@entry` is passed to [`run`], which runs it in the contexts this host provides:
   [`Console`], which reads and writes the standard streams, [`Env`], [`FileSystem`], which reads
-  and writes files, [`Http`], which makes HTTP requests, and `Async`, which the calls that wait
-  require. The first three are written on WASI's
+  and writes files, [`Http`], which makes HTTP requests, [`Random`], which draws from the operating
+  system's random source, and `Async`, which the calls that wait require. `Console`, `Env`,
+  `FileSystem` and `Random` are written on WASI's
   functions, and `Http` on the `nanyx` runtime's own `nanyx:http`, since WASI preview 1 has no
   networking. The host declares them with `@extern` and calls them with the [`HostRuntime`] the
   toolchain provides to it, passing their buffers in memory with `nanyx/host.memory`.
@@ -14,6 +15,7 @@ import (
   nanyx/async as (Async)
   nanyx/host.memory
   nanyx/host.runtime
+  nanyx/random as (Random)
   nanyx/text
   nanyx.console.core/console as (Console, IoError)
   nanyx.console.core/env as (Env)
@@ -47,11 +49,14 @@ def environGet: [HostRuntime] I32, I32 -> I32
 @extern("wasi_snapshot_preview1", "proc_exit")
 def procExit: [HostRuntime] I32 -> ()
 
+@extern("wasi_snapshot_preview1", "random_get")
+def randomGet: [HostRuntime] I32, I32 -> I32
+
 -- The host keeps its state in the block the module sets aside for it (see `hostState`): at 4 and 8,
 -- where what is left of the standard input it has read starts and ends in its buffer; at 12, an
 -- iovec, the address and length of the bytes to write or read; at 20, the count of bytes written or
--- read; at 40, what kind of answer an HTTP request had; and from 64 to the end of the block, the buffer
--- standard input is read into.
+-- read; at 24, the bits `random_get` last gave; at 40, what kind of answer an HTTP request had; and
+-- from 64 to the end of the block, the buffer standard input is read into.
 
 --| The address `offset` bytes into the host's state.
 def stateAt: [HostRuntime] I32 -> I32 = { offset ->
@@ -198,6 +203,12 @@ def exitProcess: [HostRuntime] int -> undefined = { code ->
   exitProcess(code)
 }
 
+--| 64 bits from the operating system's random source, through WASI's `random_get`.
+def systemBits: [HostRuntime] () -> int = { _ ->
+  ignore(randomGet(stateAt(24), 8))
+  readI64(stateAt(24))
+}
+
 @extern("nanyx:http", "send")
 def httpSend: [HostRuntime] I32, I32, I32 -> I32
 
@@ -232,9 +243,10 @@ def sendThroughRuntime: [HostRuntime] Request -> #some(Response) | #error(HttpEr
 --| Runs `entry`, the program's entry point, with a `Console` that reads and writes the standard
   streams, an `Env` that reads what the program was started with, a `FileSystem` that reads and
   writes the directories the runtime opened for it, an `Http` that makes requests through the
-  runtime, and `Async`, so that it may wait. What `entry` returns is ignored.
+  runtime, a `Random` that draws from the operating system, and `Async`, so that it may wait. What
+  `entry` returns is ignored.
 export def run
-  : [HostRuntime, Async] ([Async, Console, Env, FileSystem, Http] () -> a) -> ()
+  : [HostRuntime, Async] ([Async, Console, Env, FileSystem, Http, Random] () -> a) -> ()
   = { entry ->
     use Console(
       write = { text -> writeTo(1, text) }
@@ -268,6 +280,7 @@ export def run
     )
 
     use Http(sendRequest = { request -> sendThroughRuntime(request) })
+    use Random(bits = { _ -> systemBits() })
 
     ignore(entry())
   }

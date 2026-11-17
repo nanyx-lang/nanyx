@@ -90,7 +90,7 @@ A test stops at the first `assert` that fails. Each test runs on its own (see [R
 
 # Contexts
 
-A test runs under the test host, which provides `Console` and nothing else. What a test prints is captured, and shown only if the test fails.
+A test runs under the test host, which provides `Console` and `Random`, and nothing else. What a test prints is captured, and shown only if the test fails. Its `Random` is [`random.seeded`](../stdlib/random)'s, with a seed the runner prints when a test fails and takes back to run it again, so a test that draws random numbers fails the same way twice.
 
 The code under test often needs more, such as `FileSystem` or `Clock`. A test provides those itself, with the `use` that any code has for [loading a context](../advanced/contexts#loading-a-context):
 
