@@ -75,8 +75,9 @@ module PackageModules =
     /// The module name the file at `filePath` declares as it is on disk.
     let private declaredName (filePath: string) = declaredModule filePath |> Option.map fst
 
-    /// Whether the file at `filePath`, as it is on disk, parses.
-    let private parses (filePath: string) = (readDeclaration filePath).IsSome
+    /// Whether the file at `filePath`, as it is on disk, parses. One not on disk yet (an editor's new buffer) has
+    /// nothing to fail.
+    let private parses (filePath: string) = not (File.Exists filePath) || (readDeclaration filePath).IsSome
 
     /// `modules` with the modules `declared` gives its files, each module name and whether it is exported with the file
     /// that declares it, and the modules of the files from GitHub it depends on. A module split across files is public
