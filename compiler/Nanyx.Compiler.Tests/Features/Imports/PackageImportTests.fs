@@ -85,7 +85,7 @@ let private unparsed (name: string) =
     $"""
 module {name}
 
-export shapes
+export def = 1
 """
 
 [<Fact>]
@@ -107,7 +107,7 @@ let ``Compiling the file that imports a module that doesn't parse reports the mo
     let diagnostic = Assert.Single result.Diagnostics
     Assert.Equal(DiagnosticCodes.SyntaxError.Code, diagnostic.Code)
     Assert.Equal(Some (Path.GetFullPath(package.Path "src/greetings.nyx")), diagnostic.Span |> Option.map _.File)
-    // `export shapes`, the fourth line, after the blank one the text starts with.
+    // `export def = 1`, the fourth line, after the blank one the text starts with.
     Assert.Equal(Some 3, diagnostic.Span |> Option.map _.StartLine)
 
 [<Fact>]
