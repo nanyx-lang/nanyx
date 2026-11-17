@@ -82,29 +82,33 @@ module Attributes =
             let others, errors = withoutAllows rest
             item :: others, errors
 
-    /// The kinds `@customKeywordType` takes. A `#bind` keyword takes a value and the rest of the block, which is how every
-    /// keyword is desugared (see `WorkflowDesugaring`).
-    let keywordKinds = [ "bind" ]
+    /// The kind a `@customKeywordType` attribute's argument names, as `#delay` does (see `WorkflowSyntax.keywordKinds`).
+    let private (|KeywordKindTag|_|) (argument: Expression option) =
+        match argument with
+        | Some (Kind (TagExpr(tag, None))) -> WorkflowSyntax.keywordKinds |> List.tryFind (fst >> (=) tag) |> Option.map snd
+        | _ -> None
 
-    /// The attributes written before the members of a context declaration (see `TypeFieldAttribute`).
+    /// The attributes written before the members of a context declaration (see `TypeFieldAttribute`), each with the
+    /// member it is written before.
     let private memberAttributes (modifiers: TypeDefModifier list) (body: TypeExpr) =
         match body.Kind with
         | TypeRecord fields
         | TypeOpenRecord(fields, _) when List.contains Context modifiers ->
-            fields |> List.choose (function TypeFieldAttribute(name, argument, span) -> Some (name, argument, span) | _ -> None)
+            TypeRecordField.withAttributes fields |> List.collect (fun (attributes, field) -> attributes |> List.map (fun attribute -> attribute, field))
         | _ -> []
 
-    /// The errors in the attributes of `module'`'s record types' fields. Only a member of a context declaration may
-    /// have one, and the only one it may have is `@customKeywordType`, with a kind from `keywordKinds`.
-    let private fieldAttributeErrors (module': Module) : Diagnostic list =
-        let expressions = module' |> List.collect SyntaxTree.ofItem |> List.collect SyntaxTree.expressionsWithin
+    /// The attributes written before the members of `module'`'s context declarations, each with its member: those at the
+    /// top level, in module blocks and in blocks.
+    let private contextMemberAttributes (module': Module) =
         let rec typeDefs (item: TopLevelItem) =
             match item.Kind with
             | Def (TypeDef(_, modifiers, _, body)) -> [ modifiers, body ]
             | ModuleBlock(_, items) -> items |> List.collect typeDefs
             | _ -> []
         let localTypeDefs =
-            expressions
+            module'
+            |> List.collect SyntaxTree.ofItem
+            |> List.collect SyntaxTree.expressionsWithin
             |> List.collect (fun expr ->
                 match expr.Kind with
                 | Block statements ->
@@ -113,10 +117,57 @@ module Attributes =
                         | TypeDefStatement(_, modifiers, _, body) -> Some (modifiers, body)
                         | _ -> None)
                 | _ -> [])
-        let members =
-            (module' |> List.collect typeDefs) @ localTypeDefs
-            |> List.collect (fun (modifiers, body) -> memberAttributes modifiers body)
-        let onMembers = members |> List.map (fun (_, _, span) -> span) |> Set.ofList
+        (module' |> List.collect typeDefs) @ localTypeDefs
+        |> List.collect (fun (modifiers, body) -> memberAttributes modifiers body)
+
+    /// The kinds of the workflow keywords `module'`'s context declarations mark with `@customKeywordType`, by the
+    /// member's name (see `WorkflowDesugaring`).
+    let keywordKinds (module': Module) : Map<Identifier, KeywordKind> =
+        contextMemberAttributes module'
+        |> List.choose (fun ((name, argument, _), field) ->
+            match argument, field with
+            | KeywordKindTag kind, (TypeField(memberName, _, _, _) | TypeMember(memberName, _)) when name = customKeywordTypeAttribute -> Some (memberName, kind)
+            | _ -> None)
+        |> Map.ofList
+
+    /// `kinds` with the keywords of `nearer` added, whose kinds win where both have a keyword.
+    let withKeywordKinds (nearer: Map<Identifier, KeywordKind>) (kinds: Map<Identifier, KeywordKind>) =
+        nearer |> Map.fold (fun acc name kind -> Map.add name kind acc) kinds
+
+    /// The parameters of the function type `typeExpr`, its contexts and constraints aside, if it is one.
+    let rec private parameterTypes (typeExpr: TypeExpr) =
+        match typeExpr.Kind with
+        | TypeWithContext(_, inner)
+        | TypeConstraint(_, inner, _)
+        | TypeWhere(inner, _) -> parameterTypes inner
+        | TypeFunc(Kind (TypeTuple parameters), _) -> Some parameters
+        | TypeFunc(parameter, _) -> Some [ parameter ]
+        | _ -> None
+
+    /// The error for a member of kind `kind` whose type, `typeOpt`, does not take what the kind passes it: a `#delay`
+    /// member takes only a function of no parameters, the expression after the keyword, and a `#bindF` member takes one
+    /// and then the rest of the block.
+    let private keywordTypeError (span: SourceSpan) (memberName: Identifier) (kind: KeywordKind) (typeOpt: TypeExpr option) =
+        let takesThunk (parameter: TypeExpr) = match parameterTypes parameter with Some [ Kind TypeUnit ] -> true | _ -> false
+        let fits, expected =
+            match kind, typeOpt |> Option.bind parameterTypes with
+            | KeywordKind.Bind, _ -> true, ""
+            | KeywordKind.Delay, parameters -> (match parameters with Some [ thunk ] -> takesThunk thunk | _ -> false), "`(() -> a) -> r`"
+            | KeywordKind.BindF, parameters -> (match parameters with Some [ thunk; _ ] -> takesThunk thunk | _ -> false), "`(() -> a, a -> r) -> r`"
+        if fits then None
+        else
+            let tag = WorkflowSyntax.keywordKinds |> List.find (snd >> (=) kind) |> fst
+            Some (
+                Diagnostics.at DiagnosticCodes.KeywordMemberType span
+                    $"'{memberName}' is a `#{tag}` keyword, which passes the expression after it as a function of no parameters, so its type must be of the form {expected}")
+
+    /// The errors in the attributes of `module'`'s record types' fields. Only a member of a context declaration may
+    /// have one, and the only one it may have is `@customKeywordType`, with a kind from `WorkflowSyntax.keywordKinds`
+    /// that the member's type fits.
+    let private fieldAttributeErrors (module': Module) : Diagnostic list =
+        let expressions = module' |> List.collect SyntaxTree.ofItem |> List.collect SyntaxTree.expressionsWithin
+        let members = contextMemberAttributes module'
+        let onMembers = members |> List.map (fun ((_, _, span), _) -> span) |> Set.ofList
         let types = (module' |> List.collect SyntaxTree.topLevelTypes) @ (expressions |> List.collect SyntaxTree.expressionTypes)
         let misplaced =
             types
@@ -129,13 +180,14 @@ module Attributes =
                 | _ -> [])
             |> List.map (fun (name, span) ->
                 Diagnostics.at DiagnosticCodes.MisplacedAttribute span $"Attribute '@{name}' can only come before a member of a context declaration")
-        let kinds = keywordKinds |> List.map (fun kind -> $"`#{kind}`") |> String.concat ", "
-        let onMember (name: Identifier, argument: Expression option, span: SourceSpan) =
-            match argument with
+        let kinds = WorkflowSyntax.keywordKinds |> List.map (fun (kind, _) -> $"`#{kind}`") |> String.concat ", "
+        let onMember ((name: Identifier, argument: Expression option, span: SourceSpan), field: TypeRecordField) =
+            match argument, field with
             | _ when name <> customKeywordTypeAttribute ->
                 Some (Diagnostics.at DiagnosticCodes.UnknownAttribute span $"Unknown attribute '@{name}' on a context's member")
-            | Some (Kind (TagExpr(kind, None))) when List.contains kind keywordKinds -> None
-            | Some (Kind (TagExpr(kind, None))) ->
+            | KeywordKindTag kind, (TypeField(memberName, _, typeOpt, _) | TypeMember(memberName, typeOpt)) -> keywordTypeError span memberName kind typeOpt
+            | KeywordKindTag _, _ -> None
+            | Some (Kind (TagExpr(kind, None))), _ ->
                 Some (Diagnostics.at DiagnosticCodes.UnknownKeywordKind span $"Unknown keyword kind '#{kind}': the kinds are {kinds}")
             | _ ->
                 Some (Diagnostics.at DiagnosticCodes.UnknownKeywordKind span $"Attribute '@{name}' takes the keyword's kind, as `@{name}(#bind)`: the kinds are {kinds}")

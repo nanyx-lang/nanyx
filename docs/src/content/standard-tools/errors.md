@@ -295,7 +295,7 @@ in [Workflows](../advanced/workflows#keyword-kinds).
 
 ```nanyx
 context Lazy = (
-  @customKeywordType(#later)  -- error NYX0019: Unknown keyword kind '#later': the kinds are `#bind`
+  @customKeywordType(#later)  -- error NYX0019: Unknown keyword kind '#later': the kinds are `#bind`, `#bindF`, `#delay`
   force: [c] (int, ([c] int -> int)) -> int
 )
 ```
@@ -793,6 +793,22 @@ checking the package.
 
 To fix it, run an application, or add an `@entry` to one of its files and name the host it runs under in its manifest,
 as `host = (package = "nanyx.console", version = "...")`.
+
+# NYX0046: Keyword member whose type doesn't fit its kind
+
+A `#delay` or `#bindF` keyword passes the expression after it to its member as a function of no parameters (see
+[Keyword kinds](../advanced/workflows#keyword-kinds)), but the member's type doesn't take one: a `#delay` member's type
+must be of the form `(() -> a) -> r`, and a `#bindF` member's `(() -> a, a -> r) -> r`.
+
+```nanyx
+context Lazy = (
+  @customKeywordType(#delay)  -- error NYX0046: 'later' is a `#delay` keyword, which passes the expression after it as a function of no parameters, so its type must be of the form `(() -> a) -> r`
+  later: int -> int
+)
+```
+
+To fix it, make the member take a function of no parameters, as `later: (() -> int) -> int`, or give it the kind that
+takes a value, `#bind`.
 
 # NYX0101: Unknown identifier
 

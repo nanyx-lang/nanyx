@@ -74,7 +74,10 @@ type internal CheckedModule =
       AmbientContexts: Map<string, TypeDefInfo>
       /// What the module re-exports (`export m (a, b)`), each with the module it re-exports from, for its importers to
       /// import too.
-      ReExports: ReExported list }
+      ReExports: ReExported list
+      /// The kinds of the workflow keywords its context declarations mark with `@customKeywordType`, and those of the
+      /// modules it re-exports from, by the member's name: how its importers desugar them (see `WorkflowDesugaring`).
+      KeywordKinds: Map<Identifier, KeywordKind> }
 
 /// A re-export, `export m (a, b)`: the import of `m` that selects what is exported again, and `m` as checked.
 and internal ReExported =

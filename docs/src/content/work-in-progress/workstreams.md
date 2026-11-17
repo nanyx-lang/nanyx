@@ -29,7 +29,7 @@ the backlog:
 | Packaging | [Packaging](./packaging) | [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packaging) |
 | Formatter | [Formatter](../compiler-internals/formatter) | [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) |
 | Refactorings | [Refactorings](./refactorings) | [`refactoring`](https://github.com/nanyx-lang/nanyx/labels/refactoring) |
-| Code quality | [Code quality](../compiler-internals/code-quality) | [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) |
+| Code quality | — | [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) |
 
 [The parser](./parser) proposes moving the parser to a lexer and a hand-written parser, in stages.
 The compilation workstream has pages of its own for the larger pieces of its design:

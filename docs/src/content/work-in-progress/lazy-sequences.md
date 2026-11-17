@@ -204,8 +204,8 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
   - **A keyword kind, `#yield`,** rewrites a block run under a context whose member has it, leaving no context in it:
     `yield x` with the rest `k` becomes `seq.cons(x, { k })`, the end of the block `seq.empty()`, and a `for` loop
     whose body yields `seq.concatMap`. Laziness comes from the closures. `seq` stays an ordinary prelude definition,
-    since the member's kind chooses the rewrite, not the builder's name. It joins the planned `#delay` and `#bindF`
-    kinds ([#1879](https://github.com/nanyx-lang/nanyx/issues/1879)).
+    since the member's kind chooses the rewrite, not the builder's name. It joins the
+    [`#bind`, `#bindF` and `#delay`](../advanced/workflows#keyword-kinds) kinds.
   - **`yield` is written without `!`,** as `try` and `return` are.
   - **No `yield` in a `while` loop.** A `while` needs a cell, and a sequence that reads one can't leave its `memory`
     block anyway.

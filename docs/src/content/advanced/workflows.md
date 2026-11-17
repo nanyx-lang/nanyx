@@ -135,15 +135,35 @@ def retrying: [c] int, ([Retry, c] () -> Attempt(a)) -> Attempt(a) = { times, bl
 | `return` | Wrap the block's final value and finish the block |
 | `zero`   | The value of a block that produces no value (an `if` without `else`, or falling off the end without `return`) |
 | `for`    | Run a `for` loop whose body uses a keyword (see [Keywords in loops](#keywords-in-loops)) |
-| `defer`  | Run a thunk after the rest of the block has finished |
+| `defer`  | Run the expression after it once the rest of the block has finished (a `#bindF` keyword) |
+| `start`  | Start a task that runs the expression after it (a `#delay` keyword, see [Concurrency](../work-in-progress/concurrency-and-crash-boundaries#structured-concurrency)) |
 
 ## Keyword kinds
 
-| Kind | Description |
-|---------|-------------|
-| `#bind`  | The keyword takes a value and a continuation function. The workflow will call the continuation with the result of the keyword operation. |
+| Kind | `kw! e` becomes | For |
+|---------|-------------|-----|
+| `#bind`  | `kw(e, { rest of the block })` | `try`, and `retry` in a retrying workflow: the member takes a value and the continuation, which it calls with the result |
+| `#bindF` | `kw({ e }, { rest of the block })` | `defer`, which runs `e` after the rest of the block |
+| `#delay` | `kw({ e })` | anything that takes "this computation, not its value": `start!`, a `retry!`, a `timeout!` |
 
-`#bind` is the only kind for now, and a member without the attribute is a `#bind` keyword too. Two more are planned ([#1879](https://github.com/nanyx-lang/nanyx/issues/1879)) for keywords that take a computation rather than a value: `#bindF`, which passes the expression as a lambda along with the continuation (`defer! cleanUp()` would be `defer({ cleanUp() }, ...)`), and `#delay`, which passes only the lambda and rewrites nothing else (`start! e` would be `start({ e })`). A third, `#yield` ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)), rewrites a block into a lazy sequence, as [below](#yield-and-collection-builders). Any other kind is a compile error at the attribute, as is the attribute anywhere but before a member of a `context` declaration.
+A member without the attribute is a `#bind` keyword. A `#bindF` member's first parameter is a function of no parameters, `[c] () -> a`, and its second the continuation. A `#delay` member takes only the function: its type is of the form `(() -> a) -> r`, with the lambda's contexts as usual (`[c] () -> a` where the member is generic in them). A member whose type doesn't take a function of no parameters where its kind passes one is a compile error at the attribute ([NYX0046](../standard-tools/errors#nyx0046)).
+
+A `#delay` keyword rewrites nothing but itself: `kw! e` is a call of the member with `{ e }`, wherever it's written. So it needs no builder, and can be used wherever its context is in scope, a lambda included:
+
+```nanyx fragment
+context Async = (
+  @customKeywordType(#delay)
+  start: [Async] (() -> a) -> Task(a)
+)
+
+def pages = { urls -> urls \map { url -> start! http.get(url) } }   -- start({ http.get(url) })
+```
+
+Like `try`, every keyword takes the whole expression after it. For a `#delay` keyword that matters: in `start! http.get(url) \orCrash("failed")` the pipe is inside the lambda, so `orCrash` runs in the task, not on the `Task` that `start!` gives back.
+
+A keyword's kind is the one its member's declaration gives it, in the module or in a module it imports.
+
+A fourth kind is planned, `#yield` ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)), which rewrites a block into a lazy sequence, as [above](#yield-and-collection-builders). Any other kind is a compile error at the attribute ([NYX0019](../standard-tools/errors#nyx0019)), as is the attribute anywhere but before a member of a `context` declaration.
 
 # Workflow keywords
 
@@ -154,7 +174,7 @@ context Jobs = (
   @customKeywordType(#bind)
   run: [c] (Job(a), ([c] a -> Job(b))) -> Job(b)
 
-  @customKeywordType(#bind)
+  @customKeywordType(#bindF)
   defer: [c] (([c] () -> ()), ([c] () -> Job(a))) -> Job(a)
 
   zero: Job(())
@@ -164,7 +184,7 @@ context Jobs = (
 ```nanyx fragment
 def main = {
   jobs {
-    defer! { println("This runs at the end of the block") }
+    defer! println("This runs at the end of the block")   -- defer({ println(...) }, { _ -> ... })
     println("This runs first")
   }
 }
@@ -192,12 +212,12 @@ def lastOrderTotal: () -> Result(Money, #customerNotFound | #orderNotFound) = pr
 
 # Early return and defer
 
-A workflow can also provide a `return` keyword that exits the block early, and a `defer` keyword that runs a thunk at the end of the block.
+A workflow can also provide a `return` keyword that exits the block early, and a `defer` keyword, of kind `#bindF`, that runs the expression after it at the end of the block.
 
 ```nanyx
 def main = {
   jobs {
-    defer! { println("This runs at the end of the block") }
+    defer! println("This runs at the end of the block")
 
     if b then return "Early exit"
 

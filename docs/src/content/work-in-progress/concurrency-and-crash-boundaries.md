@@ -203,7 +203,7 @@ Decided with the maintainer on 2026-11-17:
   def race: [Async] list([Async] () -> a) -> a
   ```
 
-- **`start!` is a keyword of kind `#delay`** ([#1879](https://github.com/nanyx-lang/nanyx/issues/1879)): `start! e`
+- **`start!` is a keyword of kind [`#delay`](../advanced/workflows#keyword-kinds)**, which is built: `start! e`
   is `start({ e })`, the expression wrapped in a lambda and nothing else rewritten: no workflow builder, no
   continuation per `start!`. As with `try`, the keyword takes the whole expression after it: in
   `start! http.get(urlA) \orCrash("a failed")` the `orCrash` runs in the task, not on the `Task`.
@@ -474,7 +474,7 @@ Async is filed in three stages, after the keyword kinds. The crash-boundary step
 
 | Step | Issue | Stage |
 |---|---|---|
-| The `#delay` and `#bindF` keyword kinds | [#1879](https://github.com/nanyx-lang/nanyx/issues/1879) | Ready |
+| The `#delay` and `#bindF` keyword kinds ([Keyword kinds](../advanced/workflows#keyword-kinds)) | [#1879](https://github.com/nanyx-lang/nanyx/issues/1879) | Done |
 | Async 1: the `Async` context, provided by hosts; a wait holds only its instance | [#1889](https://github.com/nanyx-lang/nanyx/issues/1889) | Done |
 | Async 2: `start!`, `await` and `race`, each def a scope, tasks on stack switching | [#1890](https://github.com/nanyx-lang/nanyx/issues/1890) | Ready |
 | Async 3: channels, and `seq.buffer`, `conflate` and `merge` | [#1891](https://github.com/nanyx-lang/nanyx/issues/1891) | Planning: full channels, cancelled streams |

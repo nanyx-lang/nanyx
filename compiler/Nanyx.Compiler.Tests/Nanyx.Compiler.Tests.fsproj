@@ -205,6 +205,7 @@
     <Compile Include="Features\Workflows\LoweredTests.fs" />
     <Compile Include="Features\Workflows\WorkflowTests.fs" />
     <Compile Include="Features\Workflows\WorkflowLoopTests.fs" />
+    <Compile Include="Features\Workflows\KeywordKindTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
