@@ -83,6 +83,7 @@
     <Compile Include="Features\Functions\RunCallResultTests.fs" />
     <Compile Include="Features\Functions\RunDefinitionOrderTests.fs" />
     <Compile Include="Features\Functions\RunFunctionTests.fs" />
+    <Compile Include="Features\Functions\RunPolymorphicRecursionTests.fs" />
     <Compile Include="Features\Functions\RunTupleArgumentTests.fs" />
     <Compile Include="Features\Functions\RunTypeArgumentTests.fs" />
     <Compile Include="Features\Functions\RunUnitFunctionValueTests.fs" />
