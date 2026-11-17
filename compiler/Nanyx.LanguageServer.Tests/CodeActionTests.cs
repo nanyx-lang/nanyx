@@ -4,6 +4,7 @@ using Microsoft.FSharp.Core;
 using OmniSharp.Extensions.LanguageServer.Client;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
@@ -247,6 +248,41 @@ public sealed class CodeActionTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task A_match_offers_to_convert_to_an_if()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-match-to-if");
+        const string text = """
+            def pick = { (ok: bool) ->
+              match ok
+                | true -> 1
+                | false -> 2
+            }
+
+            """;
+
+        Open(uri, text.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var convert = Assert.Single(await CodeActionsIn(uri, new Range(1, 3, 1, 3)), action => action.Title == "Convert to if");
+        Assert.Equal(CodeActionKind.RefactorRewrite, convert.Kind);
+        Assert.Equal("def pick = { (ok: bool) ->\n  if ok then 1 else 2\n}\n", Applied(text.ReplaceLineEndings("\n"), Assert.Single(convert.Edit!.Changes![uri])));
+    }
+
+    [Fact]
+    public async Task A_concatenation_offers_to_convert_to_an_interpolated_string()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-interpolate");
+        const string text = "def greet = { (name: string) -> \"Hello, \" ++ name }\n";
+
+        Open(uri, text);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var convert = Assert.Single(await CodeActionsIn(uri, new Range(0, 43, 0, 43)), action => action.Title == "Convert to interpolated string");
+        Assert.Equal(CodeActionKind.RefactorRewrite, convert.Kind);
+        Assert.Equal("def greet = { (name: string) -> \"Hello, {name}\" }\n", Applied(text, Assert.Single(convert.Edit!.Changes![uri])));
+    }
+
+    [Fact]
     public async Task A_selected_expression_offers_to_introduce_a_function()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-introduce-function");
@@ -263,5 +299,49 @@ public sealed class CodeActionTests : LanguageServerTestBase
             Applied(text, Assert.Single(extract.Edit!.Changes![uri])));
         Assert.Equal([uri.ToString(), "5", "4"], extract.Command!.Arguments!.Select(argument => argument.ToString()));
         Assert.Contains(actions, action => action.Title == "Introduce local function `extracted`");
+    }
+
+    [Fact]
+    public async Task A_request_compiles_nothing_and_a_refactoring_is_compiled_when_it_is_resolved()
+    {
+        var compiles = 0;
+        // As VS Code does, the client resolves a code action's edits when it is picked.
+        await RestartWithClientAsync(
+            TestSettings with { CompileStarted = _ => Interlocked.Increment(ref compiles) },
+            options => options.WithCapability(new CodeActionCapability
+            {
+                CodeActionLiteralSupport = new CodeActionLiteralSupportOptions
+                {
+                    CodeActionKind = new CodeActionKindCapabilityOptions { ValueSet = new Container<CodeActionKind>(CodeActionKind.QuickFix, CodeActionKind.RefactorExtract, CodeActionKind.RefactorInline, CodeActionKind.RefactorRewrite, CodeActionKind.SourceOrganizeImports) }
+                },
+                DataSupport = true,
+                ResolveSupport = new CodeActionCapabilityResolveSupportOptions { Properties = new Container<string>("edit") }
+            }));
+        var uri = DocumentUri.Parse("untitled:Untitled-deferred");
+        const string text = """
+            def tidy = { (s: string) -> string.trim(s) }
+
+            def area = { (s: int) ->
+              def side = s * 2 + 1
+              side * side
+            }
+
+            """;
+
+        Open(uri, text.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+        Assert.Equal(1, Volatile.Read(ref compiles));
+
+        // On a call's name, on a def's name, and with a selection: each offered, none compiled.
+        var toPipe = Assert.Single(await CodeActionsIn(uri, new Range(0, 36, 0, 36)), action => action.Title == "Convert to pipe");
+        var inline = Assert.Single(await CodeActionsIn(uri, new Range(3, 7, 3, 7)), action => action.Title == "Inline `side`");
+        var extract = Assert.Single(await CodeActionsIn(uri, new Range(3, 13, 3, 18)), action => action.Title == "Introduce function `extracted`");
+        Assert.All(new[] { toPipe, inline, extract }, action => Assert.Null(action.Edit));
+        Assert.Equal(1, Volatile.Read(ref compiles));
+
+        // Picked, it is compiled, and has its edits.
+        var resolved = await _client.TextDocument.ResolveCodeAction(toPipe, _cancellation.Token);
+        Assert.True(Volatile.Read(ref compiles) > 1);
+        Assert.StartsWith("def tidy = { (s: string) -> s \\trim }\n", Applied(text.ReplaceLineEndings("\n"), Assert.Single(resolved.Edit!.Changes![uri])));
     }
 }

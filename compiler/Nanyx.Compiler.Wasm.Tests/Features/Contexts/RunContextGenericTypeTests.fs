@@ -124,3 +124,17 @@ println(runLoud(widenedValue))
 println(runLoud(widenedResult()))
 """
     runSource (normalized source) |> assertRan "1\n1\n1\n"
+[<Fact>]
+let ``Run - a generic def's result with fewer contexts than it declares is adapted to them`` () =
+    // #1872: `a` is still a variable where `counted([])` is compiled.
+    let source =
+        thunk
+        + """
+def lengthOf: list(a) -> Thunk(int) = { xs -> Thunk(get = { list.length(xs) }) }
+def counted: list(a) -> [Console] Thunk(int) = { xs -> lengthOf(xs) }
+
+println(force(counted([])))
+println(force(counted([1, 2])))
+"""
+    for inlineCalls in [ true; false ] do
+        runSourceWithOptions true inlineCalls "" (normalized source) |> assertRan "0\n2\n"

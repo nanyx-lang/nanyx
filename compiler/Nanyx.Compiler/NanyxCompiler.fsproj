@@ -158,6 +158,8 @@
     <Compile Include="Refactorings/Inline.fs" />
     <Compile Include="Refactorings/CallAndPipe.fs" />
     <Compile Include="Refactorings/ShorthandLambda.fs" />
+    <Compile Include="Refactorings/MatchAndIf.fs" />
+    <Compile Include="Refactorings/Interpolation.fs" />
     <Compile Include="Refactorings/OrganiseImports.fs" />
     <Compile Include="Refactorings/FieldSites.fs" />
     <Compile Include="Refactorings/ModuleSites.fs" />

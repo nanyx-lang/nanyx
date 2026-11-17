@@ -81,6 +81,23 @@ def leaks = transaction { open("select") }
     Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], result.Diagnostics |> List.map _.Code)
 
 [<Fact>]
+let ``A type in a scoped context's scope imported under an alias is of the scope the signature writes`` () =
+    // #1871: `t.Cursor` belongs to the scope of `t.Tx`, as `Cursor` does to `Tx`'s without the alias.
+    let main =
+        """
+module main
+
+import mod as t
+
+def row: [t.Tx] t.Cursor -> int = { c -> t.next(c) }
+def total = t.transaction { row(t.open("select")) }
+def leaks = t.transaction { t.open("select") }
+"""
+    let result = compileImporting (normalized transactions) (normalized main)
+    Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], result.Diagnostics |> List.map _.Code)
+    Assert.Equal(normalized main |> _.LastIndexOf("t.open"), result.Diagnostics.Head.Span.Value.Start)
+
+[<Fact>]
 let ``Hovering a type in a scoped context's scope shows the scope`` () =
     let source = normalized transactions
     let result = Compiler.compile source

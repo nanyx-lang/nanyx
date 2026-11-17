@@ -19,6 +19,19 @@ let canonical (state: InferState) (name: Identifier) : Identifier =
         | _ -> name
     | None -> name
 
+/// The name the scoped context `name` is declared under: one written through an import's alias, `t.Tx` after
+/// `import x as t`, is the imported module's `Tx`, which its functions require and its types' scope is of (see
+/// `TypeDefInfo.ScopedBy`), so that a signature's `[t.Tx] t.Cursor` is one scope (#1871). A block import's name is
+/// left to `canonical`.
+let declaredScoped (state: InferState) (name: Identifier) : Identifier =
+    match name.LastIndexOf '.' with
+    | dot when dot > 0 && not (state.BlockAliases.ContainsKey (name.Substring(dot + 1))) ->
+        let bare = name.Substring(dot + 1)
+        match state.TypeDefs |> Map.tryFind name, state.TypeDefs |> Map.tryFind bare with
+        | Some aliased, Some declared when aliased.Symbol = declared.Symbol -> bare
+        | _ -> name
+    | _ -> name
+
 /// The context `context` names, as a function type carries it: `Console` is `TyApply("Console", [])`, `Show(a)` is
 /// `TyApply("Show", [a])` and a context variable `c` is the type variable of that name. A scoped context is of a scope
 /// that every scoped context of its name written in the same signature shares (see `signatureScope`). `None` for one
@@ -29,6 +42,7 @@ let private read (typeExprToTy: InferState -> TypeExpr -> Ty * InferState) (stat
         let var, next = typeExprToTy state context
         Some var, next
     | TypeName name when isScoped state name ->
+        let name = declaredScoped state name
         let scope, next = signatureScope state name
         Some (FunctionContexts.scoped (canonical state name) scope), next
     | TypeName name -> Some (TyApply(canonical state name, [])), state
@@ -54,6 +68,7 @@ let plain (state: InferState) (ty: Ty) (written: TypeExpr list) : Ty list * Infe
     written
     |> List.choose (fun ctx -> match ctx.Kind with TypeName name -> Some name | _ -> None)
     |> List.mapFold (fun current name ->
+        let name = if isScoped current name then declaredScoped current name else name
         let declared = canonical current name
         if isScoped current name then
             match scopeIn declared ty |> Option.orElse (scopeIn name ty) with

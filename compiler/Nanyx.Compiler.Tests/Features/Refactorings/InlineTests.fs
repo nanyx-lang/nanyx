@@ -15,7 +15,7 @@ let private offersAt (marked: string) =
     let source = marked.Replace("^", "")
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    source, Inline.at Formatter.Options.defaults "" source result offset Compiler.compile
+    source, Inline.at Formatter.Options.defaults "" source result offset Compiler.compile |> List.map Offer.decided
 
 /// The text after the offer titled starting `title` at the mark, checked to compile and be formatted.
 let private rewrittenBy (title: string) (marked: string) =

@@ -114,7 +114,11 @@ passes the instance the type checker found for it there, as a call to a top-leve
   members of the contexts they stand for at each call (`CoreIrLower.callee`), and takes those members after the ones
   it declares.
 - A function value given where one requiring other contexts is expected, as an argument, a context member, a `use`
-  binding, a list element or a def's result, is adapted (`CoreIrLowerMembers.coerce`): a closure over an adapter that
+  binding, a list element, a branch of an `if` or a `match` (`CoreIrLower.Branch`), or a def's result, is adapted
+  (`CoreIrLowerMembers.coerce`), and so is a value of a type generic in contexts that carries fewer than expected. A
+  def's result is adapted to the type it declares, a generic def's once its type arguments are in, even where a
+  parameter's type still has a variable ([#1872](https://github.com/nanyx-lang/nanyx/issues/1872)). A function is
+  adapted to a closure over an adapter that
   holds it, drops the members it doesn't take and captures the ones it needs that the expected type doesn't pass, as
   they are where it is given. That is how `use Console(write = { s -> write(...) })` calls the outer `write`, and how a
   builder's `try`, whose context variable no call binds, takes a continuation that prints.

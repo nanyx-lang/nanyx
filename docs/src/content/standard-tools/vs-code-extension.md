@@ -142,7 +142,9 @@ The lines that formatting would change are marked as you type, with a hint (thre
 # Refactorings
 
 The refactorings change the code without changing what it does. Each one checks its result: where it can't keep the
-program's meaning, it is shown in the menu disabled, with the reason, rather than offered. What it writes is formatted
+program's meaning, it is shown in the menu disabled, with the reason, rather than offered. One that has to compile its
+result to know is checked when you pick it, so moving the cursor stays fast; refused then, it changes nothing and shows
+the reason as a message. What it writes is formatted
 as `nanyx format` would format it. One that makes up a name, such as introducing a local, starts renaming the name
 straight away, so you can type the one you want.
 
@@ -157,6 +159,8 @@ straight away, so you can type the one you want.
 | **Inline** a type alias | the name of a `type` alias, or a use of it | Puts the type it stands for in place of every use and removes the alias, its parameters replaced by each use's arguments: `Pair(int)`, for `type Pair(a) = (a, a)`, becomes `(int, int)`. **Inline this use** does it at one use. Refused for a `protected` or `private` type, which isn't an alias, and for an alias that names itself; an exported alias is inlined only a use at a time, since another module may use it. |
 | **Convert to pipe** / **Convert to call** | the name of a call, or of a pipe | Writes `f(x, y)` as `x \f(y)`, and back. A chain converts as a whole: `list.filter(list.map(xs, f), g)` becomes `xs \map(f) \filter(g)`. |
 | **Convert to shorthand lambda** / **Convert to lambda with parameters** | a lambda | Writes `{ x -> x * 2 }` as `{ * 2 }` and `{ a, b -> a + b }` as `{ + }`, and back, naming the parameters `x` and `y` and starting a rename. Offered where the body is one operator applied to the parameters in order, each used once. Refused where a parameter writes its type, which a shorthand can't. |
+| **Convert to if** / **Convert to match** | the `match` or `if` keyword | Writes `match ok \| true -> a \| false -> b` as `if ok then a else b`, and a match whose arms are each a literal or a tag, then `_`, as an `if ... else if ...` chain comparing with `==`: `match n \| 1 -> "one" \| _ -> "many"` becomes `if n == 1 then "one" else "many"`. Back, an `if` chain comparing one value with literals or tags becomes a match on it, and any other `if` a match on `true` and `false`. Refused where an arm binds a variable or has a guard, which an `if` has no place for, where the conditions compare different values, and where a chain would evaluate a value other than a name more or fewer times. |
+| **Convert to interpolated string** / **Convert to concatenation** | a `++` of strings, or an interpolated string | Writes `"Hello, " ++ name ++ "! You are " ++ age \toString ++ "."` as `"Hello, {name}! You are {age}."`, and back. A `toString` call becomes a hole on its argument, as interpolation converts with `ToString`; back, a hole that isn't a string gets `\toString`. A string's escapes are kept. Refused for a raw (single-quoted) string, which can't interpolate, and a string of several lines. |
 | **Organize Imports** | anywhere (Shift+Alt+O) | Removes the imports nothing uses, and the names of a selection nothing uses, and writes the rest as one sorted import. |
 | **Rename Symbol** | a name (F2) | Renames it and every use of it, in every file of the package. |
 | **Expand Selection** / **Shrink Selection** | anywhere (Shift+Alt+Right, Shift+Alt+Left) | Grows the selection to the syntax around it, and back. |

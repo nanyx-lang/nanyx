@@ -15,7 +15,7 @@ let private offersAt (marked: string) =
     let source = marked.Remove(offset, 2)
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    source, ShorthandLambda.at Formatter.Options.defaults "" source result offset Compiler.compile
+    source, ShorthandLambda.at Formatter.Options.defaults "" source result offset Compiler.compile |> List.map Offer.decided
 
 /// The text after the one offer at `$$`, checked to compile and to be formatted, and the name its rename starts on.
 let private convertedWithRename (marked: string) =

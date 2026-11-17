@@ -22,8 +22,6 @@ to the server over the real wire protocol.
 - **Parse errors.** The parser has no error recovery, so a parse error hides the rest of the file: hover, completion
   and the type hints read the last text that parsed, less the top-level items edited since (see
   [The parser](./parser)).
-- **Code actions compile.** Each refactoring offered compiles the document again to check its result, so a code
-  action request on a large file can be slow ([#1846](https://github.com/nanyx-lang/nanyx/issues/1846)).
 - **Downloaded packages.** The server does not resolve packages from the lockfile and the cache, or offer to restore
   them ([#866](https://github.com/nanyx-lang/nanyx/issues/866)).
 - **Find references and rename** search the files of the document's package, but not other packages that depend on

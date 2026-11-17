@@ -113,25 +113,28 @@ let at
         let before = referenced result
         // The text with `chain` written by `write` with each name given by one of `namings` in turn, the first that
         // means the same, or why none does.
+        // Decided when it is picked, as it compiles each text it tries.
         let convert (title: string) (chain: Expression) (write: (string -> string) -> Expression -> string) (namings: (string -> string) list) =
-            let attempts =
-                namings
-                |> List.distinctBy (fun naming -> write naming chain)
-                |> List.map (fun naming ->
-                    let text = $"({write naming chain})"
-                    let edits = [ chain.Span.Start, chain.Span.End, text ]
-                    let after = recompile (applied source edits)
-                    match newError result after with
-                    | Some reason -> Error $"The converted module would not compile{reason}"
-                    | None when referenced after <> before -> Error "A name would find a different definition"
-                    | None -> Ok edits)
-            match attempts |> List.tryPick (function Ok edits -> Some edits | Error _ -> None) with
-            | Some edits ->
-                let after = appliedAndFormatted options file source edits
-                Available { Title = title; Kind = RefactoringKind.Rewrite; Edits = [ difference file source after ]; Rename = None }
-            | None ->
-                let reason = attempts |> List.tryPick (function Error reason -> Some reason | Ok _ -> None) |> Option.defaultValue ""
-                Refused(title, RefactoringKind.Rewrite, reason)
+            let decide () =
+                let attempts =
+                    namings
+                    |> List.distinctBy (fun naming -> write naming chain)
+                    |> List.map (fun naming ->
+                        let text = $"({write naming chain})"
+                        let edits = [ chain.Span.Start, chain.Span.End, text ]
+                        let after = recompile (applied source edits)
+                        match newError result after with
+                        | Some reason -> Error $"The converted module would not compile{reason}"
+                        | None when referenced after <> before -> Error "A name would find a different definition"
+                        | None -> Ok edits)
+                match attempts |> List.tryPick (function Ok edits -> Some edits | Error _ -> None) with
+                | Some edits ->
+                    let after = appliedAndFormatted options file source edits
+                    Available { Title = title; Kind = RefactoringKind.Rewrite; Edits = [ difference file source after ]; Rename = None }
+                | None ->
+                    let reason = attempts |> List.tryPick (function Error reason -> Some reason | Ok _ -> None) |> Option.defaultValue ""
+                    Refused(title, RefactoringKind.Rewrite, reason)
+            Deferred(title, RefactoringKind.Rewrite, decide)
         match atOffset with
         | Some expr when isCall expr ->
             [ convert toPipeTitle (outermost isCall expr) (asPipe source) [ ownName; id ] ]

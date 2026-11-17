@@ -14,7 +14,7 @@ let private offersAt (marked: string) =
     let offset = marked.IndexOf "$$"
     let source = marked.Remove(offset, 2)
     let result = Compiler.compile source
-    source, result, WriteHoleTypes.at Formatter.Options.defaults "" source result offset Compiler.compile
+    source, result, WriteHoleTypes.at Formatter.Options.defaults "" source result offset Compiler.compile |> List.map Offer.decided
 
 /// The text after the offer titled `title` at `$$`, checked to compile and to be formatted.
 let private rewrittenBy (title: string) (marked: string) =
@@ -47,7 +47,7 @@ let ``Only the _ the offer is on is written, or every one`` () =
 [<Fact>]
 let ``On the def's name every _ is written`` () =
     let _, _, offers = offersAt "def add$$: int, _ -> _ = { a, b -> a + b }\n"
-    Assert.Equal<string list>([ "Write the inferred types of every `_`" ], offers |> List.map (function Available r -> r.Title | Refused(title, _, _) -> title))
+    Assert.Equal<string list>([ "Write the inferred types of every `_`" ], offers |> List.map (Offer.titleAndKind >> fst))
     Assert.StartsWith("def add: int, int -> int = ", every "def add$$: int, _ -> _ = { a, b -> a + b }\n")
 
 [<Fact>]

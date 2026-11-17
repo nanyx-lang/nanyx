@@ -64,17 +64,6 @@ let private statementRefusal (run: Statement list) =
         | ExprStatement _
         | AttributeStatement _ -> None)
 
-/// `text`, which starts at `offset` in `source`, with each line after its first moved left by the indent of the line
-/// it starts on, and every line then indented by `indent`.
-let private reindented (source: string) (offset: int) (indent: string) (text: string) =
-    let _, original = lineOf source offset
-    text.Split '\n'
-    |> Array.mapi (fun index line ->
-        if index = 0 || line.Trim() = "" then indent + line
-        elif line.StartsWith original then indent + line.Substring original.Length
-        else indent + line.TrimStart())
-    |> String.concat "\n"
-
 /// The innermost statement of a block in `values` whose span holds `selection`, if it starts its line in `source`.
 let private statementAround (source: string) (values: Expression list) (selection: SourceSpan) =
     values
@@ -191,27 +180,28 @@ let at
                     else $"def {name} = {{ {parameterList} ->\n{reindented source selection.Start (indent + indentStep) body}\n{indent}}}"
                 let replace = selection.Start, selection.End, replacement
                 let offer (offerTitle: string) (edits: (int * int * string) list) =
-                    let untyped = applied source edits
-                    let compiled = recompile untyped
-                    match newError result compiled with
-                    | Some reason -> Refused(offerTitle, RefactoringKind.Extract, $"The function would not compile{reason}")
-                    | None ->
-                        // The def's type, written as it was inferred, unless the text with it written does not compile.
-                        let written =
-                            declarationOf untyped name
-                            |> Option.bind (WriteInferredType.at file untyped compiled)
-                            |> Option.bind (function
-                                | Available writing -> writing.Edits |> List.tryExactlyOne |> Option.map (withEdit untyped)
-                                | Refused _ -> None)
-                            |> Option.filter (fun text -> (newError result (recompile text)).IsNone)
-                            |> Option.defaultValue untyped
-                        let changed = difference file source written
-                        let after = formatted options file written changed.Span.Start (changed.Span.Start + changed.NewText.Length)
-                        Available
-                            { Title = offerTitle
-                              Kind = RefactoringKind.Extract
-                              Edits = [ difference file source after ]
-                              Rename = declarationOf after name }
+                    Deferred(offerTitle, RefactoringKind.Extract, fun () ->
+                        let untyped = applied source edits
+                        let compiled = recompile untyped
+                        match newError result compiled with
+                        | Some reason -> Refused(offerTitle, RefactoringKind.Extract, $"The function would not compile{reason}")
+                        | None ->
+                            // The def's type, written as it was inferred, unless the text with it written does not compile.
+                            let written =
+                                declarationOf untyped name
+                                |> Option.bind (WriteInferredType.at file untyped compiled)
+                                |> Option.bind (function
+                                    | Available writing -> writing.Edits |> List.tryExactlyOne |> Option.map (withEdit untyped)
+                                    | _ -> None)
+                                |> Option.filter (fun text -> (newError result (recompile text)).IsNone)
+                                |> Option.defaultValue untyped
+                            let changed = difference file source written
+                            let after = formatted options file written changed.Span.Start (changed.Span.Start + changed.NewText.Length)
+                            Available
+                                { Title = offerTitle
+                                  Kind = RefactoringKind.Extract
+                                  Edits = [ difference file source after ]
+                                  Rename = declarationOf after name })
                 let topLevel =
                     syntax
                     |> List.tryFind (fun item -> not (SourceSpan.isNone item.Span) && SourceSpan.contains item.Span selection)
