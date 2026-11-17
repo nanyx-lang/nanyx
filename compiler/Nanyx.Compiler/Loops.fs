@@ -47,7 +47,7 @@ let inferFor
         // The loop runs its body where it is written: what the body uses is used here.
         | Ok (typedLambda, next) ->
             match ScopedCalls.unsuppliedToLoop next typedLambda.Type expr.Span with
-            | [] -> Ok (mkTypedExpr expr (TyPrimitive "unit") None None None, LambdaContexts.recordRunHere typedLambda.Type next)
+            | [] -> Ok (mkTypedExpr expr (TyPrimitive "unit") None None None, LambdaContexts.recordRunHere env typedLambda.Type next)
             | errors -> Error errors
         | Error err -> Error err
 

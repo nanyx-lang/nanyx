@@ -1005,7 +1005,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                             match Unifier.unalias typedLambda.Type with
                             | TyFunc(_, ret, _) -> ret
                             | other -> other
-                        Ok (mkTypedExpr expr returnTy None None None, { LambdaContexts.recordRunHere typedLambda.Type next with WorkflowBlocks = next.WorkflowBlocks.Add expr.Id })
+                        Ok (mkTypedExpr expr returnTy None None None, { LambdaContexts.recordRunHere env typedLambda.Type next with WorkflowBlocks = next.WorkflowBlocks.Add expr.Id })
                     | Error err -> Error err
                 | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidWorkflow calleeSpan $"Workflow '{name}' must be called with a trailing lambda" ]
             | None ->

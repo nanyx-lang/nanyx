@@ -157,3 +157,42 @@ def f: [Y(int)] () -> () = { y(1) }
 def shown: () -> () = { use Y(int)(y = { x -> println(x) }) in f() }
 """
     Assert.Equal((DiagnosticCodes.UndeclaredContext.Code, "println"), singleError (source.ReplaceLineEndings "\n"))
+// A `for` loop's body runs where the loop is written, so a `use` around the loop supplies what it calls needs (#1757).
+
+[<Fact>]
+let ``A for loop's body may call a function value needing a context a use in the same block supplies`` () =
+    let source = """context Emit(b) = (emit: b -> ())
+context Note = (note: int -> ())
+
+def each: list(int), ([Emit(int)] int -> ()) -> int = { xs, f ->
+  memory {
+    mut n = 0
+    use Emit(int)(emit = { x -> n := n + 1 })
+    for xs | x -> f(x)
+    n
+  }
+}
+
+def noted: list(int), ([Note] int -> ()) -> int = { xs, f ->
+  memory {
+    mut n = 0
+    use Note(note = { x -> n := n + x })
+    for xs | x -> f(x)
+    n
+  }
+}
+"""
+    let typed = compileClean (source.ReplaceLineEndings "\n")
+    Assert.Equal("list(int), ([Emit(int)] int -> ()) -> int", Unifier.tyToString typed.Types.["each"])
+    Assert.Equal("list(int), ([Note] int -> ()) -> int", Unifier.tyToString typed.Types.["noted"])
+
+[<Fact>]
+let ``A for loop's body still needs a context no use around it supplies`` () =
+    let source = """context Note = (note: int -> ())
+
+def each: list(int), ([Note] int -> ()) -> () = { xs, f ->
+  for xs | x -> f(x)
+}
+"""
+    let code, _ = singleError (source.ReplaceLineEndings "\n")
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)

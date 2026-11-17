@@ -201,14 +201,9 @@ export def list.select: [c] list(a), ([Yield(b), c] a -> ()) -> list(b) = { xs, 
       }
     )
 
-    runOnEach(xs, f)
+    for xs | x -> f(x)
     first
   }
-}
-
--- Runs `f` on each element of `xs` in turn.
-def runOnEach: [c] list(a), ([c] a -> ()) -> () = { xs, f ->
-  for xs | x -> f(x)
 }
 
 --| The first value `f` yields, running it on the elements in turn as [`list.select`] does, or `#notFound`
