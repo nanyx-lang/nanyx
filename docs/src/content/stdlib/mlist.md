@@ -124,6 +124,15 @@ def MList.length: [Memory] MList(a) -> int
 
 How many elements `items` holds.
 
+## `MList.toSeq`
+
+```nanyx fragment
+def MList.toSeq: [Memory] MList(a) -> seq(a)
+```
+
+The elements of `items` now, in order, as a sequence: adding to `items` later doesn't change
+it. A mutable list is `Iterable` by it, so a `for` loop walks one.
+
 ## `MList.toList`
 
 ```nanyx fragment

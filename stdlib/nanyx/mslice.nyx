@@ -284,7 +284,9 @@ def copyFrom: [Memory] MSlice(a), MSlice(a), int -> () = { from, to, index ->
 
 --| The elements of `s` now, in order, as a sequence: changing them later doesn't change it. A
   mutable slice is [`Iterable`] by it, so a `for` loop walks one.
-export def MSlice.toSeq: [Memory] MSlice(a) -> seq(a) = { s -> list.toSeq(MSlice.toList(s)) }
+export def MSlice.toSeq: [Memory] MSlice(a) -> seq(a) = { s ->
+  list.toSeq(MSlice.toList(s))
+}
 
 --| The elements of `s` now, in order, as a list.
 export def MSlice.toList: [Memory] MSlice(a) -> list(a) = { s ->

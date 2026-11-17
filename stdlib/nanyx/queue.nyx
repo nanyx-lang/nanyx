@@ -85,7 +85,9 @@ export def Queue.length: Queue(a) -> int = { queue ->
 
 --| The values in `queue`, the front one first, as a sequence. A queue is [`Iterable`] by it, so a
   `for` loop walks one.
-export def Queue.toSeq: Queue(a) -> seq(a) = { queue -> list.toSeq(Queue.toList(queue)) }
+export def Queue.toSeq: Queue(a) -> seq(a) = { queue ->
+  list.toSeq(Queue.toList(queue))
+}
 
 --| The values in `queue`, the front one first.
 export def Queue.toList: Queue(a) -> list(a) = { queue ->

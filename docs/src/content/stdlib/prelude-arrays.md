@@ -37,4 +37,13 @@ def list.fromArray: array(a) -> list(a)
 The elements of `xs`, in order. What a literal builds a list with where it is written
 `List[...]`.
 
+## `array.toSeq`
+
+```nanyx fragment
+def array.toSeq: array(a) -> seq(a)
+```
+
+The elements of `xs`, in order, each read when the sequence is pulled. An array is
+`Iterable` by it, so a `for` loop walks one.
+
 <!-- End of the generated reference. -->

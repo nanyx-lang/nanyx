@@ -122,6 +122,15 @@ def Stack.length: Stack(a) -> int
 How many values are on `stack`. It counts them, so it takes time in proportion to how many
 there are.
 
+## `Stack.toSeq`
+
+```nanyx fragment
+def Stack.toSeq: Stack(a) -> seq(a)
+```
+
+The values on `stack`, the top one first, as a sequence. A stack is `Iterable` by it, so a
+`for` loop walks one.
+
 ## `Stack.toList`
 
 ```nanyx fragment

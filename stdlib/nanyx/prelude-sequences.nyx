@@ -80,7 +80,9 @@ export def seq.toSeq: seq(a) -> seq(a) = { s -> s }
 
 --| The sequence of `xs`, through its [`Iterable`]: what a `for` loop walks when `xs` is not a list, a
   sequence, a map or a set.
-export def __toSeq: [Iterable(c)] c -> seq(elem) = { xs -> toSeq(xs) }
+export def __toSeq: [Iterable(c)] c -> seq(elem) = { xs ->
+  toSeq(xs)
+}
 
 --| The elements of `xs`, in order.
 export def list.toSeq: list(a) -> seq(a) = { xs ->

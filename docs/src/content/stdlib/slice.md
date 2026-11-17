@@ -112,6 +112,15 @@ slice of `1`, `2` and `3` reduced with `{ + }` is `6`. An empty one gives the de
 never fails, unlike a `reduce` that starts from the first element. To start from another value,
 use [`Slice.fold`](#slicefold).
 
+## `Slice.toSeq`
+
+```nanyx fragment
+def Slice.toSeq: Slice(a) -> seq(a)
+```
+
+The elements of `s`, in order, each read when the sequence is pulled. A slice is `Iterable` by
+it, so a `for` loop walks one.
+
 ## `Slice.toList`
 
 ```nanyx fragment

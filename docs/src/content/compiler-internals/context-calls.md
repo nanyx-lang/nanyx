@@ -227,11 +227,18 @@ an attached alias, `type Bag.elem = int`, and leaving one unfixed or fixing it t
 
 A function's type need not write its associated types, as `elem` in `countAll: [Iter(c)] c -> int`, though its body has
 values of them, whose layout depends on what they are. So the type checker records what each one is at each call, by
-the name the callee's signature gives it (`TypedModule.AssociatedArguments`), and keeps those names on the variables
-when the constraints are solved (`InferState.AssociatedVariables`). The backend binds the callee's variables of those
-names to them where it specialises it (`CoreIrLower.withAssociatedArguments`), so `countAll` at a `Bag` of ints reads
-the `int` in `#some(elem, c)`. A context member's type that names an associated type the function's type doesn't fix
-is boxed, as a member's own type variables are (`coreIrContextParameters` in `CodeGen.fs`).
+the name the callee's signature gives it (`TypedModule.AssociatedArguments`), or, for one the signature fixes,
+`[Iterable(c, elem = int)]`, by the context's name for it, and keeps those names on the variables when the constraints
+are solved (`InferState.AssociatedVariables`). The backend binds the callee's variables of those names, in its body's
+types and in its context members' types, to them where it specialises it (`CoreIrLower.withAssociatedArguments`), so
+`countAll` at a `Bag` of ints reads the `int` in `#some(elem, c)`, and a member known at the call, such as the generic
+`list.toSeq` for `Iterable(list(int))`, is called at the type the call fixes. A context member's type that names an
+associated type nothing binds is boxed, as a member's own type variables are (`coreIrContextParameters` in `CodeGen.fs`).
+
+Another of a function's contexts may name an associated type, as `ToString(elem)` does in
+`[Iterable(c), ToString(elem)] c -> ()`: it is determined, since the instance of `Iterable` fixes it
+(`Contexts.ensureContextTypesDetermined`), and at a call the contexts are read with one variable for each name across
+them (`ContextInstances.contextArgTysAtCall`), so the `ToString` found is for the `elem` the `Iterable` fixed.
 
 After specialising, the [inliner](./inlining) folds small functions such as `println` into their callers, and makes
 the members of a `use` it brings into the same function as their calls known.

@@ -103,6 +103,15 @@ def MArray.toArray: [Memory] MArray(a) -> array(a)
 A copy of the elements of `xs` now, in order, as an `Array`, which later changes to `xs` leave
 as it is.
 
+## `MArray.toSeq`
+
+```nanyx fragment
+def MArray.toSeq: [Memory] MArray(a) -> seq(a)
+```
+
+The elements of `xs` now, in order, as a sequence: changing `xs` later doesn't change it. A
+mutable array is `Iterable` by it, so a `for` loop walks one.
+
 ## `MArray.toList`
 
 ```nanyx fragment

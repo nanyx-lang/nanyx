@@ -88,7 +88,7 @@ def foldFrom: [c] Slice(a), int, b, ([c] b, a -> b) -> b = { s, index, acc, step
   it, so a `for` loop walks one.
 export def Slice.toSeq: Slice(a) -> seq(a) = { s ->
   seq.unfold(
-    0,
+    0
     { index ->
       match Slice.at(s, index)
         | #some(element) -> #some(element, index + 1)
