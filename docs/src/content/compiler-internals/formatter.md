@@ -1,13 +1,12 @@
 ---
 title: "Formatter"
 description: "How nanyx format is built"
-order: 31
+order: 13
 ---
 
-> The formatter is built. Its style, settings and command are described for users on
-> [Formatter](../standard-tools/formatter), and its editor features on
-> [VS Code extension](../standard-tools/vs-code-extension#formatting). This page keeps how it is built. Work is
-> tracked under the [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) label.
+The formatter's style, settings and command are described for users on [Formatter](../standard-tools/formatter), and
+its editor features on [VS Code extension](../standard-tools/vs-code-extension#formatting). This page says how it is
+built. Work is tracked under the [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) label.
 
 There is one official formatter, `nanyx format`, so that there is one layout for Nanyx code and nobody argues about
 it. This page is about what the user's page leaves out: how the formatter keeps comments the parser would throw away,

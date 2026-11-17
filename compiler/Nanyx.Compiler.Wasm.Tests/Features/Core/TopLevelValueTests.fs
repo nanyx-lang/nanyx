@@ -1,5 +1,5 @@
 /// A top-level value is built once, on its first read, and every read sees that value (#1257, #1151; see "Top-level
-/// values" in docs/src/content/work-in-progress/memory-management.md).
+/// values" in docs/src/content/compiler-internals/memory-management.md).
 module TranspilerWasmTests.Features.Core.TopLevelValues
 
 open Xunit

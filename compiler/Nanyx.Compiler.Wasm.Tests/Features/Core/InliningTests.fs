@@ -1,4 +1,4 @@
-/// Inlining in the core IR (#745, see `docs/src/content/work-in-progress/inlining.md`): which calls are replaced by the
+/// Inlining in the core IR (#745, see `docs/src/content/compiler-internals/inlining.md`): which calls are replaced by the
 /// body of the function they call, and that the inlined code does what the call did. The functions the tests look into
 /// call themselves, so that they are not inlined in turn: a function inlined wherever it is called is not emitted.
 module TranspilerWasmTests.Features.Core.Inlining

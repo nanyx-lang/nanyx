@@ -1,5 +1,5 @@
 /// A package chooses its host with the `host` field of its manifest, or `--host` on `run`, `build` and `check` (#1247,
-/// see docs/src/content/work-in-progress/hosts.md).
+/// see docs/src/content/compiler-internals/hosts.md).
 module TranspilerWasmTests.Features.Hosts.ChooseHost
 
 open System.IO

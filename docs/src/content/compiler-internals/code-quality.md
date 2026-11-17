@@ -1,10 +1,10 @@
 ---
 title: "Code quality"
 description: "How the compiler's code is structured, and why the contributor rules exist"
-order: 33
+order: 15
 ---
 
-This workstream is about how the compiler and its tools are structured: file and function size, duplicated
+The code quality workstream is about how the compiler and its tools are structured: file and function size, duplicated
 code, dead code, and how the tests are laid out. It does not cover what the compiler does. The rules for
 day-to-day changes are in [AGENTS.md](https://github.com/nanyx-lang/nanyx/blob/main/AGENTS.md); this document explains why they exist and records
 where the code stands. Issues carry the
@@ -56,6 +56,7 @@ that did it are closed under the `code quality` label.
 their own (`inferOperator`, `inferPipe`, `inferMatch`, `inferCall`); `inferMatch` and `inferCall` are each about 300
 lines. The `Compiler` workflow lists the files over the limit on every run, and the
 [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
+
 # The daily review
 
 A scheduled review runs once a day. It does five things:

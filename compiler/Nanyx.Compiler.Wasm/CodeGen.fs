@@ -499,7 +499,7 @@ let private isInstance (context: Ty) =
     | TyApply(_, _ :: _) -> true
     | _ -> false
 
-/// The functions a module was compiled into, from the core IR (see "Core IR" in `docs/src/content/work-in-progress/memory-management.md`).
+/// The functions a module was compiled into, from the core IR (see "Core IR" in `docs/src/content/compiler-internals/memory-management.md`).
 type BackendReport =
     { /// The functions, by their names in WebAssembly text, specialisations and the start function included.
       Functions: string list

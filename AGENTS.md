@@ -3,7 +3,7 @@
 These rules are for anyone changing the compiler and its tools, whether a person or an agent. The compiler
 moves fast, with dozens of commits a day, and most of them land in the same few files. These rules keep
 those files workable. The reasoning behind them, and the current state of the code, are in
-[Code quality](docs/src/content/work-in-progress/code-quality.md), and its issues carry the `code quality`
+[Code quality](docs/src/content/compiler-internals/code-quality.md), and its issues carry the `code quality`
 label.
 
 ## Where new code goes
@@ -40,22 +40,23 @@ label.
 
 ## Documentation
 
-- **All documentation lives on the docs site.** Design notes, proposals and descriptions of how the
-  compiler works today go in the Work in progress section,
-  [docs/src/content/work-in-progress](docs/src/content/work-in-progress). Don't add design docs or long
-  READMEs elsewhere in the repository; `compiler/README.md` only says how to build and test.
-- **Keep the Work in progress section up to date.** If your change touches something a page there
-  describes (a feature, a plan item, an open question, a file or function it names), update the page in
-  the same PR: mark plan items done, move settled questions into the design, and correct what the page
-  says about the code. If you start on something that has no page, add one. When a feature is finished
-  and described in the language docs, cut the page down to what is still open, or delete it.
+- **All documentation lives on the docs site.** Descriptions of how the compiler and its tools work today go in the
+  Compiler internals section, [docs/src/content/compiler-internals](docs/src/content/compiler-internals). Design
+  notes, proposals, plans and open questions, what is open, undecided or planned, go in the Work in progress section,
+  [docs/src/content/work-in-progress](docs/src/content/work-in-progress). Don't add design docs or long READMEs
+  elsewhere in the repository; `compiler/README.md` only says how to build and test.
+- **Keep the Compiler internals and Work in progress sections up to date.** If your change touches something a page
+  there describes (a feature, a plan item, an open question, a file or function it names), update the page in the
+  same PR: correct what a Compiler internals page says about the code, mark plan items done, and move settled
+  questions into the design. When something planned is built, describe it in Compiler internals and cut the Work in
+  progress page down to what is still open, or delete it. If you start on something that has no page, add one.
 - **Keep the VS Code extension page up to date.** A change to the extension in `extension/` (a setting, a
   command, a feature, how it finds `nanyx`) updates
   [VS Code extension](docs/src/content/standard-tools/vs-code-extension.md) in the same PR.
 - **The tour's examples are tests.** Every ` ```nanyx ` block in `docs/src/content/tour` is compiled and run by
   `RunTourExampleTests.fs`. Mark a block that isn't a whole program ` ```nanyx fragment `, and one the compiler
   gets wrong ` ```nanyx skip=#<issue> `; the rules are in
-  [Compilation](docs/src/content/work-in-progress/compilation.md#tour-examples).
+  [Compilation](docs/src/content/compiler-internals/compilation.md#tour-examples).
 - **Use types, not strings.** Prefer a union case to a string for types, kinds and keys. Never take
   structured data apart with `Split`.
 

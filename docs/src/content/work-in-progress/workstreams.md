@@ -4,11 +4,12 @@ description: "How work on the compiler and its tools is split up, labelled and t
 order: 20
 ---
 
-The pages from here to the end of this section are the design of the compiler and its tools: how they work today,
-what is decided and what is still open. They change as the work does, so they say where the code is as well as where
-it is going. Anyone who changes something one of them describes updates the page in the same pull request.
+The pages from here to the end of this section are the design of the compiler and its tools: what is planned, what is
+decided and what is still open. How they work today is in the [Compiler internals](../compiler-internals/compilation)
+section. Both change as the work does. Anyone who changes something one of them describes updates the page in the same
+pull request.
 
-Work on the compiler and its tools is split into workstreams. Each has a page here and a label on its issues.
+Work on the compiler and its tools is split into workstreams. Each has a page and a label on its issues.
 There are no tracking issues. The
 [Nanyx workstreams project](https://github.com/orgs/nanyx-lang/projects/1) holds every open issue on one board.
 Its Stream field places an issue in the workstream it mostly serves. Its Stage field, set on each issue, orders
@@ -26,16 +27,18 @@ the backlog:
 | Error messages | [Error messages](./error-messages) | [`error messages`](https://github.com/nanyx-lang/nanyx/labels/error%20messages) |
 | Language server and editor | [Language server and editor](./language-server) | [`lsp`](https://github.com/nanyx-lang/nanyx/labels/lsp) |
 | Packaging | [Packaging](./packaging) | [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packaging) |
-| Formatter | [Formatter](./formatter) | [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) |
+| Formatter | [Formatter](../compiler-internals/formatter) | [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) |
 | Refactorings | [Refactorings](./refactorings) | [`refactoring`](https://github.com/nanyx-lang/nanyx/labels/refactoring) |
-| Code quality | [Code quality](./code-quality) | [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) |
+| Code quality | [Code quality](../compiler-internals/code-quality) | [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) |
 
 [The parser](./parser) proposes moving the parser to a lexer and a hand-written parser, in stages.
 The compilation workstream has pages of its own for the larger pieces of its design:
-[deferred errors](./deferred-errors), [closed and open records](./closed-and-open-records),
-[tail calls](./tail-calls), [memory management](./memory-management), [context calls](./context-calls), [inlining](./inlining),
-[lazy sequences](./lazy-sequences) and [the standard library's implementation](./standard-library-implementation).
-[The `nanyx` command](./command-line) says how the CLI is built; what it does is on [The nanyx command](../standard-tools/command-line).
+[deferred errors](./deferred-errors),
+[tail calls](./tail-calls), [memory management](./memory-management), [context calls](./context-calls), [inlining](./inlining)
+and [lazy sequences](./lazy-sequences). How the standard library is built is in
+[Standard library implementation](../compiler-internals/standard-library-implementation), and how the CLI is built in
+[The `nanyx` command](../compiler-internals/command-line); what the CLI does is on
+[The nanyx command](../standard-tools/command-line).
 
 An issue that serves more than one workstream gets every label that applies. The finer labels (`parser`, `type checker`, `wasm backend`) say which part of the compiler an issue is in,
 and are used alongside the workstream label.

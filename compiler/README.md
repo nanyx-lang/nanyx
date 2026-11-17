@@ -1,8 +1,9 @@
 # The Nanyx compiler
 
 The compiler, its runtime, the language server and the `nanyx` CLI. This file says how to build and test them.
-How they work, and the design of what comes next, is in the
-[Work in progress](https://nanyx.dev/docs/work-in-progress/workstreams) section of the docs site, starting at
+How they work is in the [Compiler internals](https://nanyx.dev/docs/compiler-internals/compilation) section of the docs
+site (source in [docs/src/content/compiler-internals](../docs/src/content/compiler-internals)), and the design of what
+comes next in the [Work in progress](https://nanyx.dev/docs/work-in-progress/workstreams) section, starting at
 *Compiler workstreams* (source in [docs/src/content/work-in-progress](../docs/src/content/work-in-progress)).
 
 ## Project Structure

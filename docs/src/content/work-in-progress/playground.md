@@ -16,7 +16,7 @@ the compiler in the browser exists so far.
   each code linked to its section of [Compiler errors](../standard-tools/errors). With
   [deferred errors](./deferred-errors), a program with errors still runs up to the first one, as `nanyx run` does.
 - **Start from an example.** A menu of examples, starting with the tour's, which are already whole programs that
-  [are compiled and run by the tests](./compilation#tour-examples). A tour example can link to "open in the
+  [are compiled and run by the tests](../compiler-internals/compilation#tour-examples). A tour example can link to "open in the
   playground".
 - **Share.** The code is kept in the page's URL, so a link reproduces it with no server storage.
 - **Look underneath.** A pane shows the WebAssembly text the program compiled to, for people curious about the
@@ -50,7 +50,7 @@ page: Stop, or a time limit, terminates the worker. The worker posts what the pr
 prints it, so output appears while the program runs. A trap shows as the CLI shows it, with the deferred error's
 message when that is what trapped.
 
-**Browsers.** The backend emits `return_call` for [tail calls](./tail-calls), which Safari has had since 18.2;
+**Browsers.** The backend emits `return_call` for [tail calls](../compiler-internals/tail-calls), which Safari has had since 18.2;
 Chrome and Firefox have had it for longer. An older browser gets a message saying so instead of a broken page.
 
 # Where the compiler runs

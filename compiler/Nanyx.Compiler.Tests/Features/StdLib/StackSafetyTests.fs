@@ -4,7 +4,7 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-// Each standard-library function that walks a collection is stack-safe (docs/src/content/work-in-progress/tail-calls.md): it calls
+// Each standard-library function that walks a collection is stack-safe (docs/src/content/compiler-internals/tail-calls.md): it calls
 // itself only in tail position. The runs that show it working on long input are in the Wasm tests
 // (Features/StdLib/RunStackSafeTests.fs).
 

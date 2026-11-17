@@ -1,5 +1,5 @@
 /// `@extern("module", "name")` declares a foreign function: a typed def with no value that the embedder provides,
-/// which only a host can call (#1424, see docs/src/content/work-in-progress/foreign-functions.md).
+/// which only a host can call (#1424, see docs/src/content/compiler-internals/foreign-functions.md).
 module Nanyx.Compiler.Tests.Features.Hosts.Externs
 
 open Xunit

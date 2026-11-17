@@ -1,12 +1,12 @@
 ---
 title: "Hosts"
-description: "Hosts still to come (in a page, a browser, HTTP, tests), the design behind them, and how the compiler builds hosts"
+description: "Hosts still to come (in a page, a browser, HTTP, tests), and the design behind them"
 order: 3
 ---
 
 What works today, choosing a host, the console host, writing a host package, foreign functions and host memory, is
-described in [Hosts](../advanced/hosts). This page keeps the hosts still to come, the design they follow, how the
-compiler builds hosts, and the open questions.
+described in [Hosts](../advanced/hosts), and how the compiler builds hosts in [Hosts](../compiler-internals/hosts) in the
+Compiler internals section. This page keeps the hosts still to come, the design they follow, and the open questions.
 
 A command-line tool, an HTTP service, a browser app and a test run are all the same program model running under
 different hosts.
@@ -86,7 +86,7 @@ A console program can run in a page unchanged, with the page standing in for the
 - **`proc_exit` has to unwind.** The page's `proc_exit` throws, and the code that called the entry catches it and reads the exit code.
 - **Reading stdin blocks.** `fd_read` returns its bytes before the program carries on, and a page can't wait for input on its main thread. The program would have to run in a worker, or `Console` input would have to be unavailable.
 
-The backend also emits `return_call` for [tail calls](./tail-calls), which needs Safari 18.2 or later; Chrome and Firefox have had it for longer.
+The backend also emits `return_call` for [tail calls](../compiler-internals/tail-calls), which needs Safari 18.2 or later; Chrome and Firefox have had it for longer.
 
 ## A browser host
 
@@ -160,7 +160,7 @@ a `Request -> Response`. That is the next section's rule.
 names and values, and the body as a string; the host, `nanyx.http`, on the machinery ConsoleHost builds; and serving
 without WASI: `nanyx run` listens on the port the `settings` of the manifest's `host` give, and answers each request
 with a fresh instance, which is enough for local development and for the [HTTP server cookbook](../cookbook/http-server)
-([#1786](https://github.com/nanyx-lang/nanyx/issues/1786); see [How it's built](#how-its-built)). The host provides
+([#1786](https://github.com/nanyx-lang/nanyx/issues/1786); see [How it's built](../compiler-internals/hosts#how-its-built)). The host provides
 `Http` only, so far; what else it lacks is on [Files, HTTP and JSON](./files-http-json#http).
 
 **What it still needs:** to serve on WASI, the `wasi:http` incoming-handler world. That is the largest piece: the
@@ -277,154 +277,6 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
 4. **The test host**, with [Testing](./testing).
 5. **The HTTP host** ([Serving HTTP](#serving-http)): serving from the CLI for local development is done (#1786); the
    `wasi:http` world is next.
-
-# How it's built
-
-- **A host declares itself.** A host package's manifest has `host = (root = "...", prelude = "...")` in its `package`
-  (`Manifest.checkHostDeclaration` checks it, `HostPackages.ofManifest` reads it into `Manifest.Declares`). `Host`
-  (`Hosts.fs`) is what the compiler knows of one: its package, its root module, its prelude and its directory. The
-  compiler keeps no table of hosts: `HostPackages.tryShipped` reads the manifest of one it ships, from its directory
-  beside the compiler (`ShippedPackages`, see [Built-ins as packages](./built-ins-as-packages#how-shipped-packages-are-built)), and
-  `HostPackages.console` is the console host, which a loose script runs under unless it names another. The host is imported as
-  `nanyx.console/console.host` (`Host.Import`), and its prelude as `nanyx.console/console.prelude` (`Host.PreludeImport`).
-- **A package chooses its host.** `Manifest.check` reads the manifest's `host`, `(package = "nanyx.console", version
-  = "0.28.0")` or `(package = "acme.host", path = "../acme.host")`, into `Manifest.Host` (a `HostEntry`; none without a
-  `host` field: a library, whose `@entry` `Attributes.applyAttributes` reports as `NYX0031`). A host the compiler
-  doesn't ship, named without a path, is `NYX0023`, saying how to give its path; a host with both a path and a version
-  is an error. Its `settings` are a record, checked against the settings the host declares, with their defaults, in its
-  own manifest (`Host.Settings`, `HostSettings.errors`) once the host is read. `Package.ofManifest` reads the host's
-  own manifest (`Package.hostIn`): its name must match, and it must declare itself a host. The host's package travels
-  with the package's module table (`PackageModules.Host` and `PackageModules.HostPackage`), so every compile of a
-  package's file, the language server's included, passes `@entry` to that host's `run`, and the host's imports resolve
-  in its own package. `--host` on `run`, `build` and `check` replaces it with a host the compiler ships or the
-  directory of one (`Package.withHost`); on a script it is a usage error.
-- **A script chooses its host.** `Script.read` reads a script's `::host` and `::dependency` directives into the
-  entries a manifest's `host` and `dependencies` would be (`Manifest.hostEntry`, `Manifest.dependencyEntries`), so they
-  are checked as a manifest's are, with the same errors, at the word each is about. `Package.scriptModules` reads the packages
-  they name, the console host when there is no `::host`, into a module table for the script's build
-  (`PackageModules.Script`): it has no files of its own, so every file of the build in no package it depends on is the
-  program's (`PackageModules.isProgramFile`), and its imports are found by path, but for an import of a dependency's
-  public module, `acme.util/strings`. `Script.compileSourceReading` compiles a script in that build, for `nanyx run`
-  and the language server alike. A script with neither directive compiles as before, in no build.
-- **Which modules see the host.** A module of the program itself runs under the build's host: it sees the host's
-  prelude and may declare the `@entry`. A module of a package the program depends on, of the host's own package, or
-  of the standard library has no host (`checkModule` in `Library.fs`).
-- **The host's prelude.** A module with a host imports its prelude after the standard library's, as an implicit import
-  that the module's own imports win over. The contexts the prelude re-exports are those the host provides
-  (`providesContexts` in `Library.fs`): importing the module that declares one, as the prelude does, binds the names
-  of its members, so they are ambient (see below). An import that selects a context, as the prelude's
-  `export nanyx.console.core/console (Console, ...)` does, selects its members too.
-- **`@entry` calls the host's `run`.** `Attributes.applyAttributes` imports the host under an alias of its own
-  (`__host`), so that it can't clash with the program's names, and appends `__host.run(main)` to the module as its
-  start. The entry point passed to `run` is at the attribute's span, so a mismatch there is the entry not fitting the
-  host: `NYX0237`, reported at `@entry`, with the type the host expects and the one the entry has.
-- **`run` ignores what the entry returns.** Its parameter is `[Console] () -> a`, not `() -> ()`, because an entry
-  whose block ends in an expression (`dbg(x)`) returned a value that the old `main()` call dropped.
-- **`HostRuntime`** is declared in `nanyx/host.runtime`, a context with no members: the capability that lets code
-  call [foreign functions](./foreign-functions) and use `nanyx/host.memory`. With no members, a function that requires
-  it is passed nothing, and the type checker treats it as available wherever it is required, so `Hosts.runtimeErrors`
-  reports `NYX0238` in any module but a host, `nanyx/host.runtime` and `nanyx/host.memory` by what each call calls: at
-  each top-level def that requires it, as its written contexts say or a call in it does, other than a foreign function,
-  which any module may declare, and at each call at the top level that requires it, other than the call of `run` that
-  `@entry` makes. A module that calls a host's `run` itself needs `HostRuntime` for it, so that is an error too.
-- **Where the entry's `Console` comes from.** Every entry is passed the members of the `Console` that `run` `use`s, so
-  it reads and writes through the host. An entry that doesn't write its type, which is most programs, infers `Console`
-  as an ambient context, because the host's prelude brings `Console`'s names in. A def that infers an ambient context takes its
-  members as a def that writes it does: `InferModule` adds the contexts it inferred to the def's annotation for the
-  backend (`[Console]` on its own, or after the parameterised contexts it was given), and the backend gives a function
-  named as a value the contexts without parameters it requires (`CodeGen.carryPlainContexts`), so `run(main)` passes
-  `main` its members rather than closing it over the module that declares `Console`. Nothing wires `Console` to the entry by name.
-- **Scripts run under the host.** A module without an `@entry` whose top level has statements is a script, and its
-  statements are its entry point: `Scripts.asEntry` makes them the body of a lambda, followed by `()`, and appends
-  `__host.run({ ... })` to the module, importing the host (a script sees the host's prelude, as any program's module
-  does).
-  The lambda is not given `Console`'s members as a lambda passed to `run` would be
-  (`Contexts.extendEnvForLambdaArgument`): its statements are the top level, and see the script's own names and
-  ambient contexts as before. A script's value that needs a context, directly or through the functions and values it
-  names (`def line = readLine()`), is inferred in a scope of its own (`ScriptValueScope`) that records what it
-  needs. A lambda written in the value is not run by building it, so what it calls is its own type's, not the value's
-  (`def handlers = (log = { m -> println(m) })` needs nothing). Once the module is inferred, those values (`InferState.ScriptEntryValues`) move into the entry point as local
-  defs, in the order written, so each is computed once
-  ([#1257](https://github.com/nanyx-lang/nanyx/issues/1257)). A value that needs no context stays at the top level,
-  where a function can name it, and is built on its first read
-  ([Memory management](./memory-management#core-ir)). A function that names a value that moved, or a statement that reads one before its def,
-  is `NYX0239`. The ambient contexts the statements and the moved values need through unannotated functions are
-  only known once the module is inferred, so the lambda's type is given them then (`InferModule.withEntryContexts`),
-  and the host passes their members. Once typed, the entry point is a def of its own, `def __script: [Console] = { ... }`,
-  which `__host.run(__script)` names (`Scripts.asDefinition`), so a lambda in a statement captures its members as a
-  lambda in any def does. Statements beside an `@entry` are a script entry too, run before the `@entry`'s, as they ran
-  at the top level. A value that needs a context in a module with no statements, which nothing would run, is an error
-  at the value. A script carries only the members of the host's contexts that it calls, as an entry program does
-  (see `Env` below).
-- **`Console` only comes from the host.** `nanyx.console.core/console` declares the context and `print`, `println`, `eprint` and
-  `eprintln`, but no instance: the line reading lives in the console host alone. Importing a module whose contexts
-  the host provides (those its prelude re-exports) binds the names of its plain contexts' members, `readLine` and the
-  rest, each a symbol of its own (`Library.mergeImport`), so `Console` is still an ambient context: a script's
-  statements and an unannotated def can call `readLine()`, and the def infers `Console`. A member of a context a def
-  declares, or a `use` loads, shadows an imported function of the same name, and takes none of its contexts
-  (`Contexts.contextRequirementsOf`): a def's own `println` member is not the prelude's `println`. A function named as a value carries it in its
-  type (#1288), and an unannotated one carries those it was inferred to require, its own and those of the functions it
-  calls (`Contexts.inferredAmbientContexts`), found once for each function it reaches however many paths reach it
-  ([#1458](https://github.com/nanyx-lang/nanyx/issues/1458)). A def that writes `[c.Console]` for an aliased import is passed the members as `[Console]` is: the
-  backend reads the layout of the context's own name (`CodeGen.layoutOf`), and a member called under the alias,
-  `c.write`, is written by its own name for the backend (`ModuleLinking.writeMemberAliases`).
-- **`Env`** is declared in `nanyx.console.core/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, with
-  `FileSystem` and `Http` (see below), so its parameter is `[Console, Env, FileSystem, Http] () -> a`; an entry that requires fewer
-  contexts fits. The host's prelude re-exports
-  `Env`, so its members are ambient names in every module of the program. Its members are functions of the host's own
-  over WASI's `args_sizes_get` and `args_get`, `environ_sizes_get` and `environ_get`, and `proc_exit`, declared with
-  `@extern`, with their buffers allocated with `nanyx/host.memory` (see
-  [Foreign functions](./foreign-functions#whats-built)). `run` passes the members of both contexts to every entry,
-  but the inliner inlines `run` and the entry into the start ([#1469](https://github.com/nanyx-lang/nanyx/issues/1469)),
-  so a member nothing calls is never built, and a program contains only the members it calls and imports only what
-  they call ([#1497](https://github.com/nanyx-lang/nanyx/issues/1497)): hello world imports `fd_write` alone. A
-  program that reads `args()` imports no `environ_*` function, and one that reads only `variable` no `args_*` one
-  ([#1766](https://github.com/nanyx-lang/nanyx/issues/1766)): `entriesOf`, which reads either list, is passed the
-  list's two WASI functions, each wrapped in a lambda the inliner removes, rather than a tag it matches on, which
-  built both lists' code into every caller. `nanyx run` passes what follows the
-  file or package as the arguments, after the program's name, and the process's environment variables (see
-  [`nanyx run`](../standard-tools/command-line#nanyx-run)); an `exit(0)` part-way is a clean end, which `--check-memory` doesn't
-  count as a leak. A script's entry point requires only the plain contexts that are ambient in its module
-  (`Scripts.withAmbientContextsOnly`): a statement that calls a function whose type is an error would otherwise leave it
-  requiring all that `run` provides, `Env` too in a script that doesn't import it.
-- **`FileSystem`** is declared in the shipped package `nanyx.fs`, which the console host depends on; its prelude
-  re-exports `FileSystem`, with `Path` and `FsError`, the types its members name: a program module sees `run`'s
-  parameter type, so it must be able to name the members' types. A program reaches its functions by importing
-  `nanyx.fs`'s modules, with `::dependency nanyx.fs` or a manifest's `dependencies`. `FileSystem`'s members are named
-  for what they do on their own (`readFile`, `writeFile`, `pathExists`, `listDirectory`, ...), since the prelude makes
-  them ambient names. `listDirectory` gives names in any order, and `dir.list` sorts and joins them, so another host
-  has less to do.
-- **The file system on WASI.** The console host writes `FileSystem` in `console.host.nyx` on WASI's
-  `fd_prestat_get` and `fd_prestat_dir_name`, `path_open`, `fd_read`, `fd_pread`, `fd_write`, `fd_close`,
-  `fd_filestat_get`, `fd_readdir`, `path_filestat_get`, `path_unlink_file` and `path_create_directory`. A path is
-  found in the runtime's preopened directories: a relative one in the preopen named `.`, an absolute one in the
-  preopen whose name starts it (compared without case when it starts with a drive), and one in none is
-  `#permissionDenied`, as is a relative path that climbs out of `.`, which WASI refuses (`ENOTCAPABLE`). WASI's error
-  numbers map to `FsError`. `WasmRunner` (`Nanyx.Compiler.Runtime/Runner.fs`) takes the directories a program may
-  reach, the current directory first: it preopens that one as `.` and by its absolute path, and each other by its
-  absolute path, written with `/`. `nanyx run` passes the shell's directory and the one `--allow-dir` names
-  (`Program.RunIn`). `file.lines` reads 64 KB at a time through a member of its own, `readFileChunk(at, offset,
-  length)`, which opens the file, reads the chunk with `fd_pread` and closes it again, so a sequence abandoned before
-  its end holds no file, and pulling a sequence again reads the same lines again. The host's `readFileChunk` gives an
-  error, not an empty chunk, for an offset past the file's end, so a file cut short between chunks is caught.
-- **`Http`** is declared in the shipped package `nanyx.http.core`, which the console host depends on; its prelude
-  re-exports `Http` and `HttpError`, with `Request`, `Method` and `Response`. Its one member, `sendRequest`, is written
-  on the runtime's own import `nanyx:http`, not on WASI, which has no networking (see
-  [Foreign functions](./foreign-functions#whats-built)). `nanyx.http.core`'s module `wire` writes and reads requests
-  and responses as the runtime's imports pass them, so the console host and the HTTP host share it.
-- **The HTTP host.** `packages/nanyx.http` declares itself a host with `host = (root = "http.host", prelude =
-  "http.prelude", settings = (port = 3000))`. Its `run` takes the handler, `use`s an `Http` written on `nanyx:http` as
-  the console host's is, takes the request from the runtime, calls the handler, and gives the runtime the response; a
-  request the runtime wrote wrongly is answered with a 400 without calling the handler. The host imports the
-  runtime's own `nanyx:serve`, and `nanyx run` serves any program whose module imports it (`WasmServer.serves`),
-  whatever its host: it compiles the module once, listens on `http://localhost:<port>/` with .NET's `HttpListener`,
-  and answers each request in a store and an instance of its own, on a task of its own. An instance that traps or
-  exits without responding is answered with a 500, the reason goes to standard error, and the server carries on.
-  `Request.path` takes the path from the whole URL the runtime passes.
-- **Host settings.** A host declares the settings it takes, with their defaults, in its own manifest's `host`; a
-  program's manifest sets them in its `host`'s `settings`, and one the host doesn't take, or of another kind than its
-  default, is an error at the setting (`HostSettings`, checked when `Package` reads the host). A script's `::host` has
-  no settings, so it gets the defaults.
 
 # Open questions
 

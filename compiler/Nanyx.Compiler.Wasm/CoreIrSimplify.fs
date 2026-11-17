@@ -1,5 +1,5 @@
 /// Simplifying what inlining exposes in the core IR (see "What inlining exposes" in
-/// `docs/src/content/work-in-progress/inlining.md`), between the inliner's rounds and before reference counting:
+/// `docs/src/content/compiler-internals/inlining.md`), between the inliner's rounds and before reference counting:
 ///
 /// - a call through a closure known at that point is a direct call to the function the closure is over, with the
 ///   closure as its environment, which the inliner may inline in turn;

@@ -660,7 +660,7 @@ internal static partial class CliCommands
 
     /// <summary>
     /// Write the reference of each standard-library page on the docs site from the library's doc comments
-    /// (see docs/src/content/work-in-progress/standard-library-implementation.md).
+    /// (see docs/src/content/compiler-internals/standard-library-implementation.md).
     /// </summary>
     /// <param name="check">Write nothing; list the pages that are out of date, and exit with 1 if there are any.</param>
     /// <param name="directory">The docs site's standard-library pages: docs/src/content/stdlib.</param>

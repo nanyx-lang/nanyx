@@ -6,8 +6,9 @@ order: 32
 
 The console host is already an ordinary package that the compiler ships, described in
 [Hosts](../advanced/hosts#packages-the-compiler-ships), and the manifest that names it in
-[Packages and projects](../tour/packages#package-manifests). This page keeps what is left: the official linter as a
-package, how shipped packages are built, and the open questions. It is part of the [packaging](./packaging)
+[Packages and projects](../tour/packages#package-manifests), and how shipped packages are built in
+[Shipped packages](../compiler-internals/shipped-packages) in the Compiler internals section. This page keeps what is
+left: the official linter as a package, and the open questions. It is part of the [packaging](./packaging)
 workstream.
 
 # Why
@@ -57,36 +58,6 @@ host as one of them ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344),
 
 1. **The official linter as a package** ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)), once the linter
    contract is designed. The rules move one at a time, with the tests checking that each one reports what it did.
-
-# How shipped packages are built
-
-- **Shipped packages are source directories.** `packages/` at the repository root holds them, each named for its
-  package, with its manifest at the compiler's version and its sources under `src`: `packages/nanyx.console`,
-  `packages/nanyx.console.core`, `packages/nanyx.fs`, `packages/nanyx.http.core`, `packages/nanyx.http` and
-  `packages/nanyx.json`. Every build of the compiler copies the directory beside it (a `None` item in
-  `NanyxCompiler.fsproj` with `CopyToOutputDirectory` and `CopyToPublishDirectory`), so the tests, the language server
-  and the published `nanyx` all find it at `ShippedPackages.directory`, and each release archive holds it beside the
-  executable. A test checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with
-  the compiler.
-- **The console host declares itself.** The compiler reads `nanyx.console`'s manifest (`HostPackages.tryShipped`)
-  rather than keeping a table of hosts; `HostPackages.console` is the host a script runs under. The program's package
-  records the host's package (`PackageModules.HostPackage`; for a script or a module given as source,
-  `ShippedPackages.tryModules`), and the program's modules import the host and its prelude through it, as do the
-  host's own files (`PackageModules.resolveWithin`); it needs no `dependencies` entry. A host found by its path is read
-  the same way, from its directory. `HostRuntime` goes to the host's file (`Hosts.mayRequireRuntime`, given the files
-  that declare the host's module), and a statement in that file isn't a script's. A shipped package's file is named
-  after its package in messages, `nanyx.console/src/console.host.nyx`, wherever the compiler is installed
-  (`ShippedPackages.tryDisplay`).
-- **The interface package.** `nanyx.console` depends on `nanyx.console.core` by version: a dependency may name a
-  package the compiler ships at the compiler's version exactly (`NYX0029` otherwise), as a linter or host may, and
-  `ShippedPackages.tryModules` reads a shipped package's public modules and the shipped packages it depends on. A file
-  of the host's package, or of a package it depends on, sees no host, so the interface package doesn't import the
-  prelude that re-exports it. The reference on the `console` and `env` pages of the docs site is generated from its
-  doc comments, as the standard library's is ([#1505](https://github.com/nanyx-lang/nanyx/issues/1505), see
-  [Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)).
-- **No host means a library.** `Manifest.Host` and `PackageModules.Host` are options. A package file under no host gets
-  no host import, an `@entry` there is `NYX0031` (`Attributes.applyAttributes`), and `nanyx run` on a library says it
-  has no entry point.
 
 # Open questions
 

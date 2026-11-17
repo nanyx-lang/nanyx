@@ -1,6 +1,6 @@
 /// A function that requires contexts is specialised on the members known where it is called: it calls a known member
 /// directly, passes it on as known, and is not passed it (#744, see "Specialising on known members" in
-/// `docs/src/content/work-in-progress/context-calls.md`).
+/// `docs/src/content/compiler-internals/context-calls.md`).
 module TranspilerWasmTests.Features.Contexts.KnownMembers
 
 open System

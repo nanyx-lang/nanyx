@@ -59,7 +59,7 @@ That is enough to recognise Nanyx code. The docs cover the rest, including [reco
 
 ## Writing Nanyx programs
 
-Nanyx is young: the compiler runs a small subset of the language the docs describe, and there is no standard library yet beyond a built-in `println`. The docs' [Hello, World!][hello] works today; the [Work in progress][wip] section of the docs says what else does, and what is being designed.
+Nanyx is young: the compiler runs a small subset of the language the docs describe, and there is no standard library yet beyond a built-in `println`. The docs' [Hello, World!][hello] works today; the [Compiler internals][compilation] section of the docs says what else does, and the [Work in progress][wip] section what is being designed.
 
 ### 1. Get the `nanyx` tool
 
@@ -184,4 +184,4 @@ Nanyx aims to feel small: few rules, few exceptions, and features that compose r
 [currying]: https://nanyx.dev/docs/coming-from-other-languages/currying
 [unions]: https://nanyx.dev/docs/coming-from-other-languages/arbitrary-unions
 [wip]: https://nanyx.dev/docs/work-in-progress/workstreams
-[compilation]: https://nanyx.dev/docs/work-in-progress/compilation
+[compilation]: https://nanyx.dev/docs/compiler-internals/compilation

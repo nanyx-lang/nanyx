@@ -1,5 +1,5 @@
 /// A loose script runs under the console host: its statements, and its values that need a context, are the entry point
-/// passed to `run` (#1245, see docs/src/content/work-in-progress/hosts.md).
+/// passed to `run` (#1245, see docs/src/content/compiler-internals/hosts.md).
 module TranspilerWasmTests.Features.Hosts.Scripts
 
 open Xunit

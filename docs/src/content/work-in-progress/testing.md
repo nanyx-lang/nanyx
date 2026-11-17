@@ -170,7 +170,7 @@ These fit the design but are not part of the first version:
 - **Property-based testing.** A library, with a context that generates values, rather than a language feature.
 - **Snapshot tests**, which compare a value's printed form with one stored in a file.
 - **Expecting a crash.** A test cannot catch a crash, but the runner sees one, so an attribute such as `@test(#crashes)` could pass a test only if it crashes.
-- **Docs as tests.** Running the code blocks in docs as tests. The compiler's own tests already run the tour's ([compilation](./compilation#tour-examples)); `nanyx test` could do the same for a package's.
+- **Docs as tests.** Running the code blocks in docs as tests. The compiler's own tests already run the tour's ([compilation](../compiler-internals/compilation#tour-examples)); `nanyx test` could do the same for a package's.
 
 # Prior art
 

@@ -1,6 +1,6 @@
 /// A program that recurses too deeply in a call that is not in tail position runs out of stack, and `nanyx run` says so,
 /// naming the function, rather than printing the engine's backtrace (#1478, see
-/// docs/src/content/work-in-progress/tail-calls.md).
+/// docs/src/content/compiler-internals/tail-calls.md).
 module TranspilerWasmTests.Features.TailCalls.StackOverflow
 
 open Xunit

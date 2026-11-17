@@ -25,6 +25,7 @@ export const sections = [
   { title: "Meta", dir: "foundations", icon: "Fingerprint" },
   { title: "Cookbook", dir: "cookbook", icon: "BookOpen" },
   { title: "Examples", dir: "examples", icon: "Code", firstPage: EXAMPLES_OVERVIEW_SLUG },
+  { title: "Compiler internals", dir: "compiler-internals", icon: "Cpu" },
   { title: "Work in progress", dir: "work-in-progress", icon: "Construction" },
 ];
 
