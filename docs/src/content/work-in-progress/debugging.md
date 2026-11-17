@@ -68,7 +68,7 @@ the maintainer on 2026-11-17 and filed in stages ([Plan](#plan)).
 | The debug adapter: breakpoints, stepping and variables in VS Code | [#2041](https://github.com/nanyx-lang/nanyx/issues/2041) | #2040 |
 | Recording a run's effects and replaying it (Planning) | [#2042](https://github.com/nanyx-lang/nanyx/issues/2042) | |
 | Stepping backwards (Planning) | [#2043](https://github.com/nanyx-lang/nanyx/issues/2043) | #2041, #2042 |
-| `nanyx run --profile`, with Wasmtime's guest profiler | [#2044](https://github.com/nanyx-lang/nanyx/issues/2044) | |
+| `nanyx run --profile`, with Wasmtime's guest profiler (done) | [#2044](https://github.com/nanyx-lang/nanyx/issues/2044) | |
 | `dbg` output handled by the host | [#2058](https://github.com/nanyx-lang/nanyx/issues/2058) | |
 | `dbg` values inline in the editor | [#2054](https://github.com/nanyx-lang/nanyx/issues/2054) | #2058 |
 | Live mode: re-run on save when the entry needs only `Console` | [#2055](https://github.com/nanyx-lang/nanyx/issues/2055) | #2054 |

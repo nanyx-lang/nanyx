@@ -34,6 +34,17 @@ function on the stack that the source names, as running out of stack does, where
 `WasmRunner.describeFault` words the message, for the CLI and the HTTP host. Any other trap is reported as Wasmtime
 gives it, with its backtrace.
 
+# Profiling
+
+`run --profile <file>` runs the program with Wasmtime's guest profiler (`GuestProfiler` in `Profiling.fs`), which
+wasmtime-dotnet doesn't wrap: the runtime calls Wasmtime's C API from the native library wasmtime-dotnet ships
+(`wasmtime_guestprofiler_new`, `_sample` and `_finish`, in Wasmtime 48), with the engine, store and module handles
+wasmtime-dotnet keeps internal, read by reflection. The engine is made with epoch interruption; a timer moves the epoch
+on every 10 ms, and the store's epoch deadline callback takes a sample each time. Once the program stops, however it
+stops, the profile is written. Its frames are named from the module's name section; the profiler gives each frame the
+address of Wasmtime's compiled code, not an offset in the module, so the table of places (see
+[Crash stacks](./crash-stacks)) can't give them lines.
+
 # The stopwatch
 
 The compiler reports to the CLI through a `CompileListener` (`CompileListener.fs`): a package build says which file

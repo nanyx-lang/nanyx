@@ -216,8 +216,12 @@ module WasmRunner =
             | Binary bytes -> Ok (Module.FromBytes(engine, "nanyx", bytes))
         with :? WasmtimeException as ex -> Error (InvalidModule ex.Message)
 
+    /// How often a profiled run is sampled: what the Wasmtime command line's guest profiler samples at by default.
+    let private profileInterval = TimeSpan.FromMilliseconds 10.0
+
     /// Instantiates `program` in a store that `configure` sets up, with its debug probes, if it has any, answered by
-    /// `listener`, which runs its start function, then calls its export
+    /// `listener`, and sampled by the guest profiler if `profiled` is given, which it gives the profile once the program
+    /// has stopped, which runs its start function, then calls its export
     /// `start` if it is given and the module exports it, and gives what `read` makes of the instance afterwards: `None`
     /// when the program ended itself, through `proc_exit` with exit code 0, so there is no instance or it stopped without
     /// freeing what it held. Also gives what `inspect` makes of the instance once the program has stopped, however it
@@ -229,14 +233,17 @@ module WasmRunner =
         (read: Instance option -> 'a)
         (inspect: Instance -> 'b)
         (listener: IProbeListener option)
+        (profiled: (Result<byte array, string> -> unit) option)
         : Result<'a, RunError> * 'b option =
-        use engine = new Engine()
+        use engine = if profiled.IsSome then new Engine(GuestProfiler.Configure(new Config())) else new Engine()
         match compile engine program with
         | Error err -> Error err, None
         | Ok module' ->
             use module' = module'
             use linker = new Linker(engine)
             use store = new Store(engine)
+            let profiler = profiled |> Option.map (fun _ -> GuestProfiler(engine, module', profileInterval))
+            profiler |> Option.iter (fun profiler -> profiler.Watch store)
             linker.DefineWasi()
             HttpImport.define linker
             Probing.define linker (spanTable program) listener
@@ -259,6 +266,10 @@ module WasmRunner =
                 | :? WasmtimeException as ex when exitedCleanly ex -> Ok (read None)
                 | :? WasmtimeException as ex when ex.ExitCode.HasValue -> Error (Exited ex.ExitCode.Value)
                 | :? WasmtimeException as ex -> Error(trapped (spanTable program) ex)
+            // The profile is of the whole run, however it ended.
+            match profiled, profiler with
+            | Some give, Some profiler -> give (profiler.Finish())
+            | _ -> ()
             outcome, instantiated |> Option.map inspect
 
     /// `executeIn`, with the program's standard streams `io`, its command-line arguments `arguments`, its name first, and
@@ -272,15 +283,16 @@ module WasmRunner =
         (read: Instance option -> 'a)
         (inspect: Instance -> 'b)
         (listener: IProbeListener option)
+        (profiled: (Result<byte array, string> -> unit) option)
         : Result<'a, RunError> * 'b option =
         let mutable finish = ignore
         try
-            executeIn (fun store -> finish <- configureIo io arguments directories store) program start read inspect listener
+            executeIn (fun store -> finish <- configureIo io arguments directories store) program start read inspect listener profiled
         finally
             finish ()
 
     let private execute (io: ProgramIo) (arguments: string list) (directories: string list) (program: Program) (start: string option) (read: Instance option -> 'a) : Result<'a, RunError> =
-        executeInspecting io arguments directories program start read ignore None |> fst
+        executeInspecting io arguments directories program start read ignore None None |> fst
 
     /// The value of the exported global `name` of `instance`, an `i32` or an `i64`: 0 when it does not export it.
     let private globalValue (instance: Instance) (name: string) : int64 =
@@ -303,7 +315,12 @@ module WasmRunner =
 
     /// `runBinary`, with the program's debug probes answered by `listener` (see `IProbeListener`).
     let runListening (io: ProgramIo) (arguments: string list) (directories: string list) (wasm: byte array) (listener: IProbeListener) : Result<unit, RunError> =
-        executeInspecting io arguments directories (Binary wasm) None ignore ignore (Some listener) |> fst
+        executeInspecting io arguments directories (Binary wasm) None ignore ignore (Some listener) None |> fst
+
+    /// `runBinary`, with Wasmtime's guest profiler sampling the run every `profileInterval`, giving `profiled` the profile,
+    /// in the Firefox profiler's format, once it has stopped, or why it couldn't be written (see `GuestProfiler`).
+    let runProfiled (io: ProgramIo) (arguments: string list) (directories: string list) (wasm: byte array) (profiled: Result<byte array, string> -> unit) : Result<unit, RunError> =
+        executeInspecting io arguments directories (Binary wasm) None ignore ignore None (Some profiled) |> fst
 
     /// What `runCounting` gives, for any `Program`.
     let private counting (io: ProgramIo) (arguments: string list) (directories: string list) (start: string) (globals: string array) (program: Program) =
@@ -321,6 +338,7 @@ module WasmRunner =
                     match instance.GetMemory "memory" with
                     | null -> 0L
                     | memory -> memory.GetSize() * 65536L })
+            None
             None
 
     /// Runs the module described by `wat`, which exports its start function as `start` rather than running it when

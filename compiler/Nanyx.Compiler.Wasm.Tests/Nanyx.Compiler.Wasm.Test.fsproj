@@ -69,6 +69,7 @@
     <Compile Include="Features\Contexts\RunBlockContextTests.fs" />
     <Compile Include="Features\Dbg\RunDbgTests.fs" />
     <Compile Include="Features\Debugging\ProbeTests.fs" />
+    <Compile Include="Features\Profiling\RunProfileTests.fs" />
     <Compile Include="Features\Docs\ErrorReferenceTests.fs" />
     <Compile Include="Features\Docs\RunTourExampleTests.fs" />
     <Compile Include="Features\Docs\StandardLibraryReferenceTests.fs" />
