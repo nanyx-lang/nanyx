@@ -8,11 +8,6 @@ open Nanyx.Compiler.Tests.TestSupport
 
 let private manifest = $"""(package = (name = "demo", version = "0.1.0"), {consoleHostEntry})"""
 
-let private okOf result =
-    match result with
-    | Result.Ok value -> value
-    | Result.Error errors -> failwith (String.concat "\n" errors)
-
 /// The standard library's modules are checked once per process, so which of them a compile reports depends on the
 /// tests that ran before it: only the package's own modules are compared.
 let private ownEvents (root: string) (events: string list) =

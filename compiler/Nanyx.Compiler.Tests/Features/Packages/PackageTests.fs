@@ -19,16 +19,6 @@ def main = {
   println("hi")
 }"""
 
-let private errorsOf result =
-    match result with
-    | Result.Error errors -> errors
-    | Result.Ok _ -> failwith "Expected errors"
-
-let private okOf result =
-    match result with
-    | Result.Ok value -> value
-    | Result.Error errors -> failwith (String.concat "\n" (errors |> Seq.map string))
-
 [<Fact>]
 let ``A package is found from a directory under it, with its sources and entry`` () =
     use package =
