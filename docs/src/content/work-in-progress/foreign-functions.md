@@ -35,10 +35,10 @@ in any package, works the same way as the console host. `HostRuntime` has no mem
 Done: `@extern` ([#1424](https://github.com/nanyx-lang/nanyx/issues/1424)), host memory
 ([#1425](https://github.com/nanyx-lang/nanyx/issues/1425)), the console host on them with no intrinsics
 ([#1426](https://github.com/nanyx-lang/nanyx/issues/1426)), and the console host as a package
-([#1342](https://github.com/nanyx-lang/nanyx/issues/1342), [#1344](https://github.com/nanyx-lang/nanyx/issues/1344)).
+([#1342](https://github.com/nanyx-lang/nanyx/issues/1342), [#1344](https://github.com/nanyx-lang/nanyx/issues/1344)),
+and a foreign function named as a value ([#1781](https://github.com/nanyx-lang/nanyx/issues/1781)).
 
 1. **Later:** the browser host's imports, which a page's JavaScript provides ([Hosts](./hosts#a-browser-host)).
-2. **Later:** a foreign function named as a value, rather than called, which can't be compiled yet (`NYX0301`).
 
 # Open questions
 

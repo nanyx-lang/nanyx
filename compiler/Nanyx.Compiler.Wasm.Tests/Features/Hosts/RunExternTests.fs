@@ -36,6 +36,22 @@ let ``A host calls an extern of a WASI function, which the CLI's runtime provide
     Assert.Equal(Ok "0 0", runHost [ "test" ] (hostWatWith WasmOptions.Default argsSizes))
 
 [<Fact>]
+let ``An extern is passed as a function value, and called through it`` () =
+    let source =
+        host
+            """
+@extern("wasi_snapshot_preview1", "args_sizes_get")
+def argsSizesGet: [HostRuntime] (I32, I32) -> I32
+
+def call: [HostRuntime] ([HostRuntime] (I32, I32) -> I32) -> I32 = { f -> f(0, 4) }
+
+writeStdout("{call(argsSizesGet)}")
+"""
+    let wat = hostWatWith WasmOptions.Default source
+    Assert.Equal(1, countOccurrences "(import \"wasi_snapshot_preview1\" \"args_sizes_get\"" wat)
+    Assert.Equal(Ok "0", runHost [ "test" ] wat)
+
+[<Fact>]
 let ``An extern takes and returns each of the value types`` () =
     let source =
         host
