@@ -149,7 +149,7 @@ println("Hello, {fetchName("https://example.com/name")}")    -- the top level al
 ```
 
 - **No `async { }` block.** "May wait" is the `Async` context, which code has or doesn't. "Runs at the same time" is
-  [`concurrent`](#structured-concurrency). Those are the two things an `async` block mixes up in C# or JavaScript.
+  [`start!`](#structured-concurrency). Those are the two things an `async` block mixes up in C# or JavaScript.
 - **Code without `Async` can't get it.** A library that doesn't ask for it provably never waits, as one that doesn't
   ask for `Console` never prints.
 - **No `runBlocking`.** Inside a host that can suspend there's nothing to bridge, and in one that can't, a blocking
@@ -176,66 +176,74 @@ And one rule that keeps the feature small:
 
 ## Structured concurrency
 
-Waiting on one thing is a plain call. Doing several at once is a block whose tasks can't outlive it, as Trio's
-nurseries and Kotlin's coroutine scopes do:
+Waiting on one thing is a plain call. Doing several at once is `start!`, and the tasks it starts can't outlive the
+def that started them, as Swift's `async let` and Kotlin's coroutine scopes do:
 
 ```nanyx fragment
 def both: [Async, Http] () -> (Response, Response) = {
-  concurrent {
-    def a = start! http.get(urlA) \orCrash("a failed")
-    def b = start! http.get(urlB) \orCrash("b failed")
-    (await(a), await(b))
-  }
+  def a = start! http.get(urlA) \orCrash("a failed")
+  def b = start! http.get(urlB) \orCrash("b failed")
+  (await(a), await(b))
 }
+
+def pages = { urls -> urls \map { url -> start! http.get(url) } \map(await) }   -- every one, at once, in order
 ```
 
 Decided with the maintainer on 2026-11-17:
 
-- **`concurrent` is an ordinary function** whose lambda requires a `Scope` context, as `list.select`'s requires
-  `Yield`. It returns only when every task started in it has finished.
+- **`start!` is a member of `Async`,** so it's available wherever `Async` is, with no helper to open a scope.
 
   ```nanyx fragment
-  context Scope = (
+  context Async = (
     @customKeywordType(#delay)
     start: [Async] (() -> a) -> Task(a)
   )
 
-  def concurrent: [Async, c] ([Scope, Async, c] () -> a) -> a
   def await: [Async] Task(a) -> a
+  def race: [Async] list([Async] () -> a) -> a
   ```
 
 - **`start!` is a keyword of kind `#delay`** ([#1879](https://github.com/nanyx-lang/nanyx/issues/1879)): `start! e`
-  is `start({ e })`, the expression wrapped in a lambda and nothing else rewritten. So `concurrent` needs no workflow
-  builder, there's no continuation per `start!`, and the block isn't turned into closures. As with `try`, the keyword
-  takes the whole expression after it: in `start! http.get(urlA) \orCrash("a failed")` the `orCrash` runs in the
-  task, not on the `Task`.
+  is `start({ e })`, the expression wrapped in a lambda and nothing else rewritten: no workflow builder, no
+  continuation per `start!`. As with `try`, the keyword takes the whole expression after it: in
+  `start! http.get(urlA) \orCrash("a failed")` the `orCrash` runs in the task, not on the `Task`.
+- **Every def is a scope.** A def whose body uses `start!`, directly or in a lambda written in it, doesn't return
+  until every task it started has finished. At the top level of a script, the scope is the program. The scope is the
+  def, not the nearest block or lambda: in `pages` above, `start!` is in `map`'s lambda, and the tasks run at once
+  because the def, not the lambda, waits for them.
+- **The scope is still a scoped context, just not written.** The compiler runs such a def's body under a scoped
+  context, as a `memory` block runs under `Memory`, and `start!` requires it. So the
+  [escape](../advanced/memory#values-cannot-escape-memory-scope) rules keep a `Task`, or a lambda that starts one,
+  from leaving the def: a lambda stored and called after its def returned would start a task in a scope that's gone.
+- **A task nobody awaits is waited for,** as in Kotlin, not cancelled, as in Swift. `def f = { start! log(event); 42 }`
+  returns 42 after `log` finishes: a `start!` whose result is never used is probably fire-and-forget, and its effect
+  was wanted. A default-linter rule flags a task never awaited whose result isn't `()`, which is more likely a
+  forgotten `await`.
 - **`start!` gives back a `Task(a)`.** A task shares the instance and lives in a scope; a
   [process](#processes-mailboxes-and-supervision) is isolated and comes from `process.start`. The names keep the two
   levels apart.
-- **`Scope` is scoped,** as `Memory` is, so the [escape](../advanced/memory#values-cannot-escape-memory-scope) rules keep a `Task`, and `start`,
-  from leaving the block. "No task outlives its block" is checked by the type checker Nanyx already has.
 - **`await` is a function, not a keyword.** A keyword exists to capture the rest of a block; waiting on a task is an
   ordinary call that suspends, like `http.get`, so it's written like one.
 - **A task never stands in for its value.** `a` is a `Task(Response)` until it's awaited. Having it awaited when it's
   first read would be an implicit conversion, which Nanyx doesn't have.
+- **`race` is the one helper that's needed:** "first to finish, the rest cancelled" can't be written with `start!` and
+  `await`, which waits for one particular task. A timeout is a race against a sleep:
 
-Most code wants the common shapes, which are ordinary library functions on top:
+  ```nanyx fragment
+  def fastest = race([{ http.get(mirrorA) }, { http.get(mirrorB) }])
+  def limited = race([{ #some(http.get(url)) }, { clock.sleep(seconds = 5); #timedOut }])
+  ```
 
-```nanyx fragment
-def both = concurrent.both({ http.get(urlA) }, { http.get(urlB) })   -- a tuple of both results
+- **`concurrent` stays as an option,** an ordinary library function for a scope smaller than the def, such as
+  finishing each batch before starting the next:
 
-def pages: [Async, Http] list(string) -> list(#some(Response) | #error(HttpError)) = { urls ->
-  urls \concurrent.all { url -> http.get(url) }          -- every one, at once, in order
-}
+  ```nanyx fragment
+  for batches | batch ->
+    concurrent { batch \map { job -> start! run(job) } \map(await) }
+  ```
 
-def fastest = async.race([{ http.get(mirrorA) }, { http.get(mirrorB) }])   -- first to finish; the rest cancelled
-
-def withLimit = async.timeout(seconds = 5) { http.get(url) }               -- #some(r) | #timedOut
-```
-
-Why structured, not free `spawn`: a task can't leak, a block's type says everything it needs, and the scope is where
-a task's crash and cancellation go. A free-running task is a process (below), which is explicit about it.
-
+Why structured, not free `spawn`: a task can't leak, a def's type says everything it needs, and the scope is where a
+task's crash and cancellation go. A free-running task is a process (below), which is explicit about it.
 ## Cancellation without exceptions
 
 A cancelled task has to stop, and there's nothing to throw. **Cancellation arrives as a value at the next point where
@@ -256,7 +264,7 @@ Decided by the maintainer on 2026-11-17 ([#1890](https://github.com/nanyx-lang/n
 
 - **`#cancelled` is a case of every waiting call's error type,** such as `HttpError`, not a wrapper around it, so it's
   matched and passed on like any other failure.
-- **Cancelling a task cancels every task it started,** in each of its `concurrent` scopes.
+- **Cancelling a task cancels every task it started,** in its scope.
 - **So `await` never reports cancellation.** A `Task` can't leave its scope, so the task being awaited was always
   started by the awaiting one, is cancelled with it, and finishes promptly through its own waiting calls. `await`
   stays `[Async] Task(a) -> a` and gives back whatever that task returned.
@@ -269,7 +277,7 @@ The language doesn't change between these; the hosts and the backend do.
 
 - **First: a wait suspends the whole instance.** Wasmtime can run an instance on its own stack and suspend it inside
   a host call, so `http.get` blocks only that instance, and the host runs many instances at once. That's the HTTP
-  host's one instance per request, available now. `concurrent` can be built on it by running each task as a
+  host's one instance per request, available now. Tasks can be built on it by running each as a
   process (below), at the cost of copying.
 - **Then: tasks inside one instance, by stack switching.** WebAssembly's stack-switching proposal gives a module
   many stacks and lets it switch between them; it's built for effect handlers, which is what `Async` is. Wasmtime
@@ -326,7 +334,7 @@ for events(feedUrl) \seq.filter { e -> e.level == #error } \seq.take(10) | e -> 
 | `map`, `filter`, `take`, `fold` | `seq.map`, `seq.filter`, `seq.take`, `seq.fold`, with no async versions, since they're generic over contexts |
 | `collect` | a `for` loop, or `seq.fold` |
 | A `suspend` lambda in `map` | an `[Async]` lambda, which makes the result an `[Async] seq` |
-| Cancelling the collector's scope stops the flow | cancelling the `concurrent` scope that's pulling it |
+| Cancelling the collector's scope stops the flow | cancelling the task that's pulling it |
 
 Kotlin needs `Flow` beside `Sequence` because `Sequence`'s operators can't suspend. Nanyx's `seq` operators take
 `[c]` functions, so one type is both.
@@ -337,7 +345,7 @@ Kotlin needs `Flow` beside `Sequence` because `Sequence`'s operators can't suspe
   pipeline that runs in one task the two behave the same. The difference shows only when the producer and consumer
   run at the same time, which is the next point.
 - **Concurrent operators are library code over channels.** `buffer`, `conflate`, `flatMapMerge` and `flowOn` run the
-  producer in a coroutine of its own. In Nanyx each starts a task in a `concurrent` scope that pulls the source and
+  producer in a coroutine of its own. In Nanyx each starts a task that pulls the source and
   sends into a bounded channel, and gives back a `seq` that reads the channel: `events(url) \seq.buffer(16)`. They
   need tasks and channels, so they come after the plain operators.
 - **Hot streams are processes.** Kotlin's `SharedFlow` and `StateFlow` run whether or not anyone is collecting and
@@ -468,7 +476,7 @@ Async is filed in three stages, after the keyword kinds. The crash-boundary step
 |---|---|---|
 | The `#delay` and `#bindF` keyword kinds | [#1879](https://github.com/nanyx-lang/nanyx/issues/1879) | Ready |
 | Async 1: the `Async` context, provided by hosts; a wait suspends the instance | [#1889](https://github.com/nanyx-lang/nanyx/issues/1889) | Ready |
-| Async 2: `concurrent`, `start!` and `await`, tasks on stack switching | [#1890](https://github.com/nanyx-lang/nanyx/issues/1890) | Ready |
+| Async 2: `start!`, `await` and `race`, each def a scope, tasks on stack switching | [#1890](https://github.com/nanyx-lang/nanyx/issues/1890) | Ready |
 | Async 3: channels, and `seq.buffer`, `conflate` and `merge` | [#1891](https://github.com/nanyx-lang/nanyx/issues/1891) | Planning: full channels, cancelled streams |
 | Asyncify, for hosts with neither stack switching nor JSPI | | not filed |
 | Crash reports: `Crash` with message, span and stack, used by the console, HTTP and test hosts | | proposed |
