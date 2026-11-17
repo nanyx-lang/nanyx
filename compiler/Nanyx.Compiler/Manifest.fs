@@ -6,24 +6,29 @@ open System.Text.RegularExpressions
 open Parser.Program
 open Parser.Program.DataValues
 
+/// Where a package a manifest depends on is found.
+type DependencySource =
+    /// In a directory on disk, by its full path: `path = "../util"`.
+    | AtPath of directory: string
+    /// Shipped with the compiler, named at the compiler's version exactly: `version = "0.28.0"`.
+    | Shipped
+    /// From the package index, at the versions the requirement accepts: `version = "1.2"`.
+    | FromIndex of VersionRequirement
+    /// In a GitHub repository, at a commit: `github = "acme/web", rev = "..."`.
+    | OnGitHub of GitHubReference
+
 /// A package another depends on: in a directory on disk, `(package = "acme.util", path = "../util")` in
 /// `dependencies`; from the package index, at a version, `(package = "acme.web", version = "1.2")`; or in a GitHub
 /// repository, `(package = "acme.web", github = "acme/web", rev = "...")`.
 type Dependency =
     { /// The package's name, which its own manifest must give it too.
       Name: string
-      /// The full path of the directory its manifest is in; empty for one from the index or on GitHub, which is in the
-      /// directory it is unpacked or fetched to.
-      Directory: string
+      /// Where it is found.
+      Source: DependencySource
       /// Where its `package` is written.
       NameSpan: SourceSpan
       /// Where its `path`, its `version` or its `github` is written.
-      PathSpan: SourceSpan
-      /// The versions accepted of a package from the index; none for one on disk, on GitHub, or shipped with the
-      /// compiler.
-      Version: VersionRequirement option
-      /// The repository and commit of a package on GitHub; none for one on disk.
-      GitHub: GitHubReference option }
+      SourceSpan: SourceSpan }
 
 /// A file in a GitHub repository that a package depends on, which is a module of the package, named by its manifest:
 /// `(module = "retry", github = "acme/snippets/retry.nyx", rev = "...")` in `dependencies`.
@@ -108,10 +113,26 @@ module Manifest =
           "hint", Some Severity.Hint
           "off", None ]
 
+    /// `text` with its line breaks `\n`, as a manifest or a script is read.
+    let internal normalized (text: string) = text.Replace("\r\n", "\n").Replace("\r", "\n")
+
+    /// The manifests in `directory`, in order: a package's directory has one.
+    let internal manifestsIn (directory: string) = Directory.GetFiles(directory, "*" + extension) |> Array.sort
+
+    /// The manifest of the package in `directory`, the one `.nyxp` file there, by its full path, or what is wrong.
+    let internal manifestIn (directory: string) : Result<string, string> =
+        if not (Directory.Exists directory) then
+            Result.Error $"'{directory}' is not a directory"
+        else
+            match manifestsIn directory with
+            | [| manifest |] -> Result.Ok(Path.GetFullPath manifest)
+            | [||] -> Result.Error $"'{directory}' has no {extension} manifest"
+            | several -> Result.Error $"""'{directory}' has more than one {extension} manifest: {several |> Array.map (Path.GetFileName >> sprintf "'%s'") |> List.ofArray |> Diagnostics.listed}"""
+
     /// The manifest in `directory` or the nearest directory above it that has one, or an error if that directory
     /// has more than one.
     let rec tryFind (directory: string) : Result<string option, string> =
-        match Directory.GetFiles(directory, "*" + extension) |> Array.sort with
+        match manifestsIn directory with
         | [| manifest |] -> Result.Ok(Some manifest)
         | [||] ->
             match Path.GetDirectoryName directory with
@@ -392,7 +413,7 @@ module Manifest =
                 | Some packageField, None, None ->
                     match problems.Text "a dependency" fields "package" namePattern nameRule, commit with
                     | Some name, Some _ ->
-                        Some(Choice1Of2 { Name = name; Directory = ""; NameSpan = packageField.Value.Location; PathSpan = github.Value.Location; Version = None; GitHub = Some reference })
+                        Some(Choice1Of2 { Name = name; Source = OnGitHub reference; NameSpan = packageField.Value.Location; SourceSpan = github.Value.Location })
                     | _ -> None
                 | None, Some _, Some _ ->
                     match problems.Text "a dependency" fields "module" modulePattern "a module name, `retry` or `acme.retry`", commit with
@@ -433,11 +454,9 @@ module Manifest =
                 | Some _ ->
                     Some
                         { Name = shipped.Value
-                          Directory = ShippedPackages.directoryOf shipped.Value
+                          Source = Shipped
                           NameSpan = (DataValue.field "package" fields).Value.Value.Location
-                          PathSpan = version.Value.Location
-                          Version = None
-                          GitHub = None }
+                          SourceSpan = version.Value.Location }
                 | None -> None
             | None, Some version ->
                 match version.Value.Data, name with
@@ -446,11 +465,9 @@ module Manifest =
                     | Some requirement ->
                         Some
                             { Name = name
-                              Directory = ""
+                              Source = FromIndex requirement
                               NameSpan = (DataValue.field "package" fields).Value.Value.Location
-                              PathSpan = version.Value.Location
-                              Version = Some requirement
-                              GitHub = None }
+                              SourceSpan = version.Value.Location }
                     | None ->
                         problems.Add DiagnosticCodes.InvalidManifestValue version.Value.Location $"""a dependency's version "{written}" must be {VersionRequirement.rule}"""
                         None
@@ -466,11 +483,9 @@ module Manifest =
                 | Some name, DataString directory ->
                     Some
                         { Name = name
-                          Directory = Path.GetFullPath(Path.Combine(root, directory))
+                          Source = AtPath(Path.GetFullPath(Path.Combine(root, directory)))
                           NameSpan = (DataValue.field "package" fields).Value.Value.Location
-                          PathSpan = path.Value.Location
-                          Version = None
-                          GitHub = None }
+                          SourceSpan = path.Value.Location }
                 | _, DataString _ -> None
                 | _ ->
                     problems.Add
@@ -627,8 +642,31 @@ module Manifest =
                 span
                 $"{what} is on GitHub, so '{manifest.Name}' can't be packed or published, since a published package must keep building for as long as anything depends on it, and what is in someone else's repository can disappear"
         (manifest.Dependencies
-         |> List.choose (fun dependency -> dependency.GitHub |> Option.map (fun reference -> error dependency.PathSpan $"The dependency '{dependency.Name}', '{reference}',")))
+         |> List.choose (fun dependency ->
+             match dependency.Source with
+             | OnGitHub reference -> Some(error dependency.SourceSpan $"The dependency '{dependency.Name}', '{reference}',")
+             | AtPath _
+             | Shipped
+             | FromIndex _ -> None))
         @ (manifest.Files |> List.map (fun file -> error file.GitHubSpan $"The module '{file.Module}', '{file.Reference}',"))
+
+    /// `text` as a manifest writes a string: in quotes, with `\` and `"` escaped.
+    let internal quotedString (text: string) = "\"" + text.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""
+
+    /// The entry of `dependencies`, or the `host`, that names the package `name` found at `source`, as `nanyx migrate`,
+    /// `nanyx install` and `nanyx new` write it: `(package = "acme.util", path = "../util")`, its path relative to
+    /// `root`, the manifest's directory; one the compiler ships at the compiler's version, `toolVersion`; and a file on
+    /// GitHub, which is a module of the package, `(module = "retry", github = "acme/snippets/retry.nyx", rev = "...")`.
+    /// A reference with no commit yet is written with no `rev`, which the build's fix pins.
+    let entryText (toolVersion: string) (root: string) (name: string) (source: DependencySource) : string =
+        match source with
+        | AtPath directory -> $"(package = {quotedString name}, path = {quotedString (PackageModules.relativePath root directory)})"
+        | Shipped -> $"(package = {quotedString name}, version = {quotedString toolVersion})"
+        | FromIndex requirement -> $"(package = {quotedString name}, version = {quotedString (string requirement)})"
+        | OnGitHub reference ->
+            let key = if reference.File.IsSome then "module" else "package"
+            let rev = if reference.Commit = "" then "" else $", rev = {quotedString reference.Commit}"
+            $"({key} = {quotedString name}, github = {quotedString (string reference)}{rev})"
 
     /// `diagnostic`, one of a manifest's, as one line: `path:line:column: error NYX0021: message`.
     let describe (diagnostic: Diagnostic) =

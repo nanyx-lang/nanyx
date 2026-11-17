@@ -7,10 +7,11 @@ module NewPackage =
     /// The manifest of a new package called `name`: its sources are under `src`, the official linter is on with every
     /// rule at its default, and the console host runs it. Both are the release `toolVersion` of the compiler making it.
     let manifest (name: string) (toolVersion: string) =
+        let shipped package = Manifest.entryText toolVersion "" package Shipped
         $"""(
-  package = (name = "{name}", version = "0.1.0", sources = ["src/**/*.nyx"])
-  linters = [(package = "nanyx.lint", version = "{toolVersion}")]
-  host = (package = "nanyx.console", version = "{toolVersion}")
+  package = (name = {Manifest.quotedString name}, version = "0.1.0", sources = ["src/**/*.nyx"])
+  linters = [{shipped "nanyx.lint"}]
+  host = {shipped Hosts.consolePackage}
 )
 """
             .ReplaceLineEndings "\n"
@@ -39,7 +40,7 @@ def main = {
         elif File.Exists full then
             Result.Error $"'{full}' is a file, not a directory"
         elif Directory.Exists full && not (Seq.isEmpty (Directory.EnumerateFileSystemEntries full)) then
-            match Directory.GetFiles(full, "*" + Manifest.extension) |> Array.sort with
+            match Manifest.manifestsIn full with
             | [||] -> Result.Error $"'{full}' is not empty, and a new package is made in a new or empty directory: give another directory"
             | manifests -> Result.Error $"'{full}' is already a package, with the manifest '{Path.GetFileName manifests[0]}'"
         else

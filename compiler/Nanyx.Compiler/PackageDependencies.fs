@@ -22,11 +22,9 @@ type Installed = { Manifest: string; ToDownload: (string * string) option }
 module PackageDependencies =
     let private isShipped (name: string) = Directory.Exists(ShippedPackages.directoryOf name)
 
-    let private normalize (text: string) = text.Replace("\r\n", "\n").Replace("\r", "\n")
-
     /// The manifest at `manifestPath`, read as data, with its text, line breaks `\n`; or why it can't be.
     let private readData (manifestPath: string) : Result<string * DataField list, string> =
-        let text = normalize (File.ReadAllText manifestPath)
+        let text = Manifest.normalized (File.ReadAllText manifestPath)
         match DataValue.read manifestPath text with
         | Result.Ok { Data = DataRecord fields } -> Result.Ok(text, fields)
         | _ -> Result.Error $"'{manifestPath}' is not a manifest: run `nanyx check` on it to see why"
@@ -95,20 +93,16 @@ module PackageDependencies =
                                         elif PackageModules.samePath dependency.Manifest.Root (PackageStore.directoryOf store name (SemanticVersion.tryParse version).Value) then
                                             if wasCached |> List.exists (fun locked -> locked.Name = name) then "in the cache" else "downloaded"
                                         else
-                                            Path.GetRelativePath(root, dependency.Manifest.Root).Replace('\\', '/')
+                                            PackageModules.relativePath root dependency.Manifest.Root
                                     $"{name} {version} ({where})"))))
 
     /// The name of the package whose manifest is in `directory`, or why there is none.
     let private packageIn (directory: string) : Result<string, string> =
-        if not (Directory.Exists directory) then
-            Result.Error $"'{directory}' is not a directory"
-        else
-            match Directory.GetFiles(directory, "*" + Manifest.extension) |> Array.sort with
-            | [||] -> Result.Error $"'{directory}' holds no package, since it has no {Manifest.extension} manifest"
-            | manifests ->
-                match Manifest.read manifests[0] with
-                | Result.Ok manifest -> Result.Ok manifest.Name
-                | Result.Error errors -> Result.Error(errors |> List.map Manifest.describe |> String.concat "\n")
+        Manifest.manifestIn directory
+        |> Result.bind (fun path ->
+            match Manifest.read path with
+            | Result.Ok manifest -> Result.Ok manifest.Name
+            | Result.Error errors -> Result.Error(errors |> List.map Manifest.describe |> String.concat "\n"))
 
     /// `text` with `entry` added to the end of the manifest's `dependencies` (`fields` are its top level, read from
     /// `text`), laid out as the list is: on a line of its own when the last entry is, and after a comma when not. A
@@ -159,12 +153,17 @@ module PackageDependencies =
                                 if found <> name then
                                     Result.Error $"The package in '{directory}' is named '{found}', not '{name}': make the names match"
                                 else
-                                    let path = Path.GetRelativePath(Path.GetDirectoryName manifestPath, directory).Replace('\\', '/')
-                                    Result.Ok($"(package = \"{name}\", path = \"{path}\")", None))
-                        | None, Some version -> Result.Ok($"(package = \"{name}\", version = \"{version}\")", (if isShipped name then None else Some (name, version)))
-                        | None, None when isShipped name -> Result.Ok($"(package = \"{name}\", version = \"{toolVersion}\")", None)
+                                    Result.Ok(DependencySource.AtPath directory, None))
+                        | None, Some version ->
+                            match VersionRequirement.tryParse version with
+                            | Some requirement -> Result.Ok(FromIndex requirement, (if isShipped name then None else Some (name, version)))
+                            | None -> Result.Error $"'{version}' is not a version, which must be {VersionRequirement.rule}"
+                        | None, None when isShipped name -> Result.Ok(DependencySource.Shipped, None)
                         | None, None -> Result.Error $"Neither `--path` nor `--version` was given: give the directory '{name}' is in with `--path`, or its version with `--version`"
-                    added |> Result.map (fun (entry, download) -> { Manifest = withEntry text fields entry; ToDownload = download }))
+                    added
+                    |> Result.map (fun (source, download) ->
+                        let entry = Manifest.entryText toolVersion (Path.GetDirectoryName manifestPath) name source
+                        { Manifest = withEntry text fields entry; ToDownload = download }))
 
     /// What `nanyx install` says of the package `name` it added at `version`, which has to be downloaded.
     let notDownloaded (name: string, version: string) = cantDownload name version

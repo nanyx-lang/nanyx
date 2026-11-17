@@ -55,8 +55,8 @@ let forEach
 /// None when `ty` isn't a sequence: a record of one function of no parameters that gives `#next(x, rest)` or `#done`.
 let private pulledBy (ty: IrType) =
     match IrType.unfold ty with
-    | IrRecord [ _, (IrFunction(IrUnit, IrTags tags, _) as next) ] when tags |> List.exists (fun (name, payload) -> name = "done" && payload.IsNone) ->
-        match tags |> List.tryFind (fst >> (=) "next") |> Option.bind snd with
+    | IrRecord [ _, (IrFunction(IrUnit, IrTags tags, _) as next) ] when tags |> List.exists (fun (name, payload) -> name = NyxCompiler.Seqs.doneTag && payload.IsNone) ->
+        match tags |> List.tryFind (fst >> (=) NyxCompiler.Seqs.nextTag) |> Option.bind snd with
         | Some (IrRecord [ _, element; _, rest ]) -> Some (next, element, rest)
         | _ -> None
     | _ -> None
@@ -126,7 +126,7 @@ let forEachPulling
                         let value = element elementTy
                         let following = local "__for_following" restTy
                         let taken =
-                            { Patterns = [ PTag("next", Some (PFields [ 0, PBind value; 1, PBind following ])) ]
+                            { Patterns = [ PTag(NyxCompiler.Seqs.nextTag, Some (PFields [ 0, PBind value; 1, PBind following ])) ]
                               Body = Expr.doThen (next value) (Expr.make (Assign(rest, AVar following)) IrUnit) }
                         let matched = Expr.make (Match([ pulled ], [ taken; { Patterns = [ PWildcard ]; Body = stop } ])) IrUnit
                         Expr.letIn pull (Expr.make (Field(AVar rest, 0)) nextTy) (members wanted (fun memberAtoms ->

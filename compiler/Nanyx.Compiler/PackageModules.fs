@@ -144,9 +144,11 @@ module PackageModules =
 
     let private quoted (names: string seq) = names |> Seq.map (fun name -> $"'{name}'") |> String.concat ", "
 
+    /// `path` relative to `root`, with forward slashes, as a manifest and messages write it.
+    let relativePath (root: string) (path: string) = Path.GetRelativePath(root, path).Replace('\\', '/')
+
     /// A file of the package as messages name it: relative to the manifest, with forward slashes.
-    let display (modules: PackageModules) (filePath: string) =
-        Path.GetRelativePath(modules.Root, filePath).Replace('\\', '/')
+    let display (modules: PackageModules) (filePath: string) = relativePath modules.Root filePath
 
     /// The file of the public module `moduleName` of `dependency`, a direct dependency of the package whose file has the
     /// import `item` of `name`.
