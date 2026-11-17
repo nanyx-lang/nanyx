@@ -8,9 +8,6 @@ open Parser.Program
 /// A nominal type's name, written at `Span`: protected, or private when `IsPrivate`.
 type NominalName = { Span: SourceSpan; IsPrivate: bool }
 
-/// The part of a name after its last dot: `Email` in `m.Email`.
-let private ownName (name: string) = name.Substring(name.LastIndexOf '.' + 1)
-
 /// The last `length` characters of `span`, a name on one line: the type's own name in `m.Email`.
 let private lastChars (length: int) (span: SourceSpan) =
     let start = max span.Start (span.End - length)
@@ -30,7 +27,7 @@ let inModule (file: string) (result: CompileResult) : NominalName list =
             |> Seq.choose (fun info -> info.Symbol |> Option.map (fun id -> id, info))
             |> Map.ofSeq
         let named (info: TypeDefInfo) (span: SourceSpan) =
-            { Span = lastChars (Names.written (ownName info.Name)).Length span; IsPrivate = info.IsPrivate }
+            { Span = lastChars (Names.written (Names.ownPart info.Name)).Length span; IsPrivate = info.IsPrivate }
         let referenced (id: NodeId) = typed.References |> Map.tryFind id
         // `T.member`, an attached definition of the nominal type `T`, written at `span`: the span of `T`, if it is written.
         let attachedType (symbol: Symbol) (span: SourceSpan) =

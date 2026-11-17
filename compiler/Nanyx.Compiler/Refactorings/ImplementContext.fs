@@ -21,7 +21,7 @@ let private typeDefinitions (syntax: Module) =
 
 /// Where the name of the type `name`, defined by `item`, is written in `source`.
 let private nameSpanOf (source: string) (item: TopLevelItem) (name: string) =
-    let text = source.Substring(item.Span.Start, item.Span.End - item.Span.Start)
+    let text = SourceSpan.textIn source item.Span
     let found = System.Text.RegularExpressions.Regex.Match(text, $@"\btype\s+({System.Text.RegularExpressions.Regex.Escape name})\b")
     if found.Success then Some (item.Span.Start + found.Groups[1].Index, item.Span.Start + found.Groups[1].Index + name.Length) else None
 

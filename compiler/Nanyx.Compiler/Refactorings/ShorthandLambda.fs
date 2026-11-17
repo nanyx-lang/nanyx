@@ -19,7 +19,7 @@ let private mentions (name: string) (expr: Expression) =
 /// What converting `lambda`, written in `source`, gives: its text in the other form, and the names of the parameters it
 /// makes up, if any; or why it can't be converted, or nothing where it is not a lambda the other form can say.
 let private converted (source: string) (taken: Set<string>) (lambda: Expression) : Result<string * string list, string> option =
-    let textOf (expr: Expression) = source.Substring(expr.Span.Start, expr.Span.End - expr.Span.Start)
+    let textOf (expr: Expression) = SourceSpan.textIn source expr.Span
     let refusal (parameters: (string * TypeExpr option) list) =
         if parameters |> List.exists (snd >> Option.isSome) then Some (Error "A parameter writes its type, which a shorthand lambda can't write")
         else None

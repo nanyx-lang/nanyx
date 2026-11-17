@@ -12,9 +12,6 @@ let private toIf = "Convert to if"
 
 let private toMatch = "Convert to match"
 
-/// The text of `span` in `source`.
-let private textOf (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
-
 /// Whether `expr` is written in `source` starting with `keyword`, as a word.
 let private startsWith (source: string) (keyword: string) (expr: Expression) =
     let at = expr.Span.Start
@@ -45,7 +42,7 @@ let private testOf (source: string) (pattern: Pattern) =
     | LiteralPattern(BoolLit true) -> Ok IsTrue
     | LiteralPattern(BoolLit false) -> Ok IsFalse
     | LiteralPattern _
-    | TagPattern(_, None) -> Ok (Equals (textOf source pattern.Span))
+    | TagPattern(_, None) -> Ok (Equals (SourceSpan.textIn source pattern.Span))
     | WildcardPattern
     | ElsePattern -> Ok Otherwise
     | GuardPattern _ -> Error "An arm has a guard, which an `if` has no place for"
@@ -54,12 +51,12 @@ let private testOf (source: string) (pattern: Pattern) =
 
 /// `body` written as a branch: on the same line, or indented by `indent` on the lines after.
 let private branch (source: string) (indent: string) (body: Expression) =
-    let text = textOf source body.Span
+    let text = SourceSpan.textIn source body.Span
     if text.Contains '\n' then "\n" + reindented source body.Span.Start indent text else " " + text
 
 /// The text of `if` with `conditions`, each with the branch it guards, then `otherwise`, at a line indented by `indent`.
 let private ifText (source: string) (indent: string) (step: string) (conditions: (string * Expression) list) (otherwise: Expression) =
-    let multiLine = (otherwise :: (conditions |> List.map snd)) |> List.exists (fun body -> (textOf source body.Span).Contains '\n')
+    let multiLine = (otherwise :: (conditions |> List.map snd)) |> List.exists (fun body -> (SourceSpan.textIn source body.Span).Contains '\n')
     let separator = if multiLine then "\n" + indent else " "
     let heads = conditions |> List.map (fun (condition, body) -> $"if {condition} then{branch source (indent + step) body}")
     $"""{String.concat $"{separator}else " heads}{separator}else{branch source (indent + step) otherwise}"""
@@ -82,7 +79,7 @@ let private matchToIf (source: string) (indent: string) (step: string) (expr: Ex
     | Some reason -> Error reason
     | None ->
         let tested = tested |> List.choose (function Ok arm -> Some arm | Error _ -> None)
-        let valueText = bracketed value (textOf source value.Span)
+        let valueText = bracketed value (SourceSpan.textIn source value.Span)
         match tested with
         | [ IsTrue, ifTrue; (IsFalse | Otherwise), ifFalse ]
         | [ IsFalse, ifFalse; (IsTrue | Otherwise), ifTrue ] -> Ok (ifText source indent step [ valueText, ifTrue ] ifFalse)
@@ -118,14 +115,14 @@ and private isMultiBranch (source: string) (expr: Expression) =
 /// The value and the literal or tag compared in `condition`, a `value == literal`.
 let private comparison (source: string) (condition: Expression) =
     match condition.Kind with
-    | BinaryOp("==", _, value, ({ Kind = LiteralExpr _ | TagExpr(_, None) } as compared)) -> Some (value, textOf source compared.Span)
+    | BinaryOp("==", _, value, ({ Kind = LiteralExpr _ | TagExpr(_, None) } as compared)) -> Some (value, SourceSpan.textIn source compared.Span)
     | _ -> None
 
 /// Converting the `if` `expr` to a match, or why it can't be.
 let private ifToMatch (source: string) (indent: string) (step: string) (expr: Expression) =
     let conditions, otherwise = chainOf source expr
     let body (branch: Expression) =
-        let text = textOf source branch.Span
+        let text = SourceSpan.textIn source branch.Span
         if text.Contains '\n' then reindented source branch.Span.Start (indent + step + step) text else text
     // A left-out `else` is written `()`.
     let otherwiseText = if otherwise.Kind = UnitExpr && otherwise.Span = (List.last conditions |> snd).Span then "()" else body otherwise
@@ -133,19 +130,19 @@ let private ifToMatch (source: string) (indent: string) (step: string) (expr: Ex
     match compared with
     | Some (value, _) :: _ when compared |> List.forall Option.isSome ->
         let values = compared |> List.choose id
-        if values |> List.exists (fun (other, _) -> textOf source other.Span <> textOf source value.Span) then
+        if values |> List.exists (fun (other, _) -> SourceSpan.textIn source other.Span <> SourceSpan.textIn source value.Span) then
             Error "The conditions don't compare the same value"
         elif values.Length > 1 && not (isPlain value) then
             Error "The compared value would be evaluated once, not once for each condition"
         else
             let arms = List.map2 (fun (_, pattern) (_, branch) -> pattern, body branch) values conditions
-            Ok (matchText source indent step (bracketed value (textOf source value.Span)) (arms @ [ "_", otherwiseText ]))
+            Ok (matchText source indent step (bracketed value (SourceSpan.textIn source value.Span)) (arms @ [ "_", otherwiseText ]))
     | _ ->
         match expr.Kind with
         | IfExpr(condition, ifTrue, ifFalse) ->
             // An `else if` stays an `if`, in the `false` arm.
             let ifFalse = if conditions.Length = 1 then otherwiseText else body ifFalse
-            Ok (matchText source indent step (bracketed condition (textOf source condition.Span)) [ "true", body ifTrue; "false", ifFalse ])
+            Ok (matchText source indent step (bracketed condition (SourceSpan.textIn source condition.Span)) [ "true", body ifTrue; "false", ifFalse ])
         | _ -> Error "It is not an `if`"
 
 /// The refactoring at `offset` in `source`, the text of the root module of `result` compiled as `file`, laid out with

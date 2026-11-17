@@ -46,9 +46,6 @@ type TokenModifier =
 /// A name, written at `Span`, with what it is.
 type Token = { Span: SourceSpan; Type: TokenType; Modifiers: TokenModifier list }
 
-/// The part of a name after its last dot: `show` in `Point.show`.
-let private ownName (name: string) = name.Substring(name.LastIndexOf '.' + 1)
-
 /// The last `length` characters of `span`, a name on one line: the name's own part in `m.origin`.
 let private lastChars (length: int) (span: SourceSpan) =
     let start = max span.Start (span.End - length)
@@ -163,7 +160,7 @@ let inModule (file: string) (source: string) (result: CompileResult) : Token lis
                 Some { Span = part; Type = TokenType.Type; Modifiers = nominal |> Map.tryFind part.Start |> Option.defaultValue [] }
             else None
         let named (symbol: Symbol) (span: SourceSpan) (declaration: bool) =
-            let own = lastChars (Names.written (ownName symbol.Name)).Length span
+            let own = lastChars (Names.written (Names.ownPart symbol.Name)).Length span
             Option.toList (symbolToken symbol own declaration) @ Option.toList (attachedType symbol span)
         let declarations =
             typed.Symbols

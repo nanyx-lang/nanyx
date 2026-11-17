@@ -119,7 +119,7 @@ module internal RefactoringText =
                | IdentifierExpr name -> [ name ]
                // A pipe or call finds its function by name among the locals first.
                | FunctionCall(name, _, _)
-               | Pipe(_, name, _, _) -> [ name; name.Substring(name.LastIndexOf '.' + 1) ]
+               | Pipe(_, name, _, _) -> [ name; Names.ownPart name ]
                | _ -> [])
            |> Set.ofList)
 
