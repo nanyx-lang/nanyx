@@ -181,6 +181,7 @@
     <Compile Include="Features\Refactorings\SelectionRangeTests.fs" />
     <Compile Include="Features\Refactorings\ShorthandLambdaTests.fs" />
     <Compile Include="Features\Refactorings\MatchAndIfTests.fs" />
+    <Compile Include="Features\Refactorings\InterpolationTests.fs" />
     <Compile Include="Features\Refactorings\WriteHoleTypesTests.fs" />
     <Compile Include="Features\Refactorings\WriteInferredTypeTests.fs" />
     <Compile Include="Features\Tooling\CompletionTests.fs" />

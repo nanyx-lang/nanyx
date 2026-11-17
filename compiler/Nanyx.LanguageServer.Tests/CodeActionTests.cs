@@ -269,6 +269,20 @@ public sealed class CodeActionTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task A_concatenation_offers_to_convert_to_an_interpolated_string()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-interpolate");
+        const string text = "def greet = { (name: string) -> \"Hello, \" ++ name }\n";
+
+        Open(uri, text);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var convert = Assert.Single(await CodeActionsIn(uri, new Range(0, 43, 0, 43)), action => action.Title == "Convert to interpolated string");
+        Assert.Equal(CodeActionKind.RefactorRewrite, convert.Kind);
+        Assert.Equal("def greet = { (name: string) -> \"Hello, {name}\" }\n", Applied(text, Assert.Single(convert.Edit!.Changes![uri])));
+    }
+
+    [Fact]
     public async Task A_selected_expression_offers_to_introduce_a_function()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-introduce-function");
