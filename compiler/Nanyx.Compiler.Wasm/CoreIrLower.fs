@@ -140,11 +140,48 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | Some scheme -> bindScheme Map.empty scheme (substitute subst instanceTy)
         | None -> Map.empty
 
+    /// The type variables the types of the definition `name`'s nodes name, by name.
+    let namedVariables =
+        let cache = System.Collections.Generic.Dictionary<string, Map<string, int list>>()
+        fun (name: string) ->
+            match cache.TryGetValue name with
+            | true, found -> found
+            | _ ->
+                let rec named (ty: Ty) =
+                    match ty with
+                    | TyVar { Id = id; Name = Some varName } -> [ varName, id ]
+                    | _ -> Ty.children ty |> List.collect named
+                let found =
+                    SyntaxTree.expressionsWithin definitions.[name]
+                    |> List.choose (fun expr -> input.ExprTypes |> Map.tryFind expr.Id)
+                    |> List.collect named
+                    |> List.distinct
+                    |> List.groupBy fst
+                    |> List.map (fun (varName, ids) -> varName, List.map snd ids)
+                    |> Map.ofList
+                cache[name] <- found
+                found
+
+    /// `bindings`, the type variables of `name` where `call` calls it, with each associated type of a context it requires
+    /// as the call has it (see `LowerInput.AssociatedArguments`): its type need not write them, as `elem` in
+    /// `[Iter(c)] c -> int`, though its body has values of them.
+    let withAssociatedArguments (call: NodeId option) (name: string) (bindings: Map<int, Ty>) =
+        match call |> Option.bind (fun call -> input.AssociatedArguments |> Map.tryFind call) with
+        | Some named when definitions.ContainsKey name ->
+            let variables = namedVariables name
+            named
+            |> Map.fold (fun acc varName ty ->
+                variables
+                |> Map.tryFind varName
+                |> Option.defaultValue []
+                |> List.fold (fun acc id -> if acc |> Map.containsKey id then acc else acc |> Map.add id (substitute subst ty)) acc) bindings
+        | _ -> bindings
+
     /// The name to call `name` by at the instance type `instanceTy`, given the members known where it is called: its
     /// own, or a specialisation's. A definition with context variables is specialised on the members of the contexts
     /// they stand for, unless they stand for none. A definition that declares contexts is lowered in its own form only
     /// where a call asks for it (see `CoreIrLowerModule.lowerModule`).
-    let calleeKnowing (name: string) (instanceTy: Ty) (knownMembers: (ContextMemberKey * KnownMember) list) =
+    let calleeKnowing (call: NodeId option) (name: string) (instanceTy: Ty) (knownMembers: (ContextMemberKey * KnownMember) list) =
         let scheme =
             match input.DefinitionTypes |> Map.tryFind name with
             | Some scheme -> scheme
@@ -156,7 +193,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             else sanitizeIdentifier name
         if typeVars.IsEmpty && contextVars.IsEmpty && knownMembers.IsEmpty then own ()
         else
-            let bindings = bindingsAt name instanceTy
+            let bindings = bindingsAt name instanceTy |> withAssociatedArguments call name
             let typeArguments =
                 typeVars
                 |> List.map (fun id ->
@@ -173,7 +210,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             if typeArguments.IsEmpty && knownMembers.IsEmpty then own ()
             else request { Definition = name; TypeArguments = typeArguments; Known = knownMembers } bindings AsDefined
 
-    let callee (name: string) (instanceTy: Ty) = calleeKnowing name instanceTy []
+    let callee (name: string) (instanceTy: Ty) = calleeKnowing None name instanceTy []
 
     /// A scope with nothing in it, as at the top of the start function.
     let emptyScope =
@@ -609,7 +646,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | Some output -> TyFunc(input', output, [])
                 | None -> cannot $"a call to '{name}' whose type is not known"
         let knownMembers = CoreIrLowerMembers.knownMembers this.MemberTools scope name expr.Id instanceTy
-        let target = calleeKnowing name instanceTy knownMembers
+        let target = calleeKnowing (Some expr.Id) name instanceTy knownMembers
         let ty = tyOf expr
         let parameters = parameterNames name
         // A function value given for a parameter whose type requires other contexts is adapted to it (see `CoreIrLowerMembers.coerce`).

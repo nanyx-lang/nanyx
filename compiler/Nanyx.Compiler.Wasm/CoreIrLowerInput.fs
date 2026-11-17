@@ -58,6 +58,9 @@ type LowerInput =
       /// `CalleeTypes`). Type variables in them are the generalised variables of the definition they are in.
       ExprTypes: Map<NodeId, Ty>
       CalleeTypes: Map<NodeId, Ty>
+      /// What the associated types of the contexts each call's callee requires are at the call, by the names the callee's
+      /// signature gives them (`TypedModule.AssociatedArguments`): its type need not write them, so they are bound apart.
+      AssociatedArguments: Map<NodeId, Map<string, Ty>>
       /// Each definition's type, generalised (`TypedModule.Types`).
       DefinitionTypes: Map<string, Ty>
       /// The context members each definition that requires contexts takes, in order, and the other names it can call

@@ -1989,6 +1989,87 @@ To fix it, write the arguments in the first brackets after the tag, `#DivisibleB
 if the pattern returns one, in a second pair: `#SplitOn(",")(first, second)`. A pattern that takes no arguments has
 only the payload's brackets.
 
+# NYX0265: Associated type declared wrongly
+
+A context's [associated type](../advanced/contexts#associated-types) is declared with a default, or with a name that
+can't be one: a built-in type's, such as `list`, or one that isn't lowercase and longer than one letter. Or `type` is
+written as the type of something other than a context's member.
+
+```nanyx
+context Container(c) = (elem: type = int, get: c -> elem)  -- error NYX0265: The associated type 'elem' can't have a default
+```
+
+To fix it, leave the default out: each instance fixes the associated type, by its members' types or with an attached
+alias, `type Bag.elem = int`. Name it as a type variable is named, but longer: `elem`, `item`, `failure`.
+
+# NYX0266: Associated type named by more than one context
+
+A signature names an associated type bare, as `elem`, where two contexts in its list have one of that name.
+
+```nanyx
+context Iter(c) = (elem: type, next: c -> #some(elem, c) | #done)
+
+def pick: [Iter(c), Iter(d)] c, d, elem -> elem = { xs, ys, fallback -> fallback }  -- error NYX0266: 'elem' is an associated type of 'Iter(c)' and 'Iter(d)'
+```
+
+To fix it, write which one, as the message shows: `Iter(c).elem` or `Iter(d).elem`.
+
+# NYX0267: Associated type the context does not have
+
+A constraint fixes an associated type the context doesn't have, as `Iter(c, item = int)`, or one of its members that
+isn't a type, as `Iter(c, next = int)`; or a signature names the associated type of a context it doesn't require, as
+`Iter(d).elem` in a signature whose list has only `Iter(c)`.
+
+```nanyx
+context Iter(c) = (elem: type, next: c -> #some(elem, c) | #done)
+
+def total: [Iter(c, item = int)] c -> int = { xs -> 0 }  -- error NYX0267: 'Iter' has no associated type 'item'
+```
+
+To fix it, name an associated type the context declares, or add the context whose associated type the signature
+names to its list.
+
+# NYX0268: Instance that leaves an associated type unfixed
+
+An instance of a context with an [associated type](../advanced/contexts#associated-types) doesn't say what it is: no
+member's type mentions it, and nothing else fixes it.
+
+```nanyx
+context Sized(c) = (elem: type, size: c -> int)
+
+type Bag = protected (items: list(int))
+
+def Bag.size: Bag -> int = { bag -> bag.items.length }
+
+def total: [Sized(c)] c -> int = { xs -> size(xs) }
+
+def n = total(Bag(items = []))  -- error NYX0268: The instance 'Sized(Bag)' leaves its associated type 'elem' unfixed
+```
+
+To fix it, declare it with an alias attached to the type, `type Bag.elem = int`, or, for an instance a `use` loads,
+fix it by name: `use Sized(Bag, elem = int)(...)`.
+
+# NYX0269: Instance that fixes an associated type two ways
+
+Two members of an instance fix one of the context's associated types as different types, or a member fixes it as
+another type than the attached alias `type Bag.elem = ...` says.
+
+```nanyx
+context Pair(c) = (elem: type, first: c -> elem, second: c -> elem)
+
+type Bag = protected (items: list(int))
+
+def Bag.first: Bag -> int = { bag -> 0 }
+
+def Bag.second: Bag -> string = { bag -> "" }
+
+def go: [Pair(c)] c -> () = { xs -> () }
+
+def ran = go(Bag(items = []))  -- error NYX0269: The instance 'Pair(Bag)' fixes its associated type 'elem' two ways
+```
+
+To fix it, make the members agree on the associated type.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

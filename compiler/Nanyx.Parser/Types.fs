@@ -38,6 +38,9 @@ let internal fillTypeRefs () =
     let noOptionalField (name: Identifier) =
         noOptionalMarker $"A field can't be marked optional with `?`: write one that may be absent as `{Names.written name}: #some(T) | #none`"
 
+    // `type`, as a context member's type: the member is an associated type (see `TypeKeyword`).
+    let typeKeyword = spannedType (pstring "type" >>. keywordEnd >>% TypeKeyword)
+
     // A named field's name is noted, for the record type it is in to declare.
     let typeField =
         let mutAndName =
@@ -48,7 +51,7 @@ let internal fillTypeRefs () =
                 >>% (mutOpt.IsSome, name, start)
         tuple3
             mutAndName
-            (wsInline >>. (pstring ":" <|> pstring "::") >>. ws >>. typeExpr)
+            (wsInline >>. (pstring ":" <|> pstring "::") >>. ws >>. (attempt typeKeyword <|> typeExpr))
             (opt (attempt (ws >>. pstring "=" >>. ws >>. expression)))
         >>= fun ((isMut, name, start), typeValue, defaultOpt) ->
             declareField start name typeValue.Id >>% TypeField(name, isMut, Some typeValue, defaultOpt)
@@ -145,11 +148,32 @@ let internal fillTypeRefs () =
                 match resultOpt with
                 | None -> args
                 | Some _ -> [ typeListToType ((args, resultOpt), span) ]
+        // A context's associated type fixed by name, `Iter(c, elem = string)`, after its positional arguments.
+        let namedArgument =
+            spannedType (
+                pipe2
+                    (identifierNoWs .>> wsInline .>> pstring "=" .>> notFollowedBy (anyOf "=>") .>> ws)
+                    parameterType
+                    (fun name value -> TypeNamedArgument(name, value)))
+        let withNamedArguments =
+            sepBy1 (attempt namedArgument <|> parameterType) (attempt (wsInline >>. pstring "," >>. ws))
+            .>> followedBy (ws >>. pstring ")")
+            >>= fun args ->
+                if args |> List.exists (fun arg -> match arg.Kind with TypeNamedArgument _ -> true | _ -> false) then preturn args
+                else fail "no named argument"
         spannedType (
             pipe2
                 (pipe2 identifierNoWs (many (attempt (pchar '.' >>. identifierNoWs))) (fun head tail -> String.concat "." (head :: tail)))
-                (between (pstring "(") (ws >>. pstring ")") (ws >>. (attempt recordArgument <|> typeArguments)))
+                (between (pstring "(") (ws >>. pstring ")") (ws >>. (attempt recordArgument <|> attempt withNamedArguments <|> typeArguments)))
                 (fun name args -> TypeApply(name, args)))
+
+    // `Iter(c).elem`: the associated type of a context the signature requires (see `TypeAssociated`).
+    let typeApplyOrAssociated =
+        withSpan (typeApply .>>. opt (attempt (pchar '.' >>. identifierNoWs)))
+        |>> fun ((applied, memberOpt), span) ->
+            match memberOpt with
+            | Some memberName -> TypeExpr.at span (TypeAssociated(applied, memberName))
+            | None -> applied
 
     // An operator required by the context member it reads rather than by a context's name: `` [`+`: a, a -> a] ``.
     // The language no longer has this form; it is read only so that the compiler can report it, with a fix that writes
@@ -213,7 +237,7 @@ let internal fillTypeRefs () =
             attempt typeOf
             attempt typeConstraint
             attempt typeTag
-            attempt typeApply
+            attempt typeApplyOrAssociated
             attempt contextSet
             attempt typeRecord
             attempt typeTupleOrParen

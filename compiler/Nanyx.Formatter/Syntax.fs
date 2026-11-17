@@ -105,7 +105,10 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | TypeName _
             | TypeVar _
             | TypeHole
-            | TypeUnit -> t.Kind
+            | TypeUnit
+            | TypeKeyword -> t.Kind
+            | TypeNamedArgument(n, value) -> TypeNamedArgument(n, typeExpr value)
+            | TypeAssociated(context, n) -> TypeAssociated(typeExpr context, n)
             | TypeTuple items -> TypeTuple(List.map typeExpr items)
             | TypeRecord fields -> TypeRecord(List.map typeField fields)
             | TypeOpenRecord(fields, row) -> TypeOpenRecord(List.map typeField fields, row)
@@ -133,7 +136,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | KindAt _ -> KindAt SourceSpan.none
             | Scoped _ -> Scoped SourceSpan.none
             | InScopeOf contexts -> InScopeOf (contexts |> List.map (fun (context, _) -> context, SourceSpan.none))
-            | Export | Context | Private | Protected -> m
+            | Export | Context | Private | Protected | AssociatedTypes _ -> m
         n, List.map modifier modifiers, parameters |> List.map (fun (p, t) -> p, Option.map typeExpr t), typeExpr body
 
     and statement (s: Statement) : Statement =

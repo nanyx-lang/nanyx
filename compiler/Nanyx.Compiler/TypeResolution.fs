@@ -420,6 +420,10 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
         match state.ExprTypes |> Map.tryFind value.Id with
         | Some ty -> ty, state
         | None -> freshVar state
+    // `AssociatedTypes` writes these away before inference, and reports the ones it leaves.
+    | TypeNamedArgument(_, value) -> typeExprToTy state value
+    | TypeKeyword
+    | TypeAssociated _ -> freshVar state
 
 /// The types of the fields of a record type, by name. A field written without a type is a fresh variable.
 and private recordFieldTypes (state: InferState) (fields: TypeRecordField list) : Map<string, Ty> * InferState =
@@ -611,6 +615,7 @@ let private readTypeDefBody (state: InferState) (name: Identifier) (modifiers: T
               ScopedBy = None
               Scope = None
               ContextVariable = None
+              AssociatedTypes = []
               Symbol = None
               Members = Map.empty }
         let ty, next = typeExprToTy { state with TypeDefs = state.TypeDefs |> Map.add name self } body
@@ -758,6 +763,7 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
           ScopedBy = scopedBy
           Scope = scope
           ContextVariable = contextVariable
+          AssociatedTypes = []
           Symbol = None
           Members = Map.empty }
     let underlyingTy, next = readTypeDefBody stateWithParams name modifiers paramVars self body
@@ -801,6 +807,7 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
           ScopedBy = scopedBy
           Scope = scope
           ContextVariable = contextVariable
+          AssociatedTypes = TypeDefModifier.associatedTypes modifiers
           Symbol = symbol
           Members = members }
     // A name of the type in its own definition refers to it, as any other does.

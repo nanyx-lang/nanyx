@@ -80,10 +80,18 @@ let internal writtenTypeDefinition (writeShape: Ty -> string) (symbol: Symbol) (
         if info.IsScoped then "scoped context"
         elif info.IsContext then "context"
         else "type"
+    // A context's associated types are its last parameters, which it declares as members (see `AssociatedTypes`).
     let parameters =
-        match info.Parameters |> List.choose (fun var -> var.Name) with
+        match info.Parameters |> List.truncate (info.Parameters.Length - info.AssociatedTypes.Length) |> List.choose (fun var -> var.Name) with
         | [] -> ""
         | parameterNames -> "(" + String.concat ", " parameterNames + ")"
+    let info =
+        match info.AssociatedTypes, Unifier.unalias info.Underlying with
+        | [], _ -> info
+        | associated, TyRecord(fields, FieldOrder order) ->
+            let fields = associated |> List.fold (fun acc name -> acc |> Map.add name (TyPrimitive "type")) fields
+            { info with Underlying = TyRecord(fields, FieldOrder(associated @ order)) }
+        | _ -> info
     let kind =
         if info.IsPrivate then "private"
         elif info.IsNominal then "protected"

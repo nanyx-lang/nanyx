@@ -64,6 +64,7 @@
     <Compile Include="Features\Types\TypeTests.fs" />
     <Compile Include="Features\Types\ProtectedTypeTests.fs" />
     <Compile Include="Features\Types\TypeSignatureTests.fs" />
+    <Compile Include="Features\Types\AssociatedTypeTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

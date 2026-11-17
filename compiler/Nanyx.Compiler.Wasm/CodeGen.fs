@@ -596,12 +596,14 @@ let private coreIrContextParameters
     (functionContextRequirements: Map<string, ContextMemberKey list>)
     (typeDefs: Map<string, TypeDefInfo>)
     (definitionTypes: Map<string, Ty>)
+    (exprTypes: Map<NodeId, Ty>)
     (name: string) =
-    // The function's own type variables, by the names its annotation gives them.
+    // The function's own type variables, by the names its annotation gives them. A context's associated type may be
+    // written only in the contexts, `elem` in `[Iter(c)] c -> int`; one its parameters or result write is that one.
     let rec namedVars (ty: Ty) : (string * Ty) list =
         match ty with
         | TyVar { Name = Some varName } -> [ varName, ty ]
-        | TyFunc(input, output, _) -> namedVars input @ namedVars output
+        | TyFunc(input, output, contexts) -> List.collect namedVars contexts @ namedVars input @ namedVars output
         | TyContexts _ -> []
         | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> namedVars)
         | _ -> Ty.children ty |> List.collect namedVars
@@ -613,6 +615,12 @@ let private coreIrContextParameters
             | None -> []
         | _ -> []
     let argumentTy = writtenArgumentType (definitionTypes |> Map.tryFind name |> Option.map namedVars |> Option.defaultValue []) annotated
+    // The variables its body's types name, by name.
+    let bodyVars =
+        lazy (
+            match defs |> List.tryFind (fun (defName, _, _) -> defName = name) with
+            | Some (_, _, value) -> SyntaxTree.expressionsWithin value |> List.choose (fun expr -> exprTypes |> Map.tryFind expr.Id) |> List.collect namedVars
+            | None -> [])
     let memberTypes =
         functionContextTypes
         |> Map.tryFind name
@@ -626,7 +634,17 @@ let private coreIrContextParameters
             let memberTy (memberName: string) =
                 match typeDefs |> Map.tryFind baseName with
                 | Some info when info.Parameters.Length = arguments.Length ->
-                    let argumentTys = arguments |> List.map argumentTy
+                    // An associated type the function's own type does not write, `elem` in `[Iter(c)] c -> int`, is the
+                    // variable of its name in its body's types, which each call binds (see
+                    // `TypedModule.AssociatedArguments`), or, where the body has none, held boxed, as a member's own type
+                    // variables are (see `CoreIrLowerTypes.boxOwnVariables`).
+                    let argumentTys =
+                        arguments
+                        |> List.mapi (fun index arg ->
+                            match argumentTy arg, arg.Kind with
+                            | None, TypeVar varName when index >= info.Parameters.Length - info.AssociatedTypes.Length ->
+                                bodyVars.Value |> List.tryFind (fst >> (=) varName) |> Option.map snd |> Option.orElse (Some CoreIrLowerTypes.boxedTy)
+                            | found, _ -> found)
                     if argumentTys |> List.forall Option.isSome then
                         let parameters = List.zip (info.Parameters |> List.map _.Id) (argumentTys |> List.map Option.get) |> Map.ofList
                         let rec bind (ty: Ty) =
@@ -681,6 +699,7 @@ type private LoweredModule =
 let private lowerTypedModule (typed: TypedModule) : LoweredModule =
     let contextInstances = typed.ContextInstances
     let checkedTypes = typed.ExprTypes
+    let allExprTypes = typed.InlinedExprTypes |> Map.fold (fun acc id ty -> acc |> Map.add id ty) checkedTypes
     let externs, module' = foreignFunctions typed
     // The definitions synthesized instances are made of are passed as function values.
     let synthesizedMembers =
@@ -791,15 +810,15 @@ let private lowerTypedModule (typed: TypedModule) : LoweredModule =
             { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
               Externs = externs
               ExprTypes =
-                typed.InlinedExprTypes
-                |> Map.fold (fun acc id ty -> acc |> Map.add id ty) checkedTypes
+                allExprTypes
                 |> carryPlainContexts typed.TypeDefs functionContextTypes (functionWrappers |> Map.toList |> List.map (fun (function', wrapper) -> wrapper, function') |> Map.ofList) module'
                 |> withLocalContexts
               CalleeTypes = typed.InlinedCalleeTypes |> Map.fold (fun acc id ty -> acc |> Map.add id ty) typed.CalleeTypes
+              AssociatedArguments = typed.AssociatedArguments
               DefinitionTypes = typed.Types
               ContextParameters =
                 functionContextRequirements
-                |> Map.map (fun name _ -> coreIrContextParameters defs functionContextTypes typeLayouts functionContextRequirements typed.TypeDefs typed.Types name)
+                |> Map.map (fun name _ -> coreIrContextParameters defs functionContextTypes typeLayouts functionContextRequirements typed.TypeDefs typed.Types allExprTypes name)
               ContextArguments =
                 fun name callId scopeKeys passed ->
                     try

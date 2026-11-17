@@ -37,6 +37,7 @@
     <Compile Include="Features\TopLevel\TopLevelTests.fs" />
     <Compile Include="Features\Types\TypeAnnotationTests.fs" />
     <Compile Include="Features\Types\TypeDefinitionTests.fs" />
+    <Compile Include="Features\Types\AssociatedTypeTests.fs" />
     <Compile Include="Features\Corpus\CorpusTests.fs" />
     <Compile Include="Features\Command\FormatCommandTests.fs" />
     <Compile Include="Features\Command\FormatInputTests.fs" />

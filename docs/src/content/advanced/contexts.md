@@ -410,7 +410,61 @@ def r = { x, y, p, q -> (x + y, p * q) } -- [Add(a), Num(b)] a, a, b, b -> (a, b
 
 Where a function's operators don't fit one context, its type lists the contexts they need: `[Ord(a), Add(a)]`. A context list holds contexts and context variables only; requiring an operator by its member, as in `` [`+`: a, a -> a] ``, is an error (`NYX0251`) whose fix writes the context that has it, `Add(a)`.
 
-Contexts with associated types, members whose value is a type, are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
+## Associated types
+
+A context can have a member whose value is a type, an associated type, written `name: type`. Its other members name it as a type:
+
+```nanyx fragment
+context Iter(c) = (elem: type, next: c -> #some(elem, c) | #done)
+```
+
+The element type follows from the container's, so a function constrains only the container. Without an associated type, it would be a second parameter, `Iter(c, a)`, written in every signature that uses the context.
+
+A signature names the associated type `Iter(c).elem`, or just `elem` when no other context in the list has one of that name:
+
+```nanyx fragment
+def headOr: [Iter(c)] c, elem -> elem = { items, fallback ->
+  match next(items)
+    | #some(value, _) -> value
+    | #done -> fallback
+}
+
+def firstPair: [Iter(c), Iter(d)] c, d -> #some((Iter(c).elem, Iter(d).elem)) | #none = { xs, ys ->
+  match Iter(c).next(xs), Iter(d).next(ys)
+    | #some(x, _), #some(y, _) -> #some((x, y))
+    | _, _ -> #none
+}
+```
+
+When two contexts in the list have one of that name, the bare name is an error (NYX0266) that shows the qualified forms. `Iter(d).elem` where the list doesn't require `Iter(d)`, or a name the context doesn't have, is an error too (NYX0267). An associated type need not be the type of a parameter or of the result, as a context's own parameters must (NYX0236): the instance fixes it, so `def countAll: [Iter(c)] c -> int` is fine.
+
+A constraint fixes an associated type with a named argument, as a call names one:
+
+```nanyx fragment
+def joinAll: [Iter(c, elem = string)] c -> string = { items ->
+  match next(items)
+    | #some(item, rest) -> item ++ joinAll(rest)
+    | #done -> ""
+}
+```
+
+Naming a member the context doesn't have, or one that isn't a type, as in `Iter(c, next = int)`, is NYX0267.
+
+An instance's associated type is what its members' types make it. An instance [synthesized](#context-synthesis) from a type's attached definitions finds `Bag.next` by name, and its type, `Bag -> #some(int, Bag) | #done`, makes the `elem` of `Iter(Bag)` an `int`. An instance a `use` loads is the same, and a `use` can fix one by name too, as in `use Sized(Bag, elem = int)(...)`. Where no member's type mentions an associated type, the type declares it with an alias attached to it:
+
+```nanyx fragment
+context Sized(c) = (elem: type, size: c -> int)
+
+type Bag = protected (items: list(int))
+
+def Bag.size: Bag -> int = { bag -> bag.items.length }
+
+type Bag.elem = int
+```
+
+An instance that leaves an associated type unfixed is an error that names the instance and the associated type (NYX0268), and so is one whose members fix it two different ways (NYX0269). There are no defaults: a context can't give an associated type one (NYX0265), so an instance never gets a type its author didn't write or imply. An associated type's name is lowercase and longer than one letter, which [type names](../tour/types#type-names) reserve for associated types, and a built-in type's name, such as `list`, can't be one (NYX0265). `type` is the type of an associated type only, so `(x: type)` elsewhere is NYX0265 too.
+
+Associated types cost nothing at run time: types are erased, and a generic function is specialised at each instance as usual, at its associated types too, though its type needn't write them. Passing an associated type as a value, `Type(elem)`, waits on [type arguments](../work-in-progress/type-members-and-reflection).
 
 # Common contexts
 

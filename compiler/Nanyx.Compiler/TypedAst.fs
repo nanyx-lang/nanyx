@@ -269,6 +269,9 @@ type TypeDefInfo =
       /// `Underlying` writes its contexts as. A value carries its contexts as a last argument its type is applied to (see
       /// `FunctionContexts.carried`), after the scope of a type in a scoped context's scope, if any.
       ContextVariable: TyVar option
+      /// A context's associated types, by name: the last of its `Parameters`, which a signature does not write (see
+      /// `AssociatedTypes`). Empty for any other type.
+      AssociatedTypes: string list
       Symbol: SymbolId option
       Members: Map<string, SymbolId> }
 
@@ -410,6 +413,10 @@ type TypedModule =
       ContextInstances: Map<NodeId, ContextInstance option list>
       ContextProviders: Map<NodeId, ProvidedContext list>
       UseContexts: Map<NodeId, TypeExpr>
+      /// What the associated types of the contexts each call's callee requires are at the call, by the call's node and by
+      /// the names the callee's signature gives them: `elem` is `int` where `countAll: [Iter(c)] c -> int` is called with a
+      /// `Bag` whose `next` gives `int`s. The backend specialises the callee with them, since its type need not write them.
+      AssociatedArguments: Map<NodeId, Map<string, Ty>>
       InferredContextTypes: Map<SymbolId, Ty list>
       ContextTypes: Map<SymbolId, Ty list>
       LocalContexts: Map<SymbolId, TypeExpr list>

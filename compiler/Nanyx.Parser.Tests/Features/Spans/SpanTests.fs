@@ -278,7 +278,10 @@ and private expressionsOfType (typeExpr: TypeExpr) =
     | TypeName _
     | TypeVar _
     | TypeHole
-    | TypeUnit -> []
+    | TypeUnit
+    | TypeKeyword -> []
+    | TypeNamedArgument (_, inner)
+    | TypeAssociated (inner, _) -> expressionsOfType inner
     | TypeTuple types
     | TypeUnion types
     | TypeIntersection types
@@ -384,7 +387,10 @@ let rec private typesWithin (typeExpr: TypeExpr) : TypeExpr list =
         | TypeVar _
         | TypeHole
         | TypeUnit
+        | TypeKeyword
         | TypeOf _ -> []
+        | TypeNamedArgument (_, inner)
+        | TypeAssociated (inner, _) -> typesWithin inner
         | TypeTuple types
         | TypeUnion types
         | TypeIntersection types

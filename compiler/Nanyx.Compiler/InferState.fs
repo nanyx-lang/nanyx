@@ -280,6 +280,13 @@ type InferState =
             /// Where each call to a function that requires a parameterised context finds its instances, by the call's
             /// node (see `TypedModule.ContextInstances`).
             ContextInstances: Map<NodeId, ContextInstance option list>;
+            /// What the associated types of the contexts each call's callee requires are at the call, by the call's node and
+            /// by the names the callee's signature gives them (see `TypedModule.AssociatedArguments`), as read.
+            AssociatedArguments: Map<NodeId, Map<string, Ty>>;
+            /// The type variables the module's defs' signatures name their contexts' associated types by, which keep their
+            /// names when the constraints are solved, as a type a def declares does: the backend binds them by name (see
+            /// `TypedModule.AssociatedArguments`).
+            AssociatedVariables: TyVar list;
             /// What provides each context found by its members' names that a call requires, by the call's node (see
             /// `TypedModule.ContextProviders`). Those of parameterised contexts are added from `ContextInstances` once
             /// the module is inferred.
@@ -420,6 +427,8 @@ let emptyState =
             BlockAliases = Map.empty;
             ImportSites = Map.empty;
             ContextInstances = Map.empty;
+            AssociatedArguments = Map.empty;
+            AssociatedVariables = [];
             ContextProviders = Map.empty;
             UseContexts = Map.empty;
             FailedExprs = [];

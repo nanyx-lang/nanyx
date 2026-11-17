@@ -101,6 +101,10 @@ type TypeDefModifier =
     | InScopeOf of (Identifier * SourceSpan) list
     /// Where a type declaration's `private` or `protected` is written, so that a fix can write contexts before it.
     | KindAt of SourceSpan
+    /// A context's associated types, which the compiler makes its last parameters, in the order its members declare
+    /// them: `elem` in `context Iter(c) = (elem: type, ...)`, which it reads as `Iter(c, elem)`. A signature doesn't
+    /// write them (see `NyxCompiler.AssociatedTypes`).
+    | AssociatedTypes of Identifier list
 
 module TypeDefModifier =
     let isScoped (modifier: TypeDefModifier) =
@@ -111,7 +115,12 @@ module TypeDefModifier =
         | Private
         | Protected
         | InScopeOf _
-        | KindAt _ -> false
+        | KindAt _
+        | AssociatedTypes _ -> false
+
+    /// The associated types the modifiers of a context's declaration name (see `AssociatedTypes`): none for any other.
+    let associatedTypes (modifiers: TypeDefModifier list) =
+        modifiers |> List.collect (function AssociatedTypes names -> names | _ -> [])
 
     /// Where the declaration with `modifiers` writes `private` or `protected`, if it does.
     let kindSpan (modifiers: TypeDefModifier list) =
@@ -190,6 +199,13 @@ and TypeExprKind =
     | TypeWhere of TypeExpr * Expression
     /// `typeof x`: the type of the value `x`, a name or a path of fields such as `config.server`.
     | TypeOf of Expression
+    /// `type`, written as a context member's type: the member is an associated type, as `elem` is in
+    /// `context Iter(c) = (elem: type, ...)`.
+    | TypeKeyword
+    /// `elem = string`, an argument of a context that fixes its associated type `elem`: `Iter(c, elem = string)`.
+    | TypeNamedArgument of Identifier * TypeExpr
+    /// `Iter(c).elem`: the associated type `elem` of the context `Iter(c)` a signature requires.
+    | TypeAssociated of TypeExpr * Identifier
 
 and TypeRecordField =
     /// A named field: its name, whether it is `mut`, its type and its default value.
@@ -946,7 +962,10 @@ module TypeExpr =
         | TypeVar _
         | TypeHole
         | TypeUnit
+        | TypeKeyword
         | TypeOf _ -> []
+        | TypeNamedArgument(_, inner)
+        | TypeAssociated(inner, _) -> [ inner ]
         | TypeTuple items
         | TypeUnion items
         | TypeIntersection items
@@ -975,7 +994,10 @@ module TypeExpr =
             | TypeVar _
             | TypeHole
             | TypeUnit
+            | TypeKeyword
             | TypeOf _ -> typeExpr.Kind
+            | TypeNamedArgument(name, inner) -> TypeNamedArgument(name, f inner)
+            | TypeAssociated(context, name) -> TypeAssociated(f context, name)
             | TypeTuple items -> TypeTuple(List.map f items)
             | TypeUnion items -> TypeUnion(List.map f items)
             | TypeIntersection items -> TypeIntersection(List.map f items)

@@ -202,6 +202,7 @@ module Compiler =
           InlinedTypes: Map<string, Ty>
           /// Where the calls in the imported modules' definitions, which are inlined, find their instances.
           InlinedInstances: Map<NodeId, ContextInstance option list>
+          InlinedAssociatedArguments: Map<NodeId, Map<string, Ty>>
           /// The instances the `use`s in the imported modules' definitions load.
           InlinedUseContexts: Map<NodeId, TypeExpr>
           /// The types of the defs the imports bring in, with the contexts they require (see `ImportedContextTypes`).
@@ -481,6 +482,7 @@ module Compiler =
             InlinedTypes = ModuleLinking.inlinedTypesForImport item imported |> Map.fold (fun acc name ty -> acc |> Map.add name ty) merged.InlinedTypes
             InlinedInstances = ModuleLinking.inlinedInstancesForImport item imported |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.InlinedInstances
             InlinedUseContexts = imported.Typed.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) merged.InlinedUseContexts
+            InlinedAssociatedArguments = imported.Typed.AssociatedArguments |> Map.fold (fun acc id named -> acc |> Map.add id named) merged.InlinedAssociatedArguments
             ImportedContextTypes =
                 RequiredContexts.ofImport imported.Subst imported.Typed.ContextTypes imported.RawSymbolTypes exportedSymbols.Keys
                 |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.ImportedContextTypes
@@ -653,6 +655,7 @@ module Compiler =
                   InlinedTypes = Map.empty
                   InlinedInstances = Map.empty
                   InlinedUseContexts = Map.empty
+                  InlinedAssociatedArguments = Map.empty
                   ImportedContextTypes = Map.empty
                   ProvidesContexts = providesContexts host hostModules
                   HostImport = host |> Option.map _.Import
@@ -721,8 +724,10 @@ module Compiler =
                 let patternScope = CustomPatterns.scopeOf env ambiguousImports desugared
                 let desugared, rewriteErrors = CustomPatterns.rewrite patternScope desugared
                 let patternErrors = CustomPatterns.check patternScope desugared @ rewriteErrors
+                // A context's associated types are written as its last parameters (see `AssociatedTypes`).
+                let desugared, associatedErrors = AssociatedTypes.rewrite state.TypeDefs desugared
                 let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.InferModule.inferModuleWithEnv env state desugared
-                let subst, mismatches = Solving.solveDetailed state.Constraints |> fun (subst, mismatches) -> Unifier.keepWrittenNames types.Values subst, mismatches
+                let subst, mismatches = Solving.solveDetailed state.Constraints |> fun (subst, mismatches) -> Unifier.keepWrittenNames (Seq.append types.Values (state.AssociatedVariables |> Seq.map TyVar)) subst, mismatches
                 // Every error in the module is reported: the items that failed to check, and each conflict among the
                 // constraints of those that did, in the order they are in the source rather than the order solving
                 // found them. The module is typed all the same, with what did check.
@@ -782,7 +787,7 @@ module Compiler =
                     match script, runtimeErrors with
                     | Some _, _ :: _ -> mismatchErrors |> List.filter (fun diagnostic -> not (diagnostic.Code = DiagnosticCodes.ContextsNotAllowed.Code && diagnostic.Span.IsNone))
                     | _ -> mismatchErrors
-                let moduleErrors = nameErrors @ patternErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
+                let moduleErrors = nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let defer =
                     if moduleErrors.IsEmpty then fun expr -> expr, []
@@ -860,6 +865,9 @@ module Compiler =
                           ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.InlinedInstances
                           ContextProviders = state.ContextProviders
                           UseContexts = state.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) merged.InlinedUseContexts
+                          AssociatedArguments =
+                            state.AssociatedArguments
+                            |> Map.fold (fun acc id named -> acc |> Map.add id (named |> Map.map (fun _ ty -> Unifier.apply subst ty))) merged.InlinedAssociatedArguments
                           // Resolved for the root module only, by `compileChecked`.
                           InferredContextTypes = state.InferredContextTypes
                           ContextTypes = contextTypes

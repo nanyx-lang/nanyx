@@ -93,6 +93,23 @@ let private withEntryContexts (required: Map<Identifier, Set<Identifier>>) (uses
         else { state with ExprTypes = state.ExprTypes |> Map.add lambda (TyFunc(input, output, own @ needed)) }
     | _ -> state
 
+/// The type variables the signature whose contexts are `contexts`, read into `state`, names the associated types of
+/// those contexts by (see `InferState.AssociatedVariables`).
+let private associatedVariables (state: InferState) (contexts: TypeExpr list option) : TyVar list =
+    contexts
+    |> Option.defaultValue []
+    |> List.collect (fun ctx ->
+        match ctx.Kind with
+        | TypeApply(ctxName, args) ->
+            let associated = tryFindTypeDef ctxName state |> Option.map _.AssociatedTypes.Length |> Option.defaultValue 0
+            args
+            |> List.skip (args.Length - min associated args.Length)
+            |> List.choose (fun arg ->
+                match arg.Kind with
+                | TypeVar name -> state.TypeVars |> Map.tryFind (WrittenVar name)
+                | _ -> None)
+        | _ -> [])
+
 /// Infers a module in `initialEnv`, carrying on past an item that fails to check: the types and items of those
 /// that do, and the diagnostics of those that do not. The constraints are not solved here, so a type mismatch is
 /// not among them.
@@ -356,6 +373,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                                 | names -> { resolvedState with ContextRequirements = resolvedState.ContextRequirements |> Map.add name (written @ (names |> List.map (TypeVar >> TypeExpr.synthetic))) }
                             env <- declareTopLevel name symbol scheme env
                             types <- types |> Map.add name declaredTy
+                            state <- { state with AssociatedVariables = state.AssociatedVariables @ associatedVariables state contextOpt }
                             emit (TypedDef (TypedValueDef(isExport, name, annotation, typedExpr)))
                             // The next def's constraints are solved on top of this one's where they share nothing.
                             Solving.checkpoint state.Constraints
