@@ -1,6 +1,6 @@
 /// The HTTP host, `nanyx.http`, whose entry is a `Request -> Response` handler: `nanyx run` serves it on the port of the
 /// host's `port` setting, answering each request with a fresh instance of the program (#1786, see
-/// docs/src/content/work-in-progress/files-http-json.md).
+/// docs/src/content/work-in-progress/hosts.md).
 module TranspilerWasmTests.Features.Hosts.HttpHost
 
 open System

@@ -85,7 +85,7 @@ Done: `@extern` ([#1424](https://github.com/nanyx-lang/nanyx/issues/1424)), host
   ([#1786](https://github.com/nanyx-lang/nanyx/issues/1786)): `requestLength() -> i32` and `request(destination: i32)`
   give the instance the request it was started for, written as above with a timeout of 0, and
   `respond(response: i32, length: i32)` gives the runtime the response. `nanyx run` serves a program whose module
-  imports it, rather than running it once (see [Files, HTTP and JSON](./files-http-json#how-serving-is-built)).
+  imports it, rather than running it once (see [Hosts](./hosts#how-its-built)).
 - **Host memory.** `nanyx/host.memory` is written over intrinsics of its own, private to the standard library as the
   others are (`__nanyx_memory_allocate`, `__nanyx_memory_read_i32`, `__nanyx_string_address`, ...): a read or a
   write is the one instruction that does it (`CoreIrEmit`'s `memoryAccesses`), a block comes from the allocator every

@@ -13,7 +13,7 @@ order: 25
 # Summary
 
 - There is one lazy sequence type, `seq(a)`, attached to as `seq` or `Seq`, as lists are `list` or `List`; the
-  prelude writes `seq.map`, and the stdlib docs' `Sequence.map` is renamed to it. The prelude declares it as `Seq`,
+  prelude writes `seq.map`. The prelude declares it as `Seq`,
   a type as a user's is, and `seq` is its alias (`Seqs`, `BuiltinTypeNames`); it is shown as `seq(int)`. Its runtime
   form is the pull function below ([#192](https://github.com/nanyx-lang/nanyx/issues/192), done). There is no
   separate `gen(a)` for sequences that may be infinite.
@@ -99,7 +99,7 @@ What this representation gives:
 
 What it costs:
 
-- **An allocation per element**: the closure for the rest and the `#some` it is returned in, where a stateful iterator
+- **An allocation per element**: the closure for the rest and the `#next` it is returned in, where a stateful iterator
   changes one object in place. Reference counting can't reuse these the way it reuses a list held once, since each is
   a new closure. Fusing chains of `map` and `filter` in the compiler is the longer-term answer; it isn't needed to
   start.
@@ -108,8 +108,8 @@ What it costs:
   stack.
 - **Walking a sequence twice does its work twice.** Tails are not stored once worked out. Storing them would need a
   mutable cell in every node, and a sequence whose start is still held would keep every element worked out so far
-  alive (the "holding onto the head" leak in Haskell and Clojure). `Seq.cache` gives the stored behaviour to the
-  sequences that want it.
+  alive (the "holding onto the head" leak in Haskell and Clojure). A `Seq.cache`, not written yet, would give the stored
+  behaviour to the sequences that want it.
 - **There is no cleanup hook.** A sequence over an open file that is abandoned halfway has no `Dispose`. Contexts help:
   a `[FileSystem] seq(string)` can't be pulled outside the scope that supplies `FileSystem`, so whatever opened the
   file is still there to close it.
