@@ -4,46 +4,28 @@ description: "What a call to a function that requires contexts costs, and how th
 order: 25
 ---
 
-> **Status: done.** This page describes what a call to a function that requires contexts compiles to, and the three
-> changes that made it cheaper: static closures, specialising on known members, and inlining. What a user sees, that a
-> function's contexts are part of its type and passed where it's called, is in [Contexts](../advanced/contexts). It is
-> part of the [compilation](./compilation) workstream, and its issues carry the `compilation`, `wasm backend` and
-> `performance` labels. One thing is still open, under [Specialising on known members](#specialising-on-known-members):
-> a `use` of a lambda that captures nothing is still passed as a closure.
+This page says what a call to a function that requires contexts compiles to. What a user sees, that a function's
+contexts are part of its type and passed where it's called, is in [Contexts](../advanced/contexts). It is part of the
+[compilation](./compilation) workstream, and its issues carry the `compilation`, `wasm backend` and `performance`
+labels. One thing is still to do: a `use` of a lambda that captures nothing is still passed as a closure (see
+[Still to do](#still-to-do)).
 
 # Summary
 
 A function that requires contexts takes each of their members as a closure, and calls them through the function
 table. Most calls pass members that are known when the call is compiled: the ambient `Console`, or an instance built
-from attached definitions, whose members are top-level functions. The compiler can use that. A closure over a
-top-level function is static data, so passing one allocates nothing. A function can be specialised on the
-members known at its call, so it calls them directly and is not passed the ones it never reads. The inliner then
-folds small functions such as `println` into their callers.
+from attached definitions, whose members are top-level functions. So a closure over a top-level function is static
+data, and passing one allocates nothing. A function is specialised on the members known at its call, so it calls them
+directly and is not passed the ones it never reads. The [inliner](./inlining) then folds small functions such as
+`println` into their callers.
 
-# What a call costs
-
-Since printing takes any value with a `ToString` ([ToString(a)](../advanced/contexts#tostringa)), `println` is an
-ordinary function, `[Console, ToString(a)] a -> ()` ([#726](https://github.com/nanyx-lang/nanyx/issues/726)), that
-writes `toString(value)` through `Console`'s `write`. The printing functions are not members of `Console` because a
-context member can't be generic with a requirement of its own: a member is passed as a closure, and a closure has no
-`ToString` to take. Before specialising on known members
-([#744](https://github.com/nanyx-lang/nanyx/issues/744)), hello world compiled to this:
-
-- **The call site passed a closure for every member.** `println("Hello, Nanyx!")` passed six closures, one for each
-  of `Console`'s five members and one for `string.toString`. Each was a closure over the wrapper of a top-level
-  function (`ContextArgument.ClosureOverWrapper` in `CoreIrLowerInput.fs`) and captured nothing. Static closures
-  ([#743](https://github.com/nanyx-lang/nanyx/issues/743)) made them six constant addresses; before that, the call
-  made the six on the heap and dropped them after the call.
-- **The callee called its members indirectly.** `println__string` took the six closures as parameters, after its
-  own. It read two of them, `write` and `toString`, and made three `call_indirect`s.
-- **The module carried what made this work.** It had a wrapper for each member (`__fn_write`), a table to call
-  them through, and a drop and a dup function for each member's function type: about 290 lines of WebAssembly text.
-
-Now every one of those members is known where `println` is called, so the call passes only the value, to
-`println__string__known`, which calls `string.toString` and `write` directly
-(`Nanyx.Compiler.Wasm.Tests/E2E/twentythree/expected.wat`). A member that is not known is still passed as a closure,
-and costs what it did. How members are passed is described under Monomorphisation in
-[Memory management](./memory-management).
+`println` is an ordinary function, `[Console, ToString(a)] a -> ()`, that writes `toString(value)` through `Console`'s
+`write`; it is not a member of `Console` because a context member can't be generic with a requirement of its own: a
+member is passed as a closure, and a closure has no `ToString` to take. Every member it needs is known where it is
+called, so the call passes only the value, to `println__string__known`, which calls `string.toString` and `write`
+directly. The inliner then folds all of it into the caller: hello world's start function writes the string itself,
+with no function table and no closures (`Nanyx.Compiler.Wasm.Tests/E2E/twentythree/expected.wat`). A member that is
+not known is passed as a closure over the wrapper of a function, and called with `call_indirect`.
 
 ## Functions that require contexts as values
 
@@ -150,12 +132,9 @@ its contexts aren't available. A lambda that leaves still requires the context w
 
 # Design
 
-The three changes are independent, and each was worth doing without the others. They are listed in the order they
-were done.
-
 ## Closures over top-level functions are static data
 
-Done ([#743](https://github.com/nanyx-lang/nanyx/issues/743)). A closure over a top-level function captures nothing,
+A closure over a top-level function captures nothing,
 so it is laid out once in the data segment, as a closure on the heap is laid out, with a reference count of 0. String
 literals work this way too: `retain` and `release` leave a count of 0 alone, so the closure is never freed. A call
 site passes a constant address.
@@ -167,9 +146,6 @@ function. An atom is never a variable, so reference counting gives it no dup or 
 none. The module lays out one block for each such function after its string literals (`staticClosureData` in
 `CodeGen.fs`): a count of 0, an info word of 0, since nothing ever drops it, and the function's table slot. The tests
 are in `Features/Memory/StaticClosureTests.fs`.
-
-In the `proc` measurement on [Context escape](./context-escape#measured-before-the-change), variant C goes from 9 allocations per block
-to 7, as predicted.
 
 ## Specialising on known members
 
@@ -185,7 +161,7 @@ requires contexts on its context members too (`CoreIrLowerKnown.fs`):
   value or of any other expression leaves the member unknown.
 - In a specialisation, a known member is not a parameter. A call to it is a direct `call` or `return_call`. A call that
   passes it on passes it as known, so the callee is specialised on it too.
-- A member that is not known stays a closure parameter, as today: a `use` of a lambda that captures locals, or a member
+- A member that is not known stays a closure parameter: a `use` of a lambda that captures locals, or a member
   that a function not specialised on it passes on.
 - A known member that the specialisation never reads is not passed.
 - Specialisations on members count towards the limit on specialisations per definition (`maxSpecialisations`).
@@ -223,28 +199,14 @@ How it is built:
   is a top-level function named as a value, a literal, or a local known already records its local as known
   (`FunctionLowering.NoteDefinedKnown`): such a local never changes, as a cell is a `def` of `mut(...)`. A call that
   finds a member in scope in such a local finds it known, and a call through the local is a direct call.
-- A `use` of a lambda that captures nothing is still passed as a closure. The callee could be specialised on the lifted
-  function and passed only its environment; that is not done yet.
-
-([#744](https://github.com/nanyx-lang/nanyx/issues/744))
 
 This is what Rust does for generic functions, as against `dyn` trait objects, and what GHC's specialisation does for
 type class dictionaries.
 
-## Inlining
+After specialising, the [inliner](./inlining) folds small functions such as `println` into their callers, and makes
+the members of a `use` it brings into the same function as their calls known.
 
-After specialising, `println("hi")` is a call to a function that calls `string.toString`, which returns its
-argument, and calls `write` twice. The inliner folds the small ones into the caller
-([#745](https://github.com/nanyx-lang/nanyx/issues/745), done).
+# Still to do
 
-The design is on its own page, [Inlining](./inlining): what is inlined, and how a workflow's block compiles down to the
-code you would write by hand.
-
-# Plan
-
-1. ~~Closures over top-level functions are static data~~
-   ([#743](https://github.com/nanyx-lang/nanyx/issues/743), done).
-2. ~~Specialise a function on the context members known where it is called~~
-   ([#744](https://github.com/nanyx-lang/nanyx/issues/744), done: `CoreIrLowerKnown.fs`).
-3. ~~Inline small functions in the core IR~~ ([#745](https://github.com/nanyx-lang/nanyx/issues/745), done: see
-   [Inlining](./inlining)).
+- **A `use` of a lambda that captures nothing** is still passed as a closure. The callee could be specialised on the
+  lifted function and passed only its environment.

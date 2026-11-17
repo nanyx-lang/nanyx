@@ -47,103 +47,15 @@ it is. The chain can then be shortened by turning its long match arms into separ
 
 # Where it stands
 
-**2026-11-09, at a19d2de.** The first review measured these files:
+The first round of splits, from 2026-11-09 to 2026-11-16, brought `CodeGen.fs`, `Infer.fs`, the parser's `Program.fs`
+(now `Expressions.fs` and the files around it), `Library.fs` and `CoreIrLower.fs` under the limit, broke their longest
+functions and match arms into named ones, and moved the large test files into `Features/<Area>/` files. The issues
+that did it are closed under the `code quality` label.
 
-| File | Lines |
-|---|---|
-| `CodeGen.fs` | 4,621 |
-| `Tests.fs` | ~3,300 |
-| `Infer.fs` | 3,054 |
-| `Program.fs` (parser) | 2,593 |
-| `RunTests.fs` | ~1,775 |
-| `Library.fs` | 1,435 |
-
-**2026-11-10, at 864ed61.** After the first round of splits:
-
-| File | Lines | What changed |
-|---|---|---|
-| `CodeGen.fs` | 1,331 | Lambda lifting, runtime helpers, interpolation and the core IR now have their own files |
-| `Infer.fs` | 2,597 | `InferState.fs` and `Visibility.fs` moved out |
-| `Program.fs` (parser) | 1,481 | `Ast.fs`, `ParseState.fs`, `Lexical.fs`, `Refs.fs`, `Patterns.fs` and `Types.fs` moved out |
-| `Library.fs` | 1,557 | Grew. Its split is [#365](https://github.com/nanyx-lang/nanyx/issues/365) |
-
-The large test files are now split into `Features/<Area>/` files.
-
-**2026-11-12.** Splitting `Infer.fs` around its recursive chain
-([#364](https://github.com/nanyx-lang/nanyx/issues/364)), which had grown back to 3,269 lines:
-
-| File | Lines | What changed |
-|---|---|---|
-| `Infer.fs` | 1,462 | `TypeResolution.fs`, `Contexts.fs` and `ContextInstances.fs` moved out before the chain, `InferModule.fs` after it |
-
-What is left in `Infer.fs` is a few small helpers and the recursive chain, from `inferExpr` to `inferBlock`. Most of
-the chain was `inferExprKind`, a single match of about 1,000 lines. Its long arms are now `and` functions of their own
-([#910](https://github.com/nanyx-lang/nanyx/issues/910)): an operator is `inferOperator`, a pipe `inferPipe`, a
-`match` `inferMatch` and a call `inferCall`. No arm left inline is over about 25 lines, but `inferCall` and
-`inferMatch` are each about 300.
-
-**2026-11-12.** `Program.fs` (parser) had grown back to the limit, at 1,498 lines:
-
-| File | Lines | What changed |
-|---|---|---|
-| `Program.fs` (parser) | 1,420 | `SourceTrivia.fs` (the parse error, the comments and blank lines the formatter puts back) moved out |
-
-**2026-11-13.** The first part of splitting `Library.fs` ([#365](https://github.com/nanyx-lang/nanyx/issues/365)),
-which was at 1,518 lines:
-
-| File | Lines | What changed |
-|---|---|---|
-| `Library.fs` | 1,020 | Workflow desugaring (`desugarWithDiagnostics`, `desugar`) moved out to `WorkflowDesugaring.fs` |
-| `Library.fs` | 1,063 | `@attribute` resolution (`applyAttributes`, `entryAttribute`, `entryContextModule`) moved out to `Attributes.fs`, and `collectImports` to `SyntaxTree.fs` |
-| `Library.fs` | 1,021 | Compiling errors to traps (`deferErrors`, `deferredMessage`) moved out to `DeferredErrors.fs` |
-| `Library.fs` | 948 | The types a checked module is kept in (`CompileResult`, `CheckedModule`, `ReExported`) moved out to `CheckedModule.fs` |
-| `Library.fs` | 728 | Module linking (what an import brings into scope and inlines: `inlinedItemsForImport`, `reachedItems`, `extendEnvWithImport` and their helpers) moved out to `ModuleLinking.fs` |
-
-`mergeImport` and its helpers then left `typecheckModule`, taking and returning a `MergedImports` record instead of
-changing 13 captured mutables. `Library.fs` holds only the compiling job now, at 761 lines.
-
-**2026-11-13.** `Program.fs` (parser) had grown back past the limit, to 1,509 lines
-([#366](https://github.com/nanyx-lang/nanyx/issues/366)):
-
-| File | Lines | What changed |
-|---|---|---|
-| `Program.fs` (parser) | 1,431 | The script header (`Directive`, `Directives`) moved out to `Directives.fs`, module `Parser.Program.Header` |
-| `Program.fs` (parser) | 1,358 | Destructuring defs (`destructuringDefWith` and the bindings it desugars to) moved out to `Destructuring.fs` |
-| `Expressions.fs` (parser) | 1,089 | Statements and top-level items moved out to `TopLevel.fs` (216 lines), and the public parse functions to `Api.fs` (70 lines). What was left of `Program.fs` is `Expressions.fs`, module `Parser.Program.Expressions` |
-
-**2026-11-13.** A local def and a top-level def were checked by two near-copies, in `inferBlock` and in
-`InferModule.fs` ([#373](https://github.com/nanyx-lang/nanyx/issues/373)). Reading a def's written type (the checks
-on it, its contexts, and the input and result it expects of a lambda) is now `DefAnnotations.read`, inferring the
-value against it `inferDefValue`, and a type definition's checks `DefAnnotations.typeDefErrors`, each used by both:
-
-| File | Lines | What changed |
-|---|---|---|
-| `Infer.fs` | 1,466 | The local def's annotation reading moved out to `DefAnnotations.fs` (101 lines) |
-| `InferModule.fs` | 424 | The top-level def's copy of it removed |
-
-What a def does once its value is inferred (generalising, and what an unannotated top-level def requires) still
-differs between the two, as the two kinds of def do.
-
-The loops that inferred each of a list of expressions in turn, threading the state and gathering every error, are
-now `inferAll` (a tuple's, record's and list's items, a match's values, an interpolated string's holes, a context
-member call's arguments), and those over patterns `inferPatterns`, beside `inferPattern`. A fresh variable for each
-item of a list is `InferState.freshVars`. `Infer.fs` is at 1,331 lines.
-
-**2026-11-16.** `CoreIrLower.fs` is at about 1,200 lines, after moves into `CoreIrLowerMatch.fs`, `CoreIrLowerLocals.fs`,
-`CoreIrLowerLifted.fs` and `CoreIrLowerMembers.fs` ([#1400](https://github.com/nanyx-lang/nanyx/issues/1400)). Its
-`FunctionLowering.Complex`, one match over every kind of expression, was 480 lines. Its long arms are now members of
-their own ([#872](https://github.com/nanyx-lang/nanyx/issues/872)): a name is `Identifier`, an operator `BinaryOp`, a
-call to a top-level function `CallDefinition`, an interpolated string `Interpolation`, and a top-level function passed
-as a value `WrapperClosure`. `Complex` is 225 lines, and no arm left in it is over about 20.
-
-`CodeGen.transpileTypedModuleWithOptions`, which compiles a whole module, was 656 lines, with every step inline. It is
-280 now: lowering the module to the core IR is `lowerTypedModule` (with `localContextsOf`, `contextMemberAliases` and
-`coreIrContextParameters`), the passes over the core IR (inlining, reach, reference counting and reuse) `optimised`,
-the drop, equality, ordering, hash and array functions `supportFunctions`, and the function table `contextPrelude`.
-What is left is emitting the functions and putting the module's text together.
-
-The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
-
+`Infer.fs` is mostly one recursive chain, from `inferExpr` to `inferBlock`, whose long arms are `and` functions of
+their own (`inferOperator`, `inferPipe`, `inferMatch`, `inferCall`); `inferMatch` and `inferCall` are each about 300
+lines. The `Compiler` workflow lists the files over the limit on every run, and the
+[`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 # The daily review
 
 A scheduled review runs once a day. It does five things:
