@@ -55,7 +55,7 @@ let ``Only a protected or private context's home module can construct it in a us
         Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "Tx" ], codesAt (block + constructed))
     let diagnostic = (Compiler.compile (privateTx + constructed)).Diagnostics.Head
     Assert.Equal(
-        "The private context 'Tx' can only be constructed in the module that defines it; call a function that module exports to supply it instead",
+        "The private context 'Tx' can only be constructed in the module that defines it: call a function that module exports to supply it instead",
         diagnostic.Message)
 
 [<Fact>]

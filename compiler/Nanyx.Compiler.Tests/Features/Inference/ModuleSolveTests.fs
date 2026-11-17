@@ -21,7 +21,7 @@ let private typeOf (name: string) (result: CompileResult) =
 let ``A failure among many defs is reported where solving the module afresh reports it`` () =
     let source = moduleOf (mapDefs 1 30 @ [ "def bad: string = list.map([1, 2, 3], { x -> x + 1 }) \\list.length" ] @ mapDefs 31 30)
     Assert.Equal(
-        (DiagnosticCodes.TypeMismatch.Code, "Type mismatch: int vs string.", "list.map([1, 2, 3], { x -> x + 1 }) \\list.length"),
+        (DiagnosticCodes.TypeMismatch.Code, "Type mismatch: 'int' vs 'string'", "list.map([1, 2, 3], { x -> x + 1 }) \\list.length"),
         onlyDiagnostic source)
 
 [<Fact>]

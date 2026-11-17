@@ -43,7 +43,7 @@ let ``A pipe to a name only another type attaches names what is attached`` () =
 def t = "x" \shout"""
     let code, message, at = onlyDiagnosticIn source (Compiler.compile source)
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
-    Assert.Equal("'string' has no attached 'shout', and there is no function 'shout' in scope. Only 'list.shout' is in scope", message)
+    Assert.Equal("'string' has no attached 'shout', and there is no function 'shout' in scope, but 'list.shout' is in scope", message)
     Assert.Equal("shout", at)
 
 [<Fact>]
@@ -100,7 +100,7 @@ import one as t
 def a = "x" \shout"""
     let code, message, at = onlyDiagnosticIn source (compileImportingAll (List.take 1 shoutingModules) source)
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
-    Assert.Equal("'string' has no attached 'shout', and there is no function 'shout' in scope. 'string.shout' is available as 't.string.shout'", message)
+    Assert.Equal("'string' has no attached 'shout', and there is no function 'shout' in scope, but 'string.shout' is available as 't.string.shout'", message)
     Assert.Equal("shout", at)
 
 [<Fact>]
@@ -114,7 +114,7 @@ let ``A pipe to a standard-library definition imported with as says how to reach
     let source = normalized """import nanyx/text as t
 def a = " x " \trim"""
     let _, message, _ = onlyDiagnosticIn source (Compiler.compile source)
-    Assert.Equal("'string' has no attached 'trim', and there is no function 'trim' in scope. 'string.trim' is available as 't.string.trim'", message)
+    Assert.Equal("'string' has no attached 'trim', and there is no function 'trim' in scope, but 'string.trim' is available as 't.string.trim'", message)
 
 [<Fact>]
 let ``A pipe to a definition two imports attach names both modules`` () =
@@ -124,7 +124,7 @@ import two
 def a = "x" \shout"""
     let code, message, at = onlyDiagnosticIn source (compileImportingAll shoutingModules source)
     Assert.Equal(DiagnosticCodes.AmbiguousAttachedFunction.Code, code)
-    Assert.Equal("'shout' is ambiguous for 'string': 'string.shout' is defined in 'one' and 'two'; import all but one of them with 'as'", message)
+    Assert.Equal("'shout' is ambiguous for 'string': 'string.shout' is defined in 'one' and 'two': import all but one of them with `as`", message)
     Assert.Equal("shout", at)
 
 [<Fact>]

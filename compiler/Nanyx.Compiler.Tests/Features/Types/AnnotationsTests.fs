@@ -12,22 +12,22 @@ let ``Typecheck rejects an annotation more general than its body`` () =
     let result = Compiler.compile "def f: a -> b = { x -> x }"
     assertReports DiagnosticCodes.AnnotationTooGeneral result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-    Assert.Contains("more general than the inferred type", message)
-    Assert.Contains("`b` would have to be `a`", message)
+    Assert.Contains("more general than its inferred type", message)
+    Assert.Contains("'b' would have to be 'a'", message)
 
 [<Fact>]
 let ``Typecheck rejects an annotation variable the body makes concrete`` () =
     let result = Compiler.compile "def g: a -> int = { x -> x + 1 }"
     assertReports DiagnosticCodes.AnnotationTooGeneral result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-    Assert.Contains("`a` would have to be `int`", message)
+    Assert.Contains("'a' would have to be 'int'", message)
 
 [<Fact>]
 let ``Typecheck rejects a non-function annotation more general than its value`` () =
     let result = Compiler.compile "def xs: list(a) = [1, 2]"
     assertReports DiagnosticCodes.AnnotationTooGeneral result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-    Assert.Contains("`a` would have to be `int`", message)
+    Assert.Contains("'a' would have to be 'int'", message)
 
 [<Fact>]
 let ``Typecheck accepts annotations the body proves`` () =
@@ -75,7 +75,7 @@ let ``Typecheck rejects a lambda annotated with a type variable alone`` () =
     match (Compiler.compile "def h: a = { x -> x }").Diagnostics with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.AnnotationTooGeneral.Code, diagnostic.Code)
-        Assert.Contains("more general than the inferred type", diagnostic.Message)
+        Assert.Contains("more general than its inferred type", diagnostic.Message)
     | other -> failwith $"Expected one diagnostic, got %A{other}"
 
 [<Fact>]

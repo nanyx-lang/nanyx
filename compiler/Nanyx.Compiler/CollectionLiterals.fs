@@ -29,7 +29,7 @@ let inferSpread (infer: Infer) (env: TypeEnv) (state: InferState) (expr: Express
         | TyVar _ -> inferAsCall (infer env) state expr CollectionSyntax.spreadList [ operand ]
         | ty ->
             Error [ Diagnostics.at DiagnosticCodes.InvalidCollectionSpread operand.Span
-                        $"A spread in a square-bracket literal takes a list or an array, and this is a '{Unifier.tyToString ty}'" ]
+                        $"A spread in a square-bracket literal takes a list or an array, not a '{Unifier.tyToString ty}'" ]
 
 /// Whether a literal of `ty`, expected where `literal` is written, is built through the type's `fromArray`: a list's
 /// items stay a list, and a map's entries a map, as does anything without a name a definition can be attached to.

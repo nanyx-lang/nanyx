@@ -45,17 +45,17 @@ module internal AttachedOperators =
         else
             let typeName, memberName = name.Substring(0, dot), name.Substring(dot + 1)
             if memberName = EqualityOperators.notEquals then
-                error $"'{name}' cannot be defined: '!=' is always 'not (a == b)'. Attach '==' instead"
+                error $"'{name}' cannot be defined, because `!=` is always `not (a == b)`: attach `==` instead"
             else
                 match kindOf state typeName with
                 | Some (BuiltIn builtIn) when OrderingOperators.isOperator memberName ->
-                    error $"'{name}' cannot be defined: '{builtIn}' is a built-in type, so its order is the compiler's own"
+                    error $"'{name}' cannot be defined, because '{builtIn}' is a built-in type, so its order is the compiler's own"
                 | _ ->
                 match nominalOnly |> List.tryFind (fun (attached, _, _, _) -> attached = memberName), kindOf state typeName with
                 | Some (_, decides, structural, _), Some Structural ->
-                    error $"'{name}' cannot be defined: '{typeName}' is a structural type, so {structural}. Declare it `protected` to define its own {decides}"
+                    error $"'{name}' cannot be defined, because '{typeName}' is a structural type, so {structural}: declare it `protected` to define its own {decides}"
                 | Some (_, decides, _, false), Some (BuiltIn builtIn) ->
-                    error $"'{name}' cannot be defined: '{builtIn}' is a built-in type, so its {decides} is the compiler's own. Make a nominal type of it to define its own {decides}"
+                    error $"'{name}' cannot be defined, because '{builtIn}' is a built-in type, so its {decides} is the compiler's own: make a nominal type of it to define its own {decides}"
                 | _ -> Ok ()
 
     /// The standard-library modules that own the attached definition `name` (`string.length`, owned by `nanyx/text`):
@@ -93,7 +93,7 @@ module internal AttachedOperators =
                 let typeName = name.Substring(0, name.LastIndexOf '.')
                 let error (from: string) =
                     Diagnostics.at DiagnosticCodes.AttachedDefinitionInScope span
-                        $"'{name}' is already in scope for '{typeName}'{from}: an attached definition can extend a type, but not redefine what it has. Give it another name"
+                        $"'{name}' is already in scope for '{typeName}'{from}, and an attached definition can extend a type but not redefine what it has: give it another name"
                 match ownerModules state name, TypeEnv.tryFind name imported |> Option.bind _.Symbol |> Option.bind (fun symbol -> state.Symbols |> Map.tryFind symbol) with
                 | owner :: _, _ -> Some (error $", from {owner}")
                 // The prelude is in files of its own, `nanyx/prelude-lists.nyx`, which every module imports.

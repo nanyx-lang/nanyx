@@ -53,18 +53,18 @@ let private orList (makers: (string * Ty) list) =
 let private makeOne (makers: (string * Ty) list) =
     match makers with
     | [] -> ""
-    | _ -> $" Make one with {orList makers}."
+    | _ -> $": make one with {orList makers}"
 
 /// The message for the constructor of `info`, a nominal type or context named `name`, written outside its home module
 /// (NYX0212): it names the ways among `names` to make one, if there are any.
 let constructedOutside (state: InferState) (names: (string * TypeScheme) list) (name: string) (info: TypeDefInfo) =
     let kind = if info.IsPrivate then "private" else "protected"
     if info.IsContext then
-        $"The {kind} context '{name}' can only be constructed in the module that defines it; call a function that module exports to supply it instead"
+        $"The {kind} context '{name}' can only be constructed in the module that defines it: call a function that module exports to supply it instead"
     else
         match makers state.BlockAliases names (TypeDefInfo.nominalId info) with
-        | [] -> $"The {kind} type '{name}' can only be constructed in the module that defines it; use a function that module exports instead"
-        | found -> $"The {kind} type '{name}' can only be constructed in the module that defines it.{makeOne found}"
+        | [] -> $"The {kind} type '{name}' can only be constructed in the module that defines it: use a function that module exports instead"
+        | found -> $"The {kind} type '{name}' can only be constructed in the module that defines it{makeOne found}"
 
 /// The module that makes values of `nominal`, as a reader knows it: the `module name =` block it is defined in, or its
 /// file's module.
@@ -159,7 +159,7 @@ let shapeError
         | _ -> "a value"
     let found = makers state.BlockAliases names nominal
     let message =
-        $"'{typeName}' is {kind}: {maker} makes values of it, so {what} of its shape isn't a '{typeName}' here.{makeOne found}"
+        $"'{typeName}' is {kind}, so {maker} makes values of it, and {what} of its shape isn't a '{typeName}' here{makeOne found}"
     let value =
         module'
         |> List.collect SyntaxTree.ofItem

@@ -43,6 +43,6 @@ module internal ScrutineeRests =
     let missingCatchAll (resolved: Ty list) (arms: MatchArm list) (headSpan: SourceSpan) : Diagnostic option =
         let hasCatchAll = arms |> List.exists (fst >> List.exists PatternSpace.isCatchAll)
         if resolved |> List.exists hasRest && not hasCatchAll then
-            Some (Diagnostics.at DiagnosticCodes.MissingCatchAllArm headSpan "Tag union rest parameters require a catch-all match arm")
+            Some (Diagnostics.at DiagnosticCodes.MissingCatchAllArm headSpan "This match is on a union with a rest, which stands for tags it doesn't name: add a catch-all arm, `_ -> ...`")
         else
             None

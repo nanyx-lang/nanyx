@@ -65,7 +65,7 @@ def result = f(4)"""
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("Type mismatch", message)
     Assert.Contains("(", message)
-    Assert.Contains("int vs (", message)
+    Assert.Contains("'int' vs '(", message)
 
 // A record type is closed: it has exactly the fields it names (#470).
 [<Fact>]
@@ -75,7 +75,7 @@ let ``A closed record parameter rejects a record with a field more`` () =
 def data = (x = 1, y = 2, z = 3)
 def result = f(data)"""
     let diagnostic = Assert.Single (Compiler.compile source).Diagnostics
-    Assert.StartsWith("Record field mismatch: {x, y, z} vs {x, y}: only the first has z.", diagnostic.Message)
+    Assert.EndsWith("where only the first has 'z'", diagnostic.Message)
 
 [<Fact>]
 let ``A closed record parameter rejects a record with a field fewer`` () =
@@ -83,12 +83,12 @@ let ``A closed record parameter rejects a record with a field fewer`` () =
         normalized """def f: (x: int, y: int) -> int = { x, y -> x + y }
 def result = f((x = 1))"""
     let diagnostic = Assert.Single (Compiler.compile source).Diagnostics
-    Assert.StartsWith("Record field mismatch: {x} vs {x, y}: only the second has y.", diagnostic.Message)
+    Assert.EndsWith("where only the second has 'y'", diagnostic.Message)
 
 [<Fact>]
 let ``A closed record annotation rejects a record with a field more`` () =
     let diagnostic = Assert.Single (Compiler.compile "type Point = (x: int, y: int)\ndef p: Point = (x = 1, y = 2, z = 3)").Diagnostics
-    Assert.StartsWith("Record field mismatch: {x, y, z} vs {x, y}: only the first has z.", diagnostic.Message)
+    Assert.EndsWith("where only the first has 'z'", diagnostic.Message)
 
 [<Fact>]
 let ``A function that only reads some fields takes a record with more`` () =

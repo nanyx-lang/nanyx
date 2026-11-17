@@ -65,5 +65,5 @@ let ``Only a nominal type may attach hash`` () =
     match (Compiler.compile "type Point = (x: int, y: int)\ndef Point.hash: Point -> int = { p -> p.x }\n").Diagnostics with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.UnattachableDefinition.Code, diagnostic.Code)
-        Assert.Equal("'Point.hash' cannot be defined: 'Point' is a structural type, so its hash is always that of its structure. Declare it `protected` to define its own hash", diagnostic.Message)
+        Assert.Equal("'Point.hash' cannot be defined, because 'Point' is a structural type, so its hash is always that of its structure: declare it `protected` to define its own hash", diagnostic.Message)
     | other -> failwith $"Expected one diagnostic, got %A{other}"

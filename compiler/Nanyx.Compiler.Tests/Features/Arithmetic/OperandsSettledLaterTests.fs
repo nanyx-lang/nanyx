@@ -80,5 +80,5 @@ def calc: () -> () = {
 }
 """
     Assert.Equal(
-        (DiagnosticCodes.TypeMismatch.Code, "'string' cannot be used with +: it is not a number. Use ++ to join them", "pop(mut s) + pop(mut s)"),
+        (DiagnosticCodes.TypeMismatch.Code, "'string' is not a number, so it cannot be used with +: use `++` to join them", "pop(mut s) + pop(mut s)"),
         onlyDiagnostic source)

@@ -84,7 +84,7 @@ def theirs: p.Person = mine
     let diagnostics = compiledWithPeople ids
     Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], diagnostics |> List.map fst)
     Assert.Equal(
-        "Type mismatch: Person vs Person. They are different types: the first is defined in 'ids.nyx', the second in 'people.nyx'.",
+        "Type mismatch: 'Person' vs 'Person', defined in 'ids.nyx' and 'people.nyx'",
         snd diagnostics.Head)
 
 [<Fact>]
@@ -112,7 +112,7 @@ def theirs: p.Person = (name = "Ada")
 """
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.ProtectedShape.Code,
-          "'Person' is protected: only the module 'people' makes values of it, so a record of its shape isn't a 'Person' here." ],
+          "'Person' is protected, so only the module 'people' makes values of it, and a record of its shape isn't a 'Person' here" ],
         compiledWithPeople ids)
 
 [<Fact>]
@@ -140,7 +140,7 @@ def theirs: p.Person = p.Person(name = "Ada")
 """
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.NominalConstructedOutsideItsModule.Code,
-          "The protected type 'p.Person' can only be constructed in the module that defines it; use a function that module exports instead" ],
+          "The protected type 'p.Person' can only be constructed in the module that defines it: use a function that module exports instead" ],
         compiledWithPeople (ids.ReplaceLineEndings "\n"))
 
 [<Fact>]

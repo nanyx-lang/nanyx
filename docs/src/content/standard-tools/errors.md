@@ -11,7 +11,7 @@ The command line shows each error with the file, line and column it is at, then 
 is about underlined:
 
 ```text
-shapes.nyx:3:39: error NYX0201: 'string' cannot be used with *: it is not a number
+shapes.nyx:3:39: error NYX0201: 'string' is not a number, so it cannot be used with *
   |
 3 | def perimeter: int -> int = { side -> side * "4" }
   |                                       ^^^^^^^^^^
@@ -742,8 +742,8 @@ offers to add it. A name qualified by the module's own name is imported under th
 exports lists each of them.
 
 ```nanyx
-def larger = max(1, 2)  -- error NYX0102: Unknown function 'max'. 'max' is defined in 'nanyx/math': add `import nanyx/math`
-def size = math.abs(-1)  -- error NYX0102: Unknown function 'math.abs'. 'abs' is defined in 'nanyx/math': add `import nanyx/math as math`
+def larger = max(1, 2)  -- error NYX0102: Unknown function 'max', and 'max' is defined in 'nanyx/math': add `import nanyx/math`
+def size = math.abs(-1)  -- error NYX0102: Unknown function 'math.abs', and 'abs' is defined in 'nanyx/math': add `import nanyx/math as math`
 ```
 
 To fix it, correct the name, define the function, or import the module that exports it.
@@ -782,7 +782,7 @@ A name is exported by more than one of the modules a file imports, so the compil
 import english
 import french
 
-def greeting = hello  -- error NYX0105: 'hello' is ambiguous between 'english.hello' and 'french.hello'; import all but one of them with 'as'
+def greeting = hello  -- error NYX0105: 'hello' is ambiguous between 'english.hello' and 'french.hello': import all but one of them with `as`
 -- file: english.nyx
 module english
 
@@ -969,7 +969,7 @@ A value's type is not the type its place needs: an argument is not what the func
 not the type its annotation says, or two branches give back different types. The message names the two types.
 
 ```nanyx
-def count: int = "three"  -- error NYX0201: Type mismatch: string vs int.
+def count: int = "three"  -- error NYX0201: Type mismatch: 'string' vs 'int'
 ```
 
 To fix it, change the value, or the annotation, so that the two types agree. Where the types come from far apart, an
@@ -981,7 +981,7 @@ A definition's annotation promises more than its body gives: it says a type vari
 needs a particular type, or the same type as another variable.
 
 ```nanyx
-def same: a -> b = { x -> x }  -- error NYX0202: Annotation of 'same' is more general than the inferred type: `b` would have to be `a`
+def same: a -> b = { x -> x }  -- error NYX0202: The annotation of 'same' is more general than its inferred type, where 'b' would have to be 'a'
 ```
 
 To fix it, write the type the body has (here `a -> a`), or leave the annotation out and let the type be inferred.
@@ -1007,7 +1007,7 @@ No list of arms can name them all, so the match needs an arm that takes anything
 
 ```nanyx
 def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = { o, f ->
-  match o  -- error NYX0204: Tag union rest parameters require a catch-all match arm
+  match o  -- error NYX0204: This match is on a union with a rest, which stands for tags it doesn't name: add a catch-all arm, `_ -> ...`
     | #some(v) -> #some(f(v))
 }
 ```
@@ -1095,7 +1095,7 @@ To fix it, put the code in a builder block, such as `proc { ... }`, or match on 
 A built-in, such as `dbg`, `not`, `with` or a loop, is given the wrong number or kind of arguments.
 
 ```nanyx
-def x = dbg()  -- error NYX0208: dbg expects a single argument
+def x = dbg()  -- error NYX0208: `dbg` takes one argument, not 0
 ```
 
 To fix it, give the built-in what the message says it expects.
@@ -1107,7 +1107,7 @@ position rather than by name ([Records](../tour/records)).
 
 ```nanyx
 def point = (x = 1, y = 2)
-def moved = point with (3)  -- error NYX0209: `with` updates fields by name
+def moved = point with (3)  -- error NYX0209: This field has no name, and `with` updates fields by name: write `name = value`
 ```
 
 To fix it, name the fields to update, as in `point with (x = 3)`, and annotate the record's type if it is not known.
@@ -1146,7 +1146,7 @@ module money =
 
 import money
 
-def price = Money(pence = 250)  -- error NYX0212: The nominal type 'Money' can only be constructed in the module that defines it; ...
+def price = Money(pence = 250)  -- error NYX0212: The nominal type 'Money' can only be constructed in the module that defines it: ...
 ```
 
 To fix it, make the value with a function the module exports, such as `Money.new`. The message names the definitions
@@ -1186,7 +1186,7 @@ Two parts of an and-pattern (`p & q`) bind the same name.
 ```nanyx
 def pick: (int, int) -> int = { p ->
   match p
-    | (a, _) & (_, a) -> a  -- error NYX0215: The name 'a' is bound by more than one part of this pattern; ...
+    | (a, _) & (_, a) -> a  -- error NYX0215: The name 'a' is bound by more than one part of this and-pattern: bind it in one part only
 }
 ```
 
@@ -1235,7 +1235,7 @@ order and equality are always those of its structure; `!=`, which is always `not
 
 ```nanyx
 type Point = (x: int, y: int)
-def Point.hash: Point -> int = { p -> p.x }  -- error NYX0219: 'Point.hash' cannot be defined: 'Point' is a structural type, ...
+def Point.hash: Point -> int = { p -> p.x }  -- error NYX0219: 'Point.hash' cannot be defined, because 'Point' is a structural type, ...
 ```
 
 To fix it, make the type nominal (`Point`) to give it its own definition, or attach `==` instead of `!=`.
@@ -1246,7 +1246,7 @@ A block ends with a definition, so it has no value to give back.
 
 ```nanyx
 def total = {
-  def x = 1  -- error NYX0220: This block ends with the definition of 'x', so it has no value to give back. ...
+  def x = 1  -- error NYX0220: This block ends with the definition of 'x', so it has no value to give back: ...
 }
 ```
 
@@ -1287,7 +1287,7 @@ A value of one type is assigned to a cell of another. A cell holds values of one
 ```nanyx
 def count = memory {
   mut x = 0
-  x := "one"  -- error NYX0223: Type mismatch: string vs int.
+  x := "one"  -- error NYX0223: Type mismatch: 'string' vs 'int'
   x
 }
 ```
@@ -1314,7 +1314,7 @@ whose parameter type writes no contexts, or returned from a definition whose res
 ```nanyx
 def runPure: (int -> int) -> int = { g -> g(5) }
 
-def pass: ([Console] int -> int) -> int = { f -> runPure(f) }  -- error NYX0227: A function that requires the context 'Console' is given where 'int -> int' is expected, ...
+def pass: ([Console] int -> int) -> int = { f -> runPure(f) }  -- error NYX0227: '[Console] int -> int' is given where 'int -> int' is expected, which does not require the context 'Console': ...
 ```
 
 To fix it, write the contexts the function may require on the type expected, as in `([Console] int -> int)`, or a
@@ -1363,7 +1363,7 @@ To fix it, fall back to another option with `orElseSome`, as in `lookup("a") \or
 A spread, `...r`, is written of a value whose fields are not known where it is written.
 
 ```nanyx
-def f = { r -> (...r, a = 1) }  -- error NYX0231: a spread (`...`) needs a record whose fields are known here
+def f = { r -> (...r, a = 1) }  -- error NYX0231: A spread (`...`) needs a record whose fields are known here
 ```
 
 To fix it, annotate the value's type, so that its fields are known.
@@ -1468,7 +1468,7 @@ import (
   nanyx/host.runtime
 )
 
-def peek = { address -> readByte(address) }  -- error NYX0238: 'peek' requires the context 'HostRuntime', which only a host may require. ...
+def peek = { address -> readByte(address) }  -- error NYX0238: 'peek' requires the context 'HostRuntime', which only a host may require: ...
 ```
 
 To fix it, require the context the host provides instead, such as `Console`, and call its members.
@@ -1665,7 +1665,7 @@ read with the `Hash` it was built with wherever they are written
 ([A type's own instance wins](../advanced/contexts#a-types-own-instance-wins)).
 
 ```nanyx
-def n = use Eq(int)(`==` = { x, y -> true }) in 1  -- error NYX0250: 'int' already has `==`: a `use` can't replace it. For a different equality, wrap the value in a protected type with its own `==`, or pass the comparison to a `...By` function
+def n = use Eq(int)(`==` = { x, y -> true }) in 1  -- error NYX0250: 'int' already has `==`, which a `use` can't replace: for a different equality, wrap the value in a protected type with its own `==`, or pass the comparison to a `...By` function
 ```
 
 To fix it, give the values a type that says how they behave, a protected type with its own `==`, `compare`, `hash` or
@@ -1722,7 +1722,7 @@ but never redefine one it has, so `"abc" \length` is always the string's length
 ([Extending a type](../advanced/attached-definitions#extending-a-type)).
 
 ```nanyx
-def string.length: string -> int = { s -> 42 }  -- error NYX0254: 'string.length' is already in scope for 'string', from nanyx/text: an attached definition can extend a type, but not redefine what it has. Give it another name
+def string.length: string -> int = { s -> 42 }  -- error NYX0254: 'string.length' is already in scope for 'string', from nanyx/text, and an attached definition can extend a type but not redefine what it has: give it another name
 ```
 
 To fix it, give the definition a name of its own, or, to change how a value behaves, wrap it in a protected type
@@ -1777,7 +1777,7 @@ copies. Spreading a set or anything else isn't supported.
 
 ```nanyx
 def s = set[1, 2]
-def a = Array[...s, 3]  -- error NYX0258: A spread in a square-bracket literal takes a list or an array, and this is a 'set(int)'
+def a = Array[...s, 3]  -- error NYX0258: A spread in a square-bracket literal takes a list or an array, not a 'set(int)'
 ```
 
 To fix it, spread a list of the elements, such as `set.toList(s)`.
@@ -1813,7 +1813,7 @@ module Points =
 
 import Points
 
-def p: Point = (x = 3, y = 4)  -- error NYX0260: 'Point' is protected: only the module 'Points' makes values of it, so a record of its shape isn't a 'Point' here. Make one with 'Point.new'.
+def p: Point = (x = 3, y = 4)  -- error NYX0260: 'Point' is protected, so only the module 'Points' makes values of it, and a record of its shape isn't a 'Point' here: make one with 'Point.new'
 ```
 
 To fix it, make the value with one of the definitions the message names. When there is one, it takes the fields in

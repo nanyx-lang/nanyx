@@ -381,7 +381,7 @@ let ``Typecheck joins the tags inside a list literal's tuples field by field`` (
 let ``Typecheck still rejects list elements that are same-named tags with different payloads`` () =
     let result = Compiler.compile """def f = [#some(1), #some("one")]"""
     let diagnostic = Assert.Single result.Diagnostics
-    Assert.Equal("Type mismatch: int vs string.", diagnostic.Message)
+    Assert.Equal("Type mismatch: 'int' vs 'string'", diagnostic.Message)
 
 [<Fact>]
 let ``Typecheck joins the tag payloads of same-named tags across branches`` () =

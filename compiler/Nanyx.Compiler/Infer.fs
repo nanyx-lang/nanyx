@@ -313,9 +313,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 Ok (mkTypedExpr expr typedBody.Type (Some typedBody) None None, finalState)
             | Error err -> Error err
     | WorkflowBindExpr _ ->
-        Error [ Diagnostics.at DiagnosticCodes.WorkflowKeywordOutsideWorkflow expr.Span "Workflow bind used outside of a workflow block" ]
+        Error [ Diagnostics.at DiagnosticCodes.WorkflowKeywordOutsideWorkflow expr.Span "A workflow's bind is outside a builder block: write it inside one, such as `proc { ... }`" ]
     | WorkflowReturnExpr _ ->
-        Error [ Diagnostics.at DiagnosticCodes.WorkflowKeywordOutsideWorkflow expr.Span "Workflow return used outside of a workflow block" ]
+        Error [ Diagnostics.at DiagnosticCodes.WorkflowKeywordOutsideWorkflow expr.Span "A workflow's `return` is outside a builder block: write it inside one, such as `proc { ... }`" ]
     | Block statements ->
         inferBlock env state expr statements
     | TupleExpr items ->
@@ -618,7 +618,7 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                         Diagnostics.at
                             DiagnosticCodes.NameBoundTwiceInPattern
                             pattern.Span
-                            $"The name '{name}' is bound by more than one part of this pattern; each part of an and-pattern must bind different names" ]
+                            $"The name '{name}' is bound by more than one part of this and-pattern: bind it in one part only" ]
                 | [] ->
                     let step result part =
                         result
@@ -695,7 +695,7 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                 if not isolation.IsEmpty then
                     Error isolation
                 elif info.IsPrivate && not (inNominalHome state' (TypeDefInfo.nominalId info) pattern.Span) then
-                    Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule pattern.Span $"The private type '{typeName}' can only be taken apart in the module that defines it; use a function that module exports instead" ]
+                    Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule pattern.Span $"The private type '{typeName}' can only be taken apart in the module that defines it: use a function that module exports instead" ]
                 else
                     let nominalTy, underlying, _, instantiated = freshNominalType state' info
                     let constrained = addConstraint scrutineeTy nominalTy instantiated
@@ -864,7 +864,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
             match inferExpr env state single with
             | Ok (typedArg, next) -> Ok (mkTypedExpr expr typedArg.Type None None None, next)
             | Error err -> Error err
-        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall calleeSpan "dbg expects a single argument" ]
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall calleeSpan $"`dbg` takes one argument, not {args.Length}" ]
     elif name = NotSyntax.builtIn then
         // The `not` keyword: the parser represents `not x` as a call to "not" with one argument.
         match args with
@@ -874,7 +874,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                 let constrained = addConstraint typedArg.Type (TyPrimitive "bool") next
                 Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, constrained)
             | Error err -> Error err
-        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "not expects a single operand" ]
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "`not` takes one operand" ]
     elif name = NegateSyntax.builtIn then
         match args with
         | [ single ] ->
@@ -883,7 +883,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                 let ty = typedArg.Type
                 OperatorCalls.inferNegation (memberOfInstanceInScope env next) (tryResolveAttachedFunction env (resolveSoFar next ty)) env next expr ty (numericOperandType next ty ty)
                 |> Result.map (fun (resultTy, negated) -> mkTypedExpr expr resultTy None None None, negated))
-        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "- expects a single operand" ]
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "Negation, `-`, takes one operand" ]
     elif name = WithSyntax.builtIn then
         // `record with f = v, ...`: the parser represents a record update as a call to "__with" with the
         // record and a record of the updated fields. The result has the record's type; every updated
@@ -915,10 +915,10 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                                 match inferExpr env current valueExpr with
                                 | Ok (typedValue, next) -> current <- addConstraintAt valueExpr.Span typedValue.Type fieldTy next
                                 | Error err -> errors <- errors @ err
-                        | PositionalField valueExpr -> errors <- errors @ [ Diagnostics.at DiagnosticCodes.InvalidRecordUpdate valueExpr.Span "`with` updates fields by name" ]
+                        | PositionalField valueExpr -> errors <- errors @ [ Diagnostics.at DiagnosticCodes.InvalidRecordUpdate valueExpr.Span "This field has no name, and `with` updates fields by name: write `name = value`" ]
                     if errors.IsEmpty then Ok (mkTypedExpr expr typedBase.Type None None None, current)
                     else Error errors
-        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "`with` expects a record and the fields to update" ]
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "`with` takes a record and the fields to update" ]
     elif name = RangeSyntax.builtIn then
         // `a..b` is the prelude's `seq.range(a, b)`, and `a..`, which has no end, its `seq.from(a)`: each a `seq(int)` (see
         // `Seqs`).
@@ -933,26 +933,26 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
         // `rec name = value`: the value of a self-referencing local def; the block already binds the name.
         match args with
         | [ inner ] -> inferExpr env state inner
-        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "rec expects a single definition" ]
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "`rec` takes one definition" ]
     elif name = MutSyntax.builtIn || name = AssignSyntax.builtIn || name = CellPassingSyntax.argument then
         match expr.Kind with
         | MutSyntax.Call value -> MemoryCells.inferMut inferExpr env state expr value
         | CellPassingSyntax.Argument cell -> MemoryCells.inferArgument inferExpr env state expr cell
         | AssignSyntax.Call(target, value) -> MemoryCells.inferAssign inferExpr env state expr target value
-        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span $"{name} expects a cell and a value" ]
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span $"`{name}` takes a cell and a value" ]
     elif name = ForSyntax.builtIn then
         match expr.Kind with
         | ForSyntax.Call(iterables, lambdaExpr, lambdaArgs, lambdaBody) ->
             Loops.inferFor inferExpr inferLambdaWithExpected env state expr iterables lambdaExpr lambdaArgs lambdaBody
-        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "for expects an iterable and a loop body" ]
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "`for` takes an iterable and a loop body" ]
     elif name = WhileSyntax.builtIn then
         match expr.Kind with
         | WhileSyntax.Call(condition, body) -> Loops.inferWhile inferExpr env state expr condition body
-        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "while expects a condition and a loop body" ]
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "`while` takes a condition and a loop body" ]
     elif name = CollectionSyntax.spread then
         match args with
         | [ operand ] -> CollectionLiterals.inferSpread inferExpr env state expr operand
-        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "a spread takes one list or array" ]
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "A spread takes one list or array" ]
     else
     match expr.Kind with
     // `T[...]` of a type with no `fromArray`, reported at the type's name.
@@ -1007,7 +1007,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                             | other -> other
                         Ok (mkTypedExpr expr returnTy None None None, { LambdaContexts.recordRunHere env typedLambda.Type next with WorkflowBlocks = next.WorkflowBlocks.Add expr.Id })
                     | Error err -> Error err
-                | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidWorkflow calleeSpan $"Workflow '{name}' must be called with a trailing lambda" ]
+                | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidWorkflow calleeSpan $"The workflow '{name}' is called without a trailing lambda: write its block after it, as in `{name} {{ ... }}`" ]
             | None ->
                 // With a known signature, each argument is checked against its parameter as it is inferred,
                 // so a lambda argument's parameters can take their types from the signature and from the
@@ -1222,7 +1222,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     let message =
                         match tryResolveAttachedFunction env receiverTy memberName with
                         | Some attached ->
-                            $"'{receiver}' is a value, so '{name}' is not a function's name. '{attached}' is attached to its type: call it with a pipe, as in `{receiver} \\{memberName}(...)`"
+                            $"'{receiver}' is a value, so '{name}' is not a function's name, but '{attached}' is attached to its type: call it with a pipe, as in `{receiver} \\{memberName}(...)`"
                         | None -> $"'{receiver}' is a value, so '{name}' is not a function's name, and '{Unifier.tyToString receiverTy}' has no '{memberName}' attached"
                     Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message ]
                 | _ -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" env.Names.Keys name ]

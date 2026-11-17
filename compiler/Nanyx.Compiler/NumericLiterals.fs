@@ -46,9 +46,9 @@ module internal NumericLiterals =
     let notANumber (op: string) (ty: Ty) =
         let advice =
             match op, Unifier.unalias ty with
-            | "+", (TyPrimitive "string" | Lists.ListType _) -> ". Use ++ to join them"
+            | "+", (TyPrimitive "string" | Lists.ListType _) -> ": use `++` to join them"
             | _ -> ""
-        $"'{Unifier.tyToDisplayString Ascii ty}' cannot be used with {written op}: it is not a number{advice}"
+        $"'{Unifier.tyToDisplayString Ascii ty}' is not a number, so it cannot be used with {written op}{advice}"
 
     /// `settle` for the literals, or else for the operators' operands (`operands`).
     let private settleOf (operands: bool) (isOwn: Ty -> bool) (state: InferState) : InferState =
