@@ -603,7 +603,7 @@ dbg(math.truncate(1.0 / 0.0))
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
-    Assert.Contains("wasm trap: integer overflow", outcome.StandardError)
+    Assert.Contains("a float that is NaN, infinite or out of the range of int converted to an int", outcome.StandardError)
 
 [<Fact>]
 let ``Run - nanyx/math floor of a float out of the range of int stops the program`` () =
@@ -617,7 +617,7 @@ println("after {n}")
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("before\n", outcome.StandardOutput)
-    Assert.Contains("wasm trap: integer overflow", outcome.StandardError)
+    Assert.Contains("a float that is NaN, infinite or out of the range of int converted to an int", outcome.StandardError)
 
 [<Fact>]
 let ``Run - nanyx/math round of NaN stops the program`` () =
@@ -629,4 +629,4 @@ dbg(math.round(0.0 / 0.0))
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
-    Assert.Contains("wasm trap: invalid conversion to integer", outcome.StandardError)
+    Assert.Contains("a float that is NaN, infinite or out of the range of int converted to an int", outcome.StandardError)

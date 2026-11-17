@@ -20,6 +20,20 @@ run every program this way, so a leak anywhere fails a test. `run --memory` does
 asks for text; `WriteProgram` assembles it (see [the binary format](./compilation#the-binary-format)). `run --no-inline` and `build --no-inline` clear
 `WasmOptions.Inline` (see [Inlining](./inlining)); the tour examples are run both ways, and must print the same.
 
+# Runtime errors
+
+A program that traps stops with `Runtime error: …` and exit code 1, written by `ReportRunError` in `Program.cs` from the
+`RunError` the runner gives. `WasmRunner.trapped` in `Runner.fs` reads the trap: an `unreachable` in the allocator is
+out of memory (see [Memory management](./memory-management)), and running out of stack names the function (see
+[Tail calls](./tail-calls#running-out-of-stack)). Arithmetic the program can't finish is a `RunError.ArithmeticError`
+with an `ArithmeticFault`, by the trap's code and the runtime helper it happened in: integer overflow, naming the type
+when the helper is one of the integer helpers `__nanyx_<type>_<op>` (`__nanyx_int_add`, `__nanyx_i8_mul`); division
+by zero; a float that can't be an int, from `__nanyx_float_to_int` (which traps as an overflow on an infinity and as a
+bad conversion on NaN); and an int out of a sized type's range, from `__nanyx_<type>_from_int`. Each names the innermost
+function on the stack that the source names, as running out of stack does, where inlining left one.
+`WasmRunner.describeFault` words the message, for the CLI and the HTTP host. Any other trap is reported as Wasmtime
+gives it, with its backtrace.
+
 # The stopwatch
 
 The compiler reports to the CLI through a `CompileListener` (`CompileListener.fs`): a package build says which file

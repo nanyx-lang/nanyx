@@ -54,7 +54,7 @@ def main = {{
     let outcome = runSource (source.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("before\n", outcome.StandardOutput)
-    Assert.Contains("wasm trap: integer overflow", outcome.StandardError)
+    Assert.StartsWith("Runtime error: integer overflow", outcome.StandardError)
 
 [<Fact>]
 let ``Run - int arithmetic that comes close to overflowing does not stop the program`` () =

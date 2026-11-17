@@ -49,15 +49,3 @@ println(count(build(1000000, [])))
     let outcome = runSourceWith false "" source
     Assert.Equal(message "count", outcome.StandardError.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
-
-[<Fact>]
-let ``Another trap is reported as it was`` () =
-    let source =
-        normalized """def zero: int -> int = { n -> n - n }
-
-println(10 / zero(3))
-"""
-    let outcome = runSourceWith false "" source
-    Assert.StartsWith("Runtime error:", outcome.StandardError)
-    Assert.Contains("divide by zero", outcome.StandardError)
-    Assert.Equal(1, outcome.ExitCode)
