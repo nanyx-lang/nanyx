@@ -66,7 +66,7 @@ def main = {
 let ``Run - arithmetic on two type variables calls each one's instance`` () =
     let source =
         """
-def both: [Add(a), Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p - q) }
+def both: [Add(a), Sub(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p - q) }
 def same: [Eq(a), Eq(b)] a, a, b, b -> bool = { x, y, p, q -> x == y and p != q }
 def r = { x, y, p, q -> (x + y, p * q) }
 def negated = { x, p -> (-x, -p) }
