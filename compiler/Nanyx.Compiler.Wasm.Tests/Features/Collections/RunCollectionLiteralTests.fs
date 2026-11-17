@@ -16,7 +16,7 @@ def s: set(int) = [1, 2, 2, 3]
 def m: map(string, int) = ["a" => 1, "b" => 2]
 
 println("{a}")
-println(set.count(s))
+println(set.length(s))
 println(map.get(m, "b"))
 """
     |> assertRan "[1, 2, 3]\n3\n#some(2)\n"
@@ -31,7 +31,7 @@ def m = map["x" => 10]
 def l = List[7, 8]
 
 println("{a}")
-println(set.count(s))
+println(set.length(s))
 println(map.get(m, "x"))
 println("{l}")
 """
@@ -44,7 +44,7 @@ let ``Run - a literal passed where a function takes an array builds one`` () =
 import nanyx/array
 
 def total: Array(int) -> int = { xs -> array.fold(xs, 0) { acc, x -> acc + x } }
-def both: Array(int), set(int) -> int = { xs, s -> total(xs) + set.count(s) }
+def both: Array(int), set(int) -> int = { xs, s -> total(xs) + set.length(s) }
 
 println(total([7, 8, 9]))
 println(both([1], [5, 5, 6]))
@@ -64,8 +64,8 @@ def e = Array[]
 def l = []
 
 println(array.length(a))
-println(set.count(s))
-println(map.count(m))
+println(set.length(s))
+println(map.length(m))
 println(array.length(e))
 println(list.length(l))
 """

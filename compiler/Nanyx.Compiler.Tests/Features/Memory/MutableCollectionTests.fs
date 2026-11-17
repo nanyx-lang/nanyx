@@ -17,7 +17,7 @@ def total = memory {
   stack \push(1)
   def items = MList.empty()
   items \add("a")
-  MStack.count(stack) + MList.count(items)
+  MStack.length(stack) + MList.length(items)
 }
 """
     let typed = compileClean (normalized source)
@@ -52,7 +52,7 @@ def mixed = memory {
   def stack = MStack.empty()
   stack \push(1)
   stack \push("two")
-  MStack.count(stack)
+  MStack.length(stack)
 }
 """
     let code, _ = singleError (normalized source)

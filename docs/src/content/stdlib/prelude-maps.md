@@ -37,7 +37,7 @@ A `set(a)` holds each of its elements once. There is no set literal yet: a set i
 def seen = set.fromList([3, 1, 3, 2])
 
 println(set.contains(seen, 2))
-println(set.count(seen))
+println(set.length(seen))
 -- true
 -- 3
 ```
@@ -113,10 +113,10 @@ def map.remove: [Eq(k), Hash(k)] map(k, v), k -> map(k, v)
 
 `m` without `key` or its value. A map that has no `key` is given back as it is.
 
-## `map.count`
+## `map.length`
 
 ```nanyx fragment
-def map.count: map(k, v) -> int
+def map.length: map(k, v) -> int
 ```
 
 The number of keys.
@@ -262,10 +262,10 @@ def set.remove: [Eq(a), Hash(a)] set(a), a -> set(a)
 
 `s` without `x`. A set that does not hold `x` is given back as it is.
 
-## `set.count`
+## `set.length`
 
 ```nanyx fragment
-def set.count: set(a) -> int
+def set.length: set(a) -> int
 ```
 
 The number of elements.

@@ -84,7 +84,7 @@ def lastCell: list(a) -> list(a) = { xs ->
 }
 
 --| How many elements `items` holds.
-export def MList.count: [Memory] MList(a) -> int = { MList(state) ->
+export def MList.length: [Memory] MList(a) -> int = { MList(state) ->
   MRef.get(state).count
 }
 

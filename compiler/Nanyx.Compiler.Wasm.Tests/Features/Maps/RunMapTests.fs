@@ -49,7 +49,7 @@ let ``Run - a key written twice in a literal holds the value written last`` () =
         []
         [ """def m = ["a" => 1, "b" => 2, "a" => 3]"""
           """found(m("a"))"""
-          """println("{map.count(m)}")""" ]
+          """println("{map.length(m)}")""" ]
     |> runSource
     |> assertRan "3\n2\n"
 
@@ -64,7 +64,7 @@ let ``Run - insert adds a key, or replaces its value, and leaves the map it was 
           """found(replaced("a"))"""
           """found(m("c"))"""
           "println(keys(replaced))"
-          """println("{map.count(replaced)}")""" ]
+          """println("{map.length(replaced)}")""" ]
     |> runSource
     |> assertRan "3\n10\nnot found\nabc\n3\n"
 
@@ -77,7 +77,7 @@ let ``Run - remove takes a key out, and containsKey says whether a map has one``
           "println(show(map.containsKey(m, 2)))"
           "println(show(map.containsKey(removed, 2)))"
           "found(removed(3))"
-          """println("{map.count(map.remove(removed, 7))}")""" ]
+          """println("{map.length(map.remove(removed, 7))}")""" ]
     |> runSource
     |> assertRan "T\nF\n30\n2\n"
 
@@ -128,7 +128,7 @@ let ``Run - list.groupBy takes a key of any type with an Eq and a Hash`` () =
           """println(list.fold(map.keys(byCity), "", { acc, k -> acc ++ k ++ " " }))"""
           """println(names(byCity("Leeds") \someOr([])))"""
           """def byBoth = people \groupBy { p -> (p.city, p.age) }"""
-          """println("{map.count(byBoth)} {names(byBoth(("Leeds", 30)) \someOr([]))}")""" ]
+          """println("{map.length(byBoth)} {names(byBoth(("Leeds", 30)) \someOr([]))}")""" ]
     |> runSource
     |> assertRan "Leeds York \nAnn,Cy,\n3 Cy,\n"
 
@@ -140,7 +140,7 @@ let ``Run - List.groupBy groups elements by a key, in order`` () =
           "println(show(groups(1) \\someOr([])))"
           "println(show(groups(0) \\someOr([])))"
           "println(show(map.toList(groups) \\list.map({ group -> group.0 })))"
-          """println("{map.count(list.groupBy([], { (x: int) -> x }))}")""" ]
+          """println("{map.length(list.groupBy([], { (x: int) -> x }))}")""" ]
     |> runSource
     |> assertRan "135\n24\n10\n0\n"
 
@@ -161,7 +161,7 @@ let ``Run - a nominal type with its own == and hash can be a key, compared by it
           "def Code.`==`: Code, Code -> bool = { a, b -> true }"
           "def Code.hash: Code -> int = { c -> 0 }" ]
         [ """def m = [Code("ab") => 1] \insert(Code("xy"), 2)"""
-          """println("{map.count(m)}")"""
+          """println("{map.length(m)}")"""
           """found(m(Code("zz")))""" ]
     |> runSource
     |> assertRan "1\n2\n"
@@ -225,7 +225,7 @@ let ``Run - filter keeps the entries that pass the test`` () =
         []
         [ """def m = ["a" => 1, "b" => 2, "c" => 3]"""
           """println(m \map.filter { key, value -> value > 1 } \map.keys \list.fold("", { acc, k -> acc ++ k }))"""
-          """println("{m \map.filter({ key, value -> key == "a" }) \map.count}")""" ]
+          """println("{m \map.filter({ key, value -> key == "a" }) \map.length}")""" ]
     |> runSource
     |> assertRan "bc\n1\n"
 

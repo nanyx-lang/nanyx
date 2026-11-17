@@ -98,10 +98,10 @@ def MList.set: [Memory] MList(a), int, a -> #ok | #outOfRange
 Changes the element of `items` at `index`, counting from 0, to `value`: `#ok`, or `#outOfRange`
 when `index` is negative or past the end, and `items` is left as it was.
 
-## `MList.count`
+## `MList.length`
 
 ```nanyx fragment
-def MList.count: [Memory] MList(a) -> int
+def MList.length: [Memory] MList(a) -> int
 ```
 
 How many elements `items` holds.
