@@ -100,7 +100,7 @@ def pass: ([Console] int -> int) -> int = { f -> runPure(f) }
     let result = Compiler.compile source
     let diagnostic = Assert.Single result.Diagnostics
     Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, diagnostic.Code)
-    Assert.Contains("requires the context 'Console'", diagnostic.Message)
+    Assert.Contains("which does not require the context 'Console'", diagnostic.Message)
 
 let private console = TyApply("Console", [])
 let private intFunc contexts = TyFunc(TyPrimitive "int", TyPrimitive "int", contexts)

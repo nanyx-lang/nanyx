@@ -335,15 +335,19 @@ module Unifier =
         | StandardLibraryModule name -> $"the standard library's '{name}'"
         | InMemory -> "this module"
 
-    /// Says that two types are not the same. Two nominal types of the same name from different modules are written
-    /// alike, so it says where each is defined.
+    /// Says that two types are not the same: `Type mismatch: 'int' vs 'string'`. Two nominal types of the same name from
+    /// different modules are written alike, so it says where each is defined.
     let private mismatchMessage left right =
         let homes =
             match left, right with
             | TyNominal(l, _, _, _), TyNominal(r, _, _, _) when l.Name = r.Name && l.Home <> r.Home ->
-                $" They are different types: the first is defined in {moduleText l.Home}, the second in {moduleText r.Home}."
+                $", defined in {moduleText l.Home} and {moduleText r.Home}"
             | _ -> ""
-        $"Type mismatch: {tyToString left} vs {tyToString right}.{homes}"
+        $"Type mismatch: '{tyToString left}' vs '{tyToString right}'{homes}"
+
+    /// `items`, each in single quotes, as a message lists them.
+    let private quotedList (items: Ty list) =
+        items |> List.map (fun item -> $"'{tyToString item}'") |> String.concat ", "
 
     /// Says which contexts make two function types differ: `onlyLeft` are those the first requires that the second has
     /// no room for, and `onlyRight` the reverse.
@@ -351,22 +355,20 @@ module Unifier =
         let onlyIn which contexts =
             match contexts with
             | [] -> None
-            | _ -> Some $"""only the {which} requires {contexts |> List.map (fun c -> $"'{tyToString c}'") |> String.concat ", "}"""
-        let differences = [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat "; "
-        $"Context mismatch: {differences}. {mismatchMessage left right}"
+            | _ -> Some $"only the {which} requires {quotedList contexts}"
+        let differences = [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat " and "
+        $"Context mismatch: '{tyToString left}' vs '{tyToString right}', where {differences}"
 
     /// Says that a function of type `given`, which requires `extra`, is given where one of type `expected` is, which
     /// has no room for them.
     let private contextsNotAllowedMessage (extra: Ty list) (given: Ty) (expected: Ty) =
-        let contexts = extra |> List.map (fun c -> $"'{tyToString c}'") |> String.concat ", "
         let what = if extra.Length = 1 then "the context" else "the contexts"
-        $"A function that requires {what} {contexts} is given where '{tyToString expected}' is expected, which does not: '{tyToString given}'. Write the contexts it may require on the type expected, as a context's member does in `log: [Console] string -> ()`, or a context variable for any, as in `[c] a -> b`."
+        $"'{tyToString given}' is given where '{tyToString expected}' is expected, which does not require {what} {quotedList extra}: write the contexts it may require on the type expected, as a context's member does in `log: [Console] string -> ()`, or a context variable for any, as in `[c] a -> b`"
 
     /// Says that a value of a type generic in contexts that carries `extra` is given where one that does not is expected.
     let private carriedNotAllowedMessage (extra: Ty list) (given: Ty) (expected: Ty) =
-        let contexts = extra |> List.map (fun c -> $"'{tyToString c}'") |> String.concat ", "
         let what = if extra.Length = 1 then "the context" else "the contexts"
-        $"A '{tyToString given}' is given where '{tyToString expected}' is expected, whose functions don't require {what} {contexts}. Write them in front of the type expected, or a context variable for any, as in `[c] {tyToString expected}`."
+        $"'{tyToString given}' is given where '{tyToString expected}' is expected, whose functions don't require {what} {quotedList extra}: write them in front of the type expected, or a context variable for any, as in `[c] {tyToString expected}`"
 
     /// Says which contexts make two values of a type generic in contexts, `left` and `right`, differ where they must be
     /// the same type: `onlyLeft` are those the first carries that the second has no room for, and `onlyRight` the reverse.
@@ -374,29 +376,31 @@ module Unifier =
         let onlyIn which contexts =
             match contexts with
             | [] -> None
-            | _ -> Some $"""only the {which} carries {contexts |> List.map (fun c -> $"'{tyToString c}'") |> String.concat ", "}"""
-        let differences = [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat "; "
-        $"Context mismatch: '{tyToString left}' and '{tyToString right}' must be the same type, but {differences}. Write the same contexts in front of both, or a context variable for any."
+            | _ -> Some $"only the {which} carries {quotedList contexts}"
+        let differences = [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat " and "
+        $"Context mismatch: '{tyToString left}' vs '{tyToString right}', where {differences}: write the same contexts in front of both, or a context variable for any"
 
     /// Says which tags make two unions differ: `onlyLeft` are tags only the first has that the second cannot take,
-    /// and `onlyRight` the reverse. `Tag union mismatch: only the first has #bad; only the second has #underflow.`
+    /// and `onlyRight` the reverse. `Tag union mismatch: '...' vs '...', where only the first has #bad and only the
+    /// second has #underflow`.
     let private tagUnionMessage (onlyLeft: Set<string>) (onlyRight: Set<string>) left right =
         let onlyIn which tags =
             if Set.isEmpty tags then None
             else Some $"""only the {which} has {tags |> Set.toList |> List.sort |> List.map (sprintf "#%s") |> String.concat ", "}"""
-        let differences = [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat "; "
-        $"Tag union mismatch: {differences}. {mismatchMessage left right}"
+        let differences = [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat " and "
+        $"Tag union mismatch: '{tyToString left}' vs '{tyToString right}', where {differences}"
 
-    /// Says which fields only one of two records has: `{a, x} vs {x, y}: only the first has a; only the second has y.`
+    /// Says which fields only one of two records has: `Record field mismatch: '...' vs '...', where only the first has
+    /// 'a' and only the second has 'y'`.
     let private recordKeyMessage leftKeys rightKeys left right =
-        let keyList keys = keys |> Set.toList |> List.sort |> String.concat ", "
         let onlyIn which keys =
-            if Set.isEmpty keys then None else Some $"only the {which} has {keyList keys}"
+            if Set.isEmpty keys then None
+            else Some $"""only the {which} has {keys |> Set.toList |> List.sort |> List.map (sprintf "'%s'") |> String.concat ", "}"""
         let differences =
             [ onlyIn "first" (Set.difference leftKeys rightKeys); onlyIn "second" (Set.difference rightKeys leftKeys) ]
             |> List.choose id
-            |> String.concat "; "
-        $"Record field mismatch: {{{keyList leftKeys}}} vs {{{keyList rightKeys}}}: {differences}. {mismatchMessage left right}"
+            |> String.concat " and "
+        $"Record field mismatch: '{tyToString left}' vs '{tyToString right}', where {differences}"
 
     let private keySet (fields: Map<string, Ty>) =
         fields |> Map.keys |> Set.ofSeq
@@ -833,7 +837,7 @@ module Unifier =
                 | TyVar v, ty
                 | ty, TyVar v ->
                     if occurs v.Id ty then
-                        Error ($"Occurs check failed: {tyToString ty} contains {tyToString (TyVar v)}.", origin, TypesDiffer)
+                        Error ($"Type mismatch: '{tyToString (TyVar v)}' vs '{tyToString ty}', which contains it, so the type would be infinite", origin, TypesDiffer)
                     else
                         if madeUpBefore v then restTaken <- true
                         let newSubst = subst |> Map.add v.Id ty
@@ -932,7 +936,7 @@ module Unifier =
                     match lPayload, rPayload with
                     | None, None -> loop subst rest
                     | Some lTy, Some rTy -> loop subst ((lTy, rTy, Equal, origin) :: rest)
-                    | _ -> Error ($"Tag payload mismatch: #{lName}. {mismatchMessage l r}", origin, TypesDiffer)
+                    | _ -> Error ($"Tag payload mismatch: '{tyToString l}' vs '{tyToString r}', where only one of them gives #{lName} a payload", origin, TypesDiffer)
                 | TyUnion lItems, TyUnion rItems ->
                     match parseTagUnion lItems, parseTagUnion rItems with
                     | Ok (lMap, lRest), Ok (rMap, rRest) ->

@@ -39,21 +39,21 @@ let ``Defining an operator Nanyx does not have is an error at the operator`` () 
 let ``A spare operator with no meaning for its operands is an error at the operator`` () =
     let code, reported, text = onlyDiagnostic "def x = 1 + 2 ^ 3\n"
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
-    Assert.Equal("`^` has no built-in meaning, and `int` has no `^` attached. A type gets one by attaching it: def Money.`^` = ...", reported)
+    Assert.Equal("`^` has no built-in meaning, and 'int' has no `^` attached: attach one to the type, as in ``def Money.`^` = ...``", reported)
     Assert.Equal("^ 3", text)
 
 [<Fact>]
 let ``+= on a cell is an error that says to assign with :=`` () =
     let code, reported, text = onlyDiagnostic "def f = memory {\n  mut count = 1\n  count += 1\n  count\n}\n"
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
-    Assert.Equal("`+=` doesn't change a cell: write `count := count + ...`. `+=` means only what a type attaches to it, as `MList` does to add to the list", reported)
+    Assert.Equal("`+=` doesn't change a cell, and means only what a type attaches to it, as `MList` does to add to the list: write `count := count + ...`", reported)
     Assert.Equal("+= 1", text)
 
 [<Fact>]
 let ``+= on a value that isn't a cell is a spare operator with no meaning`` () =
     let code, reported, text = onlyDiagnostic "def f = { n: int -> n += 1 }\n"
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
-    Assert.Equal("`+=` has no built-in meaning, and `int` has no `+=` attached. A type gets one by attaching it: def Money.`+=` = ...", reported)
+    Assert.Equal("`+=` has no built-in meaning, and 'int' has no `+=` attached: attach one to the type, as in ``def Money.`+=` = ...``", reported)
     Assert.Equal("+= 1 }", text)
 
 [<Fact>]

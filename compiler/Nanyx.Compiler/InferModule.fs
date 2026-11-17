@@ -45,14 +45,14 @@ let private checkAnnotationIsRigid (state: InferState) (name: Identifier) (span:
                         resolved
                         |> List.take index
                         |> List.tryFind (fun (_, otherTy) -> otherTy = ty)
-                        |> Option.map (fun (otherName, _) -> $"`{varName}` would have to be `{otherName}`")
-                    | concrete -> Some $"`{varName}` would have to be `{Unifier.tyToString (Unifier.apply displayNames concrete)}`")
+                        |> Option.map (fun (otherName, _) -> $"'{varName}' would have to be '{otherName}'")
+                    | concrete -> Some $"'{varName}' would have to be '{Unifier.tyToString (Unifier.apply displayNames concrete)}'")
                 |> List.choose id
             if problems.IsEmpty then
                 Ok ()
             else
-                let details = String.concat "; " problems
-                Error [ Diagnostics.at DiagnosticCodes.AnnotationTooGeneral span $"Annotation of '{name}' is more general than the inferred type: {details}" ]
+                let details = Diagnostics.listed problems
+                Error [ Diagnostics.at DiagnosticCodes.AnnotationTooGeneral span $"The annotation of '{name}' is more general than its inferred type, where {details}" ]
 
 /// `item` with the ambient contexts it was inferred to require (`required`, by the def's name) in its annotation, where
 /// it is a def that does not write its type: after the parameterised contexts it was given, or on their own

@@ -569,15 +569,15 @@ let private ownInstanceText (state: InferState) (ctxName: Identifier) (argTys: T
 /// What else to do for a different instance of `ctxName` than a type's own, in the error for a `use` that would replace it.
 let private ownInstanceAdvice (ctxName: Identifier) =
     if ctxName = EqualityOperators.context then
-        "For a different equality, wrap the value in a protected type with its own `==`, or pass the comparison to a `...By` function"
+        "for a different equality, wrap the value in a protected type with its own `==`, or pass the comparison to a `...By` function"
     elif ctxName = WellKnownContexts.ordering.Context then
-        "For a different order, wrap the value in a protected type with its own `compare`, or pass the comparison to a `...By` function"
+        "for a different order, wrap the value in a protected type with its own `compare`, or pass the comparison to a `...By` function"
     elif ctxName = WellKnownContexts.hashing.Context then
-        "For a different hash, wrap the value in a protected type with its own `==` and `hash`"
+        "for a different hash, wrap the value in a protected type with its own `==` and `hash`"
     elif ctxName = InterpolationHoles.context then
-        "To write it differently, call a function in the hole, or wrap the value in a protected type with its own `toString`"
+        "to write it differently, call a function in the hole, or wrap the value in a protected type with its own `toString`"
     else
-        $"For a different {ctxName}, wrap the value in a protected type with its own definitions"
+        $"for a different {ctxName}, wrap the value in a protected type with its own definitions"
 
 /// The errors for `value`, loaded with `use` into `env` to give `withUse`, for each instance it loads for a type that has
 /// its own (see `hasOwnInstance`): a `use` can't replace a type's own instance, so `1 == 2` reads `int`'s `==`
@@ -589,7 +589,7 @@ let internal ownInstanceErrors (env: TypeEnv) (withUse: TypeEnv) (state: InferSt
         match resolveSoFar state instance.Context with
         | TyApply(ctxName, (forType :: _ as argTys)) when hasOwnInstance env state value.Id value.Span ctxName argTys ->
             let message =
-                $"'{WellKnownContexts.display forType}' already has {ownInstanceText state ctxName argTys}: a `use` can't replace it. {ownInstanceAdvice ctxName}"
+                $"'{WellKnownContexts.display forType}' already has {ownInstanceText state ctxName argTys}, which a `use` can't replace: {ownInstanceAdvice ctxName}"
             Some (Diagnostics.at DiagnosticCodes.OwnInstanceReplaced value.Span message)
         | _ -> None)
     |> List.distinctBy _.Message

@@ -18,7 +18,7 @@ let infer (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr * Infe
                 match recordFieldsSoFar next typedRecord.Type with
                 | Some spread -> Map.foldBack Map.add spread fields, next, errors
                 | None ->
-                    let message = "a spread (`...`) needs a record whose fields are known here"
+                    let message = "A spread (`...`) needs a record whose fields are known here"
                     fields, next, errors @ [ Diagnostics.at DiagnosticCodes.InvalidRecordSpread record.Span message ]
         | SpreadField(name, value) ->
             match infer env current value with

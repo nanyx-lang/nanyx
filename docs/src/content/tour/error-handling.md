@@ -218,13 +218,13 @@ def main = {
 `nanyx run shapes.nyx` reports the error, says that it is running in spite of it, and runs `main`:
 
 ```text
-shapes.nyx:3:39: error NYX0201: 'string' cannot be used with *: it is not a number
+shapes.nyx:3:39: error NYX0201: 'string' is not a number, so it cannot be used with *
   |
 3 | def perimeter: int -> int = { side -> side * "4" }
   |                                       ^^^^^^^^^^
 Running with 1 deferred error
 9
-shapes.nyx:3:39: error NYX0201: 'string' cannot be used with *: it is not a number (deferred from compile time)
+shapes.nyx:3:39: error NYX0201: 'string' is not a number, so it cannot be used with * (deferred from compile time)
 ```
 
 `area(3)` runs and prints `9`. `perimeter(3)` reaches the broken expression, which writes its error to standard error, marked `(deferred from compile time)`, and ends the program with exit code 1, as `crash` does. `done` is never printed. Everything that runs before the error still happens: in `f(a(), bad, c())`, `a()` is called and `c()` is not.

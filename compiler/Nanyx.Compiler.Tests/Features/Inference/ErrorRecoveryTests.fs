@@ -120,7 +120,7 @@ let ``The error type agrees with every type`` () =
 let ``Every error inside a def is reported`` () =
     let result = Compiler.compile "def f = { x ->\n  def a = missing1(x)\n  def b = missing2(x)\n  def s: string = 1\n  a + b\n}"
     Assert.Equal<string list>(
-        [ "Unknown function 'missing1'"; "Unknown function 'missing2'"; "Type mismatch: int vs string." ],
+        [ "Unknown function 'missing1'"; "Unknown function 'missing2'"; "Type mismatch: 'int' vs 'string'" ],
         result.Diagnostics |> List.map (fun diag -> diag.Message))
 
 [<Fact>]
@@ -166,7 +166,7 @@ def h: int -> #some(int) | #none = { n -> if n > 0 then #some(n) else #none }
     match (Compiler.compile source).Diagnostics with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
-        Assert.Equal("'string' cannot be used with +: it is not a number. Use ++ to join them", diagnostic.Message)
+        Assert.Equal("'string' is not a number, so it cannot be used with +: use `++` to join them", diagnostic.Message)
         Assert.Equal(0, diagnostic.Span.Value.StartLine)
     | other -> failwith $"Expected one diagnostic, got %A{other}"
 
@@ -187,7 +187,7 @@ def main = {
     let result = Compiler.compile source
     Assert.Equal<(string * string * int) list>(
         [ DiagnosticCodes.UnknownFunction.Code, "Unknown function 'missing'", 6
-          DiagnosticCodes.TypeMismatch.Code, "Type mismatch: int vs #some(string).", 2 ],
+          DiagnosticCodes.TypeMismatch.Code, "Type mismatch: 'int' vs '#some(string)'", 2 ],
         result.Diagnostics |> List.map (fun diag -> diag.Code, diag.Message, diag.Span.Value.StartLine))
 
 [<Theory>]
@@ -211,7 +211,7 @@ def head2: list(int) -> int = { xs ->
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     Assert.Equal(
-        "Tag union mismatch: only the first has #bad; only the second has #underflow. Type mismatch: #some(int) | #bad(string) vs #some(int) | #underflow.",
+        "Tag union mismatch: '#some(int) | #bad(string)' vs '#some(int) | #underflow', where only the first has #bad and only the second has #underflow",
         diagnostic.Message)
     Assert.Equal(offsetOf source "if x == 1 then applyOp" 0 0, diagnostic.Span.Value.Start)
 
@@ -232,7 +232,7 @@ def count: () -> int = {
 """
     let source = source.ReplaceLineEndings "\n"
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
-    Assert.Equal("Type mismatch: string vs int.", diagnostic.Message)
+    Assert.Equal("Type mismatch: 'string' vs 'int'", diagnostic.Message)
     Assert.Equal("\"x\"", textAt source diagnostic.Span.Value)
 
 [<Fact>]
@@ -250,7 +250,7 @@ def h: [Console] list(int) -> list(int) = { numbers ->
 """
     let source = source.ReplaceLineEndings "\n"
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
-    Assert.Equal("Type mismatch: string vs int.", diagnostic.Message)
+    Assert.Equal("Type mismatch: 'string' vs 'int'", diagnostic.Message)
     Assert.Equal("\"not an int\"", textAt source diagnostic.Span.Value)
 /// The codes and messages of the diagnostics compiling `source`, after a def that fails to check, gives besides that
 /// def's own mismatch (#1483).

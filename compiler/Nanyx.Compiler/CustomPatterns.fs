@@ -86,14 +86,14 @@ module internal CustomPatterns =
         { Diagnostics.at
             DiagnosticCodes.UnknownPattern
             span
-            $"No pattern in scope returns `#{tag}`. A capitalised tag is a custom pattern's: an ordinary tag is written in lower case, as `#{lowered}`" with
+            $"No pattern in scope returns `#{tag}`, and a capitalised tag is a custom pattern's: write an ordinary tag in lower case, as `#{lowered}`" with
             Fixes = [ { Title = $"Write `#{lowered}`"; Edits = [ { Span = firstLetter span; NewText = string lowered[0] } ] } ] }
 
     let private ambiguousPattern (tag: Identifier) (span: SourceSpan) (sources: string list) =
         Diagnostics.at
             DiagnosticCodes.AmbiguousPattern
             span
-            $"More than one pattern in scope returns `#{tag}`, so a match can't tell which to run. They come from {Diagnostics.listed sources}"
+            $"More than one pattern in scope returns `#{tag}`, from {Diagnostics.listed sources}, so a match can't tell which to run"
 
     /// Each capitalised tag written in `items`, with where it is written: in a value, a pattern or a type, but not in a
     /// pattern's own type, which declares its tags.

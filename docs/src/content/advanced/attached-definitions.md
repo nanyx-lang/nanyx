@@ -100,7 +100,7 @@ Any module can attach a new definition to any type, its own or not, as extension
 An attached definition can extend a type, but never redefine what is already in scope for it. A name the type has from an import, or from the standard library for a built-in type, is the error `NYX0254` when attached again:
 
 ```nanyx fragment
-def string.length: string -> int = { s -> 42 }  -- error NYX0254: 'string.length' is already in scope for 'string', from nanyx/text
+def string.length: string -> int = { s -> 42 }  -- error NYX0254: 'string.length' is already in scope for 'string', from nanyx/text, ...
 def string.shout: string -> string = { s -> s ++ "!" }  -- fine: strings have no `shout`
 ```
 
