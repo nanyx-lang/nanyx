@@ -299,8 +299,10 @@ let private storeDigit =
 
 /// How a floating-point format lays a value out in its bits, which the helper that writes it as text reads them by.
 type private Format =
-    { /// The instruction that loads a value's bits from its box, as an `i64`.
-      Load: string
+    { /// The value type the helper takes the value as.
+      Parameter: string
+      /// The code that gives the value's bits, from `$value`, as an `i64`.
+      Bits: string list
       /// The code that leaves 1 when the value in `$bits` is negative.
       Negative: string list
       /// The bits of every magnitude: all but the sign.
@@ -315,16 +317,18 @@ type private Format =
 
 /// A float, an `f64`.
 let private f64 =
-    { Load = "i64.load"
+    { Parameter = "f64"
+      Bits = [ "local.get $value"; "i64.reinterpret_f64" ]
       Negative = [ "local.get $bits"; "i64.const 0"; "i64.lt_s" ]
       Magnitude = "0x7fffffffffffffff"
       Infinity = "0x7ff0000000000000"
       MantissaBits = 52
       ExponentOffset = 1075 }
 
-/// An `F32`, an `f32`, whose bits are loaded into the low half of `$bits`.
+/// An `F32`, an `f32` in a box, whose bits are loaded into the low half of `$bits`.
 let private f32 =
-    { Load = "i64.load32_u"
+    { Parameter = "i32"
+      Bits = [ "local.get $value"; "i64.load32_u" ]
       Negative = [ "local.get $bits"; "i64.const 0x80000000"; "i64.and"; "i64.eqz"; "i32.eqz" ]
       Magnitude = "0x7fffffff"
       Infinity = "0x7f800000"
@@ -646,18 +650,17 @@ let private layOut (calls: Calls) =
       "  end"
       "end" ]
 
-// Formats a boxed float as the shortest decimal that reads back as the same float, always with a point: 6.28, 4.0,
+// Formats a float as the shortest decimal that reads back as the same float, always with a point: 6.28, 4.0,
 // -1.5, 0.30000000000000004, 1.0e-7, 1.0e21. NaN, the infinities and the zeros are NaN, Infinity, -Infinity, 0.0
 // and -0.0.
 let private floatToStringHelper (format: Format) (floatToString: string) (calls: Calls) =
-    [ $"(func ${floatToString} (param $box i32) (result i32)"
+    [ $"(func ${floatToString} (param $value {format.Parameter}) (result i32)"
       yield!
           [ "bits i64"; "f i64"; "biased i32"; "e i32"; "es i32"; "u i32"; "even i32"; "k i32"; "scratch i32"
             "r i32"; "s i32"; "mp i32"; "mm i32"; "t i32"; "digits i32"; "n i32"; "d i32"; "low i32"; "high i32"
             "exp i32"; "base i32"; "cursor i32" ]
           |> List.map (fun local -> $"  (local ${local})")
-      "  local.get $box"
-      $"  {format.Load}"
+      yield! indent "  " format.Bits
       "  local.set $bits"
       "  ;; a string of a sign and up to 24 characters with a terminator; $base is its length"
       "  i32.const 32"

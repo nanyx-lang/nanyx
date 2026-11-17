@@ -61,8 +61,8 @@ Out of scope here, with their own workstreams:
    time. The blocks marked `skip=` wait on the issues they name.
 2. **Parser error recovery.** Keep parsing after a syntax error so later errors (and later analysis) are not
    lost. Shared with the language server; it is stage 5 of [The parser](./parser#stage-5-error-recovery).
-3. **Backend coverage.** Close the remaining value types and constructs the type checker accepts, such as unboxed
-   floats ([Memory management](./memory-management#still-to-do)).
+3. **Backend coverage.** Close the remaining value types and constructs the type checker accepts, such as an unboxed
+   `F32` ([Memory management](./memory-management#still-to-do)).
 4. **Standard library.** Implement the documented modules, writing intrinsics only where Nanyx cannot
    ([Standard library implementation](../compiler-internals/standard-library-implementation)).
 

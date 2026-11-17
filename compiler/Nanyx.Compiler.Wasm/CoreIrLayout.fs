@@ -1,8 +1,9 @@
 /// How the values of the core IR are held in WebAssembly (see "Value representation" in
 /// `docs/src/content/compiler-internals/memory-management.md`): the value type each type is held in, in locals and on the
-/// stack, and where each part of an object on the heap is. An int and a `U64` are `i64`s, stored in 8 bytes; an `I8` and
-/// a `U8` are `i32`s stored in 1 byte, and an `I16` and a `U16` in 2; every other value is an `i32` (a pointer, a code, a
-/// bool, a boxed float, an `I32`, a `U32`), stored in 4. Values are laid one after another, unaligned.
+/// stack, and where each part of an object on the heap is. An int and a `U64` are `i64`s, stored in 8 bytes, and a float
+/// an `f64`, stored in 8; an `I8` and a `U8` are `i32`s stored in 1 byte, and an `I16` and a `U16` in 2; every other value
+/// is an `i32` (a pointer, a code, a bool, a boxed `F32`, an `I32`, a `U32`), stored in 4. Values are laid one after
+/// another, unaligned.
 module Transpiler.Wasm.CoreIrLayout
 
 open NyxCompiler
@@ -14,11 +15,13 @@ let valueType (ty: IrType) =
     match ty with
     | IrInt
     | IrSized SizedInteger.U64 -> "i64"
+    | IrFloat -> "f64"
     | _ -> "i32"
 
 /// How a value of `ty` is written in a field, a payload or a list cell.
 let internal storage (ty: IrType) =
     match ty with
+    | IrFloat -> Double
     | IrInt
     | IrSized SizedInteger.U64 -> Wide
     | IrSized SizedInteger.I8
