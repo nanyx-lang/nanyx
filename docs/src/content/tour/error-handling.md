@@ -225,9 +225,11 @@ shapes.nyx:3:39: error NYX0201: 'string' is not a number, so it cannot be used w
 Running with 1 deferred error
 9
 shapes.nyx:3:39: error NYX0201: 'string' is not a number, so it cannot be used with * (deferred from compile time)
+  perimeter (shapes.nyx:3)
+  main (shapes.nyx:8)
 ```
 
-`area(3)` runs and prints `9`. `perimeter(3)` reaches the broken expression, which writes its error to standard error, marked `(deferred from compile time)`, and ends the program with exit code 1, as `crash` does. `done` is never printed. Everything that runs before the error still happens: in `f(a(), bad, c())`, `a()` is called and `c()` is not.
+`area(3)` runs and prints `9`. `perimeter(3)` reaches the broken expression, which writes its error to standard error, marked `(deferred from compile time)`, with the stack under it, each function the program was in and the line it had reached, innermost first, and ends the program with exit code 1, as `crash` does. `done` is never printed. Everything that runs before the error still happens: in `f(a(), bad, c())`, `a()` is called and `c()` is not.
 
 The error stays where it was found, so the program fails no sooner than it has to:
 

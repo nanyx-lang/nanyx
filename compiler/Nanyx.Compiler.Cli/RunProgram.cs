@@ -22,9 +22,22 @@ internal static partial class CliCommands
         var programArguments = ListModule.OfSeq(arguments ?? ["nanyx"]);
         var directories = ListModule.OfSeq<string>([shell.Directory, .. allowedDirectories ?? []]);
         var errors = shell.Error;
-        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot));
+        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot), true);
         if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred, timings))
         {
+            return 1;
+        }
+
+        // The program runs as the compiler assembled it, so that the frames of a trap are where its table of places
+        // says (see `SpanTable`).
+        byte[] wasm;
+        try
+        {
+            wasm = WasmBinary.assemble(wat);
+        }
+        catch (Exception ex) when (ex is WasmBinary.WasmAssemblyError or WatSyntax.WatSyntaxError)
+        {
+            errors.WriteLine($"Internal error in the compiler, whose WebAssembly can't be assembled ({ex.Message}): report it at https://github.com/nanyx-lang/nanyx/issues");
             return 1;
         }
 
@@ -32,16 +45,16 @@ internal static partial class CliCommands
         (errors as RunBox.Writer)?.Box.Close("output");
         if (WasmServer.serves(wat))
         {
-            return Serve(shell, programArguments, wat, port, errors);
+            return Serve(shell, programArguments, wasm, port, errors);
         }
 
         if (memoryCheck == MemoryCheck.Off)
         {
-            var outcome = WasmRunner.run(shell.Io, programArguments, directories, wat);
+            var outcome = WasmRunner.runBinary(shell.Io, programArguments, directories, wasm);
             return outcome.IsOk ? 0 : ReportRunError(outcome.ErrorValue, errors);
         }
 
-        var (counted, counters) = WasmRunner.runCounting(shell.Io, programArguments, directories, CodeGen.CheckedExports.start, MemoryReport.Counters, wat);
+        var (counted, counters) = WasmRunner.runCountingBinary(shell.Io, programArguments, directories, CodeGen.CheckedExports.start, MemoryReport.Counters, wasm);
         var exitCode = counted.IsError ? ReportRunError(counted.ErrorValue, errors) : CheckNothingLeft(counted.ResultValue, errors);
         // The report follows what stopped the program, or the leak the check found.
         if (memoryCheck == MemoryCheck.Report && counters is not null)
@@ -75,12 +88,12 @@ internal static partial class CliCommands
     }
 
     /// <summary>
-    /// Serves the program <paramref name="wat"/>, whose host answers HTTP requests, on <paramref name="port"/> until the
+    /// Serves the program <paramref name="wasm"/>, whose host answers HTTP requests, on <paramref name="port"/> until the
     /// shell's <see cref="Shell.Stop"/> is cancelled or, for the process's own, Ctrl+C is pressed. Each request is
     /// answered by a fresh instance of it; one that stops without answering is a 500, which is said on
     /// <paramref name="errors"/>, and the server carries on.
     /// </summary>
-    private static int Serve(Shell shell, FSharpList<string> arguments, string wat, int port, TextWriter errors)
+    private static int Serve(Shell shell, FSharpList<string> arguments, byte[] wasm, int port, TextWriter errors)
     {
         using var stopping = CancellationTokenSource.CreateLinkedTokenSource(shell.Stop);
         ConsoleCancelEventHandler interrupted = (_, pressed) =>
@@ -108,7 +121,7 @@ internal static partial class CliCommands
             var outcome = WasmServer.serve(
                 shell.Io,
                 arguments,
-                Program.NewText(wat),
+                Program.NewBinary(wasm),
                 port,
                 stopping.Token,
                 FuncConvert.FromAction<string>(address => Report($"Serving {address} (Ctrl+C to stop)")),
@@ -135,7 +148,15 @@ internal static partial class CliCommands
                 errors.WriteLine($"Internal error in the compiler, whose WebAssembly is invalid ({invalid.Item}): report it at https://github.com/nanyx-lang/nanyx/issues");
                 return 1;
             case RunError.Trapped trapped:
-                errors.WriteLine($"Runtime error: {trapped.Item}");
+                errors.WriteLine($"Runtime error: {trapped.message}{WasmRunner.stackText(trapped.stack)}");
+                return 1;
+            // The program said why it stopped before it trapped, so only the stack follows.
+            case RunError.Crashed crashed:
+                if (!crashed.stack.IsEmpty)
+                {
+                    errors.WriteLine(WasmRunner.stackText(crashed.stack).TrimStart('\n'));
+                }
+
                 return 1;
             case var _ when error.IsOutOfMemory:
                 errors.WriteLine("Runtime error: out of memory");
@@ -146,7 +167,9 @@ internal static partial class CliCommands
                     $"Runtime error: the program ran out of stack{where}: a recursive call that isn't in tail position uses stack for every call (see {TailRecursionDocs})");
                 return 1;
             case RunError.ArithmeticError arithmetic:
-                errors.WriteLine($"Runtime error: {WasmRunner.describeFault(arithmetic.fault, arithmetic.functionName)}");
+                // The stack names the function, when there is one.
+                var function = arithmetic.stack.IsEmpty ? arithmetic.functionName : FSharpOption<string>.None;
+                errors.WriteLine($"Runtime error: {WasmRunner.describeFault(arithmetic.fault, function)}{WasmRunner.stackText(arithmetic.stack)}");
                 return 1;
             case RunError.CannotServe cannot:
                 errors.WriteLine($"error: the program can't be served on port {cannot.port}: {cannot.reason}. Give the host another `port` in its `settings`");

@@ -7,7 +7,7 @@ module internal Transpiler.Wasm.CoreIrLowerHoles
 open Transpiler.Wasm.CoreIr
 
 /// A hole for the rest of a block to go in. Each is a value of its own, told apart from any other by reference.
-let hole () : Expr = { Kind = Atom AUnit; Type = IrUnit }
+let hole () : Expr = Expr.make (Atom AUnit) IrUnit
 
 /// `lowered`, a statement's lets and dos, with `rest` in place of `hole` at the end of them. Each let and do has the
 /// type of what follows it, so each is given `rest`'s.

@@ -70,7 +70,7 @@ writeStdout("{numbers(1, 2, 3.0, 4.0)}")
     Assert.Contains("""(import "test" "nothing" (func $import_test_nothing))""", wat)
     // The module is valid: it fails only because nothing provides the imports.
     match runHost [ "test" ] wat with
-    | Error (Trapped message) -> Assert.Contains("test", message)
+    | Error(Trapped(message, _)) -> Assert.Contains("test", message)
     | other -> failwith $"Expected a failure to instantiate, got %A{other}"
 
 [<Fact>]
@@ -84,7 +84,7 @@ def missing: [HostRuntime] () -> I32
 writeStdout("{missing()}")
 """
     match runHost [ "test" ] (hostWatWith WasmOptions.Default source) with
-    | Error (Trapped message) -> Assert.Contains("elsewhere", message); Assert.Contains("missing", message)
+    | Error(Trapped(message, _)) -> Assert.Contains("elsewhere", message); Assert.Contains("missing", message)
     | other -> failwith $"Expected a failure to instantiate, got %A{other}"
 
 [<Fact>]

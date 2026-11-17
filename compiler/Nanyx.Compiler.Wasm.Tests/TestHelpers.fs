@@ -366,6 +366,11 @@ let assertRan (expectedOutput: string) (outcome: RunOutcome) =
 let withoutDbgLocations (outcome: RunOutcome) =
     { outcome with StandardOutput = Regex.Replace(outcome.StandardOutput, @"^\[main\.nyx:\d+\] ", "", RegexOptions.Multiline) }
 
+/// `stderr` without the stack a crash or a runtime error writes under its message (the lines that start with two
+/// spaces): for a test of the message.
+let withoutStack (stderr: string) =
+    stderr.ReplaceLineEndings("\n").Split('\n') |> Array.filter (fun line -> not (line.StartsWith "  ")) |> String.concat "\n"
+
 /// The options the in-process tests compile with: memory checks on, so that the counters are there to read.
 let checkedOptions = { WasmOptions.Default with CheckMemory = true }
 

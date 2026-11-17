@@ -306,7 +306,7 @@ dbg(broken(2))
     let functions = withoutPrinters report.Functions
     Assert.Equal<string list>([ "broken"; "fine" ], functions |> List.filter (fun name -> name = "broken" || name = "fine"))
     Assert.Equal("__nanyx_start", List.last functions)
-    Assert.Contains("call $proc_exit\n    unreachable", wat)
+    Assert.Contains("call $__nanyx_crashed\n    unreachable", wat)
     Assert.Contains("(start $__nanyx_start)", wat)
 
 [<Fact>]

@@ -4,7 +4,8 @@
 /// `start`, `elem` and `data`, with exports written inside a definition too, and instructions written flat or folded.
 /// The instructions are those of WebAssembly 2.0's numeric, variable, memory and control instructions, with
 /// `return_call` and `return_call_indirect` from tail calls. Function names go in the `name` section, so a trap's
-/// backtrace names them as it does for the text.
+/// backtrace names them as it does for the text, and the place markers the backend writes (`;;@ main.nyx:12`) go in a
+/// table of places, so the runtime can name the file and line of each frame.
 module Transpiler.Wasm.WasmBinary
 
 open System
@@ -12,6 +13,16 @@ open System.Collections.Generic
 open System.Globalization
 open System.Text
 open Transpiler.Wasm.WatSyntax
+
+/// The name of the custom section that holds the table of places. It holds three vectors, as in the rest of the module.
+/// The names of files and functions, numbered from 1. The frames, numbered from 1, each a function's name (0 for the
+/// function the code is in), a file's name, a line, and the frame of the call it was inlined at (0 for none), which
+/// comes before it: a place is its innermost frame, and the frames of the calls it was inlined through follow from it.
+/// And for each stretch of code, in order, how far after the last one it starts (the first, from the start of the
+/// module) and its place, the number of its innermost frame. A function's code starts a stretch of place 0, none, so
+/// that the code before its first marker has none. Each number is an unsigned LEB128. The runtime reads it to name the
+/// file and line of each frame of a trap (see `Nanyx.Runtime.SpanTable`).
+let spanTableName = "nanyx.spans"
 
 /// What follows an instruction's opcode.
 type private Immediate =
@@ -545,8 +556,9 @@ type private Assembler(fields: SExpr list) =
     member _.FunctionNamesByIndex = functionNamesByIndex
 
 /// Writes the code of instructions, flat or folded, for a function whose locals are `locals` (empty for a constant
-/// expression), keeping the labels of the blocks it is in.
-type private CodeWriter(assembler: Assembler, locals: Dictionary<string, int>, out: Bytes) =
+/// expression), keeping the labels of the blocks it is in, and adds to `places` each place marker's frames with where
+/// in `out` the code after it starts.
+type private CodeWriter(assembler: Assembler, locals: Dictionary<string, int>, out: Bytes, places: ResizeArray<int * (string option * string * int) list>) =
     let labels = Stack<string option>()
 
     /// The depth of the block a branch to `reference` leaves: its label, or a number.
@@ -661,6 +673,9 @@ type private CodeWriter(assembler: Assembler, locals: Dictionary<string, int>, o
                     this.Folded folded
                     rest
                 | Atom keyword :: rest -> this.Flat(keyword, rest)
+                | Placed frames :: rest ->
+                    places.Add((out.Count, frames))
+                    rest
                 | Text _ :: _ -> fail "a string among instructions"
                 | [] -> []
 
@@ -729,7 +744,7 @@ type private CodeWriter(assembler: Assembler, locals: Dictionary<string, int>, o
             // The immediates come first, then the operands, which are folded instructions themselves.
             let probe = Bytes()
             let operandsFrom =
-                let writer = CodeWriter(assembler, locals, probe)
+                let writer = CodeWriter(assembler, locals, probe, ResizeArray())
                 writer.CopyLabels labels
                 writer.Flat(keyword, rest)
             this.Instructions operandsFrom
@@ -749,7 +764,7 @@ let private section (out: Bytes) (id: byte) (contents: Bytes) =
 
 /// A constant expression, `(i32.const 0)`, ended.
 let private constant (assembler: Assembler) (out: Bytes) (items: SExpr list) =
-    CodeWriter(assembler, Dictionary(), out).Instructions items
+    CodeWriter(assembler, Dictionary(), out, ResizeArray()).Instructions items
     out.Add 0x0Buy
 
 /// The binary format of the module that the WebAssembly text `wat` writes.
@@ -758,6 +773,9 @@ let assemble (wat: string) : byte array =
     assembler.Read()
     // The functions' code first: a `call_indirect` or a block may add a type.
     let code = Bytes()
+    // Each place marker's frames, and where in `code` the code after it starts; and where each body starts, with no
+    // frames, so that code before a body's first marker has no place.
+    let places = ResizeArray<int * (string option * string * int) list>()
     vector code assembler.Functions (fun out func ->
         let body = Bytes()
         let groups =
@@ -770,9 +788,13 @@ let assemble (wat: string) : byte array =
         vector body groups (fun out (count, ty) ->
             unsigned out (uint64 count)
             out.Add ty)
-        CodeWriter(assembler, func.Locals, body).Instructions func.Body
+        let bodyPlaces = ResizeArray()
+        CodeWriter(assembler, func.Locals, body, bodyPlaces).Instructions func.Body
         body.Add 0x0Buy
         unsigned out (uint64 body.Count)
+        places.Add((out.Count, []))
+        for offset, frames in bodyPlaces do
+            places.Add((out.Count + offset, frames))
         out.AddRange body)
     let globals = Bytes()
     vector globals assembler.Globals (fun out global' ->
@@ -846,6 +868,8 @@ let assemble (wat: string) : byte array =
         section out 8uy start
     | None -> ()
     if assembler.Elements.Count > 0 then section out 9uy elements
+    // Where the code section's contents start, past its id and size.
+    let codeStart = out.Count + 1 + (let size = Bytes() in unsigned size (uint64 code.Count); size.Count)
     if assembler.Functions.Count > 0 then section out 10uy code
     if assembler.Data.Count > 0 then section out 11uy dataSegments
     // The name section: the functions' names, so that a backtrace names them.
@@ -860,4 +884,38 @@ let assemble (wat: string) : byte array =
         unsigned names (uint64 functionNames.Count)
         names.AddRange functionNames
         section out 0uy names
+    // The table of places (see `spanTableName`).
+    if places |> Seq.exists (fun (_, frames) -> not frames.IsEmpty) then
+        let strings = Dictionary<string, int>()
+        let stringNumber (text: string) =
+            match strings.TryGetValue text with
+            | true, number -> number
+            | _ ->
+                strings.[text] <- strings.Count + 1
+                strings.Count
+        // Each frame once, with the frame of the call it was inlined at, which is numbered first.
+        let frames = Dictionary<int * int * int * int, int>()
+        let rec frameNumber (place: (string option * string * int) list) =
+            match place with
+            | [] -> 0
+            | (functionName, file, line) :: outer ->
+                let key = (functionName |> Option.map stringNumber |> Option.defaultValue 0), stringNumber file, line, frameNumber outer
+                match frames.TryGetValue key with
+                | true, number -> number
+                | _ ->
+                    frames.[key] <- frames.Count + 1
+                    frames.Count
+        let stretches = places |> Seq.map (fun (offset, place) -> codeStart + offset, frameNumber place) |> List.ofSeq
+        let table = Bytes()
+        name table spanTableName
+        vector table (strings |> Seq.sortBy _.Value |> Seq.map _.Key) name
+        vector table (frames |> Seq.sortBy _.Value |> Seq.map _.Key) (fun out (functionName, file, line, outer) ->
+            for number in [ functionName; file; line; outer ] do
+                unsigned out (uint64 number))
+        let mutable last = 0
+        vector table stretches (fun out (offset, place) ->
+            unsigned out (uint64 (offset - last))
+            unsigned out (uint64 place)
+            last <- offset)
+        section out 0uy table
     out.ToArray()

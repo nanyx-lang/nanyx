@@ -52,7 +52,7 @@ module WasmServer =
     /// Answers the request `context` holds with a fresh instance of `module'`, run with the standard streams `io` and
     /// the command-line arguments `arguments`; a request it doesn't answer is a 500, and why is given to `report`.
     /// `gate` is held while what the instance wrote to redirected streams is copied to them.
-    let private answer engine (module': Module) io arguments (gate: obj) (report: string -> unit) (context: HttpListenerContext) =
+    let private answer engine (module': Module) (table: SpanTable option) io arguments (gate: obj) (report: string -> unit) (context: HttpListenerContext) =
         let request = incoming context
         let response = ref None
         let mutable finish = ignore
@@ -81,11 +81,12 @@ module WasmServer =
                 | :? WasmtimeException as ex when WasmRunner.exitedCleanly ex -> Ok()
                 | :? WasmtimeException as ex when ex.ExitCode.HasValue -> Error $"it exited with code {ex.ExitCode.Value}"
                 | :? WasmtimeException as ex ->
-                    match WasmRunner.trapped ex with
-                    | Trapped message -> Error message
+                    match WasmRunner.trapped table ex with
+                    | Trapped(message, stack) -> Error(message + WasmRunner.stackText stack)
+                    | Crashed stack -> Error("it crashed" + WasmRunner.stackText stack)
                     | OutOfMemory -> Error "it ran out of memory"
                     | StackOverflow _ -> Error "it ran out of stack"
-                    | ArithmeticError(fault, functionName) -> Error(WasmRunner.describeFault fault functionName)
+                    | ArithmeticError(fault, functionName, stack) -> Error(WasmRunner.describeFault fault functionName + WasmRunner.stackText stack)
                     | other -> Error(string other)
             finally
                 lock gate finish
@@ -124,6 +125,7 @@ module WasmServer =
             | None ->
                 listening address
                 let gate = obj ()
+                let table = WasmRunner.spanTable program
                 let answering = Collections.Concurrent.ConcurrentDictionary<Task, unit>()
                 try
                     try
@@ -133,7 +135,7 @@ module WasmServer =
                             // outbound request say, holds only that thread, not one the listener needs.
                             let task =
                                 Task.Factory.StartNew(
-                                    (fun () -> answer engine module' io arguments gate report context),
+                                    (fun () -> answer engine module' table io arguments gate report context),
                                     TaskCreationOptions.LongRunning)
                             answering.TryAdd(task, ()) |> ignore
                             task.ContinueWith(fun (finished: Task) -> answering.TryRemove finished |> ignore) |> ignore

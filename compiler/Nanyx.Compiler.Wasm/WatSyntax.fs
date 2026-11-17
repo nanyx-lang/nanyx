@@ -1,5 +1,6 @@
 /// WebAssembly text read as the s-expressions it is written in, for `WasmBinary` to assemble: lists, atoms (keywords,
-/// `$names`, numbers and `key=value` immediates) and strings, with comments left out.
+/// `$names`, numbers and `key=value` immediates) and strings, with comments left out but the place markers the backend
+/// writes (`;;@ main.nyx:12`, see `CoreIrEmit.placeMarker`).
 module Transpiler.Wasm.WatSyntax
 
 open System
@@ -13,6 +14,11 @@ type SExpr =
     | Atom of string
     /// A string, as the bytes its escapes stand for.
     | Text of byte array
+    /// A place marker, `;;@ main.nyx:12`: the code after it, up to the next, was made from source on this line of this
+    /// file. To WebAssembly it is a comment. Code inlined from other functions has a frame for each call it was inlined
+    /// through (`;;@ prelude.nyx:18 | crash | main.nyx:12`), innermost first, each with the name of the function whose
+    /// code it is; the outermost's is the function the marker is in, so it has none.
+    | Placed of frames: (string option * string * int) list
 
 /// WebAssembly text that is not well formed: what is wrong, and the offset into the text where it was found.
 exception WatSyntaxError of message: string * offset: int
@@ -56,10 +62,12 @@ let private endsAtom (c: char) = Char.IsWhiteSpace c || c = '(' || c = ')' || c 
 /// The s-expressions `text` is written as, in order.
 let read (text: string) : SExpr list =
     let mutable i = 0
+    let isMarker (at: int) = at + 2 < text.Length && text.[at] = ';' && text.[at + 1] = ';' && text.[at + 2] = '@'
     let skipSpace () =
         let mutable going = true
         while going && i < text.Length do
             if Char.IsWhiteSpace text.[i] then i <- i + 1
+            elif isMarker i then going <- false
             elif text.[i] = ';' && i + 1 < text.Length && text.[i + 1] = ';' then
                 while i < text.Length && text.[i] <> '\n' do
                     i <- i + 1
@@ -84,6 +92,24 @@ let read (text: string) : SExpr list =
                 if topLevel then closed <- true else raise (WatSyntaxError("a list that is never closed", i))
             else
                 match text.[i] with
+                | ';' ->
+                    // A place marker: `file:line`, then a function's name and the `file:line` of its call for each call
+                    // the code was inlined through. Each file runs to the last `:`, and the line number follows it.
+                    let start = i
+                    let lineEnd = match text.IndexOf('\n', i) with -1 -> text.Length | found -> found
+                    let parts = text.Substring(i + 3, lineEnd - i - 3).Trim().Split(" | ")
+                    let place (written: string) =
+                        let colon = written.LastIndexOf ':'
+                        match (if colon < 0 then None else Some(Int32.TryParse(written.Substring(colon + 1)))) with
+                        | Some(true, line) -> written.Substring(0, colon), line
+                        | _ -> raise (WatSyntaxError("a place marker that is not ;;@ file:line", start))
+                    if parts.Length % 2 = 0 then raise (WatSyntaxError("a place marker with a function but not its call", start))
+                    let frames =
+                        [ for index in 0..2 .. parts.Length - 1 ->
+                              let file, line = place parts.[index]
+                              (if index + 1 < parts.Length then Some parts.[index + 1] else None), file, line ]
+                    items.Add(Placed frames)
+                    i <- lineEnd
                 | '(' ->
                     i <- i + 1
                     items.Add(List(nodes false))

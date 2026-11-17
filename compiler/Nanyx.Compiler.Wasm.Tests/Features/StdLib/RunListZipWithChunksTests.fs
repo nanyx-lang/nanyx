@@ -60,10 +60,10 @@ let ``Run - list.windows gives every run of size neighbouring elements, and none
 let ``Run - list.chunks and list.windows crash on a size below 1`` () =
     let chunks = run "  println([1, 2] \\list.chunks(0))\n"
     Assert.Equal(1, chunks.ExitCode)
-    Assert.Equal("crash: list.chunks: the size must be 1 or more, but is 0\n", chunks.StandardError)
+    Assert.Equal("crash: list.chunks: the size must be 1 or more, but is 0\n", chunks.StandardError |> withoutStack)
     let windows = run "  println([1, 2] \\list.windows(-1))\n"
     Assert.Equal(1, windows.ExitCode)
-    Assert.Equal("crash: list.windows: the size must be 1 or more, but is -1\n", windows.StandardError)
+    Assert.Equal("crash: list.windows: the size must be 1 or more, but is -1\n", windows.StandardError |> withoutStack)
 
 [<Fact>]
 let ``Run - list.scan gives the initial value, then each running total`` () =
