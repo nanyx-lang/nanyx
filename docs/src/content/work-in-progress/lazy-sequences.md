@@ -216,15 +216,15 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
 
   Making a plain `seq(a)` parameter quietly mean "anything iterable" is ruled out: the annotation would no longer mean
   what it says.
-- **Iterable values that need contexts.** If `c` is a `[k] seq(a)`, `toSeq` has to keep `k` in its result. Either the
-  context's member carries `c`'s own requirements, or, to start with, `Iterable` takes only pure values and the
-  `Seq` functions also take `[k] seq(a)` directly.
+- ~~**Iterable values that need contexts.**~~ Decided ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802)):
+  `Iterable` takes only pure values to start with, and the `seq` functions also take a `[k] seq(a)` directly, so
+  `file.lines` still works with them. Carrying `c`'s own contexts through `toSeq` can come later.
 - ~~**How a value's contexts reach its members.**~~ Settled in
   [#1059](https://github.com/nanyx-lang/nanyx/issues/1059): `seq`'s declaration names `k`, and its pull function's type
   is `[k] () -> ...`, so the contexts are on the function, where calling it requires them
   ([#1525](https://github.com/nanyx-lang/nanyx/issues/1525), done).
-- **The context's name.** The compiler matches the member, `toSeq`, by name; the context's own name is free.
-  `Iterable` reads well in signatures; `ToSeq` would sit beside `ToString` and `FromString`.
+- ~~**The context's name.**~~ Decided ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802)): `Iterable`, which
+  reads well in signatures.
 - **Walking an unbounded range.** A default-linter rule for a `for` over only an unbounded range literal, or nothing,
   as for `while true`.
 - ~~**One `yield`.**~~ Decided and built ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)): the prelude's
