@@ -513,6 +513,14 @@ export def StringSlice.startsWith: StringSlice, string -> bool = { s, prefix ->
   length <= s.length and matchesAt(s.text, prefix, length, s.start, 0)
 }
 
+--| The byte index, counting from 0 at the start of `s`, of the first occurrence of `needle` in the
+  bytes `s` views, found without copying them. An empty `needle` is found at 0.
+export def StringSlice.indexOf: StringSlice, string -> #some(int) | #notFound = { s, needle ->
+  def length = string.length(needle)
+  def index = indexBetween(s.text, needle, length, s.start, s.start + s.length - length)
+  if index >= 0 then #some(index - s.start) else #notFound
+}
+
 --| A copy of the bytes `s` views, as a string of its own, which doesn't keep the string `s` views
   alive.
 export def StringSlice.toString: StringSlice -> string = { s ->

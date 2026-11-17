@@ -8,6 +8,7 @@
 export module wire
 
 import (
+  nanyx/text
   nanyx.http.core/request as (Method, Request)
   nanyx.http.core/response as (Response)
 )
@@ -37,43 +38,61 @@ export def methodOf: string -> #some(Method) | #unknown = {
 
 --| `headers` written as lines: how many there are, then each one's name and value.
 def headerLines: list((string, string)) -> string = { headers ->
-  def lines = headers \fold(
-    ""
-    { written, header -> written ++ header.0 ++ "\n" ++ header.1 ++ "\n" }
-  )
+  def lines = headers \map({ header -> "{header.0}\n{header.1}\n" })
 
-  "{headers \length}\n{lines}"
+  "{headers \length}\n{string.concat(lines)}"
+}
+
+--| The line at the start of `text`, and what follows it. The text is read where it is: only the line
+  is copied, so reading a message line by line never copies its body.
+def lineIn: StringSlice -> #some(string, StringSlice) | #malformed = { text ->
+  match StringSlice.indexOf(text, "\n")
+    | #notFound -> #malformed
+    | #some(end) ->
+      #some(
+        StringSlice.toString(StringSlice.slice(text, 0, end))
+        StringSlice.slice(text, end + 1, StringSlice.length(text))
+      )
 }
 
 --| The headers written in `text`, `count` of them, after `headers` (the latest first), in order,
   with what follows them.
 def headersIn
-  : string, int, list((string, string)) -> #some(list((string, string)), string) | #malformed
+  : StringSlice, int, list((string, string)) -> #some(list((string, string)), StringSlice) | #malformed
   = { text, count, headers ->
     if count <= 0 then #some(headers \reverse, text) else
-      match string.splitOnce(text, on = "\n")
-        | #notFound -> #malformed
+      match lineIn(text)
+        | #malformed -> #malformed
         | #some(name, rest) ->
-          match string.splitOnce(rest, on = "\n")
-            | #notFound -> #malformed
+          match lineIn(rest)
+            | #malformed -> #malformed
             | #some(value, after) -> headersIn(after, count - 1, [(name, value), ...headers])
   }
 
 --| The line at the start of `text`, as a whole number, and what follows it.
-def numberLine: string -> #some(int, string) | #malformed = { text ->
-  match string.splitOnce(text, on = "\n")
-    | #notFound -> #malformed
+def numberLine: StringSlice -> #some(int, StringSlice) | #malformed = { text ->
+  match lineIn(text)
+    | #malformed -> #malformed
     | #some(line, rest) ->
       match int.fromString(line)
         | #some(number) -> #some(number, rest)
         | #invalidInt -> #malformed
 }
 
---| The headers written at the start of `text`, with the count before them, and the body after them.
-def headersAndBody: string -> #some(list((string, string)), string) | #malformed = { text ->
+--| The headers written at the start of `text`, with the count before them, and the body after them,
+  which is the only copy made of it.
+def headersAndBody: StringSlice -> #some(list((string, string)), string) | #malformed = { text ->
   match numberLine(text)
     | #malformed -> #malformed
-    | #some(count, rest) -> headersIn(rest, count, [])
+    | #some(count, rest) ->
+      match headersIn(rest, count, [])
+        | #malformed -> #malformed
+        | #some(headers, body) -> #some(headers, StringSlice.toString(body))
+}
+
+--| All of `text`, as a slice to read it by.
+def whole: string -> StringSlice = { text ->
+  string.slice(text, 0, string.length(text))
 }
 
 --| `request`, written.
@@ -85,10 +104,10 @@ export def writeRequest: Request -> string = { request ->
 
 --| The request written in `text`.
 export def readRequest: string -> #some(Request) | #malformed = { text ->
-  match string.splitOnce(text, on = "\n")
-    | #notFound -> #malformed
+  match lineIn(whole(text))
+    | #malformed -> #malformed
     | #some(name, rest) ->
-      match (methodOf(name), string.splitOnce(rest, on = "\n"))
+      match (methodOf(name), lineIn(rest))
         | (#some(method), #some(url, after)) ->
           match numberLine(after)
             | #malformed -> #malformed
@@ -115,7 +134,7 @@ export def writeResponse: Response -> string = { response ->
 
 --| The response written in `text`.
 export def readResponse: string -> #some(Response) | #malformed = { text ->
-  match numberLine(text)
+  match numberLine(whole(text))
     | #malformed -> #malformed
     | #some(status, rest) ->
       match headersAndBody(rest)
