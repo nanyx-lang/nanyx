@@ -192,12 +192,13 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
   the one desugaring rule `yield x` is `yield(x, rest)`, and `rest` needs the builder's context, which is gone by the
   time the sequence is pulled. So `yield` is a keyword of kind `#yield`, and any lambda with one in it, a block after
   `seq` included, is rewritten into the sequence itself (`WorkflowDesugaring`): `yield x` with the rest `k` is
-  `seq.cons(x, { k })`, the end of the block `seq.delay({ seq.empty() })`, and a `for` loop whose body yields
+  `seq.cons(x, { k })`, the end of the block `seq.empty()`, and a `for` loop whose body yields
   `seq.append(seq.concatMap(items, body), seq.delay({ k }))`. `seq` is an ordinary prelude function, `seq.delay` by
-  another name. The end is delayed because the contexts a sequence carries are unified where the branches of an `if`
-  join, and `seq.empty()` carries none, so it couldn't join a branch whose sequence prints; `seq.delay` and `seq.cons`
-  take the lambda's own contexts, which a pure lambda's can be any, apart from those of the sequence it gives. There is no `yield` in a `while` loop: a `while` needs a cell, and a sequence that reads one can't
-  leave its `memory` block anyway.- **Ranges** give sequences: `1..10` and `0..` are both `seq(int)` values that can be passed around and stored, not
+  another name. Where the branches of an `if` join, a pure `seq.empty()` joins a branch whose sequence prints: the
+  whole carries what any branch's sequence does
+  ([#1908](https://github.com/nanyx-lang/nanyx/issues/1908)). There is no `yield` in a `while` loop: a `while` needs
+  a cell, and a sequence that reads one can't leave its `memory` block anyway.
+- **Ranges** give sequences: `1..10` and `0..` are both `seq(int)` values that can be passed around and stored, not
   only walked by a `for` loop.
 
 # Open questions

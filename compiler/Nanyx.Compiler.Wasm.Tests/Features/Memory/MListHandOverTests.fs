@@ -81,5 +81,5 @@ let ``list.select builds its list without reversing it`` () =
     Assert.Equal(2450, total)
     // A cell for each value yielded, the sequence the lambda gives for each element (#1699), and the cells, closure and
     // mutable cells of the block: no copy of the list.
-    Assert.InRange(selectAllocations - initAllocations, 645, 655)
+    Assert.InRange(selectAllocations - initAllocations, 445, 455)
     Assert.Equal(liveBefore, program.LiveBlocks)

@@ -90,3 +90,27 @@ def first: [Console] () -> () = {
 first()
 """
     |> assertRan "made\npull 1\ngot 10\n"
+
+[<Fact>]
+let ``Run - a function that requires a context is passed on to concatMap through a signature's context variable`` () =
+    // #1908
+    run """
+def flat: [c] list(a), ([c] a -> [c] seq(b)) -> list(b) = { xs, f ->
+  xs \list.toSeq \seq.concatMap(f) \seq.toList
+}
+
+println(flat([1, 2], { x ->
+  println("at {x}")
+  list.toSeq([x])
+}))
+
+def pulled: () -> [Console] seq(int) = {
+  (1..2) \seq.map { x ->
+    println("pull {x}")
+    x
+  }
+}
+
+println(seq.cons(0, { pulled() }) \seq.append(list.toSeq([3])) \seq.toList)
+"""
+    |> assertRan "at 1\nat 2\n[1, 2]\npull 1\npull 2\n[0, 1, 2, 3]\n"
