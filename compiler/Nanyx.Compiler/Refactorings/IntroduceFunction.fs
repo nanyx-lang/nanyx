@@ -191,27 +191,28 @@ let at
                     else $"def {name} = {{ {parameterList} ->\n{reindented source selection.Start (indent + indentStep) body}\n{indent}}}"
                 let replace = selection.Start, selection.End, replacement
                 let offer (offerTitle: string) (edits: (int * int * string) list) =
-                    let untyped = applied source edits
-                    let compiled = recompile untyped
-                    match newError result compiled with
-                    | Some reason -> Refused(offerTitle, RefactoringKind.Extract, $"The function would not compile{reason}")
-                    | None ->
-                        // The def's type, written as it was inferred, unless the text with it written does not compile.
-                        let written =
-                            declarationOf untyped name
-                            |> Option.bind (WriteInferredType.at file untyped compiled)
-                            |> Option.bind (function
-                                | Available writing -> writing.Edits |> List.tryExactlyOne |> Option.map (withEdit untyped)
-                                | Refused _ -> None)
-                            |> Option.filter (fun text -> (newError result (recompile text)).IsNone)
-                            |> Option.defaultValue untyped
-                        let changed = difference file source written
-                        let after = formatted options file written changed.Span.Start (changed.Span.Start + changed.NewText.Length)
-                        Available
-                            { Title = offerTitle
-                              Kind = RefactoringKind.Extract
-                              Edits = [ difference file source after ]
-                              Rename = declarationOf after name }
+                    Deferred(offerTitle, RefactoringKind.Extract, fun () ->
+                        let untyped = applied source edits
+                        let compiled = recompile untyped
+                        match newError result compiled with
+                        | Some reason -> Refused(offerTitle, RefactoringKind.Extract, $"The function would not compile{reason}")
+                        | None ->
+                            // The def's type, written as it was inferred, unless the text with it written does not compile.
+                            let written =
+                                declarationOf untyped name
+                                |> Option.bind (WriteInferredType.at file untyped compiled)
+                                |> Option.bind (function
+                                    | Available writing -> writing.Edits |> List.tryExactlyOne |> Option.map (withEdit untyped)
+                                    | _ -> None)
+                                |> Option.filter (fun text -> (newError result (recompile text)).IsNone)
+                                |> Option.defaultValue untyped
+                            let changed = difference file source written
+                            let after = formatted options file written changed.Span.Start (changed.Span.Start + changed.NewText.Length)
+                            Available
+                                { Title = offerTitle
+                                  Kind = RefactoringKind.Extract
+                                  Edits = [ difference file source after ]
+                                  Rename = declarationOf after name })
                 let topLevel =
                     syntax
                     |> List.tryFind (fun item -> not (SourceSpan.isNone item.Span) && SourceSpan.contains item.Span selection)

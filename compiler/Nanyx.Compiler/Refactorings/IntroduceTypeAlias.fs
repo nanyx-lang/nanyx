@@ -192,15 +192,16 @@ let at
                 let parameterList = if parameters.IsEmpty then "" else $"""({String.concat ", " parameters})"""
                 let definition = $"""{if exported then "export " else ""}type {name}{parameterList} = {typeText}{"\n\n"}"""
                 let edits = (at, at, definition) :: (occurrences |> List.map (fun (w, span) -> span.Start, span.End, useOf w.Type))
-                let after = appliedAndFormatted options file source edits
-                match newError result (recompile after) with
-                | Some reason -> Refused(offerTitle, RefactoringKind.Extract, $"The alias would not compile{reason}")
-                | None ->
-                    Available
-                        { Title = offerTitle
-                          Kind = RefactoringKind.Extract
-                          Edits = [ difference file source after ]
-                          Rename = typeDeclarationOf after name }
+                Deferred(offerTitle, RefactoringKind.Extract, fun () ->
+                    let after = appliedAndFormatted options file source edits
+                    match newError result (recompile after) with
+                    | Some reason -> Refused(offerTitle, RefactoringKind.Extract, $"The alias would not compile{reason}")
+                    | None ->
+                        Available
+                            { Title = offerTitle
+                              Kind = RefactoringKind.Extract
+                              Edits = [ difference file source after ]
+                              Rename = typeDeclarationOf after name })
             offer $"{title} `{name}`" [ selected, selectedSpan ]
             :: (if others.IsEmpty then []
                 else [ offer $"{title} `{name}` for all {others.Length + 1} occurrences" ((selected, selectedSpan) :: (others |> List.map (fun w -> w, w.Type.Span))) ])

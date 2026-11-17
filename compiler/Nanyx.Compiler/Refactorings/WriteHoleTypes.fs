@@ -134,10 +134,11 @@ let at
             match writing typed annotation holes with
             | Error reason -> Refused(title, RefactoringKind.Rewrite, reason)
             | Ok edits ->
-                let after = appliedAndFormatted options file source edits
-                match newError result (recompile after) with
-                | Some reason -> Refused(title, RefactoringKind.Rewrite, $"The annotation would not compile{reason}")
-                | None -> Available { Title = title; Kind = RefactoringKind.Rewrite; Edits = [ difference file source after ]; Rename = None }
+                Deferred(title, RefactoringKind.Rewrite, fun () ->
+                    let after = appliedAndFormatted options file source edits
+                    match newError result (recompile after) with
+                    | Some reason -> Refused(title, RefactoringKind.Rewrite, $"The annotation would not compile{reason}")
+                    | None -> Available { Title = title; Kind = RefactoringKind.Rewrite; Edits = [ difference file source after ]; Rename = None })
         let onHole =
             found
             |> List.tryPick (fun annotation ->

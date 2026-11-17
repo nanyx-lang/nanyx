@@ -17,7 +17,7 @@ let private offersAt (marked: string) =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let selection : Parser.Program.SourceSpan = { File = ""; Start = start; End = finish; StartLine = 0; StartColumn = 0 }
-    source, IntroduceTypeAlias.at Formatter.Options.defaults "" source result selection Compiler.compile
+    source, IntroduceTypeAlias.at Formatter.Options.defaults "" source result selection Compiler.compile |> List.map Offer.decided
 
 /// The text after the offer titled starting `title` at the selection, checked to compile and to be formatted.
 let private rewrittenBy (title: string) (marked: string) =

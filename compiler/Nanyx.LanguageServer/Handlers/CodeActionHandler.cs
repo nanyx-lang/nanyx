@@ -1,10 +1,13 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.FSharp.Core;
+using Newtonsoft.Json.Linq;
 using NyxCompiler.Refactorings;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using OmniSharp.Extensions.LanguageServer.Protocol.Server;
+using OmniSharp.Extensions.LanguageServer.Protocol.Window;
 using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Nanyx.LanguageServer.Handlers;
@@ -23,17 +26,28 @@ namespace Nanyx.LanguageServer.Handlers;
 /// offered disabled, with its reason. One that makes up a name has the <see cref="RenameAtCommand"/> command, which
 /// starts renaming it once its edits are made. Where formatting would change the lines in the range, it offers to
 /// format them, or the whole document (see <see cref="FormattingHints"/>), even in a text that did not compile.
+/// <para>
+/// A refactoring that has to compile the document again to make its edits, or to know whether it is refused
+/// (<c>Offer.Deferred</c>), is offered without its edits to a client that can resolve them, and compiled only when the
+/// user picks it, in <c>codeAction/resolve</c>: a request, sent on every move of the cursor, compiles nothing. One
+/// refused then has no edits, and its reason is shown as a message.
+/// </para>
 /// </summary>
 public sealed class CodeActionHandler : CodeActionHandlerBase
 {
     private readonly DocumentStore _documents;
     private readonly ServerSettings _settings;
+    private readonly ILanguageServerFacade _server;
     private readonly ILogger<CodeActionHandler> _logger;
 
-    public CodeActionHandler(DocumentStore documents, ServerSettings settings, ILogger<CodeActionHandler> logger)
+    /// <summary>Whether the client resolves an action's edits when it is picked (<c>codeAction/resolve</c>).</summary>
+    private bool _clientResolvesEdits;
+
+    public CodeActionHandler(DocumentStore documents, ServerSettings settings, ILanguageServerFacade server, ILogger<CodeActionHandler> logger)
     {
         _documents = documents;
         _settings = settings;
+        _server = server;
         _logger = logger;
     }
 
@@ -41,7 +55,7 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
         Task.FromResult(Compute(request));
 
     public override Task<CodeAction> Handle(CodeAction request, CancellationToken cancellationToken) =>
-        Task.FromResult(request);
+        Task.FromResult(Resolve(request));
 
     private CommandOrCodeActionContainer? Compute(CodeActionParams request)
     {
@@ -73,7 +87,9 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             .SelectMany(pair => pair.First.Fixes.Select((fix, index) => ToAction(uri, document, fix, pair.Second, isPreferred: index == 0)))
             .OfType<CodeAction>()
             .ToList();
-        var refactorings = Refactorings(uri, document, compiled, start, end, only).ToList();
+        var refactorings = Offers(uri, document, compiled, start, end, only)
+            .Select(offer => Offered(uri, document, offer, start, end))
+            .ToList();
 
         // Organising imports is a fix for an unused import, too.
         var unusedImports = compiled.Diagnostics
@@ -84,11 +100,11 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             .ToList();
         if (unusedImports.Count > 0 && Wanted(only, CodeActionKind.QuickFix) && document.Typed)
         {
-            foreach (var organise in OrganiseImports.at(OptionsFor(document, uri), document.FileName, document.Text, compiled, Recompile(uri)))
+            foreach (var organise in OrganiseImports.at(document.RefactoringOptions(uri, _logger), document.FileName, document.Text, compiled, Recompile(uri)))
             {
-                if (organise is Offer.Available)
+                if (organise is not Offer.Refused)
                 {
-                    actions.Add(ToAction(uri, document, organise) with
+                    actions.Add(Offered(uri, document, organise, start, end) with
                     {
                         Kind = CodeActionKind.QuickFix,
                         Diagnostics = new Container<Diagnostic>(unusedImports)
@@ -98,6 +114,74 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
         }
 
         return new CommandOrCodeActionContainer(actions.Concat(formatting).Concat(refactorings).Select(action => new CommandOrCodeAction(action)));
+    }
+
+    /// <summary>
+    /// The action for <paramref name="offer"/>, made at the range from <paramref name="start"/> to <paramref name="end"/>:
+    /// a deferred one without its edits, which <see cref="Resolve"/> makes, if the client resolves them, or else decided now.
+    /// </summary>
+    private CodeAction Offered(DocumentUri uri, OpenDocument document, Offer offer, int start, int end)
+    {
+        if (offer is not Offer.Deferred deferred)
+        {
+            return ToAction(uri, document, offer);
+        }
+
+        if (!_clientResolvesEdits)
+        {
+            return ToAction(uri, document, OfferModule.decided(offer));
+        }
+
+        return new CodeAction
+        {
+            Title = deferred.title,
+            Kind = KindOf(deferred.kind),
+            Data = new JObject
+            {
+                ["uri"] = uri.ToString(),
+                ["kind"] = KindOf(deferred.kind).ToString(),
+                ["text"] = document.Text.GetHashCode(),
+                ["start"] = start,
+                ["end"] = end
+            }
+        };
+    }
+
+    /// <summary>
+    /// <paramref name="request"/>, a deferred refactoring the user picked, with its edits: the offers at its range are
+    /// found again, which compiles nothing, and the one of its title and kind decided. Unchanged if the document has
+    /// changed since it was offered; refused, it has no edits, and its reason is shown.
+    /// </summary>
+    private CodeAction Resolve(CodeAction request)
+    {
+        if (request.Data is not JObject data
+            || data["uri"]?.Value<string>() is not { } uriText
+            || DocumentUri.Parse(uriText) is not { } uri
+            || _documents.TryGet(uri) is not { Compiled: { } compiled } document
+            || data["text"]?.Value<int>() != document.Text.GetHashCode())
+        {
+            return request;
+        }
+
+        var start = data["start"]!.Value<int>();
+        var end = data["end"]!.Value<int>();
+        var offer = Offers(uri, document, compiled, start, end, only: null)
+            .OfType<Offer.Deferred>()
+            .FirstOrDefault(offer => offer.title == request.Title && KindOf(offer.kind).ToString() == data["kind"]?.Value<string>());
+        if (offer is null)
+        {
+            return request;
+        }
+
+        var decided = OfferModule.decided(offer);
+        if (decided is Offer.Refused refused)
+        {
+            _server.Window.ShowWarning($"{refused.title}: {refused.reason}");
+            return request;
+        }
+
+        var action = ToAction(uri, document, decided);
+        return request with { Edit = action.Edit, Command = action.Command, Data = null };
     }
 
     /// <summary>
@@ -136,9 +220,6 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
     private static bool Wanted(List<CodeActionKind>? only, CodeActionKind kind) =>
         only is null || only.Any(wanted => kind.ToString() == wanted.ToString() || kind.ToString().StartsWith(wanted + "."));
 
-    private Nanyx.Formatter.Formatter.Options OptionsFor(OpenDocument document, DocumentUri uri) =>
-        FormattingHandler.SettingsFor(document, uri, _logger) ?? Nanyx.Formatter.Formatter.OptionsModule.defaults;
-
     /// <summary>Compiles a text of the document at <paramref name="uri"/>, as a refactoring checks what it would make.</summary>
     private Microsoft.FSharp.Core.FSharpFunc<string, NyxCompiler.CompileResult> Recompile(DocumentUri uri) =>
         Microsoft.FSharp.Core.FuncConvert.FromFunc((string text) =>
@@ -146,22 +227,23 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
 
     /// <summary>
     /// The refactorings at the range from <paramref name="start"/> to <paramref name="end"/> of the kinds
-    /// <paramref name="only"/> (all, when null), if the document's text type-checked.
+    /// <paramref name="only"/> (all, when null), if the document's text type-checked. Those that compile the document
+    /// again are deferred.
     /// </summary>
-    private IEnumerable<CodeAction> Refactorings(DocumentUri uri, OpenDocument document, NyxCompiler.CompileResult compiled, int start, int end, List<CodeActionKind>? only)
+    private IEnumerable<Offer> Offers(DocumentUri uri, OpenDocument document, NyxCompiler.CompileResult compiled, int start, int end, List<CodeActionKind>? only)
     {
         if (!document.Typed)
         {
             yield break;
         }
 
-        var options = OptionsFor(document, uri);
+        var options = document.RefactoringOptions(uri, _logger);
         var recompile = Recompile(uri);
         if (Wanted(only, CodeActionKind.SourceOrganizeImports))
         {
             foreach (var organise in OrganiseImports.at(options, document.FileName, document.Text, compiled, recompile))
             {
-                yield return ToAction(uri, document, organise);
+                yield return organise;
             }
         }
 
@@ -172,32 +254,32 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
 
         if (WriteInferredType.at(document.FileName, document.Text, compiled, start)?.Value is { } offer)
         {
-            yield return ToAction(uri, document, offer);
+            yield return offer;
         }
 
         foreach (var write in WriteHoleTypes.at(options, document.FileName, document.Text, compiled, start, recompile))
         {
-            yield return ToAction(uri, document, write);
+            yield return write;
         }
 
         foreach (var inline in Inline.at(options, document.FileName, document.Text, compiled, start, recompile))
         {
-            yield return ToAction(uri, document, inline);
+            yield return inline;
         }
 
         foreach (var inline in InlineTypeAlias.at(options, document.FileName, document.Text, compiled, start, recompile))
         {
-            yield return ToAction(uri, document, inline);
+            yield return inline;
         }
 
         foreach (var convert in CallAndPipe.at(options, document.FileName, document.Text, compiled, start, recompile))
         {
-            yield return ToAction(uri, document, convert);
+            yield return convert;
         }
 
         foreach (var convert in ShorthandLambda.at(options, document.FileName, document.Text, compiled, start, recompile))
         {
-            yield return ToAction(uri, document, convert);
+            yield return convert;
         }
 
         if (end > start)
@@ -205,17 +287,17 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             var selection = new Parser.Program.SourceSpan(document.FileName, start, end, 0, 0);
             foreach (var extract in IntroduceLocal.at(options, document.FileName, document.Text, compiled, selection))
             {
-                yield return ToAction(uri, document, extract);
+                yield return extract;
             }
 
             foreach (var extract in IntroduceFunction.at(options, document.FileName, document.Text, compiled, selection, recompile))
             {
-                yield return ToAction(uri, document, extract);
+                yield return extract;
             }
 
             foreach (var extract in IntroduceTypeAlias.at(options, document.FileName, document.Text, compiled, selection, recompile))
             {
-                yield return ToAction(uri, document, extract);
+                yield return extract;
             }
         }
     }
@@ -226,6 +308,7 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
     /// </summary>
     public const string RenameAtCommand = "nanyx.renameAt";
 
+    /// <summary>The action for <paramref name="offer"/>, which is decided.</summary>
     private static CodeAction ToAction(DocumentUri uri, OpenDocument document, Offer offer) =>
         offer switch
         {
@@ -315,6 +398,14 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
 
     protected override CodeActionRegistrationOptions CreateRegistrationOptions(
         CodeActionCapability capability,
-        ClientCapabilities clientCapabilities) =>
-        new() { DocumentSelector = TextDocumentSyncHandler.Selector, CodeActionKinds = new Container<CodeActionKind>(CodeActionKind.QuickFix, CodeActionKind.RefactorExtract, CodeActionKind.RefactorInline, CodeActionKind.RefactorRewrite, CodeActionKind.SourceOrganizeImports) };
+        ClientCapabilities clientCapabilities)
+    {
+        _clientResolvesEdits = capability?.ResolveSupport?.Properties.Contains("edit") == true;
+        return new()
+        {
+            DocumentSelector = TextDocumentSyncHandler.Selector,
+            CodeActionKinds = new Container<CodeActionKind>(CodeActionKind.QuickFix, CodeActionKind.RefactorExtract, CodeActionKind.RefactorInline, CodeActionKind.RefactorRewrite, CodeActionKind.SourceOrganizeImports),
+            ResolveProvider = _clientResolvesEdits
+        };
+    }
 }

@@ -142,7 +142,9 @@ The lines that formatting would change are marked as you type, with a hint (thre
 # Refactorings
 
 The refactorings change the code without changing what it does. Each one checks its result: where it can't keep the
-program's meaning, it is shown in the menu disabled, with the reason, rather than offered. What it writes is formatted
+program's meaning, it is shown in the menu disabled, with the reason, rather than offered. One that has to compile its
+result to know is checked when you pick it, so moving the cursor stays fast; refused then, it changes nothing and shows
+the reason as a message. What it writes is formatted
 as `nanyx format` would format it. One that makes up a name, such as introducing a local, starts renaming the name
 straight away, so you can type the one you want.
 

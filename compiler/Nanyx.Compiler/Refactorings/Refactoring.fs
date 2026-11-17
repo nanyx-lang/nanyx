@@ -31,6 +31,24 @@ type Offer =
     | Available of Refactoring
     /// The refactoring, by its title and kind, and why it is refused.
     | Refused of title: string * kind: RefactoringKind * reason: string
+    /// The refactoring, by its title and kind, whose edits, or whether it is refused, take compiling the module again:
+    /// `decide` compiles and gives the `Available` or `Refused` offer. An editor lists it and decides it only when it is
+    /// picked, so moving the cursor compiles nothing.
+    | Deferred of title: string * kind: RefactoringKind * decide: (unit -> Offer)
+
+module Offer =
+    /// `offer`, decided if it was deferred.
+    let rec decided (offer: Offer) =
+        match offer with
+        | Deferred(_, _, decide) -> decided (decide ())
+        | _ -> offer
+
+    /// The title and kind of `offer`.
+    let titleAndKind (offer: Offer) =
+        match offer with
+        | Available refactoring -> refactoring.Title, refactoring.Kind
+        | Refused(title, kind, _)
+        | Deferred(title, kind, _) -> title, kind
 
 /// What the refactorings that edit text share: making edits, laying out what they write as the formatter does, and
 /// finding where new code goes and a name for it. Offsets are into source with line endings normalised to `\n`.

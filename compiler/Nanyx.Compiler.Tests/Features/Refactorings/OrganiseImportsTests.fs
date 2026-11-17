@@ -12,7 +12,7 @@ let private offersFor (source: string) =
     let source = normalized source
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    source, OrganiseImports.at Formatter.Options.defaults "" source result Compiler.compile
+    source, OrganiseImports.at Formatter.Options.defaults "" source result Compiler.compile |> List.map Offer.decided
 
 /// The text after organising imports, checked to compile and be formatted.
 let private organised (source: string) =

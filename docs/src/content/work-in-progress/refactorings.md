@@ -17,9 +17,6 @@ and inline, and the small rewrites that save typing. Its issues carry the
 
 # Planned
 
-Each refactoring that compiles its result does so for every code action request it is offered on, which can be slow
-on a large file; [#1846](https://github.com/nanyx-lang/nanyx/issues/1846) moves that work out of the request.
-
 Each refactoring below has an issue with its design; none is built yet.
 
 | Refactoring | Issue |
