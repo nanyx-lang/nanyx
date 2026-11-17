@@ -228,6 +228,7 @@ module NonTailRecursion =
         | UnitExpr
         | IdentifierExpr _
         | ContextMemberAccess _
+        | TypeValue _
         | Lambda _
         | ContextNames _ -> "it is not the last thing the function does"
 

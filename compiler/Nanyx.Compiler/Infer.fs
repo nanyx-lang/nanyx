@@ -403,6 +403,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             inferExprKind env state read
             |> Result.map (fun (typed, next) -> { typed with Expr = expr }, { next with ReadAs = next.ReadAs |> Map.add expr.Id read })
         | _ -> readMember env state expr baseExpr None memberName memberSpan
+    | TypeValue written -> TypeArguments.infer state expr written
     // `C(T).member` as a value has the member's type in the context's definition, as a call of it does. A member the
     // context does not have leaves the value's type to what uses it.
     | ContextMemberAccess(ctxType, memberName) ->
@@ -1138,6 +1139,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     // error again.
                     | Some diagnostic, TyFunc(input, output, _) -> Ok (FailedCalls.result expr input output [ diagnostic ] state)
                     | Some diagnostic, _ -> Error [ diagnostic ]
+                    | None, TypeArguments.LeavesOut current expr name args typedArgs (output, call) -> Ok (TypeArguments.leaveOut expr output call { current with Constraints = state.Constraints })
                     | None, _ ->
                     let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
                     let current = WorkflowRests.noteCall name argTys current

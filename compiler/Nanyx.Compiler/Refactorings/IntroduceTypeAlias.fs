@@ -45,7 +45,8 @@ let internal writtenTypes (syntax: Module) =
         | SyntaxTree.TypeBody _
         | SyntaxTree.LambdaParameter -> true
         | SyntaxTree.ParameterConstraint
-        | SyntaxTree.ContextNamed -> false)
+        | SyntaxTree.ContextNamed
+        | SyntaxTree.PassedType -> false)
     |> List.collect (fun root ->
         typesIn false root.Type
         |> List.map (fun (written, inContexts) -> { Type = written; Item = root.Item; Exported = isExported root; InContexts = inContexts }))

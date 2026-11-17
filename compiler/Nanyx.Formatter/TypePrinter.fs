@@ -120,6 +120,7 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
         | TypeKeyword -> text "type"
         | TypeNamedArgument(n, value) -> cat [ text n; text " = "; unionType value ]
         | TypeAssociated(context, n) -> cat [ atomType context; text ("." + n) ]
+        | TypeArgument operand -> cat [ text "type "; typeExpr operand ]
         | TypeFunc _
         | TypeUnion _
         | TypeIntersection _
@@ -169,8 +170,6 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
                  | Some value -> cat [ text " = "; expressionFollowed value ]
                  | None -> Doc.empty)
             ]
-        | TypeMember(n, Some t) -> cat [ text $"type {n} = "; typeExpr t ]
-        | TypeMember(n, None) -> text $"type {n}"
         | TypeFieldAttribute(n, argument, span) -> attribute n argument span
 
     /// The fields of a record type on one line, each after its attributes: `(@customKeywordType(#bind) await: ...)`.
@@ -201,6 +200,8 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
 
     /// A type anywhere a single type is read.
     member _.TypeExpr t = typeExpr t
+    /// One type, bracketed unless it is an atom: what `type` is followed by in `type Point` or `type (a -> b)`.
+    member _.AtomType t = atomType t
 
     /// A field of a record type.
     member _.RecordTypeField field = recordTypeField field

@@ -175,6 +175,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             let isIndex = field <> "" && String.forall Char.IsDigit field
             cat [ expr operandPosition target; text "."; text (if isIndex then field else Names.written field) ]
         | ContextMemberAccess(context, field) -> cat [ contextHead context; text "."; text (Names.written field) ]
+        | TypeValue written -> cat [ text "type "; atomType written ]
         | ContextMemberCall(context, field, args) ->
             let count = args.Length
             let argument index arg = expr { full with Tail = (index = count - 1) } arg
@@ -458,6 +459,8 @@ let format (options: Options) (parsed: SourceModule) : string =
 
     and typeExpr (t: TypeExpr) : Doc = (types ()).TypeExpr t
 
+    and atomType (t: TypeExpr) : Doc = (types ()).AtomType t
+
     and recordTypeField (field: TypeRecordField) : Doc = (types ()).RecordTypeField field
 
     and typeDefDoc (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) : Doc =
@@ -536,7 +539,6 @@ let format (options: Options) (parsed: SourceModule) : string =
                 | TypeField(_, _, Some t, defaultValue) ->
                     let finish = match defaultValue with Some value when sourceText.Valid value.Span -> value.Span.End | _ -> t.Span.End
                     t.Span.Start, finish
-                | TypeMember(_, Some t) -> t.Span.Start, t.Span.End
                 | _ -> -1, -1
             let children =
                 TypeRecordField.withAttributes fields

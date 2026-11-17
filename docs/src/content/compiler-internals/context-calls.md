@@ -240,5 +240,21 @@ Another of a function's contexts may name an associated type, as `ToString(elem)
 (`Contexts.ensureContextTypesDetermined`), and at a call the contexts are read with one variable for each name across
 them (`ContextInstances.contextArgTysAtCall`), so the `ToString` found is for the `elem` the `Iterable` fixed.
 
+## Type arguments
+
+A [type argument](../tour/functions#type-arguments) chooses an instance as any argument whose type mentions a type
+variable does. `type a` in a signature is a `TypeArgument` type, read as the built-in `Type(a)` (`TypeValues.fs`), and
+the expression `type Point` is a `TypeValue`, of type `Type(Point)` (`TypeArguments.infer`). `TypeArguments.rewrite`
+runs before `AssociatedTypes`: it writes each named parameter `into: type` of a def's signature as one of type
+`Type(into)`, and `into` wherever the def writes it as a type, in its signature and in the types written in its value
+(`type into` among them), as the type variable it is. It also reports a type parameter declared wrongly (NYX0270), and
+a `Type` value chosen with `if` or `match` or held in a list with another type's (NYX0272), each read then as the
+first, so that inference has no conflict among them to report again.
+
+A call that leaves out a type argument (`TypeArguments.LeavesOut`, next to `NamedArguments.check`) gives back its
+callee's result type all the same, without checking its arguments, so the code around it fixes the type it should have
+passed; `TypeArguments.report` reports it (NYX0271) once the module's constraints are solved, naming that type. A
+`Type` value holds nothing at run time: the backend lays out `Type(a)` as unit and lowers `type Point` to `()`.
+
 After specialising, the [inliner](./inlining) folds small functions such as `println` into their callers, and makes
 the members of a `use` it brings into the same function as their calls known.
