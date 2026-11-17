@@ -105,6 +105,7 @@ module Unifier =
             (writtenContexts contexts |> List.choose (function FunctionContexts.ScopedContext(name, scope) -> Some (name, scope) | _ -> None))
             @ scopedContextsInPrintOrder arg
             @ scopedContextsInPrintOrder ret
+        | TyContexts contexts -> writtenContexts contexts |> List.choose (function FunctionContexts.ScopedContext(name, scope) -> Some (name, scope) | _ -> None)
         | TyRecord(fields, _)
         | TyOpenRecord(fields, _) -> all (List.ofSeq fields.Values)
         | TyTag(_, Some payload) -> scopedContextsInPrintOrder payload
@@ -287,6 +288,9 @@ module Unifier =
         | TyParam index -> $"${index}"
         // Only where a scoped context's scope is printed on its own, which a reader never sees.
         | TyScope scope -> $"scope({soleArgument scope})"
+        // Only where the contexts a type carries are printed on their own, which a reader never sees: they are written
+        // in front of the type.
+        | TyContexts contexts -> $"""[{writtenContexts contexts |> List.map (contextAsPrinted p >> printTy p false) |> String.concat ", "}]"""
 
     /// `ty` as it would be written in a def's annotation: see `printTy`.
     let tyToString (ty: Ty) : string = printTy (printingFor "..." ty) true ty
@@ -305,6 +309,7 @@ module Unifier =
             | TySelf args -> args |> List.collect collect
             | TyFunc(arg, ret, contexts) ->
                 (writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect) @ collect arg @ collect ret
+            | TyContexts contexts -> writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect
             | TyRecord(fields, _) ->
                 match tryTupleLikeRecord fields with
                 | Some tupleItems, namedFields ->
@@ -467,6 +472,7 @@ module Unifier =
         | TyVar v -> resolve v
         | TyFunc(arg, ret, contexts) ->
             TyFunc(apply arg, apply ret, contexts |> List.map apply |> FunctionContexts.flatten)
+        | TyContexts contexts -> TyContexts(contexts |> List.map apply |> FunctionContexts.flatten)
         // A solved row adds its fields: to a record when it was solved to one, still open when to an open one.
         | TyOpenRecord(fields, row) ->
             let applied = fields |> Map.map (fun _ v -> apply v)
@@ -1139,8 +1145,8 @@ module Unifier =
                         | _ ->
                         match l, r with
                         // A nominal type's arguments are its own, not only what it is made from, so they are the same. The
-                        // contexts a type generic in contexts carries are a function type's: one with fewer fits where one
-                        // with more is expected (see `FunctionContexts.carried`).
+                        // contexts a type generic in contexts carries are like a function type's: one with fewer fits where
+                        // one with more is expected (see `FunctionContexts.carried`).
                         | TyNominal(lNominal, lArgs, _, _), TyNominal(rNominal, rArgs, _, _) when lNominal = rNominal && lArgs.Length = rArgs.Length ->
                             let arguments =
                                 List.zip lArgs rArgs

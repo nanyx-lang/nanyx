@@ -602,6 +602,7 @@ let private coreIrContextParameters
         match ty with
         | TyVar { Name = Some varName } -> [ varName, ty ]
         | TyFunc(input, output, _) -> namedVars input @ namedVars output
+        | TyContexts _ -> []
         | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> namedVars)
         | _ -> Ty.children ty |> List.collect namedVars
     let annotated =

@@ -109,6 +109,7 @@ let rec private variablesOf (ty: Ty) : int list =
     // A nominal type or an alias is matched by its name and written arguments, and a function without its contexts.
     | TyNominal(_, args, _, _) -> writtenArguments args |> List.collect variablesOf
     | TyFunc(input, output, _) -> variablesOf input @ variablesOf output
+    | TyContexts _ -> []
     | TyAlias(_, args, _) -> args |> List.collect variablesOf
     | _ -> Ty.children ty |> List.collect variablesOf
 
@@ -144,6 +145,7 @@ let rec private unify (subst: Substitution) (left: Ty) (right: Ty) : Substitutio
             | _, TyAlias _ -> unify subst left (Unifier.unalias right)
             | TyFunc(leftInput, leftOutput, _), TyFunc(rightInput, rightOutput, _) ->
                 unify subst leftInput rightInput |> Option.bind (fun subst -> unify subst leftOutput rightOutput)
+            | TyContexts _, TyContexts _ -> Some subst
             | TyRecord(leftFields, _), TyRecord(rightFields, _)
             | TyOpenRecord(leftFields, _), TyOpenRecord(rightFields, _) when Set.ofSeq leftFields.Keys = Set.ofSeq rightFields.Keys ->
                 unifyAll subst (List.ofSeq leftFields.Values) (List.ofSeq rightFields.Values)
@@ -160,6 +162,7 @@ let private canonical (ty: Ty) : Ty =
         match ty with
         | TyVar var -> TyVar (TyVar.ordinary (numbers.[var.Id]) None)
         | TyFunc(input, output, _) -> TyFunc(rewrite input, rewrite output, [])
+        | TyContexts _ -> TyContexts []
         | TyRecord(fields, order) -> TyRecord(Map.map (fun _ field -> rewrite field) fields, order)
         | TyOpenRecord(fields, row) -> TyOpenRecord(Map.map (fun _ field -> rewrite field) fields, (TyVar.ordinary (numbers.[row.Id]) None))
         | TyTag(name, payload) -> TyTag(name, Option.map rewrite payload)

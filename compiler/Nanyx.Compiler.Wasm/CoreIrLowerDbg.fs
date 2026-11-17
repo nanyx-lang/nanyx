@@ -74,6 +74,7 @@ let rec private mangle (ty: Ty) : string =
     | TyApply(name, args) -> $"{name}_{all args}"
     | TyScope scope -> $"scope_{mangle scope}"
     | TyFunc(input, output, _) -> $"fn_{mangle input}_to_{mangle output}"
+    | TyContexts _ -> "contexts"
     | TyVar _
     | TyOpenRecord _ -> "unit"
     | TyRecursive _

@@ -97,7 +97,8 @@ module internal StructuralInstances =
         | TyVar _
         | TyPrimitive _
         | TyParam _
-        | TyNominal _ -> Some ty
+        | TyNominal _
+        | TyContexts _ -> Some ty
         | TyAlias(name, args, underlying) ->
             match all args, closed rigid underlying with
             | Some args, Some underlying -> Some (TyAlias(name, args, underlying))

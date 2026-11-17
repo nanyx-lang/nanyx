@@ -51,6 +51,7 @@ let rec private replaceNamedVars (names: Map<string, Ty>) (ty: Ty) : Ty =
     match ty with
     | TyVar { Name = Some name } when names.ContainsKey name -> names.[name]
     | TyFunc(arg, ret, contexts) -> TyFunc(recur arg, recur ret, contexts |> List.map recur |> FunctionContexts.flatten)
+    | TyContexts contexts -> TyContexts(contexts |> List.map recur |> FunctionContexts.flatten)
     | _ -> Ty.map recur ty
 
 /// The type each type variable of `general` that `keyOf` gives a key stands for in `specific`, a type of the same

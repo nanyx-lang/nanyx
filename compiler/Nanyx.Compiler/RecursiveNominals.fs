@@ -36,13 +36,16 @@ module RecursiveNominals =
             match ty with
             | TyRecursive(body, args) -> TyRecursive(body, List.map recur args)
             // A context variable replaced by the contexts a type carries adds them.
-            | TyFunc(input, output, contexts) ->
-                let contexts =
-                    contexts
-                    |> List.map recur
-                    |> List.collect (function FunctionContexts.Carried carried -> carried | context -> [ context ])
-                TyFunc(recur input, recur output, FunctionContexts.flatten contexts)
+            | TyFunc(input, output, contexts) -> TyFunc(recur input, recur output, mapContexts replace contexts)
+            | TyContexts contexts -> TyContexts(mapContexts replace contexts)
             | _ -> Ty.map recur ty
+
+    /// `contexts`, a function type's or those a type carries, walked by `mapTy`.
+    and private mapContexts (replace: Ty -> Ty option) (contexts: Ty list) : Ty list =
+        contexts
+        |> List.map (mapTy replace)
+        |> List.collect (function FunctionContexts.Carried carried -> carried | context -> [ context ])
+        |> FunctionContexts.flatten
 
     /// What the nominal type `ty` is made from: its underlying type, unfolded one level when the type names itself, so
     /// that each place it does is the type at the arguments it is written with there. `ty` itself when it isn't nominal.

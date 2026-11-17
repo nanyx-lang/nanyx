@@ -678,6 +678,7 @@ let rec private heldScopes (ty: Ty) : (string * string) list =
             | _ -> []
         own @ List.collect heldScopes args
     | TyFunc(input, output, _) -> heldScopes input @ heldScopes output
+    | TyContexts _ -> []
     | _ -> Ty.children ty |> List.collect heldScopes
 
 /// The error for each scoped context whose scope the representation of the nominal type `name` holds a value of,

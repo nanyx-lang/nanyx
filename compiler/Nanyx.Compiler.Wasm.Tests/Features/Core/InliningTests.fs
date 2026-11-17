@@ -178,6 +178,27 @@ def run: int -> int = { n -> orZero(#some(n + 1)) }
     Assert.Equal(0, inlinedAllocations)
 
 [<Fact>]
+let ``A match on a variable given another's value, given another's, reads the first`` () =
+    let source =
+        normalized """def wrap: int -> #some(int) | #none = { n -> #some(n) }
+
+def run: int -> int = { n ->
+  def made: #some(int) | #none = #some(n + 1)
+  def given = made
+  def givenAgain = given
+  match givenAgain
+    | #some(value) -> value
+    | #none -> 0
+}
+"""
+    use inlined = instantiateWasm source []
+    let allocations, result = allocationsOf inlined "run" 100
+    Assert.Equal(101, result)
+    // `givenAgain` is read as `given`, and `given` as `made`, so the match is on the tag made just before it: it takes
+    // that arm, and nothing reads the tag. (`wrap` allocates, so that the module has an allocator to count with.)
+    Assert.Equal(0, allocations)
+
+[<Fact>]
 let ``A match on what an if gives is copied into its branches`` () =
     let source =
         normalized """def classify: int -> #positive(int) | #other = { n -> if n > 0 then #positive(n) else #other }
