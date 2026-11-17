@@ -1036,6 +1036,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let statement = adapt bindings scope.Vars
             statement, Some (hole, restScope.Value, rest)
         | UseStatement _ :: _ -> cannot "this kind of `use`"
+        // A local type declares nothing that exists at run time: types are erased, and a nominal type's values are its
+        // representation's.
+        | TypeDefStatement _ :: rest -> this.Statement scope rest k
         | _ -> cannot "this kind of statement"
 
     /// Records the local `local`, which a `def` gives the value `rhs`, lowered to `value`, as known when `rhs` is a
