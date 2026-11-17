@@ -94,7 +94,7 @@ let misfit (env: TypeEnv) (state: InferState) (lookup: Lookup) (hasArguments: bo
             | TyFunc(input, _, _) when not hasArguments -> Some input
             | _ -> None
         takes
-        |> Option.filter (fun takes -> Unifier.unify [ lookup.PipedType, takes, Assignable, SourceSpan.none ] |> Result.isError)
+        |> Option.filter (fun takes -> Solving.unify [ lookup.PipedType, takes, Assignable, SourceSpan.none ] |> Result.isError)
         |> Option.map (fun takes ->
             let name = lookup.Written
             let piped = Unifier.tyToString lookup.PipedType

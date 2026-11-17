@@ -186,14 +186,6 @@ let typeDefCore: Parser<Definition, ParseState> =
     (getPosition >>= fun defStart -> attempt (contextDef defStart) <|> typeDefWithModifiers defStart)
     <?> "type definition"
 
-let valueDefCore: Parser<Definition, ParseState> =
-    getPosition >>= fun lineStart ->
-        pipe2
-            (opt (attempt (pstring "export" >>. ws)))
-            (parseDefWith lineStart typedDefIdentifier (wsInline >>. singleOrTuple (sepBy1 expression (pstring "," .>> ws))))
-            (fun exportOpt (name, typeOpt, expr) -> ValueDef(exportOpt.IsSome, name, typeOpt, expr))
-    <?> "value definition"
-
 // A match arm: `| patterns -> body`. An arm may list several alternatives (an or-pattern), written
 // `| p1 | p2 -> body` on one line or with each `|` on its own line; every arm ends in `->`, so a `|` that is
 // not preceded by `->` continues the current arm rather than starting a new one. The arm is desugared into one

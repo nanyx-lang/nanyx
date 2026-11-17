@@ -22,7 +22,7 @@ asks for text; `WriteProgram` assembles it (see [the binary format](./compilatio
 
 # Runtime errors
 
-A program that traps stops with `Runtime error: …` and exit code 1, written by `ReportRunError` in `Program.cs` from the
+A program that traps stops with `Runtime error: …` and exit code 1, written by `ReportRunError` in `RunProgram.cs` from the
 `RunError` the runner gives. `WasmRunner.trapped` in `Runner.fs` reads the trap: an `unreachable` in the allocator is
 out of memory (see [Memory management](./memory-management)), and running out of stack names the function (see
 [Tail calls](./tail-calls#running-out-of-stack)). Arithmetic the program can't finish is a `RunError.ArithmeticError`

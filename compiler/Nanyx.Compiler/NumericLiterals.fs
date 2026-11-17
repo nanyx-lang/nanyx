@@ -52,7 +52,7 @@ module internal NumericLiterals =
 
     /// `settle` for the literals, or else for the operators' operands (`operands`).
     let private settleOf (operands: bool) (isOwn: Ty -> bool) (state: InferState) : InferState =
-        let subst = fst (Unifier.solve state.Constraints)
+        let subst = fst (Solving.solve state.Constraints)
         let isSettling (literal: NumericLiteral) =
             literal.Operator.IsSome = operands
             && (match Unifier.apply subst literal.Type with
@@ -184,7 +184,7 @@ module internal NumericLiterals =
     /// an expression fails to check there, and the errors of the others, which are patterns, are given back.
     let check (state: InferState) : InferState * Diagnostic list =
         let settled = settle (fun _ -> true) state
-        let subst = fst (Unifier.solve settled.Constraints)
+        let subst = fst (Solving.solve settled.Constraints)
         let report (literal: NumericLiteral) (error: Diagnostic) (current: InferState, errors: Diagnostic list) =
             match literal.Node with
             | Some node -> { current with FailedExprs = (node, [ error ]) :: current.FailedExprs }, errors

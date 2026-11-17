@@ -220,7 +220,7 @@ let private builtSource (ctxName: Identifier) (members: (string * string) list) 
 let private contextsAtCall (typed: TypedModule) (symbol: Symbol) (call: Expression) : Ty list =
     match Hover.declaredType typed symbol, typed.CalleeTypes |> Map.tryFind call.Id with
     | Some (general, contexts), Some calleeTy ->
-        match Unifier.unify [ general, calleeTy, Equal, SourceSpan.none ] with
+        match Solving.unify [ general, calleeTy, Equal, SourceSpan.none ] with
         | Ok subst -> contexts |> List.map (Unifier.apply subst)
         | Error _ -> []
     | _ -> []
