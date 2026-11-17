@@ -97,6 +97,7 @@
     <Compile Include="Features\Imports\ImportHintTests.fs" />
     <Compile Include="Features\Imports\NameSuggestionTests.fs" />
     <Compile Include="Features\Imports\PackageImportTests.fs" />
+    <Compile Include="Features\Imports\PackageImportFixTests.fs" />
     <Compile Include="Features\Imports\PackageBuildTests.fs" />
     <Compile Include="Features\Imports\PartialModuleTests.fs" />
     <Compile Include="Features\Imports\ImportedTypeTests.fs" />

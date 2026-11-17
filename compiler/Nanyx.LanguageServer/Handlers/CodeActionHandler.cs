@@ -16,7 +16,8 @@ namespace Nanyx.LanguageServer.Handlers;
 /// Offers the fixes of the diagnostics in the requested range as quick fixes: each fix's edits, applied to the
 /// document, with the diagnostic it resolves as published. A diagnostic's first fix is the preferred one. Linters
 /// offer fixes (removing an unused local, renaming an unused name to <c>_</c>), and the compiler offers the import
-/// an unknown name from the standard library needs (<c>NyxCompiler.ImportFixes</c>). A fix that would edit another
+/// an unknown name needs, from another module of the package, a package it depends on, or the standard library
+/// (<c>NyxCompiler.ImportFixes</c>), which a request for refactorings alone lists as refactorings too. A fix that would edit another
 /// file is not offered. It also offers the refactorings at the range (see <c>NyxCompiler.Refactorings</c>), in a
 /// document whose text type-checked: writing the inferred type of the name at its start, or of the <c>_</c>s in an annotation, inlining the def or type alias it names,
 /// converting the call or pipe it names to the other, the lambda it is in to its shorthand or back, the match or <c>if</c> whose keyword it is on to the other, the <c>++</c> chain or interpolated string it is in to the other, implementing a context for the type whose definition it names, introducing a local or a function for what it selects, and a type
@@ -295,6 +296,16 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
         foreach (var implement in ImplementContext.at(options, document.FileName, document.Text, compiled, start, recompile))
         {
             yield return implement;
+        }
+
+        // An unknown name's imports are its quick fixes already, so they are listed again only for a request for
+        // refactorings alone, as the editor's Refactor menu makes.
+        if (only is not null)
+        {
+            foreach (var import in ImportName.at(compiled, start))
+            {
+                yield return import;
+            }
         }
 
         if (end > start)
