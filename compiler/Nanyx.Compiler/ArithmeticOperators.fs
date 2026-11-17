@@ -3,7 +3,7 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// `+`, `-`, `*`, `/` and `%`, and prefix `-` (see "Numeric contexts" in the docs' work in progress). On `int` and
+/// `+`, `-`, `*`, `/` and `%`, and prefix `-` (see "Add(a)" and "Num(a)" on the docs' Contexts page). On `int` and
 /// `float` they are the built-in operators. Each reads the context member of its name, and prefix `-` reads `negate`,
 /// through the prelude's smallest context that has it (see `OperatorContexts`): `+`, `-` and prefix `-` through `Add`,
 /// whose members are `zero`, `` `+` ``, `` `-` `` and `negate`, and `*`, `/` and `%` through `Num`, which has `Add`'s

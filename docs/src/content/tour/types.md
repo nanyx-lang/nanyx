@@ -89,6 +89,8 @@ def stop: int -> undefined = { x ->
 def double = { n -> if n > 0 then n * 2 else stop(n) } -- int -> int
 ```
 
+The items of a list literal are joined the same way, so `[1, crash("no")]` is a `list(int)`. It only works one way: nothing but an expression that never gives a value can be given where an `undefined` is expected.
+
 # Tuple types
 
 Tuples are anonymous records with numbered fields:

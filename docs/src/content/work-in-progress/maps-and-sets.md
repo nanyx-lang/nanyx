@@ -20,7 +20,7 @@ order: 10
   `__map` with the list of the entries as tuples, `__map([(k, v), ...])` (`MapSyntax` in `Nanyx.Parser/Ast.fs`), so the
   type checker and the backend see an ordinary call. A set literal, or a map literal of an expected type, goes through
   `fromArray` ([Collection literals](./collection-literals)).
-- **Keys need `Eq` and `Hash`**, as [the equality design](./equality-and-well-known-contexts#hashing) agreed. The hash
+- **Keys need `Eq` and `Hash`**, as [Hash(a)](../advanced/contexts#hasha) describes. The hash
   is not used yet: lookups compare with `==`.
 - **Calling a map is a lookup.** The type checker types `m(k)` as the call to `map.get` (`inferMapLookup` in
   `Infer.fs`) and records it in `ReadAs`, and `ExpressionRewrites.writeAsRead` writes it as that call for the backend.

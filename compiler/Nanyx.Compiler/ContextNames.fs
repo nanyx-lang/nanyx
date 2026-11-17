@@ -1,5 +1,5 @@
 /// `context l` before a lambda's parameters: a name for the instance of a context the lambda is given, which only
-/// `use l` can do anything with (see docs/src/content/work-in-progress/context-escape.md#contexts-are-not-types).
+/// `use l` can do anything with (see docs/src/content/advanced/contexts.md#naming-the-instance-a-lambda-is-given).
 module internal NyxCompiler.ContextNames
 
 open Parser.Program

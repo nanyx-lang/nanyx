@@ -140,7 +140,7 @@ def total: Stream(int) -> int = { s ->
 println(total(Stream(next = { #next(1, Stream(next = { #next(2, Stream(next = { #done })) })) })))
 ```
 
-A type that is generic in contexts, `type Stream(a) = [k] protected (...)`, names itself with those contexts: the rest of a `[Console] Stream(int)` is a `[Console] Stream(int)` too (see [Context-qualified types](../work-in-progress/context-qualified-types)).
+A type that is generic in contexts, `type Stream(a) = [k] protected (...)`, names itself with those contexts: the rest of a `[Console] Stream(int)` is a `[Console] Stream(int)` too (see [Types generic in contexts](./contexts#types-generic-in-contexts)).
 
 # Private (opaque) types
 
