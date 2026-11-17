@@ -7,6 +7,7 @@ on:
       - "extension/**"
       - "!extension/**/*.md"
       - ".github/workflows/extension.yml"
+      - ".github/scripts/changelog.sh"
   # Pull requests run nothing. Run the build on your branch before you merge, locally or with
   # `gh workflow run "VS Code extension" --ref <branch>`.
   workflow_dispatch:
@@ -26,6 +27,8 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the extension/ tags, which the changelog is written from
 
       - uses: actions/setup-node@v4
         with:
@@ -46,6 +49,16 @@ jobs:
         id: version
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
+      # The pull requests that changed extension/, release by release, from the extension/ tags: this version's are the
+      # GitHub release's notes, and every version's are the CHANGELOG.md the package ships, which the Marketplace's
+      # Changelog tab shows. Nothing is written by hand.
+      - name: Write the changelog
+        run: |
+          ../.github/scripts/changelog.sh extension/ extension/ "${{ steps.version.outputs.version }}" notes \
+            "Errors, hovers and formatting come from the \`nanyx\` compiler the extension runs: see the [compiler's changelog](https://nanyx.dev/docs/overview/changelog)."
+          cp notes/CHANGELOG.md CHANGELOG.md
+          cat notes/release-notes.md
+
       - name: Package
         run: npx --yes @vscode/vsce@4 package --out "nanyx-${{ steps.version.outputs.version }}.vsix"
 
@@ -53,6 +66,12 @@ jobs:
         with:
           name: nanyx-vsix
           path: extension/nanyx-*.vsix
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: extension/notes/release-notes.md
           if-no-files-found: error
 
   # Merging a version bump is the release: main publishes the package it just built as
@@ -96,6 +115,12 @@ jobs:
           name: nanyx-vsix
           path: extension
 
+      - uses: actions/download-artifact@v4
+        if: steps.check.outputs.release == 'true'
+        with:
+          name: release-notes
+          path: notes
+
       # Trusted publishing: no secret is stored. The `nanyx` Marketplace publisher
       # has a policy naming this repository and this workflow file (and no
       # environment, so none is set here), and vsce exchanges the job's OIDC
@@ -118,4 +143,4 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: VS Code extension ${{ needs.build.outputs.version }}
           files: extension/nanyx-${{ needs.build.outputs.version }}.vsix
-          generate_release_notes: true
+          body_path: notes/release-notes.md

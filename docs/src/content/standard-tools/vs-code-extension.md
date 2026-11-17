@@ -294,6 +294,12 @@ To try a change to the compiler in the editor, set `nanyx.path` to your build, s
 |---------|---------|--------------|
 | `nanyx.developmentMode` | off | Runs the server from a copy of the build `nanyx.path` points at, so `dotnet build` can overwrite the build while the server runs, and restarts the server with a fresh copy whenever the build changes. Also starts the server with `--timings`, so the output channel shows how long each module took to check in each compile, not only how long the compile took, and runs a file with `nanyx run --timings`, so the run terminal shows the same tree. Needs `nanyx.path`. |
 
+# Releases and what changed
+
+The extension is released apart from the compiler: merging a change to the version in `extension/package.json` publishes it to the Visual Studio Marketplace and Open VSX, and tags it `extension/<version>` on GitHub. What changed in each release is listed in the extension's **Changelog** tab, in VS Code and in the Marketplace, and in its GitHub release's notes. Both are written when the extension is built, from the pull requests that changed `extension/` between one `extension/` tag and the next, one line each with a link, so nothing is kept by hand.
+
+Most of what the editor shows, its errors, hovers, completions and formatting, comes from the `nanyx` compiler the extension runs, not from the extension, so each release's notes end with a link to the [compiler's changelog](../overview/changelog).
+
 # Troubleshooting
 
 The **Nanyx** output channel logs how the extension found or downloaded the compiler, the server's start-up, how long each compile of a file took, and any errors.
