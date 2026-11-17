@@ -65,27 +65,27 @@ let ``Importing a module by a name its file does not declare names both names`` 
     Assert.Equal(DiagnosticCodes.ImportNotFound.Code, code)
     Assert.Equal(Some "src/main.nyx", file)
     Assert.Equal(
-        "Import not found: greetings: the package 'acme.web' has no module 'greetings'; 'src/greetings.nyx' declares the module name 'salutations', not 'greetings'",
+        "The package 'acme.web' has no module 'greetings', but 'src/greetings.nyx' declares the module name 'salutations', not 'greetings'",
         message)
 
 [<Fact>]
 let ``An unknown module of the package suggests close names`` () =
     let code, _, message = Assert.Single(buildOf [ "src/lib.nyx", greetings "greetings"; "src/main.nyx", main "greeting" ])
     Assert.Equal(DiagnosticCodes.ImportNotFound.Code, code)
-    Assert.Equal("Import not found: greeting: the package 'acme.web' has no module 'greeting': did you mean 'greetings'?", message)
+    Assert.Equal("The package 'acme.web' has no module 'greeting': did you mean 'greetings'?", message)
 
 [<Fact>]
 let ``A module of another package cannot be imported`` () =
     let code, _, message = Assert.Single(buildOf [ "src/greetings.nyx", greetings "greetings"; "src/main.nyx", main "acme.core/greetings" ])
     Assert.Equal(DiagnosticCodes.ImportNotFound.Code, code)
-    Assert.StartsWith("Import not found: acme.core/greetings: there is no package 'acme.core'", message)
+    Assert.StartsWith("There is no package 'acme.core' to import from", message)
 
 [<Fact>]
 let ``A source file of a package without a module name is an error naming the file`` () =
     let code, file, message = Assert.Single(buildOf [ "src/main.nyx", plainMain; "src/util.nyx", """export def one = 1""" ])
     Assert.Equal(DiagnosticCodes.ScriptInPackage.Code, code)
     Assert.Equal(Some "src/util.nyx", file)
-    Assert.Equal("'src/util.nyx' is in the package 'acme.web', so it must declare a module name: start it with module util", message)
+    Assert.Equal("'src/util.nyx' is in the package 'acme.web', so it must declare a module name: start it with `module util`", message)
 
 [<Fact>]
 let ``A source file of a package that only holds a module block declares no module name`` () =
@@ -96,7 +96,7 @@ module helpers =
     let code, file, message = Assert.Single(diagnostics |> List.filter (fun (code, _, _) -> code = DiagnosticCodes.ScriptInPackage.Code))
     Assert.Equal(DiagnosticCodes.ScriptInPackage.Code, code)
     Assert.Equal(Some "src/util.nyx", file)
-    Assert.Equal("'src/util.nyx' is in the package 'acme.web', so it must declare a module name: start it with module util", message)
+    Assert.Equal("'src/util.nyx' is in the package 'acme.web', so it must declare a module name: start it with `module util`", message)
 
 [<Fact>]
 let ``A source file of a package without a module name is an error even when its imports fail`` () =
@@ -108,7 +108,7 @@ export def one = 1
     Assert.Contains(diagnostics, fun (code, _, _) -> code = DiagnosticCodes.ImportNotFound.Code)
     let _, file, message = Assert.Single(diagnostics |> List.filter (fun (code, _, _) -> code = DiagnosticCodes.ScriptInPackage.Code))
     Assert.Equal(Some "src/util.nyx", file)
-    Assert.Equal("'src/util.nyx' is in the package 'acme.web', so it must declare a module name: start it with module util", message)
+    Assert.Equal("'src/util.nyx' is in the package 'acme.web', so it must declare a module name: start it with `module util`", message)
 
 [<Fact>]
 let ``A source file of a package with top-level statements is an error naming the file`` () =
@@ -119,7 +119,7 @@ println("x")
 """ ]
     let code, file, message = Assert.Single(diagnostics |> List.filter (fun (code, _, _) -> code = DiagnosticCodes.ScriptInPackage.Code))
     Assert.Equal(Some "src/extra.nyx", file)
-    Assert.Equal("'src/extra.nyx' is in the package 'acme.web', so it cannot have top-level statements: put them in the package's @entry def", message)
+    Assert.Equal("'src/extra.nyx' is in the package 'acme.web', so it cannot have top-level statements: put them in the package's `@entry` def", message)
 
 [<Fact>]
 let ``Two files that declare the same module are an error in each`` () =

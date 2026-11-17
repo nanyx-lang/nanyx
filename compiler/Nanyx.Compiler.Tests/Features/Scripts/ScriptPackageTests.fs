@@ -91,20 +91,20 @@ println("hi")"""
     Assert.Empty(compileScriptWith [] source)
 
 [<Theory>]
-[<InlineData("::host nanyx.console 0.0.1", "NYX0029", "the compiler ships nanyx.console {version}, not 0.0.1")>]
-[<InlineData("::host nanyx.nope {version}", "NYX0023", "the compiler ships no package 'nanyx.nope': a host the compiler doesn't ship is found by its path")>]
+[<InlineData("::host nanyx.console 0.0.1", "NYX0029", "The compiler ships 'nanyx.console' {version}, not 0.0.1")>]
+[<InlineData("::host nanyx.nope {version}", "NYX0023", "The compiler ships no package 'nanyx.nope': give the path of a host the compiler doesn't ship")>]
 [<InlineData("::host nanyx.nope", "NYX0009", "The compiler ships no package 'nanyx.nope': give the directory it is in, as in `../nope`")>]
 [<InlineData("::host acme.util ../util", "NYX0023", "'acme.util' is not a host")>]
-[<InlineData("::host acme.other ../util", "NYX0023", "the package in")>]
-[<InlineData("::host nanyx.console ../nowhere", "NYX0023", "the host nanyx.console can't be read")>]
+[<InlineData("::host acme.other ../util", "NYX0023", "The package in")>]
+[<InlineData("::host nanyx.console ../nowhere", "NYX0023", "The host 'nanyx.console' can't be read")>]
 [<InlineData("::host", "NYX0009", "`::host` takes a host and where it is found")>]
 [<InlineData("::host nanyx.console ../console extra", "NYX0009", "`::host` takes a host and where it is found")>]
 [<InlineData("::host nanyx.console latest", "NYX0009", "'latest' is neither a version, which starts with a digit, as `1.2.0`, nor a directory")>]
-[<InlineData("::dependency acme.util 1.2.0", "NYX0024", "is not locked in nanyx.lock, and choosing a version to lock isn't supported yet")>]
-[<InlineData("::dependency acme.util ../nowhere", "NYX0023", "the dependency acme.util can't be read")>]
-[<InlineData("::dependency acme.other ../util", "NYX0023", "is named acme.util, not acme.other")>]
+[<InlineData("::dependency acme.util 1.2.0", "NYX0024", "is not locked in 'nanyx.lock', and choosing a version to lock isn't supported yet")>]
+[<InlineData("::dependency acme.util ../nowhere", "NYX0023", "The dependency 'acme.util' can't be read")>]
+[<InlineData("::dependency acme.other ../util", "NYX0023", "is named 'acme.util', not 'acme.other'")>]
 [<InlineData("::dependency acme.util", "NYX0009", "The compiler ships no package 'acme.util': give the directory it is in, as in `../util`")>]
-[<InlineData("::dependency nanyx.console.core 0.0.1", "NYX0029", "the compiler ships nanyx.console.core {version}, not 0.0.1")>]
+[<InlineData("::dependency nanyx.console.core 0.0.1", "NYX0029", "The compiler ships 'nanyx.console.core' {version}, not 0.0.1")>]
 [<InlineData("::dependency", "NYX0009", "`::dependency` takes a package and where it is found")>]
 let ``A wrong ::host or ::dependency is the manifest's error, at the directive`` (directive: string, code: string, message: string) =
     let directive = directive.Replace("{version}", Toolchain.version)
@@ -135,7 +135,7 @@ let ``A script lists each package it depends on once`` () =
 println("hi")"""
     let diagnostic = Assert.Single(compileScriptWith util source)
     Assert.Equal(DiagnosticCodes.InvalidManifestValue.Code, diagnostic.Code)
-    Assert.Contains("the dependency acme.util is listed twice", diagnostic.Message)
+    Assert.Contains("The dependency 'acme.util' is listed twice", diagnostic.Message)
     Assert.Equal(1, diagnostic.Span.Value.StartLine)
 
 [<Fact>]

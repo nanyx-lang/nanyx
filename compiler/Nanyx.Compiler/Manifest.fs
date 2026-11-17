@@ -94,7 +94,7 @@ module Manifest =
     let internal namePattern = Regex(@"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
 
     /// What `namePattern` asks of a name, to finish "must be ...".
-    let internal nameRule = "lower case, with words separated by dots: acme.web"
+    let internal nameRule = "lower case, with words separated by dots, as `acme.web`"
 
     let private versionPattern = Regex(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$")
 
@@ -119,13 +119,15 @@ module Manifest =
 
     let private quoted (names: string seq) = names |> Seq.map (fun name -> $"'{name}'") |> String.concat ", "
 
-    /// Collects the problems with a manifest as its fields are read.
+    /// Collects the problems with a manifest as its fields are read. A message may start with the `what` of the field it
+    /// is about, "a dependency", and starts with a capital letter however it is written.
     type private Problems() =
         let found = Collections.Generic.List<Diagnostic>()
+        let sentence (message: string) = if message = "" then message else string (Char.ToUpperInvariant message[0]) + message.Substring 1
         member _.All = List.ofSeq found
-        member _.Add (code: DiagnosticCode) (span: SourceSpan) (message: string) = found.Add(Diagnostics.at code span message)
+        member _.Add (code: DiagnosticCode) (span: SourceSpan) (message: string) = found.Add(Diagnostics.at code span (sentence message))
         member _.AddWithFixes (code: DiagnosticCode) (span: SourceSpan) (message: string) (fixes: Fix list) =
-            found.Add { Diagnostics.at code span message with Fixes = fixes }
+            found.Add { Diagnostics.at code span (sentence message) with Fixes = fixes }
 
         /// The fields of `value`, `what` in messages, if it is a record; each one not in `known` is an error.
         member this.Record (what: string) (known: string list) (value: DataValue) : DataField list option =
@@ -133,10 +135,10 @@ module Manifest =
             | DataRecord fields ->
                 for field in fields do
                     if not (List.contains field.Name known) then
-                        this.Add DiagnosticCodes.UnknownManifestField field.NameSpan $"{what} has no field '{field.Name}'; its fields are {quoted known}"
+                        this.Add DiagnosticCodes.UnknownManifestField field.NameSpan $"{what} has no field '{field.Name}': its fields are {quoted known}"
                 Some fields
             | _ ->
-                this.Add DiagnosticCodes.InvalidManifestValue value.Location $"{what} must be a record, (name = value, ...), not {DataValue.describe value}"
+                this.Add DiagnosticCodes.InvalidManifestValue value.Location $"{what} must be a record, `(name = value, ...)`, not {DataValue.describe value}"
                 None
 
         /// The string in the field `name` of `fields`, `what` in messages, if it has one; one that does not match
@@ -182,7 +184,7 @@ module Manifest =
     let private entry (problems: Problems) (what: string) (known: string -> Result<'a, string>) (value: DataValue) : (DataField list * 'a) option =
         problems.Record what entryFields value
         |> Option.bind (fun fields ->
-            let version = problems.RequiredText what value.Location fields "version" versionPattern "a semantic version: 1.2.0"
+            let version = problems.RequiredText what value.Location fields "version" versionPattern "a semantic version, `1.2.0`"
             match problems.RequiredText what value.Location fields "package" anyText "" with
             | Some name ->
                 match known name with
@@ -192,7 +194,7 @@ module Manifest =
                         problems.Add
                             DiagnosticCodes.VersionNotShipped
                             (DataValue.field "version" fields).Value.Value.Location
-                            $"the compiler ships {name} {Toolchain.version}, not {version}: a package the compiler ships is named at its version exactly"
+                            $"The compiler ships '{name}' {Toolchain.version}, not {version}: name a package the compiler ships at its version exactly"
                     | _ -> ()
                     Some(fields, found)
                 | Result.Error message ->
@@ -209,12 +211,12 @@ module Manifest =
         let linter (name: string) =
             match Linters.all |> List.tryFind (fun linter -> linter.Package = name) with
             | Some linter -> Result.Ok linter
-            | None -> Result.Error $"there is no linter '{name}'; the linters are {quoted (Linters.all |> List.map _.Package)}"
+            | None -> Result.Error $"There is no linter '{name}': the linters are {quoted (Linters.all |> List.map _.Package)}"
         let rules (linter: Linter) (settings: DataValue) =
-            let what = $"the settings of {linter.Package}"
+            let what = $"the settings of '{linter.Package}'"
             problems.Record what [ "rules" ] settings
             |> Option.bind (DataValue.field "rules")
-            |> Option.bind (fun field -> problems.Record $"the rules of {linter.Package}" (linter.Rules @ [ Linters.failedRule ] |> List.map _.Id) field.Value)
+            |> Option.bind (fun field -> problems.Record $"the rules of '{linter.Package}'" (linter.Rules @ [ Linters.failedRule ] |> List.map _.Id) field.Value)
             |> Option.defaultValue []
             |> List.choose (fun rule ->
                 match rule.Value.Data with
@@ -236,7 +238,7 @@ module Manifest =
                     |> Option.map (fun (fields, linter) ->
                         linter, DataValue.field "settings" fields |> Option.map (fun field -> rules linter field.Value) |> Option.defaultValue []))
             | _ ->
-                problems.Add DiagnosticCodes.InvalidManifestValue value.Location $"linters must be a list of linters, [(package = ...)], not {DataValue.describe value}"
+                problems.Add DiagnosticCodes.InvalidManifestValue value.Location $"`linters` must be a list of linters, `[(package = ...)]`, not {DataValue.describe value}"
                 []
         // In the order the compiler has them, so diagnostics come out in the same order whatever the manifest's.
         { Linters = Linters.all |> List.filter (fun linter -> chosen |> List.exists (fun (a, _) -> a.Name = linter.Name))
@@ -255,17 +257,17 @@ module Manifest =
             | Some name, Some path ->
                 match DataValue.field "version" fields with
                 | Some field ->
-                    problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"the host {name} is found by its path, so it has no version: give one or the other"
+                    problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"The host '{name}' is found by its path, so it has no version: give one or the other"
                     None
                 | None -> Some { Package = name; Path = Some(Path.GetFullPath(Path.Combine(root, path))); Span = value.Location }
             | Some name, None ->
-                let version = problems.RequiredText "the host" value.Location fields "version" versionPattern "a semantic version: 1.2.0"
+                let version = problems.RequiredText "the host" value.Location fields "version" versionPattern "a semantic version, `1.2.0`"
                 match HostPackages.tryShipped name with
                 | Result.Error message ->
                     problems.Add
                         DiagnosticCodes.InvalidManifestValue
                         (DataValue.field "package" fields).Value.Value.Location
-                        $"{message}: a host the compiler doesn't ship is found by its path, as host = (package = \"{name}\", path = \"../{name}\")"
+                        $"{message}: give the path of a host the compiler doesn't ship, as `host = (package = \"{name}\", path = \"../{name}\")`"
                     None
                 | Result.Ok _ ->
                     match version with
@@ -273,7 +275,7 @@ module Manifest =
                         problems.Add
                             DiagnosticCodes.VersionNotShipped
                             (DataValue.field "version" fields).Value.Value.Location
-                            $"the compiler ships {name} {Toolchain.version}, not {version}: a package the compiler ships is named at its version exactly"
+                            $"The compiler ships '{name}' {Toolchain.version}, not {version}: name a package the compiler ships at its version exactly"
                         None
                     | Some _ -> Some { Package = name; Path = None; Span = value.Location }
                     | None -> None
@@ -319,16 +321,16 @@ module Manifest =
             None
         match written "rev", written "commit" with
         | _, Some (commit, span) when not (GitHub.isCommit commit) ->
-            problems.Add DiagnosticCodes.InvalidManifestValue span $"""the commit "{commit}" of {reference} must be a full commit SHA, 40 hexadecimal digits in lower case"""
+            problems.Add DiagnosticCodes.InvalidManifestValue span $"""The commit "{commit}" of '{reference}' must be a full commit SHA, 40 hexadecimal digits in lower case"""
             None
         | Some (rev, _), Some (commit, span) when GitHub.isCommit rev && rev <> commit ->
-            problems.Add DiagnosticCodes.InvalidManifestValue span $"the rev and the commit of {reference} are different commits: give one of them"
+            problems.Add DiagnosticCodes.InvalidManifestValue span $"The `rev` and the `commit` of '{reference}' are different commits: give one of them"
             None
         | _, Some (commit, _) -> Some commit
         | Some (rev, _), None when GitHub.isCommit rev -> Some rev
         | Some (rev, span), None ->
-            notPinned span ($"""{reference} names "{rev}", which is not a full commit SHA, so what it names can move: pin it to the commit it names, with commit = "<SHA>" """.TrimEnd()) rev span "commit"
-        | None, None -> notPinned value.Location $"{reference} has no rev, so nothing pins it to a commit: give the commit, with rev = \"<SHA>\"" "HEAD" github.Value.Location "rev"
+            notPinned span ($"""'{reference}' names "{rev}", which is not a full commit SHA, so what it names can move: pin it to the commit it names, with `commit = "<SHA>"`""") rev span "commit"
+        | None, None -> notPinned value.Location $"'{reference}' has no `rev`, so nothing pins it to a commit: give the commit, with `rev = \"<SHA>\"`" "HEAD" github.Value.Location "rev"
 
     /// The entry `value`, with `fields`, of a dependency on GitHub, whose `github` is `github`: a package, which is a
     /// repository, or a module, which is a file of one, as the module `module` names; and in either case a commit.
@@ -337,7 +339,7 @@ module Manifest =
         for name in [ "path"; "version" ] do
             named name
             |> Option.iter (fun field ->
-                problems.Add DiagnosticCodes.InvalidManifestValue field.NameSpan $"a dependency on GitHub is found by its github and pinned by its rev, so it has no {name}")
+                problems.Add DiagnosticCodes.InvalidManifestValue field.NameSpan $"A dependency on GitHub is found by its `github` and pinned by its `rev`, so it has no `{name}`")
         match github.Value.Data with
         | DataString text ->
             match GitHub.parse text with
@@ -352,28 +354,28 @@ module Manifest =
                     problems.Add
                         DiagnosticCodes.InvalidManifestValue
                         moduleField.NameSpan
-                        $"a dependency is a package or a module, not both: a package is a repository with a manifest, github = \"{repository}\", and a module is one file, github = \"{repository}/retry.nyx\""
+                        $"A dependency is a package or a module, not both: give a package's repository, `github = \"{repository}\"`, or a module's file, `github = \"{repository}/retry.nyx\"`"
                     None
                 | None, None, _ ->
                     problems.Add
                         DiagnosticCodes.MissingManifestField
                         value.Location
-                        ($"""a dependency on GitHub has no package or module: name the package the repository holds, package = "acme.web", or the module a file is in this package, module = "retry" """.TrimEnd())
+                        ($"""A dependency on GitHub has no `package` or `module`: name the package the repository holds, `package = "acme.web"`, or the module a file is in this package, `module = "retry"`""")
                     None
                 | Some _, None, Some _ ->
                     problems.Add
                         DiagnosticCodes.InvalidManifestValue
                         github.Value.Location
-                        ($"""a package on GitHub is a whole repository, github = "{repository}": one file of a repository is a module, module = "retry" """.TrimEnd())
+                        ($"""A package on GitHub is a whole repository, `github = "{repository}"`: depend on one file of a repository as a module, `module = "retry"`""")
                     None
                 | None, Some _, None ->
                     problems.Add
                         DiagnosticCodes.InvalidManifestValue
                         github.Value.Location
-                        ($"""a module on GitHub is one file of a repository, with the file's path: github = "{repository}/retry.nyx" """.TrimEnd())
+                        ($"""A module on GitHub is one file of a repository: give the file's path, `github = "{repository}/retry.nyx"`""")
                     None
                 | None, Some _, Some path when not (path.EndsWith ".nyx") ->
-                    problems.Add DiagnosticCodes.InvalidManifestValue github.Value.Location $"a module on GitHub is a Nanyx file, whose name ends .nyx, not {path}"
+                    problems.Add DiagnosticCodes.InvalidManifestValue github.Value.Location $"A module on GitHub is a Nanyx file, whose name ends `.nyx`, not '{path}'"
                     None
                 | Some packageField, None, None ->
                     match problems.Text "a dependency" fields "package" namePattern nameRule, commit with
@@ -381,14 +383,14 @@ module Manifest =
                         Some(Choice1Of2 { Name = name; Directory = ""; NameSpan = packageField.Value.Location; PathSpan = github.Value.Location; Version = None; GitHub = Some reference })
                     | _ -> None
                 | None, Some _, Some _ ->
-                    match problems.Text "a dependency" fields "module" modulePattern "a module name: retry, or acme.retry", commit with
+                    match problems.Text "a dependency" fields "module" modulePattern "a module name, `retry` or `acme.retry`", commit with
                     | Some name, Some _ -> Some(Choice2Of2 { Module = name; Reference = reference; Span = value.Location; GitHubSpan = github.Value.Location })
                     | _ -> None
         | _ ->
             problems.Add
                 DiagnosticCodes.InvalidManifestValue
                 github.Value.Location
-                $"a dependency's github must be a string, the repository, acme/web, or a file in it, acme/snippets/retry.nyx, not {DataValue.describe github.Value}"
+                $"A dependency's `github` must be a string, the repository, `acme/web`, or a file in it, `acme/snippets/retry.nyx`, not {DataValue.describe github.Value}"
             None
 
     /// The packages the manifest's `dependencies` lists, each in a directory relative to `root`, one the compiler ships,
@@ -406,15 +408,15 @@ module Manifest =
                 problems.Add
                     DiagnosticCodes.InvalidManifestValue
                     version.NameSpan
-                    $"the dependency {named} is found by its path, so it has no version: give one or the other"
+                    $"The dependency '{named}' is found by its path, so it has no version: give one or the other"
                 None
             | None, Some version when shipped.IsSome ->
-                match problems.Text "a dependency" fields "version" versionPattern "a semantic version: 1.2.0" with
+                match problems.Text "a dependency" fields "version" versionPattern "a semantic version, `1.2.0`" with
                 | Some written when written <> Toolchain.version ->
                     problems.Add
                         DiagnosticCodes.VersionNotShipped
                         version.Value.Location
-                        $"the compiler ships {shipped.Value} {Toolchain.version}, not {written}: a package the compiler ships is named at its version exactly"
+                        $"The compiler ships '{shipped.Value}' {Toolchain.version}, not {written}: name a package the compiler ships at its version exactly"
                     None
                 | Some _ ->
                     Some
@@ -445,7 +447,7 @@ module Manifest =
                     problems.Add DiagnosticCodes.InvalidManifestValue version.Value.Location $"a dependency's version must be a string, {VersionRequirement.rule}, not {DataValue.describe version.Value}"
                     None
             | None, None ->
-                problems.Add DiagnosticCodes.MissingManifestField value.Location ($"""a dependency has no path or version: give the directory the package is in, {example}, or the version to download, version = "1.2" """.TrimEnd())
+                problems.Add DiagnosticCodes.MissingManifestField value.Location ($"""A dependency has no `path` or `version`: give the directory the package is in, `{example}`, or the version to download, `version = "1.2"`""")
                 None
             | Some path, None ->
                 match name, path.Value.Data with
@@ -462,7 +464,7 @@ module Manifest =
                     problems.Add
                         DiagnosticCodes.InvalidManifestValue
                         path.Value.Location
-                        $"a dependency's path must be a string, the directory the package is in, not {DataValue.describe path.Value}"
+                        $"A dependency's `path` must be a string, the directory the package is in, not {DataValue.describe path.Value}"
                     None
         let read (value: DataValue) =
             problems.Record "a dependency" dependencyFields value
@@ -473,13 +475,13 @@ module Manifest =
                     problems.Add
                         DiagnosticCodes.MissingManifestField
                         value.Location
-                        "a module dependency is a file on GitHub, but this one has no github: give the file, github = \"acme/snippets/retry.nyx\""
+                        "A module dependency is a file on GitHub, but this one has no `github`: give the file, `github = \"acme/snippets/retry.nyx\"`"
                     None
                 | None ->
                     for name in [ "rev"; "commit" ] do
                         DataValue.field name fields
                         |> Option.iter (fun field ->
-                            problems.Add DiagnosticCodes.InvalidManifestValue field.NameSpan $"a dependency's {name} pins a reference to GitHub, but this one has no github")
+                            problems.Add DiagnosticCodes.InvalidManifestValue field.NameSpan $"A dependency's `{name}` pins a reference to GitHub, but this one has no `github`")
                     readPackage fields value |> Option.map Choice1Of2)
         match value.Data with
         | DataList entries ->
@@ -488,13 +490,13 @@ module Manifest =
             let files = read |> List.choose (function Choice2Of2 file -> Some file | Choice1Of2 _ -> None)
             problems.Repeats
                 (dependencies |> List.map (fun dependency -> dependency.Name, dependency.NameSpan))
-                (fun name -> $"the dependency {name} is listed twice: a package lists each package it depends on once")
+                (fun name -> $"The dependency '{name}' is listed twice, but a package lists each package it depends on once: remove one")
             problems.Repeats
                 (files |> List.map (fun file -> file.Module, file.Span))
-                (fun name -> $"the module {name} is listed twice: a package gives each module name to one file")
+                (fun name -> $"The module '{name}' is listed twice, but a package gives each module name to one file: remove one")
             dependencies, files
         | _ ->
-            problems.Add DiagnosticCodes.InvalidManifestValue value.Location $"dependencies must be a list, [(package = ..., path = ...)], not {DataValue.describe value}"
+            problems.Add DiagnosticCodes.InvalidManifestValue value.Location $"`dependencies` must be a list, `[(package = ..., path = ...)]`, not {DataValue.describe value}"
             [], []
 
     /// The host `value` names, written as a manifest's `host` is, with its `path` relative to `root`, or what is wrong
@@ -569,13 +571,13 @@ module Manifest =
                 | Some field -> problems.Record "package" packageFields field.Value |> Option.map (fun fields -> fields, field.Value.Location)
                 | None ->
                     if manifest.Data.IsDataRecord then
-                        problems.Add DiagnosticCodes.MissingManifestField manifest.Location "the manifest has no package, which needs at least a name and a version"
+                        problems.Add DiagnosticCodes.MissingManifestField manifest.Location "The manifest has no `package`, which needs at least a name and a version"
                     None
             let name, version, sources =
                 match package with
                 | Some (fields, span) ->
                     let name = problems.RequiredText "package" span fields "name" namePattern nameRule
-                    let version = problems.RequiredText "package" span fields "version" versionPattern "a semantic version: 1.2.0"
+                    let version = problems.RequiredText "package" span fields "version" versionPattern "a semantic version, `1.2.0`"
                     DataValue.field HostPackages.field fields |> Option.iter (fun field -> checkHostDeclaration problems field.Value)
                     name, version, problems.Strings "package" fields "sources" |> Option.map (List.map fst)
                 | None -> None, None, None
@@ -611,10 +613,10 @@ module Manifest =
             Diagnostics.at
                 DiagnosticCodes.GitHubReferenceNotPublishable
                 span
-                $"{what} is on GitHub, so {manifest.Name} can't be packed or published: a published package must keep building for as long as anything depends on it, and what is in someone else's repository can disappear"
+                $"{what} is on GitHub, so '{manifest.Name}' can't be packed or published, since a published package must keep building for as long as anything depends on it, and what is in someone else's repository can disappear"
         (manifest.Dependencies
-         |> List.choose (fun dependency -> dependency.GitHub |> Option.map (fun reference -> error dependency.PathSpan $"the dependency {dependency.Name}, {reference},")))
-        @ (manifest.Files |> List.map (fun file -> error file.GitHubSpan $"the module {file.Module}, {file.Reference},"))
+         |> List.choose (fun dependency -> dependency.GitHub |> Option.map (fun reference -> error dependency.PathSpan $"The dependency '{dependency.Name}', '{reference}',")))
+        @ (manifest.Files |> List.map (fun file -> error file.GitHubSpan $"The module '{file.Module}', '{file.Reference}',"))
 
     /// `diagnostic`, one of a manifest's, as one line: `path:line:column: error NYX0021: message`.
     let describe (diagnostic: Diagnostic) =

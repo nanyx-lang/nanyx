@@ -268,10 +268,10 @@ module Migration =
             Result.Ok(Path.GetDirectoryName full, [ full ])
         elif Directory.Exists full then
             match Directory.GetFiles(full, "*.nyx", SearchOption.AllDirectories) |> Array.sort |> List.ofArray with
-            | [] -> Result.Error [ $"{full} has no .nyx files to migrate" ]
+            | [] -> Result.Error [ $"'{full}' has no .nyx files to migrate" ]
             | files -> Result.Ok(full, files)
         else
-            Result.Error [ $"Not a .nyx file or a directory: {target}" ]
+            Result.Error [ $"'{target}' is neither a .nyx file nor a directory" ]
 
     /// Reads and parses the script at `path`, or says why it can't be migrated: it doesn't parse, or a directive is
     /// wrong. What a directive names that can't be had yet, a package to download or a directory that isn't there, is
@@ -283,7 +283,7 @@ module Migration =
         match wrong, parseModuleFileWithNames path source with
         | [], Result.Ok (syntax, _, moduleBlocks) ->
             Result.Ok { Path = path; Source = source; Directives = Directives.read path source; Syntax = syntax; ModuleBlocks = moduleBlocks }
-        | [], Result.Error _ -> Result.Error [ $"{relative root path} doesn't parse: fix it, then migrate again" ]
+        | [], Result.Error _ -> Result.Error [ $"'{relative root path}' doesn't parse: fix it, then migrate again" ]
         | problems, _ -> Result.Error(problems |> List.map (fun problem -> $"{relative root path}:{(problem.Span |> Option.map _.StartLine |> Option.defaultValue 0) + 1}: {problem.Message}"))
 
     /// The values of the entry script at `path` that need a context, so run in its entry point, and whether its last
@@ -311,12 +311,12 @@ module Migration =
             let existing = Directory.GetFiles(root, "*" + Manifest.extension) |> Array.sort
             let packageName = name |> Option.defaultValue (Path.GetFileName root)
             if existing.Length > 0 then
-                Result.Error [ $"{root} is already a package: it has {Path.GetFileName existing[0]}" ]
+                Result.Error [ $"'{root}' is already a package, with the manifest '{Path.GetFileName existing[0]}'" ]
             elif not (Manifest.namePattern.IsMatch packageName) then
                 match name with
-                | Some _ -> Result.Error [ $"""The package name "{packageName}" must be {Manifest.nameRule}""" ]
+                | Some _ -> Result.Error [ $"""The package name '{packageName}' must be {Manifest.nameRule}""" ]
                 | None ->
-                    Result.Error [ $"""The directory's name "{packageName}" is not a package name, which must be {Manifest.nameRule}: give one with --name""" ]
+                    Result.Error [ $"""The directory's name '{packageName}' is not a package name, which must be {Manifest.nameRule}: give one with `--name`""" ]
             else
                 let read = paths |> List.map (readScript root)
                 match read |> List.collect (function Result.Error errors -> errors | Result.Ok _ -> []) with
@@ -326,9 +326,9 @@ module Migration =
                     let withStatements = scripts |> List.filter (fun script -> script.Syntax |> List.exists isStatement)
                     match withStatements with
                     | _ :: _ :: _ ->
-                        let names = withStatements |> List.map (fun script -> relative root script.Path) |> String.concat ", "
+                        let names = withStatements |> List.map (fun script -> $"'{relative root script.Path}'") |> Diagnostics.listed
                         Result.Error
-                            [ $"These scripts each have top-level statements, but a package runs from one @entry: {names}. Migrate them one at a time (nanyx migrate <file>), or make all but one of them modules first" ]
+                            [ $"The scripts {names} each have top-level statements, but a package runs from one `@entry`: migrate them one at a time, with `nanyx migrate <file>`, or make all but one of them modules first" ]
                     | entryScripts ->
                         settings toolVersion root scripts
                         |> Result.bind (fun settings ->
@@ -337,8 +337,8 @@ module Migration =
                             let modules = scripts |> List.map (fun script -> script.Path, (if isEntry script then "main" else moduleNameOf script))
                             match modules |> List.groupBy snd |> List.filter (fun (_, files) -> files.Length > 1) with
                             | (moduleName, files) :: _ ->
-                                let names = files |> List.map (fst >> relative root) |> String.concat ", "
-                                Result.Error [ $"These files would each be the module '{moduleName}', but a package has one module of each name: {names}. Rename all but one first" ]
+                                let names = files |> List.map (fun (path, _) -> $"'{relative root path}'") |> Diagnostics.listed
+                                Result.Error [ $"The files {names} would each be the module '{moduleName}', but a package has one module of each name: rename all but one first" ]
                             | [] ->
                                 let exports = entryScript.IsNone
                                 let moduleMap = Map.ofList modules
@@ -361,4 +361,4 @@ module Migration =
                                       Notes =
                                         downloads
                                         |> List.map (fun dependency ->
-                                            $"{dependency} is named by its version, but packages can't be downloaded yet, so the package won't build until they can: give the directory it is in instead, with path") }))
+                                            $"'{dependency}' is named by its version, but packages can't be downloaded yet, so the package won't build until they can: give the directory it is in instead, with `path`") }))

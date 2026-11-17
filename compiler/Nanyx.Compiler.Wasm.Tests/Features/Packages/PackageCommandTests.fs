@@ -51,7 +51,7 @@ let ``New - writes a formatted manifest naming the compiler's version for its li
     Assert.Equal(Nanyx.Formatter.FormatCommand.Formatted text, Nanyx.Formatter.FormatCommand.formatText Nanyx.Formatter.Formatter.Options.defaults manifest text)
 
 [<Fact>]
-let ``New - makes the package in the directory it is given`` () =
+let ``New - makes The package in the directory it is given`` () =
     use directory = new TempDirectory()
     assertSucceeded (nanyxIn directory.Path [ "new"; "hello_world"; "here" ])
     Assert.True(File.Exists(Path.Combine(directory.Path, "here", "hello_world.nyxp")))
@@ -61,7 +61,7 @@ let ``New - refuses a name the manifest would refuse`` () =
     use directory = new TempDirectory()
     let outcome = nanyxIn directory.Path [ "new"; "Demo" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("""The package name "Demo" must be lower case, with words separated by dots: acme.web""", outcome.StandardError)
+    Assert.Contains("""The package name 'Demo' must be lower case, with words separated by dots, as `acme.web`""", outcome.StandardError)
     Assert.Empty(Directory.GetFileSystemEntries directory.Path)
 
 [<Fact>]
@@ -70,7 +70,7 @@ let ``New - refuses a directory that is already a package, or is not empty`` () 
     assertSucceeded (nanyxIn directory.Path [ "new"; "demo" ])
     let again = nanyxIn directory.Path [ "new"; "other"; "demo" ]
     Assert.Equal(1, again.ExitCode)
-    Assert.Contains("is already a package: it has demo.nyxp", again.StandardError)
+    Assert.Contains("is already a package, with the manifest 'demo.nyxp'", again.StandardError)
     let notEmpty = nanyxIn directory.Path [ "new"; "other"; "demo/src" ]
     Assert.Equal(1, notEmpty.ExitCode)
     Assert.Contains("is not empty", notEmpty.StandardError)
@@ -179,7 +179,7 @@ let ``A library, a package with no host, checks and builds, but running it is an
     assertSucceeded (onLibrary files "build")
     let run = onLibrary files "run"
     Assert.Equal(1, run.ExitCode)
-    Assert.Contains("error: no entry point: acme.util names no host, so it is a library, which can't be run.", run.StandardError)
+    Assert.Contains("error NYX0045: 'acme.util' names no host, so it is a library, which can't be run", run.StandardError)
 
 [<Theory>]
 [<InlineData("check")>]

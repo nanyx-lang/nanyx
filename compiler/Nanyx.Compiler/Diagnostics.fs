@@ -96,6 +96,10 @@ module DiagnosticCodes =
     let GitHubReferenceNotPublishable = code 39 "GitHub reference in a package to publish" Severity.Error
     let InvalidReferencedFile = code 40 "File referenced from GitHub that breaks a file's rules" Severity.Error
     let PackageNotDownloaded = code 41 "Locked package not in the package cache" Severity.Error
+    let NoSourceFiles = code 42 "Sources that match no file" Severity.Error
+    let SeveralEntryPoints = code 43 "More than one entry point in a package" Severity.Error
+    let InvalidLockfile = code 44 "Lockfile that can't be read" Severity.Error
+    let NothingToRun = code 45 "Package with nothing to run" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -194,7 +198,7 @@ module DiagnosticCodes =
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
           ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped; DefinitionWithoutValue; EntryInLibrary; ContextsJoined
-          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; PackageNotDownloaded; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
+          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; PackageNotDownloaded; NoSourceFiles; SeveralEntryPoints; InvalidLockfile; NothingToRun; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField; UnknownPattern; AmbiguousPattern
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers

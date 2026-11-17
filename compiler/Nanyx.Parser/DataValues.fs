@@ -74,14 +74,14 @@ module DataValue =
     /// What `expression` is as code, for the message that says it is not data.
     let private whatCode (expression: Expression) =
         match expression.Kind with
-        | IdentifierExpr name -> $"the name '{name}'"
+        | IdentifierExpr name -> $"The name '{name}'"
         | FunctionCall(name, _, _)
-        | Pipe(_, name, _, _) -> $"a call of '{name}'"
-        | BinaryOp(op, _, _, _) -> $"the operator '{op}'"
-        | Lambda _ -> "a lambda"
-        | InterpolatedString _ -> "an interpolated string"
-        | UnitExpr -> "()"
-        | _ -> "code"
+        | Pipe(_, name, _, _) -> $"A call of '{name}'"
+        | BinaryOp(op, _, _, _) -> $"The operator `{op}`"
+        | Lambda _ -> "A lambda"
+        | InterpolatedString _ -> "An interpolated string"
+        | UnitExpr -> "`()`"
+        | _ -> "Code"
 
     /// `expression` as data, or each place in it that is code. `source` is the normalised text of the file it is
     /// written in, where a field's name is found.
@@ -139,7 +139,7 @@ module DataValue =
         let source = normalizeSource text
         let directives =
             Directives.read filePath source
-            |> List.map (fun directive -> NotData(directive.Span, "a :: directive is for a script, but this file holds only data"))
+            |> List.map (fun directive -> NotData(directive.Span, "A `::` directive is for a script, but this file holds only data"))
         match runModuleParser filePath source with
         | Result.Error error -> Result.Error [ NotParsed error ]
         | Result.Ok (items, _) ->

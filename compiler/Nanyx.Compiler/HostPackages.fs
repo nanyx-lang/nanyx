@@ -38,7 +38,7 @@ module HostPackages =
 
     /// The error for naming the package `name` as a host when its manifest doesn't declare it one.
     let notAHost (name: string) =
-        $"'{name}' is not a host: a host's manifest declares that it is one, with the module that exports '{Hosts.runFunction}', as package = (..., {field} = ({rootField} = \"<module>\"))"
+        $"'{name}' is not a host: a host's manifest declares that it is one, with the module that exports '{Hosts.runFunction}', as `package = (..., {field} = ({rootField} = \"<module>\"))`"
 
     let private shipped = ConcurrentDictionary<string, Result<Host, string>>()
 
@@ -49,11 +49,11 @@ module HostPackages =
             let directory = ShippedPackages.directoryOf name
             let path = Path.Combine(directory, name + ".nyxp")
             if not (File.Exists path) then
-                Error $"the compiler ships no package '{name}'"
+                Error $"The compiler ships no package '{name}'"
             else
                 match DataValue.read path (File.ReadAllText path) with
                 | Ok manifest -> ofManifest name directory manifest |> Option.map Ok |> Option.defaultValue (Error (notAHost name))
-                | Error _ -> Error $"the manifest of '{name}', which the compiler ships, can't be read")
+                | Error _ -> Error $"The manifest of '{name}', which the compiler ships, can't be read")
 
     /// The console host the compiler ships, which a script runs under.
     let console : Lazy<Host> =

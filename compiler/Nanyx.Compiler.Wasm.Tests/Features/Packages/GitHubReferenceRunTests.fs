@@ -24,4 +24,4 @@ let ``Running a package with a file on GitHub not pulled yet says to pull it`` (
     write "app/main.nyx" "module main\n\nimport retry\n\n@entry\ndef main = {\n  println(twice(2))\n}\n"
     let outcome = nanyxIn (Path.Combine(directory.Path, "app")) [ "run" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("NYX0041: the module retry is on GitHub, but it isn't in the package cache: run nanyx pull to fetch it", outcome.StandardError)
+    Assert.Contains("NYX0041: The module 'retry' is on GitHub, but it isn't in the package cache: run `nanyx pull` to fetch it", outcome.StandardError)

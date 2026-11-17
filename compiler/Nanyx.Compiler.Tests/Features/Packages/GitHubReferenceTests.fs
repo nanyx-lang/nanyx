@@ -98,7 +98,7 @@ let ``A tag is pinned by the commit beside it`` () =
 let ``A reference with no rev is not pinned`` () =
     let error = manifestError """(module = "retry", github = "acme/snippets/retry.nyx")"""
     Assert.Equal(DiagnosticCodes.GitHubReferenceNotPinned.Code, error.Code)
-    Assert.Contains("acme/snippets/retry.nyx has no rev", error.Message)
+    Assert.Contains("'acme/snippets/retry.nyx' has no `rev`", error.Message)
 
 [<Fact>]
 let ``A tag or a branch alone is not pinned, since it can move`` () =
@@ -143,7 +143,7 @@ let ``A package on GitHub is a repository, and a module a file of one`` () =
 let ``A module without github is refused`` () =
     let error = manifestError """(module = "retry", path = "../retry.nyx")"""
     Assert.Equal(DiagnosticCodes.MissingManifestField.Code, error.Code)
-    Assert.Contains("has no github", error.Message)
+    Assert.Contains("has no `github`", error.Message)
 
 [<Fact>]
 let ``A package with a GitHub reference can't be packed or published`` () =
@@ -179,7 +179,7 @@ let ``A file from GitHub must declare no module name`` () =
     let errors = errorsOf (Package.ofManifestFrom (storeFor package) (package.Path "app/app.nyxp"))
     let error = errors |> List.exactlyOne
     Assert.Contains(DiagnosticCodes.InvalidReferencedFile.Code, error)
-    Assert.Contains("declares the module name 'named', but a file from GitHub must declare none", error)
+    Assert.Contains("declares the module name 'named', but a file from GitHub declares none", error)
 
 [<Fact>]
 let ``A file from GitHub imports only the standard library`` () =
@@ -188,7 +188,7 @@ let ``A file from GitHub imports only the standard library`` () =
     use package = new TempPackage(repositories @ [ app [ entry ]; helpers; mainImporting "importing" "ignore(four)" ])
     let found = okOf (Package.ofManifestFrom (storeFor package) (package.Path "app/app.nyxp"))
     let errors = (Package.build found).Diagnostics |> List.filter Diagnostics.isError
-    Assert.Contains(errors, fun error -> error.Code = DiagnosticCodes.InvalidReferencedFile.Code && error.Message.Contains "can import only the standard library, not helpers")
+    Assert.Contains(errors, fun error -> error.Code = DiagnosticCodes.InvalidReferencedFile.Code && error.Message.Contains "can import only the standard library, not 'helpers'")
 
 [<Fact>]
 let ``A build reads GitHub only from the cache, and says to pull what isn't there`` () =
@@ -198,7 +198,7 @@ let ``A build reads GitHub only from the cache, and says to pull what isn't ther
     Assert.Equal(2, errors.Length)
     for error in errors do
         Assert.Contains(DiagnosticCodes.PackageNotDownloaded.Code, error)
-        Assert.Contains("is on GitHub, but it isn't in the package cache: run nanyx pull to fetch it", error)
+        Assert.Contains("is on GitHub, but it isn't in the package cache: run `nanyx pull` to fetch it", error)
 
 /// GitHub's addresses as `GitHub.downloadingWith` asks for them, answered from `repositories`: a file from
 /// raw.githubusercontent.com, a repository's zip from codeload.github.com, in one folder as GitHub makes it, and the
@@ -249,7 +249,7 @@ let ``A tag is resolved through GitHub's API, once`` () =
     Assert.Equal<Result<string, FetchFailure>>(Result.Ok commit, fetcher.Resolve web "v1.0")
     Assert.Equal<Result<string, FetchFailure>>(Result.Ok commit, fetcher.Resolve web "v1.0")
     Assert.Equal<string list>([ "https://api.github.com/repos/acme/web/commits/v1.0" ], List.ofSeq asked)
-    Assert.Equal<Result<string, FetchFailure>>(Result.Error(FetchFailed "acme/web has no tag or branch 'v9'"), fetcher.Resolve web "v9")
+    Assert.Equal<Result<string, FetchFailure>>(Result.Error(FetchFailed "'acme/web' has no tag or branch 'v9'"), fetcher.Resolve web "v9")
 
 [<Fact>]
 let ``The editor offers to pin a tag to the commit it points at`` () =

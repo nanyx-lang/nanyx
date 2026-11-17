@@ -157,18 +157,18 @@ module PackageModules =
         | Some _ ->
             let publicOnes =
                 match dependency.PublicModules with
-                | [] -> "it has none: a module is public when its file declares it with export module"
+                | [] -> "it has none, and a module is public when its file declares it with `export module`"
                 | modules -> $"its public modules are {quoted modules}"
             Error (Diagnostics.at DiagnosticCodes.ModuleNotPublic item.Span $"The module '{moduleName}' of the package '{dependency.Package}' is not public, so another package can't import it: {publicOnes}")
         | None ->
             let hint = NameSuggestions.question (NameSuggestions.closest dependency.PublicModules moduleName)
-            Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"Import not found: {name}: the package '{dependency.Package}' has no module '{moduleName}'{hint}")
+            Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"The package '{dependency.Package}' has no module '{moduleName}'{hint}")
 
     /// The file that the import `item` of the module `name`, in a source file of the package `modules`, names: one of the
     /// package's own modules, or a public module of a package it depends on directly. `build` is the package the build
     /// is of, which holds every package the build reaches.
     let private resolveModule (build: PackageModules) (modules: PackageModules) (item: ImportItem) (name: string) : Result<string, Diagnostic> =
-        let notFound message = Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"Import not found: {name}: {message}")
+        let notFound message = Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span message)
         let package, moduleName =
             match name.IndexOf '/' with
             | -1 -> None, name
@@ -178,13 +178,13 @@ module PackageModules =
             match modules.Dependencies |> List.tryFind (fun dependency -> dependency.Package = other), tryFindPackage build other with
             | Some dependency, _ -> resolvePublicModule dependency item name moduleName
             | None, Some _ ->
-                Error (Diagnostics.at DiagnosticCodes.IndirectDependency item.Span $"The package '{other}' is not a dependency of '{modules.Package}', only of a package it depends on: a package can import only the packages it depends on itself, so add '{other}' to its dependencies")
+                Error (Diagnostics.at DiagnosticCodes.IndirectDependency item.Span $"The package '{other}' is not a dependency of '{modules.Package}', only of a package it depends on, and a package can import only the packages it depends on itself: add '{other}' to its dependencies")
             | None, None ->
                 let dependencies =
                     match modules.Dependencies with
                     | [] -> "it has no dependencies"
                     | dependencies -> $"its dependencies are {quoted (dependencies |> List.map _.Package)}"
-                notFound $"there is no package '{other}': '{modules.Package}' can import the standard library, its own modules, and the public modules of the packages it depends on, and {dependencies}"
+                notFound $"There is no package '{other}' to import from, since '{modules.Package}' can import the standard library, its own modules, and the public modules of the packages it depends on, and {dependencies}"
         | _ ->
             // A module in several files is checked from its first, which brings in the others.
             match modules.Modules |> Map.tryFind moduleName with
@@ -202,8 +202,8 @@ module PackageModules =
                 let hint =
                     match namedFor with
                     | [] -> NameSuggestions.question (NameSuggestions.closest modules.Modules.Keys moduleName)
-                    | found -> "; " + String.concat "; " found
-                notFound $"the package '{modules.Package}' has no module '{moduleName}'{hint}"
+                    | found -> ", but " + Diagnostics.listed found
+                notFound $"The package '{modules.Package}' has no module '{moduleName}'{hint}"
 
     /// The file of the module `name`, by its name alone or after the package's name, among the modules of `modules`
     /// alone, for the import `item`: how a host's import, and the imports in a host's own files, are resolved (see
@@ -226,7 +226,7 @@ module PackageModules =
                 Diagnostics.at
                     DiagnosticCodes.InvalidReferencedFile
                     item.Span
-                    $"'{(referencedName modules importer).Value}' is a file from GitHub, which has no manifest to say what it depends on, so it can import only the standard library, not {shown}"
+                    $"'{(referencedName modules importer).Value}' is a file from GitHub, which has no manifest to say what it depends on, so it can import only the standard library, not '{shown}'"
             )
         | Some modules, ModuleImport name ->
             match ownerOf modules importer with
@@ -259,11 +259,11 @@ module PackageModules =
                     let firstLine = match source.IndexOf '\n' with -1 -> source.Length | newline -> newline
                     let span = { File = filePath; Start = 0; End = firstLine; StartLine = 0; StartColumn = 0 }
                     let example = Path.GetFileNameWithoutExtension filePath
-                    [ Diagnostics.at DiagnosticCodes.ScriptInPackage span $"'{shown}' is in the package '{modules.Package}', so it must declare a module name: start it with module {example}" ]
+                    [ Diagnostics.at DiagnosticCodes.ScriptInPackage span $"'{shown}' is in the package '{modules.Package}', so it must declare a module name: start it with `module {example}`" ]
             let statements =
                 syntax
                 |> List.tryFind (function Kind (Expr _) -> true | _ -> false)
                 |> Option.map (fun statement ->
-                    Diagnostics.at DiagnosticCodes.ScriptInPackage statement.Span $"'{shown}' is in the package '{modules.Package}', so it cannot have top-level statements: put them in the package's @entry def")
+                    Diagnostics.at DiagnosticCodes.ScriptInPackage statement.Span $"'{shown}' is in the package '{modules.Package}', so it cannot have top-level statements: put them in the package's `@entry` def")
                 |> Option.toList
             named @ statements

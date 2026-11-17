@@ -65,7 +65,7 @@ module PackageIndex =
         |> Result.bind (fun config' ->
             match property "format" config', property "index" config' with
             | Some found, _ when found.ValueKind <> JsonValueKind.Number || found.GetInt32() <> format ->
-                Result.Error $"the index at {index} is format {found}, but this nanyx reads format {format}"
+                Result.Error $"The index at '{index}' is format {found}, but this nanyx reads format {format}"
             | Some _, Some files when files.ValueKind = JsonValueKind.String ->
                 let files = resolve config (files.GetString())
                 Result.Ok(if isAddress files || files.EndsWith "/" then files else files + string Path.DirectorySeparatorChar)
@@ -108,25 +108,25 @@ module PackageIndex =
     /// downloads, since a lockfile that names it keeps building.
     let download (store: PackageStore) (locked: LockedPackage) : Result<string, string> =
         let directory = PackageStore.directoryOf store locked.Name locked.Version
-        let named = $"{locked.Name} {locked.Version}"
+        let named = $"'{locked.Name}' {locked.Version}"
         if Directory.Exists directory then
             Result.Ok directory
         else
             versions store.Index locked.Name
             |> Result.bind (fun (file, listed) ->
                 match listed |> List.tryFind (fun version -> version.Version = locked.Version) with
-                | None -> Result.Error $"the index at {store.Index} has no {named}"
-                | Some version when not version.Available -> Result.Error $"{named} can't be downloaded: its release is missing from GitHub"
+                | None -> Result.Error $"The index at '{store.Index}' has no {named}"
+                | Some version when not version.Available -> Result.Error $"{named} can't be downloaded, since its release is missing from GitHub"
                 | Some version ->
                     read (resolve file version.Url)
                     |> Result.mapError (fun message -> $"{named} can't be downloaded: {message}")
                     |> Result.bind (fun bytes ->
                         let hash = PackageArchive.sha256 bytes
                         if hash <> locked.Sha256 then
-                            Result.Error $"the download of {named} has the SHA-256 {hash}, but {Lockfile.fileName} locks {locked.Sha256}: it was changed after it was locked, so it isn't used"
+                            Result.Error $"The download of {named} has the SHA-256 {hash}, but '{Lockfile.fileName}' locks {locked.Sha256}, so it was changed after it was locked and isn't used"
                         else
                             PackageArchive.unpack bytes directory
-                            |> Result.mapError (fun message -> $"the download of {named} can't be unpacked: {message}")
+                            |> Result.mapError (fun message -> $"The download of {named} can't be unpacked: {message}")
                             |> Result.bind (fun () ->
                                 // What was unpacked must be the package it was downloaded as.
                                 match Directory.GetFiles(directory, "*" + Manifest.extension) with
@@ -136,7 +136,7 @@ module PackageIndex =
                                     | found ->
                                         Directory.Delete(directory, true)
                                         let what = match found with Result.Ok manifest -> $"{manifest.Name} {manifest.Version}" | Result.Error _ -> "a manifest that doesn't read"
-                                        Result.Error $"the download of {named} holds {what}"
+                                        Result.Error $"The download of {named} holds {what}"
                                 | _ ->
                                     Directory.Delete(directory, true)
-                                    Result.Error $"the download of {named} has no manifest")))
+                                    Result.Error $"The download of {named} has no manifest")))

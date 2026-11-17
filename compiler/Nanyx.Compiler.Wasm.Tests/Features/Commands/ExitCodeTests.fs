@@ -15,17 +15,17 @@ let private assertExit (expected: int) (message: string) (directory: string) (ar
 [<InlineData("build")>]
 let ``Exit codes - more than one path is a usage error, 2, for every command that takes one`` (command: string) =
     use directory = new TempDirectory()
-    assertExit 2 "Give one file, directory or manifest, not 2." directory.Path [ command; "a"; "b" ]
+    assertExit 2 "2 paths were given: give one file, directory or manifest" directory.Path [ command; "a"; "b" ]
 
 [<Fact>]
 let ``Exit codes - run takes what follows the path as the program's arguments, not as more paths`` () =
     use directory = new TempDirectory()
-    assertExit 2 "File not found: a.nyx" directory.Path [ "run"; "a.nyx"; "b" ]
+    assertExit 2 "error NYX0002: There is no file 'a.nyx'" directory.Path [ "run"; "a.nyx"; "b" ]
 
 [<Fact>]
 let ``Exit codes - new given two directories is a usage error, 2`` () =
     use directory = new TempDirectory()
-    assertExit 2 "Give one file, directory or manifest, not 2." directory.Path [ "new"; "acme.demo"; "a"; "b" ]
+    assertExit 2 "2 paths were given: give one file, directory or manifest" directory.Path [ "new"; "acme.demo"; "a"; "b" ]
 
 [<Theory>]
 [<InlineData("check")>]
@@ -33,7 +33,7 @@ let ``Exit codes - new given two directories is a usage error, 2`` () =
 [<InlineData("wasm")>]
 let ``Exit codes - a file that does not exist is a usage error, 2`` (command: string) =
     use directory = new TempDirectory()
-    assertExit 2 "File not found: missing.nyx" directory.Path [ command; "missing.nyx" ]
+    assertExit 2 "error NYX0002: There is no file 'missing.nyx'" directory.Path [ command; "missing.nyx" ]
 
 [<Theory>]
 [<InlineData("check")>]
@@ -41,14 +41,14 @@ let ``Exit codes - a file that does not exist is a usage error, 2`` (command: st
 [<InlineData("build")>]
 let ``Exit codes - a manifest that does not exist is a usage error, 2`` (command: string) =
     use directory = new TempDirectory()
-    assertExit 2 "Not found: missing.nyxp" directory.Path [ command; "missing.nyxp" ]
+    assertExit 2 "There is no file or directory 'missing.nyxp'" directory.Path [ command; "missing.nyxp" ]
 
 [<Fact>]
 let ``Exit codes - build with no manifest in or above the directory fails with 1`` () =
     use directory = new TempDirectory()
     let outcome = nanyxIn directory.Path [ "build" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.StartsWith("No .nyxp manifest in ", outcome.StandardError)
+    Assert.StartsWith("There is no .nyxp manifest in '", outcome.StandardError)
 
 [<Fact>]
 let ``Exit codes - a script with an error fails check with 1`` () =

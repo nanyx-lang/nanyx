@@ -92,14 +92,14 @@ let ``A dependency without a path is an error`` () =
 let ``A dependency must be a directory with a manifest`` () =
     use package = new TempPackage([ app [ "acme.util", "missing" ]; mainImporting "nanyx/math" "println(abs(1))" ])
     let error = Assert.Single(errorsOf (Package.find (package.Path "app")))
-    Assert.EndsWith($"""error NYX0023: the dependency acme.util can't be read: {Path.GetFullPath(package.Path "missing")} is not a directory""", error)
+    Assert.EndsWith($"""error NYX0023: The dependency 'acme.util' can't be read: '{Path.GetFullPath(package.Path "missing")}' is not a directory""", error)
 
 [<Fact>]
 let ``A dependency's package must have the name the dependant gives it`` () =
     use package = new TempPackage(util @ [ app [ "acme.tools", "util" ]; mainImporting "nanyx/math" "println(abs(1))" ])
     let error = Assert.Single(errorsOf (Package.find (package.Path "app")))
     Assert.EndsWith(
-        $"""error NYX0023: the package in {Path.GetFullPath(package.Path "util")} is named acme.util, not acme.tools: the names must match""",
+        $"""error NYX0023: The package in '{Path.GetFullPath(package.Path "util")}' is named 'acme.util', not 'acme.tools': make the names match""",
         error)
 
 [<Fact>]
@@ -118,7 +118,7 @@ let ``A library that exports no module is an error at its package`` () =
     use package =
         new TempPackage([ "util/util.nyxp", manifest "acme.util" [] ] @ internalOnly @ [ app [ "acme.util", "util" ]; mainImporting "nanyx/math" "println(abs(1))" ])
     let message =
-        "acme.util is a library, since its manifest names no host, but it exports no module: a library must export at least one, by declaring it with export module"
+        "'acme.util' is a library, since its manifest names no host, but it exports no module: export at least one, by declaring it with `export module`"
     Assert.EndsWith($"util.nyxp:2:13: error NYX0033: {message}", Assert.Single(errorsOf (Package.find (package.Path "util"))))
     Assert.EndsWith($"error NYX0033: {message}", Assert.Single(errorsOf (Package.find (package.Path "app"))))
     let manifestPath = package.Path "util/util.nyxp"
@@ -172,7 +172,7 @@ let ``A package that is no dependency is not found`` () =
     use package = new TempPackage([ app []; mainImporting "acme.util/strings" "ignore(1)" ])
     let error = Assert.Single(buildDiagnostics package)
     Assert.Equal(DiagnosticCodes.ImportNotFound.Code, error.Code)
-    Assert.EndsWith("there is no package 'acme.util': 'app' can import the standard library, its own modules, and the public modules of the packages it depends on, and it has no dependencies", error.Message)
+    Assert.EndsWith("There is no package 'acme.util' to import from, since 'app' can import the standard library, its own modules, and the public modules of the packages it depends on, and it has no dependencies", error.Message)
 
 [<Fact>]
 let ``A build has one version of each package`` () =
@@ -189,7 +189,7 @@ export def louder = { s: string -> s }""" ]
                 mainImporting "nanyx/math" "println(abs(1))" ])
     let error = Assert.Single(errorsOf (Package.find (package.Path "app")))
     Assert.Contains(
-        $"""error NYX0028: the build reaches the package acme.util by two paths, {Path.GetFullPath(package.Path "util")} and {Path.GetFullPath(package.Path "copy")}""",
+        $"""error NYX0028: The build reaches the package 'acme.util' by two paths, '{Path.GetFullPath(package.Path "util")}' and '{Path.GetFullPath(package.Path "copy")}'""",
         error)
 
 [<Fact>]
@@ -224,7 +224,7 @@ let ``Packages can't depend on each other in a cycle`` () =
               "b/b.nyxp", manifest "acme.b" [ "acme.a", "a" ]
               "b/other.nyx", withFinalNewline "export module other\n\nexport def y = 1" ])
     let error = Assert.Single(errorsOf (Package.find (package.Path "a")))
-    Assert.EndsWith("error NYX0027: packages can't depend on each other in a cycle: acme.a -> acme.b -> acme.a", error)
+    Assert.EndsWith("error NYX0027: Packages can't depend on each other in a cycle: 'acme.a' -> 'acme.b' -> 'acme.a'", error)
 
 [<Fact>]
 let ``A file of the package compiled on its own, as an editor compiles it, resolves its dependencies`` () =

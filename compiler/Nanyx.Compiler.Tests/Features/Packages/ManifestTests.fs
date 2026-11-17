@@ -105,10 +105,10 @@ let ``Code in a manifest is an error at each place it is written`` () =
 )
 """
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.CodeInManifest.Code, "the name 'lint' is code, but this file holds only data"
-          DiagnosticCodes.CodeInManifest.Code, "the operator '+' is code, but this file holds only data"
-          DiagnosticCodes.CodeInManifest.Code, "a call of 'width' is code, but this file holds only data"
-          DiagnosticCodes.CodeInManifest.Code, "a lambda is code, but this file holds only data" ],
+        [ DiagnosticCodes.CodeInManifest.Code, "The name 'lint' is code, but this file holds only data"
+          DiagnosticCodes.CodeInManifest.Code, "The operator `+` is code, but this file holds only data"
+          DiagnosticCodes.CodeInManifest.Code, "A call of 'width' is code, but this file holds only data"
+          DiagnosticCodes.CodeInManifest.Code, "A lambda is code, but this file holds only data" ],
         errors
     )
 
@@ -116,7 +116,7 @@ let ``Code in a manifest is an error at each place it is written`` () =
 let ``An interpolated string in a manifest is code`` () =
     let error = errorOf "(package = (name = \"demo\", version = \"{major}.0.0\"))"
     Assert.Equal(DiagnosticCodes.CodeInManifest.Code, error.Code)
-    Assert.Equal("an interpolated string is code, but this file holds only data", error.Message)
+    Assert.Equal("An interpolated string is code, but this file holds only data", error.Message)
 
 [<Fact>]
 let ``A definition, an import or a directive in a manifest is an error`` () =
@@ -139,32 +139,32 @@ let ``An unknown field is an error at its name`` () =
         | Result.Ok _ -> failwith "Expected errors"
     Assert.Equal<string list>([ DiagnosticCodes.UnknownManifestField.Code; DiagnosticCodes.UnknownManifestField.Code ], errors |> List.map _.Code)
     Assert.Equal<string list>(
-        [ "the manifest has no field 'extras'; its fields are 'package', 'dependencies', 'linters', 'host', 'formatter'"
-          "package has no field 'colour'; its fields are 'name', 'version', 'sources', 'host'" ],
+        [ "The manifest has no field 'extras': its fields are 'package', 'dependencies', 'linters', 'host', 'formatter'"
+          "Package has no field 'colour': its fields are 'name', 'version', 'sources', 'host'" ],
         errors |> List.map _.Message
     )
     let extras = errors.[0].Span.Value
     Assert.Equal((2, 2), (extras.StartLine, extras.StartColumn))
     Assert.Equal("extras", text.Substring(extras.Start, extras.End - extras.Start))
-    Assert.EndsWith("demo.nyxp:3:3: error NYX0021: the manifest has no field 'extras'; its fields are 'package', 'dependencies', 'linters', 'host', 'formatter'", Manifest.describe errors.[0])
+    Assert.EndsWith("demo.nyxp:3:3: error NYX0021: The manifest has no field 'extras': its fields are 'package', 'dependencies', 'linters', 'host', 'formatter'", Manifest.describe errors.[0])
 
 [<Fact>]
 let ``A missing package, name or version is an error`` () =
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.MissingManifestField.Code, "the manifest has no package, which needs at least a name and a version" ],
+        [ DiagnosticCodes.MissingManifestField.Code, "The manifest has no `package`, which needs at least a name and a version" ],
         errorsOf "(linters = [])"
     )
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.MissingManifestField.Code, "package has no name, which it needs"
-          DiagnosticCodes.MissingManifestField.Code, "package has no version, which it needs" ],
+        [ DiagnosticCodes.MissingManifestField.Code, "Package has no name, which it needs"
+          DiagnosticCodes.MissingManifestField.Code, "Package has no version, which it needs" ],
         errorsOf "(package = (sources = []))"
     )
 
 [<Fact>]
 let ``A linter or host without a package or version is an error`` () =
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.MissingManifestField.Code, "a linter has no version, which it needs"
-          DiagnosticCodes.MissingManifestField.Code, "the host has no package, which it needs" ],
+        [ DiagnosticCodes.MissingManifestField.Code, "A linter has no version, which it needs"
+          DiagnosticCodes.MissingManifestField.Code, "The host has no package, which it needs" ],
         errorsOf
             $"""(package = (name = "demo", version = "0.1.0"), linters = [(package = "nanyx.lint")], host = (version = "{Toolchain.version}"))"""
     )
@@ -172,28 +172,28 @@ let ``A linter or host without a package or version is an error`` () =
 [<Fact>]
 let ``A value of the wrong kind is an error saying what it must be`` () =
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.InvalidManifestValue.Code, "package must be a record, (name = value, ...), not a list" ],
+        [ DiagnosticCodes.InvalidManifestValue.Code, "Package must be a record, `(name = value, ...)`, not a list" ],
         errorsOf "(package = [])"
     )
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.InvalidManifestValue.Code, """package's name "Demo" must be lower case, with words separated by dots: acme.web"""
-          DiagnosticCodes.InvalidManifestValue.Code, "package's version must be a string, not 1"
-          DiagnosticCodes.InvalidManifestValue.Code, "package's sources must be a list of strings, not the string \"src\"" ],
+        [ DiagnosticCodes.InvalidManifestValue.Code, """Package's name "Demo" must be lower case, with words separated by dots, as `acme.web`"""
+          DiagnosticCodes.InvalidManifestValue.Code, "Package's version must be a string, not 1"
+          DiagnosticCodes.InvalidManifestValue.Code, "Package's sources must be a list of strings, not the string \"src\"" ],
         errorsOf """(package = (name = "Demo", version = 1, sources = "src"))"""
     )
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.InvalidManifestValue.Code, "the manifest must be a record, (name = value, ...), not a list" ],
+        [ DiagnosticCodes.InvalidManifestValue.Code, "The manifest must be a record, `(name = value, ...)`, not a list" ],
         errorsOf "[]"
     )
 
 [<Fact>]
 let ``An unknown linter, rule, severity or host is an error`` () =
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.InvalidManifestValue.Code, "there is no linter 'acme.lint'; the linters are 'nanyx.lint'"
+        [ DiagnosticCodes.InvalidManifestValue.Code, "There is no linter 'acme.lint': the linters are 'nanyx.lint'"
           DiagnosticCodes.UnknownManifestField.Code,
-          "the rules of nanyx.lint has no field 'noSuchRule'; its fields are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'unannotatedExports', 'unusedResults', 'uselessExpressions', 'shadowedPreludeNames', 'semicolons', 'unusedAllows', 'linterFailed'"
-          DiagnosticCodes.InvalidManifestValue.Code, "the rule unusedBindings must be #error, #warning, #info, #hint, #off, not the string \"error\""
-          DiagnosticCodes.InvalidManifestValue.Code, "the compiler ships no package 'acme.host': a host the compiler doesn't ship is found by its path, as host = (package = \"acme.host\", path = \"../acme.host\")" ],
+          "The rules of 'nanyx.lint' has no field 'noSuchRule': its fields are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'unannotatedExports', 'unusedResults', 'uselessExpressions', 'shadowedPreludeNames', 'semicolons', 'unusedAllows', 'linterFailed'"
+          DiagnosticCodes.InvalidManifestValue.Code, "The rule unusedBindings must be #error, #warning, #info, #hint, #off, not the string \"error\""
+          DiagnosticCodes.InvalidManifestValue.Code, "The compiler ships no package 'acme.host': give the path of a host the compiler doesn't ship, as `host = (package = \"acme.host\", path = \"../acme.host\")`" ],
         errorsOf
             $"""
 (
@@ -210,7 +210,7 @@ let ``An unknown linter, rule, severity or host is an error`` () =
 [<Fact>]
 let ``A host's settings are not supported yet`` () =
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.UnsupportedManifestField.Code, "a host takes no settings yet" ],
+        [ DiagnosticCodes.UnsupportedManifestField.Code, "A host takes no settings yet" ],
         errorsOf
             $"""
 (
@@ -225,9 +225,9 @@ let ``A host's settings are not supported yet`` () =
 let ``A linter or host must be named at the version the compiler ships, exactly`` () =
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.VersionNotShipped.Code,
-          $"the compiler ships nanyx.lint {Toolchain.version}, not 0.1.0: a package the compiler ships is named at its version exactly"
+          $"The compiler ships 'nanyx.lint' {Toolchain.version}, not 0.1.0: name a package the compiler ships at its version exactly"
           DiagnosticCodes.VersionNotShipped.Code,
-          $"the compiler ships nanyx.console {Toolchain.version}, not 99.0.0: a package the compiler ships is named at its version exactly" ],
+          $"The compiler ships 'nanyx.console' {Toolchain.version}, not 99.0.0: name a package the compiler ships at its version exactly" ],
         errorsOf
             """
 (
@@ -247,9 +247,9 @@ let ``A dependency the compiler ships is named at its version, and found beside 
         manifest.Dependencies |> List.map (fun dependency -> dependency.Name, dependency.Directory))
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.VersionNotShipped.Code,
-          $"the compiler ships nanyx.console.core {Toolchain.version}, not 99.0.0: a package the compiler ships is named at its version exactly"
+          $"The compiler ships 'nanyx.console.core' {Toolchain.version}, not 99.0.0: name a package the compiler ships at its version exactly"
           DiagnosticCodes.InvalidManifestValue.Code,
-          "the dependency acme.util is found by its path, so it has no version: give one or the other" ],
+          "The dependency 'acme.util' is found by its path, so it has no version: give one or the other" ],
         errorsOf
             """
 (
@@ -276,7 +276,7 @@ let ``A dependency listed twice is an error at the repeat`` () =
         | Result.Error errors -> errors
         | Result.Ok _ -> failwith "Expected errors"
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.InvalidManifestValue.Code, "the dependency acme.web is listed twice: a package lists each package it depends on once" ],
+        [ DiagnosticCodes.InvalidManifestValue.Code, "The dependency 'acme.web' is listed twice, but a package lists each package it depends on once: remove one" ],
         errors |> List.map (fun error -> error.Code, error.Message)
     )
     Assert.Equal<(int * int) list>([ 3, 70 ], errors |> List.map (fun error -> error.Span.Value.StartLine, error.Span.Value.StartColumn))
