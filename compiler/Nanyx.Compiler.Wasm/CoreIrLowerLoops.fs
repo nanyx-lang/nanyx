@@ -85,9 +85,7 @@ let forEachPulling
     (parameters: (Identifier * TypeExpr option) list)
     (k: Expr -> Expr) =
     let going = local "__for_going" IrBool
-    let letIn (var: Var) (value: Expr) (body: Expr) = Expr.make (Let(var, value, body)) body.Type
     let stop = Expr.make (Assign(going, ABool false)) IrUnit
-    let andThen (first: Expr) (second: Expr) = Expr.make (Do(first, second)) second.Type
     // Each iterable's operands, and, from their atoms, the locals that walk it, each with its starting value, and
     // `step`, which binds its next element for the rest of the time round (`next`) and moves it on after, or stops.
     let walker (iterable: Expression) (parameter: Identifier) : Expression list * (Atom list -> (Var * Expr) list * ((Var -> Expr) -> Expr)) =
@@ -102,12 +100,12 @@ let forEachPulling
                 let step (next: Var -> Expr) =
                     let value = element IrInt
                     let following = local "__for_following" IrInt
-                    let moveOn = letIn following (Expr.make (Prim(Binary "+", [ AVar counter; AInt 1L ])) IrInt) (Expr.make (Assign(counter, AVar following)) IrUnit)
-                    let body = letIn value (Expr.make (Atom(AVar counter)) IrInt) (andThen (next value) moveOn)
+                    let moveOn = Expr.letIn following (Expr.make (Prim(Binary "+", [ AVar counter; AInt 1L ])) IrInt) (Expr.make (Assign(counter, AVar following)) IrUnit)
+                    let body = Expr.letIn value (Expr.make (Atom(AVar counter)) IrInt) (Expr.doThen (next value) moveOn)
                     if last.IsNone then body
                     else
                         let past = local "__for_past" IrBool
-                        letIn past (Expr.make (Prim(Binary ">", [ AVar counter; AVar finish ])) IrBool) (Expr.make (If(AVar past, stop, body)) IrUnit)
+                        Expr.letIn past (Expr.make (Prim(Binary ">", [ AVar counter; AVar finish ])) IrBool) (Expr.make (If(AVar past, stop, body)) IrUnit)
                 walking, step
         | _ ->
             let ty = tyOf iterable
@@ -118,7 +116,7 @@ let forEachPulling
                     let step (next: Var -> Expr) =
                         let head = element elementTy
                         let tail = local "__for_tail" ty
-                        let taken = { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = andThen (next head) (Expr.make (Assign(rest, AVar tail)) IrUnit) }
+                        let taken = { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = Expr.doThen (next head) (Expr.make (Assign(rest, AVar tail)) IrUnit) }
                         Expr.make (Match([ rest ], [ taken; { Patterns = [ PWildcard ]; Body = stop } ])) IrUnit
                     [ rest, Expr.make (Atom atoms.Head) ty ], step
                 | _, Some (IrFunction(_, result, wanted) as nextTy, elementTy, restTy) ->
@@ -129,10 +127,10 @@ let forEachPulling
                         let following = local "__for_following" restTy
                         let taken =
                             { Patterns = [ PTag("next", Some (PFields [ 0, PBind value; 1, PBind following ])) ]
-                              Body = andThen (next value) (Expr.make (Assign(rest, AVar following)) IrUnit) }
+                              Body = Expr.doThen (next value) (Expr.make (Assign(rest, AVar following)) IrUnit) }
                         let matched = Expr.make (Match([ pulled ], [ taken; { Patterns = [ PWildcard ]; Body = stop } ])) IrUnit
-                        letIn pull (Expr.make (Field(AVar rest, 0)) nextTy) (members wanted (fun memberAtoms ->
-                            letIn pulled (Expr.make (CallClosure(pull, memberAtoms, Borrowing)) result) matched))
+                        Expr.letIn pull (Expr.make (Field(AVar rest, 0)) nextTy) (members wanted (fun memberAtoms ->
+                            Expr.letIn pulled (Expr.make (CallClosure(pull, memberAtoms, Borrowing)) result) matched))
                     [ rest, Expr.make (Atom atoms.Head) ty ], step
                 | other, _ -> cannot $"a `for` loop over a value of type '{IrType.show other}'"
     let names = parameters |> List.map fst
@@ -150,7 +148,7 @@ let forEachPulling
             | step :: rest, name :: others -> step (fun element -> run rest (bound |> Map.add name element) others)
             | _ -> lowerBody bound
         let loop = Expr.make (While { Condition = Expr.make (Atom(AVar going)) IrBool; Depth = depth; Body = run steps vars names }) IrUnit
-        k (List.foldBack (fun (var, value) body -> letIn var value body) (List.concat walking) (letIn going (Expr.make (Atom(ABool true)) IrBool) loop)))
+        k (List.foldBack (fun (var, value) body -> Expr.letIn var value body) (List.concat walking) (Expr.letIn going (Expr.make (Atom(ABool true)) IrBool) loop)))
 
 /// `while condition -> body`, from the lowered condition and body, which run again each time round. `depth` is how many
 /// loops enclose this one, which names its labels.

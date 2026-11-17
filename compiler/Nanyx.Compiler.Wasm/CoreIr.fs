@@ -536,6 +536,12 @@ module Expr =
     /// The expression of `kind`, of type `ty`.
     let make (kind: ExprKind) (ty: IrType) : Expr = { Kind = kind; Type = ty }
 
+    /// `var` bound to `value` for `body`, of `body`'s type.
+    let letIn (var: Var) (value: Expr) (body: Expr) : Expr = make (Let(var, value, body)) body.Type
+
+    /// `value` run for its effect, and then `body`, of `body`'s type.
+    let doThen (value: Expr) (body: Expr) : Expr = make (Do(value, body)) body.Type
+
     /// The expressions directly inside `e`, in the order its code runs them: a let's or a do's value and then what
     /// follows it, an if's branches, each arm's guards and then its body, a loop's condition and body, and what a
     /// count instruction wraps. An instruction on atoms has none. A walk over the IR recurses through these, and a rewrite
