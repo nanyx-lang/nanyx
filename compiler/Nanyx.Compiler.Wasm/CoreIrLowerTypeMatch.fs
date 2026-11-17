@@ -46,13 +46,16 @@ type TypeMatchTools =
       /// The function that builds a part of a description, asked for by its name and how it is lowered.
       Request: string -> Lowering -> string
       /// The function a box of a value of this type is a closure over (see `CoreIrLowerBoxes.readerFunction`).
-      Reader: IrType -> string }
+      Reader: IrType -> string
+      /// An atom, a value of its type, as a value of the given type, boxed or unboxed where they differ (see
+      /// `CoreIrLowerBoxes.convert`), passed on.
+      Convert: Atom -> IrType -> (Atom -> Expr) -> Expr }
 
 /// The IR type of a type's description.
-let private descriptionType (tools: TypeMatchTools) = tools.ToIrType (TypeValues.descriptionUnion boxedTy boxedTy)
+let descriptionType (tools: TypeMatchTools) = tools.ToIrType (TypeValues.descriptionUnion boxedTy boxedTy)
 
 /// `value` in a new local, passed to `k`.
-let private bindLocal (tools: TypeMatchTools) (name: string) (value: Expr) (k: Var -> Expr) : Expr =
+let bindLocal (tools: TypeMatchTools) (name: string) (value: Expr) (k: Var -> Expr) : Expr =
     let local = tools.NewVar (tools.UniqueName name) Local value.Type
     let body = k local
     Expr.make (Let(local, value, body)) body.Type
@@ -282,7 +285,9 @@ let private descriptionOf (tools: TypeMatchTools) (ty: Ty, view: string) : Expr 
                         [ "name", text fieldName; "type", typeId fieldType; "get", closure getter getTy
                           "attributes", Expr.make (Atom attributeList) attributesTy ]
                     makeRecord tools fieldTy (Map.ofList values) k))
+        let maker = tools.Request $"__make_{tools.TypeIds.Of(ty, view)}" (MakingRecord ty)
         naming (Some ("fields", fieldItems, fieldTy)) (fun values ->
+            let values = values |> Map.add makeMember (closure maker (IrFunction(IrList IrBox, IrBox, [])))
             makeRecord tools (tools.ToIrType (TyApply(TypeValues.recordInfo, [ boxedTy ]))) values (tagged TypeValues.recordTag))
     | tag, shape when tag = TypeValues.unionTag ->
         let rec cases (ty: Ty) =
@@ -299,7 +304,11 @@ let private descriptionOf (tools: TypeMatchTools) (ty: Ty, view: string) : Expr 
             |> List.map (fun (caseName, payload) k ->
                 let getter = tools.Request $"__case_{tools.TypeIds.Of(ty, view)}_{caseName}" (CaseGetting(ty, caseName))
                 let payloadTy = payload |> Option.defaultValue (TyPrimitive "unit")
-                makeRecord tools caseTy (Map.ofList [ "name", text caseName; "type", typeId payloadTy; "get", closure getter getTy ]) k)
+                let builder = tools.Request $"__build_case_{tools.TypeIds.Of(ty, view)}_{caseName}" (CaseBuilding(ty, caseName))
+                let values =
+                    [ "name", text caseName; "type", typeId payloadTy; "get", closure getter getTy
+                      "build", closure builder (IrFunction(IrBox, IrBox, [])) ]
+                makeRecord tools caseTy (Map.ofList values) k)
         naming (Some ("cases", caseItems, caseTy)) (fun values ->
             makeRecord tools (tools.ToIrType (TyApply(TypeValues.unionInfo, [ boxedTy ]))) values (tagged TypeValues.unionTag))
     | tag, _ -> cannot $"a description with the tag '#{tag}'"
@@ -345,7 +354,7 @@ let rec private canonical (tools: TypeMatchTools) (ty: Ty) (atom: Atom) (k: Atom
 
 /// The IR type of the elements of the collection `collection` in their canonical form: a box for each, and a map's
 /// entries each a tuple of boxes.
-and private canonicalElements (tools: TypeMatchTools) (collection: Ty) : IrType =
+and canonicalElements (tools: TypeMatchTools) (collection: Ty) : IrType =
     match Unifier.unalias collection with
     | Maps.MapType _ -> IrList(IrRecord [ "0", IrBox; "1", IrBox ])
     | _ -> IrList IrBox
@@ -382,7 +391,7 @@ let canonicalisingFunction (tools: TypeMatchTools) (functionName: string) (colle
       Body = Expr.make (Match([ list ], arms)) result }
 
 /// The environment a closure that captures nothing is given, and the box it is called with.
-let private getterParameters (tools: TypeMatchTools) =
+let getterParameters (tools: TypeMatchTools) =
     tools.NewVar ClosureSyntax.envParameter Param (IrRecord [ "0", IrWord ]), tools.NewVar "__boxed" Param IrBox
 
 /// The `get` of the field `fieldName` of the record type `recordType`: it takes a value of the type, boxed, and gives

@@ -214,6 +214,7 @@
     <Compile Include="Features\TailCalls\RunTailCallTests.fs" />
     <Compile Include="Features\TailCalls\StackOverflowTests.fs" />
     <Compile Include="Features\Types\RunTypeMatchTests.fs" />
+    <Compile Include="Features\Types\RunTypeBuildTests.fs" />
     <Compile Include="Features\Workflows\RunWorkflowTests.fs" />
     <Compile Include="Features\Workflows\RunWorkflowLoopTests.fs" />
     <Compile Include="Features\Workflows\RunKeywordKindTests.fs" />

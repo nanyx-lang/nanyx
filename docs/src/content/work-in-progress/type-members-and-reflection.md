@@ -4,7 +4,7 @@ description: "Associated types on contexts, types passed as arguments, and inspe
 order: 4
 ---
 
-This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), and what is left of them here is how they meet type arguments and the prelude contexts that move to them. **Type arguments** let a function take a type as a parameter and inspect its structure; their design was decided on 2026-11-17 and is filed in stages ([Plan](#plan)). Passing a type and inspecting it are built ([Type arguments](../tour/functions#type-arguments), [Inspecting a type](../tour/functions#inspecting-a-type), and how they compile in [Type descriptions](../compiler-internals/type-descriptions)); what is left is `build`. Both are the same thing: a record member whose value is a type.
+This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), and what is left of them here is how they meet type arguments and the prelude contexts that move to them. **Type arguments** let a function take a type as a parameter and inspect its structure; their design was decided on 2026-11-17 and is filed in stages ([Plan](#plan)). Passing a type and inspecting it are built ([Type arguments](../tour/functions#type-arguments), [Inspecting a type](../tour/functions#inspecting-a-type), and how they compile in [Type descriptions](../compiler-internals/type-descriptions)), and so is decoding with `build` ([Building a value](../tour/functions#building-a-value)). Both are the same thing: a record member whose value is a type.
 
 # The problems
 
@@ -68,16 +68,6 @@ Decided by the maintainer on 2026-11-17:
 - **Customising an encoding:** a type that provides the library's context itself wins over walking its description, as an explicit instance already wins over synthesis, and attributes on fields cover renames without one.
 - **`dbg`, interpolation and `==` become library code over descriptions, eventually,** once reflection is proven and measured ([#2000](https://github.com/nanyx-lang/nanyx/issues/2000)).
 
-## Decoding with `build`
-
-Decoding builds a record instead of taking one apart. It needs a function that works for every field's type:
-
-```nanyx fragment
-| #record(r) -> r.build { f -> decode(obj \json.field(f.name), f.type) }
-```
-
-The function given to `build` must work for every field type, a rank-2 type, which users never write: the compiler provides `build` for each record description and union case ([#1997](https://github.com/nanyx-lang/nanyx/issues/1997)).
-
 Precedents: Jane Street's `typerep` for OCaml, GHC's `Type.Reflection`, and the "Scrap your boilerplate" approach (`Data`). Swift's `Mirror` and Go's `reflect` have a similar shape but are not typed.
 
 ## The synthesised `Typed(a)` context
@@ -131,7 +121,7 @@ C#'s source generators run user code at compile time that emits more source. The
 |---|---|---|
 | Type arguments: `type a`, `into: type`, `Type(a)` values (built) | [#1995](https://github.com/nanyx-lang/nanyx/issues/1995) | |
 | Type descriptions, matched with narrowing (built) | [#1996](https://github.com/nanyx-lang/nanyx/issues/1996) | #1995 |
-| A compiler-provided `build` for decoding | [#1997](https://github.com/nanyx-lang/nanyx/issues/1997) | #1996 |
+| A compiler-provided `build` for decoding (built) | [#1997](https://github.com/nanyx-lang/nanyx/issues/1997) | #1996 |
 | `Typed(a)`, synthesised for every type (built) | [#1998](https://github.com/nanyx-lang/nanyx/issues/1998) | #1995 |
 | An associated type as a `Type` value (built) | [#1999](https://github.com/nanyx-lang/nanyx/issues/1999) | #1995 |
 | JSON for any record, on reflection | [#1789](https://github.com/nanyx-lang/nanyx/issues/1789) | #1996, #1997, #1998 |

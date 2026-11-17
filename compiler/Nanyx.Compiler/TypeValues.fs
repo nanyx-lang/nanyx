@@ -82,7 +82,7 @@ module TypeValues =
             [ "name", stringTy; "type", ofType packaged; "get", TyFunc(described, packaged, []); "attributes", Lists.ofType attributeTy ]
         | n when n = case ->
             let payload = TyUnion [ TyTag("some", Some packaged); TyTag("none", None) ]
-            [ "name", stringTy; "type", ofType packaged; "get", TyFunc(described, payload, []) ]
+            [ "name", stringTy; "type", ofType packaged; "get", TyFunc(described, payload, []); "build", TyFunc(packaged, described, []) ]
         | _ -> [ "type", ofType packaged ]
 
     /// A value of the description type `name` applied to `args`, as the record it is, its packaged type `packaged`.

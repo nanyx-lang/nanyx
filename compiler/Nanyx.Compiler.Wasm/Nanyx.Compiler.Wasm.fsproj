@@ -40,6 +40,7 @@
     <Compile Include="CoreIrLowerLocals.fs" />
     <Compile Include="CoreIrLowerLifted.fs" />
     <Compile Include="CoreIrLowerTypeMatch.fs" />
+    <Compile Include="CoreIrLowerBuild.fs" />
     <Compile Include="CoreIrLower.fs" />
     <Compile Include="CoreIrLowerModule.fs" />
     <Compile Include="CoreIrDrop.fs" />
