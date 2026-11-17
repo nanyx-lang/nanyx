@@ -22,10 +22,10 @@ let ``Run - a set holds each element once, in the order they were first added`` 
         []
         [ "def s = set.fromList([3, 1, 3, 2, 1])"
           "println(ints(s))"
-          """println("{set.count(s)}")"""
+          """println("{set.length(s)}")"""
           "println(ints(s \\insert(4) \\insert(1)))"
           "println(ints(set.remove(s, 1)))"
-          """println("{set.count(set.empty \insert(5))}")""" ]
+          """println("{set.length(set.empty \insert(5))}")""" ]
     |> runSource
     |> assertRan "312\n3\n3124\n32\n1\n"
 
@@ -58,11 +58,11 @@ let ``Run - records, tuples and tags can be elements, compared by their structur
           "type Colour = #red | #green | #blue"
           "def add: set(Colour), Colour -> set(Colour) = { s, c -> s \\insert(c) }" ]
         [ "def points = set.fromList([Point(x = 1, y = 2), Point(x = 1, y = 2), Point(x = 3, y = 4)])"
-          """println("{set.count(points)} {show(set.contains(points, Point(x = 3, y = 4)))}")"""
+          """println("{set.length(points)} {show(set.contains(points, Point(x = 3, y = 4)))}")"""
           """def pairs = set.fromList([(1, "a"), (1, "a"), (2, "a")])"""
-          """println("{set.count(pairs)}")"""
+          """println("{set.length(pairs)}")"""
           "def colours = add(add(add(set.empty, #red), #green), #red)"
-          """println("{set.count(colours)} {show(set.contains(colours, #blue))}")""" ]
+          """println("{set.length(colours)} {show(set.contains(colours, #blue))}")""" ]
     |> runSource
     |> assertRan "2 T\n2\n2 F\n"
 
@@ -100,7 +100,7 @@ let ``Run - map gives the set of what a function makes of each element`` () =
     program
         []
         [ """def s = set.fromList([1, 2, 3])"""
-          """println("{s \set.map { % 2 } \set.count}")"""
+          """println("{s \set.map { % 2 } \set.length}")"""
           """println(ints(s \set.map { % 2 }))"""
           """println(ints(s \set.map { * 10 }))""" ]
     |> runSource

@@ -90,7 +90,7 @@ export def map.remove: [Eq(k), Hash(k)] map(k, v), k -> map(k, v) = { m, key ->
 }
 
 --| The number of keys.
-export def map.count: map(k, v) -> int = { m ->
+export def map.length: map(k, v) -> int = { m ->
   list.length(__nanyx_map_entries(m))
 }
 
@@ -257,7 +257,7 @@ export def set.remove: [Eq(a), Hash(a)] set(a), a -> set(a) = { s, x ->
 }
 
 --| The number of elements.
-export def set.count: set(a) -> int = { s ->
+export def set.length: set(a) -> int = { s ->
   list.length(__nanyx_set_elements(s))
 }
 

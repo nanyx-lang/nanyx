@@ -108,7 +108,7 @@ def s = set[1, 2, 2, 3] -- a set of 1, 2 and 3
 def e: set(int) = [] -- an empty set
 def m: map(string, int) = [] -- an empty map
 
-println(set.count(s))
+println(set.length(s))
 ```
 
 Writing the type's name before the brackets is like writing a record's type before its fields, `Point(x = 1, y = 2)`. The expected type can be a def's written type or the type a function takes: `total([1, 2])` passes an array to `total: Array(int) -> int`. With neither, plain items make a `list(a)` and `key => value` entries a `map(k, v)`; `[]` is the empty list.

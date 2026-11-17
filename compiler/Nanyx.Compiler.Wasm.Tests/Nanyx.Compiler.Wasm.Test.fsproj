@@ -173,6 +173,7 @@
     <Compile Include="Features\StdLib\RunStackTests.fs" />
     <Compile Include="Features\StdLib\RunQueueTests.fs" />
     <Compile Include="Features\StdLib\RunTrieTests.fs" />
+    <Compile Include="Features\StdLib\RunCollectionLengthTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />
     <Compile Include="Features\Strings\RunInterpolationTests.fs" />
     <Compile Include="Features\Tags\RunTagTests.fs" />

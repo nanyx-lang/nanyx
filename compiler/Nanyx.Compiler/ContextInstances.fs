@@ -451,10 +451,10 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     match instanceInScope env current ctxName argTys, wellKnown |> Option.orElseWith derived with
                     | Some inScope, _ -> Ok (found @ [ Some (InstanceInScope inScope) ], current)
                     | None, _ when reference && not settled -> Ok (found @ [ None ], current)
-                    // A value that failed to check has every context, so that the call is not an error too. It has the
-                    // compiler's own `ToString`, so the backend still has a member to pass. A hole of one is written by
-                    // the backend, which reports the error where the hole is.
-                    | None, _ when not (InterpolationHoles.isHole name) && argTys |> List.contains Unifier.errorType ->
+                    // A value that failed to check, or one made of such a value (a list of them), has every context, so
+                    // that the call is not an error too. It has the compiler's own `ToString`, so the backend still has
+                    // a member to pass. A hole of one is written by the backend, which reports the error where the hole is.
+                    | None, _ when not (InterpolationHoles.isHole name) && argTys |> List.exists Unifier.holdsError ->
                         if ctxName = InterpolationHoles.context && (TypeEnv.tryFind InterpolationHoles.builtInFunction env).IsSome then
                             Ok (found @ [ Some (InstanceSynthesized InterpolationHoles.builtInMembers) ], current)
                         else Ok (found @ [ None ], current)

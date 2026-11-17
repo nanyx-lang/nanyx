@@ -21,7 +21,7 @@ let ``map(k, v) and Map(k, v) are the same type`` () =
     let source =
         normalized """def m: map(string, int) = ["a" => 1]
 def n: map(string, int) = m
-def count: map(string, int) -> int = { x -> map.count(x) }
+def count: map(string, int) -> int = { x -> map.length(x) }
 def c = count(m)
 """
     Assert.Equal<string list>([ "map(string, int)"; "map(string, int)"; "int" ], typesOf source [ "m"; "n"; "c" ])
@@ -39,7 +39,7 @@ def price = { (shop: Shop) -> shop.prices("tea") }
 [<Fact>]
 let ``A map's functions are attached to Map, so a pipe finds them`` () =
     let source = withFinalNewline """def m = ["a" => 1] \insert("b", 2) \remove("a")
-def n = m \count"""
+def n = m \length"""
     Assert.Equal<string list>([ "map(string, int)"; "int" ], typesOf source [ "m"; "n" ])
 
 [<Fact>]
@@ -121,7 +121,7 @@ let ``set(a) and Set(a) are the same type, made by the Set functions`` () =
         normalized """def s = set.fromList([1, 2, 2])
 def t: set(int) = s \insert(3)
 def u: set(string) = set.empty
-def n = set.count(t)
+def n = set.length(t)
 """
     Assert.Equal<string list>([ "set(int)"; "set(int)"; "set(string)"; "int" ], typesOf source [ "s"; "t"; "u"; "n" ])
 

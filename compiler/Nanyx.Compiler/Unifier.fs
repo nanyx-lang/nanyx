@@ -46,6 +46,9 @@ module Unifier =
     /// Whether `ty` is `errorType`.
     let isError (ty: Ty) = unalias ty = errorType
 
+    /// Whether `ty` is `errorType` or is made of it at any depth, as `list(?error)` is.
+    let rec holdsError (ty: Ty) = isError ty || Ty.exists holdsError ty
+
     /// `undefined`, the bottom type: the union of no tags, which no value is. It is the type of an expression that
     /// never gives a value, such as a call to a function that stops the program. It is assignable to every type, so
     /// such an expression fits wherever a value is expected; nothing but itself is assignable to it, and an `Equal`

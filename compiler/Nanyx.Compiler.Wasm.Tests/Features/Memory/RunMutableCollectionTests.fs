@@ -19,7 +19,7 @@ def main = {
     stack \push("b")
     def popped = stack \pop
     def peeked = stack \peek
-    def count = MStack.count(stack)
+    def count = MStack.length(stack)
     def last = stack \pop
     def empty = stack \pop
     (popped, peeked, count, last, empty, MStack.isEmpty(stack), MStack.toList(MStack.fromList([1, 2])))
@@ -60,7 +60,7 @@ def evaluate: string -> #some(float) | #none = { text ->
                 | #some(answer) -> stack \push(answer)
                 | #none -> ok := false
             | _ -> ok := false
-    if ok and MStack.count(stack) == 1 then stack \pop else #none
+    if ok and MStack.length(stack) == 1 then stack \pop else #none
   }
 }
 
@@ -86,12 +86,12 @@ def main = {
     items \add("c")
     def changed = items \set(1, "B")
     def missed = items \set(3, "d")
-    (MList.toList(items), MList.count(items), items \at(0), items \at(2), items \at(3), items \at(-1), changed, missed)
+    (MList.toList(items), MList.length(items), items \at(0), items \at(2), items \at(3), items \at(-1), changed, missed)
   }
   println(result)
   def empty = memory {
     def items: MList(int) = MList.empty()
-    (MList.count(items), MList.toList(items))
+    (MList.length(items), MList.toList(items))
   }
   println(empty)
 }
