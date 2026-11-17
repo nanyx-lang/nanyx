@@ -97,7 +97,14 @@ tests and the tags the arms before it tested and failed. From that:
   branch when it matches on that tag, so that each copy knows which tag it is (case-of-case). Each copy but the first
   has its variables made new. It is kept only when the copies, simplified, grow the code by no more than `copyLimit`
   (40) nodes, as when all but one of them come to little. Within a copy being tried nothing more is copied, so a trial
-  cannot grow without end; the next pass goes on from there.
+  cannot grow without end; the next pass goes on from there. Copies that could not come to so little are never made:
+  the sizes of a chain's links, and which links read which variables, are worked out once for the chain
+  (`ChainShape`), and the rest of the chain is copied only if the links that could change in a copy are big enough
+  that the others, copied into every branch, fit the limit. The links that could change are those that read the
+  variable, or a variable such a link binds that something can be known of (not a number, string or `bool`), those
+  whose variable only they read, and those that give a variable another's value. Without this, a function with a long
+  run of tags made and matched took time that grew with the square of its length
+  ([#1847](https://github.com/nanyx-lang/nanyx/issues/1847)).
 - **A variable given another variable's value** of its type is that variable: what follows reads the other, and the
   binding goes. Not a parameter on the heap, which its function may only borrow: a match on the variable that takes it
   over can reuse its memory, and a match on the parameter could not. The walk keeps the variables it renames this way
