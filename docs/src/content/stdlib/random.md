@@ -11,7 +11,9 @@ die with no setup:
 ```nanyx
 import nanyx/random as random
 
-println(random.between(1, 6))
+def roll = random.between(1, 6)
+println(roll >= 1 and roll <= 6)
+-- true
 ```
 
 `random.seeded` runs a function under a `Random` that a seed decides instead, so the same seed gives the same numbers

@@ -77,7 +77,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
         Assert.Equal(("Console", "inferred", new Range(0, 4, 0, 9)), (inDef.Text, inDef.Detail, inDef.Location?.Range));
         // The runtime supplies every context of the host's prelude at the top level.
         var topLevel = Section(await InfoViewAt(uri, 1, 2), "module", "contexts");
-        Assert.Equal([("Async", "runtime", null), ("Console", "runtime", null), ("Env", "runtime", null), ("FileSystem", "runtime", null), ("Http", "runtime", null)], topLevel.Select(item => (item.Text, item.Detail, item.Location)));
+        Assert.Equal([("Async", "runtime", null), ("Console", "runtime", null), ("Env", "runtime", null), ("FileSystem", "runtime", null), ("Http", "runtime", null), ("Random", "runtime", null)], topLevel.Select(item => (item.Text, item.Detail, item.Location)));
         var atTopLevel = topLevel.Single(item => item.Text == "Console");
         // A context of the host's prelude shows its doc comment.
         Assert.StartsWith("The terminal: standard output", atTopLevel.Documentation);
