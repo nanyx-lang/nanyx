@@ -15,6 +15,12 @@ module Seqs =
     /// The type's identity: the prelude's `Seq`, not a type of that name another module defines.
     let nominal: NominalId = { Home = StandardLibraryModule ModuleOrigin.preludeName; Name = typeName }
 
+    /// The tag a sequence's `next` gives with its first element and the rest, `#next(a, Seq(a))`.
+    let nextTag = "next"
+
+    /// The tag a sequence's `next` gives when it has no more elements, `#done`.
+    let doneTag = "done"
+
     /// The element type of a sequence type.
     let (|SeqType|_|) (ty: Ty) =
         match ty with
