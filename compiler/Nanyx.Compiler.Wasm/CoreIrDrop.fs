@@ -17,7 +17,6 @@ let rec isHeapType (ty: IrType) =
     | IrRecursive _ -> isHeapType (IrType.unfold ty)
     | IrSelf -> internalError "a recursive type's own type outside it"
     | IrString
-    | IrFloat
     | IrF32
     | IrList _
     | IrArray _
@@ -27,6 +26,7 @@ let rec isHeapType (ty: IrType) =
     | IrTags tags -> tags |> List.exists (snd >> Option.isSome)
     | IrInt
     | IrSized _
+    | IrFloat
     | IrBool
     | IrUnit
     | IrError
@@ -170,7 +170,6 @@ let private releaseThen (ty: IrType) (fields: string list) =
 let private fieldDrops (tagId: string -> int option) (ty: IrType) : string list * string list =
     match IrType.unfold ty with
     | IrString
-    | IrFloat
     | IrF32 -> [], []
     | IrRecord fields ->
         [],
@@ -233,6 +232,7 @@ let private fieldDrops (tagId: string -> int option) (ty: IrType) : string list 
     | IrList _
     | IrInt
     | IrSized _
+    | IrFloat
     | IrBool
     | IrUnit
     | IrError
@@ -271,7 +271,6 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
           "  end"
           "end" ]
     | IrString
-    | IrFloat
     | IrF32
     | IrRecord _
     | IrFunction _
@@ -281,6 +280,7 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
         locals @ releaseThen ty fields
     | IrInt
     | IrSized _
+    | IrFloat
     | IrBool
     | IrUnit
     | IrError

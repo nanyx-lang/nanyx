@@ -64,7 +64,6 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
         // `0.0 == -0.0`, so both hash as 0. NaN equals nothing, so its hash does not matter.
         [ "(local $x f64)"; "(local $bits i64)" ],
         [ "local.get $a"
-          "f64.load"
           "local.tee $x"
           "f64.const 0"
           "f64.eq"

@@ -77,6 +77,7 @@
     <Compile Include="Features\Except\RunExceptTests.fs" />
     <Compile Include="Features\Floats\RunFloatTextTests.fs" />
     <Compile Include="Features\Floats\RunFloatSettledLaterTests.fs" />
+    <Compile Include="Features\Floats\FloatValueTests.fs" />
     <Compile Include="Features\Functions\RunArmsAfterParametersTests.fs" />
     <Compile Include="Features\Functions\RunCallResultTests.fs" />
     <Compile Include="Features\Functions\RunDefinitionOrderTests.fs" />

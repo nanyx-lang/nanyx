@@ -11,7 +11,7 @@ internals section, and what a user sees in [Reference counting](../foundations/r
 
 # Still to do
 
-- **Unbox floats.** A `float` or an `F32` is still a pointer to a box on the heap
+- **Unbox `F32`.** A `float` is an `f64`, but an `F32` is still a pointer to a box on the heap
   ([#1876](https://github.com/nanyx-lang/nanyx/issues/1876)).
 
 # Open questions
