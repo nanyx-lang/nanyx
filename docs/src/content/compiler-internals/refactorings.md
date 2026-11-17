@@ -25,7 +25,7 @@ progress.
 - **Its output is formatted.** Edits are laid out as the formatter would lay out the result
   (`RangeFormatting.formatRange`), so applying a refactoring never leaves code `nanyx format` would change.
 - **Code action kinds** are the standard ones, so editors put them in the usual menus: `refactor.extract` (introduce
-  local, introduce function and introduce type alias), `refactor.inline`, `refactor.rewrite` (write the inferred type, call and pipe), and
+  local, introduce function and introduce type alias), `refactor.inline`, `refactor.rewrite` (write the inferred type, write the types of the `_`s, call and pipe), and
   `source.organizeImports`. Rename and selection ranges have their own LSP requests.
 - **A new name starts a rename.** A refactoring that invents a name (introduce local, introduce function, introduce type alias) carries the
   command `nanyx.renameAt`, which the VS Code extension registers: after the edits, it puts the cursor on the name and
