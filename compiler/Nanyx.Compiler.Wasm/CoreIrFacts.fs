@@ -80,6 +80,7 @@ let collect (functions: Function list) : ModuleFacts =
         | CallRuntime(_, atoms, _)
         | MakeClosure(_, _, atoms)
         | CallClosure(_, atoms, _) -> atoms |> List.iter atom
+        | CopyArrayInto(target, at, source) -> [ target; at; source ] |> List.iter atom
         | CallImport(declared, atoms) ->
             imports.Add declared
             atoms |> List.iter atom

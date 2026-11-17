@@ -157,6 +157,7 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | CallImport(_, atoms)
     | MakeClosure(_, _, atoms)
     | CallClosure(_, atoms, _) -> ofAtoms atoms
+    | CopyArrayInto(target, at, source) -> ofAtoms [ target; at; source ]
     | MakeRecord fields -> ofAtoms (List.map snd fields)
     | UpdateRecord(record, updates) -> ofAtoms (record :: List.map snd updates)
     | MakeTag(_, atom)
@@ -633,7 +634,7 @@ type private FunctionEmitter(context: EmitContext) =
                 $"local.get ${array}" ]
         // A spread array's elements copied into a new one from an index, a loop over the two blocks in step, each element
         // with a reference of its own.
-        | CallRuntime(name, [ target; at; source ], _) when name = Helpers.arrayCopyInto ->
+        | CopyArrayInto(target, at, source) ->
             let element = arrayElement (atomType source)
             let size = CoreIrLayout.size element
             let first = CoreIrLayout.arrayElementOffset element 0
