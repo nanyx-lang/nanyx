@@ -563,14 +563,6 @@
     end
     i32.const 1
   )
-  (func $__nanyx_record_set (param $base i32) (param $value i32) (param $offset i32) (result i32)
-    local.get $base
-    local.get $offset
-    i32.add
-    local.get $value
-    i32.store
-    local.get $base
-  )
   (func $__nanyx_escape_byte (param $c i32) (result i32)
     local.get $c
     i32.const 34
@@ -706,14 +698,11 @@
   (type $ctx_fn_1 (func (param i32) (result i32)))
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
   (type $ctx_fn_2_i32_i64_to_i32 (func (param i32 i64) (result i32)))
-  (table $ctx_table 2 funcref)
-  (elem (i32.const 0) $__lambda_1 $__lambda_4)
+  (table $ctx_table 0 funcref)
 
   (data (i32.const 256) "\00\00\00\00\09\00\00\00xString: \00\00\00")
   (data (i32.const 276) "\00\00\00\00\0b\00\00\00, yString: \00")
   (data (i32.const 296) "\00\00\00\00\04\00\00\00fake\00\00\00\00")
-  (data (i32.const 312) "\00\00\00\00\00\00\00\00\00\00\00\00")
-  (data (i32.const 324) "\00\00\00\00\00\00\00\00\01\00\00\00")
 
   (func $compareStrings__int__string (param $x_i64 i64) (param $y i32) (param $__ctx_Describe_a_describe i32) (param $__ctx_Describe_b_describe i32) (result i32) (local $xString i32) (local $yString i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32)
     local.get $__ctx_Describe_a_describe
@@ -760,80 +749,40 @@
     call $__nanyx_drop_string
   )
 
-  (func $main (result i32) (local $__use_Describe_int_describe_2 i32) (local $__use_Describe_string_describe_5 i32) (local $x__in1_i64 i64) (local $y__in1 i32) (local $xString__in1 i32) (local $yString__in1 i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32) (local $__owned_4 i32) (local $__owned_5 i32)
-    i32.const 4
-    i32.const 1
-    call $__nanyx_new_object
-    i32.const 320
-    i32.const 0
-    call $__nanyx_record_set
-    local.tee $__owned_0
-    i32.load
-    call $__nanyx_dup_fn_int_to_string
-    local.get $__owned_0
-    call $__nanyx_drop_rec_describe_fn_int_to_string
-    local.set $__use_Describe_int_describe_2
-    i32.const 4
-    i32.const 1
-    call $__nanyx_new_object
-    i32.const 332
-    i32.const 0
-    call $__nanyx_record_set
-    local.tee $__owned_1
-    i32.load
-    call $__nanyx_dup_fn_string_to_string
-    local.get $__owned_1
-    call $__nanyx_drop_rec_describe_fn_string_to_string
-    local.set $__use_Describe_string_describe_5
-    i64.const 42
-    local.set $x__in1_i64
+  (func $main (result i32) (local $y__in1 i32) (local $xString__in1 i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32)
     i32.const 304
     local.set $y__in1
-    local.get $__use_Describe_int_describe_2
-    local.get $x__in1_i64
-    local.get $__use_Describe_int_describe_2
-    i32.load
-    call_indirect (type $ctx_fn_2_i32_i64_to_i32)
-    local.get $__use_Describe_int_describe_2
-    call $__nanyx_drop_fn_int_to_string
+    i32.const 304
     local.set $xString__in1
-    local.get $__use_Describe_string_describe_5
-    local.get $y__in1
-    local.get $__use_Describe_string_describe_5
-    i32.load
-    call_indirect (type $ctx_fn_2)
-    local.get $__use_Describe_string_describe_5
-    call $__nanyx_drop_fn_string_to_string
-    local.set $yString__in1
     i32.const 264
     local.get $xString__in1
     i32.const 284
-    local.get $yString__in1
+    local.get $y__in1
     call $__nanyx_string_concat
-    local.tee $__owned_5
-    call $__nanyx_string_concat
-    local.get $__owned_5
-    call $__nanyx_drop_string
-    local.tee $__owned_4
-    call $__nanyx_string_concat
-    local.get $__owned_4
-    call $__nanyx_drop_string
     local.tee $__owned_3
-    call $__nanyx_string_quote
+    call $__nanyx_string_concat
     local.get $__owned_3
     call $__nanyx_drop_string
     local.tee $__owned_2
+    call $__nanyx_string_concat
+    local.get $__owned_2
+    call $__nanyx_drop_string
+    local.tee $__owned_1
+    call $__nanyx_string_quote
+    local.get $__owned_1
+    call $__nanyx_drop_string
+    local.tee $__owned_0
     call $dbg_str
     i32.const 0
-    local.get $__owned_2
+    local.get $__owned_0
     call $__nanyx_drop_string
     drop
     local.get $xString__in1
-    local.get $yString__in1
+    local.get $y__in1
     call $__nanyx_string_equals
     local.get $xString__in1
     call $__nanyx_drop_string
-    local.get $yString__in1
+    local.get $y__in1
     call $__nanyx_drop_string
   )
   (export "main" (func $main))
@@ -976,60 +925,6 @@
   )
 
   (func $__nanyx_dup_fn_string_to_string (param $p i32) (result i32)
-    block $shared
-      local.get $p
-      i32.const 8
-      i32.sub
-      call $__nanyx_retain
-    end
-    local.get $p
-  )
-
-  (func $__nanyx_drop_rec_describe_fn_int_to_string (param $p i32)
-    ;; (describe: (int -> string))
-    local.get $p
-    i32.const 8
-    i32.sub
-    call $__nanyx_release
-    if
-      local.get $p
-      i32.load
-      call $__nanyx_drop_fn_int_to_string
-      local.get $p
-      i32.const 8
-      i32.sub
-      call $__nanyx_free
-    end
-  )
-
-  (func $__nanyx_dup_rec_describe_fn_int_to_string (param $p i32) (result i32)
-    block $shared
-      local.get $p
-      i32.const 8
-      i32.sub
-      call $__nanyx_retain
-    end
-    local.get $p
-  )
-
-  (func $__nanyx_drop_rec_describe_fn_string_to_string (param $p i32)
-    ;; (describe: (string -> string))
-    local.get $p
-    i32.const 8
-    i32.sub
-    call $__nanyx_release
-    if
-      local.get $p
-      i32.load
-      call $__nanyx_drop_fn_string_to_string
-      local.get $p
-      i32.const 8
-      i32.sub
-      call $__nanyx_free
-    end
-  )
-
-  (func $__nanyx_dup_rec_describe_fn_string_to_string (param $p i32) (result i32)
     block $shared
       local.get $p
       i32.const 8
