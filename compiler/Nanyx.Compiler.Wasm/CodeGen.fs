@@ -901,7 +901,8 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
                 |> Map.filter (fun _ info -> not info.IsContext)
                 |> Map.map (fun _ info -> TyNominal(TypeDefInfo.nominalId info, info.Parameters |> List.map TyVar, info.Underlying, info.IsPrivate))
               Dbg = if options.Release then CoreIrLowerInput.Stripped else CoreIrLowerInput.PrintedFrom options.SourceRoot
-              TypeIds = CoreIrTypeIds.TypeIds() }
+              TypeIds = CoreIrTypeIds.TypeIds()
+              TypeDefinitions = typed.TypeDefs }
         try CoreIrLowerModule.lowerModule input (emitFromCoreIr functionContextRequirements probeContext Set.empty >> ignore)
         // What the passes after the lowering make has no place, even after a lowering that stopped part way.
         finally CoreIr.Places.Current <- None

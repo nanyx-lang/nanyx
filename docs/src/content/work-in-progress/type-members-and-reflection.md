@@ -4,7 +4,7 @@ description: "Associated types on contexts, types passed as arguments, and inspe
 order: 4
 ---
 
-This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), and what is left of them here is how they meet type arguments and the prelude contexts that move to them. **Type arguments** let a function take a type as a parameter and inspect its structure; their design was decided on 2026-11-17 and is filed in stages ([Plan](#plan)). Passing a type and inspecting it are built ([Type arguments](../tour/functions#type-arguments), [Inspecting a type](../tour/functions#inspecting-a-type), and how they compile in [Type descriptions](../compiler-internals/type-descriptions)); what is left is a description's attributes, module and doc comments, `#nominal` outside a type's home module, and `build`. Both are the same thing: a record member whose value is a type.
+This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), and what is left of them here is how they meet type arguments and the prelude contexts that move to them. **Type arguments** let a function take a type as a parameter and inspect its structure; their design was decided on 2026-11-17 and is filed in stages ([Plan](#plan)). Passing a type and inspecting it are built ([Type arguments](../tour/functions#type-arguments), [Inspecting a type](../tour/functions#inspecting-a-type), and how they compile in [Type descriptions](../compiler-internals/type-descriptions)); what is left is `build`. Both are the same thing: a record member whose value is a type.
 
 # The problems
 
@@ -68,16 +68,6 @@ Decided by the maintainer on 2026-11-17:
 - **Customising an encoding:** a type that provides the library's context itself wins over walking its description, as an explicit instance already wins over synthesis, and attributes on fields cover renames without one.
 - **`dbg`, interpolation and `==` become library code over descriptions, eventually,** once reflection is proven and measured ([#2000](https://github.com/nanyx-lang/nanyx/issues/2000)).
 
-## What is left of descriptions
-
-Matching on a `Type`, narrowing in its arms, and the packaged types of fields, cases and elements are built
-([Type descriptions](../compiler-internals/type-descriptions)). A module holds descriptions only of the types its `Type`
-values name and of their parts. Still to come, as [#1996](https://github.com/nanyx-lang/nanyx/issues/1996) goes on:
-
-- **Attributes on fields,** so a type can say `@json(name = "user_id")` on a field and a library reads it from the field's description. Attributes on record fields aren't allowed yet.
-- **A description's module and doc comment**, which are empty strings for now.
-- **`#nominal` outside the home module.** A nominal type is described by its structure everywhere for now.
-
 ## Decoding with `build`
 
 Decoding builds a record instead of taking one apart. It needs a function that works for every field's type:
@@ -140,7 +130,7 @@ C#'s source generators run user code at compile time that emits more source. The
 | Step | Issue | After |
 |---|---|---|
 | Type arguments: `type a`, `into: type`, `Type(a)` values (built) | [#1995](https://github.com/nanyx-lang/nanyx/issues/1995) | |
-| Type descriptions, matched with narrowing (matching built; attributes, docs, `#nominal` left) | [#1996](https://github.com/nanyx-lang/nanyx/issues/1996) | #1995 |
+| Type descriptions, matched with narrowing (built) | [#1996](https://github.com/nanyx-lang/nanyx/issues/1996) | #1995 |
 | A compiler-provided `build` for decoding | [#1997](https://github.com/nanyx-lang/nanyx/issues/1997) | #1996 |
 | `Typed(a)`, synthesised for every type (built) | [#1998](https://github.com/nanyx-lang/nanyx/issues/1998) | #1995 |
 | An associated type as a `Type` value (built) | [#1999](https://github.com/nanyx-lang/nanyx/issues/1999) | #1995 |

@@ -30,7 +30,7 @@ with their members, are in `TypeValues`, which the backend reads too.
 - **Recursion.** A walker calls itself at a part's type, so a def whose annotation is complete sees itself, while its
   body is checked, generic in the variables it writes (`InferModule`, where it binds `envWithRec`).
 - **For the backend,** each arm that narrows `a` records the type it narrows it to at its pattern's node, in
-  `ExprTypes`.
+  `ExprTypes`, which an importing module's `InlinedExprTypes` keeps with the nodes of the definitions it inlines.
 
 # Compiling
 
@@ -40,6 +40,15 @@ A `Type` value is a number at run time, an `IrInt`: the number of the type it st
 each number: a tag of `TypeValues.descriptionUnion`, with a record's `RecordInfo` and its fields, each field's type as
 a number in turn, so `__describe` goes on until every type numbered has one. The module holds descriptions of the
 types its `Type` values name and of the types of their parts, and of no others.
+
+A type is numbered as seen from the file of the `type X` that names it (`CoreIrTypeIds`), and a description's parts
+are seen from there too: a nominal type seen from outside its home module (`Compiler.sourceFileName` of its home is
+not the file) is described as `#nominal`. So a function specialised at a nominal type can't pick its arm at compile
+time: it keeps every arm that could match, its structure's and `#nominal`'s, and matches on `__describe`. A
+description's `name` and `parameters` come from the alias or nominal type, its `doc` and its fields' `attributes`
+from the type's definition (`TypeDefInfo.Doc`, filled from the module's doc comments by `Compiler.withDocs`, and
+`TypeDefInfo.FieldAttributes`, read by `TypeResolution.fieldAttributeArguments`), which the backend has as
+`LowerInput.TypeDefinitions`.
 
 `FunctionLowering.Match` hands a match on a `Type` to `CoreIrLowerTypeMatch.lower`:
 

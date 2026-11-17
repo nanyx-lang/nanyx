@@ -99,6 +99,21 @@ Marks a unit declaration as a base unit of its dimension. Base units name the di
 
 See [Units and dimensions](../work-in-progress/units-and-dimensions), which is currently a design proposal.
 
+# Attributes on fields
+
+A field of a record type's definition can have attributes of any name, written on the lines before it. The compiler gives them no meaning: a library reads them from the [type's description](functions#inspecting-a-type), as a JSON encoder reads the name to write a field under:
+
+```nanyx fragment
+type Account = (
+  @json(name = "user_id")
+  id: int
+  @range(1, 10)
+  level: int
+)
+```
+
+An attribute's argument is made of literals: a string, a number, a bool or a tag, or a record or tuple of them (NYX0013 otherwise). A field's description gives each value as text, by its field's name or its position: `@json(name = "user_id")` has the argument `("name", "user_id")`, and `@range(1, 10)` the arguments `("0", "1")` and `("1", "10")`. An attribute on a field of any other record type, such as one written in a signature, is misplaced (NYX0008).
+
 # Notes
 
 - Attributes are compile-time metadata.

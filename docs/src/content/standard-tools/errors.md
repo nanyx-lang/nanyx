@@ -130,7 +130,7 @@ To fix it, correct the attribute's name, or remove it.
 # NYX0008: Misplaced attribute
 
 An attribute is written where it can't be. An attribute line must be followed by a definition, and an attribute in a
-type can only come before a member of a context declaration.
+type can only come before a field of a record type's definition or a member of a context declaration.
 
 ```nanyx
 def double: int -> int = { x -> x * 2 }
