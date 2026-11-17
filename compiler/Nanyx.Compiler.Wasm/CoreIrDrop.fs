@@ -122,6 +122,8 @@ let collect (functions: Function list) : Drops =
             match atomType first with
             | IrList element when isHeapType element && not (listConcats.Contains element) -> listConcats.Add element
             | _ -> ()
+        // The text a probe's printer writes a local as, which it gives up once the runtime has it.
+        | Probe(_, locals) when not locals.IsEmpty -> add IrString
         | _ -> ()
         match Expr.children e with
         | [] -> ()

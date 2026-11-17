@@ -10,7 +10,8 @@ open System.Collections.Generic
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrRewrite
 
-/// The functions `func` names: those it calls, and those it makes a closure over.
+/// The functions `func` names: those it calls, those it makes a closure over, and the printers its probes write locals
+/// with.
 let private namedBy (func: Function) : string list =
     let names = ResizeArray<string>()
     let pending = Stack<Expr>()
@@ -20,6 +21,7 @@ let private namedBy (func: Function) : string list =
         match e.Kind with
         | Call(name, _)
         | MakeClosure(name, _, _) -> names.Add name
+        | Probe(_, locals) -> locals |> List.iter (fun local -> names.Add local.Printer)
         | _ -> ()
         for atom in directAtoms e do
             match atom with

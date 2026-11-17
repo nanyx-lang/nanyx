@@ -73,6 +73,7 @@ module WasmServer =
                     "respond",
                     CallerAction<int, int>(fun caller address length ->
                         response.Value <- Some((caller.GetMemory "memory").GetSpan(int64 address, length).ToArray())))
+                Probing.define linker table None
                 finish <- WasmRunner.configureIo io arguments [] store
                 try
                     linker.Instantiate(store, module') |> ignore

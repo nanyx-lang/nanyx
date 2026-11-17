@@ -62,6 +62,36 @@ let rec private tagsOf (ty: Ty) : (string * Ty option) list =
     | TyUnion items -> items |> List.collect tagsOf |> List.distinctBy fst
     | _ -> []
 
+/// Whether a printer can write a value of `ty` (see `printerFunction`), whose type `toIrType` gives: a debug build's
+/// probe writes only such locals (see `CoreIrProbes`).
+let printable (toIrType: Ty -> IrType) (ty: Ty) =
+    // A type that holds itself is written by printers that call each other, so its parts are looked at only so deep.
+    let rec writable (depth: int) (ty: Ty) =
+        let part = writable (depth + 1)
+        if depth > 8 then true
+        else
+        match constantText ty with
+        | Some _ -> true
+        | None ->
+        match ty with
+        | RecursiveNominals.Nominal(_, _, shape, _) -> part shape
+        | _ ->
+        match Unifier.unalias ty with
+        | TyPrimitive("int" | "bool" | "float" | "F32" | "string")
+        | SizedIntegerType _ -> true
+        | TyTag _
+        | TyUnion _ as union -> tagsOf union |> List.forall (snd >> Option.forall part)
+        | TyRecord(fields, _) -> fields.Values |> Seq.forall part
+        | TyApply("list", [ elementTy ])
+        | Sets.SetType elementTy
+        | Arrays.ArrayType elementTy -> part elementTy
+        | Maps.MapType(keyTy, valueTy) -> part keyTy && part valueTy
+        | _ -> false
+    try
+        toIrType ty |> ignore
+        writable 0 ty
+    with CannotLower _ -> false
+
 /// `ty` as part of a printer's name, such as `list_int` in `__dbg_show_list_int`. Types printed differently are
 /// named differently, which their `IrType`s are not: a nominal type is the type of its shape, and a map is a list.
 let rec private mangle (ty: Ty) : string =

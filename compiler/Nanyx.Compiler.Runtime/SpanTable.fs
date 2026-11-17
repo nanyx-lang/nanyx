@@ -14,17 +14,68 @@ type Frame =
         | Some(file, line) -> $"{this.Name} ({file}:{line})"
         | None -> this.Name
 
+/// The names a stack shows for the functions the backend names.
+module FunctionNames =
+    /// The name a function has in the source, from the name the backend gave it: `count`; `list_fold` for a library
+    /// module's `fold`; `go` for a local `rec go` (`__rec_go_16`, see `LambdaLifting`); without the type arguments of a
+    /// specialisation (`map__int`) or the suffix of a closure's owning entry (`__owning`, see `CoreIrClosureEntries`).
+    /// None for a lambda (`__lambda_3`), a runtime helper (`__nanyx_alloc`) and the other functions the backend makes,
+    /// whose names all start with `__`.
+    let source (name: string) =
+        // The name without what follows its first `__`, the type arguments of a specialisation or `__owning`.
+        let own (name: string) =
+            match name.IndexOf "__" with
+            | -1 -> name
+            | index -> name.Substring(0, index)
+        if String.IsNullOrEmpty name then None
+        elif name.StartsWith "__rec_" then
+            let numbered = own (name.Substring "__rec_".Length)
+            match numbered.LastIndexOf '_' with
+            | index when index > 0 -> Some(numbered.Substring(0, index))
+            | _ -> None
+        elif name.StartsWith "__fn_" then Some(own (name.Substring "__fn_".Length))
+        elif name.StartsWith "__" then None
+        else Some(own name)
+
+    /// The name a stack shows for the function the backend named `name`: its name in the source (see `source`),
+    /// `<lambda>` for a lambda and `<top level>` for a script's top-level code, which the compiler makes a def named
+    /// `__script` (see `NyxCompiler.Scripts.definitionName`); none for another function the compiler made, such as a
+    /// runtime helper or the start function, which runs the host, and which a stack leaves out.
+    let shown (name: string) =
+        match source name with
+        | _ when isNull name -> None
+        | _ when name = "__script" || name = "__fn___script" -> Some "<top level>"
+        | Some name when name <> "" -> Some name
+        | _ when name.StartsWith "__lambda" -> Some "<lambda>"
+        | _ -> None
+
 /// Where code was made from: for each call it was inlined through, innermost first, the function whose code it is, the
 /// file and the line; the outermost has no function's name, since it is the function the code is in.
 type InlinedFrame = string option * string * int
 
+/// Where a debug build's probe is (see `Transpiler.Wasm.CoreIrProbes`).
+type ProbeKind =
+    /// The start of the function the backend named so.
+    | Entry of functionName: string
+    /// A statement's start.
+    | Statement
+    /// A function's end.
+    | Return
+
+/// A debug build's probe: the number the program calls the runtime with, where it is, and its place.
+type Probe =
+    { Id: int
+      Kind: ProbeKind
+      Place: InlinedFrame list }
+
 /// The table of places a module the compiler assembled carries in its custom section `nanyx.spans` (see
 /// `Transpiler.Wasm.WasmBinary.spanTableName`, which says how it is laid out): for each stretch of code, by where it
-/// starts in the module, the place of the source it was made from.
+/// starts in the module, the place of the source it was made from, and the module's debug probes by their numbers.
 type SpanTable =
     private
         { Starts: int array
-          Places: InlinedFrame list array }
+          Places: InlinedFrame list array
+          Probes: Collections.Generic.Dictionary<int, Probe> }
 
 module SpanTable =
     /// The name of the custom section that holds the table.
@@ -57,11 +108,11 @@ module SpanTable =
             else
                 let id = wasm.[at]
                 let size, contents = unsigned wasm (at + 1)
-                if id = 0uy && fst (name wasm contents) = sectionName then Some(snd (name wasm contents))
+                if id = 0uy && fst (name wasm contents) = sectionName then Some(snd (name wasm contents), contents + size)
                 else find (contents + size)
         try
             find 8
-            |> Option.map (fun start ->
+            |> Option.map (fun (start, finish) ->
                 let mutable at = start
                 let number () =
                     let value, next = unsigned wasm at
@@ -91,8 +142,27 @@ module SpanTable =
                     |> Array.rev
                     |> Array.distinctBy fst
                     |> Array.rev
-                { Starts = entries |> Array.map fst; Places = entries |> Array.map snd })
+                let probes = Collections.Generic.Dictionary<int, Probe>()
+                if at < finish then
+                    for _ in 1 .. number () do
+                        let id = number ()
+                        let kind = number ()
+                        let functionName = number ()
+                        let place = number ()
+                        let kind =
+                            match kind with
+                            | 1 -> Entry strings.[functionName - 1]
+                            | 2 -> Statement
+                            | _ -> Return
+                        probes.[id] <- { Id = id; Kind = kind; Place = (if place = 0 then [] else frames.[place - 1]) }
+                { Starts = entries |> Array.map fst; Places = entries |> Array.map snd; Probes = probes })
         with :? IndexOutOfRangeException -> None
+
+    /// The probe of the number `id`, if the module has one.
+    let probe (table: SpanTable) (id: int) =
+        match table.Probes.TryGetValue id with
+        | true, found -> Some found
+        | _ -> None
 
     /// The place of the code at `offset` in the module, the place of the stretch it is in: empty when it has none.
     let placeAt (table: SpanTable) (offset: int) : InlinedFrame list =

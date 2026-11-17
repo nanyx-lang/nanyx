@@ -7,8 +7,10 @@ order: 8
 Today Nanyx has [`dbg`](../stdlib/console#dbg), which prints any value after where it was called and which a release
 build leaves out, and [deferred errors](../standard-tools/errors) that report their span when they're reached. A crash, a
 deferred error and a runtime error print the stack, with the file and line of each frame, in debug and release builds
-alike ([Crash stacks](../compiler-internals/crash-stacks)). There is no debugger. This page is the plan, agreed with the
-maintainer on 2026-11-17 and filed in stages ([Plan](#plan)).
+alike ([Crash stacks](../compiler-internals/crash-stacks)). A program `nanyx run` runs has debug probes, which a test
+host can already follow with a shadow stack and read a frame's locals from
+([Debug probes](../compiler-internals/debug-probes)), but there is no debugger yet. This page is the plan, agreed with
+the maintainer on 2026-11-17 and filed in stages ([Plan](#plan)).
 
 # Decisions
 
@@ -37,12 +39,17 @@ maintainer on 2026-11-17 and filed in stages ([Plan](#plan)).
   that needs more is re-run on save only if the user turns it on for that file.
 - **The console host first.** Debugging a request in the HTTP host, and a single test from the editor, come next; the
   browser host later.
+- **A frame's locals are written when the runtime asks,** at the probe, through the `dbg` printers, rather than spilled
+  to a shadow frame at each probe: a spilled reference could outlive the value, which reference counting gives up after
+  its last use, and keeping it alive would change every debug run's memory. Measured in
+  [#2040](https://github.com/nanyx-lang/nanyx/issues/2040), on [Debug probes](../compiler-internals/debug-probes).
 
 # Open questions
 
-- **How a frame's locals stay reachable** for the debugger to read: spilled to a shadow frame in linear memory at each
-  probe, or passed to the probe. Settled, with measurements, in
-  [#2040](https://github.com/nanyx-lang/nanyx/issues/2040).
+- **The locals of a frame further out,** which the debugger shows when the user picks one: the probe writes only the
+  locals of the frame it is in. The adapter can ask at each statement probe while it steps, and keep each frame's last,
+  or the program could write them on request as it returns
+  ([#2041](https://github.com/nanyx-lang/nanyx/issues/2041)).
 - **The recording's format,** how tasks interleave in it once async has them, and whether users keep recordings
   ([#2042](https://github.com/nanyx-lang/nanyx/issues/2042)).
 - **Stepping backwards:** how often to snapshot, and how the adapter presents it
@@ -57,7 +64,7 @@ maintainer on 2026-11-17 and filed in stages ([Plan](#plan)).
 |---|---|---|
 | `dbg` prints its location; release builds strip it (done) | [#2038](https://github.com/nanyx-lang/nanyx/issues/2038) | |
 | Names and spans kept in release; crash stacks with file and line (done) | [#2039](https://github.com/nanyx-lang/nanyx/issues/2039) | |
-| Debug probes, the shadow stack and locals | [#2040](https://github.com/nanyx-lang/nanyx/issues/2040) | |
+| Debug probes, the shadow stack and locals (done) | [#2040](https://github.com/nanyx-lang/nanyx/issues/2040) | |
 | The debug adapter: breakpoints, stepping and variables in VS Code | [#2041](https://github.com/nanyx-lang/nanyx/issues/2041) | #2040 |
 | Recording a run's effects and replaying it (Planning) | [#2042](https://github.com/nanyx-lang/nanyx/issues/2042) | |
 | Stepping backwards (Planning) | [#2043](https://github.com/nanyx-lang/nanyx/issues/2043) | #2041, #2042 |
