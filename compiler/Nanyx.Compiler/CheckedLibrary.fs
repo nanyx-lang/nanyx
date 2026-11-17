@@ -5,17 +5,19 @@ open System.IO
 open System.Security.Cryptography
 open System.Text
 
+/// What checking a module gave: the module, or the phase it stopped at and why.
+type internal CheckedResult = Result<CheckedModule, CompilationPhase * Diagnostic list>
+
 /// A standard-library module as an import of it checks it, with the modules it imports, all the way down, each by its
 /// `originKey`: what `Compiler.typecheckImport` keeps of it for the rest of the process.
-type internal CheckedLibraryModule =
-    Result<CheckedModule, CompilationPhase * Diagnostic list> * (string * Result<CheckedModule, CompilationPhase * Diagnostic list>) list
+type internal CheckedLibraryModule = CheckedResult * (string * CheckedResult) list
 
-/// One module in the checked library: its `originKey`, the hash of the source it was checked from, and what the check
-/// gave.
+/// One module in the checked library: its `originKey`, the hash of the source it was checked from, and the keys of the
+/// modules it imports, all the way down.
 type internal CheckedLibraryEntry =
     { Key: string
       SourceHash: string
-      Checked: CheckedLibraryModule }
+      Imports: string list }
 
 /// A module of a package the compiler ships, as an import of it checks it: what `checkedSourceFiles` in `Compiler`
 /// keeps of a source file's module.
@@ -26,14 +28,22 @@ type internal CheckedShippedModule =
       Read: (string * string) list
       Module: CheckedModule
       /// The modules it imports, all the way down.
-      Imports: (string * Result<CheckedModule, CompilationPhase * Diagnostic list>) list }
+      Imports: (string * CheckedResult) list }
 
-/// The checked library as it is written: the hash of every file of the standard library it was checked from, its
-/// modules, and the modules of the packages the compiler ships.
+/// A module of a shipped package as the file has it: its key, the files its check read, and the keys of the modules it
+/// imports, all the way down.
+type internal CheckedShippedEntry =
+    { Key: string
+      Read: (string * string) list
+      Imports: string list }
+
+/// The checked library as it is written: its modules and the modules of the packages the compiler ships, each with the
+/// keys of what it imports, and what checking each of them and of their imports gave, by key, each read only when it is
+/// first asked for.
 type internal CheckedLibraryFile =
-    { LibraryHash: string
-      Modules: CheckedLibraryEntry list
-      Shipped: CheckedShippedModule list }
+    { Modules: CheckedLibraryEntry list
+      Shipped: CheckedShippedEntry list
+      Checked: Map<string, Lazy<CheckedResult>> }
 
 /// The standard library checked once, when the compiler is built, so that a compile does not check the prelude and the
 /// modules it imports again (#837), with the modules of the packages the compiler ships, which a loose script imports
@@ -42,11 +52,14 @@ type internal CheckedLibraryFile =
 /// beside it, and the published `nanyx` too (see `compiler/CheckedLibrary.targets`). A process reads it the first time
 /// it imports a library module.
 ///
-/// The file is used only where it is what checking the module would give: it is read only by a compiler whose types
-/// are written as those of the compiler that wrote it (`BinaryData.schema`), only while every file of the library reads
-/// as it did then, a library module only for the source it was checked from, and a shipped package's module only while
-/// every file its check read reads the same. Any other source, as a development build's changed library or the
-/// editor's unsaved prelude, is checked as before.
+/// The file is used only where it is what checking the module would give: it is read only by the build of the compiler
+/// that wrote it (`build`, which the library's files are embedded in, so they read as they did then), a library module
+/// only for the source it was checked from, and a shipped package's module only while every file its check read reads
+/// the same. Any other source, as the editor's unsaved prelude, is checked as before.
+///
+/// Each module is written once, in a part of its own (see `BinaryData`): a process reads the list of modules, and then
+/// only the modules it imports, the first time it does (#1852). A module that refers to another module's types holds a
+/// copy of them, since no part refers into another.
 ///
 /// A shipped package's files are where the compiler is (`ShippedPackages.directory`), which is not where the writer
 /// was, so the file names a path in that directory relative to it, and a path read back is in this compiler's.
@@ -66,17 +79,9 @@ module internal CheckedLibrary =
 
     let private hash (text: string) = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes text))
 
-    /// The hash of every file of the standard library, as this compiler embeds it.
-    let libraryHash =
-        lazy
-            (StandardLibrary.preludeModuleName :: StandardLibrary.moduleNames
-             |> List.collect StandardLibrary.moduleSources
-             |> List.sortBy fst
-             |> List.map (fun (name, source) -> name + "\n" + source)
-             |> String.concat "\n\u0000"
-             |> hash)
-
-    let private schema = lazy (BinaryData.schema typeof<CheckedLibraryFile>)
+    /// This build of the compiler: the id of its assembly, which changes when any of its code or the library files it
+    /// embeds does.
+    let build = typeof<CheckedLibraryFile>.Assembly.ManifestModule.ModuleVersionId.ToString()
 
     /// What a path in the shipped packages' directory starts with in the file, in place of the directory.
     let private shippedMark = "\u0000packages/"
@@ -99,38 +104,48 @@ module internal CheckedLibrary =
 
     /// Writes the library's `modules` and the shipped packages' `shipped` to the file at `path`.
     let write (path: string) (modules: (string * string * CheckedLibraryModule) list) (shipped: CheckedShippedModule list) =
+        let checkedResults =
+            [ for _, _, (_, imports) in modules do
+                  yield! imports
+              for key, _, (own, _) in modules do
+                  yield key, own
+              for entry in shipped do
+                  yield! entry.Imports
+                  yield entry.Key, Ok entry.Module ]
+            |> List.fold (fun checkedResults (key, result) -> if Map.containsKey key checkedResults then checkedResults else checkedResults |> Map.add key (lazy result)) Map.empty
+        let file =
+            { Modules =
+                modules
+                |> List.sortBy (fun (key, _, _) -> key)
+                |> List.map (fun (key, source, (_, imports)) -> { CheckedLibraryEntry.Key = key; SourceHash = hash source; Imports = List.map fst imports })
+              Shipped =
+                shipped
+                |> List.sortBy _.Key
+                |> List.map (fun entry -> { CheckedShippedEntry.Key = entry.Key; Read = entry.Read; Imports = List.map fst entry.Imports })
+              Checked = checkedResults }
         use stream = File.Create path
         use writer = new BinaryWriter(stream)
         writer.Write magic
-        writer.Write schema.Value
-        let file =
-            { LibraryHash = libraryHash.Value
-              Modules =
-                modules
-                |> List.sortBy (fun (key, _, _) -> key)
-                |> List.map (fun (key, source, checkedModule) -> { Key = key; SourceHash = hash source; Checked = checkedModule })
-              Shipped = shipped |> List.sortBy _.Key }
+        writer.Write build
         BinaryData.write writer relative typeof<CheckedLibraryFile> file
 
     /// Where the compiler finds the checked library: beside it.
     let path = Path.Combine(AppContext.BaseDirectory, fileName)
 
-    /// The checked library at `path`, if it is there, this compiler can read it, and it was checked from the library
-    /// whose files hash to `library`.
-    let read (path: string) (library: string) : CheckedLibraryFile option =
+    /// The checked library at `path`, if it is there and the build of the compiler `writtenBy` wrote it. Its modules are
+    /// read from the file's bytes when they are first asked for.
+    let read (path: string) (writtenBy: string) : CheckedLibraryFile option =
         if not (File.Exists path) then
             None
         else
-            use stream = new BufferedStream(File.OpenRead path, 1 <<< 16)
-            use reader = new BinaryReader(stream)
-            if reader.ReadString() <> magic || reader.ReadString() <> schema.Value then
+            let bytes = File.ReadAllBytes path
+            use reader = new BinaryReader(new MemoryStream(bytes, false))
+            if reader.ReadString() <> magic || reader.ReadString() <> writtenBy then
                 None
             else
-                match BinaryData.read reader absolute typeof<CheckedLibraryFile> :?> CheckedLibraryFile with
-                | file when file.LibraryHash = library -> Some file
-                | _ -> None
+                Some (BinaryData.read bytes (int reader.BaseStream.Position) absolute typeof<CheckedLibraryFile> :?> CheckedLibraryFile)
 
-    let private file = lazy (if reading then read path libraryHash.Value else None)
+    let private file = lazy (if reading then read path build else None)
 
     let private modules =
         lazy (file.Value |> Option.map (fun file -> file.Modules |> List.map (fun entry -> entry.Key, entry) |> Map.ofList) |> Option.defaultValue Map.empty)
@@ -138,11 +153,17 @@ module internal CheckedLibrary =
     let private shipped =
         lazy (file.Value |> Option.map (fun file -> file.Shipped |> List.map (fun entry -> entry.Key, entry) |> Map.ofList) |> Option.defaultValue Map.empty)
 
+    /// What checking the module `key` gave, as the file has it, read now if it was not before.
+    let private checkedResult (key: string) = file.Value.Value.Checked[key].Value
+
     /// The library module `key` (its `originKey`) as the checked library has it, if the library was checked from
     /// `source`.
     let tryFind (key: string) (source: string) : CheckedLibraryModule option =
         if reading then
-            modules.Value |> Map.tryFind key |> Option.filter (fun entry -> entry.SourceHash = hash source) |> Option.map _.Checked
+            modules.Value
+            |> Map.tryFind key
+            |> Option.filter (fun entry -> entry.SourceHash = hash source)
+            |> Option.map (fun entry -> checkedResult key, entry.Imports |> List.map (fun import -> import, checkedResult import))
         else
             None
 
@@ -151,4 +172,14 @@ module internal CheckedLibrary =
     let tryFindShipped (key: string) (readFile: string -> string) : CheckedShippedModule option =
         let readsTheSame (file: string, text: string) =
             try readFile file = text with _ -> false
-        if reading then shipped.Value |> Map.tryFind key |> Option.filter (fun entry -> List.forall readsTheSame entry.Read) else None
+        if reading then
+            shipped.Value
+            |> Map.tryFind key
+            |> Option.filter (fun entry -> List.forall readsTheSame entry.Read)
+            |> Option.bind (fun entry ->
+                match checkedResult key with
+                | Ok checkedModule ->
+                    Some { CheckedShippedModule.Key = key; Read = entry.Read; Module = checkedModule; Imports = entry.Imports |> List.map (fun import -> import, checkedResult import) }
+                | Error _ -> None)
+        else
+            None

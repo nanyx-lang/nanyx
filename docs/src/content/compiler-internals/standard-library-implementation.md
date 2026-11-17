@@ -38,12 +38,20 @@ test projects import, copies the file beside them and into the published `nanyx`
 that builds, without the program's runtime or the publish properties that would pick one, and makes it a reference
 of the program while restoring, so that building or publishing one project alone restores it
 ([#1656](https://github.com/nanyx-lang/nanyx/issues/1656)). Its syntax nodes and symbols have ids from
-`CheckedLibrary.firstId` (2⁵⁶) on, which no process reaches, so they never meet a process's own. A process reads the
-file the first time it imports a library module, about 0.2 s, and a module read from it is reported as reused,
-`nanyx/prelude (cached)` under `--timings`. The file is used only where it is what checking would give: by a compiler
-whose types are written as the writer's were (`BinaryData.schema`), while every file of the library hashes as it did
-then, and for a module only with the source it was checked from. Anything else, as a development build whose library
-changed after the file was written, is checked as before.
+`CheckedLibrary.firstId` (2⁵⁶) on, which no process reaches, so they never meet a process's own. A module read from it
+is reported as reused, `nanyx/prelude (cached)` under `--timings`. The file is used only where it is what checking
+would give: by the build of the compiler that wrote it (`CheckedLibrary.build`, the id of the compiler's assembly, which
+changes with its code and with the library files it embeds), and for a module only with the source it was checked
+from. Anything else, as the editor's unsaved prelude, is checked as before.
+
+The file is read on demand ([#1852](https://github.com/nanyx-lang/nanyx/issues/1852)). It holds a list of the modules,
+each with the hash of its source and the keys of what it imports, and then each module checked, once, in a part of its
+own: `BinaryData` writes a `Lazy` as a part that a read skips, and reads it the first time the `Lazy` is asked for, from
+the file's bytes, which it keeps. A part may refer back to what was written before it, but nothing refers into a part,
+so a module that refers to another's types holds a copy of them, and the file is larger (7.4 MB against 4.7 MB). A
+process reads the list the first time it imports a library module, in about 20 ms and 8 MB against 330 ms and 245 MB
+when it read every module, and then only the modules it imports: `def x = 1` reads four, in about 185 ms and 85 MB,
+most of it the prelude. A one-line `nanyx check` takes 1.05 to 1.08 s against 1.11 s (Release, medians of 7).
 
 Each standard-library module the file does not have is checked once per process, the first time a compile imports
 it, and every later compile reuses the result (`checkedStandardLibrary` in `Nanyx.Compiler/Library.fs`, keyed by the
