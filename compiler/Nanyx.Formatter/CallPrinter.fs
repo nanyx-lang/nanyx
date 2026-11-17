@@ -44,6 +44,35 @@ type CallPrinter(indentSize: int, sourceText: SourceText, placement: CommentPlac
         else
             bracketed "[" "]" (List.mapi entryDoc entries)
 
+    /// A table literal, the records of a list written as a header of their fields' names and a row of values for each,
+    /// with each column's `|` lined up:
+    ///
+    ///   [| name     | age |
+    ///    | "Alex"   | 22  |
+    ///    | "Taylor" | 30  |]
+    ///
+    /// A cell is printed on one line. With a comment among the rows, the table is printed as the list it stands for,
+    /// one record per line, so that the comments have lines to go on.
+    and tableDoc (span: SourceSpan) (records: Expression list) : Doc =
+        let fieldsOf (record: Expression) =
+            match record.Kind with
+            | RecordExpr fields -> fields |> List.choose (function NamedField(n, value) -> Some (n, value) | PositionalField _ -> None)
+            | _ -> []
+        let rows = records |> List.map fieldsOf
+        if hasCommentsIn span.Start span.End then
+            listDoc span [ Choice1Of2 records ]
+        else
+            let header = List.head rows |> List.map (fst >> Names.written)
+            let cells = rows |> List.map (List.map (fun (_, value) -> (Doc.render 10000 (expression false value)).TrimEnd '\n'))
+            let widths =
+                header
+                |> List.mapi (fun column name -> (name :: (cells |> List.map (List.item column))) |> List.map String.length |> List.max)
+            let line (opening: string) (values: string list) =
+                let padded = List.map2 (fun (value: string) width -> value.PadRight width) values widths
+                text (opening + " " + String.concat " | " padded + " |")
+            let rowLines = cells |> List.map (fun values -> cat [ hard; line "|" values ])
+            cat [ line "[|" header; Doc.nest 1 (cat rowLines); text "]" ]
+
     /// Items between brackets, on one line separated by commas if they fit, or else one per line, separated by line
     /// breaks, with the closing bracket on a line of its own (as a record's fields or a list's items may be written):
     ///
@@ -151,6 +180,8 @@ type CallPrinter(indentSize: int, sourceText: SourceText, placement: CommentPlac
         | _ -> cat [ text "("; commaJoin (List.map (expression true) args); text ")" ]
 
     member _.ListDoc (span: SourceSpan) (segments: Choice<Expression list, Expression> list) : Doc = listDoc span segments
+
+    member _.TableDoc (span: SourceSpan) (records: Expression list) : Doc = tableDoc span records
 
     member _.MapDoc (span: SourceSpan) (entries: (Expression * Expression) list) : Doc = mapDoc span entries
 

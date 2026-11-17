@@ -38,6 +38,7 @@
     <Compile Include="Features\Loops\WhileLoopTests.fs" />
     <Compile Include="Features\Loops\LoopBodyTests.fs" />
     <Compile Include="Features\Maps\MapLiteralTests.fs" />
+    <Compile Include="Features\Tables\TableLiteralTests.fs" />
     <Compile Include="Features\Memory\MutationTests.fs" />
     <Compile Include="Features\Matches\MatchTests.fs" />
     <Compile Include="Features\Matches\AndPatternTests.fs" />

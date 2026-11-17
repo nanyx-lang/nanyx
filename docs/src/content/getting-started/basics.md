@@ -260,9 +260,9 @@ Nanyx also supports tags, ranges, and records as core value forms. See [Tags](..
 
 # Table literals
 
-Table literals are a shorthand for lists of records with the same shape:
+Table literals are a shorthand for lists of records with the same shape. The first row names the fields, and each row after it is one record:
 
-```nanyx skip=#1255
+```nanyx
 def namesAndAges =
   [| name     | age |
    | "Alex"   | 22  |
@@ -270,6 +270,8 @@ def namesAndAges =
    | "Sam"    | 28  |
    | "Morgan" | 45  |]
 ```
+
+This is the list `[(name = "Alex", age = 22), (name = "Taylor", age = 30), ...]`, a `list(name: string, age: int)`. Each row has a value for each field, written one row per line; a cell can be any expression. Where a def's type asks for another collection, such as an `Array`, the table builds that instead, as any [collection literal](../tour/collections#syntax) does. The formatter lines up each column's `|`.
 
 # Conditionals
 

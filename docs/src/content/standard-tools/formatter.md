@@ -75,7 +75,8 @@ A file that does not parse is left as it is and its syntax error is reported. Th
 The formatter uses two spaces of indent and a line width of 100, unless the package [configures](#configuration)
 others. Indent is always measured from the start of the line, never from a keyword's column. It puts one space around
 binary operators and `->`, after commas, and inside a lambda's braces: `{ a, b -> a + b }`. It aligns nothing but the
-`|`s of a match's cases, so that one edit never changes the lines around it.
+`|`s of a match's cases and the columns of a [table literal](../getting-started/basics#table-literals), so that one edit never changes the lines around it,
+but for a table, whose columns are the point of writing one.
 
 It never renames anything or reorders anything but imports. It changes whitespace and where lines break, puts back
 the brackets precedence needs and drops those it doesn't, and adds or removes blank lines.

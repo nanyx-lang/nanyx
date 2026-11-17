@@ -165,6 +165,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | IfExpr _ -> ifDoc e
         | TupleExpr items -> fieldsDoc e.Span.Start e.Span.End (List.map PositionalField items)
         | RecordExpr fields -> fieldsDoc e.Span.Start e.Span.End fields
+        | ListExpr items when sourceText.StartsWith e.Span "[|" -> tableDoc e.Span items
         | ListExpr items -> listDoc e.Span [ Choice1Of2 items ]
         | TagExpr(n, None) -> text ("#" + n)
         | TagExpr(n, Some (Kind UnitExpr)) -> text $"#{n}()"
@@ -216,6 +217,8 @@ let format (options: Options) (parsed: SourceModule) : string =
     and calls () = CallPrinter(options.IndentSize, sourceText, placement, fun isLast e -> expr { full with Tail = isLast } e)
 
     and listDoc (span: SourceSpan) (segments: Choice<Expression list, Expression> list) : Doc = (calls ()).ListDoc span segments
+
+    and tableDoc (span: SourceSpan) (records: Expression list) : Doc = (calls ()).TableDoc span records
 
     and mapDoc (span: SourceSpan) (entries: (Expression * Expression) list) : Doc = (calls ()).MapDoc span entries
 

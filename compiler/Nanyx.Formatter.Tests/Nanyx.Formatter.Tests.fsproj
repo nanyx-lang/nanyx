@@ -11,6 +11,7 @@
     <Compile Include="Features\Blocks\BlockTests.fs" />
     <Compile Include="Features\Blocks\SemicolonTests.fs" />
     <Compile Include="Features\Collections\CollectionTests.fs" />
+    <Compile Include="Features\Collections\TableTests.fs" />
     <Compile Include="Features\Comments\DocCommentTests.fs" />
     <Compile Include="Features\CustomPatterns\CustomPatternTests.fs" />
     <Compile Include="Features\Doc\DocTests.fs" />

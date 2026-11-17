@@ -58,6 +58,11 @@ construct are written once, as documents, and the printer decides where to break
   has no span of its own: `writtenStringText` finds it in the source after the opening quote or the hole before it,
   and keeps it if `StringEscapes.decode` gives back the parsed text.
 - Identifiers, operators and keywords are printed as written; the formatter never renames.
+- A table literal is parsed as the list of records it stands for, so the formatter tells it from one by its source
+  starting `[|` (`CallPrinter.tableDoc`). It prints each cell flat, pads each column to its widest cell, and indents the
+  rows one column in from the line the table starts on. With a comment among the rows, it prints the list instead, one
+  record per line, as the rows give a comment no line of its own to go on. A table stays where it was written: moving
+  one from a def's line to the next would make the def's value a block.
 - Whether a construct spans more than one line, which decides the blank lines around it, depends on its layout, which
   depends on where it starts, so the renderer decides it (`Doc.Stack`): a construct is multi-line if it always breaks,
   or if it does not fit flat in the width left at its indent.
@@ -157,7 +162,8 @@ On 2026-11-16:
   line's start and contradicted the typed-def lambda rule decided on 2026-11-07, so it now shows the cases on the
   lines after the `{`, as the formatter writes them.
 - **Alignment.** None beyond the `|`s of a match's cases: aligning `=` or `->` across lines makes one edit change many
-  lines in a diff ([#856](https://github.com/nanyx-lang/nanyx/issues/856)).
+  lines in a diff ([#856](https://github.com/nanyx-lang/nanyx/issues/856)). On 2026-11-17 a table literal's columns
+  became the one exception: a table is written to be read as a grid ([#1255](https://github.com/nanyx-lang/nanyx/issues/1255)).
 - **Highlighting differences in the editor** as described under [The editor](#the-editor)
   ([#705](https://github.com/nanyx-lang/nanyx/issues/705)).
 - **A field named by a number is positional,** so `` (`0`: a, x: int) `` is printed `(a, x: int)`; the formatter
