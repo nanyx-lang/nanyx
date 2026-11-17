@@ -459,7 +459,7 @@ let ``A proc block that returns a value on one path and ends without return on a
     let result = Compiler.compile "def c = { n -> proc {\n  if n > 2 then return n\n} }"
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
-    Assert.Contains("() vs int", diagnostic.Message)
+    Assert.Contains("'()' vs 'int'", diagnostic.Message)
 [<Fact>]
 let ``An if or match keeps every tag of a branch whose type is an open union`` () =
     // A branch that is `#nothing | r` used to be made equal to a `#some(...)` one, which dropped `#nothing` (#433).

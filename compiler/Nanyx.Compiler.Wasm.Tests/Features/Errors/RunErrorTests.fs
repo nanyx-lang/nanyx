@@ -325,7 +325,7 @@ println(show(mapError(int.fromString("zz"), { #invalidInt -> #bad("bad") })))
     let outcome = runSource source
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal("some 12\nbad\n", outcome.StandardOutput)
-    Assert.Contains(":1:5: error NYX0202: Annotation of 'broken' is more general than the inferred type", outcome.StandardError)
+    Assert.Contains(":1:5: error NYX0202: The annotation of 'broken' is more general than its inferred type", outcome.StandardError)
     Assert.Contains("Running with 1 deferred error", outcome.StandardError)
 
 [<Fact>]

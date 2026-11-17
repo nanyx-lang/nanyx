@@ -33,7 +33,7 @@ let ``A sized integer is not an int`` () =
     let result = Compiler.compile source
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
-    Assert.Equal("Type mismatch: I32 vs int.", diagnostic.Message)
+    Assert.Equal("Type mismatch: 'I32' vs 'int'", diagnostic.Message)
 
 [<Fact>]
 let ``A sized integer has the compiler's own Num`` () =

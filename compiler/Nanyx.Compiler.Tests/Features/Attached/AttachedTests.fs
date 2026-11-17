@@ -303,17 +303,17 @@ let ``A dot on a value does not reach a definition attached to its type, and the
 def s = "nanyx"
 def b = s.isEmpty""")
     Assert.Equal(DiagnosticCodes.UnknownMember.Code, code)
-    Assert.Equal("'string' has no property 'isEmpty'. 'string.isEmpty' is attached to its type: call it with a pipe, as in `s \\isEmpty`", message)
+    Assert.Equal("'string' has no property 'isEmpty', but 'string.isEmpty' is attached to its type: call it with a pipe, as in `s \\isEmpty`", message)
     // Called, it reads as a function named `s.startsWith`.
     let code, message, _ = onlyDiagnostic (withFinalNewline """import nanyx/text
 def s = "nanyx"
 def b = s.startsWith("nan")""")
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
-    Assert.Equal("'s' is a value, so 's.startsWith' is not a function's name. 'string.startsWith' is attached to its type: call it with a pipe, as in `s \\startsWith(...)`", message)
+    Assert.Equal("'s' is a value, so 's.startsWith' is not a function's name, but 'string.startsWith' is attached to its type: call it with a pipe, as in `s \\startsWith(...)`", message)
     // A record type with an attached definition and no field of that name.
     let _, message, _ =
         onlyDiagnostic "type Point = (x: int, y: int)\ndef Point.length = { p -> p.x + p.y }\ndef p = Point(x = 3, y = 4)\ndef n = p.length\n"
-    Assert.Equal("Record 'p' has no member 'length'. 'Point.length' is attached to its type: call it with a pipe, as in `p \\length`", message)
+    Assert.Equal("Record 'p' has no member 'length', but 'Point.length' is attached to its type: call it with a pipe, as in `p \\length`", message)
     // Nothing attached: the property is just missing.
     Assert.Equal((DiagnosticCodes.UnknownMember.Code, "'string' has no property 'size'", "size"), onlyDiagnostic (withFinalNewline """def s = "x"
 def n = s.size"""))

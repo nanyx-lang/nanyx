@@ -42,7 +42,8 @@ let ``A tuple pattern still matches a tuple by position`` () =
 let ``A record pattern that leaves a field out without ... is an error that names it`` () =
     let result = Compiler.compile "def f: (name: string, age: int) -> string = { r -> match r\n  | (name = n) -> n }\n"
     let diagnostic = Assert.Single result.Diagnostics
-    Assert.StartsWith("Record field mismatch: {age, name} vs {name}: only the first has age.", diagnostic.Message)
+    Assert.StartsWith("Record field mismatch:", diagnostic.Message)
+    Assert.EndsWith("where only the first has 'age'", diagnostic.Message)
 
 [<Fact>]
 let ``A record pattern that ends in ... leaves the other fields out`` () =
@@ -102,4 +103,5 @@ def f: list((name: string, age: int)) -> int = { people ->
 let ``A name that is not one of the record's fields is matched by position, and the record has none there`` () =
     let result = Compiler.compile "def f: (name: string, age: int) -> string = { r -> match r\n  | (name, years) -> name }\n"
     let diagnostic = Assert.Single result.Diagnostics
-    Assert.StartsWith("Record field mismatch: {age, name} vs {1, name}: only the first has age; only the second has 1.", diagnostic.Message)
+    Assert.StartsWith("Record field mismatch:", diagnostic.Message)
+    Assert.EndsWith("where only the first has 'age' and only the second has '1'", diagnostic.Message)

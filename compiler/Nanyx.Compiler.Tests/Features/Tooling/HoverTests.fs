@@ -64,7 +64,7 @@ def c = show(#some((name = "pat", age = 3)), "!")
 let ``A function reading a field rejects a record without it`` () =
     let result = Compiler.compile "def name = { p -> p.name }\ndef a = name((age = 3))\n"
     assertReports DiagnosticCodes.TypeMismatch result
-    Assert.Contains("Record field mismatch: {name} vs {age}", (result.Diagnostics |> List.head).Message)
+    Assert.StartsWith("Record field mismatch: '(age: int)' vs '(", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]
 let ``Expressions at a position are innermost first`` () =

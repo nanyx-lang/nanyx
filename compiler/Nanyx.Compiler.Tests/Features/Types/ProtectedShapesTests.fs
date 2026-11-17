@@ -30,7 +30,7 @@ let ``A record of a protected type's shape outside its module says why it isn't 
     let result = Compiler.compile source
     Assert.Equal(
         (DiagnosticCodes.ProtectedShape.Code,
-         "'Point' is protected: only the module 'Points' makes values of it, so a record of its shape isn't a 'Point' here. Make one with 'Point.new'.",
+         "'Point' is protected, so only the module 'Points' makes values of it, and a record of its shape isn't a 'Point' here: make one with 'Point.new'",
          "(x = 3, y = 4)"),
         onlyDiagnosticIn source result)
     // `Point.new` gives a `#some(Point)`, not a `Point`, so making it with that is not offered.
@@ -41,7 +41,7 @@ let ``A record of a private type's shape outside its module says the type is pri
     let source = points "private" checkedNew "def p: Point = (x = 3, y = 4)"
     Assert.Equal(
         (DiagnosticCodes.ProtectedShape.Code,
-         "'Point' is private: only the module 'Points' makes values of it, so a record of its shape isn't a 'Point' here. Make one with 'Point.new'.",
+         "'Point' is private, so only the module 'Points' makes values of it, and a record of its shape isn't a 'Point' here: make one with 'Point.new'",
          "(x = 3, y = 4)"),
         onlyDiagnostic source)
 
@@ -50,7 +50,7 @@ let ``With no attached definition that makes one, the error says only the module
     let source = points "protected" "" "def p: Point = (x = 3, y = 4)"
     Assert.Equal(
         (DiagnosticCodes.ProtectedShape.Code,
-         "'Point' is protected: only the module 'Points' makes values of it, so a record of its shape isn't a 'Point' here.",
+         "'Point' is protected, so only the module 'Points' makes values of it, and a record of its shape isn't a 'Point' here",
          "(x = 3, y = 4)"),
         onlyDiagnostic source)
 
@@ -66,7 +66,7 @@ let ``Several ways to make one are each named`` () =
     let source = points "protected" makers "def p: Point = (x = 3, y = 4)"
     let code, message, _ = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.ProtectedShape.Code, code)
-    Assert.EndsWith("Make one with 'Point.at', 'Point.onAxis' or 'Point.origin'.", message)
+    Assert.EndsWith(": make one with 'Point.at', 'Point.onAxis' or 'Point.origin'", message)
 
 [<Fact>]
 let ``The one way to make one that takes the fields is offered as a fix`` () =
@@ -101,6 +101,6 @@ let ``Constructing the type outside its module names the ways to make one`` () =
     let source = points "protected" checkedNew "def p = Point(x = 3, y = 4)"
     Assert.Equal(
         (DiagnosticCodes.NominalConstructedOutsideItsModule.Code,
-         "The protected type 'Point' can only be constructed in the module that defines it. Make one with 'Point.new'.",
+         "The protected type 'Point' can only be constructed in the module that defines it: make one with 'Point.new'",
          "Point"),
         onlyDiagnostic source)

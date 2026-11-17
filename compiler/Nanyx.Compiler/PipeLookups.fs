@@ -56,7 +56,7 @@ let private notAttached (env: TypeEnv) (state: InferState) (isTypeName: string -
             |> Seq.filter (fun key -> key.EndsWith("." + attachedName))
             |> Seq.sort
             |> Seq.tryHead
-            |> Option.map (fun qualified -> $". '{attachedName}' is available as '{qualified}'"))
+            |> Option.map (fun qualified -> $", but '{attachedName}' is available as '{qualified}'"))
     let inStandardLibrary () =
         attachedNames
         |> List.tryPick (fun attachedName ->
@@ -68,7 +68,7 @@ let private notAttached (env: TypeEnv) (state: InferState) (isTypeName: string -
         | [] -> None
         | others ->
             let verb = if others.Length = 1 then "is" else "are"
-            Some $". Only {Diagnostics.listed others} {verb} in scope"
+            Some $", but {Diagnostics.listed others} {verb} in scope"
     let hint =
         aliased ()
         |> Option.orElseWith inStandardLibrary
@@ -121,7 +121,7 @@ let private ambiguous (env: TypeEnv) (state: InferState) (lookup: Lookup) : Diag
     | Some (symbol, candidates), Some scheme when scheme.Symbol = Some symbol ->
         let modules = candidates |> List.map (fun candidate -> $"'{candidate.Substring(0, candidate.Length - called.Length - 1)}'")
         Some (Diagnostics.at DiagnosticCodes.AmbiguousAttachedFunction lookup.At
-                $"'{lookup.Written}' is ambiguous for '{Unifier.tyToString lookup.PipedType}': '{called}' is defined in {Diagnostics.listed modules}; import all but one of them with 'as'")
+                $"'{lookup.Written}' is ambiguous for '{Unifier.tyToString lookup.PipedType}': '{called}' is defined in {Diagnostics.listed modules}: import all but one of them with `as`")
     | _ -> None
 
 /// `diagnostics`, the errors of the call a pipe made, with the error for a name the call found nothing for, or more

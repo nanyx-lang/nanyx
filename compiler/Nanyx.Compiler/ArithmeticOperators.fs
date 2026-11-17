@@ -132,7 +132,7 @@ module internal ArithmeticOperators =
             | FloatLit x ->
                 let text = x.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
                 let text = if text.Contains '.' || text.Contains 'E' then text else text + ".0"
-                Some (Wrong (DiagnosticCodes.TypeMismatch, $"'{text}' cannot be an '{tyText}': '{tyText}' may be an integer type. Take the value as a parameter", []))
+                Some (Wrong (DiagnosticCodes.TypeMismatch, $"'{text}' cannot be an '{tyText}', which may be an integer type: take the value as a parameter", []))
             | _ -> None
         | _ -> None
 

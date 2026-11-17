@@ -23,5 +23,5 @@ let internal check (statements: Statement list) : Diagnostic list =
     | None -> []
     | Some last ->
         let message =
-            $"This block ends with {describe last.Kind}, so it has no value to give back. End it with the expression whose value it gives back, or with () if it gives back nothing."
+            $"This block ends with {describe last.Kind}, so it has no value to give back: end it with the expression whose value it gives back, or with `()` if it gives back nothing"
         [ Diagnostics.at DiagnosticCodes.BlockWithoutResult last.Span message ]

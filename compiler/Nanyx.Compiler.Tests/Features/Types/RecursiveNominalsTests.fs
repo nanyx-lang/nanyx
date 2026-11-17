@@ -122,6 +122,6 @@ def pullRest: [Console] ([Console] Stream(int)) -> int = { s ->
     // given for the other. The mismatch is the two nominal types', not the contexts they carry (#1677).
     Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, diagnostic.Code)
     Assert.Equal(
-        "Context mismatch: '[Console] Stream(int)' and 'Stream(int)' must be the same type, but only the first carries 'Console'. Write the same contexts in front of both, or a context variable for any.",
+        "Context mismatch: '[Console] Stream(int)' vs 'Stream(int)', where only the first carries 'Console': write the same contexts in front of both, or a context variable for any",
         diagnostic.Message
     )
