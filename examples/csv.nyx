@@ -1,8 +1,8 @@
 module csv
 
 import (
-  nanyx/io
   nanyx/math
+  nanyx/text
 )
 
 type Stock = (
@@ -15,49 +15,48 @@ type Stock = (
 
 -- A table literal is a list of records with the same shape
 def stocks: list(Stock) =
-  [| ticker | name                  | price  | change | pct     |
-   | "GOOG" | "Google, Inc."        | 505.24 | 0.47   | 0.09    |
-   | "YHOO" | "Yahoo! Inc."         | 27.38  | 0.33   | 1.22    |
-   | "CNET" | "CNET Networks, Inc." | 8.62   | -0.13  | -1.4901 |]
+  [| ticker | name            | price  | change | pct     |
+   | "GOOG" | "Google Inc."   | 505.24 | 0.47   | 0.09    |
+   | "YHOO" | "Yahoo! Inc."   | 27.38  | 0.33   | 1.22    |
+   | "CNET" | "CNET Networks" | 8.62   | -0.13  | -1.4901 |]
 
 def quote: string -> string = { s ->
-  '"' ++ s ++ '"'
+  "\"" ++ s ++ "\""
+}
+
+def unquote: string -> string = { s ->
+  s \string.removePrefix("\"") \string.removeSuffix("\"")
 }
 
 def toCsvLine: Stock -> string = { s ->
   [s.ticker, quote(s.name), "{s.price}", "{s.change}", "{s.pct}"] \string.join(",")
 }
 
-def fromCsvLine: string -> #some(Stock) | #error(#malformed) | #invalidFloat = { line ->
-  match line \split(on = ",")
-    | [ticker, name, price, change, pct] -> proc {
-      return Stock(
-        ticker = ticker
-        name = name \trim('"')
-        price = (try float.fromString(price))
-        change = (try float.fromString(change))
-        pct = try float.fromString(pct)
-      )
-    }
-    | _ -> #error(#malformed)
+def fromCsvLine: string -> #some(Stock) | #malformed = { line ->
+  match line \string.split(on = ",")
+    | [ticker, name, price, change, pct] ->
+      match (float.fromString(price), float.fromString(change), float.fromString(pct))
+        | (#some(price), #some(change), #some(pct)) ->
+          #some(
+            Stock(ticker = ticker, name = unquote(name), price = price, change = change, pct = pct)
+          )
+        | _ -> #malformed
+    | _ -> #malformed
 }
 
-def statusLabels = [-1 => "down", 0 => "unchanged", 1 => "up"]
+def statusLabels = [-1.0 => "down", 0.0 => "unchanged", 1.0 => "up"]
 
 @entry
-def main: [Console, FileSystem] () -> () = {
-  def path = "stocks.csv"
-
+def main = {
   -- Write the stocks as comma-separated values
-  File.writeLines(path, stocks \map(toCsvLine))
+  def csv = stocks \map(toCsvLine) \string.join("\n")
+  println(csv)
 
   -- Read them back and print a status line for each
-  for File.readLines(path) | line ->
+  for csv \string.lines | line ->
     match fromCsvLine(line)
       | #some(stock) ->
-        def sign = Math.sign(stock.change)
-        def #some(status) = statusLabels(sign) except #notFound -> #some("unknown")
-        println("{stock.name} is {status} {stock.pct}")
-      | _ ->
-        println("Skipping malformed line: {line}")
+        def #some(status) = statusLabels(sign(stock.change)) except #notFound -> #some("unknown")
+        println("{stock.name} is {status} {stock.pct}%")
+      | #malformed -> println("Skipping malformed line: {line}")
 }
