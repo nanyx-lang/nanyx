@@ -166,6 +166,7 @@
     <Compile Include="Features\StdLib\SequenceTests.fs" />
     <Compile Include="Features\StdLib\StackSafetyTests.fs" />
     <Compile Include="Features\StdLib\StandardLibraryCacheTests.fs" />
+    <Compile Include="Features\StdLib\ReduceTests.fs" />
     <Compile Include="Features\Strings\InterpolationTests.fs" />
     <Compile Include="Features\Refactorings\CallAndPipeTests.fs" />
     <Compile Include="Features\Refactorings\InlineTests.fs" />

@@ -49,6 +49,14 @@ export def MArray.toList: [Memory] MArray(a) -> list(a) = { MArray(xs) ->
   __nanyx_marray_to_list(xs)
 }
 
+--| The elements of `xs` combined with `f`, in order, starting from the element type's [`Default`]:
+  an `MArray` of `1`, `2` and `3` reduced with `{ + }` is `6`. An empty one gives the default, so
+  `reduce` never fails, unlike a `reduce` that starts from the first element. To start from another
+  value, use [`list.fold`].
+export def MArray.reduce: [Memory, Default(a), c] MArray(a), ([c] a, a -> a) -> a = { xs, f ->
+  list.reduce(MArray.toList(xs), f)
+}
+
 --| How many elements `xs` holds.
 export def MArray.length: [Memory] MArray(a) -> int = { MArray(xs) ->
   __nanyx_marray_length(xs)

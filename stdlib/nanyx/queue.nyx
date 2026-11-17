@@ -76,6 +76,14 @@ export def Queue.toList: Queue(a) -> list(a) = { queue ->
   queue.front ++ list.reverse(queue.back)
 }
 
+--| The elements of `q`, from the front, combined with `f`, in order, starting from the element
+  type's [`Default`]: a queue of `1`, `2` and `3` reduced with `{ + }` is `6`. An empty one gives
+  the default, so `reduce` never fails, unlike a `reduce` that starts from the first element. To
+  start from another value, use [`list.fold`].
+export def Queue.reduce: [Default(a), c] Queue(a), ([c] a, a -> a) -> a = { q, f ->
+  list.reduce(Queue.toList(q), f)
+}
+
 --| Whether `p` and `q` hold equal values in the same order.
 export def Queue.`==`: [Eq(a)] Queue(a), Queue(a) -> bool = { p, q ->
   p.length == q.length and Queue.toList(p) == Queue.toList(q)

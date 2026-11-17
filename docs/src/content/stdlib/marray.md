@@ -94,6 +94,17 @@ def MArray.toList: [Memory] MArray(a) -> list(a)
 
 The elements of `xs` now, in order, as a list.
 
+## `MArray.reduce`
+
+```nanyx fragment
+def MArray.reduce: [Memory, Default(a), c] MArray(a), ([c] (a, a) -> a) -> a
+```
+
+The elements of `xs` combined with `f`, in order, starting from the element type's `Default`:
+an `MArray` of `1`, `2` and `3` reduced with `{ + }` is `6`. An empty one gives the default, so
+`reduce` never fails, unlike a `reduce` that starts from the first element. To start from another
+value, use [`list.fold`](prelude-lists#listfold).
+
 ## `MArray.length`
 
 ```nanyx fragment

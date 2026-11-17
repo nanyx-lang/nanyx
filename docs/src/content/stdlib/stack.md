@@ -122,4 +122,15 @@ def Stack.toString: [ToString(a)] Stack(a) -> string
 `stack` as its literal is written, the top first: `Stack[3, 2, 1]`, and `Stack[]` when it is
 empty.
 
+## `Stack.reduce`
+
+```nanyx fragment
+def Stack.reduce: [Default(a), c] Stack(a), ([c] (a, a) -> a) -> a
+```
+
+The elements of `s`, from the top, combined with `f`, in order, starting from the element type's
+`Default`: a stack of `1`, `2` and `3` reduced with `{ + }` is `6`. An empty one gives the
+default, so `reduce` never fails, unlike a `reduce` that starts from the first element. To start
+from another value, use [`list.fold`](prelude-lists#listfold).
+
 <!-- End of the generated reference. -->

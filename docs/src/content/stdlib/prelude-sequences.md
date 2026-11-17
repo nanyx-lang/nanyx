@@ -172,6 +172,17 @@ def seq.fold: [c, d] ([c] seq(a)), b, ([d] (b, a) -> b) -> b
 `step` applied to `initial` and the first element, then to that result and the second, and so
 on, pulling the whole of `s` now. Stack-safe, but an endless sequence never ends.
 
+## `seq.reduce`
+
+```nanyx fragment
+def seq.reduce: [Default(a), c, d] ([c] seq(a)), ([d] (a, a) -> a) -> a
+```
+
+The elements of `s`, pulled now, combined with `f`, in order, starting from the element type's
+`Default`: `(1..4) \seq.reduce { + }` is `10`. An empty one gives the default, so `reduce` never
+fails, unlike a `reduce` that starts from the first element. To start from another value, use
+[`seq.fold`](#seqfold).
+
 ## `seq.toList`
 
 ```nanyx fragment

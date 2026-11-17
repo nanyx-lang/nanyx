@@ -77,6 +77,14 @@ def unique: set(int) = [1, 2, 2, 3]
 
 The functions on them are on the standard library's [lists](../stdlib/prelude-lists), [maps and sets](../stdlib/prelude-maps), [array](../stdlib/array), [stack](../stdlib/stack), [queue](../stdlib/queue) and [trie](../stdlib/trie) pages. A stack, a queue and a trie are immutable, as a list is: each operation that adds or takes away gives back a new one, and the old one still holds what it held.
 
+Each collection combines its elements into one value with `fold`, from a starting value, or with `reduce`, from the element type's [`Default`](../advanced/contexts#defaulta). So `reduce` of an empty collection is that default, `0`, `""` or `[]`, rather than a failure:
+
+```nanyx
+println([1, 2, 3, 4] \fold(0) { + })
+println([1, 2, 3, 4] \reduce { + })
+println(["a", "b"] \reduce { ++ })
+```
+
 ```nanyx
 import (
   nanyx/queue

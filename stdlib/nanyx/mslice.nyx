@@ -131,6 +131,14 @@ export def MSlice.toList: [Memory] MSlice(a) -> list(a) = { s ->
   list.reverse(toListFrom(s, 0, []))
 }
 
+--| The elements of `s` combined with `f`, in order, starting from the element type's [`Default`]: a
+  slice of `1`, `2` and `3` reduced with `{ + }` is `6`. An empty one gives the default, so `reduce`
+  never fails, unlike a `reduce` that starts from the first element. To start from another value,
+  use [`list.fold`].
+export def MSlice.reduce: [Memory, Default(a), c] MSlice(a), ([c] a, a -> a) -> a = { s, f ->
+  list.reduce(MSlice.toList(s), f)
+}
+
 def toListFrom: [Memory] MSlice(a), int, list(a) -> list(a) = { s, index, acc ->
   match MSlice.at(s, index)
     | #some(element) -> toListFrom(s, index + 1, [element, ...acc])

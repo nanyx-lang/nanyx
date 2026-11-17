@@ -162,6 +162,17 @@ def map.fold: [c] map(k, v), b, ([c] (b, k, v) -> b) -> b
 
 `step` applied to `acc` and each key and value of `m` in turn, in the order of [`map.toList`](#maptolist).
 
+## `map.reduce`
+
+```nanyx fragment
+def map.reduce: [Default(v), c] map(k, v), ([c] (v, v) -> v) -> v
+```
+
+The values of `m` combined with `f`, in order, starting from the value type's `Default`: `["a"
+=> 1, "b" => 2] \map.reduce { + }` is `3`. An empty one gives the default, so `reduce` never
+fails, unlike a `reduce` that starts from the first element. To start from another value, use
+[`map.fold`](#mapfold).
+
 ## `map.map`
 
 ```nanyx fragment
@@ -285,6 +296,17 @@ def set.fold: [c] set(a), b, ([c] (b, a) -> b) -> b
 ```
 
 `step` applied to `acc` and each element of `s` in turn, in the order of [`set.toList`](#settolist).
+
+## `set.reduce`
+
+```nanyx fragment
+def set.reduce: [Default(a), c] set(a), ([c] (a, a) -> a) -> a
+```
+
+The elements of `s` combined with `f`, in order, starting from the element type's `Default`:
+`set[1, 2, 3] \set.reduce { + }` is `6`. An empty one gives the default, so `reduce` never fails,
+unlike a `reduce` that starts from the first element. To start from another value, use
+[`set.fold`](#setfold).
 
 ## `set.map`
 
