@@ -41,6 +41,17 @@ type internal Lowering =
     /// As the function that gives the elements of a value of this collection type boxed, in their canonical form (see
     /// `CoreIrLowerTypeMatch`).
     | Canonicalising of Ty
+    /// As the function that gives a value of this collection type from its elements boxed in their canonical form.
+    | Decanonicalising of Ty
+    /// As the function that makes a value of this record type from its fields' values, boxed, in its description.
+    | MakingRecord of Ty
+    /// As the `build` of the case of this name of this union, in its description.
+    | CaseBuilding of Ty * string
+    /// As the function a record description's `build`, of this type, is a closure over (see `CoreIrLowerTypeMatch`).
+    | Building of IrType
+    /// As the function that gives each field's value a record description's `build`, of this type, is given, or the
+    /// first failure.
+    | BuildingFields of IrType
     /// As the start function, from the module's top-level expressions.
     | AsStart
 

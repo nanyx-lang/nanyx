@@ -24,6 +24,10 @@ let rec freeVars (ty: Ty) : int list =
 /// or an element's type that is only known when the program runs (see `substitute`): their values are boxed (`IrBox`).
 let boxedTy = TyPrimitive "?box"
 
+/// The member of a record type's description, as the backend lays it out, that makes a value of the record from its
+/// fields' values (see `CoreIrLowerTypeMatch`). No program can name it.
+let makeMember = "__make"
+
 /// Whether `ty` holds a type whose values are boxed (see `boxedTy`).
 let rec holdsBoxed (ty: Ty) = ty = boxedTy || Ty.children ty |> List.exists holdsBoxed
 
@@ -241,9 +245,13 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     // A `Type` value is the number of the type it stands for, which the module's descriptions are kept by (see
     // `CoreIrTypeIds`).
     | TypeValues.TypeValueType _ -> IrInt
-    // A value of a description type is the record it is, with the packaged type's values boxed.
+    // A value of a description type is the record it is, with the packaged type's values boxed. A record's description
+    // also holds what makes a value of the record from its fields' values, boxed, which its `build` calls (see
+    // `CoreIrLowerTypeMatch`).
     | TyApply(name, args) when TypeValues.isDescriptionType name ->
-        toIrType (TypeValues.descriptionRecord name (args |> List.map (fun _ -> boxedTy)) boxedTy)
+        let members = TypeValues.descriptionMembers name (args |> List.map (fun _ -> boxedTy)) boxedTy
+        let members = if name = TypeValues.recordInfo then members @ [ makeMember, TyFunc(Lists.ofType boxedTy, boxedTy, []) ] else members
+        toIrType (TyRecord(Map.ofList members, FieldOrder.ofList members))
     // A cell passed to a function is the box it is held in (see `CellSyntax`).
     | FunctionContexts.CellType(held, _) -> IrRecord [ "0", toIrType held ]
     // So is a `box`, which the standard library's `MRef` is (see `Boxes`).

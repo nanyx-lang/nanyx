@@ -507,6 +507,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             not (scope.Vars.ContainsKey qualifier) && definitions.ContainsKey $"{qualifier}.{fieldName}" ->
             // A value of another module, named through it.
             this.Complex scope { expr with Kind = IdentifierExpr $"{qualifier}.{fieldName}" } k
+        // A record description's `build` (see `CoreIrLowerBuild`).
+        | MemberAccess(record, "build", _) when
+            (match input.ExprTypes |> Map.tryFind record.Id with Some (TyApply(name, _)) -> name = TypeValues.recordInfo | _ -> false) ->
+            CoreIrLowerBuild.building this.TypeMatchTools scope record (tyOf expr) k
         | MemberAccess(record, fieldName, _) ->
             // The field's type is the record's for it: a lifted function reads what it captures from its environment
             // with reads the type checker never saw.
@@ -1228,7 +1232,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           Complex = this.Complex
           Branch = this.Branch
           Request = fun name lowering -> request (SpecKey.plain name []) Map.empty lowering
-          Reader = (CoreIrLowerMembers.boxTools this.MemberTools emptyScope).Reader }
+          Reader = (CoreIrLowerMembers.boxTools this.MemberTools emptyScope).Reader
+          Convert = (CoreIrLowerMembers.boxTools this.MemberTools emptyScope).Convert }
 
     /// What lowering a `match` needs from this function's lowering (see `CoreIrLowerMatch`).
     member private this.MatchTools : CoreIrLowerMatch.MatchTools =
@@ -1310,6 +1315,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | FieldGetting(recordType, fieldName) -> CoreIrLowerTypeMatch.fieldGettingFunction this.TypeMatchTools functionName recordType fieldName
         | CaseGetting(unionType, caseName) -> CoreIrLowerTypeMatch.caseGettingFunction this.TypeMatchTools functionName unionType caseName
         | Canonicalising collection -> CoreIrLowerTypeMatch.canonicalisingFunction this.TypeMatchTools functionName collection
+        | Decanonicalising collection -> CoreIrLowerBuild.decanonicalisingFunction this.TypeMatchTools functionName collection
+        | MakingRecord recordType -> CoreIrLowerBuild.makingFunction this.TypeMatchTools functionName recordType
+        | CaseBuilding(unionType, caseName) -> CoreIrLowerBuild.caseBuildingFunction this.TypeMatchTools functionName unionType caseName
+        | Building buildTy -> CoreIrLowerBuild.buildingFunction this.TypeMatchTools functionName buildTy
+        | BuildingFields buildTy -> CoreIrLowerBuild.buildingFieldsFunction this.TypeMatchTools functionName buildTy
         | _ ->
         let expr = definitions.[name]
         let parameterNames, body = parametersAndBody expr
@@ -1405,7 +1415,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | Describing
         | FieldGetting _
         | CaseGetting _
-        | Canonicalising _ -> internalError "a part of a type's description lowered as a definition"
+        | Canonicalising _
+        | Decanonicalising _
+        | MakingRecord _
+        | CaseBuilding _
+        | Building _
+        | BuildingFields _ -> internalError "a part of a type's description lowered as a definition"
         | AsStart -> internalError "the start function lowered as a definition"
 
     /// What lowering a lifted lambda, a wrapper or an adapter needs from this function's lowering (see
