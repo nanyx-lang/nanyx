@@ -191,7 +191,10 @@ tests and the tags the arms before it tested and failed. From that:
   cannot grow without end; the next pass goes on from there.
 - **A variable given another variable's value** of its type is that variable: what follows reads the other, and the
   binding goes. Not a parameter on the heap, which its function may only borrow: a match on the variable that takes it
-  over can reuse its memory, and a match on the parameter could not.
+  over can reuse its memory, and a match on the parameter could not. The walk keeps the variables it renames this way
+  and renames each link as it reaches it, so a function with many such bindings (each interpolation hole that is a
+  plain variable makes one) takes time in proportion to its length
+  ([#1459](https://github.com/nanyx-lang/nanyx/issues/1459)).
 - **A chain that ends in a variable** it gave another variable's value, or a constant, or the value of its last link,
   ends in that value.
 - **A binding that nothing reads** is not made when its value has no effect (no call, no write, and no operator that
