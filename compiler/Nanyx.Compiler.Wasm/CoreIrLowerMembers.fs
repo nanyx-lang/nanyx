@@ -252,11 +252,20 @@ and contextMembers (tools: MemberTools) (scope: Scope) (name: string) (node: Nod
             internalError $"{arguments.Length} context members found for the {memberTys.Length} '{name}' requires"
         pass (List.zip3 (contextParameters |> List.map _.Key) arguments memberTys) []
 
+/// Whether making a value of `given` a value of `expected` (see `coerce`) stores to a local: converting it to or from
+/// boxes does (see `CoreIrLowerBoxes`), and so does making a record or a tag again around its adapted parts.
+let coercionStores (given: IrType) (expected: IrType) : bool =
+    CoreIrLowerBoxes.needsConversion given expected
+    || differInContexts given expected
+       && (match given, expected with
+           | IrFunction _, IrFunction _
+           | IrRecursive _, IrRecursive _ -> false
+           | _ -> true)
+
 /// `atoms`, each adapted to the type in `tys` in its place (see `coerce`); as they are when `tys` is empty.
-/// Where one of them is converted to or from boxes, which stores (see `CoreIrLowerBoxes`), each adapted value waits
-/// in a local.
+/// Where adapting one of them stores (see `coercionStores`), each adapted value waits in a local.
 let coerceAll (tools: MemberTools) (scope: Scope) (atoms: Atom list) (tys: IrType list) (k: Atom list -> Expr) : Expr =
-    let converting = tys.Length = atoms.Length && List.exists2 (fun atom ty -> CoreIrLowerBoxes.needsConversion (atomType atom) ty) atoms tys
+    let converting = tys.Length = atoms.Length && List.exists2 (fun atom ty -> coercionStores (atomType atom) ty) atoms tys
     let rec go (remaining: (Atom * IrType) list) (acc: Atom list) =
         match remaining with
         | [] -> k (List.rev acc)
