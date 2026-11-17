@@ -335,3 +335,43 @@ def parityOf = { n: int ->
 println(parityOf(3))
 """
     runFile (Path.Combine(directory.Path, "main.nyx")) |> assertRan "odd\n"
+
+[<Fact>]
+let ``Run - a use may leave out the payload of a tag that carries one, with or without arguments`` () =
+    """
+pattern string -> string -> #SplitOn(string, string) | _ = { separator ->
+  { s ->
+    match s \split(on = separator)
+      | [a, b] -> #SplitOn(a, b)
+      | _ -> _
+  }
+}
+
+pattern int -> #Big(int) | #Small = { n -> if n > 100 then #Big(n - 100) else #Small }
+
+def describe = { (s: string) ->
+  match s
+    | #SplitOn("=")(key, value) -> "{key} is {value}"
+    | #SplitOn(":") -> "a pair, with a colon"
+    | _ -> "no pair"
+}
+
+def size = { (n: int) ->
+  match n
+    | #Big -> "big"
+    | #Small -> "small"
+}
+
+println(describe("a=1"))
+println(describe("a:1"))
+println(describe("a"))
+println(size(500))
+println(size(5))
+"""
+    |> printsAs """
+a is 1
+a pair, with a colon
+no pair
+big
+small
+"""
