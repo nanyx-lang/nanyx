@@ -6,8 +6,10 @@ open Parser.Program.DataValues
 
 /// Packages that are hosts. A host package says so in its own manifest, in its `package`'s `host` field:
 /// `host = (root = "console.host", prelude = "console.prelude")` names its root module, which exports `run`, and the
-/// module whose exports every module of a program it runs sees without importing them, if it has one. `Manifest.check`
-/// checks the field; this reads it. A program names its host in its own manifest's `host` (see `Manifest.HostEntry`).
+/// module whose exports every module of a program it runs sees without importing them, if it has one, and
+/// `settings = (port = 3000)`, if it takes any, the settings a program may give it, with their defaults.
+/// `Manifest.check` checks the field; this reads it. A program names its host in its own manifest's `host` (see
+/// `Manifest.HostEntry`).
 module HostPackages =
     /// The field of a package's `package` that declares it a host.
     let field = "host"
@@ -16,6 +18,10 @@ module HostPackages =
     let rootField = "root"
 
     let preludeField = "prelude"
+
+    /// The field of a host's declaration that gives the settings it takes, each with its default:
+    /// `settings = (port = 3000)`.
+    let settingsField = "settings"
 
     let private text (fields: DataField list) (name: string) =
         match DataValue.field name fields with
@@ -31,7 +37,12 @@ module HostPackages =
                 match DataValue.field field package with
                 | Some { DataField.Value = { DataValue.Data = DataRecord host } } ->
                     text host rootField
-                    |> Option.map (fun root -> { Package = name; Module = root; Prelude = text host preludeField; Directory = directory })
+                    |> Option.map (fun root ->
+                        let settings =
+                            match DataValue.field settingsField host with
+                            | Some { DataField.Value = { DataValue.Data = DataRecord settings } } -> settings
+                            | _ -> []
+                        { Package = name; Module = root; Prelude = text host preludeField; Directory = directory; Settings = settings })
                 | _ -> None
             | _ -> None
         | _ -> None

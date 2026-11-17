@@ -64,7 +64,7 @@ Done: `@extern` ([#1424](https://github.com/nanyx-lang/nanyx/issues/1424)), host
 - **The runtime's own imports.** What WASI preview 1 lacks, the `nanyx` runtime supplies under a module name of its
   own, `nanyx:<area>`, until the backend emits components and can use the standard interface instead. A program that
   imports one runs under `nanyx run`, and fails to load under another WASI runtime, which is accurate: it needs what
-  only this runtime gives it. There is one so far, `nanyx:http` (`Nanyx.Runtime.HttpImport`), which the console host
+  only this runtime gives it. There are two so far. One is `nanyx:http` (`Nanyx.Runtime.HttpImport`), which the console host
   implements `Http` on ([#1785](https://github.com/nanyx-lang/nanyx/issues/1785)), and which `wasi:http` replaces later
   with no change to programs, since they see only `Http`:
   - `send(request: i32, length: i32, kind: i32) -> i32` makes the request written in the `length` bytes at `request`
@@ -80,6 +80,12 @@ Done: `@extern` ([#1424](https://github.com/nanyx-lang/nanyx/issues/1424)), host
   body; a failed connection's and another failure's answer is the message saying why. The answer is kept per store,
   so between the two calls nothing else may send. Two calls rather than one let the program allocate the answer's
   room itself, with the allocator every object uses, rather than the runtime writing into memory it doesn't own.
+
+  The other is `nanyx:serve` (`Nanyx.Runtime.WasmServer`), which the HTTP host answers requests on
+  ([#1786](https://github.com/nanyx-lang/nanyx/issues/1786)): `requestLength() -> i32` and `request(destination: i32)`
+  give the instance the request it was started for, written as above with a timeout of 0, and
+  `respond(response: i32, length: i32)` gives the runtime the response. `nanyx run` serves a program whose module
+  imports it, rather than running it once (see [Files, HTTP and JSON](./files-http-json#how-serving-is-built)).
 - **Host memory.** `nanyx/host.memory` is written over intrinsics of its own, private to the standard library as the
   others are (`__nanyx_memory_allocate`, `__nanyx_memory_read_i32`, `__nanyx_string_address`, ...): a read or a
   write is the one instruction that does it (`CoreIrEmit`'s `memoryAccesses`), a block comes from the allocator every

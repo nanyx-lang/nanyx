@@ -63,10 +63,10 @@ let ``A package whose manifest doesn't declare it a host is not one`` () =
     Assert.Contains("'acme.util' is not a host: a host's manifest declares that it is one", outcome.StandardError)
 
 [<Fact>]
-let ``A host's settings are an error at the field, until hosts take settings`` () =
+let ``A setting for a host that takes none is an error at the setting`` () =
     let outcome = onPackage $"""host = (package = "nanyx.console", version = "{Toolchain.version}", settings = (port = 3000))""" main [ "build" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("app.nyxp:3:58: error NYX0024: A host takes no settings yet", outcome.StandardError)
+    Assert.Contains("app.nyxp:3:70: error NYX0021: The host 'nanyx.console' takes no settings", outcome.StandardError)
 
 [<Fact>]
 let ``A host without a package is an error`` () =

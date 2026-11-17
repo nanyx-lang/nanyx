@@ -129,6 +129,7 @@
     <Compile Include="Lockfile.fs" />
     <Compile Include="PackageStore.fs" />
     <Compile Include="Manifest.fs" />
+    <Compile Include="HostSettings.fs" />
     <Compile Include="Package.fs" />
     <Compile Include="PackageArchive.fs" />
     <Compile Include="PackageIndex.fs" />

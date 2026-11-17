@@ -34,6 +34,10 @@ internal sealed record Shell(string Directory, TextWriter Out, TextWriter Error,
     /// <summary>The package cache, the index and GitHub, as a build reads them: the user's (see <c>PackageStore.user</c>).</summary>
     public PackageStore Packages { get; init; } = PackageStoreModule.user();
 
+    /// <summary>What stops a program the command serves, as `nanyx run` serves one whose host answers HTTP requests: none
+    /// for the process's own, which Ctrl+C stops.</summary>
+    public CancellationToken Stop { get; init; } = CancellationToken.None;
+
     /// <summary>The process's current directory and its standard streams.</summary>
     public static Shell Process => new(System.IO.Directory.GetCurrentDirectory(), Console.Out, Console.Error, ProgramIo.Inherited);
 
@@ -266,7 +270,7 @@ internal static partial class CliCommands
         }
 
         ReportDeferredRun(compiling, deferred, build.Diagnostics);
-        return RunProgram(compiling, entry.Value, deferred, memoryCheck, timings, [package.Manifest.Name, .. programArguments], inlineCalls, directories);
+        return RunProgram(compiling, entry.Value, deferred, memoryCheck, timings, [package.Manifest.Name, .. programArguments], inlineCalls, directories, HostSettings.port(package.Host, package.Manifest.Host));
     }
 
     /// <summary>
@@ -875,7 +879,7 @@ internal static partial class CliCommands
         // program reaches it.
         var deferred = ErrorsDeferred(result);
         ReportDeferredRun(compiling, deferred, result.Diagnostics);
-        return RunProgram(compiling, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls, allowedDirectories);
+        return RunProgram(compiling, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls, allowedDirectories, HostSettings.port(Script.hostOf(shell.FullPath(inputFile)), FSharpOption<HostEntry>.None));
     }
 
     private static int RunParse(Shell shell, string inputFile)
@@ -1025,9 +1029,10 @@ internal static partial class CliCommands
     /// Runs a compiled program with the shell's standard streams and the command-line arguments
     /// <paramref name="arguments"/>, its name first, reporting what stops it to the shell's stderr, and gives the exit
     /// code. The program may read and write the shell's directory and each of <paramref name="allowedDirectories"/>, full
-    /// paths.
+    /// paths. A program whose host answers HTTP requests is served on <paramref name="port"/> instead (see
+    /// <see cref="Serve"/>).
     /// </summary>
-    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null)
+    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, int port = 3000)
     {
         var programArguments = ListModule.OfSeq(arguments ?? ["nanyx"]);
         var directories = ListModule.OfSeq<string>([shell.Directory, .. allowedDirectories ?? []]);
@@ -1040,6 +1045,11 @@ internal static partial class CliCommands
 
         // The program's output follows the run's box, unmarked, and so does what the run reports after it.
         (errors as RunBox.Writer)?.Box.Close("output");
+        if (WasmServer.serves(wat))
+        {
+            return Serve(shell, programArguments, wat, port, errors);
+        }
+
         if (memoryCheck == MemoryCheck.Off)
         {
             var outcome = WasmRunner.run(shell.Io, programArguments, directories, wat);
@@ -1076,6 +1086,56 @@ internal static partial class CliCommands
     }
 
     /// <summary>The tour's section on tail recursion, which a program that ran out of stack is pointed to.</summary>
+    /// <summary>
+    /// Serves the program <paramref name="wat"/>, whose host answers HTTP requests, on <paramref name="port"/> until the
+    /// shell's <see cref="Shell.Stop"/> is cancelled or, for the process's own, Ctrl+C is pressed. Each request is
+    /// answered by a fresh instance of it; one that stops without answering is a 500, which is said on
+    /// <paramref name="errors"/>, and the server carries on.
+    /// </summary>
+    private static int Serve(Shell shell, FSharpList<string> arguments, string wat, int port, TextWriter errors)
+    {
+        using var stopping = CancellationTokenSource.CreateLinkedTokenSource(shell.Stop);
+        ConsoleCancelEventHandler interrupted = (_, pressed) =>
+        {
+            pressed.Cancel = true;
+            stopping.Cancel();
+        };
+        var own = shell.Io.IsInherited;
+        if (own)
+        {
+            Console.CancelKeyPress += interrupted;
+        }
+
+        try
+        {
+            var gate = new object();
+            void Report(string line)
+            {
+                lock (gate)
+                {
+                    errors.WriteLine(line);
+                }
+            }
+
+            var outcome = WasmServer.serve(
+                shell.Io,
+                arguments,
+                Program.NewText(wat),
+                port,
+                stopping.Token,
+                FuncConvert.FromAction<string>(address => Report($"Serving {address} (Ctrl+C to stop)")),
+                FuncConvert.FromAction<string>(Report));
+            return outcome.IsOk ? 0 : ReportRunError(outcome.ErrorValue, errors);
+        }
+        finally
+        {
+            if (own)
+            {
+                Console.CancelKeyPress -= interrupted;
+            }
+        }
+    }
+
     private const string TailRecursionDocs = "https://nanyx.dev/docs/tour/functions#tail-recursion";
 
     private static int ReportRunError(RunError error, TextWriter errors)
@@ -1095,6 +1155,9 @@ internal static partial class CliCommands
                 var where = FSharpOption<string>.get_IsSome(overflow.functionName) ? $" in '{overflow.functionName.Value}'" : "";
                 errors.WriteLine(
                     $"Runtime error: the program ran out of stack{where}: a recursive call that isn't in tail position uses stack for every call (see {TailRecursionDocs})");
+                return 1;
+            case RunError.CannotServe cannot:
+                errors.WriteLine($"error: the program can't be served on port {cannot.port}: {cannot.reason}. Give the host another `port` in its `settings`");
                 return 1;
             // The program said why it stopped (a deferred error writes itself to stderr) before it exited.
             case RunError.Exited exited:

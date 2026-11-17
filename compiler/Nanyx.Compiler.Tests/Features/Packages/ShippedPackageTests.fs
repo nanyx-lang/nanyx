@@ -54,7 +54,16 @@ let ``The HTTP interface package is shipped beside the compiler, with no depende
     Assert.Equal(("nanyx.http.core", Toolchain.version), (http.Name, http.Version))
     Assert.Equal(None, http.Declares)
     Assert.Empty(http.Dependencies)
-    Assert.Equal<string list>([ "client"; "http"; "request"; "response" ], (ShippedPackages.tryModules "nanyx.http.core").Value.PublicModules |> List.sort)
+    Assert.Equal<string list>([ "client"; "http"; "request"; "response"; "wire" ], (ShippedPackages.tryModules "nanyx.http.core").Value.PublicModules |> List.sort)
+
+[<Fact>]
+let ``The HTTP host is shipped beside the compiler, and takes a port, 3000 by default`` () =
+    match HostPackages.tryShipped "nanyx.http" with
+    | Ok host ->
+        Assert.Equal(("http.host", Some "http.prelude"), (host.Module, host.Prelude))
+        Assert.Equal(3000, HostSettings.port (Some host) None)
+    | Error message -> failwith message
+    Assert.Equal<string list>([ "nanyx.http.core" ], (manifestOf "nanyx.http").Dependencies |> List.map _.Name)
 
 [<Fact>]
 let ``The JSON package is shipped beside the compiler, with its modules for values and for encoders, and no dependencies`` () =

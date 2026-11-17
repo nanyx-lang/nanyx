@@ -66,6 +66,12 @@ stops it before the program starts.
 A package runs under the host its manifest's `host` names. A package without a `host` is a library, which can't be
 run. A script runs under the console host, `nanyx.console`, unless a `::host` directive names another.
 
+A program whose host answers HTTP requests, as the HTTP host `nanyx.http` does, is served rather than run once: `run`
+listens on `http://localhost:<port>/`, the port the host's `port` setting gives (3000 by default), says so on standard
+error, and answers each request with a fresh instance of the program until Ctrl+C. A request whose handler stops the
+program is answered with a 500, and the reason is written to standard error. See the
+[HTTP server cookbook](../cookbook/http-server).
+
 | Option | What it does |
 |--------|--------------|
 | `--host <host>` | Runs the package's `@entry` under another host, in place of its manifest's: a host package the compiler ships, `--host nanyx.console`, or the directory of one, `--host ../acme.host`. A host the compiler doesn't ship, or a directory whose manifest doesn't declare a host, is an error. A script names its host with `::host`, so `--host` with a `.nyx` file is an error. |

@@ -45,7 +45,9 @@ type HostEntry =
       /// The full path of the host package's directory, for a host found by its `path`; none for one the compiler ships.
       Path: string option
       /// Where the entry is written, which an error about the host it names is reported at.
-      Span: SourceSpan }
+      Span: SourceSpan
+      /// The settings its `settings` gives the host, which must be ones the host takes (see `Host.Settings`).
+      Settings: DataField list }
 
 /// A package's `.nyxp` manifest, as far as it is read so far: what the package is called, which files are its
 /// sources, what it depends on, which linters check it, and which host runs its `@entry`. Which of its modules other
@@ -245,13 +247,18 @@ module Manifest =
           Severities = chosen |> List.collect snd |> Map.ofList }
 
     /// The host the manifest's `host` names, if the entry is right: a package the compiler ships, named at the compiler's
-    /// version exactly, or one found by its `path`, relative to `root`, which has no version. It takes no settings yet.
+    /// version exactly, or one found by its `path`, relative to `root`, which has no version. Its `settings`, a record,
+    /// are checked against those the host takes once the host is read (see `Package`).
     let private readHost (problems: Problems) (root: string) (value: DataValue) : HostEntry option =
         problems.Record "the host" hostFields value
         |> Option.bind (fun fields ->
-            match DataValue.field "settings" fields with
-            | Some field -> problems.Add DiagnosticCodes.UnsupportedManifestField field.NameSpan "a host takes no settings yet"
-            | None -> ()
+            let settings =
+                match DataValue.field "settings" fields with
+                | Some { DataField.Value = { DataValue.Data = DataRecord settings } } -> settings
+                | Some field ->
+                    problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"The host's `settings` must be a record, `(port = 3000)`, not {DataValue.describe field.Value}"
+                    []
+                | None -> []
             let name = problems.RequiredText "the host" value.Location fields "package" namePattern nameRule
             match name, problems.Text "the host" fields "path" anyText "" with
             | Some name, Some path ->
@@ -259,7 +266,7 @@ module Manifest =
                 | Some field ->
                     problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"The host '{name}' is found by its path, so it has no version: give one or the other"
                     None
-                | None -> Some { Package = name; Path = Some(Path.GetFullPath(Path.Combine(root, path))); Span = value.Location }
+                | None -> Some { Package = name; Path = Some(Path.GetFullPath(Path.Combine(root, path))); Span = value.Location; Settings = settings }
             | Some name, None ->
                 let version = problems.RequiredText "the host" value.Location fields "version" versionPattern "a semantic version, `1.2.0`"
                 match HostPackages.tryShipped name with
@@ -277,17 +284,22 @@ module Manifest =
                             (DataValue.field "version" fields).Value.Value.Location
                             $"The compiler ships '{name}' {Toolchain.version}, not {version}: name a package the compiler ships at its version exactly"
                         None
-                    | Some _ -> Some { Package = name; Path = None; Span = value.Location }
+                    | Some _ -> Some { Package = name; Path = None; Span = value.Location; Settings = settings }
                     | None -> None
             | None, _ -> None)
 
     /// Checks the `host` field of the manifest's `package`, which declares the package a host: its root module, and its
     /// prelude, if it has one (see `HostPackages`).
     let private checkHostDeclaration (problems: Problems) (value: DataValue) =
-        problems.Record "the package's host" [ HostPackages.rootField; HostPackages.preludeField ] value
+        problems.Record "the package's host" [ HostPackages.rootField; HostPackages.preludeField; HostPackages.settingsField ] value
         |> Option.iter (fun fields ->
             problems.RequiredText "the package's host" value.Location fields HostPackages.rootField anyText "" |> ignore
-            problems.Text "the package's host" fields HostPackages.preludeField anyText "" |> ignore)
+            problems.Text "the package's host" fields HostPackages.preludeField anyText "" |> ignore
+            match DataValue.field HostPackages.settingsField fields with
+            | Some { DataField.Value = { DataValue.Data = DataRecord _ } }
+            | None -> ()
+            | Some field ->
+                problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"A host's `settings` must be a record of the settings it takes with their defaults, `(port = 3000)`, not {DataValue.describe field.Value}")
 
     /// The fields of an entry of `dependencies`.
     let private dependencyFields = [ "package"; "module"; "path"; "version"; "github"; "rev"; "commit" ]

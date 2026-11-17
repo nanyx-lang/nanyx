@@ -19,8 +19,9 @@ import (
   nanyx.fs/path as (Path)
   nanyx.fs/path as path
   nanyx.http.core/client as (Http, HttpError)
-  nanyx.http.core/request as (Method, Request)
+  nanyx.http.core/request as (Request)
   nanyx.http.core/response as (Response)
+  nanyx.http.core/wire as (readResponse, writeRequest)
 )
 
 @extern("wasi_snapshot_preview1", "fd_write")
@@ -530,72 +531,13 @@ def httpSend: [HostRuntime] I32, I32, I32 -> I32
 @extern("nanyx:http", "receive")
 def httpReceive: [HostRuntime] I32 -> ()
 
--- A request is passed to `nanyx:http` as lines, each ended by `\n`: the method, the URL, the timeout
--- in milliseconds, the number of headers and each header's name and value, then the body; a response
--- comes back in the same way: the status, the number of headers, each header's name and value, then
--- the body. What kind of answer `send` had, a response or why there is none, it writes at 40 in the
--- host's state.
-
---| `method`'s name, as HTTP writes it: `GET` for `#get`.
-def methodName: Method -> string = {
-  | #get -> "GET"
-  | #post -> "POST"
-  | #put -> "PUT"
-  | #delete -> "DELETE"
-  | #patch -> "PATCH"
-  | #head -> "HEAD"
-  | #options -> "OPTIONS"
-}
-
---| `request` as `nanyx:http` reads it.
-def wireOf: Request -> string = { request ->
-  def headers = request.headers \fold(
-    ""
-    { lines, header -> lines ++ header.0 ++ "\n" ++ header.1 ++ "\n" }
-  )
-
-  def count = request.headers \length
-
-  "{methodName(request.method)}\n{request.url}\n{request.timeout}\n{count}\n{headers}{request.body}"
-}
-
---| The headers written in `text`, `count` of them, after `headers` (the latest first), in order, with
-  what follows them.
-def headersIn
-  : string, int, list((string, string)) -> #some(list((string, string)), string) | #malformed
-  = { text, count, headers ->
-    if count <= 0 then #some(headers \reverse, text) else
-      match string.splitOnce(text, on = "\n")
-        | #notFound -> #malformed
-        | #some(name, rest) ->
-          match string.splitOnce(rest, on = "\n")
-            | #notFound -> #malformed
-            | #some(value, after) -> headersIn(after, count - 1, [(name, value), ...headers])
-  }
-
---| The response written in `text`.
-def responseOf: string -> #some(Response) | #error(HttpError) = { text ->
-  def malformed = #error(#other("the runtime's answer to the request was malformed"))
-
-  match string.splitOnce(text, on = "\n")
-    | #notFound -> malformed
-    | #some(status, rest) ->
-      match (int.fromString(status), string.splitOnce(rest, on = "\n"))
-        | (#some(code), #some(count, after)) ->
-          match int.fromString(count)
-            | #invalidInt -> malformed
-            | #some(headerCount) ->
-              match headersIn(after, headerCount, [])
-                | #malformed -> malformed
-                | #some(headers, body) -> #some(
-                  Response(status = code, headers = headers, body = body)
-                )
-        | _ -> malformed
-}
+-- A request is passed to `nanyx:http` written as `nanyx.http.core/wire` writes it, and its response comes
+-- back written the same way. What kind of answer `send` had, a response or why there is none, it writes
+-- at 40 in the host's state.
 
 --| Sends `request` through `nanyx:http`, and gives its response, or why there is none.
 def sendThroughRuntime: [HostRuntime] Request -> #some(Response) | #error(HttpError) = { request ->
-  def wire = wireOf(request)
+  def wire = writeRequest(request)
   def length = httpSend(addressOf(wire), byteLength(wire), stateAt(40))
   keepAlive(wire)
   def buffer = allocate(length + 1)
@@ -604,7 +546,10 @@ def sendThroughRuntime: [HostRuntime] Request -> #some(Response) | #error(HttpEr
   free(buffer)
 
   match readI32(stateAt(40))
-    | 0 -> responseOf(answer)
+    | 0 ->
+      match readResponse(answer)
+        | #some(response) -> #some(response)
+        | #malformed -> #error(#other("the runtime's answer to the request was malformed"))
     | 1 -> #error(#timeout)
     | 2 -> #error(#connectionFailed(answer))
     | 3 -> #error(#invalidUrl)

@@ -156,15 +156,15 @@ answers it with a 500 and logs the message, and the server carries on.
 **Routing, middleware and templates are libraries.** A router is a function from routes to a handler, so it produces
 a `Request -> Response`. That is the next section's rule.
 
-**What it needs:**
+**What's built:** `Request` and `Response` in `nanyx.http.core`, with the methods as a tag union, headers as a list of
+names and values, and the body as a string; the host, `nanyx.http`, on the machinery ConsoleHost builds; and serving
+without WASI: `nanyx run` listens on the port the `settings` of the manifest's `host` give, and answers each request
+with a fresh instance, which is enough for local development and for the [HTTP server cookbook](../cookbook/http-server)
+([#1786](https://github.com/nanyx-lang/nanyx/issues/1786); how it's built is on
+[Files, HTTP and JSON](./files-http-json#how-serving-is-built)). The host provides `Http` only, so far.
 
-- `Request` and `Response` in a `nanyx/http` module, with the methods as a tag union, headers as a list of names and values, and the body
-  as a string.
-- The host itself, on the machinery ConsoleHost builds ([#1245](https://github.com/nanyx-lang/nanyx/issues/1245)).
-- Something to serve with. On WASI, that's the `wasi:http` incoming-handler world. That is the largest piece: the
-  backend emits a WASI preview 1 core module today, and `wasi:http` is a preview 2 component. Before that, the CLI can
-  serve without WASI: `nanyx run` listens on a port (from the `settings` of the manifest's `host`) and calls the handler for
-  each request, which is enough for local development and for the [HTTP server cookbook](../cookbook/http-server).
+**What it still needs:** to serve on WASI, the `wasi:http` incoming-handler world. That is the largest piece: the
+backend emits a WASI preview 1 core module today, and `wasi:http` is a preview 2 component.
 
 # Libraries for a host
 
@@ -274,8 +274,8 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
 3. **The browser host**: `init`, `update` and `view`, with `Dom`, `Clock` and `Log`, and the JavaScript it ships
    beside the module. The [Nim demo](./nim-demo) is its first user.
 4. **The test host**, with [Testing](./testing).
-5. **The HTTP host** ([Serving HTTP](#serving-http)): `nanyx/http`'s `Request` and `Response`, serving from the CLI
-   for local development, then the `wasi:http` world.
+5. **The HTTP host** ([Serving HTTP](#serving-http)): serving from the CLI for local development is done (#1786); the
+   `wasi:http` world is next.
 
 # How it's built
 
@@ -290,7 +290,8 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
   = "0.28.0")` or `(package = "acme.host", path = "../acme.host")`, into `Manifest.Host` (a `HostEntry`; none without a
   `host` field: a library, whose `@entry` `Attributes.applyAttributes` reports as `NYX0031`). A host the compiler
   doesn't ship, named without a path, is `NYX0023`, saying how to give its path; a host with both a path and a version
-  is an error, and `settings` is `NYX0024`, since no host takes configuration yet. `Package.ofManifest` reads the host's
+  is an error. Its `settings` are a record, checked against the settings the host declares, with their defaults, in its
+  own manifest (`Host.Settings`, `HostSettings.errors`) once the host is read. `Package.ofManifest` reads the host's
   own manifest (`Package.hostIn`): its name must match, and it must declare itself a host. The host's package travels
   with the package's module table (`PackageModules.Host` and `PackageModules.HostPackage`), so every compile of a
   package's file, the language server's included, passes `@entry` to that host's `run`, and the host's imports resolve
@@ -397,7 +398,9 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
 
 # Open questions
 
-- **Host configuration typing.** The `settings` of the manifest's `host` should be checked against a record type the host exports, so that misspelt keys are errors.
+- **Host configuration typing.** The `settings` of the manifest's `host` are checked against the settings the host
+  declares in its manifest, with their defaults: a misspelt key is an error, and so is a value of another kind than its
+  default. Checking them against a record type the host exports, as Nanyx types are checked, is still open.
 - **Async and workflows.** Can a host change how the entry runs, for example by running it as a [workflow](../advanced/workflows) or on an event loop, without changing the entry's written type? [Concurrency and crash boundaries](./concurrency-and-crash-boundaries) proposes that a host provides an `Async` context or doesn't, and the entry's type says whether it needs one.
 - **Naming a host and its interface.** Does the host take the short name (`nanyx.console`, with `nanyx.console.core` for
   the interface), or the interface (`nanyx.http`, with `nanyx.http.host`)? See

@@ -1,0 +1,7 @@
+--| What every module of a program the HTTP host serves sees without importing it: `Request`,
+  `Method` and `Response`, and outbound HTTP, `Http`, with `HttpError`.
+export module http.prelude
+
+export nanyx.http.core/client (Http, HttpError)
+export nanyx.http.core/request (Request, Method)
+export nanyx.http.core/response (Response)

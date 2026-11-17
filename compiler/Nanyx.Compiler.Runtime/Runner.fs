@@ -17,6 +17,9 @@ type RunError =
     /// The program ended itself with a non-zero exit code, through WASI `proc_exit`: a deferred error does, once it
     /// has written itself to stderr.
     | Exited of int
+    /// The program answers HTTP requests, and the port it was to be served on can't be listened on, for the reason
+    /// given.
+    | CannotServe of port: int * reason: string
 
 /// Where a program's standard streams are, and which environment variables it sees.
 type ProgramIo =
@@ -61,7 +64,7 @@ module WasmRunner =
     /// variables and the directories it may reach (`directories`, see `withDirectories`), and gives what to do once
     /// the program has stopped and its store is gone. Redirected output is written by WASI to files of its own, which
     /// are then copied to the caller's streams and deleted.
-    let private configureIo (io: ProgramIo) (arguments: string list) (directories: string list) (store: Store) : unit -> unit =
+    let internal configureIo (io: ProgramIo) (arguments: string list) (directories: string list) (store: Store) : unit -> unit =
         let wasi = WasiConfiguration().WithArgs(arguments) |> withDirectories directories
         match io with
         | Inherited ->
@@ -87,7 +90,7 @@ module WasmRunner =
                     IO.File.Delete file
 
     /// Whether `ex` is the program ending itself through WASI `proc_exit` with exit code 0.
-    let private exitedCleanly (ex: WasmtimeException) = ex.ExitCode.HasValue && ex.ExitCode.Value = 0
+    let internal exitedCleanly (ex: WasmtimeException) = ex.ExitCode.HasValue && ex.ExitCode.Value = 0
 
     /// The allocator's function, which the backend names `WasmAllocator.Names.alloc`. It traps with `unreachable` only
     /// when the program is out of memory.
@@ -120,12 +123,20 @@ module WasmRunner =
 
     /// What the trap `ex` means: out of memory when it is an `unreachable` in the allocator itself, and out of stack
     /// when the call stack is exhausted, in the innermost function on it that the source names.
-    let private trapped (ex: WasmtimeException) =
+    let internal trapped (ex: WasmtimeException) =
         match ex with
         | :? TrapException as trap when trap.Type = TrapCode.Unreachable && List.tryHead (frameNames trap) = Some allocator ->
             OutOfMemory
         | :? TrapException as trap when trap.Type = TrapCode.StackOverflow -> StackOverflow(frameNames trap |> List.tryPick sourceName)
         | _ -> Trapped ex.Message
+
+    /// `program` compiled for `engine`, or why it can't be.
+    let internal compile (engine: Engine) (program: Program) : Result<Module, RunError> =
+        try
+            match program with
+            | Text wat -> Ok (Module.FromText(engine, "nanyx", wat))
+            | Binary bytes -> Ok (Module.FromBytes(engine, "nanyx", bytes))
+        with :? WasmtimeException as ex -> Error (InvalidModule ex.Message)
 
     /// Instantiates `program` in a store that `configure` sets up, which runs its start function, then calls its export
     /// `start` if it is given and the module exports it, and gives what `read` makes of the instance afterwards: `None`
@@ -140,13 +151,7 @@ module WasmRunner =
         (inspect: Instance -> 'b)
         : Result<'a, RunError> * 'b option =
         use engine = new Engine()
-        let moduleResult =
-            try
-                match program with
-                | Text wat -> Ok (Module.FromText(engine, "nanyx", wat))
-                | Binary bytes -> Ok (Module.FromBytes(engine, "nanyx", bytes))
-            with :? WasmtimeException as ex -> Error (InvalidModule ex.Message)
-        match moduleResult with
+        match compile engine program with
         | Error err -> Error err, None
         | Ok module' ->
             use module' = module'

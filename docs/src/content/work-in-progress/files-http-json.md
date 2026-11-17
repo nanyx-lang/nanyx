@@ -9,7 +9,8 @@ useful programs. This page is their design, decided by the maintainer on 2026-11
 `file.lines` and the check described under [Still open](#still-open-for-the-file-system), and so is `nanyx.json`: the
 `Json` value with parsing and printing ([#1787](https://github.com/nanyx-lang/nanyx/issues/1787)), and its decoders
 and encoders ([#1788](https://github.com/nanyx-lang/nanyx/issues/1788)). The HTTP client is built
-([#1785](https://github.com/nanyx-lang/nanyx/issues/1785)); serving HTTP is not yet.
+([#1785](https://github.com/nanyx-lang/nanyx/issues/1785)), and so is serving HTTP locally with `nanyx run`, under the HTTP
+host ([#1786](https://github.com/nanyx-lang/nanyx/issues/1786)).
 
 # What they share
 
@@ -129,13 +130,14 @@ match http.get("https://example.com/api/users")
 
 ## How the client is built
 
-- **The package.** `packages/nanyx.http.core` has four public modules, laid out as `nanyx.fs` is: `request` declares
+- **The package.** `packages/nanyx.http.core` has four public modules a program uses, laid out as `nanyx.fs` is: `request` declares
   `Method` (`#get | #post | #put | #delete | #patch | #head | #options`) and `Request`, with
-  `Request.of(method, url)`; `response` declares `Response`, with `Response.text(status, body)`, which a handler of the
-  HTTP host will make its answers with, and `Response.header`, which finds a header whatever its case; `client`
+  `Request.of(method, url)` and `Request.path`; `response` declares `Response`, with `Response.text(status, body)`, which a handler of the
+  HTTP host makes its answers with, and `Response.header`, which finds a header whatever its case; `client`
   declares `Http` and `HttpError`; and `http` has `get`, `post` and `send`, imported as `http`. The context's one
   member is `sendRequest`, named for what it does on its own, since the console host's prelude makes it an ambient
-  name.
+  name. A fifth, `wire`, is for hosts: it writes and reads requests and responses as the runtime's imports pass them,
+  so the console host and the HTTP host share it.
 - **Settled while building it.**
   - **The body is text,** a `string`, not bytes: nothing in the library turns an `Array(U8)` into a `string`, so a
     byte body would leave every program unable to read a response, and the [Hosts](./hosts#serving-http) page's
@@ -159,9 +161,38 @@ match http.get("https://example.com/api/users")
 - **Calls block.** `send` waits on `HttpClient` in the runtime's thread, so the program stops until the answer comes:
   in the HTTP host, only the instance that sends it.
 
-**Serving** is the HTTP host already designed on the [Hosts](./hosts#serving-http) page: a host package, `nanyx.http`,
-whose entry is a `Request -> Response` handler. It runs each request in a fresh instance, and provides `Http` but not
-`Console` or `FileSystem`. `nanyx run` serves it locally first; serving it as a `wasi:http` component comes later.
+**Serving** is the HTTP host designed on the [Hosts](./hosts#serving-http) page: a host package, `nanyx.http`, whose
+entry is a `[Http] Request -> Response` handler. It runs each request in a fresh instance, and provides `Http` but not
+`Console` or `FileSystem`. `nanyx run` serves it locally, and is built
+([#1786](https://github.com/nanyx-lang/nanyx/issues/1786)); the [HTTP server cookbook](../cookbook/http-server) shows
+it. Serving it as a `wasi:http` component comes later, as an issue of its own.
+
+## How serving is built
+
+- **The host.** `packages/nanyx.http` declares itself a host with `host = (root = "http.host", prelude =
+  "http.prelude", settings = (port = 3000))`, and depends on `nanyx.http.core`. Its prelude re-exports `Http`,
+  `HttpError`, `Request`, `Method` and `Response`. Its `run` takes the handler, `use`s an `Http` written on
+  `nanyx:http` as the console host's is, takes the request from the runtime, calls the handler, and gives the runtime
+  the response; a request the runtime wrote wrongly is answered with a 400 without calling the handler.
+- **The runtime serves it.** The host imports the runtime's own `nanyx:serve` (`requestLength`, `request`,
+  `respond`; see [Foreign functions](./foreign-functions#whats-built)), and `nanyx run` serves any program whose
+  module imports it (`WasmServer.serves`), whatever its host: it compiles the module once, listens on
+  `http://localhost:<port>/` with .NET's `HttpListener`, and answers each request in a store and an instance of its
+  own, on a task of its own, so requests are answered at the same time and share nothing. An instance that traps or
+  exits without responding is answered with a 500, the reason goes to standard error, and the server carries on. It
+  stops on Ctrl+C. A port that can't be listened on is an error saying to give another.
+- **Settings.** A host declares the settings it takes, with their defaults, in its own manifest's `host`; a program's
+  manifest sets them in its `host`'s `settings`, and one the host doesn't take, or of another kind than its default, is
+  an error at the setting (`HostSettings`, checked when `Package` reads the host). This settles the
+  [Hosts](./hosts#open-questions) page's question on typing host configuration, for now by the defaults' kinds. A
+  script's `::host` has no settings, so it gets the defaults.
+- **`Request.path`** is the path of a request's URL, without its query or fragment: the runtime passes an incoming
+  request's whole URL, `http://localhost:3000/hello/Ada?x=1`, so a handler matches on the path. There is no `#Path`
+  route pattern yet; the cookbook splits the path and matches the parts with a list pattern.
+- **Not provided yet:** `Env`, `Log` and `Clock`, which the Hosts page lists. `Clock` and `Log` don't exist yet, and
+  `Env`'s members are written in the console host's root module, which another host can't share
+  ([#1816](https://github.com/nanyx-lang/nanyx/issues/1816) is the start of that). Also not done: a server bound to
+  other addresses than `localhost`, and streamed bodies.
 
 # JSON: `nanyx.json`
 
@@ -230,7 +261,7 @@ be a compiler special case that a SQL or YAML library couldn't use.
 | [#1783](https://github.com/nanyx-lang/nanyx/issues/1783) | `nanyx.fs`: `FileSystem`, `Path`, the functions, in the console host: built, but for [#1811](https://github.com/nanyx-lang/nanyx/issues/1811) | |
 | [#1784](https://github.com/nanyx-lang/nanyx/issues/1784) | `file.lines` as a lazy `seq` | #1783 |
 | [#1785](https://github.com/nanyx-lang/nanyx/issues/1785) | `nanyx.http.core` and the client, through a runtime import (done) | |
-| [#1786](https://github.com/nanyx-lang/nanyx/issues/1786) | The HTTP host, served locally by `nanyx run` | #1785 |
+| [#1786](https://github.com/nanyx-lang/nanyx/issues/1786) | The HTTP host, served locally by `nanyx run` (done) | #1785 |
 | [#1787](https://github.com/nanyx-lang/nanyx/issues/1787) | `nanyx.json`: the `Json` value, parsing and printing (done) | |
 | [#1788](https://github.com/nanyx-lang/nanyx/issues/1788) | `nanyx.json`: encoders and decoders (done) | #1787 |
 | [#1789](https://github.com/nanyx-lang/nanyx/issues/1789) | Automatic encoding and decoding, on type reflection (Planning) | #1788, reflection |

@@ -23,3 +23,21 @@ export type Request = (
 export def Request.of: Method, string -> Request = { method, url ->
   Request(method = method, url = url, headers = [], body = "", timeout = 30000)
 }
+
+--| The path `request`'s URL names, without its query or fragment: `/hello/ada` for
+  `http://localhost:3000/hello/ada?greeting=hi`, and `/` for a URL with no path.
+export def Request.path: Request -> string = { request ->
+  def afterScheme = match string.splitOnce(request.url, on = "://")
+    | #some(_, rest) -> (match string.indexOf(rest, "/")
+      | #some(at) -> string.skip(rest, at)
+      | #notFound -> "/")
+    | #notFound -> request.url
+
+  def withoutQuery = match string.splitOnce(afterScheme, on = "?")
+    | #some(path, _) -> path
+    | #notFound -> afterScheme
+
+  match string.splitOnce(withoutQuery, on = "#")
+    | #some(path, _) -> path
+    | #notFound -> withoutQuery
+}

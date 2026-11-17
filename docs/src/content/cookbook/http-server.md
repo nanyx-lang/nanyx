@@ -4,48 +4,62 @@ description: Build a basic web server
 order: 3
 ---
 
-Build a basic HTTP server with Nanyx using the `http` package.
+Build a basic web server: a program whose entry point answers HTTP requests, run under the HTTP host, `nanyx.http`.
 
 # Setup
 
 ```bash
 nanyx new my_server
 cd my_server
-nanyx install nanyx.http
+```
+
+Then name the HTTP host in the manifest, `my_server.nyxp`, in place of the console host, with the port to serve on:
+
+```nanyx fragment
+(
+  package = (name = "my_server", version = "0.1.0", sources = ["src/**/*.nyx"])
+  host = (package = "nanyx.http", version = "0.28.0", settings = (port = 3000))
+)
 ```
 
 # The code
 
+In `src/main.nyx`:
+
 ```nanyx
 module main
 
-import nanyx.http/server
-
-def handler: Request -> Response = { req ->
-  match req.path
-    | "/" -> Response.text(200, "Welcome to Nanyx!")
-    | #Path('/hello/{name}')(name) -> Response.text(200, "Hello, {name}!")
-    | _ -> Response.text(404, "Not Found")
-}
-
 @entry
-def main = {
-  println("Server running on http://localhost:3000")
-  server.start(handler, port = 3000)
+def main: Request -> Response = { request ->
+  match string.split(Request.path(request), on = "/")
+    | ["", ""] -> Response.text(200, "Welcome to Nanyx!")
+    | ["", "hello", name] -> Response.text(200, "Hello, {name}!")
+    | _ -> Response.text(404, "Not Found")
 }
 ```
 
-The route template is written as a single-quoted (raw) string so that its `{name}` placeholder is passed to the `#Path` pattern as-is rather than being interpolated. `#Path` is a [custom pattern with arguments](../advanced/custom-patterns#patterns-with-arguments): the template goes in the first parenthesis group, and the captured parameters are bound by the second.
+The entry point is the handler itself, a `Request -> Response` function: the host owns the server, listens on the
+port, and calls the handler for each request. `Request.path` is the path of the request's URL, without its query, so
+`/hello/Ada` splits into `""`, `"hello"` and `"Ada"`.
 
 # Run it
 
 ```bash
 nanyx run
-# Server running on http://localhost:3000
 ```
+
+`nanyx run` serves the program until you press Ctrl+C:
+
+```text
+Serving http://localhost:3000/ (Ctrl+C to stop)
+```
+
+Open `http://localhost:3000/hello/Ada` and it answers `Hello, Ada!`.
 
 # Key concepts
 
-- **Pattern matching on routes** — clean, readable routing without a framework
-- **Custom patterns** — extract path parameters with a `#Path` template pattern
-- **Immutable request/response** — functional approach to HTTP handling
+- **The handler is the entry point.** The HTTP host takes a `Request -> Response`, and provides `Http` for requests
+  the handler makes itself, but neither `Console` nor `FileSystem`: a library that writes files can't be used here.
+- **Each request runs on its own.** Every request is answered by a fresh instance of the program, so nothing is shared
+  between requests, and one whose handler crashes is answered with a 500 while the others carry on.
+- **Pattern matching on routes**, with list patterns over the path's parts: readable routing without a framework.
