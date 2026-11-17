@@ -280,7 +280,8 @@ The language doesn't change between these; the hosts and the backend do.
   holds only its instance, and the HTTP host answers other requests meanwhile, each in an instance of its own. Running
   an instance on Wasmtime's own fiber stack, so that a wait suspends it and frees the thread, would scale further,
   but the .NET embedding has no async API: it would mean calling Wasmtime's C API directly and running .NET host
-  functions on Wasmtime's stacks, which .NET doesn't support. Tasks can be built on instances by running each as a
+  functions on Wasmtime's stacks, which .NET doesn't support. A possible later optimisation
+  ([#1901](https://github.com/nanyx-lang/nanyx/issues/1901)). Tasks can be built on instances by running each as a
   process (below), at the cost of copying.
 - **Then: tasks inside one instance, by stack switching.** WebAssembly's stack-switching proposal gives a module
   many stacks and lets it switch between them; it's built for effect handlers, which is what `Async` is. Wasmtime
