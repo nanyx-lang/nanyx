@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+
+  <!--
+    The compiler's compile path (parse, check, lower, emit, assemble) built for .NET's browser-wasm runtime, for the
+    playground (see the Work in progress page "Playground"). `dotnet publish -c Release` writes a static site to
+    bin/Release/net10.0/publish/wwwroot: `index.html` loads the compiler and times it, and `serve.mjs` serves it.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishTrimmed>true</PublishTrimmed>
+    <!-- The checked library is read through reflection over the compiler's F# types (BinaryData.fs), which trimming
+         them would break, so only the framework is trimmed. -->
+    <TrimMode>partial</TrimMode>
+    <!-- The checked library and the packages' sources are compressed with the rest. -->
+    <CompressionIncludePatterns>$(CompressionIncludePatterns);**/*.bin;**/*.nyx;**/*.nyxp</CompressionIncludePatterns>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Nanyx.Compiler\NanyxCompiler.fsproj" />
+    <ProjectReference Include="..\Nanyx.Compiler.Wasm\Nanyx.Compiler.Wasm.fsproj" />
+  </ItemGroup>
+
+  <!-- The examples the page compiles. -->
+  <ItemGroup>
+    <Content Include="..\..\examples\fizzbuzzbaz.nyx;..\..\examples\Nim.nyx;..\..\examples\shop.nyx" Link="wwwroot\examples\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Import Project="..\CheckedLibrary.targets" />
+
+  <!--
+    The compiler reads the checked library and the shipped packages from beside itself (AppContext.BaseDirectory),
+    which in the browser is the runtime's in-memory file system. They are published with the page, which hands them to
+    `BrowserCompiler.AddFile` before the first compile (the SDK has no way to put files in that file system).
+  -->
+  <ItemGroup>
+    <Content Include="..\..\packages\**\*" Link="wwwroot\packages\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="PublishCheckedLibraryWithPage" AfterTargets="IncludeCheckedLibrary" BeforeTargets="AssignTargetPaths">
+    <!-- Through a property, so that the item has none of the writer's metadata: its OriginalItemSpec, the writer's
+         project, is what the compression reads. -->
+    <PropertyGroup>
+      <_CheckedLibraryPath>@(_CheckedLibraryWriter->'%(RootDir)%(Directory)checked-library.bin')</_CheckedLibraryPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <Content Include="$(_CheckedLibraryPath)" Link="wwwroot\checked-library.bin" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
+</Project>

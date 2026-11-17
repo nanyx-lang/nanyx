@@ -24,5 +24,6 @@ let runWithStack (stackSize: int) (action: unit -> 'T) : 'T =
     | Some ex -> raise ex
     | None -> result
 
-/// Runs `action` on a thread with a large stack, waiting for it, and gives its result or raises what it raised.
-let run (action: unit -> 'T) : 'T = runWithStack size action
+/// Runs `action` on a thread with a large stack, waiting for it, and gives its result or raises what it raised. In the
+/// browser, which runs .NET on one thread, it runs `action` on the calling thread, whose stack is the runtime's.
+let run (action: unit -> 'T) : 'T = if System.OperatingSystem.IsBrowser() then action () else runWithStack size action
