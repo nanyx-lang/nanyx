@@ -107,7 +107,7 @@ workflow form stays available for the cases a workflow is good at (generators, p
 
 ## What colouring costs in each
 
-All three options except C put "this can wait" in the type; the difference is who pays for it.
+A and B both put "this can wait" in the type; the difference is who pays for it.
 
 - **With A,** every generic function pays. `list.map(urls, fetch)` gives a `list(Task(Response))`, not the responses,
   so the library needs a second set of functions for tasks (`async.traverse`, an async `fold`, an async `filter`),
