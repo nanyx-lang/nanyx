@@ -25,3 +25,33 @@ let ``A package runs with the public module of its path dependency`` () =
 """
     write "app/main.nyx" "module main\n\nimport acme.util/strings\n\n@entry\ndef main = {\n  println(shout(\"hello\"))\n}\n"
     assertRan "hello!\n" (nanyxIn (Path.Combine(directory.Path, "app")) [ "run" ])
+
+[<Theory>]
+[<InlineData("import acme.two/two", "describe")>]
+[<InlineData("import acme.two/two as t", "t.describe")>]
+let ``A dependency's module interpolates a tag union an earlier arm narrowed`` (import: string, describe: string) =
+    use directory = new TempDirectory()
+    let write (path: string) (text: string) =
+        let full = Path.Combine(directory.Path, path)
+        Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
+        File.WriteAllText(full, text.ReplaceLineEndings "\n")
+    write "lib2/acme.two.nyxp" """(package = (name = "acme.two", version = "0.1.0"))"""
+    write
+        "lib2/two.nyx"
+        """export module two
+
+export def describe: #some(string) | #error(#a | #other(string)) -> string = {
+  | #some(text) -> text
+  | #error(#a) -> "a"
+  | #error(e) -> "unreadable: {e}"
+}
+"""
+    write
+        "main.nyx"
+        $"""::dependency acme.two ./lib2
+
+{import}
+
+println({describe}(#error(#other("x"))))
+"""
+    assertRan "unreadable: #other(x)\n" (nanyxIn directory.Path [ "run"; Path.Combine(directory.Path, "main.nyx") ])

@@ -479,7 +479,7 @@ module Compiler =
             PreludeInlined = if importedKey = preludeKey then inlinedItems else merged.PreludeInlined
             PreludeTypeNames = preludeTypeNames
             InlinedTypes = ModuleLinking.inlinedTypesForImport item imported |> Map.fold (fun acc name ty -> acc |> Map.add name ty) merged.InlinedTypes
-            InlinedInstances = imported.Typed.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.InlinedInstances
+            InlinedInstances = ModuleLinking.inlinedInstancesForImport item imported |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.InlinedInstances
             InlinedUseContexts = imported.Typed.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) merged.InlinedUseContexts
             ImportedContextTypes =
                 RequiredContexts.ofImport imported.Subst imported.Typed.ContextTypes imported.RawSymbolTypes exportedSymbols.Keys

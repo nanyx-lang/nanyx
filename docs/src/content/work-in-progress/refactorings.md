@@ -24,7 +24,6 @@ Each refactoring below has an issue with its design; none is built yet.
 
 | Refactoring | Issue |
 |---|---|
-| Inline a type alias | [#1826](https://github.com/nanyx-lang/nanyx/issues/1826) |
 | Change a def's signature: add, remove or reorder parameters, updating every call | [#1822](https://github.com/nanyx-lang/nanyx/issues/1822) |
 | Make a parameter named or positional, updating every call | [#1827](https://github.com/nanyx-lang/nanyx/issues/1827) |
 | Move a def to another module | [#1823](https://github.com/nanyx-lang/nanyx/issues/1823) |
@@ -32,6 +31,5 @@ Each refactoring below has an issue with its design; none is built yet.
 | Make a structural type protected or private, with a constructor | [#1825](https://github.com/nanyx-lang/nanyx/issues/1825) |
 | Turn a `++` chain into an interpolated string, and back | [#1828](https://github.com/nanyx-lang/nanyx/issues/1828) |
 | Implement a context for a type: stubs for its missing attached definitions | [#1829](https://github.com/nanyx-lang/nanyx/issues/1829) |
-| Convert a lambda to its shorthand and back | [#1830](https://github.com/nanyx-lang/nanyx/issues/1830) |
 | Move a file and update the imports of it by path | [#1831](https://github.com/nanyx-lang/nanyx/issues/1831) |
 | Rename a `module name =` block | [#1832](https://github.com/nanyx-lang/nanyx/issues/1832) |
