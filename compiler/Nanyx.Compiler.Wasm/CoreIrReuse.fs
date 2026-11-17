@@ -21,7 +21,7 @@ type private Rewriter() =
 
     member _.NewToken() =
         tokens <- tokens + 1
-        { Id = -tokens; Name = $"__reuse_{tokens}"; Kind = Scratch; Type = IrWord }
+        reuseToken tokens
 
     /// `e` rewritten: a chain's values from the first, then what it ends in.
     member this.Expr(e: Expr) : Expr =
@@ -42,7 +42,7 @@ type private Rewriter() =
     /// A name for an object inside a scrutinee that an arm takes apart (see `takenApart`).
     member _.NewInner(ty: IrType) =
         inners <- inners + 1
-        { Id = -(1000000 + inners); Name = $"__inner_{inners}"; Kind = Scratch; Type = ty }
+        innerObject inners ty
 
     /// An arm with each scrutinee it takes apart and drops released instead, and each object inside one that its
     /// pattern takes apart released after it, and each released object's block reused by the first allocation of the

@@ -20,6 +20,12 @@ module TakenApart =
     let rec sizes (taken: TakenApart) : int list =
         taken.Size :: (taken.Inner |> List.collect (snd >> sizes))
 
+/// The reuse token numbered `n`: the block of a released object, which an allocation of its size writes into.
+let reuseToken (n: int) : Var = { Id = -n; Name = $"__reuse_{n}"; Kind = Scratch; Type = IrWord }
+
+/// The name numbered `n` of an object of type `ty` inside a scrutinee that an arm takes apart (see `takenApart`).
+let innerObject (n: int) (ty: IrType) : Var = { Id = -(1000000 + n); Name = $"__inner_{n}"; Kind = Scratch; Type = ty }
+
 /// How `pattern` takes apart a value of type `ty`, when it takes apart exactly one object and each of its fields is
 /// bound, ignored, tested by a pattern that binds nothing (the field is then dropped with the object), or taken apart
 /// in turn, as in `[b, a, ...rest]` or `[#some(n), ...rest]`. With it, the pattern binds each object inside that it
