@@ -116,6 +116,12 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
         if not (input.Lifted.ContainsKey name) && isGeneric name && not specialised && not (deferredMessages expr).IsEmpty then
             lowerWithRequests (SpecKey.plain name []) Map.empty AsDefined (sanitizeIdentifier name)
 
+    // The descriptions of the types the module's `Type` values stand for, once every function that numbers one is
+    // lowered (see `CoreIrLowerTypeMatch`).
+    if input.TypeIds.Count > 0 then
+        let describe = CoreIrLowerTypeMatch.describeFunction
+        lowerWithRequests (SpecKey.plain describe []) Map.empty Describing describe
+
     let lowered =
         order
         |> Seq.distinct

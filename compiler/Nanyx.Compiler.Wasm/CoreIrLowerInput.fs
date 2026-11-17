@@ -121,7 +121,9 @@ type LowerInput =
       /// names one means.
       NamedTypes: Map<string, Ty>
       /// What a call to `dbg` compiles to.
-      Dbg: DbgBuild }
+      Dbg: DbgBuild
+      /// The numbers the types `Type` values stand for are at run time (see `CoreIrTypeIds`).
+      TypeIds: CoreIrTypeIds.TypeIds }
 
 /// The top-level function `wrapper`, a wrapper lambda lifting made, wraps.
 let wrappedOf (input: LowerInput) (wrapper: string) =
