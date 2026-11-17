@@ -266,7 +266,7 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
 (#1424, #1425, #1426), and any package as a host, with `::host` and `::dependency` (#1344, #1504).
 
 1. **More contexts for the console host**, as they are added: [`Random`](https://github.com/nanyx-lang/nanyx/issues/1237),
-   then `Clock` and `FileSystem`.
+   then `Clock` and `FileSystem` ([Files, HTTP and JSON](./files-http-json), [#1783](https://github.com/nanyx-lang/nanyx/issues/1783)).
 2. **Console in a page**, for the [playground](./playground): the embedder changes in "`ConsoleHost` in a page"
    above; writing `.wasm` is done ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).
 3. **The browser host**: `init`, `update` and `view`, with `Dom`, `Clock` and `Log`, and the JavaScript it ships
