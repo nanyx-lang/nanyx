@@ -10,8 +10,8 @@ The standard library is the modules under `nanyx/`. The [prelude](./prelude) is 
 
 - [prelude](./prelude) — what every module sees, written across files by topic:
   [contexts](./prelude-contexts), [numbers](./prelude-numbers), [sized numbers](./prelude-sized-numbers),
-  [conversions](./prelude-conversions), [lists](./prelude-lists), [maps and sets](./prelude-maps) and
-  [results and options](./prelude-results)
+  [conversions](./prelude-conversions), [lists](./prelude-lists), [sequences](./prelude-sequences),
+  [maps and sets](./prelude-maps), [arrays](./prelude-arrays) and [results and options](./prelude-results)
 - [array](./array) — immutable arrays with constant-time indexing (`nanyx/array`)
 - [slice](./slice) — views of part of an array, which share its storage (`nanyx/slice`)
 - [marray](./marray) — mutable arrays, fixed-length and changed in place (`nanyx/marray`)

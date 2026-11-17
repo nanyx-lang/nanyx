@@ -526,7 +526,9 @@ Hover hides a private context's members outside its file, as it hides a private 
      require each scoped context its body requires outside a lambda, all of one scope
      (`InferState.InferredScopedContexts`), and its type carries them, so its callers are checked in turn. A `for`
      loop's body runs where the loop is written, so the loop is checked the same way
-     ([#1561](https://github.com/nanyx-lang/nanyx/issues/1561)).
+     ([#1561](https://github.com/nanyx-lang/nanyx/issues/1561)). For the same reason, a context a `use` around the
+     loop supplies, in the lambda the loop is in (a `memory` block's, say), is not one that lambda requires
+     (`LambdaContexts.recordRunHere`, [#1757](https://github.com/nanyx-lang/nanyx/issues/1757)).
 5. Let a `memory` block name its `Memory`, `memory { context m -> ... }`
    ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058), then
    [#1446](https://github.com/nanyx-lang/nanyx/issues/1446) for the `context m` form). See

@@ -129,38 +129,26 @@ def entriesBefore: [HostRuntime] I32, I32, list(string) -> list(string) = { poin
     entriesBefore(pointers, count - 1, [stringAt(address, lengthFrom(address, 0)), ...acc])
 }
 
---| How many of the program's arguments or environment variables there are, and how many bytes they
-  take, written at `sizes` and `sizes + 4`.
-def sizesOf: [HostRuntime] (#arguments | #environment), I32 -> I32 = { which, sizes ->
-  match which
-    | #arguments -> argsSizesGet(sizes, sizes + 4)
-    | #environment -> environSizesGet(sizes, sizes + 4)
-}
-
---| Writes the program's arguments or environment variables in `buffer`, each ended by a zero byte,
-  and their addresses at `pointers`.
-def entriesAt
-  : [HostRuntime] (#arguments | #environment), I32, I32 -> I32
-  = { which, pointers, buffer ->
-    match which
-      | #arguments -> argsGet(pointers, buffer)
-      | #environment -> environGet(pointers, buffer)
+--| The program's arguments, its own name first, or its environment variables, each `NAME=value`:
+  the list that `sizesGet` writes the count and byte length of at its two addresses, and `get` writes,
+  each entry ended by a zero byte, in its second address, with their addresses at its first. The
+  WASI functions are passed in rather than chosen by a tag, so a program that reads only one list
+  imports only that list's functions.
+def entriesOf
+  : [HostRuntime] ([HostRuntime] I32, I32 -> I32), ([HostRuntime] I32, I32 -> I32) -> list(string)
+  = { sizesGet, get ->
+    def sizes = allocate(8)
+    ignore(sizesGet(sizes, sizes + 4))
+    def count = readI32(sizes)
+    def pointers = allocate(count * 4 + 4)
+    def buffer = allocate(readI32(sizes + 4) + 1)
+    free(sizes)
+    ignore(get(pointers, buffer))
+    def entries = entriesBefore(pointers, count, [])
+    free(pointers)
+    free(buffer)
+    entries
   }
-
---| The program's arguments, its own name first, or its environment variables, each `NAME=value`.
-def entriesOf: [HostRuntime] (#arguments | #environment) -> list(string) = { which ->
-  def sizes = allocate(8)
-  ignore(sizesOf(which, sizes))
-  def count = readI32(sizes)
-  def pointers = allocate(count * 4 + 4)
-  def buffer = allocate(readI32(sizes + 4) + 1)
-  free(sizes)
-  ignore(entriesAt(which, pointers, buffer))
-  def entries = entriesBefore(pointers, count, [])
-  free(pointers)
-  free(buffer)
-  entries
-}
 
 --| The value in `entries`, each written `NAME=value`, of the variable whose entries start `prefix`.
 def variableIn: list(string), string -> #some(string) | #notSet = {
@@ -173,14 +161,17 @@ def variableIn: list(string), string -> #some(string) | #notSet = {
 
 --| The program's command-line arguments, after its name.
 def arguments: [HostRuntime] () -> list(string) = { _ ->
-  match entriesOf(#arguments)
+  match entriesOf({ at, bytes -> argsSizesGet(at, bytes) }, { at, buffer -> argsGet(at, buffer) })
     | [] -> []
     | [_, ...rest] -> rest
 }
 
 --| The value of the environment variable `name`, or `#notSet` when it has none.
 def environmentVariable: [HostRuntime] string -> #some(string) | #notSet = { name ->
-  variableIn(entriesOf(#environment), name ++ "=")
+  variableIn(
+    entriesOf({ at, bytes -> environSizesGet(at, bytes) }, { at, buffer -> environGet(at, buffer) })
+    name ++ "="
+  )
 }
 
 --| Ends the program with the exit code `code`, or 1 for a code that doesn't fit an `I32`. WASI's
