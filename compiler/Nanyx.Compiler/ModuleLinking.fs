@@ -198,10 +198,81 @@ module internal ModuleLinking =
             | _ -> None)
         |> Map.ofList
 
+    /// The names `imported`, from `origin`, gives its importers, each with the module that defines it: its own exports,
+    /// and what it re-exports, which for a whole-module re-export (`export m`) is everything `m` gives, so through
+    /// chains of them.
+    let rec internal exportSources (origin: ModuleOrigin) (imported: CheckedModule) : Map<string, ModuleOrigin> =
+        let own =
+            Set.union (SyntaxTree.exportedValueNames imported.Own) (exportedTypeNames imported.Own)
+            |> Seq.map (fun name -> name, origin)
+            |> Map.ofSeq
+        imported.ReExports
+        |> List.fold (fun sources reExport -> reExportSources reExport |> Map.fold (fun acc name source -> Map.add name source acc) sources) own
+
+    /// The names the re-export `reExport` gives the importers of the module that writes it, each with the module that
+    /// defines it.
+    and internal reExportSources (reExport: ReExported) : Map<string, ModuleOrigin> =
+        let all = exportSources reExport.Origin reExport.Module
+        match reExport.Item.Selection with
+        | Some selection -> selection |> List.choose (fun (name, _) -> all |> Map.tryFind name |> Option.map (fun source -> name, source)) |> Map.ofList
+        | None -> all
+
+    /// The module a re-export names, as it is written.
+    let private writtenSource (item: ImportItem) =
+        match item.Source with
+        | ModuleImport name -> name
+        | PathImport path -> $"\"{path}\""
+
+    /// An error for each name a whole-module re-export (`export m`) gives that the module `own` defines itself, or that
+    /// a re-export before it gives from another module, at the whole-module one, naming both. Its fix turns the
+    /// whole-module re-export into one that selects the rest of what it gives.
+    let internal reExportClashes (own: Module) (reExports: ReExported list) : Diagnostic list =
+        let defined =
+            own
+            |> List.choose (function
+                | Kind (Def (ValueDef(_, name, _, _)))
+                | Kind (Def (TypeDef(name, _, _, _))) -> Some name
+                | _ -> None)
+            |> Set.ofList
+        let fix (reExport: ReExported) (sources: Map<string, ModuleOrigin>) (clashing: Set<string>) =
+            match sources.Keys |> Seq.filter (clashing.Contains >> not) |> List.ofSeq with
+            | [] -> []
+            | rest ->
+                let written = writtenSource reExport.Item
+                [ { Title = $"Re-export only what doesn't clash from '{written}'"
+                    Edits = [ { Span = reExport.Item.Span; NewText = $"""{written} ({String.concat ", " rest})""" } ] } ]
+        reExports
+        |> List.fold (fun (given: Map<string, ModuleOrigin * ReExported>, errors) reExport ->
+            let sources = reExportSources reExport
+            let written = writtenSource reExport.Item
+            let clashes =
+                match reExport.Item.Selection with
+                | Some _ -> []
+                | None ->
+                    sources
+                    |> Map.toList
+                    |> List.choose (fun (name, source) ->
+                        if defined.Contains name then
+                            Some (name, $"'{name}' is re-exported from '{written}', but this module defines '{name}' too", SourceSpan.none)
+                        else
+                            match given |> Map.tryFind name with
+                            | Some (other, earlier) when other <> source ->
+                                let message = $"'{name}' is re-exported from '{written}', but also from '{writtenSource earlier.Item}', where it is another definition"
+                                Some (name, message, earlier.Item.Span)
+                            | _ -> None)
+            let fixes = fix reExport sources (clashes |> List.map (fun (name, _, _) -> name) |> Set.ofList)
+            let errors =
+                errors
+                @ (clashes
+                   |> List.map (fun (_, message, earlier) ->
+                       { Diagnostics.at DiagnosticCodes.ReExportClash reExport.Item.Span message with Fixes = fixes }
+                       |> Diagnostics.withRelated earlier "Re-exported here too"))
+            Map.fold (fun acc name source -> acc |> Map.add name (source, reExport)) given sources, errors) (Map.empty, [])
+        |> snd
+
     /// The error for each name `item` selects that `imported` does not export, with the exports closest to it.
     let internal unexportedSelections (item: ImportItem) (imported: CheckedModule) : Diagnostic list =
-        let reExported = imported.ReExports |> List.collect (fun reExport -> reExport.Item.Selection |> Option.defaultValue [] |> List.map fst)
-        let exports = Set.union (SyntaxTree.exportedValueNames imported.Own) (exportedTypeNames imported.Own) |> Set.union (Set.ofList reExported)
+        let exports = imported.ReExports |> List.fold (fun names reExport -> Set.union names (Set.ofSeq (reExportSources reExport).Keys)) (Set.union (SyntaxTree.exportedValueNames imported.Own) (exportedTypeNames imported.Own))
         let shown =
             match item.Source with
             | ModuleImport name -> name
