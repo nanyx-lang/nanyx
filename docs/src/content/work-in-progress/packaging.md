@@ -18,7 +18,7 @@ the first release, and built alongside the compiler.
 
 The [Packages and projects](../tour/packages) page already describes the user's side:
 `.nyxp` and `.nyxproj` manifests, imports of the form `acme.web/http`, `export module`, project
-references and script mode. This page is about what that page leaves out: who owns a package name, how versions
+references and script mode (projects are planned). This page is about what that page leaves out: who owns a package name, how versions
 are chosen, what a published package is, and where it lives.
 
 # Scope
@@ -44,59 +44,19 @@ Out of scope here:
 
 # Where the compiler is today
 
-Local packages work: a package and the packages it depends on by path are built, checked and run together. Projects
-(`.nyxproj`) and everything that needs a downloaded package are only in the docs.
+Built, and described in the user docs: local packages, path dependencies, public modules and the packages the
+compiler ships ([Packages and projects](../tour/packages),
+[Packages the compiler ships](../advanced/hosts#packages-the-compiler-ships)); the manifest
+([The package manifest](./package-manifest)); GitHub references; the lockfile, the `.nyxpkg` format and the package
+cache, read by builds and filled by `nanyx pull`; `api.json` and `nanyx bump`
+([Versions](../tour/packages#versions)); and `nanyx new`, `migrate`, `install`, `pull`, `pack`, `bump` and `manifest`
+([Packages](../standard-tools/command-line#packages)). A program compiles to one WebAssembly module: imported modules
+are checked separately and their items inlined, so there is no compiled artifact per module or package.
 
-- **A package can be built and run** (`Package.fs`). The manifest is one Nanyx record written as data, read by
-  `Manifest.check` ([The package manifest](./package-manifest)). Its `package` (`name`, `version`, `sources`,
-  `host`), `dependencies`, `linters` and `host` are read, with an error at the field for anything wrong or
-  unknown (`NYX0020` to `NYX0024`), a repeated `dependencies` entry among them. A library (no `host`, no
-  `@entry`) whose files export no module is `NYX0033` at its `package`, when the package is read for a build
-  (`Package.exportErrors`) and in the editor. `nanyx build`, `nanyx check` and `nanyx run` without a file (or with a
-  directory or manifest) check every source file, each module once however many files import it (`Package.build`,
-  [#698](https://github.com/nanyx-lang/nanyx/issues/698)), and `run` runs the one `@entry`; `build` writes it to
-  `out/<name>.wasm`. `nanyx new` makes a package (`NewPackage.fs`). The language server reads the manifest's linter
-  configuration too. Path dependencies work (`Package.dependenciesIn`): each is read with its own, and a directory without a manifest, a
-  name that doesn't match, a cycle (`NYX0027`) or a package reached by two paths (`NYX0028`) is an error; a
-  dependency's `version` is the version `nanyx.lock` locks, unpacked in the cache, which `nanyx pull` downloads into ([#863](https://github.com/nanyx-lang/nanyx/issues/863)); one the lockfile doesn't lock is `NYX0024` until versions can be chosen ([#864](https://github.com/nanyx-lang/nanyx/issues/864)). There is no `.nyxproj`. `nanyx migrate` makes a package of scripts, `nanyx pull` downloads and lists its dependencies, `nanyx install` adds one, and `nanyx pack` packs it; for a package named by its version that the lockfile doesn't lock, `pull` and `install` are stubs ([#1471](https://github.com/nanyx-lang/nanyx/issues/1471), [The nanyx command](./command-line#packages)). The formatter
-  reads the manifest's `formatter` field itself.
-- **The compiler ships packages as source directories** beside it (`ShippedPackages`): the console host,
-  `packages/nanyx.console`, its interface package, `packages/nanyx.console.core`, and the JSON library, `packages/nanyx.json`,
-  at the compiler's version, which
-  a manifest's `host` or `dependencies` names at that version exactly (`NYX0029`) (see
-  [Built-ins as packages](./built-ins-as-packages#how-shipped-packages-are-built)).
-- **A package's imports go through its module table** (`PackageModules.fs`). Every source file the manifest
-  selects is keyed by the module name it declares (`PackageModules.ofFiles`), and in those files `import greetings`
-  and `import acme.web/greetings` both reach the file that declares `module greetings`, wherever it is
-  (`PackageModules.resolveImport`). An unknown module is `NYX0003`, naming the package, the file named for the module
-  if it declares another name, or close names. A source file must declare a module name and have no top-level
-  statements (`NYX0017`). Files that declare the same module are its fragments, each marked `@partial`, and are
-  assembled into one module before it is checked (`PartialModules.assemble`); without `@partial` on each, it is
-  `NYX0018`. `PackageModules` holds the packages it depends on too: `import acme.util/strings` reaches a module a direct
-  dependency declares with `export module` (`NYX0025` for one it doesn't, `NYX0026` for a package only a dependency
-  depends on), and a dependency's own files resolve within that package (`PackageModules.ownerOf`). Dependencies'
-  modules are checked once per build, into the same program. `Package.build`, a single file of a package compiled
-  with `nanyx run`/`check`, and the language server (`Package.compileSourceWith`) all resolve this way; the language
-  server checks a `.nyxp` with its dependencies (`Package.compileManifest`).
-- **Outside a package, imports resolve two ways only** (`FileImports.resolvePath` and
-  `StandardLibrary.tryModuleName`). A module import `a.b/c` becomes the file `a/b/c.nyx` next to the importing file,
-  with `.` and `/` treated alike. A name starting `nanyx/` comes from the standard library embedded in the compiler.
-  There are no search paths, and a module's declared name is not checked against the name it was imported by. An
-  import by file path, in a package or not, must have an alias (`NYX0014`) and must name a script module, not one
-  that declares `module name` (`NYX0015`), and no import may name an entrypoint, a file with top-level statements
-  (`NYX0016`), as the [modules page](../tour/modules#importing-modules-by-file-path) says (`FileImports.fs`).
-- **The documented import syntax works.** `import x as m`, grouped imports, selections (`as (a, b)`,
-  `as m & (a, b)`) and re-exports (`export collections.list (map, filter)`). A selection brings in only the exports
-  it names, and the rest are inlined as private definitions are (`selectedExports`, `inlinedRenames`). A module
-  keeps its re-exports (`CheckedModule.ReExports`), and an importer merges each as a made-up import of the module
-  re-exported from, under its own alias (`mergeWithReExports`), so the names keep their original symbols.
-- **A program compiles to one WebAssembly module.** Imported modules are type-checked separately and their items
-  inlined into the root (`inlinedItemsForImport`), so there is no linking step and no compiled artifact per
-  module or package.
-- **The standard library is versioned with the compiler.** It is embedded as resources and is described in
-  [Standard library implementation](./standard-library-implementation) as "an ordinary package named `nanyx`", which
-  is the model this page keeps.
-
+Not built: choosing versions and writing the lockfile ([#864](https://github.com/nanyx-lang/nanyx/issues/864)), so a
+dependency the lockfile doesn't lock is `NYX0024` and `install` and `pull` can't add one; publishing and yanking
+([#865](https://github.com/nanyx-lang/nanyx/issues/865)); projects (`.nyxproj`,
+[#1386](https://github.com/nanyx-lang/nanyx/issues/1386)); and the editor's side.
 # Goals
 
 - `nanyx install acme.json` followed by `nanyx run` works on a clean machine, and gives the same result on every
@@ -150,77 +110,32 @@ how a claim survives a GitHub rename (it is kept by account ID), how organisatio
   [#859](https://github.com/nanyx-lang/nanyx/issues/859)), using
   [PubGrub](https://github.com/dart-lang/pub/blob/master/doc/solver.md) (as Dart and uv do). Its main attraction is that when
   there is no solution it explains why in plain sentences, which matches the error-message principles.
-- `nanyx.lock` records the exact version and SHA-256 of every package in the build. It is written by `pull`,
-  `add` and `build`, is committed, and is the only input a build needs from the network.
+- `nanyx.lock` records the exact version and SHA-256 of every package in the build. It is to be written by `pull`,
+  `install` and `build` ([#864](https://github.com/nanyx-lang/nanyx/issues/864)), is committed, and is the only input a build needs from the network.
 - Only direct dependencies can be imported, as the docs say. The resolver still sees the whole graph.
 
 ## Enforced semantic versioning
 
 Decided, Elm-style ([#1470](https://github.com/nanyx-lang/nanyx/issues/1470), part of #865's publishing). Publishing
-compares the new version's public API, written to `api.json`, with that of the newest published version below it:
-the exported definitions of every exported module, with their types.
+compares the new version's public API, written to `api.json`, with that of the newest published version below it. The
+rules, and `api.json` and `nanyx bump`, which are built (`PackageApi.fs`), are described in
+[Versions](../tour/packages#versions). `nanyx publish` refuses a version whose bump is too small, listing the changes
+that need a bigger one, and the index refuses a release that skipped the check.
 
-- **Major:** an export removed or renamed; a def's type changed other than made more general; a new context
-  requirement on an exported def; a field removed from an exported record type; a tag added to or removed from an
-  exported closed union (adding one breaks exhaustive matches, as in Elm); a type's parameters changed; an exported
-  type made protected or private.
-- **Minor:** new exports or modules, a type made more general, a requirement dropped.
-- **Patch:** no change to the public API.
-- **Before 1.0.0** a breaking change needs a minor bump (`0.3` to `0.4`), as in Cargo.
-
-`nanyx publish` refuses a version whose bump is too small, listing the changes that need a bigger one, and
-`nanyx bump` prints the changes and writes the right version into the manifest. The index refuses a release that
-skipped the check.
-
-**Built** ([#1470](https://github.com/nanyx-lang/nanyx/issues/1470)), but for what waits on publishing (#865), in
-`PackageApi.fs`:
-
-- **`api.json`** (`PackageApi.ofPackage`, `toJson`, `ofJson`): for each module exported with `export module`, sorted,
-  each export with its kind (`def`, `type`, `context`) and what another package sees of it: a def's type, after the
-  contexts it requires, as hover writes it, or a type's whole definition. `nanyx pack` puts it in the `.nyxpkg`, so the
-  baseline's API is read from the cache, not compiled again.
-- **The comparison** (`PackageApi.compare`): the rows above, each a change with the bump it needs and a sentence that
-  says what it is. Types are compared as written: both are parsed as annotations, and a new def type is more general
-  when the old one is it with its type variables replaced; a type variable renamed is no change. Contexts are compared
-  after that substitution, so a context added is major and one dropped minor. Any change to an exported type's
-  definition is major, described as a field or tag removed or added, its parameters changed, or it made protected or
-  private, where that can be told. A field *added* to a record type is major too, since a record written without it is
-  no longer one; the decision didn't list it.
-- **The version rules** (`required`, `bumped`, `allows`), with the 0.x rule, and **`versionErrors`**, what
-  `nanyx publish` refuses: a version not after the newest published, or a bump too small, with the changes that need
-  the bigger one.
-- **`nanyx bump`** reads the newest version of the package published at or below the manifest's from the index,
-  downloads it into the cache, and writes into the manifest that version bumped as the changes need, unless the
-  manifest already says a later version that is big enough. With nothing published, the version stays.
-
-**Left for #865:** `nanyx publish` calling `versionErrors` against the newest version published below the one it
-publishes, and the index's check that a release's `api.json` came from a bump that passed it.
-
-This needs the type of every exported definition, which inference already has, and it is one more reason for the
-linter rule that asks for annotations on exported definitions
-([#104](https://github.com/nanyx-lang/nanyx/issues/104)): an inferred type can change by accident.
-
-## What a package exports
-
-Built ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457)), and described in
-[Public modules](../tour/packages#public-modules): `export module` in a module's declaration makes it public, and
-re-exports choose what of an internal module it shows. The compiler reads it into `PackageModules.PublicModules`
-(`ModuleDecl`'s `isExport`, by `PackageModules.ofFiles`; a module split across files is public when one of them
-exports it). These public modules' exports, with their types, are the API that `api.json` and the
-[semantic version check](#enforced-semantic-versioning) compare.
-
+**Left for #865:** `nanyx publish` calling `PackageApi.versionErrors` against the newest version published below the
+one it publishes, and the index's check that a release's `api.json` came from a bump that passed it.
 ## What a package is
 
-A published package is a `.nyxpkg` file: a gzipped tar holding the `.nyxp` manifest, the source files the
-manifest selects, the readme and licence, and a generated `api.json` describing the public API.
+A published package is a `.nyxpkg` file, built ([#863](https://github.com/nanyx-lang/nanyx/issues/863)): a zip of the
+manifest, at its root, the source files its `sources` select, and `api.json`, packed the same way every time
+(`PackageArchive.pack`, `nanyx pack`).
 
 - Packages ship **source**. The compiler inlines imported modules into one WebAssembly module, so there is no
   compiled form to ship yet, and source works for every compiler version that supports the package's language
   level. A cached compiled form can be added later, as an optimisation the cache owns.
-- The manifest's `package` gains `nanyx = "0.14"` (the minimum compiler version) and `license`, `description` and
-  `repository`, which the index requires.
+- **Not built:** the readme and licence in the archive, and the manifest's `package` gaining `nanyx = "0.14"` (the
+  minimum compiler version) and `license`, `description` and `repository`, which the index requires.
 - `api.json` is what the API comparison and the package website read, so neither has to compile the package.
-
 ## Where packages live
 
 The client speaks one small protocol: **a static index served over HTTPS**, like Cargo's sparse index. For each
@@ -239,9 +154,9 @@ bucket. Its README is the format's specification; in short:
 - **One file per package**, `index/<namespace>/<name>.json`, lists every version with its `url`, `sha256`,
   `nanyx` (minimum compiler), `dependencies`, `yanked` and `available`.
 - **The index stores no artifacts and mirrors nothing.** A package's versions are the releases of its own GitHub
-  repository: a release tagged `v1.2.0` or `1.2.0` with an asset named `<name>-<version>.nyxpkg`. Until the
-  `.nyxpkg` format lands ([#863](https://github.com/nanyx-lang/nanyx/issues/863)), the asset is a zip of the
-  package's sources, with its manifest at the root.
+  repository: a release tagged `v1.2.0` or `1.2.0` with an asset named `<name>-<version>.nyxpkg`. The client
+  also unpacks a zip of a package's directory, with its manifest in its one top-level folder, which the index accepts
+  for now.
 - **Registering a package** is a pull request adding `registry/<namespace>/<name>.json`, which holds only the name
   and the repository. A check refuses, saying why, a malformed name, one that is taken or too like a registered
   one, and a repository that is missing, private, or not owned by the namespace's owner (`nanyx` belongs to
@@ -263,7 +178,7 @@ What this gives up: because nothing is mirrored, an author who deletes a release
 need it. The hash protects integrity, not availability. Mirroring can be added later behind the same `url` field,
 with no client change.
 
-**Next**, `nanyx publish` ([plan item 7](#plan)) will build the asset, create the release on the package's own
+**Next**, `nanyx publish` ([plan item 3](#plan)) will build the asset, create the release on the package's own
 repository, and open the registration pull request for a package's first version. When pull requests become the
 bottleneck, a small service can take over registration and syncing behind an upload API with tokens, and keep
 writing the same static index. The client, the lockfile and every existing package are unaffected.
@@ -290,24 +205,14 @@ release cycle (`nanyx.http`, `nanyx.json`) are ordinary packages in the `nanyx` 
 
 ## The cache and offline builds
 
-Downloaded packages are verified against the lockfile and unpacked into a per-user cache
-(`~/.nanyx/packages/<name>/<version>/`, or `NANYX_PACKAGES`), shared by every project. A package in the cache is never
-modified. `nanyx build --offline` uses only the cache, and a build with a complete lockfile and a warm cache never touches
-the network.
+Built ([#863](https://github.com/nanyx-lang/nanyx/issues/863)): downloaded packages are verified against the
+lockfile's SHA-256 and unpacked into a per-user cache (`~/.nanyx/packages`, or `NANYX_PACKAGES`), shared by every
+project and never modified, by `nanyx pull` only (`PackageIndex.download`); a build only reads the cache. The index is
+`NANYX_INDEX`, if it is set: an address, or a directory on disk, which is how the tests use it. A yanked version still
+downloads, since a lockfile that names it must keep building.
 
-Built ([#863](https://github.com/nanyx-lang/nanyx/issues/863)), but for `--offline`, which waits for resolution (#864):
-a build only ever reads the cache, and only `nanyx pull` downloads. `PackageIndex.download` reads the index's
-`config.json` and the package's index file, downloads the version's `.nyxpkg` (a path relative to the index file, or
-an address), refuses it unless its SHA-256 is the lockfile's, unpacks it beside its directory in the cache and moves it
-there, so a package is never seen half unpacked, and checks that its manifest names the package and version it was
-downloaded as. A yanked version still downloads, since a lockfile that names it must keep building. The index is
-`NANYX_INDEX`, if it is set: an address, or a directory on disk, which is how the tests use it.
-
-A `.nyxpkg` is a zip of the manifest, at its root, and the files its `sources` select, at their paths beside it, in
-order of their paths and all with the same time, so packing the same package twice makes the same bytes
-(`PackageArchive.pack`). One with a path dependency, or one on GitHub, can't be packed. Unpacking also takes the zip of
-a package's directory, with the manifest in its one top-level folder, which the index accepts for now, and refuses an
-entry that would land outside the package's directory.
+**Not built:** `nanyx build --offline`, which waits for resolution (#864), since until then a build never touches the
+network anyway.
 
 ## The editor
 
@@ -315,61 +220,32 @@ The language server resolves imports exactly as the CLI does, from the manifest,
 manifest changes, the extension offers to run `nanyx pull`. Go-to-definition into a dependency opens the
 cached source read-only.
 
-## Local packages first
-
-Decided by the maintainer. Packaging is built in two halves, so that hosts and linters can become packages
-([Built-ins as packages](./built-ins-as-packages)) without waiting for the parts that only downloaded packages need:
-
-- **Local packages, now.** A dependency is a package in a directory on disk, a path dependency
-  (`(package = "acme.util", path = "../util")` in `dependencies`), or a package shipped with the compiler. Nothing is
-  downloaded, so there is nothing to choose between and no solver is needed.
-  - **Shipped packages** (the console host, then the official linter) are source directories in the compiler's
-    distribution, each with its `.nyxp` and sources, compiled like a path dependency. They become `.nyxpkg` once the
-    cache exists.
-  - **Versions.** A manifest names a shipped package with the version the compiler ships, exactly. Anything else is
-    an error saying which version is available, and `nanyx new` writes the right one.
-  - **Projects** (`.nyxproj`, project references) wait until a workspace of several packages needs them
-    ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
-- **The manifest is Nanyx** ([The package manifest](./package-manifest)), so path dependencies are added to that form.
-- **Remote packages, later:** `.nyxpkg`, the cache, `nanyx.lock`, resolving versions, `nanyx install` and `pull`,
-  publishing and `api.json`. None of this page's open questions block the local half.
-
 # Plan
 
-Local packages first (items 3a to 3c), then remote packages. Each produces something usable on its own:
+Done: imports by module name within a package ([#287](https://github.com/nanyx-lang/nanyx/issues/287)), the rest of the
+import syntax ([#289](https://github.com/nanyx-lang/nanyx/issues/289)), path dependencies
+([#862](https://github.com/nanyx-lang/nanyx/issues/862)), packages shipped with the compiler
+([#1342](https://github.com/nanyx-lang/nanyx/issues/1342)), the console host as one
+([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)), GitHub references
+([#1472](https://github.com/nanyx-lang/nanyx/issues/1472), [#1742](https://github.com/nanyx-lang/nanyx/issues/1742)),
+the lockfile and the cache ([#863](https://github.com/nanyx-lang/nanyx/issues/863)), the index
+([#209](https://github.com/nanyx-lang/nanyx/issues/209)), `export module`
+([#1457](https://github.com/nanyx-lang/nanyx/issues/1457)), and `api.json`, the API comparison and `nanyx bump`
+(#1470). Local packages came first, so that hosts and linters could become packages
+([Built-ins as packages](./built-ins-as-packages)) without waiting for downloads.
 
-1. **Imports by module name within a package.** Done ([#287](https://github.com/nanyx-lang/nanyx/issues/287)).
-2. **The rest of the import syntax.** Done ([#289](https://github.com/nanyx-lang/nanyx/issues/289)): selections and
-   re-exports, which `export module` relies on.
-3. **Local packages:**
-   - ~~**3a. Path dependencies** ([#862](https://github.com/nanyx-lang/nanyx/issues/862)): a dependency on a package in
-     a directory, importing its public modules as `acme.util/strings`, one version of each package per build, only
-     direct dependencies importable, with an error for each rule.~~ Done.
-   - ~~**3b. Packages shipped with the compiler** ([#1342](https://github.com/nanyx-lang/nanyx/issues/1342)): source
-     directories in the distribution, named with an exact version.~~ Done.
-   - **3c. The console host as a shipped package** ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344), done), then the
-     official linter once its contract exists ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)).
-   - Projects (`.nyxproj`) later ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
-   - **3d. GitHub references** ([#1472](https://github.com/nanyx-lang/nanyx/issues/1472), done but for the download): a
-     package, or one file as a module, from a GitHub repository, pinned to a commit; see
-     [Package ownership and locking](./package-ownership-and-locking#depending-on-a-single-file). Fetching waits for
-     the cache (item 4).
-4. ~~**The lockfile and the cache.** `nanyx.lock`, the `.nyxpkg` format, verification and the per-user cache, tested
-   against a local directory acting as an index.~~ Done ([#863](https://github.com/nanyx-lang/nanyx/issues/863)):
-   `Lockfile.fs`, `PackageArchive.fs` (`nanyx pack`), `PackageIndex.fs` and `PackageStore.fs`; see
-   [The cache and offline builds](#the-cache-and-offline-builds). Nothing writes the lockfile until item 5.
-5. **Resolution.** PubGrub over the index protocol, with error messages for conflicts; `nanyx install` and `pull`.
-6. **The index.** Done ([#209](https://github.com/nanyx-lang/nanyx/issues/209)): `nanyx-lang/packages` on GitHub
-   Pages, with the registration check, the release sync and the `nanyx` namespace reserved. Not done: recording
-   owners' account IDs, and mirroring artifacts.
-7. **Publishing.** `nanyx publish` and `yank`; `api.json`; the API comparison and version check
+1. **The official linter as a shipped package**, once its contract exists
+   ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)).
+2. **Resolution.** PubGrub over the index protocol, with error messages for conflicts; writing the lockfile;
+   `nanyx install` and `pull` for a version not locked yet ([#864](https://github.com/nanyx-lang/nanyx/issues/864)).
+3. **Publishing.** `nanyx publish` and `yank`, with the version check
    ([#865](https://github.com/nanyx-lang/nanyx/issues/865), [#1470](https://github.com/nanyx-lang/nanyx/issues/1470)).
-   `export module` ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457), done) decides what the API is.
-   `api.json`, the comparison and `nanyx bump` are done (#1470); `publish` and `yank` are left.
-8. **Editor support.** Resolve packages in the language server; pull from the extension.
-9. **First packages.** Publish at least one official package (`nanyx.json`, say) end to end before launch, to
+4. **The index:** recording owners' account IDs, and mirroring artifacts.
+5. **Projects** (`.nyxproj`, project references) when a workspace of several packages needs them
+   ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
+6. **Editor support.** Resolve packages in the language server; pull from the extension.
+7. **First packages.** Publish at least one official package (`nanyx.json`, say) end to end before launch, to
    prove the whole path.
-
 # Open questions
 
 - **A custom domain and mirroring.** The index is at `https://nanyx-lang.github.io/packages/` and points at

@@ -1,5 +1,5 @@
 /// The console host provides `Http`, from the shipped package `nanyx.http.core`, on the runtime's own import
-/// `nanyx:http`, backed by .NET's `HttpClient` (#1785, see docs/src/content/work-in-progress/files-http-json.md).
+/// `nanyx:http`, backed by .NET's `HttpClient` (#1785, see docs/src/content/work-in-progress/hosts.md).
 module TranspilerWasmTests.Features.Hosts.HttpClient
 
 open System

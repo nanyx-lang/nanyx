@@ -22,7 +22,7 @@ workstream.
 # The official linter
 
 **Today** the official linter is F#: the `default` linter's rules (`unusedBindings`, `nonTailRecursion`,
-`unusedResults` and the rest) are in `compiler/Nanyx.Compiler/Linters.fs`, about 970 lines, run by the compiler's
+`unusedResults` and the rest) are in `compiler/Nanyx.Compiler/Linters.fs`, about 1,160 lines, run by the compiler's
 [linter host](./linters#4-the-linter-host-internal). Linters written in Nanyx aren't possible yet: their contract is
 [#107](https://github.com/nanyx-lang/nanyx/issues/107).
 
@@ -33,31 +33,19 @@ severities, configuration and suppression. The rules themselves go
 
 **Shipped, but not special.** The compiler's distribution includes it, built and pinned to its release, as it does the
 console host, so an offline install with nothing downloaded builds, runs and lints a program. It is not a default: a
-package is linted only when its manifest names a linter, and `nanyx new` writes the entry. Once there is a lockfile, it
-records shipped packages like any other.
-
-# The manifest
-
-Decided by the maintainer, and built: the manifest has a small, fixed set of top-level fields, and a package's settings
-sit under its own entry, never at the top level, so a field is never mistaken for a package's configuration.
-
-- **Linters are not dependencies.** `dependencies` are packages the code imports, which end up in the program. A
-  linter runs at compile time and is never imported, like Cargo's build dependencies or npm's dev dependencies, so it
-  has a field of its own.
-- **Nothing implicit.** With no `linters`, no linter runs; with no `host`, a package is a library.
-- **Settings are typed by their package** (built for hosts). A linter or host declares the settings it accepts, so a
-  misspelt key is an error naming the package. For linters that's part of their contract
-  ([#107](https://github.com/nanyx-lang/nanyx/issues/107)); for hosts it settles the Hosts page's question on typed
-  host configuration. A host's are built: it declares the settings it takes, with their defaults, and a program's
-  `settings` for it are checked against them ([#1786](https://github.com/nanyx-lang/nanyx/issues/1786)). A linter's
-  `settings` still hold only `rules`.
+package is linted only when its manifest names a linter (`linters`, a field of its own, since a linter is never
+imported), and `nanyx new` writes the entry. A linter's settings are to be typed by the linter, as a host's are
+([The package manifest](./package-manifest#whats-not-built)). Once versions are chosen and the lockfile is written
+([#864](https://github.com/nanyx-lang/nanyx/issues/864)), it records shipped packages like any other; today it
+records none.
 
 # What it needs
 
 - **Packages that resolve.** Local dependencies are done ([#862](https://github.com/nanyx-lang/nanyx/issues/862)),
-  which is all a shipped source directory needs. Shipping packages as `.nyxpkg` waits for the format and the package
-  cache ([#863](https://github.com/nanyx-lang/nanyx/issues/863)), and taking a newer one from the index waits for
-  resolution ([#864](https://github.com/nanyx-lang/nanyx/issues/864)). See [Packaging](./packaging).
+  which is all a shipped source directory needs. The `.nyxpkg` format and the package cache are built
+  ([#863](https://github.com/nanyx-lang/nanyx/issues/863)), but shipped packages are still source directories, and
+  taking a newer one from the index waits for resolution ([#864](https://github.com/nanyx-lang/nanyx/issues/864)). See
+  [Packaging](./packaging).
 - **The public linter contract** ([#107](https://github.com/nanyx-lang/nanyx/issues/107)): how a linter written in
   Nanyx sees the semantic model and reports diagnostics, run on the embedded Wasmtime engine.
 
@@ -74,7 +62,8 @@ host as one of them ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344),
 
 - **Shipped packages are source directories.** `packages/` at the repository root holds them, each named for its
   package, with its manifest at the compiler's version and its sources under `src`: `packages/nanyx.console`,
-  `packages/nanyx.console.core` and `packages/nanyx.json`. Every build of the compiler copies the directory beside it (a `None` item in
+  `packages/nanyx.console.core`, `packages/nanyx.fs`, `packages/nanyx.http.core`, `packages/nanyx.http` and
+  `packages/nanyx.json`. Every build of the compiler copies the directory beside it (a `None` item in
   `NanyxCompiler.fsproj` with `CopyToOutputDirectory` and `CopyToPublishDirectory`), so the tests, the language server
   and the published `nanyx` all find it at `ShippedPackages.directory`, and each release archive holds it beside the
   executable. A test checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with

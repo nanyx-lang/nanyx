@@ -50,7 +50,7 @@ it, and every later compile reuses the result (`checkedStandardLibrary` in `Nany
 module and its source).
 
 The file has the modules of the shipped packages too: the console host's package, `nanyx.console`, and the packages it
-depends on, `nanyx.console.core` ([#1637](https://github.com/nanyx-lang/nanyx/issues/1637)). The writer checks each as
+depends on, `nanyx.console.core`, `nanyx.fs` and `nanyx.http.core` ([#1637](https://github.com/nanyx-lang/nanyx/issues/1637)). The writer checks each as
 a loose script's import of it does and writes what `checkedSourceFiles` keeps of it: the module, the modules it
 imports, and the text of every file its check read. Their files are beside the compiler (`ShippedPackages.directory`),
 so the file names a path there relative to that directory, and a path read back is in the reading compiler's

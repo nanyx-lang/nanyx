@@ -366,7 +366,7 @@ To fix it, write the value the message asks for: `sources = ["*.nyx"]`.
 # NYX0024: Manifest field not supported yet
 
 The manifest uses a field the compiler knows, but does not support yet: a dependency named by its version that
-`nanyx.lock` doesn't lock, since choosing a version to lock isn't supported yet, or `settings` for a host.
+`nanyx.lock` doesn't lock, since choosing a version to lock isn't supported yet.
 
 ```nanyx
 -- file: demo.nyxp

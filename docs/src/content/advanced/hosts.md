@@ -225,6 +225,7 @@ The compiler ships the packages every program needs beside itself, in a `package
 - `nanyx.console.core`, its interface package, which declares `Console` and `Env`;
 - `nanyx.fs`, the interface package of the file system, which declares `FileSystem`, `Path` and the functions on them;
 - `nanyx.http.core`, the interface package of HTTP, which declares `Http`, `Request`, `Response` and the functions on them;
-- `nanyx.http`, the HTTP host.
+- `nanyx.http`, the HTTP host;
+- `nanyx.json`, for reading and writing [JSON](../stdlib/json).
 
 A manifest or a directive names a package the compiler ships at the compiler's version exactly; any other version is an error that names the one shipped (`NYX0029`). In a `::host` or `::dependency` directive it needs no version at all: `::dependency nanyx.console.core`. The standard library, `nanyx/...`, is built into the compiler and is never listed as a dependency.

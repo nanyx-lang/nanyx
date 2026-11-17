@@ -39,7 +39,7 @@ def main: Request -> Response = { req ->
 }
 ```
 
-Compare this with the current [HTTP server cookbook](../cookbook/http-server), where `main` runs under `Console` and calls `server.start(handler, port = 3000)` itself. With a host, the port comes from configuration, and listening, concurrency and graceful shutdown belong to the host.
+The port comes from configuration, and listening, concurrency and graceful shutdown belong to the host. This is how the [HTTP server cookbook](../cookbook/http-server) works today, though the `#Path` route pattern isn't built.
 
 If the entry has the wrong shape, the error names the host:
 
@@ -160,8 +160,8 @@ a `Request -> Response`. That is the next section's rule.
 names and values, and the body as a string; the host, `nanyx.http`, on the machinery ConsoleHost builds; and serving
 without WASI: `nanyx run` listens on the port the `settings` of the manifest's `host` give, and answers each request
 with a fresh instance, which is enough for local development and for the [HTTP server cookbook](../cookbook/http-server)
-([#1786](https://github.com/nanyx-lang/nanyx/issues/1786); how it's built is on
-[Files, HTTP and JSON](./files-http-json#how-serving-is-built)). The host provides `Http` only, so far.
+([#1786](https://github.com/nanyx-lang/nanyx/issues/1786); see [How it's built](#how-its-built)). The host provides
+`Http` only, so far; what else it lacks is on [Files, HTTP and JSON](./files-http-json#http).
 
 **What it still needs:** to serve on WASI, the `wasi:http` incoming-handler world. That is the largest piece: the
 backend emits a WASI preview 1 core module today, and `wasi:http` is a preview 2 component.
@@ -185,7 +185,8 @@ So each host is **two packages**:
   interface package.
 
 A library depends only on the interface package. The capability check does the rest: a program whose host doesn't
-provide `Terminal` gets a compile error naming `Terminal` at the library's call, as it does for `FileSystem` today.
+provide `Terminal` gets a compile error naming `Terminal` at the library's call, as it is to for `FileSystem`, which today fails later, in the backend
+([#1811](https://github.com/nanyx-lang/nanyx/issues/1811)).
 The same interface can have more than one host, so middleware works under a local server, a serverless host or a
 WASI one, and a third-party HTTP host is another implementation of the same interface, with every library already
 written for it. This is the split WASI makes between an interface (WIT) and its implementation, and that WSGI makes
@@ -387,14 +388,43 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
   (`Scripts.withAmbientContextsOnly`): a statement that calls a function whose type is an error would otherwise leave it
   requiring all that `run` provides, `Env` too in a script that doesn't import it.
 - **`FileSystem`** is declared in the shipped package `nanyx.fs`, which the console host depends on; its prelude
-  re-exports `FileSystem`, with `Path` and `FsError`, the types its members name. Its members are written on WASI's
-  file functions over the directories the runtime preopens (see
-  [Files, HTTP and JSON](./files-http-json#how-the-file-system-is-built)). A program reaches its functions by
-  importing `nanyx.fs`'s modules, with `::dependency nanyx.fs` or a manifest's `dependencies`.
+  re-exports `FileSystem`, with `Path` and `FsError`, the types its members name: a program module sees `run`'s
+  parameter type, so it must be able to name the members' types. A program reaches its functions by importing
+  `nanyx.fs`'s modules, with `::dependency nanyx.fs` or a manifest's `dependencies`. `FileSystem`'s members are named
+  for what they do on their own (`readFile`, `writeFile`, `pathExists`, `listDirectory`, ...), since the prelude makes
+  them ambient names. `listDirectory` gives names in any order, and `dir.list` sorts and joins them, so another host
+  has less to do.
+- **The file system on WASI.** The console host writes `FileSystem` in `console.host.nyx` on WASI's
+  `fd_prestat_get` and `fd_prestat_dir_name`, `path_open`, `fd_read`, `fd_pread`, `fd_write`, `fd_close`,
+  `fd_filestat_get`, `fd_readdir`, `path_filestat_get`, `path_unlink_file` and `path_create_directory`. A path is
+  found in the runtime's preopened directories: a relative one in the preopen named `.`, an absolute one in the
+  preopen whose name starts it (compared without case when it starts with a drive), and one in none is
+  `#permissionDenied`, as is a relative path that climbs out of `.`, which WASI refuses (`ENOTCAPABLE`). WASI's error
+  numbers map to `FsError`. `WasmRunner` (`Nanyx.Compiler.Runtime/Runner.fs`) takes the directories a program may
+  reach, the current directory first: it preopens that one as `.` and by its absolute path, and each other by its
+  absolute path, written with `/`. `nanyx run` passes the shell's directory and the one `--allow-dir` names
+  (`Program.RunIn`). `file.lines` reads 64 KB at a time through a member of its own, `readFileChunk(at, offset,
+  length)`, which opens the file, reads the chunk with `fd_pread` and closes it again, so a sequence abandoned before
+  its end holds no file, and pulling a sequence again reads the same lines again. The host's `readFileChunk` gives an
+  error, not an empty chunk, for an offset past the file's end, so a file cut short between chunks is caught.
 - **`Http`** is declared in the shipped package `nanyx.http.core`, which the console host depends on; its prelude
-  re-exports `Http` and `HttpError`, with `Request`, `Method` and `Response`. Its member is written on the
-  runtime's own import `nanyx:http`, not on WASI, which has no networking (see
-  [Files, HTTP and JSON](./files-http-json#how-the-client-is-built)).
+  re-exports `Http` and `HttpError`, with `Request`, `Method` and `Response`. Its one member, `sendRequest`, is written
+  on the runtime's own import `nanyx:http`, not on WASI, which has no networking (see
+  [Foreign functions](./foreign-functions#whats-built)). `nanyx.http.core`'s module `wire` writes and reads requests
+  and responses as the runtime's imports pass them, so the console host and the HTTP host share it.
+- **The HTTP host.** `packages/nanyx.http` declares itself a host with `host = (root = "http.host", prelude =
+  "http.prelude", settings = (port = 3000))`. Its `run` takes the handler, `use`s an `Http` written on `nanyx:http` as
+  the console host's is, takes the request from the runtime, calls the handler, and gives the runtime the response; a
+  request the runtime wrote wrongly is answered with a 400 without calling the handler. The host imports the
+  runtime's own `nanyx:serve`, and `nanyx run` serves any program whose module imports it (`WasmServer.serves`),
+  whatever its host: it compiles the module once, listens on `http://localhost:<port>/` with .NET's `HttpListener`,
+  and answers each request in a store and an instance of its own, on a task of its own. An instance that traps or
+  exits without responding is answered with a 500, the reason goes to standard error, and the server carries on.
+  `Request.path` takes the path from the whole URL the runtime passes.
+- **Host settings.** A host declares the settings it takes, with their defaults, in its own manifest's `host`; a
+  program's manifest sets them in its `host`'s `settings`, and one the host doesn't take, or of another kind than its
+  default, is an error at the setting (`HostSettings`, checked when `Package` reads the host). A script's `::host` has
+  no settings, so it gets the defaults.
 
 # Open questions
 

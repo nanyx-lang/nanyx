@@ -22,8 +22,8 @@ order: 10
   `fromArray` ([Collection literals](./collection-literals)).
 - **Keys need `Eq` and `Hash`**, as [the equality design](./equality-and-well-known-contexts#hashing) agreed. The hash
   is not used yet: lookups compare with `==`.
-- **Calling a map is a lookup.** The type checker types `m(k)` as the call to `map.get` (`inferMapLookup` in
-  `Infer.fs`) and records it in `ReadAs`, and `ExpressionRewrites.writeAsRead` writes it as that call for the backend.
+- **Calling a map is a lookup.** The type checker types `m(k)` as the call to `map.get` (`inferLookup` in
+  `Infer.fs`, which reads a call of an array as `array.at` the same way) and records it in `ReadAs`, and `ExpressionRewrites.writeAsRead` writes it as that call for the backend.
   A call of a field that holds a function, `statement.setInt(position, value)`, is read the same way, as a block that
   keeps the field's value in a local and calls it (`FieldCalls`, [#1513](https://github.com/nanyx-lang/nanyx/issues/1513)).
 - **Representation.** A map holds the list of its entries, each key once, in the order the keys were first added, and

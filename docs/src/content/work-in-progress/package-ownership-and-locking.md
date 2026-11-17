@@ -4,7 +4,7 @@ description: "Who can publish under a package name, what the lockfile records, a
 order: 6
 ---
 
-> **Status: proposal, partly built.** Depending on a file or a package on GitHub is built ([#1472](https://github.com/nanyx-lang/nanyx/issues/1472), [#1742](https://github.com/nanyx-lang/nanyx/issues/1742)), and so is the lockfile, except writing it ([#863](https://github.com/nanyx-lang/nanyx/issues/863)); ownership is not. It fills in three parts of the [packaging design](./packaging) that are only sketched there: who owns a package name, what `nanyx.lock` holds, and whether a program can depend on one file rather than a package. The packaging work's issues carry the [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packaging) label, and the package index is [#209](https://github.com/nanyx-lang/nanyx/issues/209). See [Open questions](#open-questions) at the end.
+> **Status: proposal, partly built.** Depending on a file or a package on GitHub is built ([#1472](https://github.com/nanyx-lang/nanyx/issues/1472), [#1742](https://github.com/nanyx-lang/nanyx/issues/1742)), and so is the lockfile, except writing it ([#863](https://github.com/nanyx-lang/nanyx/issues/863)); ownership is not: the package index checks a namespace against its owner's current GitHub login, and doesn't record the owner's ID. It fills in three parts of the [packaging design](./packaging) that are only sketched there: who owns a package name, what `nanyx.lock` holds, and whether a program can depend on one file rather than a package. The packaging work's issues carry the [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packaging) label, and the package index is [#209](https://github.com/nanyx-lang/nanyx/issues/209). See [Open questions](#open-questions) at the end.
 
 [Packages and projects](../tour/packages) describes what a user writes: a `.nyxp` manifest, `dependencies` such as `(package = "acme.core", version = "2.1")`, and imports such as `acme.web/http`. This page is about what sits behind those names.
 
@@ -30,7 +30,7 @@ owner = { kind = "organisation", id = 9919, claimed-as = "acme" }
 publishers = [583231, 1024025]
 ```
 
-Nobody types an ID. The publish workflow reads the author's ID from the pull request that `nanyx publish` opens, and writes this file itself. Installing a package never involves an ID either: a dependant writes `acme.web = "1.2"` and the client reads the index, never GitHub.
+Nobody types an ID. The publish workflow reads the author's ID from the pull request that `nanyx publish` opens, and writes this file itself. Installing a package never involves an ID either: a dependant writes `(package = "acme.web", version = "1.2")` and the client reads the index, never GitHub.
 
 | What happens on GitHub | What happens to the namespace |
 | --- | --- |
@@ -58,111 +58,42 @@ Names are lower case, and two names that differ only in case, in `-` and `_`, or
 
 # The lockfile
 
-`nanyx.lock` records every package a build uses: its exact version, where it came from and the SHA-256 of what was downloaded. With a lockfile and the packages in the cache, a build needs nothing from the network, and two machines with the same lockfile build the same program.
+`nanyx.lock` records every package a build uses: its exact version, where it came from and the SHA-256 of what was
+downloaded. Reading it, and builds and `nanyx pull` using it, are built
+([#863](https://github.com/nanyx-lang/nanyx/issues/863)) and described in
+[Packages and projects](../tour/packages#package-dependencies) and [`nanyx pull`](../standard-tools/command-line#nanyx-pull).
+It is a Nanyx record, as the manifest is. Choosing the versions it locks, and so writing it, comes with resolution
+([#864](https://github.com/nanyx-lang/nanyx/issues/864)). What is planned for it then:
 
-Built ([#863](https://github.com/nanyx-lang/nanyx/issues/863)): reading and writing it (`Lockfile.fs`), and builds and `nanyx pull` using it. Choosing the versions it locks, and so writing it, comes with resolution ([#864](https://github.com/nanyx-lang/nanyx/issues/864)). It is a Nanyx record, as the [manifest](./package-manifest) is, rather than the TOML this page first proposed (decided in #863):
-
-```nanyx fragment
--- Written by nanyx, which keeps it up to date: don't edit it by hand.
-(
-  version = 1
-  packages = [
-    (package = "acme.core", version = "2.3.1", sha256 = "9f2c41…", dependencies = [])
-    (package = "acme.web", version = "1.2.0", sha256 = "e07a5d…", dependencies = ["acme.core"])
-  ]
-)
-```
-
-`version` is the lockfile's format. Every locked package comes from the index, so there is no `source` yet; one is added when a GitHub reference with a tag in its `rev` is locked by its commit.
 - **One lockfile per build.** A package on its own has `nanyx.lock` beside its `.nyxp`. In a [project](../tour/packages#projects) the lockfile is beside the `.nyxproj` and covers every package in it, because a build has [one version of each package](./packaging#versions-and-resolution) and packages built together must agree.
 - **It is committed**, for libraries as well as programs, so that a library's own tests and CI build the same thing every time. A dependant ignores a library's lockfile and resolves for itself.
 - **It changes only when it must.** `nanyx install` and `nanyx pull` write it. `nanyx build` and `nanyx run` use it as it is, and only update it when the manifest asks for something the lockfile does not satisfy, such as a new dependency. A version already locked is never upgraded as a side effect: `nanyx update` does that, for one package or all of them.
 - **`--locked` makes a stale lockfile an error.** CI runs `nanyx build --locked`, so a manifest change pushed without its lockfile fails instead of resolving something new.
 - **Entries are sorted by name**, one to a line, so two branches adding different dependencies rarely conflict, and when they do, `nanyx pull` can redo the resolution from the manifests.
 - **Path dependencies and [project references](../tour/packages#packages-developed-together) are not locked.** Their source is on disk and changes with the code around it, so there is nothing to pin.
-
-The other places a package can come from, a GitHub repository and a single file in one, are described below; their pin is in the manifest for now.
+- **GitHub references.** Every locked package comes from the index today, so an entry has no `source`. One is added when a GitHub reference with a tag in its `rev` is locked by its commit, and the lockfile records the SHA-256 of what was downloaded for a GitHub reference too.
 
 ## Scripts
 
 A script has no manifest, and its `::dependency` directives stand in for `dependencies`. Where its lockfile goes is [open](#open-questions). The proposal is a `hello.nyx.lock` beside `hello.nyx`, written the first time the script runs with a dependency. A script without one still runs and resolves its dependencies each time, which is what someone running a one-off script expects.
 
-# Depending on a single file
+# Dependencies on GitHub
 
-Some code is too small to be worth a package: a retry helper, a slug function, a few lines copied from a gist. Today the choices are to publish it or to copy it into the program. Copying loses where it came from and makes updates manual. [Paket](https://fsprojects.github.io/Paket/github-dependencies.html), the F# package manager, lets a project depend on a single source file from GitHub, pinned to a commit.
-
-Nanyx suits this better than most languages. Packages are distributed as source and a program compiles to one WebAssembly module, so a file from elsewhere is compiled the same way as a file in the program, with no separate compiled form.
-
-## Declaring a file
-
-Built ([#1472](https://github.com/nanyx-lang/nanyx/issues/1472)), except the download: see [Fetching](#fetching). A file is an entry of the manifest's `dependencies`, with `module` where a package has `package`:
-
-```nanyx fragment
-dependencies = [
-  (module = "retry", github = "acme/snippets/retry.nyx", rev = "1f8ae8b3c9d04e5f6a7b8c9d0e1f2a3b4c5d6e7f")
-]
-```
-
-`module` is the module name the file gets in this package. A package's files must all contain named modules, and a referenced file has no name of its own, so the manifest gives it one. A file must declare no `module` of its own (`NYX0040`), and a module name the package's own files declare already is an error (`NYX0018`):
-
-```nanyx fragment
-import retry
-
-def fetchAll = { urls ->
-  urls \map({ url -> withBackoff(3, { fetch(url) }) })
-}
-```
-
-In a script, a `::dependency` directive does the same job, with the reference after `github:` and the commit after `@`:
-
-```nanyx fragment
-::dependency retry github:acme/snippets/retry.nyx@1f8ae8b3c9d04e5f6a7b8c9d0e1f2a3b4c5d6e7f
-
-import retry
-```
-
-## The pin
-
-Every GitHub reference is pinned to a **commit**, a full 40-digit SHA: its `rev`, or, when `rev` is a tag or a branch, a `commit` beside it, `rev = "v1.0", commit = "1f8ae8b3…"`. A reference to a moving target, a tag or a branch with no commit, or none at all, is an error at the entry (`NYX0038`): two machines with the same manifest must build the same program. In an editor the error's fix, "Pin to <sha>", looks up what the tag or branch points at now (the default branch when there is no `rev`) and writes the commit in.
-
-Decided in #1472: the pin is the commit, not a checksum of the file. A commit identifies the repository's whole state, which a whole-package reference needs, and a file at a commit can't change, so one kind of pin serves both. Once there is a lockfile ([#863](https://github.com/nanyx-lang/nanyx/issues/863)), it also records the SHA-256 of what was downloaded, to verify it, as for any package, and a tag or branch in `rev` can be pinned by the lockfile's commit instead of the manifest's. A reference to another host by `url =`, if it is ever added, has no commit to pin, and would be pinned by its checksum alone.
-
-## What a file can use
-
-A file has no manifest, so it cannot declare dependencies. It can import the standard library and nothing else: no packages, no modules of the package that depends on it, and no other files by path (`NYX0040`, at the import). A file that needs more than that is a package.
-
-A file is held to the same rules as any other code. Anything it does through a context, such as reading files or using the network, shows in the types of its definitions, and the caller provides the context. A downloaded file is not trusted more than a package, but it is not trusted less either.
-
-It is a module of the package that depends on it, but it can't be exported: it declares no `module`, so it can't declare one with `export module`, and a package's public API is code the package publishes, which a file is not.
-
-## Files and publishing
-
-A package with a GitHub reference, a file or a whole package, can't be packed or published (`NYX0039`, from `Manifest.publishErrors`, which `nanyx publish` ([#865](https://github.com/nanyx-lang/nanyx/issues/865)) and packing ([#863](https://github.com/nanyx-lang/nanyx/issues/863)) call). A published package has to keep building for as long as anyone depends on it, and a file on someone else's GitHub repository can disappear. Building and running it locally is fine.
-
-Copying the file into the published package instead is [open](#open-questions). It would keep the build working, but the file's licence travels with it, and the publish step cannot check that it allows redistribution.
-
-# Dependencies from GitHub
-
-A package-sized version of the same idea is a dependency on a GitHub repository whose root holds a `.nyxp`:
-
-```nanyx fragment
-dependencies = [(package = "acme.web", github = "acme/web", rev = "v1.2.0", commit = "1f8ae8b3c9d04e5f6a7b8c9d0e1f2a3b4c5d6e7f")]
-```
-
-The repository's manifest must have the dependency's `package` as its `name`, as a path dependency's must, and its public modules are imported as `acme.web/http`. A `path` within the repository, for a package that isn't at its root, is left for later. This is for trying a fork or a fix that has not been released, not a second way to distribute packages: names on the index stay the only names a published package can depend on, and `nanyx publish` refuses a package that has one.
-
-Because a GitHub dependency never touches the index, the ownership rules above do not apply to it. Choosing to depend on someone's repository is the dependant's decision.
-
-## Fetching
-
-Built ([#1742](https://github.com/nanyx-lang/nanyx/issues/1742)). Resolving a tag or branch to a commit, and fetching a file or a repository's tree at a commit, go through one small F# type, `GitHubFetcher` in `GitHub.fs`. Only `nanyx pull` downloads, with `GitHub.downloading`: a file from `raw.githubusercontent.com` into `<cache>/github-files/<owner>/<repo>/<commit>/`, and a repository's tree as the zip `codeload.github.com` makes of it, unpacked into `<cache>/github/<owner>/<repo>/<commit>/`. A build reads only the cache, with `GitHub.cached`, and a reference not fetched yet is `NYX0041`, which says to pull. Resolving goes to GitHub's API (`commits/<rev>`, `HEAD` for the default branch) and is asked once a process, which is what the editor's "Pin to <sha>" fix uses. `GITHUB_TOKEN`, if it is set, is sent with every request. Tests use `GitHub.inDirectory`, and `GitHub.downloadingWith` with a fake of GitHub's addresses, so they need no network.
+Depending on a package, or a single file as a module, in a GitHub repository, pinned to a commit, is built
+([#1472](https://github.com/nanyx-lang/nanyx/issues/1472), [#1742](https://github.com/nanyx-lang/nanyx/issues/1742))
+and described in [Dependencies on GitHub](../tour/packages#dependencies-on-github). The idea for single files comes
+from [Paket](https://fsprojects.github.io/Paket/github-dependencies.html). Decided in #1472: the pin is the commit, not
+a checksum of the file, since a commit identifies the repository's whole state, which a whole-package reference needs,
+and a file at a commit can't change. Because a GitHub dependency never touches the index, the ownership rules above
+don't apply to it. It is for trying a fork or a fix that has not been released, not a second way to distribute
+packages, so `nanyx publish` refuses a package that has one (`NYX0039`).
 # Open questions
 
 - **Hyphens in names.** GitHub names can contain `-`. Can a package name segment, so that `acme-corp.web/http` is a valid import? If not, how does an account with `-` in its name get a namespace?
 - **Organisations that never claim their namespace.** A popular user could publish under their own namespace something an organisation would want to own, or an organisation's namespace could stay unclaimed. Is "first claim by the account of the same name" enough, or should well-known organisations be reserved?
 - **Frozen namespaces.** When an owner's GitHub account is deleted, what does it take for the maintainers to hand the namespace to someone else, and are its old packages kept under the old owner?
 - **Other identity providers.** GitLab or Codeberg accounts, or a domain proved by DNS as Maven Central does. Each would need a prefix, such as `gitlab-acme`, or a rule about which provider a bare name belongs to.
-- **Script lockfiles.** A file beside the script, the cache, or a lock written into the script's own `#:` directives so the script stays one file?
+- **Script lockfiles.** A file beside the script, the cache, or a lock written into the script's own `::` directives so the script stays one file?
 - **Copying files into published packages.** Should `nanyx publish` copy a file from GitHub into the package rather than refusing it, and if so, how is the licence handled?
 - **Are file dependencies worth having?** Copying a file into a program already works. What a `module` entry adds is a record of where the file came from and an easy update. Is that enough to justify a second kind of dependency, its lockfile entries and its rules?
 - **Files from other hosts.** Should `github =` have siblings, such as `gist =` or `gitlab =`, or is `url =` enough? Resolving a tag or branch to a commit needs the host's git protocol, which a plain `url` does not have, so `url` files would be pinned by hash only.
