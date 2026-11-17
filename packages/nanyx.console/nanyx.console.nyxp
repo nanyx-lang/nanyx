@@ -8,5 +8,6 @@
   dependencies = [
     (package = "nanyx.console.core", version = "0.28.0")
     (package = "nanyx.fs", version = "0.28.0")
+    (package = "nanyx.http.core", version = "0.28.0")
   ]
 )

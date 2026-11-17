@@ -34,10 +34,10 @@ let ``The console's interface package is shipped beside the compiler, and the co
     Assert.Equal<string list>([ "console"; "env" ], (ShippedPackages.tryModules "nanyx.console.core").Value.PublicModules)
     Assert.Equal(None, core.Declares)
     let host = manifestOf Hosts.consolePackage
-    Assert.Equal<string list>([ "nanyx.console.core"; "nanyx.fs" ], host.Dependencies |> List.map _.Name)
+    Assert.Equal<string list>([ "nanyx.console.core"; "nanyx.fs"; "nanyx.http.core" ], host.Dependencies |> List.map _.Name)
     // A script's build reads the host's package with the shipped packages it depends on.
     let modules = (ShippedPackages.tryModules Hosts.consolePackage).Value
-    Assert.Equal<string list>([ "nanyx.console.core"; "nanyx.fs" ], modules.Dependencies |> List.map _.Package)
+    Assert.Equal<string list>([ "nanyx.console.core"; "nanyx.fs"; "nanyx.http.core" ], modules.Dependencies |> List.map _.Package)
     Assert.Equal<string list>([ "console"; "env" ], modules.Dependencies.Head.PublicModules)
 
 [<Fact>]
@@ -47,6 +47,14 @@ let ``The file system's interface package is shipped beside the compiler, with n
     Assert.Equal(None, fs.Declares)
     Assert.Empty(fs.Dependencies)
     Assert.Equal<string list>([ "dir"; "file"; "filesystem"; "path" ], (ShippedPackages.tryModules "nanyx.fs").Value.PublicModules |> List.sort)
+
+[<Fact>]
+let ``The HTTP interface package is shipped beside the compiler, with no dependencies`` () =
+    let http = manifestOf "nanyx.http.core"
+    Assert.Equal(("nanyx.http.core", Toolchain.version), (http.Name, http.Version))
+    Assert.Equal(None, http.Declares)
+    Assert.Empty(http.Dependencies)
+    Assert.Equal<string list>([ "client"; "http"; "request"; "response" ], (ShippedPackages.tryModules "nanyx.http.core").Value.PublicModules |> List.sort)
 
 [<Fact>]
 let ``The JSON package is shipped beside the compiler, with its modules for values and for encoders, and no dependencies`` () =

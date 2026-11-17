@@ -1,0 +1,25 @@
+--| HTTP requests.
+
+  A [`Request`] is a record: its [`Method`], its URL, its headers, its body and how long to wait
+  for an answer. [`Request.of`] makes one with no headers and no body, and `with` changes the rest:
+  `Request.of(#post, url) with body = text`. Send one with `http.send`, from `nanyx.http.core/http`.
+export module request
+
+--| What a request asks the server to do.
+export type Method = #get | #post | #put | #delete | #patch | #head | #options
+
+--| An HTTP request: what it asks (`method`) of which resource (`url`), with its headers, each a name
+  and a value, in the order they are sent, and its body, as text. `timeout` is how many milliseconds to wait for the answer before giving up.
+export type Request = (
+  method: Method
+  url: string
+  headers: list((string, string))
+  body: string
+  timeout: int
+)
+
+--| A request asking `method` of `url`, with no headers and an empty body, that waits 30 seconds for
+  its answer.
+export def Request.of: Method, string -> Request = { method, url ->
+  Request(method = method, url = url, headers = [], body = "", timeout = 30000)
+}
