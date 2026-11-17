@@ -212,11 +212,13 @@ and TypeExprKind =
     | TypeNamedArgument of Identifier * TypeExpr
     /// `Iter(c).elem`: the associated type `elem` of the context `Iter(c)` a signature requires.
     | TypeAssociated of TypeExpr * Identifier
+    /// `type a`, a function's positional parameter that takes a type argument: its value is of type `Type(a)`, and the
+    /// type variable `a` is the type passed, as in `(type a, string) -> a`. A named one is written `into: type`.
+    | TypeArgument of TypeExpr
 
 and TypeRecordField =
     /// A named field: its name, whether it is `mut`, its type and its default value.
     | TypeField of Identifier * bool * TypeExpr option * Expression option
-    | TypeMember of Identifier * TypeExpr option
     /// An `@name` attribute before a named field, written where it is: it applies to the field that follows it, as
     /// `@customKeywordType(#bind)` does to a member of a `context` declaration. Its argument is written as a top-level
     /// attribute's is.
@@ -399,6 +401,8 @@ and ExpressionKind =
     | MemberAccess of Expression * Identifier * SourceSpan option  // expr.field
     | ContextMemberAccess of TypeExpr * Identifier  // C(T).field - qualified context access (as value)
     | ContextMemberCall of TypeExpr * Identifier * Expression list  // C(T).field(args) - qualified context call
+    /// `type Point`: the type written after `type`, passed as a type argument. Its value is of type `Type(Point)`.
+    | TypeValue of TypeExpr
     | UseIn of Expression * Expression  // use value in body
     | WorkflowBindExpr of Identifier * Expression
     | WorkflowReturnExpr of Expression
@@ -977,7 +981,8 @@ module TypeExpr =
         | TypeKeyword
         | TypeOf _ -> []
         | TypeNamedArgument(_, inner)
-        | TypeAssociated(inner, _) -> [ inner ]
+        | TypeAssociated(inner, _)
+        | TypeArgument inner -> [ inner ]
         | TypeTuple items
         | TypeUnion items
         | TypeIntersection items
@@ -985,7 +990,7 @@ module TypeExpr =
         | TypeApply(_, items) -> items
         | TypeRecord fields
         | TypeOpenRecord(fields, _) ->
-            fields |> List.choose (function TypeField(_, _, typeOpt, _) | TypeMember(_, typeOpt) -> typeOpt | TypeFieldAttribute _ -> None)
+            fields |> List.choose (function TypeField(_, _, typeOpt, _) -> typeOpt | TypeFieldAttribute _ -> None)
         | TypeFunc(arg, ret) -> [ arg; ret ]
         | TypeTag(_, payload) -> Option.toList payload
         | TypeWithContext(contexts, inner) -> contexts @ [ inner ]
@@ -995,7 +1000,6 @@ module TypeExpr =
     let private mapField (f: TypeExpr -> TypeExpr) (field: TypeRecordField) =
         match field with
         | TypeField(name, isMutable, typeOpt, defaultOpt) -> TypeField(name, isMutable, Option.map f typeOpt, defaultOpt)
-        | TypeMember(name, typeOpt) -> TypeMember(name, Option.map f typeOpt)
         | TypeFieldAttribute _ -> field
     /// `typeExpr` with `f` applied to each type expression directly inside it: those `children` gives. One with none,
     /// a `typeof` among them, is returned as it is.
@@ -1010,6 +1014,7 @@ module TypeExpr =
             | TypeOf _ -> typeExpr.Kind
             | TypeNamedArgument(name, inner) -> TypeNamedArgument(name, f inner)
             | TypeAssociated(context, name) -> TypeAssociated(f context, name)
+            | TypeArgument inner -> TypeArgument(f inner)
             | TypeTuple items -> TypeTuple(List.map f items)
             | TypeUnion items -> TypeUnion(List.map f items)
             | TypeIntersection items -> TypeIntersection(List.map f items)

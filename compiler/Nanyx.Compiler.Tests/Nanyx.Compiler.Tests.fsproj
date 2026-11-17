@@ -213,6 +213,7 @@
     <Compile Include="Features\Types\RecursiveAliasesTests.fs" />
     <Compile Include="Features\Types\RecursiveNominalsTests.fs" />
     <Compile Include="Features\Types\TypeHoleTests.fs" />
+    <Compile Include="Features\Types\TypeArgumentTests.fs" />
     <Compile Include="Features\Types\TypeNameTests.fs" />
     <Compile Include="Features\Types\TypeOfTests.fs" />
     <Compile Include="Features\Types\UnknownTypeNameTests.fs" />

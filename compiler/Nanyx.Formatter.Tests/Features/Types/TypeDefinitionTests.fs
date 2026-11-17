@@ -26,8 +26,8 @@ let ``A scoped context keeps scoped, before export`` () =
     Assert.Equal("scoped export context Memory = protected ()\n", format "scoped   export   context Memory = protected ()")
 
 [<Fact>]
-let ``Mutable, defaulted, member and positional fields keep what they say`` () =
-    unchanged (lines [ "type Settings = ("; "  int,"; "  mut count: int"; "  label: string"; "  limit: int = 10"; "  type Item = string"; ")" ])
+let ``Mutable, defaulted and positional fields keep what they say`` () =
+    unchanged (lines [ "type Settings = ("; "  int,"; "  mut count: int"; "  label: string"; "  limit: int = 10"; ")" ])
 
 [<Fact>]
 let ``A record type with a comment among its fields has one field per line`` () =

@@ -178,7 +178,7 @@ let private typeFields (typed: TypedModule) (defined: TypeDefInfo option) (typeE
             | (TypeRecord _ | TypeOpenRecord _), Some info when inner.Id = typeExpr.Id && info.IsNominal -> Some (Nominal(TypeDefInfo.nominalId info))
             | TypeRecord fields, _ ->
                 fields
-                |> List.choose (function TypeField(name, _, _, _) | TypeMember(name, _) when not (isPositional name) -> Some name | _ -> None)
+                |> List.choose (function TypeField(name, _, _, _) when not (isPositional name) -> Some name | _ -> None)
                 |> Set.ofList
                 |> Shape
                 |> Some

@@ -53,10 +53,8 @@ let private ofType (typeExpr: TypeExpr) : Field list list =
     | TypeOpenRecord(fields, _) ->
         [ fields
           |> List.choose (function
-              | TypeField(name, _, Some fieldType, _)
-              | TypeMember(name, Some fieldType) -> Some (name, fieldType.Id, fieldType.Span)
+              | TypeField(name, _, Some fieldType, _) -> Some (name, fieldType.Id, fieldType.Span)
               | TypeField _
-              | TypeMember _
               | TypeFieldAttribute _ -> None) ]
     | _ -> []
 

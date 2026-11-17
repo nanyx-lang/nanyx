@@ -18,8 +18,7 @@ let rec private typeKeyOf (t: TypeExpr) =
         let names, types =
             fields
             |> List.choose (function
-                | TypeField(name, _, typeOpt, _)
-                | TypeMember(name, typeOpt) -> Some (name, typeOpt |> Option.map typeKeyOf |> Option.defaultValue (TypeKey("_", [])))
+                | TypeField(name, _, typeOpt, _) -> Some (name, typeOpt |> Option.map typeKeyOf |> Option.defaultValue (TypeKey("_", [])))
                 | TypeFieldAttribute _ -> None)
             |> List.unzip
         TypeKey("(" + String.concat "," names + ")", types)

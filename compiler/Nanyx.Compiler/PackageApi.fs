@@ -164,7 +164,6 @@ module PackageApi =
         let field (field: TypeRecordField) =
             match field with
             | TypeField(name, mutability, Some fieldType, defaultValue) -> TypeField(name, mutability, Some(go fieldType), defaultValue)
-            | TypeMember(name, Some memberType) -> TypeMember(name, Some(go memberType))
             | other -> other
         let kind =
             match typeExpr.Kind with
@@ -190,7 +189,6 @@ module PackageApi =
         let fieldType (field: TypeRecordField) =
             match field with
             | TypeField(name, _, fieldType, _) -> Some(name, fieldType)
-            | TypeMember(name, memberType) -> Some(name, memberType)
             | TypeFieldAttribute _ -> None
         let fields (generals: TypeRecordField list) (specifics: TypeRecordField list) =
             let generals = generals |> List.choose fieldType |> List.sortBy fst
@@ -264,7 +262,7 @@ module PackageApi =
 
     /// The names of the fields of `fields`.
     let private fieldNames (fields: TypeRecordField list) =
-        fields |> List.choose (function TypeField(name, _, _, _) | TypeMember(name, _) -> Some name | TypeFieldAttribute _ -> None)
+        fields |> List.choose (function TypeField(name, _, _, _) -> Some name | TypeFieldAttribute _ -> None)
 
     /// The names of the tags of a union, `#a | #b(int)`, or of one tag, `#a`; none for another type.
     let private tagNames (shape: TypeExpr) =

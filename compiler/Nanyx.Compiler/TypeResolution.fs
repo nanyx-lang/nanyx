@@ -61,6 +61,7 @@ let internal isBuiltInTypeName (name: string) =
     || Arrays.isTypeName name
     || Boxes.isTypeName name
     || MutableArrays.isTypeName name
+    || TypeValues.isTypeName name
 
 /// Whether the type `name` is attached to exists; `span` is where the definition's name is written.
 let internal ensureAttachedTypeExists (state: InferState) (currentModuleOpt: string option) (name: Identifier) (span: SourceSpan) : Result<unit, Diagnostic list> =
@@ -264,7 +265,7 @@ let private isPrivateType modifiers =
 
 /// The order the fields of a record type are written in (see `FieldOrder`).
 let private writtenOrder (fields: TypeRecordField list) =
-    FieldOrder(fields |> List.choose (function TypeField(name, _, _, _) | TypeMember(name, _) -> Some name | TypeFieldAttribute _ -> None))
+    FieldOrder(fields |> List.choose (function TypeField(name, _, _, _) -> Some name | TypeFieldAttribute _ -> None))
 
 let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * InferState =
     match typeExpr.Kind with
@@ -333,6 +334,8 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
             Boxes.ofType argTys.[0], current
         elif MutableArrays.isTypeName name && argTys.Length = 1 then
             MutableArrays.ofType argTys.[0], current
+        elif TypeValues.isTypeName name && argTys.Length = 1 && (tryFindTypeDef name current).IsNone then
+            TypeValues.ofType argTys.[0], current
         // `mut T`: a cell of the `memory` block whose `Memory` the signature writes, as `[Memory] mut int -> ()` says
         // (see `WrittenContexts.read`). A `mut cell` parameter's own annotation, which has no source, is of a scope of
         // its own: the cell given for it says which. A signature inference writes out has no source either, but what
@@ -422,6 +425,10 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
         | None -> freshVar state
     // `AssociatedTypes` writes these away before inference, and reports the ones it leaves.
     | TypeNamedArgument(_, value) -> typeExprToTy state value
+    // `type a`, a parameter that takes a type argument: a value of type `Type(a)`.
+    | TypeArgument operand ->
+        let standsFor, next = typeExprToTy state operand
+        TypeValues.ofType standsFor, next
     | TypeKeyword
     | TypeAssociated _ -> freshVar state
 
@@ -432,7 +439,6 @@ and private recordFieldTypes (state: InferState) (fields: TypeRecordField list) 
         fields
         |> List.choose (function
             | TypeField(name, _, typeOpt, _) -> Some (name, typeOpt)
-            | TypeMember(name, typeOpt) -> Some (name, typeOpt)
             | TypeFieldAttribute _ -> None)
         |> List.map (fun (name, typeOpt) ->
             let ty, next =
@@ -472,8 +478,7 @@ let rec internal typeNamesIn (typeExpr: TypeExpr) : (Identifier * SourceSpan) li
     | TypeOpenRecord(fields, _) ->
         fields
         |> List.collect (function
-            | TypeField(_, _, Some t, _)
-            | TypeMember(_, Some t) -> ofType t
+            | TypeField(_, _, Some t, _) -> ofType t
             | _ -> [])
     | TypeFunc(arg, ret) -> ofType arg @ ofType ret
     | TypeTag(_, Some payload)
@@ -791,7 +796,6 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
                     let memberSymbol, declared = declareUnscoped RecordTypeFields body.Id memberName ContextMember next
                     next <- declared
                     memberSymbol |> Option.map (fun id -> memberName, id)
-                | TypeMember _
                 | TypeFieldAttribute _ -> None)
             |> Map.ofList
         | _ -> Map.empty
