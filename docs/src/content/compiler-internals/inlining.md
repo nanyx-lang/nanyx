@@ -54,6 +54,13 @@ temporaries (`CoreIrSimplify.withTemporaries`).
   once simplifying has made it a call of the lambda, with the closure as its environment. Once a handler is inlined,
   its parameter is the caller's closure, so the next time over the block is inlined too, then the members its `use`
   binds, then the continuations they are given.
+- **A function the module calls once.** A function that the whole module, as it is lowered, calls once and makes no
+  closure over (`calledOnce`) is inlined whatever its size, since its body only moves. This is how an `@entry` of any
+  size, ending in anything, gets the host's `Console` members: it is inlined into the start function, where they are
+  known, so its `println`s write directly and the code that reads standard input is never reached
+  ([#1883](https://github.com/nanyx-lang/nanyx/issues/1883)). Only its first inlining is for this reason (`placed`):
+  the function it was inlined into may itself be inlined in several places, and then the copies follow the other
+  rules.
 - **What is not.** A function in a cycle of calls, found with Tarjan's algorithm over calls and the closures a function
   makes. Nothing is inlined into a guard. A function stops taking more once it has 4,000 nodes. The start function
   takes inlining as any other does: the host's `run` is inlined into it, so the closure over the entry and the members
