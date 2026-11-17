@@ -38,6 +38,7 @@ let directAtoms (e: Expr) : Atom list =
     | CallImport(_, atoms)
     | MakeClosure(_, _, atoms)
     | CallClosure(_, atoms, _) -> atoms
+    | CopyArrayInto(target, at, source) -> [ target; at; source ]
     | MakeRecord fields -> List.map snd fields
     | UpdateRecord(record, updates) -> record :: List.map snd updates
     | ForEach loop -> ForLoop.sourceAtoms loop
@@ -104,6 +105,7 @@ let rec mapVars (var: Var -> Var) (depth: int -> int) (e: Expr) : Expr =
         | SetField(target, slot, value) -> SetField(var target, slot, atom value)
         | MakeList items -> MakeList(atoms items)
         | CallRuntime(name, args, returnsValue) -> CallRuntime(name, atoms args, returnsValue)
+        | CopyArrayInto(target, at, source) -> CopyArrayInto(atom target, atom at, atom source)
         | CallImport(declared, args) -> CallImport(declared, atoms args)
         | MakeClosure(name, arity, captured) -> MakeClosure(name, arity, atoms captured)
         | CallClosure(closure, args, entry) -> CallClosure(var closure, atoms args, entry)

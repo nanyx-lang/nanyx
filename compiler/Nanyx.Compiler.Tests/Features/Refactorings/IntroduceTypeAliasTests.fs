@@ -153,3 +153,17 @@ let ``A hole is refused`` () =
 [<Fact>]
 let ``Nothing is offered where the selection is not a written type`` () =
     Assert.Empty(snd (offersAt "def total: list(int) -> list(int) = { xs -> [[xs]] \\map { x -> x + 1 } }\n"))
+
+[<Fact>]
+let ``A type in a module block becomes an alias in the block`` () =
+    Assert.Equal(
+        normalized
+            """module shapes =
+  type Extracted = list(#some(int) | #missing)
+
+  def keep: Extracted, int -> list(#some(int) | #missing) = { xs, n -> xs }
+""",
+        rewritten
+            """module shapes =
+  def keep: [[list(#some(int) | #missing)]], int -> list(#some(int) | #missing) = { xs, n -> xs }
+""")

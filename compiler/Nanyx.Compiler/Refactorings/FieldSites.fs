@@ -194,26 +194,11 @@ let private typeFields (typed: TypedModule) (defined: TypeDefInfo option) (typeE
 
 /// The type definitions in `syntax`, each with the type it defines: at the top level, in module blocks and in blocks.
 let private typeDefinitions (typed: TypedModule) (syntax: Module) : (TypeExpr * TypeDefInfo option) list =
-    let infoOf name = typed.TypeDefs |> Map.tryFind name
-    let rec ofItem (item: TopLevelItem) =
-        match item.Kind with
-        | Def (TypeDef(name, _, parameters, body)) -> (body, infoOf name) :: (parameters |> List.choose snd |> List.map (fun t -> t, None))
-        | Def (ValueDef(_, _, Some annotation, _)) -> [ annotation, None ]
-        | ModuleBlock(_, items) -> items |> List.collect ofItem
-        | _ -> []
-    let inBlocks =
-        Hover.allExpressions syntax
-        |> List.collect (fun expr ->
-            match expr.Kind with
-            | Block statements ->
-                statements
-                |> List.collect (fun statement ->
-                    match statement.Kind with
-                    | TypeDefStatement(name, _, parameters, body) -> (body, infoOf name) :: (parameters |> List.choose snd |> List.map (fun t -> t, None))
-                    | DefStatement(_, _, Some annotation, _) -> [ annotation, None ]
-                    | _ -> [])
-            | _ -> SyntaxTree.expressionTypes expr |> List.map (fun t -> t, None))
-    (syntax |> List.collect ofItem) @ inBlocks
+    SyntaxTree.writtenTypes syntax
+    |> List.map (fun written ->
+        match written.As with
+        | SyntaxTree.TypeBody name -> written.Type, typed.TypeDefs |> Map.tryFind name
+        | _ -> written.Type, None)
 
 /// Every place in the compiled root module `result` that writes a record's field by its name: in record types (not a
 /// context's, whose fields are its members), records written in expressions (not a context's instance), field reads

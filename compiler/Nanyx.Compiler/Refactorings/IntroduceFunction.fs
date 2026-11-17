@@ -103,7 +103,7 @@ let at
     match result.Syntax, result.Typed with
     | Some syntax, Some typed when selection.End > selection.Start ->
         // The selection less the spaces around it.
-        let text = source.Substring(selection.Start, selection.End - selection.Start)
+        let text = SourceSpan.textIn source selection
         let selection =
             { selection with Start = selection.Start + (text.Length - text.TrimStart().Length); End = selection.End - (text.Length - text.TrimEnd().Length) }
         let values = topLevelValues syntax
@@ -162,7 +162,7 @@ let at
                 let call =
                     let arguments = parameters |> List.map (fun symbol -> if isCell symbol then $"mut {symbol.Name}" else symbol.Name)
                     $"""{name}({String.concat ", " arguments})"""
-                let selectedText = source.Substring(selection.Start, selection.End - selection.Start)
+                let selectedText = SourceSpan.textIn source selection
                 // The function's body, written as its lines are, and what the selection becomes.
                 let body, replacement =
                     match selected, results with

@@ -12,9 +12,6 @@ let private toInterpolated = "Convert to interpolated string"
 
 let private toConcatenation = "Convert to concatenation"
 
-/// The text of `span` in `source`.
-let private textOf (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
-
 /// Whether `expr` is a `++` written in the source, not one the parser made for a list's spread.
 let private isConcatenation (expr: Expression) =
     match expr.Kind with
@@ -50,7 +47,7 @@ let private toStringOf (typed: TypedModule) (expr: Expression) =
 
 /// What `operand` of a `++` chain is in an interpolated string: the text between the quotes of a string, or a hole.
 let private partOf (source: string) (typed: TypedModule) (operand: Expression) =
-    let text = textOf source operand.Span
+    let text = SourceSpan.textIn source operand.Span
     match operand.Kind with
     | LiteralExpr(StringLit _) when text.StartsWith "'" -> Error "It has a raw (single-quoted) string, which can't be interpolated"
     | LiteralExpr(StringLit _)
@@ -59,7 +56,7 @@ let private partOf (source: string) (typed: TypedModule) (operand: Expression) =
     | InterpolatedString _ -> Ok (text.Substring(1, text.Length - 2))
     | _ ->
         let value = toStringOf typed operand |> Option.defaultValue operand
-        Ok $"{{{textOf source value.Span}}}"
+        Ok $"{{{SourceSpan.textIn source value.Span}}}"
 
 /// The parts of the interpolated string `expr` as they are written in `source`: each text between its holes, and each
 /// hole's expression.
@@ -81,8 +78,8 @@ let private concatenation (source: string) (typed: TypedModule) (expr: Expressio
     writtenParts source expr parts
     |> List.map (function
         | Choice1Of2 text -> $"\"{text}\""
-        | Choice2Of2 hole when isString typed hole -> bracketed hole (textOf source hole.Span)
-        | Choice2Of2 hole -> $"{bracketed hole (textOf source hole.Span)} \\toString")
+        | Choice2Of2 hole when isString typed hole -> bracketed hole (SourceSpan.textIn source hole.Span)
+        | Choice2Of2 hole -> $"{bracketed hole (SourceSpan.textIn source hole.Span)} \\toString")
     |> String.concat " ++ "
 
 /// The refactoring at `offset` in `source`, the text of the root module of `result` compiled as `file`, laid out with

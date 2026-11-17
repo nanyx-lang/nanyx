@@ -7,8 +7,6 @@ open System.Text.RegularExpressions
 open Parser.Program
 open NyxCompiler
 
-let private textOf (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
-
 /// `span` from `offset` characters into it, for `length` characters, on its first line.
 let private within (span: SourceSpan) (offset: int) (length: int) =
     { span with Start = span.Start + offset; End = span.Start + offset + length; StartColumn = span.StartColumn + offset }
@@ -22,26 +20,10 @@ let declaration (source: string) (result: CompileResult) : (string * SourceSpan)
         |> List.tryPick (fun item ->
             match item.Kind with
             | ModuleDecl(_, declared) when declared = name && not (SourceSpan.isNone item.Span) ->
-                let keyword = Regex.Match(textOf source item.Span, $@"\bmodule\s+{Regex.Escape name}\b")
+                let keyword = Regex.Match(SourceSpan.textIn source item.Span, $@"\bmodule\s+{Regex.Escape name}\b")
                 if keyword.Success then Some (name, within item.Span (keyword.Index + keyword.Length - name.Length) name.Length) else None
             | _ -> None)
     | _ -> None
-
-/// Every import in `syntax`: at the top level, in module blocks and in blocks, and every re-export.
-let private importsIn (syntax: Module) : ImportItem list =
-    let rec ofItem (item: TopLevelItem) =
-        match item.Kind with
-        | Import items -> items
-        | ReExport item -> [ item ]
-        | ModuleBlock(_, items) -> items |> List.collect ofItem
-        | _ -> []
-    let inBlocks =
-        Hover.allExpressions syntax
-        |> List.collect (fun expr ->
-            match expr.Kind with
-            | Block statements -> statements |> List.collect (fun statement -> match statement.Kind with ImportStatement items -> items | _ -> [])
-            | _ -> [])
-    (syntax |> List.collect ofItem) @ inBlocks
 
 /// The module of the package `package` that an import in the compiled root module `result`, whose text is `source`,
 /// names at `offset`, and where its name is written there: `shapes` in `import shapes` or `import app/shapes`, not an
@@ -49,7 +31,7 @@ let private importsIn (syntax: Module) : ImportItem list =
 let importAt (package: string) (source: string) (result: CompileResult) (offset: int) : (string * SourceSpan) option =
     match result.Syntax with
     | Some syntax ->
-        importsIn syntax
+        SyntaxTree.allImports syntax
         |> List.tryPick (fun item ->
             match item.Source with
             | ModuleImport name when not (SourceSpan.isNone item.Span) ->
@@ -58,7 +40,7 @@ let importAt (package: string) (source: string) (result: CompileResult) (offset:
                     | -1 -> Some name
                     | slash when name.Substring(0, slash) = package -> Some (name.Substring(slash + 1))
                     | _ -> None
-                let at = (textOf source item.Span).IndexOf name
+                let at = (SourceSpan.textIn source item.Span).IndexOf name
                 moduleName
                 |> Option.filter (fun _ -> at >= 0)
                 |> Option.map (fun moduleName -> moduleName, within item.Span (at + name.Length - moduleName.Length) moduleName.Length)
@@ -81,10 +63,10 @@ let imports
     : TextEdit list =
     match result.Syntax with
     | Some syntax ->
-        importsIn syntax
+        SyntaxTree.allImports syntax
         |> List.filter (fun item -> not (SourceSpan.isNone item.Span))
         |> List.choose (fun item ->
-            let text = textOf source item.Span
+            let text = SourceSpan.textIn source item.Span
             match item.Source with
             | ModuleImport name when name = moduleName || name = $"{package}/{moduleName}" ->
                 let at = text.IndexOf name

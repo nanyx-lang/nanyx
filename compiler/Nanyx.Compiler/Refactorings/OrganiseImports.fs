@@ -24,7 +24,6 @@ let private written (item: ImportItem) =
 /// name, without what is before its last dot.
 let private namesUsedThrough (syntax: Module) (typed: TypedModule) (symbol: Symbol) =
     let through (id: NodeId) = typed.ImportReferences |> Map.tryFind id = Some symbol.Id
-    let ownName (name: string) = name.Substring(name.LastIndexOf '.' + 1)
     let expressions = Hover.allExpressions syntax
     let fromExpressions =
         expressions
@@ -33,7 +32,7 @@ let private namesUsedThrough (syntax: Module) (typed: TypedModule) (symbol: Symb
             match expr.Kind with
             | IdentifierExpr name
             | FunctionCall(name, _, _)
-            | Pipe(_, name, _, _) -> Some (ownName name)
+            | Pipe(_, name, _, _) -> Some (Names.ownPart name)
             | _ -> None)
     let fromTypes =
         (syntax |> List.collect SyntaxTree.topLevelTypes) @ (expressions |> List.collect SyntaxTree.expressionTypes)
@@ -42,7 +41,7 @@ let private namesUsedThrough (syntax: Module) (typed: TypedModule) (symbol: Symb
         |> List.choose (fun typeExpr ->
             match typeExpr.Kind with
             | TypeName name
-            | TypeApply(name, _) -> Some (ownName name)
+            | TypeApply(name, _) -> Some (Names.ownPart name)
             | _ -> None)
     fromExpressions @ fromTypes |> Set.ofList
 
@@ -110,7 +109,7 @@ let at (options: Formatter.Options) (file: string) (source: string) (result: Com
                 :: (removals |> List.map (fun (start, finish) -> start, finish, ""))
             let after = appliedAndFormatted options file source edits
             let hasComments =
-                statements |> List.exists (fun (statement, _) -> source.Substring(statement.Span.Start, statement.Span.End - statement.Span.Start).Contains "--")
+                statements |> List.exists (fun (statement, _) -> (SourceSpan.textIn source statement.Span).Contains "--")
             if after = formatted options file source 0 source.Length then []
             elif hasComments then [ Refused(title, RefactoringKind.OrganiseImports, "The imports have comments among them, which organising would lose") ]
             else

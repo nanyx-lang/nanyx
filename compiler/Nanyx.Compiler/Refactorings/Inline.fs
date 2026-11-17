@@ -19,7 +19,7 @@ let private textWith (source: string) (span: SourceSpan) (edits: (int * int * st
     edits
     |> List.filter (fun (start, finish, _) -> span.Start <= start && finish <= span.End)
     |> List.map (fun (start, finish, text) -> start - span.Start, finish - span.Start, text)
-    |> applied (source.Substring(span.Start, span.End - span.Start))
+    |> applied (SourceSpan.textIn source span)
 
 /// The def that declares `symbol` among `syntax`, with the text removing it removes: from its doc comment and
 /// attributes, or the start of its line, to the end of its line and the blank lines after it.
@@ -87,7 +87,7 @@ let private usesOf (typed: TypedModule) (syntax: Module) (inlined: Inlined) =
 /// The edits that inline a value that is not a lambda at `used`, or why it can't be.
 let private inlineValue (file: string) (source: string) (typed: TypedModule) (values: Expression list) (inlined: Inlined) (used: Expression) =
     let value = inlined.Value
-    let valueText = source.Substring(value.Span.Start, value.Span.End - value.Span.Start)
+    let valueText = SourceSpan.textIn source value.Span
     let readsCell =
         within value
         |> List.choose (fun part -> typed.References |> Map.tryFind part.Id |> Option.bind typed.Symbols.TryFind)
@@ -138,7 +138,7 @@ let private inlineCall
             | _ -> Some statements, None
         | _ -> Some [], Some body
     match arguments with
-    | None -> Ok [ used.Span.Start, used.Span.End, source.Substring(lambda.Span.Start, lambda.Span.End - lambda.Span.Start) ]
+    | None -> Ok [ used.Span.Start, used.Span.End, SourceSpan.textIn source lambda.Span ]
     | Some arguments ->
     let arguments = match arguments with [ { Kind = UnitExpr } ] when parameters.IsEmpty -> [] | _ -> arguments
     let isNamed (argument: Expression) = match argument.Kind with RecordExpr fields -> fields |> List.exists (function NamedField _ -> true | _ -> false) | _ -> false
@@ -162,7 +162,7 @@ let private inlineCall
             let uses = usesOf symbol
             isSimple argument
             || (uses.Length = 1 && uses |> List.forall (fun part -> match part.Kind with IdentifierExpr _ -> true | _ -> false)))
-    let argumentText (argument: Expression) = source.Substring(argument.Span.Start, argument.Span.End - argument.Span.Start)
+    let argumentText (argument: Expression) = SourceSpan.textIn source argument.Span
     let substitutions =
         putIn
         |> List.collect (fun (symbol, argument) ->

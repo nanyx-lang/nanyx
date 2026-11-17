@@ -42,6 +42,9 @@ module Names =
         |> Array.map (fun part -> if isIdentifier part then part else $"`{part}`")
         |> String.concat "."
 
+    /// The part of a name after its last dot: `shout` in `string.shout`, and the whole of a name without one.
+    let ownPart (name: string) = name.Substring(name.LastIndexOf '.' + 1)
+
 /// Where a syntax node came from: character offsets into its file's source (`End` is one past the last
 /// character, and trailing whitespace is not included), plus the zero-based line and column of `Start`.
 type SourceSpan =
@@ -66,6 +69,9 @@ module SourceSpan =
     /// Whether `inner` is written within `outer`. A made-up span is within nothing.
     let contains (outer: SourceSpan) (inner: SourceSpan) =
         not (isNone outer) && not (isNone inner) && outer.File = inner.File && outer.Start <= inner.Start && inner.End <= outer.End
+
+    /// The text of `span` in `source`, the text of its file.
+    let textIn (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
 
 /// Identifies a syntax node, so that analysis results can be kept in tables keyed by node rather than in a copy
 /// of the tree. Ids are unique within a process, so nodes from different modules of a compilation never clash.
@@ -1015,6 +1021,21 @@ module TypeExpr =
     /// `typeExpr` and every type expression inside it, in order.
     let rec within (typeExpr: TypeExpr) : TypeExpr list =
         typeExpr :: (children typeExpr |> List.collect within)
+
+    /// `typeExpr` and every type expression inside it, in order, each with whether a function type written in its
+    /// place needs brackets: everywhere but the result of a function, the type after a list of contexts, and
+    /// `typeExpr` itself when `takesFunction`.
+    let rec withBracketing (takesFunction: bool) (typeExpr: TypeExpr) : (TypeExpr * bool) list =
+        let inner =
+            match typeExpr.Kind with
+            | TypeFunc(input, result) -> withBracketing false input @ withBracketing true result
+            | TypeWithContext(contexts, body) -> (contexts |> List.collect (withBracketing false)) @ withBracketing takesFunction body
+            | _ -> children typeExpr |> List.collect (withBracketing false)
+        (typeExpr, not takesFunction) :: inner
+
+    /// The names of the type variables `typeExpr` writes, in the order they first appear.
+    let variablesOf (typeExpr: TypeExpr) =
+        within typeExpr |> List.choose (fun part -> match part.Kind with TypeVar name -> Some name | _ -> None) |> List.distinct
 
     /// Each `_` written in `typeExpr`, in order.
     let rec holes (typeExpr: TypeExpr) : TypeExpr list =

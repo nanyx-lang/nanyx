@@ -125,9 +125,6 @@ module Helpers =
     let retain = Names.retain
     let reuseObject = "__nanyx_reuse_object"
     let listConsAt = "__nanyx_list_cons_at"
-    /// Not a helper: the elements of an array copied into a new one from an index, each with a reference of its own, as
-    /// a collection literal's spread is (see `CoreIrLowerArrayLiterals`). It is written out where it is used.
-    let arrayCopyInto = "__nanyx_array_copy_into"
     let tagBoxAt = "__nanyx_tag_box_at"
     /// A string in double quotes, escaped as a string literal is written: what `dbg` prints a string as.
     let stringQuote = "__nanyx_string_quote"

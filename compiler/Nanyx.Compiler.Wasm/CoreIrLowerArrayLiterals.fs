@@ -90,7 +90,7 @@ let arrayOf
                             let written = { Kind = CallRuntime(Intrinsics.arrayWrite, [ AVar array; at; item ], false); Type = IrUnit }
                             sum at (AInt 1L) (fun next -> Expr.doThen written (write rest next))
                         | (_, _, Some (source, spreadLength)) :: rest ->
-                            let copied = { Kind = CallRuntime(Helpers.arrayCopyInto, [ AVar array; at; AVar source ], false); Type = IrUnit }
+                            let copied = { Kind = CopyArrayInto(AVar array, at, AVar source); Type = IrUnit }
                             sum at (AVar spreadLength) (fun next -> Expr.doThen copied (write rest next))
                     Expr.letIn array { Kind = CallRuntime(Intrinsics.arrayNew, [ total ], true); Type = ty } (write held (AInt 0L)))
             spreads paired []))
