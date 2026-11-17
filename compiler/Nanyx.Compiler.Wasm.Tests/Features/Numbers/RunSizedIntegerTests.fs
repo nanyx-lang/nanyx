@@ -25,7 +25,7 @@ def main = {
 }
 """
     runSource (source.ReplaceLineEndings "\n")
-    |> assertRan "-2 200 18000000000000000000 false true\n3 -300 -42\n1333333333 true\ntrue #greater 65535 -5\ndbg: 200\n"
+    |> withoutDbgLocations |> assertRan "-2 200 18000000000000000000 false true\n3 -300 -42\n1333333333 true\ntrue #greater 65535 -5\n200\n"
 
 [<Fact>]
 let ``Run - sized integers are kept in fields, payloads, lists and closures`` () =

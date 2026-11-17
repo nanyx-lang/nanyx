@@ -60,6 +60,17 @@ let ``A re-export names a module and what it exports again`` () =
         Assert.Equal<string list option>(Some [ "double"; "triple" ], item.Selection |> Option.map (List.map fst))
     | other -> failwith $"Unexpected parse: %A{other}"
 
+[<Theory>]
+[<InlineData("export shapes")>]
+[<InlineData("export shapes  -- all of it\n")>]
+[<InlineData("export shapes\ndef one = 1")>]
+let ``A module alone on its line is re-exported whole`` (source: string) =
+    match parseModule source with
+    | Ok (Kind (ReExport item) :: _) ->
+        Assert.Equal(ModuleImport "shapes", item.Source)
+        Assert.Equal(None, item.Selection)
+    | other -> failwith $"Unexpected parse: %A{other}"
+
 [<Fact>]
 let ``An exported definition is not a re-export`` () =
     match parseModule "export def double = { x: int -> x * 2 }\nexport type Point = (x: int, y: int)" with

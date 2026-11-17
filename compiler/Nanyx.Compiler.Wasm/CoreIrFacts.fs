@@ -101,7 +101,8 @@ let collect (functions: Function list) : ModuleFacts =
                 | Hole(_, ty) -> holeType ty
                 | Text text when Interpolation.copiesText text -> strings.Add text
                 | Text _ -> ())
-        | Dbg text ->
+        | Dbg(location, text) ->
+            atom location
             atom text
             usesDbgHelpers.Value <- true
         | Crash messages -> strings.AddRange messages

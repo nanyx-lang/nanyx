@@ -22,7 +22,7 @@ module internal NumericLiterals =
         | IntLit _
         | FloatLit _ ->
             let ty, next = freshVar state
-            let recorded = { Type = ty; Value = literal; At = span; Node = node; Operator = None }
+            let recorded = { Type = ty; Value = literal; At = span; Node = node; Operator = None; Requires = None }
             ty, { next with NumericLiterals = recorded :: next.NumericLiterals; UnsettledLiterals = recorded :: next.UnsettledLiterals }
         | StringLit _
         | BoolLit _ -> TypeResolution.literalType literal, state
@@ -50,9 +50,31 @@ module internal NumericLiterals =
             | _ -> ""
         $"'{Unifier.tyToDisplayString Ascii ty}' is not a number, so it cannot be used with {written op}{advice}"
 
-    /// `settle` for the literals, or else for the operators' operands (`operands`).
+    /// The error for `op`, which needs `required.Context`, on values of the type variable `v` of the function
+    /// `required.Def`, whose type does not require it, with the fix that adds it.
+    let undeclared (state: InferState) (at: SourceSpan) (op: string) (required: OperandRequirement) (v: TyVar) =
+        let tyText = Unifier.tyToDisplayString Ascii (TyVar v)
+        let context = $"{required.Context}({tyText})"
+        Diagnostics.at DiagnosticCodes.MissingContextMembers at
+            $"'{required.Def}' {required.Does} values of type '{tyText}' with {written op}, so its type must require {context}: add [{context}] to the type of '{required.Def}'"
+        |> ContextFixes.withAddToType state required.Def context
+
+    /// The variables the type annotation being read names, as `subst` solves them, each with its name.
+    let private writtenVariables (subst: Subst) (state: InferState) : Map<int, string> =
+        state.TypeVars
+        |> Map.toList
+        |> List.choose (fun (key, var) ->
+            match key, Unifier.apply subst (TyVar var) with
+            | WrittenVar name, TyVar solved -> Some (solved.Id, name)
+            | _ -> None)
+        |> Map.ofList
+
+    /// `settle` for the literals, or else for the operators' operands (`operands`). Operands that turned out to be of a
+    /// variable the def's annotation names, which a `for` over an `[Iterable(i)] i` makes its associated `elem` only once
+    /// the loop's instance is found, fail to check, as they would have had they been of it when the operator was read.
     let private settleOf (operands: bool) (isOwn: Ty -> bool) (state: InferState) : InferState =
         let subst = fst (Solving.solve state.Constraints)
+        let written = if operands then writtenVariables subst state else Map.empty
         let isSettling (literal: NumericLiteral) =
             literal.Operator.IsSome = operands
             && (match Unifier.apply subst literal.Type with
@@ -62,6 +84,9 @@ module internal NumericLiterals =
         settling
         |> List.fold (fun current literal ->
             match Unifier.apply subst literal.Type, literal.Operator with
+            | TyVar v, Some (op, node) when literal.Requires.IsSome && written.ContainsKey v.Id ->
+                let error = undeclared current literal.At op literal.Requires.Value { v with Name = Some written.[v.Id] }
+                { current with FailedExprs = (node, [ error ]) :: current.FailedExprs }
             | TyVar _, _ -> addConstraint literal.Type (defaultType literal.Value) current
             | ty, Some (op, node) when isKnownNonNumber ty ->
                 let error = Diagnostics.at DiagnosticCodes.TypeMismatch literal.At (notANumber op ty)
@@ -82,9 +107,9 @@ module internal NumericLiterals =
 
     /// `state` with the operands of the arithmetic operator `op`, the expression `expr`, of the type `ty`, which is still
     /// a variable, left for the code around them to settle, as a literal is: they are `int` if nothing in their def
-    /// does (#1485).
-    let awaitOperand (op: string) (expr: Expression) (ty: Ty) (state: InferState) : InferState =
-        let recorded = { Type = ty; Value = IntLit 0I; At = expr.Span; Node = None; Operator = Some (op, expr.Id) }
+    /// does (#1485). In a def that writes its type, they need what `requires` says of one of its variables.
+    let awaitOperand (op: string) (expr: Expression) (ty: Ty) (requires: OperandRequirement option) (state: InferState) : InferState =
+        let recorded = { Type = ty; Value = IntLit 0I; At = expr.Span; Node = None; Operator = Some (op, expr.Id); Requires = requires }
         { state with UnsettledLiterals = recorded :: state.UnsettledLiterals }
 
     /// The literals not yet settled whose type is still a variable of their own, each with that variable, newest first.

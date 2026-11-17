@@ -27,7 +27,7 @@ println(describe([1, 2]))
 println(describe([2, 2, 2]))
 dbg(sum([1, 2, 3, 4]))
 """
-    runSource source |> assertRan "empty\none\none then another\nmany\ndbg: 10\n"
+    runSource source |> withoutDbgLocations |> assertRan "empty\none\none then another\nmany\n10\n"
 
 [<Fact>]
 let ``Run - a list literal's ] may go on a line of its own`` () =
@@ -64,7 +64,7 @@ dbg(first([5, 6, 7]))
 dbg(first([8]))
 dbg(first([]))
 """
-    runSource source |> assertRan "dbg: 5\ndbg: 8\ndbg: 0\n"
+    runSource source |> withoutDbgLocations |> assertRan "5\n8\n0\n"
 
 [<Fact>]
 let ``Run - list spread in expressions`` () =
@@ -96,7 +96,7 @@ println(string.join(front ++ ["c"] ++ [], "-"))
 println(string.join([] ++ front, "-"))
 dbg(string.length("ab" ++ "cd" ++ "e"))
 """
-    runSource source |> assertRan "a-b-c\na-b\ndbg: 5\n"
+    runSource source |> withoutDbgLocations |> assertRan "a-b-c\na-b\n5\n"
 
 [<Fact>]
 let ``Run - ++ on a long list does not overflow the stack`` () =
@@ -192,7 +192,7 @@ dbg(list.length(list.distinct([red, green, red, red])))
 dbg(list.length(list.distinct([true, true])))
 println(show(list.distinct([])))
 """
-    runSource source |> assertRan "1 2 3 []\nb,a\ndbg: 2\ndbg: 1\n[]\n"
+    runSource source |> withoutDbgLocations |> assertRan "1 2 3 []\nb,a\n2\n1\n[]\n"
 
 [<Fact>]
 let ``Run - list.distinct compares records, tuples and lists by their structure`` () =
@@ -291,14 +291,14 @@ println(show(list.flatMap([1, 2, 3], { x -> list.take([x, x, x], x) })))
 println(show(list.flatMap(empty, { x -> [x] })))
 """
     runSource source
-    |> assertRan (
+    |> withoutDbgLocations |> assertRan (
         withFinalNewline """has 4
 no 9
 has b
 at 1
 not found
-dbg: 3
-dbg: 0
+3
+0
 empty
 not empty
 last 5

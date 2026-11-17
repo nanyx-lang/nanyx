@@ -110,6 +110,17 @@ let private associatedVariables (state: InferState) (contexts: TypeExpr list opt
                 | _ -> None)
         | _ -> [])
 
+/// `scheme`, the type of a def that writes it with the contexts `contexts`, generic in the associated types of those
+/// contexts too, though its type may not name them: `elem` in `[Iterable(i)] i -> ()`. A context that the def's value
+/// needs of one, as a hole `"{item}"` needs `ToString(Iterable(i).elem)`, must be written then, as for any of its type
+/// variables.
+let private withAssociatedQuantified (state: InferState) (contexts: TypeExpr list option) (scheme: TypeScheme) : TypeScheme =
+    let associated =
+        associatedVariables state contexts
+        |> List.map (TyVar >> resolveSoFar state >> TypeEnv.freeTyVars)
+        |> Set.unionMany
+    { scheme with Quantified = Set.union scheme.Quantified associated }
+
 /// Infers a module in `initialEnv`, carrying on past an item that fails to check: the types and items of those
 /// that do, and the diagnostics of those that do not. The constraints are not solved here, so a type mismatch is
 /// not among them.
@@ -269,13 +280,20 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 let typeOpt, contextOpt, declaredTypeExprOpt, expectedDeclaredOpt, envWithCtx =
                     annotation.TypeOpt, annotation.Contexts, annotation.DeclaredTypeExpr, annotation.Declared, annotation.Env
                 // The name is already in `env` from the pre-binding pass: at its declared type, or at the
-                // fresh variable recorded in `preboundFreshVars`. Self-recursion sees the declared type as a
-                // monomorphic binding while the body is checked, as before.
+                // fresh variable recorded in `preboundFreshVars`. While the body is checked, the def sees itself at
+                // its declared type, generic in the variables its annotation writes that no context it requires
+                // names, so it can call itself at other types (`encodeAt(field, f.type)` walks a value's parts). An
+                // annotation with a `typeof` or a `_` is not all known yet, so the def sees itself at it as it is.
                 // The symbol the pre-binding pass made.
                 let symbol, _ = declareSymbol DefValue expr.Id name TopLevelValue isExport None state
                 let envWithRec =
                     match expectedDeclaredOpt with
-                    | Some declaredTy -> TypeEnv.declare name symbol (TypeEnv.mono declaredTy) envWithCtx
+                    | Some declaredTy when preboundFreshVars.ContainsKey name -> TypeEnv.declare name symbol (TypeEnv.mono declaredTy) envWithCtx
+                    | Some declaredTy ->
+                        // A union's rest and a context variable stay the def's own: a call's are what it is given.
+                        let general = TypeEnv.generalize envWithCtx declaredTy
+                        let kept = Set.union (Unifier.restVarIds true declaredTy) (FunctionContexts.variablesIn declaredTy |> Map.keys |> Set.ofSeq)
+                        TypeEnv.declare name symbol { general with Quantified = Set.difference general.Quantified kept } envWithCtx
                     | None -> envWithCtx
                 let nextStateWithReq =
                     let written = recordWrittenType name typeOpt nextState2
@@ -345,8 +363,12 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         // variable it was pre-bound at does not stop its type being generalized. It is resolved
                         // first, as a local def's is: `{ x -> x + 1 }` is `α -> α` until its constraints are
                         // applied, and generalising that would make every use `α -> α` too.
+                        let generalize state =
+                            let scheme, generalized = generalizeDef (withoutTopLevel name env) state declaredTy
+                            if expectedDeclaredOpt.IsSome then withAssociatedQuantified generalized contextOpt scheme, generalized
+                            else scheme, generalized
                         let scheme, generalizedState =
-                            ArithmeticInference.generalize (fun state -> generalizeDef (withoutTopLevel name env) state declaredTy) (ArithmeticInference.TopLevelDef name) state
+                            ArithmeticInference.generalize generalize (ArithmeticInference.TopLevelDef name) state
                         // The parameterised contexts an unannotated def requires are part of its type, as if written.
                         match resolvePendingInstances env generalizedState name symbol scheme with
                         | Error err ->

@@ -4,8 +4,10 @@ description: "A linear-time regex package written in Nanyx, patterns checked at 
 order: 7
 ---
 
-Nanyx has no regular expressions yet. This page is their design, agreed with the maintainer on 2026-11-17 and filed in
-three stages ([Plan](#plan)). None of it is built.
+This page is the design of regular expressions, agreed with the maintainer on 2026-11-17 and filed in three stages
+([Plan](#plan)). The first is built: the shipped package `nanyx.regex`, described on its [reference page](../stdlib/regex)
+and in the [cookbook](../cookbook/regular-expressions). Checking literal patterns at compile time and matching
+regexes in `match` are still to come.
 
 # Decisions
 
@@ -84,6 +86,6 @@ The argument is parsed once, when it's given, since a pattern's body is curried.
 
 | Step | Issue | After |
 |---|---|---|
-| `nanyx.regex`: the engine and the API | [#2032](https://github.com/nanyx-lang/nanyx/issues/2032) | |
+| `nanyx.regex`: the engine and the API (done) | [#2032](https://github.com/nanyx-lang/nanyx/issues/2032) | |
 | A linter rule that checks literal patterns at compile time | [#2033](https://github.com/nanyx-lang/nanyx/issues/2033) | #2032 |
 | `#Matches`, a custom pattern for `match` arms | [#2034](https://github.com/nanyx-lang/nanyx/issues/2034) | #2032 |

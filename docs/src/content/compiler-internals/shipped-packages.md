@@ -13,8 +13,8 @@ progress.
 
 - **Shipped packages are source directories.** `packages/` at the repository root holds them, each named for its
   package, with its manifest at the compiler's version and its sources under `src`: `packages/nanyx.console`,
-  `packages/nanyx.console.core`, `packages/nanyx.fs`, `packages/nanyx.http.core`, `packages/nanyx.http` and
-  `packages/nanyx.json`. Every build of the compiler copies the directory beside it (a `None` item in
+  `packages/nanyx.console.core`, `packages/nanyx.fs`, `packages/nanyx.http.core`, `packages/nanyx.http`,
+  `packages/nanyx.json` and `packages/nanyx.regex`. Every build of the compiler copies the directory beside it (a `None` item in
   `NanyxCompiler.fsproj` with `CopyToOutputDirectory` and `CopyToPublishDirectory`), so the tests, the language server
   and the published `nanyx` all find it at `ShippedPackages.directory`, and each release archive holds it beside the
   executable. A test checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with
@@ -38,3 +38,8 @@ progress.
 - **No host means a library.** `Manifest.Host` and `PackageModules.Host` are options. A package file under no host gets
   no host import, an `@entry` there is `NYX0031` (`Attributes.applyAttributes`), and `nanyx run` on a library says it
   has no entry point.
+- **Regular expressions are Nanyx code.** `nanyx.regex` is written over the standard library, with no intrinsic of its
+  own: `regex.syntax.nyx` reads a pattern into a tree, applying its flags as it goes, and `regex.vm.nyx` compiles the
+  tree into a Thompson NFA and runs it as a Pike VM, whose threads are kept in priority order and marked in an
+  `MArray` per code point, so matching is linear in the text for every pattern. The design is on
+  [Regular expressions](../work-in-progress/regex).

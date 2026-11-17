@@ -368,6 +368,8 @@ module internal WellKnownContexts =
         | None ->
             match comparedVars ty |> List.tryFind (fun v -> declaredVars.Contains v.Id && not (hasInstance env (TyVar v))) with
             | Some v ->
+                // Named as the associated type it turned out to be, if it is one.
+                let v = match withAssociatedNames state (TyVar v) with TyVar named -> named | _ -> v
                 let errors = undeclaredError state pending.Span wellKnown pending.Callee v annotatedDef
                 Ok (None, { state with FailedExprs = (pending.Call, errors) :: state.FailedExprs })
             | None -> Ok (None, state)

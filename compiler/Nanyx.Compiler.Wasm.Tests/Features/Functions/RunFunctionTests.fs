@@ -168,7 +168,7 @@ def main = {
   dbg(add5(10))
 }
 """
-    runSource source |> assertRan "dbg: 15\n"
+    runSource source |> withoutDbgLocations |> assertRan "15\n"
 
 [<Fact>]
 let ``Run - a lambda argument's inferred parameter types`` () =
@@ -222,7 +222,7 @@ show(isEven(7))
 dbg(later(2))
 def later = { x -> x * 21 }
 """
-    runSource source |> assertRan "yes\nyes\nno\ndbg: 42\n"
+    runSource source |> withoutDbgLocations |> assertRan "yes\nyes\nno\n42\n"
 
 [<Fact>]
 let ``Run - functions as values and higher-order calls`` () =
@@ -253,7 +253,7 @@ def main = {
 }
 main()
 """
-    runSource source |> assertRan "dbg: 42\ndbg: 42\ndbg: 42\ndbg: 40\ndbg: 36\ndbg: 12\ndbg: 60\n"
+    runSource source |> withoutDbgLocations |> assertRan "42\n42\n42\n40\n36\n12\n60\n"
 
 [<Fact>]
 let ``Run - an attached function passed as a value`` () =
@@ -265,7 +265,7 @@ def apply: ((Point -> int), Point) -> int = { f, p -> f(p) }
 dbg(apply(Point.norm, (x = 3, y = 4)))
 dbg(list.fold([(x = 1, y = 2), (x = 10, y = 20)] \list.map(Point.norm), 0, { a, b -> a + b }))
 """
-    runSource source |> assertRan "dbg: 7\ndbg: 33\n"
+    runSource source |> withoutDbgLocations |> assertRan "7\n33\n"
 
 [<Fact>]
 let ``Run - a capturing lambda passed to a function`` () =
@@ -276,7 +276,7 @@ def main = { n ->
 }
 dbg(main(2))
 """
-    runSource source |> assertRan "dbg: 3\n"
+    runSource source |> withoutDbgLocations |> assertRan "3\n"
 
 [<Fact>]
 let ``Run - closures`` () =
@@ -305,7 +305,7 @@ def main = {
   println("{countTo(0)}")
 }
 """
-    runSource source |> assertRan "15 11 2\nHello, Ada\n11\ndbg: 7\ndbg: 11\n3\n"
+    runSource source |> withoutDbgLocations |> assertRan "15 11 2\nHello, Ada\n11\n7\n11\n3\n"
 
 [<Fact>]
 let ``Run - a function that only calls the closure it is given compiles without making one`` () =
@@ -457,7 +457,7 @@ def main = {
   println("{mapSomeOr(#none, 7, { n -> n + 1 })}")
 }
 """
-    runSource source |> assertRan "7 8\ndbg: 2\n0 2\n7\n"
+    runSource source |> withoutDbgLocations |> assertRan "7 8\n2\n0 2\n7\n"
 
 [<Fact>]
 let ``Run - a lambda of no parameters checked against a one-parameter type ignores the parameter (#813)`` () =
@@ -503,7 +503,7 @@ let ``Run - calling the function a top-level value holds evaluates the value onc
 def adder = makeAdder(dbg(1))
 dbg(adder(2))
 """
-    runSource source |> assertRan "dbg: 1\ndbg: 3\n"
+    runSource source |> withoutDbgLocations |> assertRan "1\n3\n"
 
 [<Fact>]
 let ``Run - a trailing lambda after several arguments is the call's last argument`` () =

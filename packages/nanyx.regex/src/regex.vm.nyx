@@ -1,0 +1,331 @@
+-- Part of the module regex, which regex.nyx starts: compiling a pattern's tree into a program for a
+-- Thompson NFA, and running it as a Pike VM.
+--
+-- The VM walks the text once, a code point at a time, keeping every thread that could still match:
+-- each is where it is in the program and where its groups so far start and end. A thread that
+-- reaches an instruction already reached at this code point is dropped, since the one there first
+-- has the higher priority and will do everything it would. So no more threads are alive than the
+-- program has instructions, and matching takes time in proportion to the text's length times the
+-- program's, for every pattern. Threads are kept in priority order, the order a backtracking engine
+-- would try them in, so the match found is the one Perl's or RE2's would be: leftmost, and then the
+-- first that the alternatives and the greedy or lazy quantifiers prefer.
+@partial export module regex
+
+import nanyx/marray
+
+-- The program ------------------------------------------------------------------------------------
+
+--| One instruction of a program: match one character, or one of a set of them; go on at both of two
+  places, the first with the higher priority; go on at another place; note where the text is in a
+  group slot; check an assertion; or report a match.
+type Inst = #char(int) | #chars(array((int, int))) | #split(int, int) | #jump(int) | #save(int) | #check(Assertion) | #match
+
+--| A program, how many group slots its threads have: two for each group, its start and its end,
+  with the whole match as group 0, and each name given to a group with the group's number.
+type Program = (insts: array(Inst), slots: int, names: list((string, int)))
+
+--| How many instructions `node` compiles to.
+def sizeOf: Node -> int = {
+  | #empty -> 0
+  | #chars(_) -> 1
+  | #assert(_) -> 1
+  | #concat(nodes) -> list.fold(nodes, 0, { total, node -> total + sizeOf(node) })
+  | #alt(nodes) -> list.fold(nodes, 0, { total, node -> total + sizeOf(node) + 2 }) - 2
+  | #group(_, node) -> sizeOf(node) + 2
+  | #repeat(node, least, most, _) ->
+    def size = sizeOf(node)
+    if most < 0 then least * size + size + 2 else least * size + (most - least) * (size + 1)
+}
+
+--| The instruction that matches a character of `ranges`: `#char` when they hold one.
+def charsInst: list((int, int)) -> Inst = { ranges ->
+  match ranges
+    | [(low, high)] -> (if low == high then #char(low) else #chars(array.fromList(ranges)))
+    | _ -> #chars(array.fromList(ranges))
+}
+
+--| The instructions of `node`, which starts at `pc`, in front of `done`, those before it, last
+  first.
+def emit: Node, int, list(Inst) -> list(Inst) = { node, pc, done ->
+  match node
+    | #empty -> done
+    | #chars(ranges) -> [charsInst(ranges), ...done]
+    | #assert(assertion) -> [#check(assertion), ...done]
+    | #concat(nodes) -> emitAll(nodes, pc, done)
+    | #alt(nodes) -> emitAlternatives(nodes, pc, pc + sizeOf(node), done)
+    | #group(number, inner) ->
+      [#save(number * 2 + 1), ...emit(inner, pc + 1, [#save(number * 2), ...done])]
+    | #repeat(inner, least, most, greedy) -> emitRepeat(inner, least, most, greedy, pc, done)
+}
+
+--| The instructions of `nodes`, one after another, the first at `pc`, in front of `done`.
+def emitAll: list(Node), int, list(Inst) -> list(Inst) = { nodes, pc, done ->
+  match nodes
+    | [] -> done
+    | [node, ...rest] -> emitAll(rest, pc + sizeOf(node), emit(node, pc, done))
+}
+
+--| The instructions of the alternatives `nodes`, the first at `pc`, each going on at `end` when it
+  matches. Each but the last is a split to it or the next, it, and a jump to `end`.
+def emitAlternatives: list(Node), int, int, list(Inst) -> list(Inst) = { nodes, pc, end, done ->
+  match nodes
+    | [] -> done
+    | [node] -> emit(node, pc, done)
+    | [node, ...rest] ->
+      def next = pc + 1 + sizeOf(node) + 1
+      def body = emit(node, pc + 1, [#split(pc + 1, next), ...done])
+      emitAlternatives(rest, next, end, [#jump(end), ...body])
+}
+
+--| `inner` repeated from `least` to `most` times (`-1` for no most), greedily or not, starting at
+  `pc`: `least` copies of it, then a loop for no most, or a copy that may be skipped for each time
+  past `least` up to `most`.
+def emitRepeat
+  : Node, int, int, bool, int, list(Inst) -> list(Inst)
+  = { inner, least, most, greedy, pc, done ->
+    def size = sizeOf(inner)
+    def required = emitCopies(inner, least, pc, done)
+    def from = pc + least * size
+    def choose = { body, out -> if greedy then #split(body, out) else #split(out, body) }
+
+    if most < 0 then
+      def end = from + size + 2
+      [#jump(from), ...emit(inner, from + 1, [choose(from + 1, end), ...required])]
+    else
+      def end = from + (most - least) * (size + 1)
+      optionalCopies(inner, most - least, from, end, size, choose, required)
+  }
+
+--| `count` copies of `node`, one after another, the first at `pc`, in front of `done`.
+def emitCopies: Node, int, int, list(Inst) -> list(Inst) = { node, count, pc, done ->
+  if count <= 0 then done else emitCopies(node, count - 1, pc + sizeOf(node), emit(node, pc, done))
+}
+
+--| `count` copies of `node`, the first at `pc`, each after a split that may skip to `end`.
+def optionalCopies
+  : Node, int, int, int, int, (int, int -> Inst), list(Inst) -> list(Inst)
+  = { node, count, pc, end, size, choose, done ->
+    if count <= 0
+      then done
+      else optionalCopies(
+        node
+        count - 1
+        pc + size + 1
+        end
+        size
+        choose
+        emit(node, pc + 1, [choose(pc + 1, end), ...done])
+      )
+  }
+
+--| The program of `node` with `groups` groups, named by `names`: the whole match is saved as
+  group 0, around it.
+def compile: Node, int, list((string, int)) -> Program = { node, groups, names ->
+  def body = emit(#group(0, node), 0, [])
+
+  Program(
+    insts = array.fromList(list.reverse([#match, ...body]))
+    slots = groups * 2 + 2
+    names = names
+  )
+}
+
+-- The text --------------------------------------------------------------------------------------
+
+--| The text being matched: the string, its code points, and the byte each code point starts at,
+  with the string's length in bytes after the last.
+type Text = (
+  subject: string
+  points: array(int)
+  offsets: array(int)
+  length: int
+)
+
+--| How many bytes UTF-8 writes the code point `c` in.
+def utf8Length: int -> int = { c ->
+  if c < 128 then 1 else if c < 2048 then 2 else if c < 65536 then 3 else 4
+}
+
+--| The text of `s`, ready to match.
+def textOf: string -> Text = { s ->
+  def points = string.codePoints(s)
+
+  def offsets = list.reverse(
+    list.fold(
+      points
+      [0]
+      { done, c ->
+        match done
+          | [last, ..._] -> [last + utf8Length(c), ...done]
+          | [] -> done
+      }
+    )
+  )
+
+  def pointArray = array.fromList(points)
+
+  Text(
+    subject = s
+    points = pointArray
+    offsets = array.fromList(offsets)
+    length = array.length(pointArray)
+  )
+}
+
+--| The code point of the text at `i`, or -1 outside it.
+def codeAt: Text, int -> int = { text, i ->
+  def points = text.points
+
+  match points(i)
+    | #some(c) -> c
+    | #none -> -1
+}
+
+--| The byte the code point at `i` starts at.
+def byteAt: Text, int -> int = { text, i ->
+  def offsets = text.offsets
+
+  match offsets(i)
+    | #some(b) -> b
+    | #none -> 0
+}
+
+--| The text's code points from `start` up to `end`, as a string.
+def between: Text, int, int -> string = { text, start, end ->
+  def from = byteAt(text, start)
+  string.substring(text.subject, start = from, length = byteAt(text, end) - from)
+}
+
+--| Whether `assertion` holds at code point `pos` of the text.
+def holds: Assertion, Text, int -> bool = { assertion, text, pos ->
+  match assertion
+    | #textStart -> pos == 0
+    | #textEnd -> pos == text.length
+    | #lineStart -> pos == 0 or codeAt(text, pos - 1) == 10
+    | #lineEnd -> pos == text.length or codeAt(text, pos) == 10
+    | #wordBoundary -> isWordPoint(codeAt(text, pos - 1)) != isWordPoint(codeAt(text, pos))
+    | #notWordBoundary -> isWordPoint(codeAt(text, pos - 1)) == isWordPoint(codeAt(text, pos))
+}
+
+--| Whether `c` is in `ranges`, sorted and apart, which it searches by halves from `low` up to
+  `high`.
+def inRanges: array((int, int)), int, int, int -> bool = { ranges, c, low, high ->
+  if low >= high then false else
+    def middle = (low + high) / 2
+
+    match ranges(middle)
+      | #some(first, last) ->
+        if c < first
+          then inRanges(ranges, c, low, middle)
+          else if c > last then inRanges(ranges, c, middle + 1, high) else true
+      | #none -> false
+}
+
+-- The VM ----------------------------------------------------------------------------------------
+
+--| A thread: where it is in the program, and its group slots, each a code point or -1.
+type Thread = (pc: int, slots: array(int))
+
+--| The instruction of `program` at `pc`.
+def instAt: Program, int -> Inst = { program, pc ->
+  def insts = program.insts
+
+  match insts(pc)
+    | #some(inst) -> inst
+    | #none -> #match
+}
+
+--| `slots` with slot `k` set to `value`.
+def withSlot: array(int), int, int -> array(int) = { slots, k, value ->
+  array.init(
+    array.length(slots)
+    { j ->
+      if j == k
+        then value
+        else match slots(j)
+          | #some(v) -> v
+          | #none -> -1
+    }
+  )
+}
+
+--| `threads`, with the thread at `pc` and those it goes on to without reading a character added
+  in front, in priority order, at code point `pos`. `marks` holds, for each instruction, the code
+  point at which a thread last reached it, so each is reached once at each.
+def addThread
+  : [Memory] Program, Text, MArray(int), int, int, array(int), list(Thread) -> list(Thread)
+  = { program, text, marks, pos, pc, slots, threads ->
+    if MArray.at(marks, pc) == #some(pos) then threads else
+      def marked = MArray.set(marks, pc, pos)
+
+      match instAt(program, pc)
+        | #jump(to) -> addThread(program, text, marks, pos, to, slots, threads)
+        | #split(first, second) ->
+          def withFirst = addThread(program, text, marks, pos, first, slots, threads)
+          addThread(program, text, marks, pos, second, slots, withFirst)
+        | #save(k) -> addThread(program, text, marks, pos, pc + 1, withSlot(slots, k, pos), threads)
+        | #check(assertion) ->
+          if holds(assertion, text, pos)
+            then addThread(program, text, marks, pos, pc + 1, slots, threads)
+            else threads
+        | _ -> [Thread(pc = pc, slots = slots), ...threads]
+  }
+
+--| The threads that go on from `threads`, in priority order, past the code point at `pos`, added
+  in front of `next`, last first, and the best match so far, `found`: a thread that reaches the
+  end of the program is a match, better than any after it, which are dropped.
+def advance
+  : [Memory] Program, Text, MArray(int), int, list(Thread), list(Thread), (#some(array(int)) | #none) -> (list(Thread), (#some(array(int)) | #none))
+  = { program, text, marks, pos, threads, next, found ->
+    match threads
+      | [] -> (next, found)
+      | [thread, ...rest] ->
+        def c = codeAt(text, pos)
+        def inst = instAt(program, thread.pc)
+
+        def reads = match inst
+          | #char(expected) -> c == expected
+          | #chars(ranges) -> c >= 0 and inRanges(ranges, c, 0, array.length(ranges))
+          | _ -> false
+
+        if inst == #match
+          then (next, #some(thread.slots))
+          else if reads then
+            def moved = addThread(program, text, marks, pos + 1, thread.pc + 1, thread.slots, next)
+            advance(program, text, marks, pos, rest, moved, found)
+          else advance(program, text, marks, pos, rest, next, found)
+  }
+
+--| The slots of the first match of `program` in the text that starts at or after code point
+  `pos`, the threads at `pos` being `threads`, in priority order, and the best match so far
+  `found`.
+def runFrom
+  : [Memory] Program, Text, MArray(int), int, list(Thread), (#some(array(int)) | #none) -> #some(array(int)) | #none
+  = { program, text, marks, pos, threads, found ->
+    -- Until a match is found, a thread starts at each code point, after those that started
+    -- earlier, which have the higher priority.
+    def alive = match found
+      | #none ->
+        def fresh = array.init(program.slots, { _ -> -1 })
+        list.reverse(addThread(program, text, marks, pos, 0, fresh, list.reverse(threads)))
+      | _ -> threads
+
+    match alive, found
+      | [], #some(_) -> found
+      | _, _ ->
+        def (next, nowFound) = advance(program, text, marks, pos, alive, [], found)
+
+        if pos >= text.length
+          then nowFound
+          else runFrom(program, text, marks, pos + 1, list.reverse(next), nowFound)
+  }
+
+--| The slots of the first match of `program` in `text` at or after code point `start`, or `#none`.
+def run: Program, Text, int -> #some(array(int)) | #none = { program, text, start ->
+  memory {
+    def marks = MArray.init(array.length(program.insts), { _ -> -1 })
+    -- The result's type is written, which the checker needs for now (#2053).
+    def found: #some(array(int)) | #none = runFrom(program, text, marks, start, [], #none)
+    found
+  }
+}

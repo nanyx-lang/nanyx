@@ -59,4 +59,4 @@ def main = {
   dbg(1.0e-7)
 }
 """
-    runSource source |> assertRan "0.30000000000000004\ndbg: 1.0e-7\n"
+    runSource source |> withoutDbgLocations |> assertRan "0.30000000000000004\n1.0e-7\n"

@@ -399,7 +399,9 @@ type TypedModule =
     { Module: Module
       Types: Map<string, Ty>
       TypeDefs: Map<string, TypeDefInfo>
-      Items: TypedTopLevelItem list
+      /// The module's items, typed. Lazy, since only tools ask for them: a module read from the checked library reads
+      /// them only then (see `CheckedLibrary`).
+      Items: Lazy<TypedTopLevelItem list>
       ExprTypes: Map<NodeId, Ty>
       CalleeTypes: Map<NodeId, Ty>
       SymbolTypes: Map<SymbolId, Ty>
