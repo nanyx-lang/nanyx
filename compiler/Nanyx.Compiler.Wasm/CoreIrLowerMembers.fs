@@ -142,7 +142,7 @@ and adaptParts (tools: MemberTools) (scope: Scope) (atom: Atom) (given: IrType) 
         let adapted = Expr.make (Match([ value ], arms @ [ others ])) expected
         let body = tools.BindTemp adapted k
         Expr.make (Let(value, Expr.make (Atom atom) value.Type, body)) body.Type
-    | _ -> internalError $"an adaptation from {IrType.show given} to {IrType.show expected}"
+    | _ -> internalError $"an adaptation from '{IrType.show given}' to '{IrType.show expected}'"
 
 /// The function `functionName` that makes a value of the recursive type `given` a value of `expected` (see `coerce`):
 /// its parts, each adapted.
@@ -184,7 +184,7 @@ and memberAtoms (tools: MemberTools) (scope: Scope) (node: NodeId option) (membe
             | Some argument, _, _ -> argumentAtom tools scope argument None found
             | None, Some var, _ -> found (AVar var)
             | None, None, Some wrapper -> found (wrapperClosure tools wrapper None)
-            | None, None, None -> cannot $"the context member {ContextMemberKey.text key}, which is not in scope"
+            | None, None, None -> cannot $"the context member '{ContextMemberKey.text key}', which is not in scope"
     go members []
 
 /// The member a call finds where `argument` says (see `ContextArgument`), as the callee takes it at `memberTy` where
@@ -200,7 +200,7 @@ and private argumentAtom (tools: MemberTools) (scope: Scope) (argument: ContextA
     // The type checker found every context a call requires, so one missing here is the backend's bug.
     | Unfound key ->
         let available = (scope.Members |> Map.keys |> List.ofSeq) @ (tools.Input.AmbientMembers |> Map.keys |> List.ofSeq) |> List.distinct |> List.map ContextMemberKey.text |> String.concat ", "
-        internalError $"the context member {ContextMemberKey.text key} is not in scope; those in scope are [{available}]"
+        internalError $"the context member '{ContextMemberKey.text key}' is not in scope; those in scope are [{available}]"
 
 /// A closure over the wrapper `wrapper` of a definition derived from the parts of a type (see `DerivedClosure`), at
 /// `memberTy`, the type of the context member it is passed as: it captures the members of the contexts the

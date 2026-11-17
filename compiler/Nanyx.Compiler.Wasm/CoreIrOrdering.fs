@@ -155,7 +155,7 @@ let private compareBody (ty: IrType) : string list * string list =
     | IrRecursive _
     | IrSelf
     | IrArray _
-    | IrWord -> internalError $"an ordering function for {IrType.show ty}, which has no order"
+    | IrWord -> internalError $"an ordering function for '{IrType.show ty}', which has no order"
 
 /// The runtime helpers the ordering functions of `types` call.
 let helpersUsed (types: IrType list) : string list =

@@ -96,7 +96,7 @@ let private compare (ty: IrType) (loadA: string list) (loadB: string list) : str
     | IrSelf
     // Two arrays are compared by the `==` derived for them (see `StructuralInstances`).
     | IrArray _
-    | IrWord -> internalError $"an equality of {IrType.show ty}, which has none"
+    | IrWord -> internalError $"an equality of '{IrType.show ty}', which has none"
 
 /// Returns 0 from the function unless the code before it left 1.
 let private orReturnFalse = [ "i32.eqz"; "if"; "  i32.const 0"; "  return"; "end" ]
@@ -188,7 +188,7 @@ let private equalsBody (tagId: string -> int option) (ty: IrType) : string list 
           "  return"
           "end"
           yield! payloadsEqual ]
-    | _ -> internalError $"an equality function for {IrType.show ty}, which needs none"
+    | _ -> internalError $"an equality function for '{IrType.show ty}', which needs none"
 
 /// The runtime helpers the equality functions of `types` call.
 let helpersUsed (types: IrType list) : string list =

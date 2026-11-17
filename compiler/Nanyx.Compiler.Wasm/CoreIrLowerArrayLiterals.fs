@@ -44,7 +44,7 @@ let arrayOf
     let element =
         match ty with
         | IrArray element -> element
-        | other -> internalError $"a collection literal's array of type {IrType.show other}"
+        | other -> internalError $"a collection literal's array of type '{IrType.show other}'"
     let expression = function Item e | SpreadArray e | SpreadList e -> e
     atoms (parts |> List.map expression) (fun lowered ->
         let items = List.zip parts lowered |> List.choose (function Item _, atom -> Some atom | _ -> None)

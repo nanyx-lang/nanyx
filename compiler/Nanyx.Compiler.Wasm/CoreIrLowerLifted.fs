@@ -127,7 +127,7 @@ let wrapperCalling (tools: LiftedTools) (wrapped: string) (instanceTy: Ty) (capt
             | Some index, _ ->
                 tools.BindTemp (Expr.make (Field(AVar environmentParameter, index + 1)) (snd captured.[index])) (fun atom -> call rest (atom :: members))
             | None, Some (_, var) -> call rest (AVar var :: members)
-            | None, None -> internalError $"the context member {ContextMemberKey.text key} of '{wrapped}' is neither captured nor passed"
+            | None, None -> internalError $"the context member '{ContextMemberKey.text key}' of '{wrapped}' is neither captured nor passed"
     make (environmentParameter :: valueParameters @ List.map snd passed) (tools.ToIrType resultTy) (bind (call order []))
 
 /// The adapter `functionName` that lets a function value of type `givenTy` be called as one of `expectedTy` (see
@@ -142,7 +142,7 @@ let adapter (tools: LiftedTools) (functionName: string) (givenTy: IrType) (expec
     let givenInput, givenOutput, given, result, wanted =
         match givenTy, expectedTy with
         | IrFunction(givenInput, givenOutput, given), IrFunction(_, result, wanted) -> givenInput, givenOutput, given, result, wanted
-        | _ -> internalError $"an adapter from {IrType.show givenTy} to {IrType.show expectedTy}"
+        | _ -> internalError $"an adapter from '{IrType.show givenTy}' to '{IrType.show expectedTy}'"
     let missing = given |> List.filter (fun (key, _) -> not (wanted |> List.exists (fst >> (=) key)))
     let environment = tools.NewVar ClosureSyntax.envParameter Param (IrRecord(("0", IrWord) :: ("1", givenTy) :: (missing |> List.mapi (fun index (_, ty) -> string (index + 2), ty))))
     let valueTys = adaptedValueTypes givenTy expectedTy
