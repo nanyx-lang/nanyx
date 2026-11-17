@@ -5,11 +5,9 @@ open TranspilerWasmTestHelpers
 
 // #1488: `list.sortDescending`, `list.sortByDescending` and `list.sortWith`.
 
-let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
-
 [<Fact>]
 let ``Run - sortByDescending is stable: elements with the same key keep their order`` () =
-    run
+    runSource
         """
 import nanyx/text
 
@@ -22,7 +20,7 @@ println(oldestFirst \list.map { p -> p.name } \string.join(", "))
 
 [<Fact>]
 let ``Run - sortDescending puts the greatest first, on ints and strings`` () =
-    run
+    runSource
         """
 def none: list(int) = []
 
@@ -32,7 +30,7 @@ println("{list.sortDescending([3, 1, 2, 3])} {list.sortDescending(["b", "c", "a"
 
 [<Fact>]
 let ``Run - sortWith sorts by one key ascending and another descending`` () =
-    run
+    runSource
         """
 import nanyx/text
 
@@ -53,7 +51,7 @@ println("{list.sortWith([3, 1, 2], { a, b -> int.compare(b, a) })}")
 
 [<Fact>]
 let ``Run - the sorts are stack-safe on a list of 100,000 elements`` () =
-    run
+    runSource
         """
 def big = list.init(100000, { i -> (i * 7919) % 100003 })
 def descending = list.sortDescending(big)

@@ -322,7 +322,7 @@ let runE2E testName =
 /// `source`, saved as a script and run (see `runScriptWithOptions`).
 let runSourceWithOptions (checkMemory: bool) (inlineCalls: bool) (standardInput: string) (source: string) : RunOutcome =
     let inputPath = Path.Combine(Path.GetTempPath(), $"nanyx-run-{Guid.NewGuid():N}.nyx")
-    File.WriteAllText(inputPath, source)
+    File.WriteAllText(inputPath, source.ReplaceLineEndings "\n")
     try runScriptWithOptions checkMemory inlineCalls standardInput inputPath
     finally File.Delete inputPath
 

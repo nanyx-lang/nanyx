@@ -5,11 +5,9 @@ module TranspilerWasmTests.Features.Collections.Spreads
 open Xunit
 open TranspilerWasmTestHelpers
 
-let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
-
 [<Fact>]
 let ``Run - a list literal spreads a set, a range and a type that attaches toSeq`` () =
-    run
+    runSource
         """
 type Bag = protected (items: list(int))
 
@@ -26,7 +24,7 @@ println(ys)
 
 [<Fact>]
 let ``Run - a literal of another type spreads a set, a slice and a sequence`` () =
-    run
+    runSource
         """
 import nanyx/slice
 
@@ -39,7 +37,7 @@ println(set[...(5..7), 5])
 
 [<Fact>]
 let ``Run - a literal spreads a sequence that needs a context, and a mutable slice`` () =
-    run
+    runSource
         """
 import (
   nanyx/marray

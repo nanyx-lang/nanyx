@@ -6,12 +6,10 @@ open TranspilerWasmTestHelpers
 // A protected or private type that names itself in its definition (#1663). Each program runs with its memory checked,
 // so a value that is not freed, or freed twice, fails the test.
 
-let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
-
 [<Fact>]
 let ``Run - a def that nests constructors of a type generic in contexts is given a function that prints`` () =
     // #1701: `v1` keeps the `[d]` it declares, so a function that requires `Console` can be passed to it.
-    run """
+    runSource """
 type Rq(a) = [k] protected (next: [k] () -> #next(a, Rq(a)) | #done)
 
 def v1: ([d] int -> b) -> [d] Rq(b) = { f -> Rq(next = { #next(f(1), Rq(next = { #done })) }) }
@@ -32,7 +30,7 @@ println(first(v1({ n ->
 [<Fact>]
 let ``Run - the rest of a value generic in contexts made with a pure lambda is pulled with the contexts it carries`` () =
     // #1725: the inner constructor's pure lambda takes the members of the `[d]` its value carries.
-    run """
+    runSource """
 type Rq(a) = [k] protected (next: [k] () -> #next(a, Rq(a)) | #done)
 
 def v1: ([d] int -> b) -> [d] Rq(b) = { f -> Rq(next = { #next(f(1), Rq(next = { #done })) }) }
@@ -50,7 +48,7 @@ println(count(v1({ n -> "{n}" })))
 [<Fact>]
 let ``Run - pure values nested in a value generic in contexts are each pulled with the contexts it carries`` () =
     // #1725: the adapter of the inner value adapts the values its function gives back, which are of its type again.
-    run """
+    runSource """
 type Rq(a) = [k] protected (next: [k] () -> #next(a, Rq(a)) | #done)
 
 def v3: ([d] int -> b) -> [d] Rq(b) = { f ->
@@ -72,7 +70,7 @@ println(joined(v3({ n ->
 
 [<Fact>]
 let ``Run - a protected type that names itself in a field is built and recursed over`` () =
-    run """
+    runSource """
 type Node = protected (value: int, rest: #some(Node) | #none)
 
 def n = Node(value = 1, rest = #some(Node(value = 2, rest = #some(Node(value = 3, rest = #none)))))
@@ -89,7 +87,7 @@ println(sum(n))
 
 [<Fact>]
 let ``Run - a generic protected type whose function gives the type again is pulled to its end`` () =
-    run """
+    runSource """
 type Stream(a) = protected (next: () -> #next(a, Stream(a)) | #done)
 
 def u = Stream(next = { #next(1, Stream(next = { #next(2, Stream(next = { #done })) })) })
@@ -106,7 +104,7 @@ println(total(u))
 
 [<Fact>]
 let ``Run - the rest of a value of a type generic in contexts requires the same contexts`` () =
-    run """
+    runSource """
 type Stream(a) = [k] protected (next: [k] () -> #next(a, Stream(a)) | #done)
 
 def loud: [Console] Stream(int) = Stream(next = {

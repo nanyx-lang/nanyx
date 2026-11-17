@@ -4,11 +4,9 @@ module TranspilerWasmTests.Features.Collections.Tables
 open Xunit
 open TranspilerWasmTestHelpers
 
-let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
-
 [<Fact>]
 let ``Run - a table literal is a list of its rows' records`` () =
-    run
+    runSource
         """
 def namesAndAges =
   [| name     | age |
