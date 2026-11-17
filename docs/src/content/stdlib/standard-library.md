@@ -46,6 +46,8 @@ in its manifest's `dependencies`, and imports its modules; the console host prov
 It also ships `nanyx.json`, which a program names in its dependencies to read and write JSON:
 
 - [json](./json) — the `Json` value, parsing and printing (`nanyx.json/json`)
+- [json, decoders](./json-typed) — reading JSON into types of your own (`nanyx.json/json`)
+- [encode](./encode) — writing types of your own as JSON (`nanyx.json/encode`)
 
 # Named parameters
 

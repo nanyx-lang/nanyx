@@ -59,8 +59,8 @@ match json.parse("[1, 2")
 Comparing `Json` values with `==`, or writing a `JsonError` with `println`, needs the types imported by name as well,
 `import nanyx.json/json as (Json, JsonError)`, until [#1796](https://github.com/nanyx-lang/nanyx/issues/1796) is fixed.
 
-Typed decoding and encoding, with combinators, is planned
-([Files, HTTP and JSON](../work-in-progress/files-http-json#json-nanyxjson)).
+To read a document into types of your own, and write them back, use the [decoders](json-typed) and
+[encoders](encode).
 
 # Reference
 
