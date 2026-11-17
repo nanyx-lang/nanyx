@@ -26,7 +26,7 @@ pattern int -> #Even | #Odd = { n ->
 """
     match itemOf source with
     | Kind (Def (PatternSyntax.Declaration (signature, Kind (Lambda _)) & ValueDef (false, name, _, _))) ->
-        Assert.Equal(Some ({ Tags = [ "Even"; "Odd" ]; TakesArguments = false; IsPartial = false; ReturnsBool = false }: PatternSyntax.Shape), PatternSyntax.shapeOf name)
+        Assert.Equal(Some ({ Tags = [ "Even"; "Odd" ]; WithPayload = []; TakesArguments = false; IsPartial = false; ReturnsBool = false }: PatternSyntax.Shape), PatternSyntax.shapeOf name)
         Assert.Equal(TypeName "int", signature.Input.Kind)
         Assert.Equal<Identifier list>([ "Even"; "Odd" ], signature.Results |> List.map fst)
     | other -> failwith $"Unexpected item: %A{other}"
@@ -36,7 +36,7 @@ let ``a partial pattern has _ among its tags, and one with one tag and no payloa
     match itemOf "export pattern int -> #Zero | _ = { n -> n == 0 }" with
     | Kind (Def (PatternSyntax.Declaration (signature, _) & ValueDef (true, name, _, _))) ->
         Assert.True signature.IsPartial
-        Assert.Equal(Some ({ Tags = [ "Zero" ]; TakesArguments = false; IsPartial = true; ReturnsBool = true }: PatternSyntax.Shape), PatternSyntax.shapeOf name)
+        Assert.Equal(Some ({ Tags = [ "Zero" ]; WithPayload = []; TakesArguments = false; IsPartial = true; ReturnsBool = true }: PatternSyntax.Shape), PatternSyntax.shapeOf name)
     | other -> failwith $"Unexpected item: %A{other}"
 
 [<Fact>]
@@ -53,6 +53,7 @@ pattern string -> #ParseInt(int) | _ = { s ->
         Assert.Equal(IdentifierExpr PatternSyntax.noMatch, lastArm.Kind)
         Assert.Equal(Some (TypeName "int"), signature.Results |> List.head |> snd |> Option.map _.Kind)
         Assert.False (PatternSyntax.shapeOf name).Value.ReturnsBool
+        Assert.Equal<Identifier list>([ "ParseInt" ], (PatternSyntax.shapeOf name).Value.WithPayload)
     | other -> failwith $"Unexpected item: %A{other}"
 
 [<Fact>]
@@ -66,7 +67,8 @@ let ``a pattern with arguments takes them before its input`` () =
 
 [<Fact>]
 let ``a pattern's def name gives back its shape whatever its tags are made of`` () =
-    let shape = ({ Tags = [ "A1"; "B_2"; "C" ]; TakesArguments = true; IsPartial = true; ReturnsBool = false }: PatternSyntax.Shape)
+    // A tag that ends in `p` is read whole, and the mark after a tag that carries a payload is no tag's.
+    let shape = ({ Tags = [ "A1"; "Bp"; "C_2"; "D" ]; WithPayload = [ "Bp"; "D" ]; TakesArguments = true; IsPartial = true; ReturnsBool = false }: PatternSyntax.Shape)
     Assert.Equal(Some shape, PatternSyntax.shapeOf (PatternSyntax.defName shape))
     Assert.Equal(Some shape, PatternSyntax.shapeOf ("m." + PatternSyntax.defName shape))
     Assert.Equal(None, PatternSyntax.shapeOf "pattern")

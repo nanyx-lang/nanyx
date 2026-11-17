@@ -169,7 +169,9 @@ println(security("https://nanyx.dev"))
 
 At the use site, a pattern with arguments takes two parenthesised groups: the arguments first, then the payload to
 destructure. When the pattern's result tag carries no payload, the second group is left out, as in
-`#StartsWith(...)` above. The compiler knows which patterns take arguments from their declarations, so there is no
+`#StartsWith(...)` above. It may be left out of a tag that carries one too, to match the tag without taking its
+payload apart, as `#SplitOn(":")` does below; the same goes for a pattern without arguments, so `#Hsl` alone matches what
+`#Hsl(h, s, l)` does. The compiler knows which patterns take arguments from their declarations, so there is no
 ambiguity with an ordinary tag such as `#circle(r)`, whose single group is always a payload. A pattern used with
 arguments it doesn't take, or without those it does, is an error ([`NYX0264`](../standard-tools/errors#nyx0264)), and
 arguments of the wrong type are a type mismatch ([`NYX0201`](../standard-tools/errors#nyx0201)).
@@ -188,7 +190,12 @@ match "hello,world"
   | #SplitOn(",")(first, second) -> println("First: {first}, Second: {second}")
   | _ -> println("Input string does not contain exactly one comma")
 
+match "key:value"
+  | #SplitOn(":") -> println("A pair, split by a colon")
+  | _ -> println("No colon")
+
 -- First: hello, Second: world
+-- A pair, split by a colon
 ```
 
 Several arguments are a tuple, and an argument may be any expression:

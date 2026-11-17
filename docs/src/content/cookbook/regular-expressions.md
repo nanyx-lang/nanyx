@@ -126,6 +126,33 @@ println("red, green ;blue;  yellow" \Regex.split(separators))
 -- [red, green, blue, yellow]
 ```
 
+# Matching in a `match`
+
+`#Matches` is a [custom pattern](../advanced/custom-patterns) that matches a string against a pattern written in the
+arm, with the `Match` as its payload if you want it. `#MatchesRegex` does the same with a `Regex` already made, such as
+one built at run time:
+
+```nanyx
+::dependency nanyx.regex
+
+import nanyx.regex/regex
+
+def classify = { (line: string) ->
+  match line
+    | #Matches('^\s*(#.*)?$') -> "blank or a comment"
+    | #Matches('^(\w+)\s*=\s*(.*)$')(m) -> "setting {m \group(1) \someOr("")}"
+    | _ -> "something else"
+}
+
+for ["  # a comment", "port = 8080", "[server]"] | line -> println(classify(line))
+
+-- blank or a comment
+-- setting port
+-- something else
+```
+
+Each pattern is read once, when the match first runs it, and one that is wrong crashes, saying where.
+
 # A pattern built at run time
 
 A pattern made from input can be wrong, and the `RegexError` says where, counting code points from 1:
