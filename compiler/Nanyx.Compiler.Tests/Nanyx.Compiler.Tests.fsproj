@@ -104,6 +104,7 @@
     <Compile Include="Features\Imports\SelectiveImportTests.fs" />
     <Compile Include="Features\Imports\ReExportTests.fs" />
     <Compile Include="Features\Inference\ErrorRecoveryTests.fs" />
+    <Compile Include="Features\Inference\FailedCallTypeTests.fs" />
     <Compile Include="Features\Inference\InferenceTests.fs" />
     <Compile Include="Features\Inference\ModuleSolveTests.fs" />
     <Compile Include="Features\Inference\TypedAstTests.fs" />

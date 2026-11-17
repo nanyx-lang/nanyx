@@ -113,6 +113,7 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   `@extern`, with their buffers allocated with `nanyx/host.memory` (see
   [Foreign functions](./foreign-functions#whats-built)). `run` passes the members of both contexts to every entry,
   but the inliner inlines `run` and the entry into the start ([#1469](https://github.com/nanyx-lang/nanyx/issues/1469)),
+  the entry whatever its size, since the module calls it once ([#1883](https://github.com/nanyx-lang/nanyx/issues/1883)),
   so a member nothing calls is never built, and a program contains only the members it calls and imports only what
   they call ([#1497](https://github.com/nanyx-lang/nanyx/issues/1497)): hello world imports `fd_write` alone. A
   program that reads `args()` imports no `environ_*` function, and one that reads only `variable` no `args_*` one
@@ -131,7 +132,7 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   for what they do on their own (`readFile`, `writeFile`, `pathExists`, `listDirectory`, ...), since the prelude makes
   them ambient names. `listDirectory` gives names in any order, and `dir.list` sorts and joins them, so another host
   has less to do.
-- **The file system on WASI.** The console host writes `FileSystem` in `console.host.nyx` on WASI's
+- **The file system on WASI.** The console host writes `FileSystem` in `console.host.files.nyx`, a `@partial` fragment of its root module `console.host` (a host package's modules are assembled from their fragments as a program's are, `PartialModules.otherFragments` searching the host's package too), on WASI's
   `fd_prestat_get` and `fd_prestat_dir_name`, `path_open`, `fd_read`, `fd_pread`, `fd_write`, `fd_close`,
   `fd_filestat_get`, `fd_readdir`, `path_filestat_get`, `path_unlink_file` and `path_create_directory`. A path is
   found in the runtime's preopened directories: a relative one in the preopen named `.`, an absolute one in the

@@ -42,12 +42,30 @@ STEPS
   a20
 }
 
-def go: int -> int = { n -> if n == 0 then long(1) else go(n - 1) }
+def go: int -> int = { n -> if n == 0 then long(1) + long(2) else go(n - 1) }
 
 println("{go(2)}")
 """
     let source = template.Replace("STEPS", steps)
     Assert.Contains("call $long", functionText "go" (transpileWat source))
+
+[<Fact>]
+let ``A function over the size limit that the module calls once is inlined`` () =
+    // Its body only moves, so nothing grows (#1883).
+    let steps = List.init 20 (fun index -> $"  def a{index + 1} = a{index} * 3 + {index}") |> String.concat "\n"
+    let template =
+        normalized """def long: int -> int = { a0 ->
+STEPS
+  a20
+}
+
+def go: int -> int = { n -> if n == 0 then long(1) else go(n - 1) }
+
+println("{go(2)}")
+"""
+    let wat = transpileWat (template.Replace("STEPS", steps))
+    Assert.DoesNotContain("call $long", functionText "go" wat)
+    Assert.DoesNotContain("(func $long", wat)
 
 [<Fact>]
 let ``A handler and the lambda it is given are inlined`` () =

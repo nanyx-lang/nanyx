@@ -232,6 +232,7 @@ shapes.nyx:3:39: error NYX0201: 'string' is not a number, so it cannot be used w
 The error stays where it was found, so the program fails no sooner than it has to:
 
 - **An expression that doesn't check**, such as an unknown name, a type mismatch, a call with the wrong number of arguments, a missing field, or a call that needs a context nothing provides, stops the program when it is evaluated. The rest of its function runs as usual.
+- **A call that fails** but whose function's type is known, because it's missing a context, given an argument of the wrong type or the wrong number of them, passed by position what it takes by name, or calling a definition a module block doesn't export, still has the type that function gives back, so its uses are checked as usual. Only what a failed argument would have decided is unknown: `list.map(xs, 5)` is a `list(???)`.
 - **A match that doesn't handle every case** runs the cases it handles, and stops the program on a case it doesn't.
 - **A definition whose type is wrong**, such as one whose body doesn't fit its annotation, is reported once. Calling it stops the program with its error, and the functions that call it are not errors themselves.
 - **`???`**, the [placeholder for unwritten code](../getting-started/basics#unimplemented-code), stops the program when it is reached.

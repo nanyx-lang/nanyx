@@ -191,23 +191,49 @@ module Solving =
     let unify (constraints: ConstraintSet) : Result<Subst, string * SourceSpan> =
         unifyDetailed constraints |> Result.mapError (fun (message, span, _) -> message, span)
 
-    /// `remaining` solved past each failure (see `solveDetailed`), with the constraints that agree and the failures
-    /// after `failures`, which are newest first.
-    let rec private solveSettingAside (remaining: ConstraintSet) (failures: Mismatch list) : Subst * ConstraintSet * Mismatch list =
+    /// Each variable of the expected sides of `constraints`, once: of a call's argument's constraint, those of the
+    /// parameter's type, which the argument would have fixed.
+    let private expectedVars (constraints: ConstraintSet) : TyVar list =
+        let found = ResizeArray<TyVar>()
+        let rec visit ty =
+            match ty with
+            | TyVar v ->
+                if not (found.Exists(fun seen -> seen.Id = v.Id)) then found.Add v
+                false
+            | _ -> Ty.exists visit ty
+        for _, expected, _, _ in constraints do
+            visit expected |> ignore
+        List.ofSeq found
+
+    /// `remaining` solved past each failure (see `solveDetailed`), with the constraints that agree, those set aside
+    /// added to `setAside`, and the failures after `failures`, which are newest first.
+    let rec private solveSettingAside (remaining: ConstraintSet) (failures: Mismatch list) (setAside: ConstraintSet) : Subst * ConstraintSet * ConstraintSet * Mismatch list =
         match unifyDetailed remaining with
-        | Ok subst -> subst, remaining, List.rev failures
+        | Ok subst -> subst, remaining, setAside, List.rev failures
         | Error (_, span, _ as failure) ->
-            let kept = remaining |> List.filter (fun (_, _, _, origin) -> origin <> span)
+            let kept, failed = remaining |> List.partition (fun (_, _, _, origin) -> origin <> span)
             // A failure from no constraint given (which `unify` does not make) cannot be set aside.
-            if kept.Length = remaining.Length then empty, [], List.rev (failure :: failures)
-            else solveSettingAside kept (failure :: failures)
+            if failed.IsEmpty then empty, [], setAside, List.rev (failure :: failures)
+            else solveSettingAside kept (failure :: failures) (failed @ setAside)
 
     /// Solves `constraints` as `unify` does, carrying on past a failure: the constraints from where it failed are
     /// set aside and the rest solved again, until they agree. Gives the substitution the rest agree on, and each
     /// failure in the order it was found (see `Mismatch`). With no failure, the substitution is the one `unify` gives.
     let solveDetailed (constraints: ConstraintSet) : Subst * Mismatch list =
-        let subst, _, failures = solveSettingAside constraints []
+        let subst, _, _, failures = solveSettingAside constraints [] []
         subst, failures
+
+    /// `solveDetailed`, for the types a module is given once it is checked: each variable that a constraint set aside
+    /// would have fixed and that the rest leave open is the error type, solved after them, so that `list.map(xs, 5)`
+    /// is a `list(???)` (#1947). Checking itself sets constraints aside to try them, so this is for its end only.
+    let solveLeavingUnknown (constraints: ConstraintSet) : Subst * Mismatch list =
+        match solveSettingAside constraints [] [] with
+        | subst, _, [], failures -> subst, failures
+        | subst, kept, setAside, failures ->
+            let unknown = expectedVars setAside |> List.map (fun v -> TyVar v, errorType, Equal, SourceSpan.none)
+            match unifyDetailed (kept @ unknown) with
+            | Ok withUnknown -> withUnknown, failures
+            | Error _ -> subst, failures
 
     /// The lists of constraints `agreeing` was given lately, by reference, each with the constraints of it that agree.
     let private agreeingLists =
@@ -235,7 +261,7 @@ module Solving =
                     match remaining with
                     | [] -> constraints
                     | constraint :: rest -> walk (constraint :: newer) rest
-            let _, kept, _ = solveSettingAside (walk [] constraints) []
+            let _, kept, _, _ = solveSettingAside (walk [] constraints) [] []
             if given.Count >= solvedListsKept then given.Clear()
             given[constraints] <- kept
             kept

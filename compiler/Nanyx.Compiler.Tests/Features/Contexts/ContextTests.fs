@@ -391,6 +391,6 @@ let ``An operator that calls a context member checks its operands against the me
 
 [<Fact>]
 let ``A def that writes a parameterised context but not its type is called with any type that has it`` () =
-    // A call read the context's argument from the written type, and there was none: `Add` was "not available here".
-    let typed = compileClean "def sub: [Add(a)] = { x, y -> x - y }\ndef i = sub(5, 3)\ndef f = sub(5.5, 3.0)\n"
+    // A call read the context's argument from the written type, and there was none: `Sub` was "not available here".
+    let typed = compileClean "def sub: [Sub(a)] = { x, y -> x - y }\ndef i = sub(5, 3)\ndef f = sub(5.5, 3.0)\n"
     Assert.Equal<string list>([ "int"; "float" ], [ "i"; "f" ] |> List.map (fun name -> Unifier.tyToString typed.Types.[name]))

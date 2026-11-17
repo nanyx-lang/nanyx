@@ -78,7 +78,7 @@ def Money.`+`: Money, Money -> Money = { a, b -> Money(pence = a.pence + b.pence
 def Money.`-`: Money, Money -> Money = { a, b -> Money(pence = a.pence - b.pence) }
 def Money.negate: Money -> Money = { a -> Money(pence = -a.pence) }
 def orZero: [Add(a)] a -> a = { x -> x + 0 }
-def twiceLess: [Add(a)] a, a -> a = { x, y -> -(x - y - y) }
+def twiceLess: [Sub(a)] a, a -> a = { x, y -> -(x - y - y) }
 def none: list(int) = []
 @entry
 def main = {
@@ -90,9 +90,24 @@ def main = {
     runSource source |> assertRan "6 4.0 0 400 -400\n4 2.5 5 400\n"
 
 [<Fact>]
+let ``Run - a type that attaches zero and + but no - is summed`` () =
+    // #1958: `list.sum` requires `Add`, which no longer has `-` and `negate`.
+    let source =
+        normalized """type Tally = protected (count: int)
+def Tally.zero: Tally = Tally(count = 0)
+def Tally.`+`: Tally, Tally -> Tally = { p, q -> Tally(count = p.count + q.count) }
+@entry
+def main = {
+  def total = [Tally(count = 1), Tally(count = 2), Tally(count = 4)] \list.sum
+  println(total.count)
+}
+"""
+    runSource source |> assertRan "7\n"
+
+[<Fact>]
 let ``Run - generic code multiplies and divides through Num, with integer literals, at ints and floats`` () =
     // #610: `*`, `/` and `%` read through `Num`, a literal beside a value of the type variable is `fromInt` of it, and
-    // a function that requires `Num` passes it to one that requires `Add`.
+    // a function that requires `Num` passes it to one that requires `Add`, and one that requires `Sub`.
     let source =
         normalized """def square: [Num(a)] a -> a = { x -> x * x }
 def halfPlusOne: [Num(a)] a -> a = { x -> x / 2 + 1 }

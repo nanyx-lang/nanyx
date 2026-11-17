@@ -606,7 +606,8 @@ module Compiler =
             parseWithDocs (checkedModules.FileName origin) source
             // A module split across files is checked as one: its other files' items join this one's.
             |> Result.bind (fun (parsed, docComments) ->
-                PartialModules.assemble parseWithDiagnostics (PartialModules.otherFragments checkedModules.ReadFile checkedModules.Package checkedModules.Edited origin) parsed
+                let packages = Option.toList checkedModules.Package @ Option.toList hostModules
+                PartialModules.assemble parseWithDiagnostics (PartialModules.otherFragments checkedModules.ReadFile packages checkedModules.Edited origin) parsed
                 |> Result.map (fun assembled -> (let ast, _, _ = parsed in ast), docComments, assembled))
             |> Result.mapError (fun diagnostics -> Parsed, diagnostics)
             // A record that names a field twice is reported before anything is inferred from it (see `DuplicateFields`).
@@ -727,7 +728,7 @@ module Compiler =
                 // A context's associated types are written as its last parameters (see `AssociatedTypes`).
                 let desugared, associatedErrors = AssociatedTypes.rewrite state.TypeDefs desugared
                 let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.InferModule.inferModuleWithEnv env state desugared
-                let subst, mismatches = Solving.solveDetailed state.Constraints |> fun (subst, mismatches) -> Unifier.keepWrittenNames (Seq.append types.Values (state.AssociatedVariables |> Seq.map TyVar)) subst, mismatches
+                let subst, mismatches = Solving.solveLeavingUnknown state.Constraints |> fun (subst, mismatches) -> Unifier.keepWrittenNames (Seq.append types.Values (state.AssociatedVariables |> Seq.map TyVar)) subst, mismatches
                 // Every error in the module is reported: the items that failed to check, and each conflict among the
                 // constraints of those that did, in the order they are in the source rather than the order solving
                 // found them. The module is typed all the same, with what did check.

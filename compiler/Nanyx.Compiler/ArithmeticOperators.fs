@@ -3,11 +3,11 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// `+`, `-`, `*`, `/` and `%`, and prefix `-` (see "Add(a)" and "Num(a)" on the docs' Contexts page). On `int` and
-/// `float` they are the built-in operators. Each reads the context member of its name, and prefix `-` reads `negate`,
-/// through the prelude's smallest context that has it (see `OperatorContexts`): `+`, `-` and prefix `-` through `Add`,
-/// whose members are `zero`, `` `+` ``, `` `-` `` and `negate`, and `*`, `/` and `%` through `Num`, which has `Add`'s
-/// members and those three, and `fromInt`. On a type that attaches the member, or a type variable of a function that
+/// `+`, `-`, `*`, `/` and `%`, and prefix `-` (see "Add(a)", "Sub(a)" and "Num(a)" on the docs' Contexts page). On
+/// `int` and `float` they are the built-in operators. Each reads the context member of its name, and prefix `-` reads
+/// `negate`, through the prelude's smallest context that has it (see `OperatorContexts`): `+` through `Add`, whose
+/// members are `zero` and `` `+` ``, `-` and prefix `-` through `Sub`, whose members are `` `-` `` and `negate`, and
+/// `*`, `/` and `%` through `Num`, which has `Add`'s and `Sub`'s members and those three, and `fromInt`. On a type that attaches the member, or a type variable of a function that
 /// requires the context of it, the operator calls the member (see `OperatorCalls`). The compiler's own instances for
 /// `int` and `float` are the members the prelude attaches to them, which are what generic code is passed.
 ///
@@ -20,7 +20,7 @@ module internal ArithmeticOperators =
     /// `Num`'s member that any other integer literal is given to there.
     let fromInt = "fromInt"
 
-    /// `Add`'s member that prefix `-` reads.
+    /// `Sub`'s member that prefix `-` reads.
     let negate = "negate"
 
     /// The operator for powers. It is not a member: `x ** n` is a call to the prelude's `powerFunction`.
@@ -55,8 +55,8 @@ module internal ArithmeticOperators =
         | _ -> None
 
     /// The context the operator `op` needs of a type variable it is used on, the prelude's smallest with the member it
-    /// reads, and what the operator does: `Add` for `+`, `-` and prefix `-`, and `Num` for `*`, `/` and `%`. A module
-    /// checked without the prelude has no context to require.
+    /// reads, and what the operator does: `Add` for `+`, `Sub` for `-` and prefix `-`, and `Num` for `*`, `/` and
+    /// `%`. A module checked without the prelude has no context to require.
     let private contextFor (state: InferState) (op: string) =
         match does op, OperatorContexts.smallest state (memberOf op) with
         | Some does, Some context -> Some (context, does)

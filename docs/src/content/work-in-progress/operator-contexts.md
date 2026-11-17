@@ -5,11 +5,13 @@ order: 9
 ---
 
 An operator on a value of a type variable reads one member of a context, and its context is the prelude's context with
-the fewest members that has that member. `Add(a)`, `Num(a)` and `Append(a)`, the arithmetic operators and `++` read
-through them, `0` and integer literals in generic code, prefix `-` and `**` are built
-([#606](https://github.com/nanyx-lang/nanyx/issues/606)). The language docs describe them in
+the fewest members that has that member. `Add(a)`, `Sub(a)`, `Num(a)` and `Append(a)`, the arithmetic operators and
+`++` read through them, `0` and integer literals in generic code, prefix `-` and `**` are built
+([#606](https://github.com/nanyx-lang/nanyx/issues/606)). `+` reads `Add`, which has only `zero` and `+`, and `-` and
+prefix `-` read `Sub`, so a function that only adds, such as `list.sum`, asks for no more than it uses
+([#1958](https://github.com/nanyx-lang/nanyx/issues/1958)). The language docs describe them in
 [Operators find their context](../advanced/contexts#operators-find-their-context), [Add(a)](../advanced/contexts#adda),
-[Num(a)](../advanced/contexts#numa), [Append(a)](../advanced/contexts#appenda) and
+[Sub(a)](../advanced/contexts#suba), [Num(a)](../advanced/contexts#numa), [Append(a)](../advanced/contexts#appenda) and
 [Operators](../tour/operators#arithmetic-and-comparison). This page keeps what is still open. How operators on measured
 values are to be typed is on [Units and dimensions](./units-and-dimensions#arithmetic-on-measured-values).
 

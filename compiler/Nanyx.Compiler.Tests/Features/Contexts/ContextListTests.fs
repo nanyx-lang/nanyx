@@ -42,7 +42,7 @@ let ``A context variable joined with & is an error too`` () =
 let ``An operator required by its member is an error whose fix writes the prelude's context that has it`` () =
     let cases =
         [ "def add: [`+`: a, a -> a] a, a -> a = { x, y -> x + y }\n", [ "`+`: a, a -> a" ], "[Add(a)]"
-          "def sub: [`-`: (a, a) -> a] a, a -> a = { x, y -> x - y }\n", [ "`-`: (a, a) -> a" ], "[Add(a)]"
+          "def sub: [`-`: (a, a) -> a] a, a -> a = { x, y -> x - y }\n", [ "`-`: (a, a) -> a" ], "[Sub(a)]"
           "def lerp: [(`+`: a, a -> a), (`*`: a, a -> a)] a, a, a -> a = { a, b, t -> a + b * t }\n",
           [ "(`+`: a, a -> a)"; "(`*`: a, a -> a)" ],
           "[Num(a)]"
