@@ -16,7 +16,7 @@ open Transpiler.Wasm.CoreIrDrop
 /// How each function uses its parameters, by its name. A function not here owns all of them.
 type internal Ownership = Map<string, Use list>
 
-let private parameterUse (ownership: Ownership) (name: string) (index: int) =
+let internal parameterUse (ownership: Ownership) (name: string) (index: int) =
     match ownership |> Map.tryFind name with
     | Some uses when index < uses.Length -> uses.[index]
     | _ -> Owned
@@ -59,6 +59,7 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | If(cond, _, _) -> [ cond, Borrowed ]
     | FloatConstant _
     | Crash _
+    | Probe _
     | While _
     | Match _
     | Let _

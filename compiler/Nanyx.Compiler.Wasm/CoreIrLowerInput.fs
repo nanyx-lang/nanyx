@@ -122,6 +122,8 @@ type LowerInput =
       NamedTypes: Map<string, Ty>
       /// What a call to `dbg` compiles to.
       Dbg: DbgBuild
+      /// Whether the module has debug probes (see `CoreIrProbes`).
+      Probes: bool
       /// The numbers the types `Type` values stand for are at run time (see `CoreIrTypeIds`).
       TypeIds: CoreIrTypeIds.TypeIds
       /// The type definitions in scope, by name: what a type's description says of it besides its structure, its doc

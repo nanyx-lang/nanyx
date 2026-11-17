@@ -408,6 +408,7 @@ let private lowerInput (typed: TypedModule) : CoreIrLowerInput.LowerInput =
       TopLevel = []
       NamedTypes = Map.empty
       Dbg = CoreIrLowerInput.PrintedFrom None
+      Probes = false
       TypeIds = CoreIrTypeIds.TypeIds()
       TypeDefinitions = Map.empty }
 

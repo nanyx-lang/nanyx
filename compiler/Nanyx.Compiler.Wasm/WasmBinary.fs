@@ -18,11 +18,13 @@ open Transpiler.Wasm.WatSyntax
 /// The names of files and functions, numbered from 1. The frames, numbered from 1, each a function's name (0 for the
 /// function the code is in), a file's name, a line, and the frame of the call it was inlined at (0 for none), which
 /// comes before it: a place is its innermost frame, and the frames of the calls it was inlined through follow from it.
-/// And for each stretch of code, in order, how far after the last one it starts (the first, from the start of the
-/// module) and its place, the number of its innermost frame. A function's code starts a stretch of place 0, none, so
+/// For each stretch of code, in order, how far after the last one it starts (the first, from the start of the
+/// module) and its place, the number of its innermost frame. And each debug probe (see `CoreIrProbes`), in order of
+/// its number: the number, its kind (see `probeKindCode`), for an entry the function's name (else 0), and its place. A function's code starts a stretch of place 0, none, so
 /// that the code before its first marker has none. Each number is an unsigned LEB128. The runtime reads it to name the
 /// file and line of each frame of a trap (see `Nanyx.Runtime.SpanTable`).
 let spanTableName = "nanyx.spans"
+
 
 /// What follows an instruction's opcode.
 type private Immediate =
@@ -557,9 +559,19 @@ type private Assembler(fields: SExpr list) =
 
 /// Writes the code of instructions, flat or folded, for a function whose locals are `locals` (empty for a constant
 /// expression), keeping the labels of the blocks it is in, and adds to `places` each place marker's frames with where
-/// in `out` the code after it starts.
-type private CodeWriter(assembler: Assembler, locals: Dictionary<string, int>, out: Bytes, places: ResizeArray<int * (string option * string * int) list>) =
+/// in `out` the code after it starts, and to `probes` each probe's number and kind with the frames of the place marker
+/// before it.
+type private CodeWriter
+    (
+        assembler: Assembler,
+        locals: Dictionary<string, int>,
+        out: Bytes,
+        places: ResizeArray<int * (string option * string * int) list>,
+        probes: ResizeArray<int * string * string option * (string option * string * int) list>
+    ) =
     let labels = Stack<string option>()
+    // The frames of the last place marker, which a probe's marker after it is at.
+    let mutable lastFrames = []
 
     /// The depth of the block a branch to `reference` leaves: its label, or a number.
     member _.Label(reference: string) =
@@ -675,6 +687,10 @@ type private CodeWriter(assembler: Assembler, locals: Dictionary<string, int>, o
                 | Atom keyword :: rest -> this.Flat(keyword, rest)
                 | Placed frames :: rest ->
                     places.Add((out.Count, frames))
+                    lastFrames <- frames
+                    rest
+                | Probed(id, kind, functionName) :: rest ->
+                    probes.Add((id, kind, functionName, lastFrames))
                     rest
                 | Text _ :: _ -> fail "a string among instructions"
                 | [] -> []
@@ -744,7 +760,7 @@ type private CodeWriter(assembler: Assembler, locals: Dictionary<string, int>, o
             // The immediates come first, then the operands, which are folded instructions themselves.
             let probe = Bytes()
             let operandsFrom =
-                let writer = CodeWriter(assembler, locals, probe, ResizeArray())
+                let writer = CodeWriter(assembler, locals, probe, ResizeArray(), ResizeArray())
                 writer.CopyLabels labels
                 writer.Flat(keyword, rest)
             this.Instructions operandsFrom
@@ -756,6 +772,15 @@ type private CodeWriter(assembler: Assembler, locals: Dictionary<string, int>, o
         for label in Seq.rev outer do
             labels.Push label
 
+/// The number a probe's kind has in the table of places, after its stretches: 1 for a function's entry, 2 for a
+/// statement and 3 for a function's return (see `CoreIrProbes`).
+let private probeKindCode (kind: string) =
+    match kind with
+    | "entry" -> 1
+    | "statement" -> 2
+    | "return" -> 3
+    | _ -> fail $"a probe of an unknown kind, {kind}"
+
 /// Writes a section: its id, its size and its contents.
 let private section (out: Bytes) (id: byte) (contents: Bytes) =
     out.Add id
@@ -764,7 +789,7 @@ let private section (out: Bytes) (id: byte) (contents: Bytes) =
 
 /// A constant expression, `(i32.const 0)`, ended.
 let private constant (assembler: Assembler) (out: Bytes) (items: SExpr list) =
-    CodeWriter(assembler, Dictionary(), out, ResizeArray()).Instructions items
+    CodeWriter(assembler, Dictionary(), out, ResizeArray(), ResizeArray()).Instructions items
     out.Add 0x0Buy
 
 /// The binary format of the module that the WebAssembly text `wat` writes.
@@ -776,6 +801,8 @@ let assemble (wat: string) : byte array =
     // Each place marker's frames, and where in `code` the code after it starts; and where each body starts, with no
     // frames, so that code before a body's first marker has no place.
     let places = ResizeArray<int * (string option * string * int) list>()
+    // Each probe's number and kind, and the frames of its place.
+    let probes = ResizeArray<int * string * string option * (string option * string * int) list>()
     vector code assembler.Functions (fun out func ->
         let body = Bytes()
         let groups =
@@ -789,7 +816,7 @@ let assemble (wat: string) : byte array =
             unsigned out (uint64 count)
             out.Add ty)
         let bodyPlaces = ResizeArray()
-        CodeWriter(assembler, func.Locals, body, bodyPlaces).Instructions func.Body
+        CodeWriter(assembler, func.Locals, body, bodyPlaces, probes).Instructions func.Body
         body.Add 0x0Buy
         unsigned out (uint64 body.Count)
         places.Add((out.Count, []))
@@ -885,7 +912,7 @@ let assemble (wat: string) : byte array =
         names.AddRange functionNames
         section out 0uy names
     // The table of places (see `spanTableName`).
-    if places |> Seq.exists (fun (_, frames) -> not frames.IsEmpty) then
+    if places |> Seq.exists (fun (_, frames) -> not frames.IsEmpty) || probes.Count > 0 then
         let strings = Dictionary<string, int>()
         let stringNumber (text: string) =
             match strings.TryGetValue text with
@@ -906,7 +933,15 @@ let assemble (wat: string) : byte array =
                     frames.[key] <- frames.Count + 1
                     frames.Count
         let stretches = places |> Seq.map (fun (offset, place) -> codeStart + offset, frameNumber place) |> List.ofSeq
+        // Each probe, by its number, then its kind, the function's name for an entry, and its place.
+        let probed =
+            probes
+            |> Seq.sortBy (fun (id, _, _, _) -> id)
+            |> Seq.map (fun (id, kind, functionName, frames) ->
+                id, probeKindCode kind, (functionName |> Option.map stringNumber |> Option.defaultValue 0), frameNumber frames)
+            |> List.ofSeq        // The strings and frames are all numbered by now.
         let table = Bytes()
+
         name table spanTableName
         vector table (strings |> Seq.sortBy _.Value |> Seq.map _.Key) name
         vector table (frames |> Seq.sortBy _.Value |> Seq.map _.Key) (fun out (functionName, file, line, outer) ->
@@ -917,5 +952,9 @@ let assemble (wat: string) : byte array =
             unsigned out (uint64 (offset - last))
             unsigned out (uint64 place)
             last <- offset)
+
+        vector table probed (fun out (id, kind, functionName, place) ->
+            for number in [ id; kind; functionName; place ] do
+                unsigned out (uint64 number))
         section out 0uy table
     out.ToArray()

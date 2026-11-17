@@ -73,9 +73,13 @@ type WasmOptions =
       /// writes into the module's table of places, so a crash's stack names the file and line of each frame. Debug and
       /// release builds both have it: the command line turns it on for every program it writes or runs. Off in
       /// `Default`, so that the text a test reads is the code alone.
-      Places: bool }
+      Places: bool
+      /// Put debug probes in the code (see `CoreIrProbes`), which import `nanyx:debug` from the runtime: what a debug
+      /// build the runtime runs has, and the debugger is built on. A release build has none, and nor does a module written
+      /// to a file, which another WebAssembly runtime may run. They need `Places`, to say where each probe is.
+      Probes: bool }
 
-    static member Default = { CheckMemory = false; Inline = true; Release = false; SourceRoot = None; Places = false }
+    static member Default = { CheckMemory = false; Inline = true; Release = false; SourceRoot = None; Places = false; Probes = false }
 
 /// The names a module compiled with `CheckMemory` exports.
 module CheckedExports =
@@ -841,7 +845,9 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
           Signature = (fun _ -> None)
           HostState = 0
           CheckMemory = false
-          ShownFile = None }
+          ShownFile = None
+          TakesOver = (fun _ _ -> false)
+          ProbeId = (fun () -> 0) }
     let lowered =
         let input: CoreIrLowerInput.LowerInput =
             { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
@@ -901,6 +907,7 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
                 |> Map.filter (fun _ info -> not info.IsContext)
                 |> Map.map (fun _ info -> TyNominal(TypeDefInfo.nominalId info, info.Parameters |> List.map TyVar, info.Underlying, info.IsPrivate))
               Dbg = if options.Release then CoreIrLowerInput.Stripped else CoreIrLowerInput.PrintedFrom options.SourceRoot
+              Probes = options.Probes
               TypeIds = CoreIrTypeIds.TypeIds()
               TypeDefinitions = typed.TypeDefs }
         try CoreIrLowerModule.lowerModule input (emitFromCoreIr functionContextRequirements probeContext Set.empty >> ignore)
@@ -934,13 +941,14 @@ let private optimised (options: WasmOptions) (cachedNames: Set<string>) (definit
     // first, and keeps it only if something can call it (see `CoreIrClosureEntries`).
     let closureTargets = CoreIrClosureEntries.targets (definitionFunctions @ Option.toList startFunction)
     let owningEntries = closureTargets |> Set.map CoreIrClosureEntries.owningName
-    let definitionFunctions, startFunction =
-        let definitions = CoreIrClosureEntries.withOwningEntries closureTargets definitionFunctions
-        let all = definitions @ Option.toList startFunction
-        let counted = CoreIrCounting.insert (CoreIrCounting.inferOwnership all) all |> CoreIrReuse.insert
-        let start = startFunction |> Option.map (fun _ -> List.last counted)
-        CoreIrClosureEntries.withoutUncalled owningEntries (Option.toList start) (List.take definitions.Length counted), start
-    definitionFunctions, startFunction, owningEntries
+    // How each function uses its parameters, which a probe reads too (see `CoreIrEmit.EmitContext.TakesOver`).
+    let definitions = CoreIrClosureEntries.withOwningEntries closureTargets definitionFunctions
+    let all = definitions @ Option.toList startFunction
+    let ownership = CoreIrCounting.inferOwnership all
+    let counted = CoreIrCounting.insert ownership all |> CoreIrReuse.insert
+    let start = startFunction |> Option.map (fun _ -> List.last counted)
+    let definitionFunctions = CoreIrClosureEntries.withoutUncalled owningEntries (Option.toList start) (List.take definitions.Length counted)
+    definitionFunctions, start, owningEntries, ownership
 
 /// The functions the module's own functions need beside the runtime's, as WebAssembly text.
 type private SupportFunctions =
@@ -1081,7 +1089,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             |> Set.ofList
         definitionFunctions |> List.filter (CoreIrCachedValues.isCached values.Contains) |> List.map _.Name |> Set.ofList
 
-    let definitionFunctions, startFunction, owningEntries = optimised options cachedNames definitionFunctions startFunction
+    let definitionFunctions, startFunction, owningEntries, ownership = optimised options cachedNames definitionFunctions startFunction
 
     // The tags, strings and dbg forms of exactly the functions emitted below.
     let facts = CoreIrFacts.collect (definitionFunctions @ Option.toList startFunction)
@@ -1114,6 +1122,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         |> List.map (fun func -> func.Name, (func.Params |> List.map _.Type, func.Result))
         |> Map.ofList
 
+    // How many probes the module has numbered (see `EmitContext.ProbeId`).
+    let probes = ref 0
+
     let context: CoreIrEmit.EmitContext =
         { TagId =
             fun name ->
@@ -1137,7 +1148,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           Signature = fun name -> signatures |> Map.tryFind name
           HostState = hostStateAddress
           CheckMemory = options.CheckMemory
-          ShownFile = if options.Places then Some(CoreIr.shownFile options.SourceRoot) else None }
+          ShownFile = if options.Places then Some(CoreIr.shownFile options.SourceRoot) else None
+          TakesOver = fun name index -> CoreIrCounting.parameterUse ownership name index = Owned
+          ProbeId = fun () -> (probes.Value <- probes.Value + 1; probes.Value) }
 
     let specialisations = lowered.Specialisations |> Map.values |> Seq.concat |> Seq.map (fun (func, _) -> func.Name) |> Set.ofSeq
 
@@ -1168,7 +1181,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let renderedStartFunction, startDirective =
         match startFunction with
         | Some func ->
-            let emitted = CoreIrEmit.emitStart context func (CoreIrCachedValues.teardown cachedValues)
+            // A module with probes asks the runtime whether it is probing before anything else runs.
+            let before =
+                if facts.UsesProbes then [ $"call ${CoreIrEmit.probingEnabled}"; $"global.set ${CoreIrEmit.probing}" ] else []
+            let emitted = CoreIrEmit.emitStart context func before (CoreIrCachedValues.teardown cachedValues)
             for helper in emitted.Helpers do
                 usedHelpers.Add helper |> ignore
             functionsTouchMemory <- functionsTouchMemory || emitted.UsesMemory
@@ -1290,11 +1306,23 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     // Imports must precede every function definition in a WebAssembly module, so the foreign functions and the prelude,
     // which imports WASI's functions, come first.
+    // What a module with probes imports from the runtime, and the global it keeps whether it is probing in.
+    let probeImports =
+        if facts.UsesProbes then
+            [ $"""  (import "{CoreIrEmit.probeModule}" "enabled" (func ${CoreIrEmit.probingEnabled} (result i32)))"""
+              $"""  (import "{CoreIrEmit.probeModule}" "probe" (func ${CoreIrEmit.probeCall} (param i32) (result i32)))"""
+              $"""  (import "{CoreIrEmit.probeModule}" "local" (func ${CoreIrEmit.probeLocal} (param i32 i32)))""" ]
+            |> String.concat "\n"
+        else ""
+    let probeGlobal = if facts.UsesProbes then $"  (global ${CoreIrEmit.probing} (mut i32) (i32.const 0))" else ""
+
     let allImports =
         [ if not (String.IsNullOrWhiteSpace foreignImports) then foreignImports
+          if not (String.IsNullOrWhiteSpace probeImports) then probeImports
           if not (String.IsNullOrWhiteSpace dbgPrelude) then dbgPrelude
           if not (String.IsNullOrWhiteSpace memorySection) then memorySection
           if not (String.IsNullOrWhiteSpace heapSection) then heapSection
+          if not (String.IsNullOrWhiteSpace probeGlobal) then probeGlobal
           if not (String.IsNullOrWhiteSpace renderedHelpers) then renderedHelpers
           if not (String.IsNullOrWhiteSpace contextPrelude) then contextPrelude ]
         |> List.filter (fun line -> not (String.IsNullOrWhiteSpace line))

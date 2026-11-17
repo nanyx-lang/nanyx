@@ -1,0 +1,67 @@
+namespace Nanyx.Runtime
+
+open System
+open Wasmtime
+
+/// What answers a debug build's probes (see `Transpiler.Wasm.CoreIrProbes`): the debugger, or a test.
+type IProbeListener =
+    /// The program is at `probe`. True asks it for the locals of the frame it is in that are still alive there, which
+    /// it passes to `Local`, one at a time, before it goes on.
+    abstract Probe: probe: Probe -> bool
+    /// A local of the frame of the last probe, by its name, written as `dbg` writes values.
+    abstract Local: name: string * text: string -> unit
+
+/// The call stack of a program, kept from the entry and return probes of a debug build: a frame for each function it
+/// is in, innermost first, each at the place of the last probe it passed. A function inlined into another still has a
+/// frame, since its probes were inlined with it, and a tail call ends its caller's frame before the callee's starts.
+type ShadowStack() =
+    let frames = Collections.Generic.List<Frame>()
+
+    /// The frames, innermost first.
+    member _.Frames = frames |> Seq.rev |> List.ofSeq
+
+    /// Takes the program on past `probe`.
+    member _.Pass(probe: Probe) =
+        let place =
+            match probe.Place with
+            | (_, file, line) :: _ -> Some(file, line)
+            | [] -> None
+        match probe.Kind with
+        | Entry functionName ->
+            let name = FunctionNames.shown functionName |> Option.defaultValue functionName
+            frames.Add { Name = name; Place = place }
+        | Statement when frames.Count > 0 -> frames.[frames.Count - 1] <- { frames.[frames.Count - 1] with Place = place }
+        | Statement -> ()
+        | Return when frames.Count > 0 -> frames.RemoveAt(frames.Count - 1)
+        | Return -> ()
+
+module Probing =
+    /// The module a debug build's probes import (see `Transpiler.Wasm.CoreIrEmit.probeModule`).
+    let moduleName = "nanyx:debug"
+
+    /// The string at `address` in the program's memory: its UTF-8 bytes, with their count in the word before them.
+    let private stringAt (memory: Memory) (address: int) =
+        let length = memory.ReadInt32(int64 (address - 4))
+        Text.Encoding.UTF8.GetString(memory.GetSpan(int64 address, length))
+
+    /// Defines what a debug build's probes import in `linker`: `enabled`, whether anything listens, which the program
+    /// reads when it starts; `probe`, which passes the probe of a number in `table` to `listener`; and `local`, which
+    /// passes it a local the program writes. Without a listener, the program never calls the last two.
+    let define (linker: Linker) (table: SpanTable option) (listener: IProbeListener option) =
+        linker.DefineFunction(moduleName, "enabled", Func<int>(fun () -> if listener.IsSome then 1 else 0))
+        linker.DefineFunction(
+            moduleName,
+            "probe",
+            Func<int, int>(fun id ->
+                match listener, table |> Option.bind (fun table -> SpanTable.probe table id) with
+                | Some listener, Some probe -> if listener.Probe probe then 1 else 0
+                | _ -> 0))
+        linker.DefineFunction(
+            moduleName,
+            "local",
+            CallerAction<int, int>(fun caller name text ->
+                match listener with
+                | Some listener ->
+                    let memory = caller.GetMemory "memory"
+                    listener.Local(stringAt memory name, stringAt memory text)
+                | None -> ()))
