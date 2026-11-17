@@ -147,7 +147,7 @@ println("Hello, {fetchName("https://example.com/name")}")    -- the top level al
 ```
 
 - **No `async { }` block.** "May wait" is the `Async` context, which code has or doesn't. "Runs at the same time" is
-  [`concurrently`](#structured-concurrency). Those are the two things an `async` block mixes up in C# or JavaScript.
+  [`concurrent`](#structured-concurrency). Those are the two things an `async` block mixes up in C# or JavaScript.
 - **Code without `Async` can't get it.** A library that doesn't ask for it provably never waits, as one that doesn't
   ask for `Console` never prints.
 - **No `runBlocking`.** Inside a host that can suspend there's nothing to bridge, and in one that can't, a blocking
@@ -179,20 +179,51 @@ nurseries and Kotlin's coroutine scopes do:
 
 ```nanyx fragment
 def both: [Async, Http] () -> (Response, Response) = {
-  concurrently { scope ->
-    def a = scope \start { http.get(urlA) \orCrash("a failed") }
-    def b = scope \start { http.get(urlB) \orCrash("b failed") }
-    (a \join, b \join)
+  concurrent {
+    def a = start! http.get(urlA) \orCrash("a failed")
+    def b = start! http.get(urlB) \orCrash("b failed")
+    (await(a), await(b))
   }
 }
 ```
 
-`concurrently` returns only when every task started in it has finished. Most code wants the common shapes, which are
-ordinary library functions on top:
+Decided with the maintainer on 2026-11-17, for direction B (which is itself still to be confirmed):
+
+- **`concurrent` is an ordinary function** whose lambda requires a `Scope` context, as `list.select`'s requires
+  `Yield`. It returns only when every task started in it has finished.
+
+  ```nanyx fragment
+  context Scope = (
+    @customKeywordType(#delay)
+    start: [Async] (() -> a) -> Task(a)
+  )
+
+  def concurrent: [Async, c] ([Scope, Async, c] () -> a) -> a
+  def await: [Async] Task(a) -> a
+  ```
+
+- **`start!` is a keyword of kind `#delay`** ([#1879](https://github.com/nanyx-lang/nanyx/issues/1879)): `start! e`
+  is `start({ e })`, the expression wrapped in a lambda and nothing else rewritten. So `concurrent` needs no workflow
+  builder, there's no continuation per `start!`, and the block isn't turned into closures. As with `try`, the keyword
+  takes the whole expression after it: in `start! http.get(urlA) \orCrash("a failed")` the `orCrash` runs in the
+  task, not on the `Task`.
+- **`start!` gives back a `Task(a)`.** A task shares the instance and lives in a scope; a
+  [process](#processes-mailboxes-and-supervision) is isolated and comes from `process.start`. The names keep the two
+  levels apart.
+- **`Scope` is scoped,** as `Memory` is, so the [context escape](./context-escape) rules keep a `Task`, and `start`,
+  from leaving the block. "No task outlives its block" is checked by the type checker Nanyx already has.
+- **`await` is a function, not a keyword.** A keyword exists to capture the rest of a block; waiting on a task is an
+  ordinary call that suspends, like `http.get`, so it's written like one.
+- **A task never stands in for its value.** `a` is a `Task(Response)` until it's awaited. Having it awaited when it's
+  first read would be an implicit conversion, which Nanyx doesn't have.
+
+Most code wants the common shapes, which are ordinary library functions on top:
 
 ```nanyx fragment
+def both = concurrent.both({ http.get(urlA) }, { http.get(urlB) })   -- a tuple of both results
+
 def pages: [Async, Http] list(string) -> list(#some(Response) | #error(HttpError)) = { urls ->
-  urls \async.all { url -> http.get(url) }               -- every one, at once, in order
+  urls \concurrent.all { url -> http.get(url) }          -- every one, at once, in order
 }
 
 def fastest = async.race([{ http.get(mirrorA) }, { http.get(mirrorB) }])   -- first to finish; the rest cancelled
@@ -226,7 +257,7 @@ The language doesn't change between these; the hosts and the backend do.
 
 - **First: a wait suspends the whole instance.** Wasmtime can run an instance on its own stack and suspend it inside
   a host call, so `http.get` blocks only that instance, and the host runs many instances at once. That's the HTTP
-  host's one instance per request, available now. `concurrently` can be built on it by running each task as a
+  host's one instance per request, available now. `concurrent` can be built on it by running each task as a
   process (below), at the cost of copying.
 - **Then: tasks inside one instance, by stack switching.** WebAssembly's stack-switching proposal gives a module
   many stacks and lets it switch between them; it's built for effect handlers, which is what `Async` is. Wasmtime
@@ -283,7 +314,7 @@ for events(feedUrl) \seq.filter { e -> e.level == #error } \seq.take(10) | e -> 
 | `map`, `filter`, `take`, `fold` | `seq.map`, `seq.filter`, `seq.take`, `seq.fold`, with no async versions, since they're generic over contexts |
 | `collect` | a `for` loop, or `seq.fold` |
 | A `suspend` lambda in `map` | an `[Async]` lambda, which makes the result an `[Async] seq` |
-| Cancelling the collector's scope stops the flow | cancelling the `concurrently` scope that's pulling it |
+| Cancelling the collector's scope stops the flow | cancelling the `concurrent` scope that's pulling it |
 
 Kotlin needs `Flow` beside `Sequence` because `Sequence`'s operators can't suspend. Nanyx's `seq` operators take
 `[c]` functions, so one type is both.
@@ -294,7 +325,7 @@ Kotlin needs `Flow` beside `Sequence` because `Sequence`'s operators can't suspe
   pipeline that runs in one task the two behave the same. The difference shows only when the producer and consumer
   run at the same time, which is the next point.
 - **Concurrent operators are library code over channels.** `buffer`, `conflate`, `flatMapMerge` and `flowOn` run the
-  producer in a coroutine of its own. In Nanyx each starts a task in a `concurrently` scope that pulls the source and
+  producer in a coroutine of its own. In Nanyx each starts a task in a `concurrent` scope that pulls the source and
   sends into a bounded channel, and gives back a `seq` that reads the channel: `events(url) \seq.buffer(16)`. They
   need tasks and channels, so they come after the plain operators.
 - **Hot streams are processes.** Kotlin's `SharedFlow` and `StateFlow` run whether or not anyone is collecting and
@@ -429,7 +460,7 @@ Not yet filed. In order:
 
 1. Crash reports: `Crash` with message, span and stack, and the console, HTTP and test hosts using it.
 2. `isolate`, the deep copy, and the test runner and HTTP host built on it.
-3. Decide A or B. If B: the `Async` context, `concurrently`, `async.all`, `race` and `timeout`, on instance
+3. Decide A or B. If B: the `Async` context, `concurrent` with `start!` (keyword kinds, #1879), `concurrent.all`, `race` and `timeout`, on instance
    suspension first.
 4. Tasks in one instance, by stack switching, with Asyncify as the fallback.
 5. Channels, and the concurrent stream operators on them: `seq.buffer`, `conflate`, `merge`.
