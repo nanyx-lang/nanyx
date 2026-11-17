@@ -136,6 +136,9 @@ module Intrinsics =
     /// A list's first cell changed in place to have another list as its tail, giving up the tail it had: how the standard
     /// library builds a list front to back, in cells nothing outside it can see yet.
     let listSetTail = prefix + "list_set_tail"
+    /// A list's first cell changed in place to hold another element, giving up the one it held: how `MList.set` changes
+    /// an element of cells only the `MList` holds.
+    let listSetHead = prefix + "list_set_head"
 
     /// The array intrinsic a mutable array's is, since the backend holds the two the same way: a mutable array's
     /// elements are read as an array's are.
@@ -246,6 +249,7 @@ module Intrinsics =
           arrayWrite, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ Arrays.ofType element; intTy; element ], unitTy, []); Symbol = None; ProvidedBy = None }
           isExclusive, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, TyPrimitive "bool", []); Symbol = None; ProvidedBy = None }
           listSetTail, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ listOf element; listOf element ], unitTy, []); Symbol = None; ProvidedBy = None }
+          listSetHead, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ listOf element; element ], unitTy, []); Symbol = None; ProvidedBy = None }
           listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element, []); Symbol = None; ProvidedBy = None }
           compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy, []); Symbol = None; ProvidedBy = None }
           hash, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, intTy, []); Symbol = None; ProvidedBy = None } ]
