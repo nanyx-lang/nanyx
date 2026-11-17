@@ -156,8 +156,8 @@ def pow: [Num(a)] a, int -> a
 ```
 
 `base ** exponent`: `base` multiplied by itself `exponent` times, for any number type. A negative
-exponent is `1 / base ** -exponent`, so on an `int` it truncates towards zero. For an exponent
-that is not a whole number, see [`float.pow`](prelude-numbers#floatpow).
+exponent is `1 / base ** -exponent` on a `float`, and stops the program on an integer type, which
+can't hold the result. For an exponent that is not a whole number, see [`float.pow`](prelude-numbers#floatpow).
 
 ## `sqrt`
 

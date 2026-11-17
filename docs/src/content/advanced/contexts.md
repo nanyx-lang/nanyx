@@ -577,8 +577,11 @@ context Num(a) = (
   `/`: (a, a) -> a
   `%`: (a, a) -> a
   fromInt: int -> a
+  isInteger: bool
 )
 ```
+
+`isInteger` is `true` for an integer type and `false` for `float` and `F32`: `x ** -n` asks it, since a negative power of an integer isn't one.
 
 In a function that requires `Num(a)`, an integer literal beside a value of type `a` is `fromInt` of it, so `2` in `x * 2` is an `a`. A decimal literal there is an error, since `a` may be an integer type.
 
