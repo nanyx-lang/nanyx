@@ -64,17 +64,6 @@ let private statementRefusal (run: Statement list) =
         | ExprStatement _
         | AttributeStatement _ -> None)
 
-/// `text`, which starts at `offset` in `source`, with each line after its first moved left by the indent of the line
-/// it starts on, and every line then indented by `indent`.
-let private reindented (source: string) (offset: int) (indent: string) (text: string) =
-    let _, original = lineOf source offset
-    text.Split '\n'
-    |> Array.mapi (fun index line ->
-        if index = 0 || line.Trim() = "" then indent + line
-        elif line.StartsWith original then indent + line.Substring original.Length
-        else indent + line.TrimStart())
-    |> String.concat "\n"
-
 /// The innermost statement of a block in `values` whose span holds `selection`, if it starts its line in `source`.
 let private statementAround (source: string) (values: Expression list) (selection: SourceSpan) =
     values

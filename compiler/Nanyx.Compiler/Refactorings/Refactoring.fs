@@ -157,6 +157,17 @@ module internal RefactoringText =
         let changedEnd = (edits |> List.map (fun (_, finish, _) -> finish) |> List.max) + growth
         formatted options file after changedStart changedEnd
 
+    /// `text`, which starts at `offset` in `source`, with each line after its first moved left by the indent of the line
+    /// it starts on, and every line then indented by `indent`.
+    let reindented (source: string) (offset: int) (indent: string) (text: string) =
+        let _, original = lineOf source offset
+        text.Split '\n'
+        |> Array.mapi (fun index line ->
+            if index = 0 || line.Trim() = "" then indent + line
+            elif line.StartsWith original then indent + line.Substring original.Length
+            else indent + line.TrimStart())
+        |> String.concat "\n"
+
     /// Whether any of `exprs` calls a function that requires a context or a context's member, or makes or changes a
     /// cell: something that may do something different each time it runs.
     let requiresAContext (typed: TypedModule) (exprs: Expression list) =
