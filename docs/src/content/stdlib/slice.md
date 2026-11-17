@@ -101,6 +101,17 @@ def Slice.fold: [c] Slice(a), b, ([c] (b, a) -> b) -> b
 `step` applied to `initial` and the first element, then to that and the second, and so on: the
 last result, or `initial` for an empty slice.
 
+## `Slice.reduce`
+
+```nanyx fragment
+def Slice.reduce: [Default(a), c] Slice(a), ([c] (a, a) -> a) -> a
+```
+
+The elements of `s` combined with `f`, in order, starting from the element type's `Default`: a
+slice of `1`, `2` and `3` reduced with `{ + }` is `6`. An empty one gives the default, so `reduce`
+never fails, unlike a `reduce` that starts from the first element. To start from another value,
+use [`Slice.fold`](#slicefold).
+
 ## `Slice.toList`
 
 ```nanyx fragment

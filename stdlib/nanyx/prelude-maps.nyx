@@ -129,6 +129,14 @@ export def map.fold: [c] map(k, v), b, ([c] b, k, v -> b) -> b = { m, acc, step 
   list.fold(__nanyx_map_entries(m), acc, { acc, entry -> step(acc, entry.0, entry.1) })
 }
 
+--| The values of `m` combined with `f`, in order, starting from the value type's [`Default`]: `["a"
+  => 1, "b" => 2] \map.reduce { + }` is `3`. An empty one gives the default, so `reduce` never
+  fails, unlike a `reduce` that starts from the first element. To start from another value, use
+  [`map.fold`].
+export def map.reduce: [Default(v), c] map(k, v), ([c] v, v -> v) -> v = { m, f ->
+  map.fold(m, default, { acc, _, value -> f(acc, value) })
+}
+
 --| `m` with `f` applied to each value. The keys stay as they are, in the same order.
 export def map.map: [c] map(k, v), ([c] v -> w) -> map(k, w) = { m, f ->
   __nanyx_map_of_entries(list.map(__nanyx_map_entries(m), { entry -> (entry.0, f(entry.1)) }))
@@ -269,6 +277,14 @@ export def set.isEmpty: set(a) -> bool = { s ->
 --| `step` applied to `acc` and each element of `s` in turn, in the order of [`set.toList`].
 export def set.fold: [c] set(a), b, ([c] b, a -> b) -> b = { s, acc, step ->
   list.fold(__nanyx_set_elements(s), acc, step)
+}
+
+--| The elements of `s` combined with `f`, in order, starting from the element type's [`Default`]:
+  `set[1, 2, 3] \set.reduce { + }` is `6`. An empty one gives the default, so `reduce` never fails,
+  unlike a `reduce` that starts from the first element. To start from another value, use
+  [`set.fold`].
+export def set.reduce: [Default(a), c] set(a), ([c] a, a -> a) -> a = { s, f ->
+  set.fold(s, default, f)
 }
 
 --| The set of `f` of each element of `s`. Elements that `f` makes equal are kept once, where the

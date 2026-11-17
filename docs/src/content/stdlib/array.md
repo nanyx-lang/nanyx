@@ -101,4 +101,15 @@ def array.fold: [c] array(a), b, ([c] (b, a) -> b) -> b
 `step` applied to `initial` and the first element of `xs`, then to that and the second, and so
 on to the last: `array.fold(xs, 0, { total, x -> total + x })` adds them up.
 
+## `array.reduce`
+
+```nanyx fragment
+def array.reduce: [Default(a), c] array(a), ([c] (a, a) -> a) -> a
+```
+
+The elements of `xs` combined with `f`, in order, starting from the element type's `Default`:
+`Array[1, 2, 3] \array.reduce { + }` is `6`. An empty one gives the default, so `reduce` never
+fails, unlike a `reduce` that starts from the first element. To start from another value, use
+[`array.fold`](#arrayfold).
+
 <!-- End of the generated reference. -->

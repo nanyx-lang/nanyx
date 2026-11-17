@@ -33,6 +33,17 @@ def list.fold: [c] list(a), b, ([c] (b, a) -> b) -> b
 
 `step` applied to `initial` and the first element, then to that result and the second, and so on.
 
+## `list.reduce`
+
+```nanyx fragment
+def list.reduce: [Default(a), c] list(a), ([c] (a, a) -> a) -> a
+```
+
+The elements of `xs` combined with `f`, in order, starting from the element type's `Default`:
+`[1, 2, 3] \list.reduce { + }` is `6`. An empty one gives the default, so `reduce` never fails,
+unlike a `reduce` that starts from the first element. To start from another value, use
+[`list.fold`](#listfold).
+
 ## `list.reverse`
 
 ```nanyx fragment

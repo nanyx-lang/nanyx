@@ -134,6 +134,17 @@ def MSlice.toList: [Memory] MSlice(a) -> list(a)
 
 The elements of `s` now, in order, as a list.
 
+## `MSlice.reduce`
+
+```nanyx fragment
+def MSlice.reduce: [Memory, Default(a), c] MSlice(a), ([c] (a, a) -> a) -> a
+```
+
+The elements of `s` combined with `f`, in order, starting from the element type's `Default`: a
+slice of `1`, `2` and `3` reduced with `{ + }` is `6`. An empty one gives the default, so `reduce`
+never fails, unlike a `reduce` that starts from the first element. To start from another value,
+use [`list.fold`](prelude-lists#listfold).
+
 ## `MSlice.toArray`
 
 ```nanyx fragment
