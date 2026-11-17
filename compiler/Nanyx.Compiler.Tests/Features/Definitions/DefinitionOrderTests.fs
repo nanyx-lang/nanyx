@@ -69,7 +69,7 @@ let ``The typed module keeps its items in the order they are written`` () =
         compileClean """def first = second(1)
 def second = { x -> x }"""
     let names =
-        result.Items
+        result.Items.Value
         |> List.choose (function
             | TypedDef (TypedValueDef(_, name, _, _)) -> Some name
             | _ -> None)

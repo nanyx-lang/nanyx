@@ -9,8 +9,9 @@ open System.Text
 type internal CheckedResult = Result<CheckedModule, CompilationPhase * Diagnostic list>
 
 /// A standard-library module as an import of it checks it, with the modules it imports, all the way down, each by its
-/// `originKey`: what `Compiler.typecheckImport` keeps of it for the rest of the process.
-type internal CheckedLibraryModule = CheckedResult * (string * CheckedResult) list
+/// `originKey` and read only when it is first asked for: what `Compiler.typecheckImport` keeps of it for the rest of the
+/// process.
+type internal CheckedLibraryModule = CheckedResult * (string * Lazy<CheckedResult>) list
 
 /// One module in the checked library: its `originKey`, the hash of the source it was checked from, and the keys of the
 /// modules it imports, all the way down.
@@ -27,8 +28,8 @@ type internal CheckedShippedModule =
       /// Every source file its check read, with the text it read: its own and those of the modules it imports.
       Read: (string * string) list
       Module: CheckedModule
-      /// The modules it imports, all the way down.
-      Imports: (string * CheckedResult) list }
+      /// The modules it imports, all the way down, each read only when it is first asked for.
+      Imports: (string * Lazy<CheckedResult>) list }
 
 /// A module of a shipped package as the file has it: its key, the files its check read, and the keys of the modules it
 /// imports, all the way down.
@@ -108,11 +109,11 @@ module internal CheckedLibrary =
             [ for _, _, (_, imports) in modules do
                   yield! imports
               for key, _, (own, _) in modules do
-                  yield key, own
+                  yield key, lazy own
               for entry in shipped do
                   yield! entry.Imports
-                  yield entry.Key, Ok entry.Module ]
-            |> List.fold (fun checkedResults (key, result) -> if Map.containsKey key checkedResults then checkedResults else checkedResults |> Map.add key (lazy result)) Map.empty
+                  yield entry.Key, lazy (Ok entry.Module) ]
+            |> List.fold (fun checkedResults (key, result) -> if Map.containsKey key checkedResults then checkedResults else checkedResults |> Map.add key result) Map.empty
         let file =
             { Modules =
                 modules
@@ -153,8 +154,8 @@ module internal CheckedLibrary =
     let private shipped =
         lazy (file.Value |> Option.map (fun file -> file.Shipped |> List.map (fun entry -> entry.Key, entry) |> Map.ofList) |> Option.defaultValue Map.empty)
 
-    /// What checking the module `key` gave, as the file has it, read now if it was not before.
-    let private checkedResult (key: string) = file.Value.Value.Checked[key].Value
+    /// What checking the module `key` gave, as the file has it, read when it is first asked for.
+    let private checkedResult (key: string) = file.Value.Value.Checked[key]
 
     /// The library module `key` (its `originKey`) as the checked library has it, if the library was checked from
     /// `source`.
@@ -163,7 +164,7 @@ module internal CheckedLibrary =
             modules.Value
             |> Map.tryFind key
             |> Option.filter (fun entry -> entry.SourceHash = hash source)
-            |> Option.map (fun entry -> checkedResult key, entry.Imports |> List.map (fun import -> import, checkedResult import))
+            |> Option.map (fun entry -> (checkedResult key).Value, entry.Imports |> List.map (fun import -> import, checkedResult import))
         else
             None
 
@@ -177,7 +178,7 @@ module internal CheckedLibrary =
             |> Map.tryFind key
             |> Option.filter (fun entry -> List.forall readsTheSame entry.Read)
             |> Option.bind (fun entry ->
-                match checkedResult key with
+                match (checkedResult key).Value with
                 | Ok checkedModule ->
                     Some { CheckedShippedModule.Key = key; Read = entry.Read; Module = checkedModule; Imports = entry.Imports |> List.map (fun import -> import, checkedResult import) }
                 | Error _ -> None)
