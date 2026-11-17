@@ -112,7 +112,7 @@ let private canAnnotate
     | _ -> false
 
 /// Whether `ty` has a part that failed to check, which source can't write.
-let rec private mentionsError (ty: Ty) =
+let rec internal mentionsError (ty: Ty) =
     Unifier.isError ty
     || match ty with
        | TyVar _
