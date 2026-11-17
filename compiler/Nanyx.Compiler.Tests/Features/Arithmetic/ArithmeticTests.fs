@@ -7,10 +7,10 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``Arithmetic on a type that is not a number is an error naming the operator`` () =
     let cases =
-        [ "def s = \"a\" % \"b\"\n", "'string' cannot be used with %: it is not a number", "\"a\" % \"b\""
-          (withFinalNewline """def s = "a" * 2"""), "'string' cannot be used with *: it is not a number", "\"a\" * 2"
-          "def b = 1 - true\n", "'bool' cannot be used with -: it is not a number", "1 - true"
-          "def s = \"a\" + \"b\"\n", "'string' cannot be used with +: it is not a number. Use ++ to join them", "\"a\" + \"b\"" ]
+        [ "def s = \"a\" % \"b\"\n", "'string' is not a number, so it cannot be used with %", "\"a\" % \"b\""
+          (withFinalNewline """def s = "a" * 2"""), "'string' is not a number, so it cannot be used with *", "\"a\" * 2"
+          "def b = 1 - true\n", "'bool' is not a number, so it cannot be used with -", "1 - true"
+          "def s = \"a\" + \"b\"\n", "'string' is not a number, so it cannot be used with +: use `++` to join them", "\"a\" + \"b\"" ]
     for source, message, text in cases do
         Assert.Equal((DiagnosticCodes.TypeMismatch.Code, message, text), onlyDiagnostic source)
 
@@ -49,7 +49,7 @@ let ``Negation of a number is of an int or a float`` () =
         let result = Compiler.compile source
         Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
         Assert.Equal(expected, Unifier.tyToString result.Typed.Value.Types.["r"])
-    Assert.Equal((DiagnosticCodes.TypeMismatch.Code, "'string' cannot be used with -: it is not a number", "-\"s\""), onlyDiagnostic "def r = -\"s\"\n")
+    Assert.Equal((DiagnosticCodes.TypeMismatch.Code, "'string' is not a number, so it cannot be used with -", "-\"s\""), onlyDiagnostic "def r = -\"s\"\n")
 
 [<Fact>]
 let ``A function that writes its type must require Num of a type variable it multiplies, divides or takes the remainder of`` () =
@@ -66,7 +66,7 @@ let ``A literal beside a value of a type variable is fromInt of it, which needs 
         (DiagnosticCodes.MissingContextMembers.Code, "'1' is an 'a' here, which needs Num(a): add [Num(a)] to the type of 'inc'", "1"),
         onlyDiagnostic "def inc: [Add(a)] a -> a = { x -> x + 1 }\n")
     Assert.Equal(
-        (DiagnosticCodes.TypeMismatch.Code, "'0.5' cannot be an 'a': 'a' may be an integer type. Take the value as a parameter", "0.5"),
+        (DiagnosticCodes.TypeMismatch.Code, "'0.5' cannot be an 'a', which may be an integer type: take the value as a parameter", "0.5"),
         onlyDiagnostic "def half: [Num(a)] a -> a = { x -> x * 0.5 }\n")
 
 [<Fact>]

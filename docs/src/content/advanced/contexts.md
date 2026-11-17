@@ -766,7 +766,7 @@ def same: [Eq(a)] a, a -> bool = { x, y -> x == y }
 
 def main = {
   use Eq(int)(`==` = { x, y -> true })
-  -- error NYX0250: 'int' already has `==`: a `use` can't replace it. For a different equality, wrap
+  -- error NYX0250: 'int' already has `==`, which a `use` can't replace: for a different equality, wrap
   -- the value in a protected type with its own `==`, or pass the comparison to a `...By` function
   same(1, 2)
 }

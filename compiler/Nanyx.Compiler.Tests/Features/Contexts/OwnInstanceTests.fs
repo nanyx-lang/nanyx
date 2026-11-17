@@ -4,7 +4,7 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-// A type's own instance always wins: a `use` can't replace it (#1501).
+// A type's own instance always wins, which a `use` can't replace (#1501).
 
 /// The one error `source` has, which must be a `use` replacing a type's own instance: its message, and the text it is
 /// reported at.
@@ -27,7 +27,7 @@ def main = {
 """
     Assert.Equal("Eq(int)(`==` = { x, y -> true })", at)
     Assert.Equal(
-        "'int' already has `==`: a `use` can't replace it. For a different equality, wrap the value in a protected type with its own `==`, or pass the comparison to a `...By` function",
+        "'int' already has `==`, which a `use` can't replace: for a different equality, wrap the value in a protected type with its own `==`, or pass the comparison to a `...By` function",
         message)
 
 [<Fact>]
@@ -72,7 +72,7 @@ def s = {
   "{250}"
 }
 """
-    Assert.StartsWith("'int' already has `toString`: a `use` can't replace it.", message)
+    Assert.StartsWith("'int' already has `toString`, which a `use` can't replace:", message)
 
 [<Fact>]
 let ``A use can't replace an instance built from a type's attached definitions`` () =
@@ -85,7 +85,7 @@ def n = {
 }
 """
     Assert.Equal("Add(int)(zero = 0, `+` = { x, y -> x * y }, `-` = { x, y -> x }, negate = { x -> x })", at)
-    Assert.StartsWith("'int' already has its own Add: a `use` can't replace it.", message)
+    Assert.StartsWith("'int' already has its own Add, which a `use` can't replace:", message)
 
 [<Fact>]
 let ``A use of a context of a type variable is still allowed`` () =

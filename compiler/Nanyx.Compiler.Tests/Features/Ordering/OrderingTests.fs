@@ -66,10 +66,10 @@ def b = (1, "a") < (1, "b") and [1, 2] > [1] and [(1, ["x"])] < [(2, [])]""")
 let ``Records, tags and functions have no order`` () =
     assertMissingContexts
         [ "def a = (x = 1) < (x = 2)\n",
-          "'(x: int)' cannot be ordered with <: records have no order. Make it a nominal type to attach a 'compare' to it, or order by a key with list.sortBy",
+          "'(x: int)' cannot be ordered with <: records have no order, so make it a nominal type to attach a `compare` to it, or order by a key with `list.sortBy`",
           "(x = 1) < (x = 2)"
           "type Color = #red | #blue\ndef less: Color, Color -> bool = { p, q -> p > q }\n",
-          "'Color' cannot be ordered with >: tags have no order. Make it a nominal type to attach a 'compare' to it, or order by a key with list.sortBy",
+          "'Color' cannot be ordered with >: tags have no order, so make it a nominal type to attach a `compare` to it, or order by a key with `list.sortBy`",
           "p > q"
           "def f = { x -> x }\ndef d = f < f\n",
           "'a -> a' cannot be ordered with <: functions have no order",
@@ -78,7 +78,7 @@ let ``Records, tags and functions have no order`` () =
           "'list(x: int)' cannot be ordered with <=: its elements are records, and records have no order",
           "[(x = 1)] <= [(x = 2)]"
           "type Version = protected (major: int, minor: int)\ndef v = Version(major = 1, minor = 2) < Version(major = 1, minor = 3)\n",
-          "'Version' cannot be ordered with <: records have no order. Attach 'Version.compare', or order by a key with list.sortBy",
+          "'Version' cannot be ordered with <: records have no order, so attach 'Version.compare', or order by a key with `list.sortBy`",
           "Version(major = 1, minor = 2) < Version(major = 1, minor = 3)" ]
 
 [<Fact>]
@@ -125,7 +125,7 @@ let ``Only a nominal type may attach compare, and a built-in type's attached com
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
     Assert.Equal(DiagnosticCodes.UnattachableDefinition.Code, diagnostic.Code)
     Assert.Equal(
-        "'Point.compare' cannot be defined: 'Point' is a structural type, so it is only ordered by its structure, and records and tags have none. Declare it `protected` to define its own order",
+        "'Point.compare' cannot be defined, because 'Point' is a structural type, so it is only ordered by its structure, and records and tags have none: declare it `protected` to define its own order",
         diagnostic.Message)
     // The prelude attaches `Int.compare`, but `List.sort` of ints uses the compiler's own.
     let typed = compileClean "def sorted = list.sort([2, 1])\n"

@@ -37,13 +37,13 @@ type with content.
   ([#96](https://github.com/nanyx-lang/nanyx/issues/96)), so errors about them are reported at the nearest node
   that has one. A type mismatch is reported where the constraint that failed was made, which is not always where
   the conflicting types came from. A mismatch between two records or two tag unions names what only one of them
-  has: `Tag union mismatch: only the first has #bad; only the second has #underflow.`
+  has: `Tag union mismatch: '#some(int) | #bad(string)' vs '#some(int) | #underflow', where only the first has #bad and only the second has #underflow`
 - **A pipe that finds nothing to call says what it looked for** (`PipeLookups.fs`). On a value whose type is not
   known yet, it names the attached definitions it could not choose between. On a known type, it says the type has
   no such attached definition and no plain function has the name, and where the definition is if the pipe cannot
   reach it: under an `as` alias (`'string.trim' is available as 't.string.trim'`), or in a standard library module
   that is not imported (`'string.trim' is defined in 'nanyx/text'`); failing those, it names what other types
-  attach under the name (`Only 'list.shout' is in scope`). A plain function of the name that does not take the
+  attach under the name (`but 'list.shout' is in scope`). A plain function of the name that does not take the
   value is a `NYX0201` on the name, saying what it takes (`the function 'shout' in scope takes 'int', not
   'string'`), rather than a mismatch over the whole pipe. A definition two imports attach is `NYX0106`, naming both
   modules.
@@ -115,10 +115,9 @@ have, written down.
   which 'calculate' does not declare: add [Memory] to the type of 'calculate'".
 - No "I" or "you", and no blame.
 
-[Principles](../foundations/principles#friendly-errors) says the same. What's left of #879 is one PR per area (parser,
-type checker, backend, packaging) rewriting the messages that break it, such as `dbg expects a single argument`, and a
-code for every error that lacks one. The parser's own messages, and those for directives, attributes and imports, are
-done. A syntax error the parser has no message of its own for is still FParsec's report ("Expecting: ..."), which the
+[Principles](../foundations/principles#friendly-errors) says the same. What's left of #879 is one PR per area (backend,
+packaging) rewriting the messages that break it. The parser's and the type checker's messages, and those for
+directives, attributes and imports, are done. A syntax error the parser has no message of its own for is still FParsec's report ("Expecting: ..."), which the
 recursive-descent parser ([#846](https://github.com/nanyx-lang/nanyx/issues/846)) replaces.
 
 # Goals

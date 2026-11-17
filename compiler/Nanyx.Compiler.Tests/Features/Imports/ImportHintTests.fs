@@ -14,7 +14,7 @@ let private reported (source: string) =
 let ``An unknown function a standard-library module exports says which import brings it in`` () =
     Assert.Equal(
         (DiagnosticCodes.UnknownFunction.Code,
-         """Unknown function 'max'. 'max' is defined in 'nanyx/math': add `import nanyx/math`""",
+         """Unknown function 'max', and 'max' is defined in 'nanyx/math': add `import nanyx/math`""",
          "max",
          [ "Add `import nanyx/math`" ]),
         reported "def c = max(1, 2)\n")
@@ -23,7 +23,7 @@ let ``An unknown function a standard-library module exports says which import br
 let ``A name qualified by a module's name says to import the module under that name`` () =
     Assert.Equal(
         (DiagnosticCodes.UnknownFunction.Code,
-         """Unknown function 'math.abs'. 'abs' is defined in 'nanyx/math': add `import nanyx/math as math`""",
+         """Unknown function 'math.abs', and 'abs' is defined in 'nanyx/math': add `import nanyx/math as math`""",
          "math.abs",
          [ "Add `import nanyx/math as math`" ]),
         reported "def e = math.abs(1)\n")
@@ -32,7 +32,7 @@ let ``A name qualified by a module's name says to import the module under that n
 let ``An unknown identifier says which import brings it in, instead of asking about names in scope`` () =
     Assert.Equal(
         (DiagnosticCodes.UnknownIdentifier.Code,
-         """Unknown identifier 'abs'. 'abs' is defined in 'nanyx/math': add `import nanyx/math`""",
+         """Unknown identifier 'abs', and 'abs' is defined in 'nanyx/math': add `import nanyx/math`""",
          "abs",
          [ "Add `import nanyx/math`" ]),
         reported "def f = abs\n")
@@ -41,7 +41,7 @@ let ``An unknown identifier says which import brings it in, instead of asking ab
 let ``An unknown context in a signature says which import brings it in, at the context's name`` () =
     Assert.Equal(
         (DiagnosticCodes.UnknownContext.Code,
-         """Unknown context 'HostRuntime' in the signature of 'g'. 'HostRuntime' is defined in 'nanyx/host.runtime': add `import nanyx/host.runtime`""",
+         """Unknown context 'HostRuntime' in the signature of 'g', and 'HostRuntime' is defined in 'nanyx/host.runtime': add `import nanyx/host.runtime`""",
          "HostRuntime",
          [ "Add `import nanyx/host.runtime`" ]),
         reported "def g: [HostRuntime] () -> () = { }\n")
@@ -50,7 +50,7 @@ let ``An unknown context in a signature says which import brings it in, at the c
 let ``An unknown type says which import brings it in`` () =
     Assert.Equal(
         (DiagnosticCodes.UnknownType.Code,
-         """Unknown type 'HostRuntime'. 'HostRuntime' is defined in 'nanyx/host.runtime': add `import nanyx/host.runtime`""",
+         """Unknown type 'HostRuntime', and 'HostRuntime' is defined in 'nanyx/host.runtime': add `import nanyx/host.runtime`""",
          "HostRuntime",
          [ "Add `import nanyx/host.runtime`" ]),
         reported "def r: list(HostRuntime) = []\n")
@@ -59,7 +59,7 @@ let ``An unknown type says which import brings it in`` () =
 let ``A name two modules export lists both, with an import for each`` () =
     let exports = Map.ofList [ "frobnicate", [ "nanyx/alpha"; "nanyx/beta" ] ]
     Assert.Equal(
-        """. 'frobnicate' is defined in 'nanyx/alpha' and 'nanyx/beta': add `import nanyx/alpha` or `import nanyx/beta`""",
+        """, and 'frobnicate' is defined in 'nanyx/alpha' and 'nanyx/beta': add `import nanyx/alpha` or `import nanyx/beta`""",
         StandardLibraryImports.hint exports "frobnicate")
 
 [<Fact>]

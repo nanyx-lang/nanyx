@@ -41,7 +41,10 @@ How it is built:
   callee is unknown is recorded whole, while an unknown name among its arguments is recorded alone. `FailedExprs`
   is also the list of nodes the deferral pass will rewrite.
 - **What is done with an error-typed value** is not another error: reading a member of it, or piping it to a name
-  attached to no type, gives the error type again (the pipe's arguments are still checked).
+  attached to no type, gives the error type again (the pipe's arguments are still checked). A context required at a
+  type made of the error type at any depth, such as the `ToString` of a `list(???)` printed or interpolated, is
+  satisfied (`Unifier.holdsError`), so only the error inside the value is reported
+  ([#1771](https://github.com/nanyx-lang/nanyx/issues/1771)).
 - **A def that fails to check** before its body is inferred (its annotation names an unknown type, say) is
   reported, and bound at the error type from then on, annotated or not, since its annotation may be what failed.
   It stays in the module, with its body (or, for a value, the whole def) recorded in `FailedExprs`.

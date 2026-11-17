@@ -154,7 +154,7 @@ export const exampleGroups = [
         file: "csv.nyx",
         slug: "csv",
         title: "CSV from a table literal",
-        description: "A table literal of records written out as CSV, then read back and parsed with proc.",
+        description: "A table literal of records written out as CSV, then read back and parsed.",
       },
       {
         file: "pairing.nyx",

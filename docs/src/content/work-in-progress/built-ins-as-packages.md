@@ -72,8 +72,8 @@ host as one of them ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344),
 # How shipped packages are built
 
 - **Shipped packages are source directories.** `packages/` at the repository root holds them, each named for its
-  package, with its manifest at the compiler's version and its sources under `src`: `packages/nanyx.console` and
-  `packages/nanyx.console.core`. Every build of the compiler copies the directory beside it (a `None` item in
+  package, with its manifest at the compiler's version and its sources under `src`: `packages/nanyx.console`,
+  `packages/nanyx.console.core` and `packages/nanyx.json`. Every build of the compiler copies the directory beside it (a `None` item in
   `NanyxCompiler.fsproj` with `CopyToOutputDirectory` and `CopyToPublishDirectory`), so the tests, the language server
   and the published `nanyx` all find it at `ShippedPackages.directory`, and each release archive holds it beside the
   executable. A test checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with

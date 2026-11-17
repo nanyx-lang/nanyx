@@ -4,7 +4,7 @@ description: "Associated types on contexts, types passed as arguments, and inspe
 order: 4
 ---
 
-This page records an early design for two related features, neither of which is implemented. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable. **Type arguments** let a function take a type as a parameter and inspect its structure. The proposal is that both are the same thing: a record member whose value is a type. Little here is settled; the sections below separate what has been decided from the current direction and the open questions.
+This page records the design for two related features, neither of which is implemented. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable. Their design was decided on 2026-11-17 ([#1800](https://github.com/nanyx-lang/nanyx/issues/1800)). **Type arguments** let a function take a type as a parameter and inspect its structure; their design is still early. The proposal is that both are the same thing: a record member whose value is a type. The sections below separate what has been decided from the current direction and the open questions.
 
 # The problems
 
@@ -43,60 +43,71 @@ def iterStrings: [Iter(c, a)] c -> () = { items -> ... }
 
 # Decisions
 
+- **Contexts have associated types,** described [below](#associated-types).
 - **A type can be passed as an argument.** The caller writes the type at the call site. The argument fixes a type variable, and the function's body receives a value that stands for the type. The syntax is part of the [current direction](#a-type-argument-is-a-type-member-of-the-parameters).
 - **Generic code can inspect a type argument**: whether it is a record or a union, and what its fields or cases are.
 - **Generic code is checked once, not per instantiation.** Nanyx does not adopt compile-time templates, at least for now. In Zig's `comptime` and in C++ templates, generic code is type-checked separately for each type it is used at, and errors appear inside library code. Inspection in Nanyx is type-checked once, when the generic function is defined, as all generic code is today.
 
-# Current direction
+# Associated types
 
-These points follow from the decisions above. They have been proposed but not agreed.
+Decided by the maintainer on 2026-11-17, and not built yet ([#1800](https://github.com/nanyx-lang/nanyx/issues/1800)).
 
-## Associated types
+A context can declare a member whose value is a type, written `name: type`. Other members refer to it by name:
 
-A context can declare a member whose value is a type. Other members refer to it by name:
-
-```nanyx
+```nanyx fragment
 context Iter(c) = (elem: type, next: c -> #some(elem, c) | #done)
 ```
 
-A function then constrains only the container type, and can fix the associated type in the constraint:
+A function then constrains only the container type. Without associated types, the element type would be a second parameter, `Iter(c, a)`, carried through every signature that uses the context even though `c` always determines it.
 
-```nanyx
-def iterStrings: [Iter(c): (elem = string)] c -> () = { items ->
-  for items | item -> dbg(item)
-}
-```
+- **A signature names it `Iter(c).elem`,** or just `elem` when exactly one context in the signature's list has a member of that name. When two do, the bare name is an error that names both, and the signature qualifies it:
 
-Elsewhere in the signature the associated type is written `Iter(c).elem`, or just `elem` where only one constraint has a member of that name, as the planned `iter` module assumed (see [Lazy sequences](./lazy-sequences), which replaces it with `Iterable(c, a)`):
+  ```nanyx fragment
+  def headOr: [Iter(c)] (c, elem) -> elem = { items, fallback ->
+    match next(items)
+      | #some(value, _) -> value
+      | #done -> fallback
+  }
 
-```nanyx
-def headOr: [Iter(c)] (c, Iter(c).elem) -> Iter(c).elem = { items, fallback ->
-  match next(items)
-  | #some(value, _) -> value
-  | #done -> fallback
-}
-```
+  def firsts: [Iter(c), Iter(d)] (c, d) -> list((Iter(c).elem, Iter(d).elem))
+  ```
 
-Each associated type lives on the context that owns the operation, so a function asks only for the capabilities it uses:
+- **A constraint fixes one with a named argument,** as a function call names one:
 
-```nanyx
-context Indexed(c) = (elem: type, get: (c, int) -> elem)
-```
+  ```nanyx fragment
+  def iterStrings: [Iter(c, elem = string)] c -> () = { items ->
+    for items | item -> dbg(item)
+  }
+  ```
 
-The prelude's `FromString` is the case that motivates this today. As an ordinary context, the tag `fromString` gives back for text it cannot read has to be a second parameter, so every generic signature carries it, `[FromString(a, e)] list(string) -> list(#some(a) | e)`, even though `e` is always determined by `a`. With an associated type it would be:
+- **An instance's associated type is inferred from its members.** Synthesis already finds a type's attached definitions by name, and their types fix the associated type by unification. `int.fromString: string -> #some(int) | #invalidInt` makes `FromString(int).failure` the tag `#invalidInt`. The same holds for an instance written in a `use`. Where no member mentions an associated type, the type declares it with an attached type alias, `type Bag.elem = int`. An instance that leaves one unfixed, or whose members fix it two ways, is an error.
+- **There are no defaults.** A context declaration can't give an associated type a default, so an instance never gets a type its author didn't write or imply.
+- **Its name is lowercase and longer than one letter,** which [type names](../tour/types#type-names) reserve for associated types. A built-in type's name, such as `list`, can't be one.
+- **Each associated type lives on the context that owns the operation,** so a function asks only for the capabilities it uses: `context Indexed(c) = (elem: type, get: (c, int) -> elem)`.
+- **It costs nothing at run time.** Types are erased, and a generic function is monomorphised at each instance as usual.
+- **It is also a value of type `Type(elem)`,** as a [type argument](#x-type-is-a-value-of-type-typex) is, so `Iter(c).elem` can be passed wherever a type argument is expected. That part is built with type arguments, not before.
 
-```nanyx
-context FromString(a) = (
-  failure: type
-  fromString: string -> #some(a) | failure
-)
+## The prelude moves to them
 
-def readAll: [FromString(a)] list(string) -> list(#some(a) | FromString(a).failure)
-```
+Every prelude context whose later parameter is fixed by its first becomes a context with an associated type:
 
-and `int.fromString` would fix `failure` as `#invalidInt`.
+- **`FromString(a, e)` becomes `FromString(a)`** ([#1801](https://github.com/nanyx-lang/nanyx/issues/1801)). The tag `fromString` gives back for text it can't read is its associated `failure` type:
 
-An associated type's name is lowercase and longer than one letter, which [type names](../tour/types#type-names) reserve for associated types.
+  ```nanyx fragment
+  context FromString(a) = (
+    failure: type
+    fromString: string -> #some(a) | failure
+  )
+
+  def readAll: [FromString(a)] list(string) -> list(#some(a) | failure)
+  ```
+
+- **`Iterable(c)`,** planned on the [Lazy sequences](./lazy-sequences#taking-anything-that-can-be-iterated) page, has an associated `elem` type instead of a second parameter ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802)).
+- **Any other context of that shape** in the prelude or the shipped packages moves in the same change as `FromString`.
+
+# Current direction
+
+These points follow from the decisions above. They have been proposed but not agreed.
 
 ## A type argument is a type member of the parameters
 
@@ -108,7 +119,7 @@ def deserialise: [Decode(into)] (string, into: type) -> into = { text, t -> ... 
 def p = deserialise('{"x": 1, "y": 2}', into = type Point)
 ```
 
-The call site matches the constraint syntax: `into = type Point` fixes a parameter's type member as `(elem = string)` fixes a context's. One concept covers both features: a record member of kind `type`.
+The call site matches the constraint syntax: `into = type Point` fixes a parameter's type member as `Iter(c, elem = string)` fixes a context's. One concept covers both features: a record member of kind `type`.
 
 Like any named field, `into` is [passed by name](../tour/functions), so `deserialise(text, type Point)` is an error for this signature. A function whose callers should pass the type positionally declares a positional type parameter instead, written `type a`:
 
@@ -128,7 +139,7 @@ A type member's name can't clash with a built-in type. [Built-in type names](../
 
 This is the same idea as Haskell's `Proxy a`, Scala's `ClassTag` and Kotlin's `KClass<T>`.
 
-The same reading would apply to associated types: a context's `elem: type` member would also be a value of type `Type(elem)`, so `Iter(c).elem` could be passed wherever a type argument is expected, and a generic function over iterables could inspect its element type.
+The same reading applies to associated types, as decided: a context's `elem: type` member is also a value of type `Type(elem)`, so `Iter(c).elem` can be passed wherever a type argument is expected, and a generic function over iterables can inspect its element type.
 
 ## Type arguments are known at compile time
 
@@ -231,8 +242,7 @@ C#'s source generators run user code at compile time that emits more source. The
 
 - **Nominal types.** A [nominal type](../advanced/nominal-and-protected-types) such as `Email` can only be created by its home module. Its description must not offer `build` elsewhere, or decoding could create values that bypass the type's invariants. Does a nominal type appear as a closed case (for example `#nominal(name)`) whose encoding must come from attached definitions or a context, or does it expose its structure only for reading? Is `Typed` synthesised for it at all?
 - **One name in two namespaces.** In `(string, into: type) -> into`, `into` is a type in the signature, and a field holding a `Type(into)` value at the call site. Is that pun clear enough?
-- **`type` at the call site.** A constraint writes `(elem = string)`, but a call writes `into = type Point`. The keyword is needed because arguments are expressions and `Point` could be a value or a constructor. Can the checker do without it when the parameter is known to be a type member, or is the difference worth keeping?
-- **Bare associated type names.** When can a signature write `elem` rather than `Iter(c).elem`? The planned `iter` module assumed it can whenever only one constraint has an `elem`.
+- **`type` at the call site.** A constraint writes `Iter(c, elem = string)`, but a call writes `into = type Point`. The keyword is needed because arguments are expressions and `Point` could be a value or a constructor. Can the checker do without it when the parameter is known to be a type member, or is the difference worth keeping?
 - **Customisation.** How does a type change how it is encoded, for example to rename a field or use a different representation? This probably ties in with attached definitions and with explicit `use` taking priority over synthesis.
 - **Rank-2 types.** Are rank-2 functions acceptable for `build`, or should decoding be limited to an applicative-style `build` that the compiler provides?
 - **How much narrowing.** Is narrowing on `Type` matches enough, or would full GADTs be needed?

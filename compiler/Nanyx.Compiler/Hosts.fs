@@ -91,7 +91,7 @@ module Hosts =
         Diagnostics.at
             DiagnosticCodes.HostRuntimeOutsideHost
             span
-            $"{what} requires the context '{runtimeContext}', which only a host may require. Use the contexts the host provides, such as 'Console'."
+            $"{what} requires the context '{runtimeContext}', which only a host may require: use the contexts the host provides, such as 'Console'"
 
     /// The errors for each place a module that is not a host (see `mayRequireRuntime`, with `isHost`) requires `HostRuntime`: each of
     /// its top-level defs that requires it, as `contextTypes` (by symbol) has its contexts or a call in it does, other
