@@ -13,7 +13,7 @@ let ``Typecheck populates typed AST items`` () =
     let result = Compiler.compile source
     let typed = result.Typed.Value
     let hasMessage =
-        typed.Items
+        typed.Items.Value
         |> List.exists (function
             | TypedDef (TypedValueDef(_, name, _, typedExpr)) ->
                 name = "message" && typedExpr.Type = TyPrimitive "string"
@@ -30,7 +30,7 @@ let ``Typecheck captures typed block statements in lambda`` () =
     let result = Compiler.compile source
     let typed = result.Typed.Value
     let hasBlockStatements =
-        typed.Items
+        typed.Items.Value
         |> List.exists (function
             | TypedDef (TypedValueDef(_, name, _, typedExpr)) when name = "f" ->
                 match typedExpr.Body with
@@ -88,7 +88,7 @@ let ``Typecheck records typed match patterns`` () =
     let result = Compiler.compile source
     let typed = result.Typed.Value
     let matchHasPattern =
-        typed.Items
+        typed.Items.Value
         |> List.exists (function
             | TypedDef (TypedValueDef(_, name, _, typedExpr)) when name = "result" ->
                 match typedExpr.MatchArms with
@@ -113,7 +113,7 @@ let ``Typecheck types list and guard patterns`` () =
     let result = Compiler.compile source
     let typed = result.Typed.Value
     let hasListPattern =
-        typed.Items
+        typed.Items.Value
         |> List.exists (function
             | TypedDef (TypedValueDef(_, name, _, typedExpr)) when name = "result" ->
                 match typedExpr.MatchArms with
