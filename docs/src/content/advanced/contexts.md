@@ -463,9 +463,17 @@ def Bag.size: Bag -> int = { bag -> bag.items.length }
 type Bag.elem = int
 ```
 
-An instance that leaves an associated type unfixed is an error that names the instance and the associated type (NYX0268), and so is one whose members fix it two different ways (NYX0269). There are no defaults: a context can't give an associated type one (NYX0265), so an instance never gets a type its author didn't write or imply. An associated type's name is lowercase and longer than one letter, which [type names](../tour/types#type-names) reserve for associated types, and a built-in type's name, such as `list`, can't be one (NYX0265). `type` is the type of an associated type only, so `(x: type)` elsewhere is NYX0265 too.
+An instance that leaves an associated type unfixed is an error that names the instance and the associated type (NYX0268), and so is one whose members fix it two different ways (NYX0269). There are no defaults: a context can't give an associated type one (NYX0265), so an instance never gets a type its author didn't write or imply. An associated type's name is lowercase and longer than one letter, which [type names](../tour/types#type-names) reserve for associated types, and a built-in type's name, such as `list`, can't be one (NYX0265). `type` is the type of an associated type, or of a function's named [type parameter](../tour/functions#type-arguments), so `(x: type)` elsewhere is NYX0265 too.
 
-Associated types cost nothing at run time: types are erased, and a generic function is specialised at each instance as usual, at its associated types too, though its type needn't write them. Passing an associated type as a value, `Type(elem)`, waits on [type arguments](../work-in-progress/type-members-and-reflection).
+Associated types cost nothing at run time: types are erased, and a generic function is specialised at each instance as usual, at its associated types too, though its type needn't write them.
+
+An associated type is also a [type argument](../tour/functions#type-arguments): `type Iter(c).elem`, or `type elem` where the bare name would do in the signature, is a value of type `Type(elem)`, so a generic function can pass its element type on to a function that takes one:
+
+```nanyx fragment
+def describe: [Named(a)] type a -> string = { t -> nameOf(t) }
+
+def describeElements: [Iterable(c), Named(elem)] c -> string = { xs -> describe(type Iterable(c).elem) }
+```
 
 # Common contexts
 

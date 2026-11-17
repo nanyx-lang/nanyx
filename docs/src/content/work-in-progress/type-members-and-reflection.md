@@ -50,9 +50,7 @@ def iterStrings: [Iter(c, a)] c -> () = { items -> ... }
 
 # Associated types
 
-Associated types are built: a context's member of kind `type`, named `Iter(c).elem` or `elem` in a signature and fixed by name in a constraint, `[Iter(c, elem = string)]`, is described on the [Contexts](../advanced/contexts#associated-types) page. What is still open:
-
-- **It is also a value of type `Type(elem)`,** as a [type argument](../tour/functions#type-arguments) is, so `Iter(c).elem` can be passed wherever a type argument is expected, and a generic function over iterables can inspect its element type ([#1999](https://github.com/nanyx-lang/nanyx/issues/1999)).
+Associated types are built: a context's member of kind `type`, named `Iter(c).elem` or `elem` in a signature and fixed by name in a constraint, `[Iter(c, elem = string)]`, and passed as a type argument, `type Iter(c).elem`, is described on the [Contexts](../advanced/contexts#associated-types) page. Inspecting one waits on descriptions ([#1996](https://github.com/nanyx-lang/nanyx/issues/1996)), as for any type argument.
 
 ## The prelude moves to them
 
@@ -163,7 +161,7 @@ C#'s source generators run user code at compile time that emits more source. The
 | Type descriptions, matched with narrowing | [#1996](https://github.com/nanyx-lang/nanyx/issues/1996) | #1995 |
 | A compiler-provided `build` for decoding | [#1997](https://github.com/nanyx-lang/nanyx/issues/1997) | #1996 |
 | `Typed(a)`, synthesised for every type (built) | [#1998](https://github.com/nanyx-lang/nanyx/issues/1998) | #1995 |
-| An associated type as a `Type` value | [#1999](https://github.com/nanyx-lang/nanyx/issues/1999) | #1995 |
+| An associated type as a `Type` value (built) | [#1999](https://github.com/nanyx-lang/nanyx/issues/1999) | #1995 |
 | JSON for any record, on reflection | [#1789](https://github.com/nanyx-lang/nanyx/issues/1789) | #1996, #1997, #1998 |
 | `dbg`, interpolation and `==` as library code (Planning) | [#2000](https://github.com/nanyx-lang/nanyx/issues/2000) | #1997, #1998 |
 | Deserialisation-only constructors (Planning) | [#2001](https://github.com/nanyx-lang/nanyx/issues/2001) | #1997 |

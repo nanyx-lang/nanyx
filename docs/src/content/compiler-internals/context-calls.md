@@ -247,7 +247,8 @@ variable does. `type a` in a signature is a `TypeArgument` type, read as the bui
 the expression `type Point` is a `TypeValue`, of type `Type(Point)` (`TypeArguments.infer`). `TypeArguments.rewrite`
 runs before `AssociatedTypes`: it writes each named parameter `into: type` of a def's signature as one of type
 `Type(into)`, and `into` wherever the def writes it as a type, in its signature and in the types written in its value
-(`type into` among them), as the type variable it is. It also reports a type parameter declared wrongly (NYX0270), and
+(`type into` among them), as the type variable it is. `AssociatedTypes` then reads the type in a `type Iter(c).elem` or
+`type elem` as it reads any type written in a def's value, so an associated type is a type argument too. It also reports a type parameter declared wrongly (NYX0270), and
 a `Type` value chosen with `if` or `match` or held in a list with another type's (NYX0272), each read then as the
 first, so that inference has no conflict among them to report again.
 

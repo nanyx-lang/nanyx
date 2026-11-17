@@ -298,3 +298,25 @@ def countAll: [Iter(c)] c -> int = { items ->
 }
 """
     compileClean source |> ignore
+
+[<Fact>]
+let ``An associated type is a Type value, qualified or bare`` () =
+    let source =
+        withIter
+            """
+def elementType: [Iter(c)] c -> Type(elem) = { xs -> type Iter(c).elem }
+
+def bareType: [Iter(c)] c -> Type(elem) = { xs -> type elem }
+
+def t = elementType(Bag(items = []))
+def u = bareType(Bag(items = []))
+"""
+    let typed = compileClean source
+    Assert.Equal("Type(int)", Unifier.tyToString typed.Types.["t"])
+    Assert.Equal("Type(int)", Unifier.tyToString typed.Types.["u"])
+
+[<Fact>]
+let ``A Type value of an associated type names a context the signature requires`` () =
+    let code, text = singleError (withIter "\ndef f: [Iter(c)] c -> () = { xs ->\n  def t = type Iter(d).elem\n  ()\n}\n")
+    Assert.Equal(DiagnosticCodes.UnknownAssociatedType.Code, code)
+    Assert.Equal("Iter(d).elem", text)

@@ -138,3 +138,24 @@ def total: [Sized(c)] c -> int = { xs -> size(xs) }
 println(total(Bag(items = [1, 2])))
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "2\n"
+
+[<Fact>]
+let ``Run - an associated type is passed as a type argument, qualified or bare`` () =
+    let source =
+        """context Named(a) = (nameOf: Type(a) -> string)
+
+def int.nameOf: Type(int) -> string = { t -> "int" }
+
+def string.nameOf: Type(string) -> string = { t -> "string" }
+
+def describe: [Named(a)] type a -> string = { t -> nameOf(t) }
+
+def describeElements: [Iterable(c), Named(elem)] c -> string = { xs -> describe(type Iterable(c).elem) }
+
+def ofElements: [Iterable(c), Named(elem)] c -> string = { xs -> "of " ++ describe(type elem) }
+
+println(describeElements([1, 2]))
+println(ofElements(["a"]))
+println(describeElements(1..3))
+"""
+    runSource source |> assertRan "int\nof string\nint\n"
