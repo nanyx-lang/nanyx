@@ -62,6 +62,7 @@ let internal isBuiltInTypeName (name: string) =
     || Boxes.isTypeName name
     || MutableArrays.isTypeName name
     || TypeValues.isTypeName name
+    || TypeValues.isDescriptionType name
 
 /// Whether the type `name` is attached to exists; `span` is where the definition's name is written.
 let internal ensureAttachedTypeExists (state: InferState) (currentModuleOpt: string option) (name: Identifier) (span: SourceSpan) : Result<unit, Diagnostic list> =
@@ -275,6 +276,7 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
         | None ->
             match tryFindTypeDef name state with
             | Some info -> namedType (recordTypeReference typeExpr info state) name info
+            | None when TypeValues.descriptionArities |> Map.tryFind name = Some 0 -> TyApply(name, []), state
             | None -> TyPrimitive name, state
     | TypeVar name ->
         let var, next = namedTypeVar state name
@@ -336,6 +338,8 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
             MutableArrays.ofType argTys.[0], current
         elif TypeValues.isTypeName name && argTys.Length = 1 && (tryFindTypeDef name current).IsNone then
             TypeValues.ofType argTys.[0], current
+        elif TypeValues.descriptionArities |> Map.tryFind name = Some argTys.Length && (tryFindTypeDef name current).IsNone then
+            TyApply(name, argTys), current
         // `mut T`: a cell of the `memory` block whose `Memory` the signature writes, as `[Memory] mut int -> ()` says
         // (see `WrittenContexts.read`). A `mut cell` parameter's own annotation, which has no source, is of a scope of
         // its own: the cell given for it says which. A signature inference writes out has no source either, but what

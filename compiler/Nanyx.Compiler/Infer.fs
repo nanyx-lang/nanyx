@@ -573,6 +573,9 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                         $"This arm has {written}, but the match is on {values}: an arm needs a pattern for each value, or a lone `else` for anything else"))
     match scrutineesInferred with
     | Error scrutineeErrors -> Error scrutineeErrors
+    | Ok ([ scrutinee ], afterScrutinee) when (match resolveSoFar afterScrutinee scrutinee.Type with TypeValues.TypeValueType _ -> true | _ -> false) ->
+        let standsFor = match resolveSoFar afterScrutinee scrutinee.Type with TypeValues.TypeValueType ty -> ty | other -> other
+        TypeMatches.infer inferExpr env afterScrutinee expr scrutinees standsFor arms
     | Ok _ when not wrongPatternCounts.IsEmpty -> Error wrongPatternCounts
     | Ok (scrutineeExprs, afterScrutinees) ->
         let mutable current = afterScrutinees
@@ -1265,7 +1268,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                     let collection = Expression.from expr (MemberAccess(Expression.from expr (IdentifierExpr receiver), field, spanOpt))
                     inferLookup env state expr lookup collection spanOpt args
                 // `statement.setInt(position, value)`, where the field holds a function, calls it (see `FieldCalls`).
-                | Some (scheme, None) when FieldCalls.holdsFunction state scheme.Type field ->
+                | Some (scheme, None) when FieldCalls.holdsFunction state scheme.Type field || TypeDescriptions.holdsFunction state scheme.Type field ->
                     FieldCalls.infer (inferExpr env) state expr receiver field spanOpt args
                 | Some (scheme, None) ->
                     let memberName = name.Substring(dot + 1)
@@ -1320,7 +1323,8 @@ and private readMember (env: TypeEnv) (state: InferState) (expr: Expression) (ba
     match inferExpr env state baseExpr with
     | Error err -> Error err
     | Ok (typedBase, next) ->
-        match fieldTySoFar next typedBase.Type memberName with
+        let symbol = match baseExpr.Kind with IdentifierExpr name -> TypeEnv.tryFind name env |> Option.bind _.Symbol | _ -> None
+        match TypeDescriptions.memberType next symbol typedBase.Type memberName |> Option.orElseWith (fun () -> fieldTySoFar next typedBase.Type memberName) with
         | Some (fieldTy, next) -> Ok (mkTypedExpr expr fieldTy None None None, next)
         | None ->
             let baseTy = resolveSoFar next typedBase.Type
@@ -1425,10 +1429,12 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
                     | None -> freshVar current
                 current <- next
                 ty)
+    let mutable parameters = []
     for ((name, typeOpt), ty) in List.zip args argTys do
         let symbol, next = declareSymbol LambdaParameters lambda.Id name Parameter false (Some lambda.Span.End) current
         let bound, next = next |> recordSymbolType symbol ty |> recordAnnotated symbol typeOpt.IsSome |> MemoryCells.bindParameter symbol typeOpt ty
         current <- next
+        parameters <- symbol :: parameters
         env' <- TypeEnv.declare name symbol (TypeEnv.mono bound) env'
     // `context l` names the instance of a context the lambda is given, for its body to load with `use l`.
     let named =
@@ -1448,10 +1454,13 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
     let expectReturned (current: InferState) =
         match returnedLambda body, expectedReturnOpt |> Option.map (resolveSoFar current >> Unifier.unalias) with
         | Some inner, Some (TyFunc _ as expected) -> { current with ExpectedLambdaTypes = current.ExpectedLambdaTypes |> Map.add inner.Id expected }
+        | _, Some expected -> TypeMatches.expectResult body expected current
         | _ -> current
     named
     |> Result.bind (fun (env', current) -> inferExpr env' (LambdaContexts.enter lambda current |> expectReturned) body)
     |> function
+    | Ok (bodyExpr, next) when (TypeDescriptions.escapingParameters next parameters bodyExpr.Type body.Span).IsSome ->
+        Error [ (TypeDescriptions.escapingParameters next parameters bodyExpr.Type body.Span).Value ]
     | Ok (bodyExpr, next) ->
         let used, next = LambdaContexts.leave lambda next ||> fun used next -> MemoryCells.parameterContexts next lambda args |> fun (cells, next) -> used @ cells |> List.distinct, next
         let withReturnConstraint =

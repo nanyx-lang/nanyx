@@ -194,6 +194,8 @@ module DiagnosticCodes =
     let InvalidTypeParameter = code 270 "Type parameter declared wrongly" Severity.Error
     let MissingTypeArgument = code 271 "Type argument left out" Severity.Error
     let TypeChosenAtRunTime = code 272 "Type value not known at compile time" Severity.Error
+    let TypeDescriptionPattern = code 273 "Match on a type's description with a pattern it can't have" Severity.Error
+    let PackagedTypeEscapes = code 274 "A packaged type leaves the function that opened it" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -223,7 +225,7 @@ module DiagnosticCodes =
           ContextAsType; InstanceOutsideUse; UseOfNonInstance; OwnInstanceReplaced; OperatorRequiredByMember; InvalidTypeScope; ContextsOnValueType; AttachedDefinitionInScope; OperatorArity
           UndeclaredTypeScope; NoFromArray; InvalidCollectionSpread; UnionWithTwoRests; ProtectedShape; PatternInsidePattern; PatternRequiresContexts; NoMatchOutsidePattern; PatternArguments
           InvalidAssociatedType; AmbiguousAssociatedType; UnknownAssociatedType; UnfixedAssociatedType; AssociatedTypeFixedTwice
-          InvalidTypeParameter; MissingTypeArgument; TypeChosenAtRunTime
+          InvalidTypeParameter; MissingTypeArgument; TypeChosenAtRunTime; TypeDescriptionPattern; PackagedTypeEscapes
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

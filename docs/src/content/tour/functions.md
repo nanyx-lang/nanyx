@@ -243,6 +243,37 @@ println(describe(5)) -- int 5
 
 `Typed` doesn't replace type arguments: in `[Typed(a)] string -> a`, nothing at the call says what `a` is. A `use` can load an instance of `Typed` as of any context, but the only `Type(int)` value is `type int`, so it stands for the same type.
 
+## Inspecting a type
+
+Generic code inspects a type argument by matching on it. Each arm is a tag of the type's description, and an arm that says what the type is tells the checker too: in the `#int` arm below, `a` is `int`, so `value + 1` checks, and in the `#string` arm it is `string`. The function is checked once, as all generic code is, not once for each type it is called at:
+
+```nanyx skip=#1996
+def describe: a, type a -> string = { value, t ->
+  match t
+    | #int -> "the int {value + 1}"
+    | #string -> "the string " ++ value
+    | #list(elem) -> value \list.map { x -> describe(x, elem) } \string.join(", ")
+    | #record(r) -> r.fields \list.map { f -> f.name ++ " = " ++ describe(f.get(value), f.type) } \string.join(", ")
+    | else -> "something else"
+}
+
+println(describe(41, type int)) -- the int 42
+println(describe((x = 1, y = 2), type (x: int, y: int))) -- x = the int 2, y = the int 3
+```
+
+The tags are:
+
+- `#int`, `#float`, `#bool`, `#string`, `#unit`, and `#i8` to `#u64` and `#f32` for the [sized numbers](types#basic-types): the type is that one.
+- `#list(elem)`, `#array(elem)` and `#set(elem)`, and `#map(key, value)`: the type is that collection, of an element type the checker never learns, which `elem` is the `Type` of. So the `#list` arm above calls `describe` again for each element, with `elem`.
+- `#function`: the type is a function's. Its input and output aren't described.
+- `#record(r)`: the type is a record, a tuple, or a nominal type made from one inside its home module. `r` is a `RecordInfo(a)`, with the type's `name`, `module` and `doc` comment (empty for a record written out), the `parameters` it is applied to, and its `fields`.
+- `#union(u)`: the type is a union of tags. `u` is a `UnionInfo(a)` with the same `name`, `module`, `parameters` and `doc`, and its `cases`.
+- `#nominal(n)`: a nominal type outside its home module, which shows only its `name`, `module`, `parameters` and `doc`.
+
+Each field of `r.fields` has a type of its own, which the checker never learns: a field `f` has its `name`, its `type`, a `Type` of it, and `get`, which takes a value of `a` and gives the field's value. Since `f.get(value)` and `f.type` are of the same type, the call `describe(f.get(value), f.type)` checks, whatever the field's type is. A case of `u.cases` has its `name`, its payload's `type` (`unit` for a tag without one), and `get`, which gives `#some(payload)` for a value of that case and `#none` otherwise. A value of a field's or an element's type can only be used where it is opened: giving it back from the lambda or the arm is an error (NYX0274), as it could then be given where another field's type is expected.
+
+A `match` on a type that leaves out a tag and has no `else` is a non-exhaustive match (NYX0203), and a pattern that isn't a description's tag is NYX0273. A function that calls itself at the type of a part, as `describe` does, must write its type, so that it can be called at other types.
+
 # Callable values
 
 Any value with a function type can be called like a function. A [map](../stdlib/prelude-maps) can be called too, and calling it is a lookup, which gives `#some(v) | #notFound`:
