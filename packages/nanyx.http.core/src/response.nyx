@@ -1,0 +1,25 @@
+--| HTTP responses.
+
+  A [`Response`] is a record: its status, its headers, each a name in lower case and a value, and
+  its body, as text. A client gets one from `http.send`; a handler makes one, with
+  [`Response.text`] or as a record.
+export module response
+
+--| An HTTP response: its `status`, as `200`, its headers, each a name in lower case and a value, in
+  the order they came, and its body.
+export type Response = (status: int, headers: list((string, string)), body: string)
+
+--| A response with the status `status` and the text `body`, as plain text in UTF-8.
+export def Response.text: int, string -> Response = { status, body ->
+  Response(status = status, headers = [("content-type", "text/plain; charset=utf-8")], body = body)
+}
+
+--| The value of the first header of `response` named `name`, whatever its case:
+  `Response.header(r, "Content-Type")`.
+export def Response.header: Response, string -> #some(string) | #notFound = { response, name ->
+  def wanted = string.lowercase(name)
+
+  match response.headers \find { header -> header.0 == wanted }
+    | #some(header) -> #some(header.1)
+    | #notFound -> #notFound
+}

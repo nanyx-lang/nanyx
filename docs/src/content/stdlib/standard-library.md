@@ -43,9 +43,23 @@ in its manifest's `dependencies`, and imports its modules; the console host prov
 - [dir](./dir) — listing and making directories (`nanyx.fs/dir`)
 - [path](./path) — paths to files and directories (`nanyx.fs/path`)
 
+The HTTP client's interface package, `nanyx.http.core`, is shipped too, and named in the same way; the console host
+provides `Http`:
+
+- [client](./client) — the `Http` context and `HttpError` (`nanyx.http.core/client`)
+- [http](./http) — making requests (`nanyx.http.core/http`)
+- [request](./request) — `Request` and `Method` (`nanyx.http.core/request`)
+- [response](./response) — `Response` (`nanyx.http.core/response`)
+- [wire](./wire) — how the runtime's HTTP imports write requests and responses, for hosts (`nanyx.http.core/wire`)
+
+The HTTP host, `nanyx.http`, serves a program whose entry point is a `Request -> Response` handler: see the
+[HTTP server cookbook](../cookbook/http-server).
+
 It also ships `nanyx.json`, which a program names in its dependencies to read and write JSON:
 
 - [json](./json) — the `Json` value, parsing and printing (`nanyx.json/json`)
+- [json, decoders](./json-typed) — reading JSON into types of your own (`nanyx.json/json`)
+- [encode](./encode) — writing types of your own as JSON (`nanyx.json/encode`)
 
 # Named parameters
 

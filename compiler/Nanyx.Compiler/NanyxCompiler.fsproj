@@ -82,6 +82,7 @@
     <Compile Include="Loops.fs" />
     <Compile Include="RecordSpread.fs" />
     <Compile Include="CollectionLiterals.fs" />
+    <Compile Include="ExpectedLiterals.fs" />
     <Compile Include="PipeLookups.fs" />
     <Compile Include="Contexts.fs" />
     <Compile Include="ScopedTypes.fs" />
@@ -128,6 +129,7 @@
     <Compile Include="Lockfile.fs" />
     <Compile Include="PackageStore.fs" />
     <Compile Include="Manifest.fs" />
+    <Compile Include="HostSettings.fs" />
     <Compile Include="Package.fs" />
     <Compile Include="PackageArchive.fs" />
     <Compile Include="PackageIndex.fs" />

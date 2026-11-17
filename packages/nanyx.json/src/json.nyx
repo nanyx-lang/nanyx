@@ -18,7 +18,7 @@
   Each function walks its text, or its value, once, and calls itself in tail position along an
   array or an object, so a document of any length is read and written in time in proportion to
   its size. Only nesting takes stack: an array in an array in an array, and so on.
-export module json
+@partial export module json
 
 import (
   nanyx/math as math

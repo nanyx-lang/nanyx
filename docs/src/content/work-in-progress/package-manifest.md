@@ -30,7 +30,8 @@ maps, so every entry has the same shape and no name needs quoting.
 - **Its shape is checked** by `Manifest.check`: the top-level fields, `package`'s `name`, `version`, `sources` and
   `host`, and each entry's fields. Code is `NYX0020`, an unknown field `NYX0021`, a missing `name` `NYX0022`, a
   wrong value `NYX0023` (a package listed twice in `dependencies` among them) and a field that isn't supported yet
-  `NYX0024` (a host's `settings`), each at that field. A manifest in the old TOML form is `NYX0034` at its first line
+  `NYX0024`, each at that field. A host's `settings` must be a record, whose fields are checked once the host is read:
+  one the host doesn't take is `NYX0021`, and one of another kind than its default `NYX0023`. A manifest in the old TOML form is `NYX0034` at its first line
   ([#1596](https://github.com/nanyx-lang/nanyx/issues/1596)).
 - **A manifest that doesn't read stops its files.** A source file under a manifest with errors is not checked as a
   script: `nanyx check <file>`, `nanyx run <file>` and the language server report the manifest's errors in place of

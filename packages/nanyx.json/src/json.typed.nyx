@@ -1,0 +1,308 @@
+-- Part of the module json, which json.nyx starts: its decoders, which read a `Json` value into a
+-- type of your own, and the `Encoder` type, whose encoders are in encode.nyx. The overview is on
+-- the docs page stdlib/json-typed.md.
+@partial export module json
+
+-- Decoding --------------------------------------------------------------------------------------
+
+--| One step on the way from a document's root to a value in it: the member of an object with this
+  name, or the element of an array at this index, counting from 0.
+export type PathStep = #field(string) | #index(int)
+
+--| Why a decoder read no value: the path from the root of the document to the value that didn't
+  fit, each step in turn (empty for the root itself), and what was wrong with it.
+export type DecodeError = (path: list(PathStep), message: string)
+
+--| What reads an `a` from a [`Json`] value, or says why it can't. The decoders here make one, and
+  [`decode`] and [`decodeValue`] run one. A missing member is the decoder's to read too: only
+  [`optional`] reads one, as `#none`.
+export type Decoder(a) = private (run: Json -> #some(a) | #failed(list(PathStep), string), absent: #some(a) | #none)
+
+--| What `decoder` reads from `value`, or the path to what didn't fit, from `value`, and why.
+def runOn: Decoder(a), Json -> #some(a) | #failed(list(PathStep), string) = { decoder, v ->
+  def run = decoder.run
+  run(v)
+}
+
+--| The decoder that runs `run`, and reads a missing member as nothing.
+def decoderOf: (Json -> #some(a) | #failed(list(PathStep), string)) -> Decoder(a) = { run ->
+  Decoder(run = run, absent = #none)
+}
+
+--| What `value` is, as a message names it: `found a string`.
+def kindOf: Json -> string = {
+  | #null -> "null"
+  | #bool(_) -> "a boolean"
+  | #number(_) -> "a number"
+  | #string(_) -> "a string"
+  | #array(_) -> "an array"
+  | #object(_) -> "an object"
+}
+
+--| The failure for `value`, where `expected` was expected.
+def mismatch: string, Json -> #some(a) | #failed(list(PathStep), string) = { expected, value ->
+  #failed([], "Expected {expected}, found {kindOf(value)}")
+}
+
+def stringOf: Json -> #some(string) | #failed(list(PathStep), string) = {
+  | #string(s) -> #some(s)
+  | other -> mismatch("a string", other)
+}
+
+--| Reads a string.
+export def string: Decoder(string) = decoderOf(stringOf)
+
+def floatOf: Json -> #some(float) | #failed(list(PathStep), string) = {
+  | #number(x) -> #some(x)
+  | other -> mismatch("a number", other)
+}
+
+--| Reads a number, as JSON holds one: a `float`.
+export def float: Decoder(float) = decoderOf(floatOf)
+
+def intOf: Json -> #some(int) | #failed(list(PathStep), string) = {
+  | #number(x) -> (match (if x % 1.0 == 0.0 then float.tryToInt(x, #truncate) else #outOfRange)
+    | #some(n) -> #some(n)
+    | #outOfRange -> #failed([], "Expected a whole number, found {print(#number(x))}"))
+  | other -> mismatch("a whole number", other)
+}
+
+--| Reads a number that is whole, and in the range of `int`, as an `int`: `2.5` is an error.
+export def int: Decoder(int) = decoderOf(intOf)
+
+def boolOf: Json -> #some(bool) | #failed(list(PathStep), string) = {
+  | #bool(b) -> #some(b)
+  | other -> mismatch("a boolean", other)
+}
+
+--| Reads `true` or `false`.
+export def bool: Decoder(bool) = decoderOf(boolOf)
+
+--| Reads any value, as it is: for a part of a document that is read later, or not at all.
+export def value: Decoder(Json) = decoderOf({ v -> #some(v) })
+
+--| `items` read by `decoder`, from `index` on, in front of `acc`, last first.
+def decodeItems
+  : Decoder(a), list(Json), int, list(a) -> #some(list(a)) | #failed(list(PathStep), string)
+  = { decoder, items, index, acc ->
+    match items
+      | [] -> #some(list.reverse(acc))
+      | [item, ...rest] -> match runOn(decoder, item)
+        | #some(x) -> decodeItems(decoder, rest, index + 1, [x, ...acc])
+        | #failed(path, message) -> #failed([#index(index), ...path], message)
+  }
+
+--| Reads an array, each element by `decoder`: `json.list(json.int)` reads `[1, 2, 3]`.
+export def list: Decoder(a) -> Decoder(list(a)) = { decoder ->
+  decoderOf(
+    {
+      | #array(items) -> decodeItems(decoder, items, 0, [])
+      | other -> mismatch("an array", other)
+    }
+  )
+}
+
+--| `members` read by `decoder`, in front of `acc`, last first.
+def decodeMembers
+  : Decoder(a), list((string, Json)), list((string, a)) -> #some(map(string, a)) | #failed(list(PathStep), string)
+  = { decoder, members, acc ->
+    match members
+      | [] -> #some(map.fromList(list.reverse(acc)))
+      | [(name, member), ...rest] -> match runOn(decoder, member)
+        | #some(x) -> decodeMembers(decoder, rest, [(name, x), ...acc])
+        | #failed(path, message) -> #failed([#field(name), ...path], message)
+  }
+
+--| Reads an object as a map, each member's value by `decoder`, in the order the object has them:
+  for an object whose members aren't known ahead, as `{"en": "Hello", "fr": "Bonjour"}`.
+export def dict: Decoder(a) -> Decoder(map(string, a)) = { decoder ->
+  decoderOf(
+    {
+      | #object(members) -> decodeMembers(decoder, map.toList(members), [])
+      | other -> mismatch("an object", other)
+    }
+  )
+}
+
+--| Reads `null` as `#none`, and anything else by `decoder`, as `#some`. A member that [`field`]
+  finds missing reads as `#none` too, so `json.field("nickname", json.optional(json.string))` reads
+  an object with no `nickname`.
+export def optional: Decoder(a) -> Decoder(#some(a) | #none) = { decoder ->
+  def run = {
+    | #null -> #some(#none)
+    | other -> match runOn(decoder, other)
+      | #some(x) -> #some(#some(x))
+      | #failed(path, message) -> #failed(path, message)
+  }
+
+  Decoder(run = run, absent = #some(#none))
+}
+
+--| Reads the member `name` of an object by `decoder`. A missing member is an error, but for a
+  decoder that reads one as a value, as [`optional`] does.
+export def field: string, Decoder(a) -> Decoder(a) = { name, decoder ->
+  def missing = match decoder.absent
+    | #some(x) -> #some(x)
+    | #none -> #failed([#field(name)], "Expected a member '{name}', found none")
+
+  decoderOf(
+    {
+      | #object(members) -> (match map.get(members, name)
+        | #some(member) -> (match runOn(decoder, member)
+          | #some(x) -> #some(x)
+          | #failed(path, message) -> #failed([#field(name), ...path], message))
+        | #notFound -> missing)
+      | other -> mismatch("an object", other)
+    }
+  )
+}
+
+--| The decoder that reads `x` from any value, whatever it is.
+export def succeed: a -> Decoder(a) = { x ->
+  decoderOf({ _ -> #some(x) })
+}
+
+--| The decoder that reads no value, but fails with `message`: for a value that is the right kind
+  but not one of those allowed, as an unknown tag.
+export def fail: string -> Decoder(a) = { message ->
+  decoderOf({ _ -> #failed([], message) })
+}
+
+--| Reads a value by `decoder`, then gives `f` of it. A member `decoder` reads as missing is `f` of
+  what it reads it as.
+export def convert: [c] Decoder(a), ([c] a -> b) -> Decoder(b) = { decoder, f ->
+  def run = { v ->
+    match runOn(decoder, v)
+      | #some(x) -> #some(f(x))
+      | #failed(path, message) -> #failed(path, message)
+  }
+
+  def absent = match decoder.absent
+    | #some(x) -> #some(f(x))
+    | #none -> #none
+
+  Decoder(run = run, absent = absent)
+}
+
+--| Reads a value by `decoder`, then reads the same value again by the decoder `next` makes of
+  what the first read: for a value whose shape depends on part of it, as a tagged union's does on
+  its tag.
+export def andThen: Decoder(a), (a -> Decoder(b)) -> Decoder(b) = { decoder, next ->
+  decoderOf(
+    { v ->
+      match runOn(decoder, v)
+        | #some(x) -> runOn(next(x), v)
+        | #failed(path, message) -> #failed(path, message)
+    }
+  )
+}
+
+--| The failure of `failures` with the longest path, the one that got furthest into the value, or
+  the first of those that tie: what a decoder of [`oneOf`] that nearly fitted says was wrong.
+def furthest
+  : list((list(PathStep), string)), (list(PathStep), string) -> #some(a) | #failed(list(PathStep), string)
+  = { failures, best ->
+    match failures
+      | [] -> #failed(best.0, best.1)
+      | [failure, ...rest] -> furthest(
+        rest
+        if list.length(failure.0) > list.length(best.0) then failure else best
+      )
+  }
+
+--| `value` read by the first of `decoders` that reads it, with `failures` those before that didn't,
+  last first.
+def firstOf
+  : list(Decoder(a)), Json, list((list(PathStep), string)) -> #some(a) | #failed(list(PathStep), string)
+  = { decoders, v, failures ->
+    match decoders
+      | [] -> (match list.reverse(failures)
+        | [] -> #failed([], "Expected a value one of no decoders reads, found {kindOf(v)}")
+        | [first, ...rest] -> furthest(rest, first))
+      | [decoder, ...rest] -> match runOn(decoder, v)
+        | #some(x) -> #some(x)
+        | #failed(path, message) -> firstOf(rest, v, [(path, message), ...failures])
+  }
+
+--| Reads a value by the first of `decoders` that reads it. When none does, the error is the one
+  that got furthest into the value, the first of those that tie.
+export def oneOf: list(Decoder(a)) -> Decoder(a) = { decoders ->
+  decoderOf({ v -> firstOf(decoders, v, []) })
+}
+
+--| The keywords of a [`record`] block: `try` reads a value by a decoder, and `return` gives the
+  value the block reads.
+export context DecodeRecord = (
+  --| Reads the value by the decoder, and goes on with what it read.
+  try: [c] (Decoder(a), ([c] a -> Decoder(b))) -> Decoder(b)
+  --| The value the block reads.
+  return: a -> Decoder(a)
+)
+
+--| A decoder written as a block that reads a value a part at a time: each `try` reads the value by
+  a decoder, usually a [`field`], and `return` says what the block reads from what they read.
+
+  ```nanyx fragment
+  def user: json.Decoder(User) = json.record {
+    def name = try json.field("name", json.string)
+    def age = try json.field("age", json.int)
+    return User(name = name, age = age)
+  }
+  ```
+
+  The first `try` that fails ends the block with its error. A `try` can read by any decoder,
+  one chosen by what an earlier `try` read among them, as for a tagged union.
+export def record: [c] ([DecodeRecord, c] () -> Decoder(b)) -> Decoder(b) = { block ->
+  use DecodeRecord(try = { decoder, next -> andThen(decoder, next) }, return = succeed) in block()
+}
+
+--| What `decoder` reads from `value`, or why it reads nothing, with the path to what didn't fit.
+export def decodeValue: Json, Decoder(a) -> #some(a) | #error(DecodeError) = { v, decoder ->
+  match runOn(decoder, v)
+    | #some(x) -> #some(x)
+    | #failed(path, message) -> #error(DecodeError(path = path, message = message))
+}
+
+--| What `decoder` reads from the JSON `text`, or why it reads nothing: text that isn't JSON is an
+  error at the root, whose message says where in the text, by line and column.
+export def decode: string, Decoder(a) -> #some(a) | #error(DecodeError) = { text, decoder ->
+  match parse(text)
+    | #some(v) -> decodeValue(v, decoder)
+    | #error(e) -> #error(
+      DecodeError(path = [], message = "{e.message}, at line {e.line}, column {e.column}")
+    )
+}
+
+--| `steps` as a path is written: a member by its name, after a `.` but at the start, and an
+  element by its index in brackets, as `users[2].age`. The root, with no steps, is `""`.
+export def pathText: list(PathStep) -> string = { steps ->
+  string.concat(
+    list.mapIndexed(
+      steps
+      {
+        | 0, #field(name) -> name
+        | _, #field(name) -> ".{name}"
+        | _, #index(i) -> "[{i}]"
+      }
+    )
+  )
+}
+
+--| `e` as a message writes it: its path, then what was wrong there, as
+  `users[2].age: Expected a whole number, found 2.5`, or only what was wrong for the root.
+export def describe: DecodeError -> string = { e ->
+  match e.path
+    | [] -> e.message
+    | path -> "{pathText(path)}: {e.message}"
+}
+
+-- Encoding --------------------------------------------------------------------------------------
+
+--| What writes an `a` as a [`Json`] value: any function that does. The encoders that build one are
+  in the module `nanyx.json/encode`.
+export type Encoder(a) = a -> Json
+
+--| `value` as JSON text, written by `encoder` and printed compactly as [`print`] prints.
+export def encode: a, Encoder(a) -> string = { x, encoder ->
+  print(encoder(x))
+}

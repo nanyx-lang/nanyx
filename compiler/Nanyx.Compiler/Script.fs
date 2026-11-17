@@ -304,6 +304,11 @@ module Script =
     /// `readFrom` the user's store.
     let read (filePath: string) (source: string) : ScriptDirectives = readFrom (PackageStore.user ()) filePath source
 
+    /// The host the script at `filePath` runs under, as its `::host` names it; none for a script with no directives,
+    /// which runs under the console host.
+    let hostOf (filePath: string) : Host option =
+        (read filePath (File.ReadAllText filePath)).Build |> Option.bind _.Host
+
     /// `result` with the problems with `directives` before its own diagnostics. An error in a directive is not
     /// deferred: it stops a debug run too.
     let withDirectives (directives: ScriptDirectives) (result: CompileResult) : CompileResult =

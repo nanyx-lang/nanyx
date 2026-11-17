@@ -7,7 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="HttpImport.fs" />
     <Compile Include="Runner.fs" />
+    <Compile Include="Serving.fs" />
   </ItemGroup>
 
   <ItemGroup>

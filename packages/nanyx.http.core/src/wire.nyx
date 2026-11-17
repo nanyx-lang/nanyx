@@ -1,0 +1,124 @@
+--| How the `nanyx` runtime's own HTTP imports, `nanyx:http` and `nanyx:serve`, write requests and
+  responses, for the hosts written on them. A program doesn't need it.
+
+  A request is written as lines, each ended by `\n`: its method, its URL, its timeout in
+  milliseconds, how many headers it has, and each header's name and value on lines of their own; its
+  body follows, as it is. A response is written the same way: its status, how many headers it has,
+  each header's name and value, then its body.
+export module wire
+
+import (
+  nanyx.http.core/request as (Method, Request)
+  nanyx.http.core/response as (Response)
+)
+
+--| `method`'s name, as HTTP writes it: `GET` for `#get`.
+export def methodName: Method -> string = {
+  | #get -> "GET"
+  | #post -> "POST"
+  | #put -> "PUT"
+  | #delete -> "DELETE"
+  | #patch -> "PATCH"
+  | #head -> "HEAD"
+  | #options -> "OPTIONS"
+}
+
+--| The method HTTP writes as `name`, or `#unknown`.
+export def methodOf: string -> #some(Method) | #unknown = {
+  | "GET" -> #some(#get)
+  | "POST" -> #some(#post)
+  | "PUT" -> #some(#put)
+  | "DELETE" -> #some(#delete)
+  | "PATCH" -> #some(#patch)
+  | "HEAD" -> #some(#head)
+  | "OPTIONS" -> #some(#options)
+  | _ -> #unknown
+}
+
+--| `headers` written as lines: how many there are, then each one's name and value.
+def headerLines: list((string, string)) -> string = { headers ->
+  def lines = headers \fold(
+    ""
+    { written, header -> written ++ header.0 ++ "\n" ++ header.1 ++ "\n" }
+  )
+
+  "{headers \length}\n{lines}"
+}
+
+--| The headers written in `text`, `count` of them, after `headers` (the latest first), in order,
+  with what follows them.
+def headersIn
+  : string, int, list((string, string)) -> #some(list((string, string)), string) | #malformed
+  = { text, count, headers ->
+    if count <= 0 then #some(headers \reverse, text) else
+      match string.splitOnce(text, on = "\n")
+        | #notFound -> #malformed
+        | #some(name, rest) ->
+          match string.splitOnce(rest, on = "\n")
+            | #notFound -> #malformed
+            | #some(value, after) -> headersIn(after, count - 1, [(name, value), ...headers])
+  }
+
+--| The line at the start of `text`, as a whole number, and what follows it.
+def numberLine: string -> #some(int, string) | #malformed = { text ->
+  match string.splitOnce(text, on = "\n")
+    | #notFound -> #malformed
+    | #some(line, rest) ->
+      match int.fromString(line)
+        | #some(number) -> #some(number, rest)
+        | #invalidInt -> #malformed
+}
+
+--| The headers written at the start of `text`, with the count before them, and the body after them.
+def headersAndBody: string -> #some(list((string, string)), string) | #malformed = { text ->
+  match numberLine(text)
+    | #malformed -> #malformed
+    | #some(count, rest) -> headersIn(rest, count, [])
+}
+
+--| `request`, written.
+export def writeRequest: Request -> string = { request ->
+  "{methodName(request.method)}\n{request.url}\n{request.timeout}\n{headerLines(
+    request.headers
+  )}{request.body}"
+}
+
+--| The request written in `text`.
+export def readRequest: string -> #some(Request) | #malformed = { text ->
+  match string.splitOnce(text, on = "\n")
+    | #notFound -> #malformed
+    | #some(name, rest) ->
+      match (methodOf(name), string.splitOnce(rest, on = "\n"))
+        | (#some(method), #some(url, after)) ->
+          match numberLine(after)
+            | #malformed -> #malformed
+            | #some(timeout, more) ->
+              match headersAndBody(more)
+                | #malformed -> #malformed
+                | #some(headers, body) ->
+                  #some(
+                    Request(
+                      method = method
+                      url = url
+                      headers = headers
+                      body = body
+                      timeout = timeout
+                    )
+                  )
+        | _ -> #malformed
+}
+
+--| `response`, written.
+export def writeResponse: Response -> string = { response ->
+  "{response.status}\n{headerLines(response.headers)}{response.body}"
+}
+
+--| The response written in `text`.
+export def readResponse: string -> #some(Response) | #malformed = { text ->
+  match numberLine(text)
+    | #malformed -> #malformed
+    | #some(status, rest) ->
+      match headersAndBody(rest)
+        | #malformed -> #malformed
+        | #some(headers, body) -> #some(Response(status = status, headers = headers, body = body))
+}

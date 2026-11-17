@@ -6,9 +6,11 @@ order: 5
 
 Reading and writing files, making and serving HTTP requests, and reading and writing JSON are the minimum for most
 useful programs. This page is their design, decided by the maintainer on 2026-11-17. The file system is built, but for
-the check described under [Still open](#still-open-for-the-file-system), and so is the first layer of
-`nanyx.json`, the `Json` value with parsing and printing ([#1787](https://github.com/nanyx-lang/nanyx/issues/1787)).
-HTTP and JSON's encoders and decoders are not built yet.
+the check described under [Still open](#still-open-for-the-file-system), and so is `nanyx.json`: the `Json` value with
+parsing and printing ([#1787](https://github.com/nanyx-lang/nanyx/issues/1787)), and its decoders and encoders
+([#1788](https://github.com/nanyx-lang/nanyx/issues/1788)). The HTTP client is built
+([#1785](https://github.com/nanyx-lang/nanyx/issues/1785)), and so is serving HTTP locally with `nanyx run`, under the HTTP
+host ([#1786](https://github.com/nanyx-lang/nanyx/issues/1786)).
 
 # What they share
 
@@ -25,8 +27,8 @@ HTTP and JSON's encoders and decoders are not built yet.
   JSON needs no context: `nanyx.json` is pure.
 - **They're shipped packages,** with the compiler, as `nanyx.console.core` is, and named in a manifest's
   `dependencies` or a script's `::dependency`. The standard library stays what every program needs.
-- **Every call blocks.** There's no async, as decided for hosts that can block: in a request handler, only that
-  request's instance waits.
+- **Every call blocks, for now.** In a request handler, only that request's instance waits. Async is coming; when it
+  does, the calls that wait require it ([Concurrency and crash boundaries](./concurrency-and-crash-boundaries)).
 - **Failures are tag unions,** matched like any value, never traps: `#some(string) | #error(FsError)`.
 - **Text is UTF-8.** Bytes are `Array(U8)`.
 
@@ -116,26 +118,94 @@ match config
 
 # HTTP: `nanyx.http.core`, then the HTTP host
 
-**The client** comes first:
+**The client** comes first, and is built ([#1785](https://github.com/nanyx-lang/nanyx/issues/1785)); its reference is
+on the [client](../stdlib/client), [http](../stdlib/http), [request](../stdlib/request) and
+[response](../stdlib/response) pages:
 
 ```nanyx fragment
 ::dependency nanyx.http.core
 
+import nanyx.http.core/http as http
+
 match http.get("https://example.com/api/users")
   | #some(response) -> println(response.status)
-  | #error(e) -> println("Request failed: {e}")
+  | #error(_) -> println("Request failed")
 ```
 
-- `Request` and `Response` are records: method, URL, headers (a `map(string, string)`) and body (bytes, with `.text`
-  and `.json` helpers). `http.get`, `post` and `send` return `#some(Response) | #error(HttpError)`.
+- `Request` and `Response` are records: method, URL, headers (a list of names and values) and body. `http.get`, `post`
+  and `send` return `#some(Response) | #error(HttpError)`, and `HttpError` is
+  `#timeout | #connectionFailed(string) | #invalidUrl | #other(string)`.
 - **How it reaches the network.** WASI preview 1, which the backend emits today, has no networking. Until the backend
   emits components and can use the standard `wasi:http`, the `nanyx` runtime supplies a small import of its own,
-  backed by .NET's `HttpClient`, and the console host implements `Http` on it. Programs see only `Http`, so the swap
-  changes nothing for them.
+  `nanyx:http`, backed by .NET's `HttpClient`, and the console host implements `Http` on it (see
+  [Foreign functions](./foreign-functions#whats-built)). Programs see only `Http`, so the swap changes nothing for
+  them.
 
-**Serving** is the HTTP host already designed on the [Hosts](./hosts#serving-http) page: a host package, `nanyx.http`,
-whose entry is a `Request -> Response` handler. It runs each request in a fresh instance, and provides `Http` but not
-`Console` or `FileSystem`. `nanyx run` serves it locally first; serving it as a `wasi:http` component comes later.
+## How the client is built
+
+- **The package.** `packages/nanyx.http.core` has four public modules a program uses, laid out as `nanyx.fs` is: `request` declares
+  `Method` (`#get | #post | #put | #delete | #patch | #head | #options`) and `Request`, with
+  `Request.of(method, url)` and `Request.path`; `response` declares `Response`, with `Response.text(status, body)`, which a handler of the
+  HTTP host makes its answers with, and `Response.header`, which finds a header whatever its case; `client`
+  declares `Http` and `HttpError`; and `http` has `get`, `post` and `send`, imported as `http`. The context's one
+  member is `sendRequest`, named for what it does on its own, since the console host's prelude makes it an ambient
+  name. A fifth, `wire`, is for hosts: it writes and reads requests and responses as the runtime's imports pass them,
+  so the console host and the HTTP host share it.
+- **Settled while building it.**
+  - **The body is text,** a `string`, not bytes: nothing in the library turns an `Array(U8)` into a `string`, so a
+    byte body would leave every program unable to read a response, and the [Hosts](./hosts#serving-http) page's
+    handler takes its body as text too. So there is no `.text` helper: `response.body` is the text. Binary bodies come
+    with a conversion between bytes and text in the library.
+  - **A request has a `timeout`,** in milliseconds, which `Request.of` sets to 30 seconds: `#timeout` needs one, and
+    a request is where it belongs, as `HttpClient` has one per call.
+  - **Headers are a list** of names and values, `list((string, string))`, not the `map(string, string)` the design
+    named: a header may come more than once (`Set-Cookie`), and its order can matter. A map also hit a compiler bug,
+    [#1841](https://github.com/nanyx-lang/nanyx/issues/1841): any map the console host builds broke every program with a
+    `def map` of its own. Names are in lower case in a response, as HTTP/2 writes them, and `Response.header`
+    finds the first of a name whatever its case; a request's are sent as written.
+  - **No `.json` helper yet.** `Response.json` would make `nanyx.http.core` depend on `nanyx.json`, and the HTTP host
+    will want a constructor of that name as much as a client wants a reader; it waits for the HTTP host and the JSON
+    encoders ([#1788](https://github.com/nanyx-lang/nanyx/issues/1788)).
+- **The console host** depends on `nanyx.http.core`; its `run` `use`s an `Http` after `FileSystem`, so its parameter is
+  `[Console, Env, FileSystem, Http] () -> a`, and its prelude re-exports `Http`, `HttpError`, `Request`, `Method` and
+  `Response`. It writes a request as `nanyx:http` reads it, calls `send`, allocates the answer's length, calls
+  `receive`, and reads the response back. As with the file system, a program that doesn't make requests imports
+  nothing for it.
+- **Calls block.** `send` waits on `HttpClient` in the runtime's thread, so the program stops until the answer comes:
+  in the HTTP host, only the instance that sends it.
+
+**Serving** is the HTTP host designed on the [Hosts](./hosts#serving-http) page: a host package, `nanyx.http`, whose
+entry is a `[Http] Request -> Response` handler. It runs each request in a fresh instance, and provides `Http` but not
+`Console` or `FileSystem`. `nanyx run` serves it locally, and is built
+([#1786](https://github.com/nanyx-lang/nanyx/issues/1786)); the [HTTP server cookbook](../cookbook/http-server) shows
+it. Serving it as a `wasi:http` component comes later, as an issue of its own.
+
+## How serving is built
+
+- **The host.** `packages/nanyx.http` declares itself a host with `host = (root = "http.host", prelude =
+  "http.prelude", settings = (port = 3000))`, and depends on `nanyx.http.core`. Its prelude re-exports `Http`,
+  `HttpError`, `Request`, `Method` and `Response`. Its `run` takes the handler, `use`s an `Http` written on
+  `nanyx:http` as the console host's is, takes the request from the runtime, calls the handler, and gives the runtime
+  the response; a request the runtime wrote wrongly is answered with a 400 without calling the handler.
+- **The runtime serves it.** The host imports the runtime's own `nanyx:serve` (`requestLength`, `request`,
+  `respond`; see [Foreign functions](./foreign-functions#whats-built)), and `nanyx run` serves any program whose
+  module imports it (`WasmServer.serves`), whatever its host: it compiles the module once, listens on
+  `http://localhost:<port>/` with .NET's `HttpListener`, and answers each request in a store and an instance of its
+  own, on a task of its own, so requests are answered at the same time and share nothing. An instance that traps or
+  exits without responding is answered with a 500, the reason goes to standard error, and the server carries on. It
+  stops on Ctrl+C. A port that can't be listened on is an error saying to give another.
+- **Settings.** A host declares the settings it takes, with their defaults, in its own manifest's `host`; a program's
+  manifest sets them in its `host`'s `settings`, and one the host doesn't take, or of another kind than its default, is
+  an error at the setting (`HostSettings`, checked when `Package` reads the host). This settles the
+  [Hosts](./hosts#open-questions) page's question on typing host configuration, for now by the defaults' kinds. A
+  script's `::host` has no settings, so it gets the defaults.
+- **`Request.path`** is the path of a request's URL, without its query or fragment: the runtime passes an incoming
+  request's whole URL, `http://localhost:3000/hello/Ada?x=1`, so a handler matches on the path. There is no `#Path`
+  route pattern yet; the cookbook splits the path and matches the parts with a list pattern.
+- **Not provided yet:** `Env`, `Log` and `Clock`, which the Hosts page lists. `Clock` and `Log` don't exist yet, and
+  `Env`'s members are written in the console host's root module, which another host can't share
+  ([#1816](https://github.com/nanyx-lang/nanyx/issues/1816) is the start of that). Also not done: a server bound to
+  other addresses than `localhost`, and streamed bodies.
 
 # JSON: `nanyx.json`
 
@@ -145,9 +215,9 @@ Two layers.
    `#null | #bool(bool) | #number(float) | #string(string) | #array(list(Json)) | #object(map(string, Json))`, with
    `json.parse`, `json.print` and `json.printPretty(value, indent = 2)`. Its reference is the [json](../stdlib/json)
    page.
-2. **Typed encoding and decoding with combinators,** as the [JSON cookbook](../cookbook/json-parsing) shows:
-   `json.record(name = json.field("name", json.string), ...)`, with errors that name where they failed
-   (`users[2].age`). Numbers are `float`, and `json.int` checks that one is whole.
+2. **Typed encoding and decoding with combinators** (built, [#1788](https://github.com/nanyx-lang/nanyx/issues/1788)),
+   with errors that name where they failed (`users[2].age`). Numbers are `float`, and `json.int` checks that one is
+   whole. Its reference is the [decoders](../stdlib/json-typed) and [encoders](../stdlib/encode) pages.
 
 How the first layer is built, in `packages/nanyx.json/src/json.nyx`, in Nanyx:
 
@@ -166,10 +236,31 @@ How the first layer is built, in `packages/nanyx.json/src/json.nyx`, in Nanyx:
   `float.fromString`. `print` writes a whole number below 10^15 without a fraction (`42`), any other as
   `float.toString` does, and NaN and infinity, which JSON can't write, as `null`.
 - **Imported under a name.** `import nanyx.json/json as json`: a plain import would bring in a `print` that clashes with
-  the console's. Two compiler bugs show up in use: a derived `==` or `ToString` of a `Json` or `JsonError` needs the
-  types imported by name too ([#1796](https://github.com/nanyx-lang/nanyx/issues/1796)), and a `Json` literal whose
-  lists hold different tags must name the inner values first
-  ([#1798](https://github.com/nanyx-lang/nanyx/issues/1798)).
+  the console's.
+
+How the second layer is built, in `packages/nanyx.json/src/json.typed.nyx` (part of the module `json`) and
+`encode.nyx`:
+
+- **A record is read by a workflow, not a record of decoders.** The design sketched
+  `json.record(name = json.field("name", json.string), ...)`, but no Nanyx type can take a record of decoders and give a
+  decoder of the record. `json.record { ... }` is a builder instead, whose `try` reads by a decoder and `return` gives
+  the value: `def name = try json.field("name", json.string)`. It reads a tagged union too, as a `try` can read by a
+  decoder an earlier one chose.
+- **`Decoder(a)` is private,** a function from `Json` to the value or a failure with its path, which each combinator
+  extends on the way out (`#field(name)`, `#index(i)`), so a path costs nothing until something fails. A missing member
+  is an error but for `json.optional`, which reads it, and `null`, as `#none`.
+- **`DecodeError` is `(path: list(PathStep), message: string)`;** `json.pathText` writes the path and `json.describe`
+  the whole error. Text that isn't JSON is an error at the root, whose message gives the line and column.
+- **Encoders are in a module of their own,** `nanyx.json/encode`, because their names are the decoders'
+  (`encode.string`, `json.string`). An `Encoder(a)` is any function `a -> Json`; `json.encode(value, encoder)` prints
+  what one writes. Attaching them to `Encoder` (`json.Encoder.string`) would have kept one module, but a type's attached
+  definitions can't be reached through an import's alias yet
+  ([#1833](https://github.com/nanyx-lang/nanyx/issues/1833)).
+- **`json.convert`, not `json.map`,** maps what a decoder read: a `def map` in the module would hide `map.empty` and the
+  other attached definitions of maps from the module's own code.
+- **Compiler bugs found on the way:** an imported builder's keywords had another module's type variables (#1818, fixed);
+  a partial module's file can't name a type from a file that sorts after it
+  ([#1838](https://github.com/nanyx-lang/nanyx/issues/1838)), which is why the decoders are in `json.typed.nyx`.
 
 **Encoding and decoding any record automatically** is decided to wait for type reflection
 ([Type members and reflection](./type-members-and-reflection)), which lets any library walk a type's structure, not
@@ -182,10 +273,10 @@ be a compiler special case that a SQL or YAML library couldn't use.
 |---|---|---|
 | [#1783](https://github.com/nanyx-lang/nanyx/issues/1783) | `nanyx.fs`: `FileSystem`, `Path`, the functions, in the console host: built, but for [#1811](https://github.com/nanyx-lang/nanyx/issues/1811) | |
 | [#1784](https://github.com/nanyx-lang/nanyx/issues/1784) | `file.lines` as a lazy `seq` (done) | #1783 |
-| [#1785](https://github.com/nanyx-lang/nanyx/issues/1785) | `nanyx.http.core` and the client, through a runtime import | |
-| [#1786](https://github.com/nanyx-lang/nanyx/issues/1786) | The HTTP host, served locally by `nanyx run` | #1785 |
+| [#1785](https://github.com/nanyx-lang/nanyx/issues/1785) | `nanyx.http.core` and the client, through a runtime import (done) | |
+| [#1786](https://github.com/nanyx-lang/nanyx/issues/1786) | The HTTP host, served locally by `nanyx run` (done) | #1785 |
 | [#1787](https://github.com/nanyx-lang/nanyx/issues/1787) | `nanyx.json`: the `Json` value, parsing and printing (done) | |
-| [#1788](https://github.com/nanyx-lang/nanyx/issues/1788) | `nanyx.json`: encoders and decoders | #1787 |
+| [#1788](https://github.com/nanyx-lang/nanyx/issues/1788) | `nanyx.json`: encoders and decoders (done) | #1787 |
 | [#1789](https://github.com/nanyx-lang/nanyx/issues/1789) | Automatic encoding and decoding, on type reflection (Planning) | #1788, reflection |
 
 # Open questions

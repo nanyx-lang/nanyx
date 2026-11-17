@@ -86,10 +86,13 @@
     <Compile Include="Features\Hosts\RunExternTests.fs" />
     <Compile Include="Features\Hosts\RunFileSystemTests.fs" />
     <Compile Include="Features\Hosts\RunFileLinesTests.fs" />
+    <Compile Include="Features\Hosts\RunHttpClientTests.fs" />
+    <Compile Include="Features\Hosts\RunHttpHostTests.fs" />
     <Compile Include="Features\Hosts\RunHostMemoryTests.fs" />
     <Compile Include="Features\Hosts\ChooseHostTests.fs" />
     <Compile Include="Features\Hosts\RunScriptTests.fs" />
     <Compile Include="Features\Json\RunJsonTests.fs" />
+    <Compile Include="Features\Json\RunJsonDecodeTests.fs" />
     <Compile Include="Features\Lists\RunListTests.fs" />
     <Compile Include="Features\Lists\RunListKeyTests.fs" />
     <Compile Include="Features\Maps\RunMapTests.fs" />
@@ -123,6 +126,7 @@
     <Compile Include="Features\Memory\OutOfMemoryTests.fs" />
     <Compile Include="Features\Binary\WasmBinaryTests.fs" />
     <Compile Include="Features\Names\RunNameTests.fs" />
+    <Compile Include="Features\Names\RunImportedTypeInstanceTests.fs" />
     <Compile Include="Features\Nominals\RunNominalTests.fs" />
     <Compile Include="Features\Nominals\RunRecursiveNominalTests.fs" />
     <Compile Include="Features\Nominals\RunLocalTypeTests.fs" />
@@ -180,6 +184,7 @@
     <Compile Include="Features\Strings\RunStringTests.fs" />
     <Compile Include="Features\Strings\RunInterpolationTests.fs" />
     <Compile Include="Features\Tags\RunTagTests.fs" />
+    <Compile Include="Features\Tags\RunExpectedPayloadTests.fs" />
     <Compile Include="Features\Tags\RunRecursiveAliasTests.fs" />
     <Compile Include="Features\TailCalls\RunTailCallTests.fs" />
     <Compile Include="Features\TailCalls\StackOverflowTests.fs" />

@@ -114,8 +114,8 @@ assembled too.
 ## Tour examples
 
 Every ` ```nanyx ` block in the [language tour](../tour/variables), the [Getting started](../getting-started/basics)
-pages, the [Standard Library](../stdlib/standard-library) pages and the [Custom patterns](../advanced/custom-patterns)
-page is a test case: `RunTourExampleTests.fs` in
+pages, the [Standard Library](../stdlib/standard-library) pages, the [Custom patterns](../advanced/custom-patterns)
+page and the [JSON cookbook](../cookbook/json-parsing) page is a test case: `RunTourExampleTests.fs` in
 `Nanyx.Compiler.Wasm.Tests` reads their pages, and compiles and runs each block in the test process, as `nanyx run`
 would run it as a script. A standard-library page's generated reference is left out (see
 [Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)). The words after
