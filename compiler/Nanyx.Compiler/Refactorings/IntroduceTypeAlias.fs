@@ -60,10 +60,6 @@ let internal writtenTypes (syntax: Module) =
             typesIn false root |> List.map (fun (written, inContexts) -> { Type = written; Item = item; Exported = exported; InContexts = inContexts })))
     |> List.filter (fun written -> not (SourceSpan.isNone written.Type.Span))
 
-/// The names of the type variables `typeExpr` writes, in the order they first appear.
-let private variablesOf (typeExpr: TypeExpr) =
-    TypeExpr.within typeExpr |> List.choose (fun part -> match part.Kind with TypeVar name -> Some name | _ -> None) |> List.distinct
-
 /// `typeExpr` with its type variables renamed by `rename`.
 let rec private renamed (rename: Map<string, string>) (typeExpr: TypeExpr) : TypeExpr =
     match typeExpr.Kind with
@@ -73,7 +69,7 @@ let rec private renamed (rename: Map<string, string>) (typeExpr: TypeExpr) : Typ
 /// `typeExpr` with its type variables named by where they first appear, so that two types that differ only by the
 /// names of their variables are equal.
 let private canonical (typeExpr: TypeExpr) =
-    renamed (variablesOf typeExpr |> List.mapi (fun index name -> name, $"v{index}") |> Map.ofList) typeExpr
+    renamed (TypeExpr.variablesOf typeExpr |> List.mapi (fun index name -> name, $"v{index}") |> Map.ofList) typeExpr
 
 /// The names of types `typeExpr` writes.
 let private typeNamesIn (typeExpr: TypeExpr) =
@@ -146,7 +142,7 @@ let at
     let source = normalised source
     match result.Syntax, result.Typed with
     | Some syntax, Some typed when selection.End > selection.Start ->
-        let text = source.Substring(selection.Start, selection.End - selection.Start)
+        let text = SourceSpan.textIn source selection
         let selection =
             { selection with Start = selection.Start + (text.Length - text.TrimStart().Length); End = selection.End - (text.Length - text.TrimEnd().Length) }
         let written = writtenTypes syntax
@@ -157,7 +153,7 @@ let at
             match exactlyAt selection with
             | Some found -> Some (found, selection)
             | None ->
-                let inner = source.Substring(selection.Start, selection.End - selection.Start)
+                let inner = SourceSpan.textIn source selection
                 if inner.Length > 2 && inner.StartsWith "(" && inner.EndsWith ")" then
                     let body = inner.Substring(1, inner.Length - 2)
                     let start = selection.Start + 1 + (body.Length - body.TrimStart().Length)
@@ -169,10 +165,10 @@ let at
         | Some (selected, _) when (refusal selected).IsSome -> [ Refused(title, RefactoringKind.Extract, (refusal selected).Value) ]
         | Some (selected, selectedSpan) ->
             let name = unique (takenTypeNames syntax typed written) "Extracted" "Extracted"
-            let parameters = variablesOf selected.Type
-            let typeText = source.Substring(selected.Type.Span.Start, selected.Type.Span.End - selected.Type.Span.Start)
+            let parameters = TypeExpr.variablesOf selected.Type
+            let typeText = SourceSpan.textIn source selected.Type.Span
             let useOf (occurrence: TypeExpr) =
-                match variablesOf occurrence with
+                match TypeExpr.variablesOf occurrence with
                 | [] -> name
                 | variables -> $"""{name}({String.concat ", " variables})"""
             // The other occurrences written the same, unless a local type may hide one of the names it writes.

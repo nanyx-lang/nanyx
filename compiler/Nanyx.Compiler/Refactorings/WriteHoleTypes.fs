@@ -65,10 +65,6 @@ let private holesOf (annotation: Annotation) =
         | _ -> TypeExpr.children typeExpr |> List.collect (walk false)
     walk (not annotation.IsParameter) annotation.Type
 
-/// The names of the type variables `typeExpr` writes.
-let private variablesOf (typeExpr: TypeExpr) =
-    TypeExpr.within typeExpr |> List.choose (fun part -> match part.Kind with TypeVar name -> Some name | _ -> None) |> List.distinct
-
 /// `ty` without the context variables of its functions that are not among `bound`: in a def's annotation, a function's
 /// context variable must be one of the def's contexts, which a `_` the compiler filled in did not need.
 let rec private withoutUnbound (bound: Ty list) (ty: Ty) =
@@ -97,7 +93,7 @@ let private writing (typed: TypedModule) (annotation: Annotation) (holes: (TypeE
         // letter none of them has.
         let around =
             let defType = annotation.Def |> Option.bind (fun symbol -> typed.SymbolTypes |> Map.tryFind symbol.Id) |> Option.map named
-            let variables = variablesOf annotation.Type |> List.mapi (fun index name -> TyVar(TyVar.ordinary (-1 - index) (Some name)))
+            let variables = TypeExpr.variablesOf annotation.Type |> List.mapi (fun index name -> TyVar(TyVar.ordinary (-1 - index) (Some name)))
             TyApply("", Option.toList defType @ variables)
         match Unifier.tysToDisplayStrings Source (around :: tys) |> List.tail with
         | written when written |> List.exists (Seq.exists (fun c -> c >= '₀' && c <= '₉')) ->

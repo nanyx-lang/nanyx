@@ -11,7 +11,7 @@ let private toPipeTitle = "Convert to pipe"
 let private toCallTitle = "Convert to call"
 
 /// The text of `expr` in `source`.
-let private textOf (source: string) (expr: Expression) = source.Substring(expr.Span.Start, expr.Span.End - expr.Span.Start)
+let private textOf (source: string) (expr: Expression) = SourceSpan.textIn source expr.Span
 
 /// The function `expr` calls, written by name, with the span of the name and its arguments, the piped value first:
 /// a call or a pipe the user wrote, with no named arguments.
@@ -20,7 +20,7 @@ let private written (source: string) (expr: Expression) =
         match span with
         | Some span when
             not (MadeUpNames.isMadeUp name)
-            && source.Substring(span.Start, span.End - span.Start) = name
+            && SourceSpan.textIn source span = name
             && not arguments.IsEmpty
             && arguments |> List.forall (fun argument -> not (SourceSpan.isNone argument.Span))
             && not (arguments |> List.exists (function { Kind = RecordExpr fields } -> fields |> List.exists (function NamedField _ -> true | _ -> false) | _ -> false)) ->
@@ -33,9 +33,6 @@ let private written (source: string) (expr: Expression) =
 
 let private isCall (expr: Expression) = match expr.Kind with FunctionCall _ -> true | _ -> false
 let private isPipe (expr: Expression) = match expr.Kind with Pipe _ -> true | _ -> false
-
-/// The own part of a dotted name: `trim` in `string.trim`.
-let private ownName (name: string) = name.Substring(name.LastIndexOf '.' + 1)
 
 /// `call`, and the calls it takes its first argument from, written as a chain of pipes: `filter(map(xs, f), g)` as
 /// `xs \map(f) \filter(g)`. Each function is named by `name`.
@@ -137,7 +134,7 @@ let at
             Deferred(title, RefactoringKind.Rewrite, decide)
         match atOffset with
         | Some expr when isCall expr ->
-            [ convert toPipeTitle (outermost isCall expr) (asPipe source) [ ownName; id ] ]
+            [ convert toPipeTitle (outermost isCall expr) (asPipe source) [ Names.ownPart; id ] ]
         | Some expr when isPipe expr ->
             let chain = outermost isPipe expr
             // The name of the definition each pipe in the chain found, by the name it is written with.
