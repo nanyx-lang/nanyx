@@ -1,5 +1,5 @@
 /// A program that asks for more memory than there is stops in the allocator, and the runner reports that as out of
-/// memory rather than as a trap (#1349, see docs/src/content/work-in-progress/memory-management.md).
+/// memory rather than as a trap (#1349, see docs/src/content/compiler-internals/memory-management.md).
 module TranspilerWasmTests.Features.Memory.OutOfMemory
 
 open Xunit

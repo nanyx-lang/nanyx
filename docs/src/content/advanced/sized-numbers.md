@@ -160,4 +160,4 @@ reads what `float.fromString` reads and gives the nearest `F32`, or infinity pas
 `FromString`, so a function that requires one works at the sized types.
 
 How each of these types is held in memory is described in
-[Memory management](../work-in-progress/memory-management#value-representation).
+[Memory management](../compiler-internals/memory-management#value-representation).

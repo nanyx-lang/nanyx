@@ -56,7 +56,8 @@ are checked separately and their items inlined, so there is no compiled artifact
 Not built: choosing versions and writing the lockfile ([#864](https://github.com/nanyx-lang/nanyx/issues/864)), so a
 dependency the lockfile doesn't lock is `NYX0024` and `install` and `pull` can't add one; publishing and yanking
 ([#865](https://github.com/nanyx-lang/nanyx/issues/865)); projects (`.nyxproj`,
-[#1386](https://github.com/nanyx-lang/nanyx/issues/1386)); and the editor's side.
+[#1386](https://github.com/nanyx-lang/nanyx/issues/1386)); `nanyx manifest` beyond `--json`; and the editor's side. How
+the package commands are built is on [The nanyx command](../compiler-internals/command-line#packages).
 # Goals
 
 - `nanyx install acme.json` followed by `nanyx run` works on a clean machine, and gives the same result on every

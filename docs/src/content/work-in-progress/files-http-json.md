@@ -10,7 +10,7 @@ for `nanyx.fs`; [client](../stdlib/client), [http](../stdlib/http), [request](..
 [response](../stdlib/response) for `nanyx.http.core`; [The HTTP host](../advanced/hosts#the-http-host) and the
 [HTTP server cookbook](../cookbook/http-server) for `nanyx.http`; and [json](../stdlib/json),
 [decoders](../stdlib/json-typed) and [encoders](../stdlib/encode) for `nanyx.json`. How the hosts implement them is on
-[Hosts](./hosts#how-its-built) and [Foreign functions](./foreign-functions#whats-built). This page keeps what is still
+[Hosts](../compiler-internals/hosts#how-its-built) and [Foreign functions](../compiler-internals/foreign-functions#whats-built). This page keeps what is still
 open.
 
 Every call blocks, for now. In a request handler, only that request's instance waits. When async comes, the calls

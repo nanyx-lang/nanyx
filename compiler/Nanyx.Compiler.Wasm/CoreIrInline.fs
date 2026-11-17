@@ -1,5 +1,5 @@
 /// Inlining in the core IR, after lowering and specialising and before reference counting (see
-/// `docs/src/content/work-in-progress/inlining.md`). A call is replaced by the body of the function it calls when the
+/// `docs/src/content/compiler-internals/inlining.md`). A call is replaced by the body of the function it calls when the
 /// function is a handler called once (or one called more often that is not large), or is a lambda's and the closure over
 /// it is called once, or is small. A function in a cycle of
 /// calls is never inlined, so inlining ends.

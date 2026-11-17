@@ -1,13 +1,13 @@
 ---
 title: "Standard library implementation"
 description: "How the standard library is written, shipped inside the compiler, and extended"
-order: 26
+order: 3
 ---
 
-> **Status: in progress.** This page describes how the standard library is built today. What it offers is
-> described in the [Standard Library](../stdlib/standard-library) section, whose references are generated from the
-> library (see [its pages on the docs site](#its-pages-on-the-docs-site)). It is part of the
-> [compilation](./compilation) workstream.
+This page describes how the standard library is built today. What it offers is described in the
+[Standard Library](../stdlib/standard-library) section, whose references are generated from the library (see
+[its pages on the docs site](#its-pages-on-the-docs-site)). What is still open about it is on
+[Compilation](../work-in-progress/compilation), the workstream it is part of.
 
 # An ordinary package
 
@@ -122,11 +122,8 @@ on these pages outside the reference are compiled and run, as the tour's are
 ([Tour examples](./compilation#tour-examples)).
 
 So explain a function in its doc comment, where hover shows it too, and keep a page's prose to what is about the
-module as a whole. Open questions:
-
-- A named parameter is written in a signature in the order of its name, not the order it is declared in, as hover
-  writes it: `string.substring: (string, length: int, start: int)`.
-- `proc`'s signature is a long record of its keyword members, which says little to a reader.
+module as a whole. The open questions about the generated references are on
+[Compilation](../work-in-progress/compilation#open-questions).
 
 # Intrinsics
 

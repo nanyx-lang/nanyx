@@ -1,5 +1,5 @@
 /// The program's entry point runs through the console host's `run` (`nanyx.console/console.host`), which builds `Console` on `HostRuntime` (#1245,
-/// see docs/src/content/work-in-progress/hosts.md).
+/// see docs/src/content/compiler-internals/hosts.md).
 module TranspilerWasmTests.Features.Hosts.ConsoleHost
 
 open Xunit

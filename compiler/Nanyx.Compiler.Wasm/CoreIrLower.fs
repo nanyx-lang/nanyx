@@ -5,7 +5,7 @@
 /// is lowered in turn (and may ask for more). Every function is
 /// compiled from the IR. What it cannot lower yet (`cannot`) is reported by `CodeGen.fs` as `UnsupportedByBackend`
 /// where it is written, and a broken invariant of the backend (`internalError`) as `BackendInternalError`: see "What
-/// cannot be compiled" in `docs/src/content/work-in-progress/memory-management.md`.
+/// cannot be compiled" in `docs/src/content/compiler-internals/memory-management.md`.
 module Transpiler.Wasm.CoreIrLower
 
 open NyxCompiler

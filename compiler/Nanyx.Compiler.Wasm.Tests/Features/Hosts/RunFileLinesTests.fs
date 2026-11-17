@@ -1,5 +1,5 @@
 /// `file.lines` reads a file lazily, a chunk at a time, as a `[FileSystem] seq(string)` (#1784, see
-/// docs/src/content/work-in-progress/hosts.md).
+/// docs/src/content/compiler-internals/hosts.md).
 module TranspilerWasmTests.Features.Hosts.FileLines
 
 open System.IO
