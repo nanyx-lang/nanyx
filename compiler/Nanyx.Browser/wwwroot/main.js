@@ -27,6 +27,11 @@ const files = [
   "packages/nanyx.console.core/nanyx.console.core.nyxp",
   "packages/nanyx.console.core/src/console.nyx",
   "packages/nanyx.console.core/src/env.nyx",
+  "packages/nanyx.fs/nanyx.fs.nyxp",
+  "packages/nanyx.fs/src/dir.nyx",
+  "packages/nanyx.fs/src/file.nyx",
+  "packages/nanyx.fs/src/filesystem.nyx",
+  "packages/nanyx.fs/src/path.nyx",
 ];
 const contents = await Promise.all(files.map(async (file) => new Uint8Array(await (await fetch(file)).arrayBuffer())));
 files.forEach((file, index) => exports.BrowserCompiler.AddFile(file, contents[index]));

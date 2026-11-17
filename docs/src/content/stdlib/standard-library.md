@@ -35,6 +35,14 @@ ships it, and the console host's prelude brings its names into every module of a
 - [console](./console) — reading from and writing to the terminal (`nanyx.console.core/console`)
 - [env](./env) — a program's arguments, environment variables and exit code (`nanyx.console.core/env`)
 
+The file system's interface package, `nanyx.fs`, is shipped too. A program names it with `::dependency nanyx.fs`, or
+in its manifest's `dependencies`, and imports its modules; the console host provides `FileSystem`:
+
+- [filesystem](./filesystem) — the `FileSystem` context and `FsError` (`nanyx.fs/filesystem`)
+- [file](./file) — reading and writing files (`nanyx.fs/file`)
+- [dir](./dir) — listing and making directories (`nanyx.fs/dir`)
+- [path](./path) — paths to files and directories (`nanyx.fs/path`)
+
 # Named parameters
 
 A [named parameter](../tour/functions#named-parameters) must be passed by name. The standard library names a parameter only when a call can't show what it is without the name: usually when two or more parameters after the receiver have the same type, or when a bare literal would leave you guessing its role. It never names the receiver (the value you pipe in), a lambda argument, or a single extra argument that the function's name already explains.
