@@ -182,7 +182,8 @@ A def that doesn't write its type and infers an ambient context, such as `def gr
 takes the context's members as one that writes `[Console]` does
 ([#1245](https://github.com/nanyx-lang/nanyx/issues/1245)). An `@entry`, and a script's statements, are called by the
 host's `run` with the members of the `Console` the host `use`s. The host's `run` is inlined into the start function,
-so the closures over those members are known there, and the simplifier and the inliner turn `println`'s call of
+and so is the entry, whatever its size, since the module calls it once
+([#1883](https://github.com/nanyx-lang/nanyx/issues/1883)), so the closures over those members are known there, and the simplifier and the inliner turn `println`'s call of
 `write` into a direct one ([#1469](https://github.com/nanyx-lang/nanyx/issues/1469), see [Inlining](./inlining)).
 
 How it is built:
