@@ -89,3 +89,12 @@ let ``A package that isn't shipped needs a path or a version`` () =
     let outcome = nanyxIn app [ "install"; "acme.util" ]
     Assert.Equal("error: Neither `--path` nor `--version` was given: give the directory 'acme.util' is in with `--path`, or its version with `--version`\n", outcome.StandardError.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
+
+[<Fact>]
+let ``A version that isn't one is an error, and the manifest is left as it was`` () =
+    use directory = new TempDirectory()
+    let app = appWith directory plain
+    let outcome = nanyxIn app [ "install"; "acme.json"; "--version"; "1.x" ]
+    Assert.Equal("error: '1.x' is not a version, which must be a version, `1.2.0`, or its first numbers, `1.2`\n", outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal(plain, manifestOf app)

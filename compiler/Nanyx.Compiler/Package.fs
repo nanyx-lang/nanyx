@@ -144,11 +144,11 @@ module Package =
     /// every package of the build shares, since a build has one version of each package.
     type private Lookup = { Store: PackageStore; Locked: Lockfile }
 
-    /// `dependency`, which accepts the versions `requirement` gives, in the directory of the version the lockfile locks,
-    /// in the cache; or why it can't be: it isn't locked, the version locked isn't one it accepts, or that version isn't
-    /// in the cache, which `nanyx pull` fills.
-    let private locked (lookup: Lookup) (dependency: Dependency) (requirement: VersionRequirement) : Result<Dependency, Problem list> =
-        let error code message = Result.Error [ AtManifest(Diagnostics.at code dependency.PathSpan message) ]
+    /// The directory of `dependency`, which accepts the versions `requirement` gives: that of the version the lockfile
+    /// locks, in the cache; or why it can't be: it isn't locked, the version locked isn't one it accepts, or that version
+    /// isn't in the cache, which `nanyx pull` fills.
+    let private locked (lookup: Lookup) (dependency: Dependency) (requirement: VersionRequirement) : Result<string, Problem list> =
+        let error code message = Result.Error [ AtManifest(Diagnostics.at code dependency.SourceSpan message) ]
         match Lockfile.tryFind dependency.Name lookup.Locked with
         | None ->
             error
@@ -161,7 +161,7 @@ module Package =
         | Some locked ->
             let directory = PackageStore.directoryOf lookup.Store dependency.Name locked.Version
             if Directory.Exists directory then
-                Result.Ok { dependency with Directory = directory }
+                Result.Ok directory
             else
                 error
                     DiagnosticCodes.PackageNotDownloaded
@@ -231,16 +231,16 @@ module Package =
     and private dependenciesIn (lookup: Lookup) (reached: Reached) (chain: (string * string) list) (dependencies: Dependency list) : Result<Package list, Problem list> =
         let error code span message = Result.Error [ AtManifest(Diagnostics.at code span message) ]
         let fetched (dependency: Dependency) =
-            match dependency.GitHub, dependency.Version with
-            | Some reference, _ ->
+            match dependency.Source with
+            | OnGitHub reference ->
                 lookup.Store.GitHub.FetchTree reference.Repository reference.Commit
-                |> Result.map (fun directory -> { dependency with Directory = directory })
-                |> Result.mapError (fun failure -> [ notFetched dependency.PathSpan $"The dependency '{dependency.Name}'" failure ])
-            | None, Some requirement -> locked lookup dependency requirement
-            | None, None -> Result.Ok dependency
-        let read (dependency: Dependency) =
-            match manifestIn dependency.Directory with
-            | Result.Error message -> error DiagnosticCodes.InvalidManifestValue dependency.PathSpan $"The dependency '{dependency.Name}' can't be read: {message}"
+                |> Result.mapError (fun failure -> [ notFetched dependency.SourceSpan $"The dependency '{dependency.Name}'" failure ])
+            | FromIndex requirement -> locked lookup dependency requirement
+            | AtPath directory -> Result.Ok directory
+            | Shipped -> Result.Ok(ShippedPackages.directoryOf dependency.Name)
+        let read (dependency: Dependency) (directory: string) =
+            match manifestIn directory with
+            | Result.Error message -> error DiagnosticCodes.InvalidManifestValue dependency.SourceSpan $"The dependency '{dependency.Name}' can't be read: {message}"
             | Result.Ok path ->
                 match Manifest.read path with
                 | Result.Error errors -> Result.Error(errors |> List.map AtManifest)
@@ -248,7 +248,7 @@ module Package =
                     error
                         DiagnosticCodes.InvalidManifestValue
                         dependency.NameSpan
-                        $"The package in '{dependency.Directory}' is named '{found.Name}', not '{dependency.Name}': make the names match"
+                        $"The package in '{directory}' is named '{found.Name}', not '{dependency.Name}': make the names match"
                 | Result.Ok found when chain |> List.exists (fst >> PackageModules.samePath path) ->
                     let names = (chain |> List.rev |> List.map snd) @ [ found.Name ]
                     error DiagnosticCodes.PackageCycle dependency.NameSpan $"""Packages can't depend on each other in a cycle: {names |> List.map (sprintf "'%s'") |> String.concat " -> "}"""
@@ -257,12 +257,12 @@ module Package =
                     | true, other when not (PackageModules.samePath other path) ->
                         error
                             DiagnosticCodes.PackageReachedTwice
-                            dependency.PathSpan
-                            $"The build reaches the package '{found.Name}' by two paths, '{Path.GetDirectoryName other}' and '{dependency.Directory}', but a build has one of each package"
+                            dependency.SourceSpan
+                            $"The build reaches the package '{found.Name}' by two paths, '{Path.GetDirectoryName other}' and '{directory}', but a build has one of each package"
                     | _ ->
                         reached.[found.Name] <- path
                         ofManifestIn lookup reached chain found
-        dependencies |> List.map (fetched >> Result.bind read) |> all
+        dependencies |> List.map (fun dependency -> fetched dependency |> Result.bind (read dependency)) |> all
 
     /// The packages of a build whose root is `manifest`: none read yet but the root.
     let private reachedFrom (manifest: Manifest) : Reached =
