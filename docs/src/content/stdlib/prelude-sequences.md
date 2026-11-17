@@ -44,7 +44,7 @@ The sequence of no elements.
 ## `seq.delay`
 
 ```nanyx fragment
-def seq.delay: ([c] () -> [c] seq(a)) -> [c] seq(a)
+def seq.delay: ([c] () -> [d] seq(a)) -> [c, d] seq(a)
 ```
 
 The sequence `f` gives, worked out when it is pulled, not now: `f` runs each time the sequence is
@@ -112,10 +112,20 @@ def seq.map: ([c] seq(a)), ([d] a -> b) -> [c, d] seq(b)
 `f` applied to each element of `s`, when it is pulled: `(1..3) \seq.map { * 2 }` gives `2`, `4`
 and `6`.
 
+## `seq.zip`
+
+```nanyx fragment
+def seq.zip: ([c] seq(a)), ([d] seq(b)) -> [c, d] seq((a, b))
+```
+
+Pairs the elements of `s` and `t` in order, ending when either ends, as `list.zip` stops at the
+shorter list: `seq.zip(0.., list.toSeq(["a", "b"]))` gives `(0, "a")` and `(1, "b")`. Each pair
+pulls one element from each side, and nothing more.
+
 ## `seq.append`
 
 ```nanyx fragment
-def seq.append: seq(a), ([d] seq(a)) -> [d] seq(a)
+def seq.append: ([c] seq(a)), ([d] seq(a)) -> [c, d] seq(a)
 ```
 
 The elements of `s`, then those of `t`.
@@ -123,7 +133,7 @@ The elements of `s`, then those of `t`.
 ## `seq.concatMap`
 
 ```nanyx fragment
-def seq.concatMap: ([c] seq(a)), (a -> seq(b)) -> [c] seq(b)
+def seq.concatMap: ([c] seq(a)), ([d] a -> [d] seq(b)) -> [c, d] seq(b)
 ```
 
 The elements of the sequences `f` gives for each element of `s`, one after another, when it is
@@ -191,5 +201,23 @@ def seq.toList: [c] ([c] seq(a)) -> list(a)
 
 The elements of `s`, pulled now, as a list: `(1..3) \seq.toList` is `[1, 2, 3]`. Stack-safe, but
 an endless sequence never ends.
+
+## `list.fromSeq`
+
+```nanyx fragment
+def list.fromSeq: [c] ([c] seq(a)) -> list(a)
+```
+
+The elements of `s`, pulled now, as a list: `(1..3) \list.fromSeq` is `[1, 2, 3]`. It requires
+the contexts the sequence's steps do. An endless sequence never ends: cut it with [`seq.take`](#seqtake).
+
+## `list.build`
+
+```nanyx fragment
+def list.build: [c, d] ([c] () -> [d] seq(a)) -> list(a)
+```
+
+The list of what `block` yields: `list.build { yield 1  if more then yield 2 }`. The same as
+`seq(block) \list.fromSeq`.
 
 <!-- End of the generated reference. -->

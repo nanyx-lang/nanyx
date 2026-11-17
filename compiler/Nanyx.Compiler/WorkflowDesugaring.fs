@@ -349,12 +349,9 @@ module WorkflowDesugaring =
             | TypeDefStatement _
             | AttributeStatement _ -> [ statement ]
 
-        // The end of a sequence: `seq.delay({ seq.empty() })`, not `seq.empty()`, whose sequence carries no contexts. A
-        // sequence's contexts are unified where branches join, and the lambda's own contexts, which a pure one's can be
-        // any, let an end join a branch that carries some.
-        let sequenceEnd () =
-            let empty = Expression.synthetic (FunctionCall(Seqs.emptyFunction, None, []))
-            Expression.synthetic (FunctionCall(Seqs.delayFunction, None, [ Expression.synthetic (Lambda([], empty, false)) ]))
+        // The end of a sequence: `seq.empty()`. It carries no contexts, and joins a branch that carries some (see
+        // `BranchJoin.joinCarried`).
+        let sequenceEnd () = Expression.synthetic (FunctionCall(Seqs.emptyFunction, None, []))
 
         // A workflow bind or return becomes a call to the workflow's members, whose type is not that of the bind as
         // written (a bind's call is the whole rest of the workflow), so that call is a node of its own, with a new id.

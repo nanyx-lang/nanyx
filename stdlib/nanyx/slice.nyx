@@ -92,10 +92,19 @@ export def Slice.toList: Slice(a) -> list(a) = { s ->
 --| A copy of the elements of `s`, in order, as an array of its own, which doesn't keep the array
   `s` views alive.
 export def Slice.toArray: Slice(a) -> Array(a) = { s ->
-  array.fromList(Slice.toList(s))
+  Slice.map(s, { x -> x })
 }
 
 --| An array of `f` applied to each element of `s`, in order.
 export def Slice.map: [c] Slice(a), ([c] a -> b) -> Array(b) = { s, f ->
-  array.fromList(list.map(Slice.toList(s), f))
+  mapFrom(s, __nanyx_array_new(s.length), 0, f)
+}
+
+-- `made`, a new array as long as `s`, once `f` of each element of `s` from `index` on is written
+-- into it.
+def mapFrom: [c] Slice(a), array(b), int, ([c] a -> b) -> array(b) = { s, made, index, f ->
+  if index < s.length then
+    __nanyx_array_write(made, index, f(__nanyx_array_get(s.items, s.start + index)))
+    mapFrom(s, made, index + 1, f)
+  else made
 }

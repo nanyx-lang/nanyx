@@ -82,6 +82,8 @@ To cut a release, bump `<Version>` in `Directory.Build.props` and merge. The pac
 are named at that version, and a manifest names them at it exactly, so update the `version` of the
 `linters` and `host` entries in `examples/greeter/greeter.nyxp`, and the `version` of each shipped package in
 `packages/` (`packages/nanyx.console/nanyx.console.nyxp`), too: the tests fail until they match.
+Add the version's section to `docs/src/content/overview/changelog.md` in the same PR (AGENTS.md says how): it
+is the release's notes, and the workflow fails without it.
 When the workflow on `main` finds no `compiler/<version>` tag for that version, it creates the tag
 and attaches the binaries it just built and tested to a GitHub release; nothing is rebuilt. Pushes
 that leave the version unchanged release nothing. (The VS Code extension is released the same way:

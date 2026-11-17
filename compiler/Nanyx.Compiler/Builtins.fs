@@ -124,6 +124,11 @@ module Intrinsics =
     let marrayLength = prefix + "marray_length"
     let marrayGet = prefix + "marray_get"
     let marraySet = prefix + "marray_set"
+    /// A new mutable array of a length whose elements are not yet written, and its element at an index written for the
+    /// first time, as `arrayNew` and `arrayWrite` are for an array: how the standard library makes a mutable array in
+    /// one block.
+    let marrayNew = prefix + "marray_new"
+    let marrayWrite = prefix + "marray_write"
     /// Whether a value is held exclusively: it takes over a reference to the value and gives it up, and says whether that
     /// was the only one, as Lean's `isExclusive` does. A caller that holds the only reference can hand over what the value
     /// holds instead of copying it, as `MList.toList` does. The value is one that is always on the heap, such as a box.
@@ -131,6 +136,9 @@ module Intrinsics =
     /// A list's first cell changed in place to have another list as its tail, giving up the tail it had: how the standard
     /// library builds a list front to back, in cells nothing outside it can see yet.
     let listSetTail = prefix + "list_set_tail"
+    /// A list's first cell changed in place to hold another element, giving up the one it held: how `MList.set` changes
+    /// an element of cells only the `MList` holds.
+    let listSetHead = prefix + "list_set_head"
 
     /// The array intrinsic a mutable array's is, since the backend holds the two the same way: a mutable array's
     /// elements are read as an array's are.
@@ -139,6 +147,8 @@ module Intrinsics =
         elif name = marrayToList then arrayToList
         elif name = marrayLength then arrayLength
         elif name = marrayGet then arrayGet
+        elif name = marrayNew then arrayNew
+        elif name = marrayWrite then arrayWrite
         else name
 
     /// Ends the program with an exit code. It never returns, so its result is `undefined`.
@@ -233,10 +243,13 @@ module Intrinsics =
           marrayLength, { Quantified = set [ elementVar.Id ]; Type = TyFunc(MutableArrays.ofType element, intTy, []); Symbol = None; ProvidedBy = None }
           marrayGet, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ MutableArrays.ofType element; intTy ], element, []); Symbol = None; ProvidedBy = None }
           marraySet, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ MutableArrays.ofType element; intTy; element ], unitTy, []); Symbol = None; ProvidedBy = None }
+          marrayNew, { Quantified = set [ elementVar.Id ]; Type = TyFunc(intTy, MutableArrays.ofType element, []); Symbol = None; ProvidedBy = None }
+          marrayWrite, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ MutableArrays.ofType element; intTy; element ], unitTy, []); Symbol = None; ProvidedBy = None }
           arrayNew, { Quantified = set [ elementVar.Id ]; Type = TyFunc(intTy, Arrays.ofType element, []); Symbol = None; ProvidedBy = None }
           arrayWrite, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ Arrays.ofType element; intTy; element ], unitTy, []); Symbol = None; ProvidedBy = None }
           isExclusive, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, TyPrimitive "bool", []); Symbol = None; ProvidedBy = None }
           listSetTail, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ listOf element; listOf element ], unitTy, []); Symbol = None; ProvidedBy = None }
+          listSetHead, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ listOf element; element ], unitTy, []); Symbol = None; ProvidedBy = None }
           listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element, []); Symbol = None; ProvidedBy = None }
           compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy, []); Symbol = None; ProvidedBy = None }
           hash, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, intTy, []); Symbol = None; ProvidedBy = None } ]

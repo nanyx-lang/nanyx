@@ -14,7 +14,7 @@ module mlist
 import nanyx/mref
 
 -- The elements in order, the last of their cells, and how many there are. `add` changes the last
--- cell's tail to a new cell: the cells are the list's own until `toList` hands them over, so
+-- cell's tail to a new cell, and `set` changes a cell's element: the cells are the list's own until `toList` hands them over, so
 -- nothing else sees them change.
 export type MList(a) = [Memory] private MRef(first: list(a), last: list(a), count: int)
 
@@ -34,6 +34,19 @@ export def MList.fromList: [Memory] list(a) -> MList(a) = { xs ->
   `[1, 2, 3]` where an `MList` is expected.
 export def MList.fromArray: [Memory] Array(a) -> MList(a) = { xs ->
   MList.fromList(list.fromArray(xs))
+}
+
+--| A new list holding the elements of `s`, pulled now, in order. It requires the contexts the
+  sequence's steps do.
+export def MList.fromSeq: [Memory, c] ([c] seq(a)) -> MList(a) = { s ->
+  def items = MList.empty()
+  seq.fold(s, (), { _, x -> MList.add(items, x) })
+  items
+}
+
+--| A new list of what `block` yields. The same as `seq(block) \MList.fromSeq`.
+export def MList.build: [Memory, c, d] ([c] () -> [d] seq(a)) -> MList(a) = { block ->
+  MList.fromSeq(seq(block))
 }
 
 --| Adds `value` at the end of `items`.
@@ -70,17 +83,19 @@ export def MList.set
     def held = MRef.get(state)
 
     if index >= 0 and index < held.count then
-      def changed = list.mapIndexed(held.first, { i, x -> if i == index then value else x })
-      MRef.set(state, (first = changed, last = lastCell(changed), count = held.count))
+      setHeadAt(held.first, index, value)
       #ok
     else #outOfRange
   }
 
--- The last cell of `xs`, or `[]` when it has none.
-def lastCell: list(a) -> list(a) = { xs ->
-  match xs
-    | [_, ...rest] -> (if rest is [] then xs else lastCell(rest))
-    | [] -> []
+-- Changes the element of the cell `index` cells into `cells` to `value`, in place. The cells are the
+-- `MList`'s own, as they are for `add`.
+def setHeadAt: list(a), int, a -> () = { cells, index, value ->
+  match cells
+    | [_, ...rest] -> (if index == 0
+      then __nanyx_list_set_head(cells, value)
+      else setHeadAt(rest, index - 1, value))
+    | [] -> ()
 }
 
 --| How many elements `items` holds.

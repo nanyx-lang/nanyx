@@ -192,12 +192,13 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
   the one desugaring rule `yield x` is `yield(x, rest)`, and `rest` needs the builder's context, which is gone by the
   time the sequence is pulled. So `yield` is a keyword of kind `#yield`, and any lambda with one in it, a block after
   `seq` included, is rewritten into the sequence itself (`WorkflowDesugaring`): `yield x` with the rest `k` is
-  `seq.cons(x, { k })`, the end of the block `seq.delay({ seq.empty() })`, and a `for` loop whose body yields
+  `seq.cons(x, { k })`, the end of the block `seq.empty()`, and a `for` loop whose body yields
   `seq.append(seq.concatMap(items, body), seq.delay({ k }))`. `seq` is an ordinary prelude function, `seq.delay` by
-  another name. The end is delayed because the contexts a sequence carries are unified where the branches of an `if`
-  join, and `seq.empty()` carries none, so it couldn't join a branch whose sequence prints; `seq.delay` and `seq.cons`
-  take the lambda's own contexts, which a pure lambda's can be any, apart from those of the sequence it gives. There is no `yield` in a `while` loop: a `while` needs a cell, and a sequence that reads one can't
-  leave its `memory` block anyway.- **Ranges** give sequences: `1..10` and `0..` are both `seq(int)` values that can be passed around and stored, not
+  another name. Where the branches of an `if` join, a pure `seq.empty()` joins a branch whose sequence prints: the
+  whole carries what any branch's sequence does
+  ([#1908](https://github.com/nanyx-lang/nanyx/issues/1908)). There is no `yield` in a `while` loop: a `while` needs
+  a cell, and a sequence that reads one can't leave its `memory` block anyway.
+- **Ranges** give sequences: `1..10` and `0..` are both `seq(int)` values that can be passed around and stored, not
   only walked by a `for` loop.
 
 # Open questions
@@ -241,10 +242,13 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
    ([#192](https://github.com/nanyx-lang/nanyx/issues/192)).
 3. ~~Give `seq(a)` its runtime representation, with ranges as values, and `for` loops over any sequence.~~ Done
    ([#192](https://github.com/nanyx-lang/nanyx/issues/192), [#1698](https://github.com/nanyx-lang/nanyx/issues/1698)).
-4. The core functions. Done: `seq.empty`, `range`, `from`, `unfold`, `map`, `filter`, `take`, `skip`, `takeWhile`,
-   `fold`, `toList`, `cons`, `delay`, `append`, `concatMap`, and `list.toSeq`. Still to write: `seq.zip`, `set.toSeq`, `map.toSeq`.
+4. ~~The core functions.~~ Done: `seq.empty`, `range`, `from`, `unfold`, `map`, `filter`, `take`, `skip`, `takeWhile`,
+   `fold`, `toList`, `cons`, `delay`, `append`, `concatMap`, `zip`, and `list.toSeq`, `set.toSeq` and `map.toSeq`
+   ([#1795](https://github.com/nanyx-lang/nanyx/issues/1795)).
 5. `Iterable(c)`, with `for` loops and the `Seq` functions that consume a sequence taking it
    ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802), after associated types,
    [#1800](https://github.com/nanyx-lang/nanyx/issues/1800)).
 6. ~~The `seq { }` builder, by the `#yield` keyword kind, with `yield` written bare and `list.select` moved to it.~~
-   Done ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)).
+   Done ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699)). Each collection type is made from a sequence
+   with `fromSeq` and from a `yield` block with `build`, `Array.build { yield 1 }`
+   ([#1906](https://github.com/nanyx-lang/nanyx/issues/1906)).

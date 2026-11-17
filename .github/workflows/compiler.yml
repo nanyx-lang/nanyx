@@ -122,6 +122,34 @@ jobs:
         id: version
         run: echo "version=$(dotnet msbuild Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -getProperty:Version)" >> "$GITHUB_OUTPUT"
 
+      # The release's notes are the version's section of the docs site's changelog, with its links made absolute so
+      # they work on GitHub. Checked on every run, so a version bump without its write-up fails before it is merged
+      # rather than at the release.
+      - name: Take the release notes from the changelog
+        if: matrix.rid == 'linux-x64'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          CHANGELOG: ../docs/src/content/overview/changelog.md
+        run: |
+          mkdir -p notes
+          awk -v heading="# $VERSION" '
+            $0 == heading { found = 1; next }
+            found && /^# / { exit }
+            found { print }
+          ' "$CHANGELOG" | sed -e 's|](\.\./|](https://nanyx.dev/docs/|g' -e '/./,$!d' > notes/release-notes.md
+          if ! grep -q '[^[:space:]]' notes/release-notes.md; then
+            echo "::error file=docs/src/content/overview/changelog.md::The changelog has no section for $VERSION. Add a '# $VERSION' section to docs/src/content/overview/changelog.md (see AGENTS.md)."
+            exit 1
+          fi
+          cat notes/release-notes.md
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.rid == 'linux-x64'
+        with:
+          name: release-notes
+          path: compiler/notes/release-notes.md
+          if-no-files-found: error
+
       # One self-contained, single-file executable per platform, so users need no .NET runtime.
       - name: Publish
         run: >
@@ -216,6 +244,12 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - uses: actions/download-artifact@v4
+        if: steps.check.outputs.release == 'true'
+        with:
+          name: release-notes
+          path: notes
+
       - name: Tag the commit and attach the binaries to a GitHub release
         if: steps.check.outputs.release == 'true'
         uses: softprops/action-gh-release@v2
@@ -224,4 +258,4 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: Compiler ${{ needs.publish.outputs.version }}
           files: dist/*
-          generate_release_notes: true
+          body_path: notes/release-notes.md

@@ -25,6 +25,8 @@ type MatchTools =
       NominalTypes: Set<string>
       /// Lowers an expression in tail position.
       Tail: Scope -> Expression -> Expr
+      /// Lowers an arm's body in tail position, adapted to the `match`'s type.
+      Branch: Scope -> Expression -> IrType -> Expr
       /// Lowers an expression to a value that is not a `Let`, and passes that on.
       Complex: Scope -> Expression -> (Expr -> Expr) -> Expr }
 
@@ -114,7 +116,7 @@ let lowerMatch (tools: MatchTools) (scope: Scope) (expr: Expression) (values: Ex
         match (try Some (List.map2 (fun scrutinee pattern -> lowerPattern true scrutinee scrutinee.Type pattern) scrutinees patterns) with NeverMatches -> None) with
         | Some loweredPatterns ->
             let bodyScope = { armScope with Vars = armVars; LivePayloads = Set.union armScope.LivePayloads payloads }
-            Some { Patterns = loweredPatterns; Body = tools.Tail bodyScope body }
+            Some { Patterns = loweredPatterns; Body = tools.Branch bodyScope body ty }
         | None -> None
     // The scrutinees are evaluated in order, each into its local, before any arm is tested.
     let rec bindScrutinees (remaining: (Var * Expression) list) =

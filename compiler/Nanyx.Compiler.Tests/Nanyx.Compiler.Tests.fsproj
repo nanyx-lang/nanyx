@@ -37,6 +37,7 @@
     <Compile Include="Features\Contexts\ScopedContextTests.fs" />
     <Compile Include="Features\Contexts\ScopedTypeTests.fs" />
     <Compile Include="Features\Contexts\ContextGenericTypeTests.fs" />
+    <Compile Include="Features\Contexts\RecursiveCarriedContextTests.fs" />
     <Compile Include="Features\Contexts\ScopedRepresentationTests.fs" />
     <Compile Include="Features\Contexts\MemberlessContextTests.fs" />
     <Compile Include="Features\Contexts\UnsuppliedScopedContextTests.fs" />

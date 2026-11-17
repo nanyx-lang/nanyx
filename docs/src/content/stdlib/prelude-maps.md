@@ -73,6 +73,24 @@ def map.fromArray: [Eq(k), Hash(k)] array((k, v)) -> map(k, v)
 The map holding each of `entries`, in order: of two entries with the same key, the later wins.
 What a literal builds a map with where a map is expected, as `[]` is, or written `map[...]`.
 
+## `map.fromSeq`
+
+```nanyx fragment
+def map.fromSeq: [Eq(k), Hash(k), c] ([c] seq((k, v))) -> map(k, v)
+```
+
+The map holding each of the entries of `s`, pulled now, in order: of two entries with the same
+key, the later wins, as in [`map.fromList`](#mapfromlist). It requires the contexts the sequence's steps do.
+
+## `map.build`
+
+```nanyx fragment
+def map.build: [Eq(k), Hash(k), c, d] ([c] () -> [d] seq((k, v))) -> map(k, v)
+```
+
+The map of the entries `block` yields: `map.build { yield ("a", 1) }`. The same as
+`seq(block) \map.fromSeq`.
+
 ## `map.toList`
 
 ```nanyx fragment
@@ -80,6 +98,14 @@ def map.toList: map(k, v) -> list((k, v))
 ```
 
 The entries of `m`, each a key and its value, in the order the keys were first added.
+
+## `map.toSeq`
+
+```nanyx fragment
+def map.toSeq: map(k, v) -> seq((k, v))
+```
+
+The entries of `m` as a sequence of key-value pairs, in the order [`map.toList`](#maptolist) gives them.
 
 ## `map.get`
 
@@ -241,6 +267,24 @@ def set.fromArray: [Eq(a), Hash(a)] array(a) -> set(a)
 The set of the elements of `xs`, each once, in the order they first appear. What a literal
 builds a set with, `set[1, 2]`, or `[1, 2]` where a set is expected.
 
+## `set.fromSeq`
+
+```nanyx fragment
+def set.fromSeq: [Eq(a), Hash(a), c] ([c] seq(a)) -> set(a)
+```
+
+The set of the elements of `s`, pulled now, each once, in the order they first appear. It
+requires the contexts the sequence's steps do.
+
+## `set.build`
+
+```nanyx fragment
+def set.build: [Eq(a), Hash(a), c, d] ([c] () -> [d] seq(a)) -> set(a)
+```
+
+The set of what `block` yields: `set.build { yield 1  yield 1 }` holds one `1`. The same as
+`seq(block) \set.fromSeq`.
+
 ## `set.toList`
 
 ```nanyx fragment
@@ -248,6 +292,14 @@ def set.toList: set(a) -> list(a)
 ```
 
 The elements of `s`, in the order they were first added.
+
+## `set.toSeq`
+
+```nanyx fragment
+def set.toSeq: set(a) -> seq(a)
+```
+
+The elements of `s` as a sequence, in the order [`set.toList`](#settolist) gives them.
 
 ## `set.contains`
 

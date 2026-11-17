@@ -284,14 +284,6 @@ let typedIdentifier (annotation: Parser<TypeExpr, ParseState>) : Parser<Identifi
         (opt (attempt (wsInline >>. pstring ":" >>. ws >>. annotation)))
         (fun name typeOpt -> (name, typeOpt))
 
-/// A def's name with an optional same-line annotation. Unlike `typedIdentifier` (lambda parameters), the
-/// annotation is a `typeSignature`.
-let typedDefIdentifier: Parser<Identifier * TypeExpr option, ParseState> =
-    pipe2
-        nameNoWs
-        (opt (attempt (wsInline >>. pstring ":" >>. ws >>. typeSignature)))
-        (fun name typeOpt -> (name, typeOpt))
-
 let typedQualifiedIdentifier: Parser<Identifier * TypeExpr option, ParseState> =
     pipe2
         qualifiedIdentifier

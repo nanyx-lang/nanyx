@@ -4,6 +4,31 @@ module NyxCompiler.BranchJoin
 open NyxCompiler
 open NyxCompiler.InferState
 
+/// Branches of one type generic in contexts that carry different contexts, as `[c, d] seq(a)` and `[d] seq(a)` do,
+/// join as that type carrying a variable that each branch's contexts fit in: a value that carries fewer contexts is
+/// given where one carrying more is expected. Made equal, the branches' variables would be made the same contexts, and
+/// a signature's `c` would stand for none (#1908). Only a type that names itself is joined so: what the others are made
+/// from holds their arguments, which the joined type's are not.
+let private joinCarried (state: InferState) (branchTypes: Ty list) : (Ty * InferState) option =
+    let carriedOf ty =
+        match resolveSoFar state ty with
+        | TyNominal(id, args, underlying, isPrivate) ->
+            match List.tryLast args with
+            | Some (FunctionContexts.Carried _ as carried) -> Some (id, args, underlying, isPrivate, carried)
+            | _ -> None
+        | _ -> None
+    match branchTypes |> List.map carriedOf with
+    | Some (id, args, underlying, isPrivate, _) :: _ as branches when
+        branches |> List.forall (function Some (other, otherArgs, _, _, _) -> other = id && otherArgs.Length = args.Length | None -> false)
+        && (branches |> List.choose (Option.map (fun (_, _, _, _, carried) -> carried)) |> List.distinct).Length > 1 ->
+        let carried, state = freshVar state
+        let joinedArgs = List.truncate (args.Length - 1) args @ [ FunctionContexts.carried [ carried ] ]
+        RecursiveNominals.instantiate underlying joinedArgs
+        |> Option.map (fun joinedUnderlying ->
+            let joined = TyNominal(id, joinedArgs, joinedUnderlying, isPrivate)
+            joined, branchTypes |> List.fold (fun st ty -> addAssignableConstraint ty joined st) state)
+    | _ -> None
+
 /// The type of an `if` or `match` whose branches have the given types, or of a list literal's elements.
 ///
 /// When every branch is a tag (or a union of tags), the tags are collected into one union instead of
@@ -23,6 +48,8 @@ open NyxCompiler.InferState
 /// tags as a fresh rest, and is that union. So `| #some(x), _ -> #some(x) | other, f -> f(other)` is
 /// `#some(a) | s`, and `f` gives back a `#some(a) | s`: tags other than `#some` too, which it could not if it
 /// were made equal to the first branch.
+///
+/// Branches of one type generic in contexts that carry different contexts are joined by `joinCarried`.
 ///
 /// A branch of type `undefined`, which never gives a value, is left out of the join.
 let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branchTypes: Ty list) : Ty * InferState =
@@ -145,6 +172,9 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
             // A named record's fields have the types its declaration gives them, so there is nothing to join, and
             // joining them would lose the name: `[Point(x = 1, y = 2), Point(x = 3, y = 4)]` is a `list(Point)`.
             let isNamed = match head with TyAlias _ -> true | _ -> false
+            match joinCarried state branchTypes with
+            | Some joined -> joined
+            | None ->
             match branchFields with
             | Some first :: _ when
                 tail.Length > 0

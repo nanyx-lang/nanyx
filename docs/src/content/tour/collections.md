@@ -85,6 +85,25 @@ println([1, 2, 3, 4] \reduce { + })
 println(["a", "b"] \reduce { ++ })
 ```
 
+Each collection is made from a [sequence](../stdlib/prelude-sequences) with `fromSeq`, which pulls the whole sequence, and from a block that `yield`s its elements with `build`, which is `fromSeq` of the block's `seq { }`:
+
+```nanyx
+def squares = (1..4) \seq.map { n -> n * n } \Array.fromSeq
+def withZero = true
+
+def numbers = Array.build {
+  yield 1
+  yield 2
+  if withZero then yield 0
+}
+
+println(squares)
+println(numbers)
+println(seq.take(0.., 3) \set.fromSeq)
+```
+
+This prints `[1, 4, 9, 16]`, `[1, 2, 0]` and `[0, 1, 2]`. An endless sequence such as `0..` must be cut with `seq.take` first. When the sequence's steps need a context, so does making the collection: `fromSeq` of a `[Console] seq(int)` requires `Console`.
+
 ```nanyx
 import (
   nanyx/queue
