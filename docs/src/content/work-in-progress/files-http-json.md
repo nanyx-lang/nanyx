@@ -25,8 +25,8 @@ HTTP and JSON's encoders and decoders are not built yet.
   JSON needs no context: `nanyx.json` is pure.
 - **They're shipped packages,** with the compiler, as `nanyx.console.core` is, and named in a manifest's
   `dependencies` or a script's `::dependency`. The standard library stays what every program needs.
-- **Every call blocks.** There's no async, as decided for hosts that can block: in a request handler, only that
-  request's instance waits.
+- **Every call blocks, for now.** In a request handler, only that request's instance waits. Async is coming; when it
+  does, the calls that wait require it ([Concurrency and crash boundaries](./concurrency-and-crash-boundaries)).
 - **Failures are tag unions,** matched like any value, never traps: `#some(string) | #error(FsError)`.
 - **Text is UTF-8.** Bytes are `Array(U8)`.
 
