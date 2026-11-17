@@ -15,7 +15,10 @@ type Host =
       /// without importing them, as `println` and `Console`.
       Prelude: string option
       /// The directory of the host's package: beside the compiler for one it ships (see `ShippedPackages`).
-      Directory: string }
+      Directory: string
+      /// The settings it takes, each with its default: a program's manifest may set them in its `host`'s `settings`,
+      /// and may set no others. The HTTP host's `port` is one.
+      Settings: Parser.Program.DataValues.DataField list }
 
     /// The host's root module as an import names it: `nanyx.console/console.host`.
     member host.Import = $"{host.Package}/{host.Module}"

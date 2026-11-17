@@ -115,7 +115,8 @@ let ``The checked library has the shipped packages' modules, with paths beside t
           "nanyx.http.core/src/client.nyx"
           "nanyx.http.core/src/http.nyx"
           "nanyx.http.core/src/request.nyx"
-          "nanyx.http.core/src/response.nyx" ],
+          "nanyx.http.core/src/response.nyx"
+          "nanyx.http.core/src/wire.nyx" ],
         shipped |> List.choose (fun entry -> ShippedPackages.tryDisplay entry.Key) |> List.sort)
     for entry in shipped do
         for file, _ in entry.Read do

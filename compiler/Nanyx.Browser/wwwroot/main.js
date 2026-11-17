@@ -37,6 +37,7 @@ const files = [
   "packages/nanyx.http.core/src/http.nyx",
   "packages/nanyx.http.core/src/request.nyx",
   "packages/nanyx.http.core/src/response.nyx",
+  "packages/nanyx.http.core/src/wire.nyx",
 ];
 const contents = await Promise.all(files.map(async (file) => new Uint8Array(await (await fetch(file)).arrayBuffer())));
 files.forEach((file, index) => exports.BrowserCompiler.AddFile(file, contents[index]));

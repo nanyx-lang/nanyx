@@ -47,4 +47,13 @@ def Request.of: Method, string -> Request
 A request asking `method` of `url`, with no headers and an empty body, that waits 30 seconds for
 its answer.
 
+## `Request.path`
+
+```nanyx fragment
+def Request.path: Request -> string
+```
+
+The path `request`'s URL names, without its query or fragment: `/hello/ada` for
+`http://localhost:3000/hello/ada?greeting=hi`, and `/` for a URL with no path.
+
 <!-- End of the generated reference. -->

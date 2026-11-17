@@ -36,20 +36,55 @@ module HttpImport =
     /// of its own.
     let private client = new HttpClient(Timeout = Timeout.InfiniteTimeSpan)
 
-    /// The request written in `bytes` (see the module's comment), with its timeout, or why it isn't one.
-    let private requestOf (bytes: byte array) : Result<HttpRequestMessage * TimeSpan, Answer * string> =
+    /// Reads `bytes` a line at a time, each ended by `\n`, and then what is left.
+    type private Lines(bytes: byte array) =
         let mutable position = 0
-        let line () =
+
+        /// The next line, without its `\n`.
+        member _.Next() =
             let start = position
             let stop = Array.IndexOf(bytes, byte '\n', start)
             let stop = if stop < 0 then bytes.Length else stop
             position <- min bytes.Length (stop + 1)
             Encoding.UTF8.GetString(bytes, start, stop - start)
-        let methodName = line ()
-        let url = line ()
-        let timeout = TimeSpan.FromMilliseconds(float (int (line ())))
-        let headers = [ for _ in 1 .. int (line ()) -> let name = line () in name, line () ]
-        let body = bytes.[position..]
+
+        /// The headers that follow: how many there are, then each one's name and value.
+        member lines.Headers() = [ for _ in 1 .. int (lines.Next()) -> let name = lines.Next() in name, lines.Next() ]
+
+        /// What is left after the lines read.
+        member _.Rest = bytes.[position..]
+
+    /// `headers`, how many there are and then each one's name and value, each on a line of its own, after `text`.
+    let private appendHeaders (text: StringBuilder) (headers: (string * string) list) =
+        text.Append(headers.Length).Append('\n') |> ignore
+        for name, value in headers do
+            text.Append(name).Append('\n').Append(value).Append('\n') |> ignore
+
+    /// A request to the program, as its host reads it (see the module's comment): with no timeout, since it is the
+    /// program that answers it.
+    let internal writtenRequest (methodName: string) (url: string) (headers: (string * string) list) (body: byte array) =
+        let text = StringBuilder()
+        text.Append(methodName).Append('\n').Append(url).Append("\n0\n") |> ignore
+        appendHeaders text headers
+        Array.append (Encoding.UTF8.GetBytes(text.ToString())) body
+
+    /// The status, headers and body of the response written in `bytes`, or none when it isn't one.
+    let internal responseOf (bytes: byte array) : (int * (string * string) list * byte array) option =
+        try
+            let lines = Lines bytes
+            let status = int (lines.Next())
+            let headers = lines.Headers()
+            Some(status, headers, lines.Rest)
+        with :? FormatException -> None
+
+    /// The request written in `bytes` (see the module's comment), with its timeout, or why it isn't one.
+    let private requestOf (bytes: byte array) : Result<HttpRequestMessage * TimeSpan, Answer * string> =
+        let lines = Lines bytes
+        let methodName = lines.Next()
+        let url = lines.Next()
+        let timeout = TimeSpan.FromMilliseconds(float (int (lines.Next())))
+        let headers = lines.Headers()
+        let body = lines.Rest
         match Uri.TryCreate(url, UriKind.Absolute) with
         | true, uri when uri.Scheme = Uri.UriSchemeHttp || uri.Scheme = Uri.UriSchemeHttps ->
             let request = new HttpRequestMessage(HttpMethod(methodName), uri)
@@ -69,9 +104,8 @@ module HttpImport =
             |> Seq.map (fun header -> header.Key.ToLowerInvariant(), String.Join(", ", header.Value))
             |> List.ofSeq
         let text = StringBuilder()
-        text.Append(int response.StatusCode).Append('\n').Append(headers.Length).Append('\n') |> ignore
-        for name, value in headers do
-            text.Append(name).Append('\n').Append(value).Append('\n') |> ignore
+        text.Append(int response.StatusCode).Append('\n') |> ignore
+        appendHeaders text headers
         Array.append (Encoding.UTF8.GetBytes(text.ToString())) body
 
     /// Makes the request written in `bytes`, and gives what kind of answer it had, with the answer.

@@ -45,11 +45,12 @@ sit under its own entry, never at the top level, so a field is never mistaken fo
   linter runs at compile time and is never imported, like Cargo's build dependencies or npm's dev dependencies, so it
   has a field of its own.
 - **Nothing implicit.** With no `linters`, no linter runs; with no `host`, a package is a library.
-- **Settings are typed by their package** (not built). A linter or host declares the settings it accepts, so a
+- **Settings are typed by their package** (built for hosts). A linter or host declares the settings it accepts, so a
   misspelt key is an error naming the package. For linters that's part of their contract
   ([#107](https://github.com/nanyx-lang/nanyx/issues/107)); for hosts it settles the Hosts page's question on typed
-  host configuration. Until then, a linter's `settings` hold only `rules`, and a host's `settings` are an error
-  (`NYX0024`).
+  host configuration. A host's are built: it declares the settings it takes, with their defaults, and a program's
+  `settings` for it are checked against them ([#1786](https://github.com/nanyx-lang/nanyx/issues/1786)). A linter's
+  `settings` still hold only `rules`.
 
 # What it needs
 

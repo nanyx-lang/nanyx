@@ -218,8 +218,11 @@ module Package =
                     match found.Declares with
                     | None -> error (HostPackages.notAHost entry.Package)
                     | Some host ->
-                        reached.[found.Name] <- path
-                        ofManifestIn lookup reached [] found |> Result.map (fun package -> Some (host, package))
+                        match HostSettings.errors host entry with
+                        | [] ->
+                            reached.[found.Name] <- path
+                            ofManifestIn lookup reached [] found |> Result.map (fun package -> Some (host, package))
+                        | errors -> Result.Error(errors |> List.map AtManifest)
 
     /// The packages `dependencies` lists, each read with its own dependencies, or what is wrong: a directory with no
     /// manifest, a package named other than its dependant names it, one that depends on itself through others, or one
@@ -333,9 +336,9 @@ module Package =
         let entry =
             if Directory.Exists full then
                 let packageName = match manifestIn full with Result.Ok path -> Path.GetFileNameWithoutExtension path | Result.Error _ -> name
-                { Package = packageName; Path = Some full; Span = SourceSpan.none }
+                { Package = packageName; Path = Some full; Span = SourceSpan.none; Settings = [] }
             else
-                { Package = name; Path = None; Span = SourceSpan.none }
+                { Package = name; Path = None; Span = SourceSpan.none; Settings = [] }
         match hostIn { Store = PackageStore.user (); Locked = Lockfile.empty } (Reached()) (Some entry) with
         | Result.Ok host -> Result.Ok { package with Host = host |> Option.map fst; HostPackage = host |> Option.map snd }
         | Result.Error problems -> Result.Error(problems |> List.map describe |> String.concat "; ")
@@ -434,7 +437,7 @@ module Package =
         (dependencies: Dependency list)
         (files: FileReference list)
         : Result<PackageModules, Diagnostic list> =
-        let host = host |> Option.defaultValue { Package = Hosts.consolePackage; Path = None; Span = span }
+        let host = host |> Option.defaultValue { Package = Hosts.consolePackage; Path = None; Span = span; Settings = [] }
         let reached = Reached()
         let lookup = { Store = store; Locked = Lockfile.empty }
         let diagnostics problems =

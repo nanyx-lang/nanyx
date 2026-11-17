@@ -207,16 +207,17 @@ let ``An unknown linter, rule, severity or host is an error`` () =
 """
     )
 
+// Which settings a host takes is checked once the host is read (see `HostSettings`, and the HTTP host's tests).
 [<Fact>]
-let ``A host's settings are not supported yet`` () =
+let ``A host's settings must be a record`` () =
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.UnsupportedManifestField.Code, "A host takes no settings yet" ],
+        [ DiagnosticCodes.InvalidManifestValue.Code, "The host's `settings` must be a record, `(port = 3000)`, not 3000" ],
         errorsOf
             $"""
 (
   package = (name = "demo", version = "0.1.0")
   dependencies = [(package = "acme.util", path = "../util")]
-  host = (package = "nanyx.console", version = "{Toolchain.version}", settings = (colour = true))
+  host = (package = "nanyx.http", version = "{Toolchain.version}", settings = 3000)
 )
 """
     )

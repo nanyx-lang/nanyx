@@ -86,6 +86,7 @@
     <Compile Include="Features\Hosts\RunExternTests.fs" />
     <Compile Include="Features\Hosts\RunFileSystemTests.fs" />
     <Compile Include="Features\Hosts\RunHttpClientTests.fs" />
+    <Compile Include="Features\Hosts\RunHttpHostTests.fs" />
     <Compile Include="Features\Hosts\RunHostMemoryTests.fs" />
     <Compile Include="Features\Hosts\ChooseHostTests.fs" />
     <Compile Include="Features\Hosts\RunScriptTests.fs" />

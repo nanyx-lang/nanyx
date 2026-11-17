@@ -1,0 +1,90 @@
+--| The HTTP host: it serves a program whose entry point is a request handler.
+
+  A program's `@entry` is a `Request -> Response` function, which is passed to [`run`]. Each
+  request is answered by a fresh instance of the program: the runtime starts one, `run` takes the
+  request from it through `nanyx:serve`, an import of the `nanyx` runtime's own, calls the handler,
+  and gives the runtime the response. So nothing is shared between requests, and a request whose
+  handler stops the program ends only that request, which the runtime answers with a 500.
+  `nanyx run` serves the program on the port the host's `port` setting gives, 3000 by default.
+
+  The host provides [`Http`], for requests the handler makes, written on the runtime's
+  `nanyx:http`, and nothing else: no `Console` and no `FileSystem`.
+export module http.host
+
+import (
+  nanyx/host.memory
+  nanyx/host.runtime
+  nanyx.http.core/client as (Http, HttpError)
+  nanyx.http.core/request as (Request)
+  nanyx.http.core/response as (Response)
+  nanyx.http.core/wire as (readRequest, readResponse, writeRequest, writeResponse)
+)
+
+@extern("nanyx:http", "send")
+def httpSend: [HostRuntime] I32, I32, I32 -> I32
+
+@extern("nanyx:http", "receive")
+def httpReceive: [HostRuntime] I32 -> ()
+
+@extern("nanyx:serve", "requestLength")
+def requestLength: [HostRuntime] () -> I32
+
+@extern("nanyx:serve", "request")
+def requestInto: [HostRuntime] I32 -> ()
+
+@extern("nanyx:serve", "respond")
+def respond: [HostRuntime] I32, I32 -> ()
+
+-- The host keeps one thing in the block the module sets aside for it (see `hostState`): at 0, what
+-- kind of answer a request the handler made had.
+
+--| Sends `request` through `nanyx:http`, and gives its response, or why there is none. The console
+  host does the same: only a host's root module may call foreign functions, so the two can't share
+  it.
+def sendThroughRuntime: [HostRuntime] Request -> #some(Response) | #error(HttpError) = { request ->
+  def wire = writeRequest(request)
+  def length = httpSend(addressOf(wire), byteLength(wire), hostState())
+  keepAlive(wire)
+  def buffer = allocate(length + 1)
+  httpReceive(buffer)
+  def answer = stringAt(buffer, length)
+  free(buffer)
+
+  match readI32(hostState())
+    | 0 ->
+      match readResponse(answer)
+        | #some(response) -> #some(response)
+        | #malformed -> #error(#other("the runtime's answer to the request was malformed"))
+    | 1 -> #error(#timeout)
+    | 2 -> #error(#connectionFailed(answer))
+    | 3 -> #error(#invalidUrl)
+    | _ -> #error(#other(answer))
+}
+
+--| The request this instance answers, from the runtime.
+def incoming: [HostRuntime] () -> #some(Request) | #malformed = { _ ->
+  def length = requestLength()
+  def buffer = allocate(length + 1)
+  requestInto(buffer)
+  def text = stringAt(buffer, length)
+  free(buffer)
+  readRequest(text)
+}
+
+--| Gives the runtime `response`, the answer to the request.
+def answer: [HostRuntime] Response -> () = { response ->
+  def text = writeResponse(response)
+  respond(addressOf(text), byteLength(text))
+  keepAlive(text)
+}
+
+--| Answers the request this instance was started for with `handle`, the program's entry point, in
+  an `Http` that makes requests through the runtime. A request the runtime wrote wrongly is answered
+  with a 400.
+export def run: [HostRuntime] ([Http] Request -> Response) -> () = { handle ->
+  use Http(sendRequest = { request -> sendThroughRuntime(request) })
+
+  match incoming()
+    | #some(request) -> answer(handle(request))
+    | #malformed -> answer(Response.text(400, "Bad Request"))
+}

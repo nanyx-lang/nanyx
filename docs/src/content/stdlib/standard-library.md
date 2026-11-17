@@ -50,6 +50,10 @@ provides `Http`:
 - [http](./http) — making requests (`nanyx.http.core/http`)
 - [request](./request) — `Request` and `Method` (`nanyx.http.core/request`)
 - [response](./response) — `Response` (`nanyx.http.core/response`)
+- [wire](./wire) — how the runtime's HTTP imports write requests and responses, for hosts (`nanyx.http.core/wire`)
+
+The HTTP host, `nanyx.http`, serves a program whose entry point is a `Request -> Response` handler: see the
+[HTTP server cookbook](../cookbook/http-server).
 
 It also ships `nanyx.json`, which a program names in its dependencies to read and write JSON:
 

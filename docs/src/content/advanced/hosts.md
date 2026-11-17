@@ -83,6 +83,27 @@ export def greet: [Console] string -> () = { name ->
 
 An application that depends on the library calls `greet` from its entry point, which the console host gives a `Console`.
 
+# The HTTP host
+
+The HTTP host, `nanyx.http`, serves a program whose entry point is a request handler, a `Request -> Response`
+function. It provides `Http`, for requests the handler makes itself, and neither `Console` nor `FileSystem`. Each
+request is answered by a fresh instance of the program, so nothing is shared between requests, and a handler that
+stops the program ends only its own request, which is answered with a 500.
+
+```nanyx fragment
+@entry
+def main: Request -> Response = { request ->
+  match Request.path(request)
+    | "/" -> Response.text(200, "Welcome!")
+    | _ -> Response.text(404, "Not Found")
+}
+```
+
+A package names it as its host with the port to serve on, `host = (package = "nanyx.http", version = "0.28.0",
+settings = (port = 8080))`, and `nanyx run` serves it there, on 3000 when no port is given. A host declares the
+settings it takes, each with its default, so a setting it doesn't take is an error at the setting. See the
+[HTTP server cookbook](../cookbook/http-server).
+
 # Hosts and contexts
 
 A host provides the contexts a program may require, and only those. A function that requires a context the host doesn't provide can't be called from the entry point, so a host that provides no `FileSystem` guarantees that neither the program nor any library it uses touches the file system. A library says what it needs in its types, `[Console]`, and runs under every host that provides it.
@@ -203,6 +224,7 @@ The compiler ships the packages every program needs beside itself, in a `package
 - `nanyx.console`, the console host;
 - `nanyx.console.core`, its interface package, which declares `Console` and `Env`;
 - `nanyx.fs`, the interface package of the file system, which declares `FileSystem`, `Path` and the functions on them;
-- `nanyx.http.core`, the interface package of HTTP, which declares `Http`, `Request`, `Response` and the functions on them.
+- `nanyx.http.core`, the interface package of HTTP, which declares `Http`, `Request`, `Response` and the functions on them;
+- `nanyx.http`, the HTTP host.
 
 A manifest or a directive names a package the compiler ships at the compiler's version exactly; any other version is an error that names the one shipped (`NYX0029`). In a `::host` or `::dependency` directive it needs no version at all: `::dependency nanyx.console.core`. The standard library, `nanyx/...`, is built into the compiler and is never listed as a dependency.
