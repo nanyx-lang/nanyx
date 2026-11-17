@@ -6,8 +6,9 @@ order: 6
 
 Two questions that turn out to be one design. **Async:** an HTTP client, and soon a server, needs to wait on many
 things at once without a thread each. **Crash boundaries:** a crash ends the whole program today, and a server
-can't let one bad request do that. This page collects the ideas and recommends a direction. Nothing here is decided
-or built.
+can't let one bad request do that. This page collects the ideas and recommends a direction. Async's direction is
+decided (direct style, B) and filed in stages ([Plan](#plan)); the crash-boundary parts are still proposals. Nothing
+is built yet.
 
 Two things are fixed already and constrain everything below:
 
@@ -102,8 +103,9 @@ Unison's effect systems, and Nanyx's contexts are already most of the way there.
 contexts are for: a function's type no longer says whether it can wait, and a host that can't suspend has no way to
 refuse a program that would.
 
-**Recommendation: B.** It keeps capabilities in types, avoids colouring through context polymorphism, and the
-workflow form stays available for the cases a workflow is good at (generators, parsers), not for async.
+**Decided: B,** by the maintainer on 2026-11-17, with no visible `await` at a suspension point. It keeps
+capabilities in types, avoids colouring through context polymorphism, and the workflow form stays available for the
+cases a workflow is good at (generators, parsers), not for async.
 
 ## What colouring costs in each
 
@@ -187,7 +189,7 @@ def both: [Async, Http] () -> (Response, Response) = {
 }
 ```
 
-Decided with the maintainer on 2026-11-17, for direction B (which is itself still to be confirmed):
+Decided with the maintainer on 2026-11-17:
 
 - **`concurrent` is an ordinary function** whose lambda requires a `Scope` context, as `list.select`'s requires
   `Yield`. It returns only when every task started in it has finished.
@@ -433,7 +435,6 @@ in the code.
 
 # Open questions
 
-- **A or B.** Direct style with an `Async` context, or workflows. Everything else here assumes B.
 - **How cancellation is typed.** A `#cancelled` case in every waiting call's error type, or a wrapper, or a crash
   that only a scope sees?
 - **Fresh or reused instances.** `isolate` in a fresh instance gives clean memory; reusing a warm one is faster but
@@ -445,9 +446,6 @@ in the code.
 - **Wasm exceptions for user crashes.** WebAssembly 3.0 has `throw` and `try_table`. A `crash` that throws could make
   a boundary cheaper and let the compiler drop reference counts as it unwinds. Real traps (stack overflow, out of
   memory) still need the instance boundary, so this would be an optimisation, not a replacement.
-- **Is hidden suspension acceptable?** The [rules above](#rules-that-make-hidden-suspension-safe) mean nothing a task
-  can see changes across a wait, which is what explicit `await` protects. Some people still want to see where code
-  can be interrupted.
 - **Effect handlers in general.** Only the host's `Async` suspends, for now. Should `Async` be designed as the first
   case of a general feature that user contexts get later?
 - **A cancelled stream.** Does a pull in a cancelled task give `#done`, as [proposed](#streams-async-sequences)?
@@ -456,12 +454,15 @@ in the code.
 
 # Plan
 
-Not yet filed. In order:
+Async is filed in three stages, after the keyword kinds. The crash-boundary steps are still proposals, not filed.
 
-1. Crash reports: `Crash` with message, span and stack, and the console, HTTP and test hosts using it.
-2. `isolate`, the deep copy, and the test runner and HTTP host built on it.
-3. Decide A or B. If B: the `Async` context, `concurrent` with `start!` (keyword kinds, #1879), `concurrent.all`, `race` and `timeout`, on instance
-   suspension first.
-4. Tasks in one instance, by stack switching, with Asyncify as the fallback.
-5. Channels, and the concurrent stream operators on them: `seq.buffer`, `conflate`, `merge`.
-6. `nanyx.process`: typed mailboxes and supervisors, and hot streams on them.
+| Step | Issue | Stage |
+|---|---|---|
+| The `#delay` and `#bindF` keyword kinds | [#1879](https://github.com/nanyx-lang/nanyx/issues/1879) | Ready |
+| Async 1: the `Async` context, provided by hosts; a wait suspends the instance | [#1889](https://github.com/nanyx-lang/nanyx/issues/1889) | Ready |
+| Async 2: `concurrent`, `start!` and `await`, tasks on stack switching | [#1890](https://github.com/nanyx-lang/nanyx/issues/1890) | Planning: how cancellation is typed |
+| Async 3: channels, and `seq.buffer`, `conflate` and `merge` | [#1891](https://github.com/nanyx-lang/nanyx/issues/1891) | Planning: full channels, cancelled streams |
+| Asyncify, for hosts with neither stack switching nor JSPI | | not filed |
+| Crash reports: `Crash` with message, span and stack, used by the console, HTTP and test hosts | | proposed |
+| `isolate`, the deep copy, and the test runner and HTTP host built on it | | proposed |
+| `nanyx.process`: typed mailboxes and supervisors, and hot streams on them | | proposed |
