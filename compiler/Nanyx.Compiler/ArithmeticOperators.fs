@@ -62,12 +62,6 @@ module internal ArithmeticOperators =
         | Some does, Some context -> Some (context, does)
         | _ -> None
 
-    /// The error for `op`, which needs `context`, on values of the type variable `v` of the function `defName`, whose
-    /// type does not require it.
-    let private undeclared (op: string) (context: string) (does: string) (v: TyVar) (defName: Identifier) =
-        let tyText = Unifier.tyToDisplayString Ascii (TyVar v)
-        $"'{defName}' {does} values of type '{tyText}' with {NumericLiterals.written op}, so its type must require {context}({tyText}): add [{context}({tyText})] to the type of '{defName}'"
-
     /// Checks `expr`, the operator `op` on operands of the types `leftTy` and `rightTy`, which calls no definition. An
     /// operand whose type is already known not to be a number is an error that names the operator. So is one of a type
     /// variable of the type the function around it writes, which then does not require the context the operator needs
@@ -85,16 +79,18 @@ module internal ArithmeticOperators =
         match tys |> List.tryFind NumericLiterals.isKnownNonNumber, contextFor state op, declaredVar, state.ContextScope with
         | Some ty, _, _, _ -> Error [ Diagnostics.at DiagnosticCodes.TypeMismatch expr.Span (NumericLiterals.notANumber op ty) ]
         | None, Some (context, does), Some v, DefScope(defName, false) ->
-            let required = $"{context}({Unifier.tyToDisplayString Ascii (TyVar v)})"
-            let error =
-                Diagnostics.at DiagnosticCodes.MissingContextMembers expr.Span (undeclared op context does v defName)
-                |> ContextFixes.withAddToType state defName required
+            let error = NumericLiterals.undeclared state expr.Span op { Def = defName; Context = context; Does = does } v
             Ok { state with FailedExprs = (expr.Id, [ error ]) :: state.FailedExprs }
         | None, Some _, None, DefScope(defName, true) when areVariables ->
             let pending = { InDef = defName; Operator = expr.Id; MemberName = memberOf op; OperandTy = leftTy; At = expr.Span }
             Ok { state with PendingArithmetic = pending :: state.PendingArithmetic }
         | _ when NumericLiterals.isOpen state leftTy -> Ok state
-        | _ when areVariables -> Ok (NumericLiterals.awaitOperand op expr leftTy state)
+        | _ when areVariables ->
+            let requires =
+                match contextFor state op, state.ContextScope with
+                | Some (context, does), DefScope(defName, false) -> Some { Def = defName; Context = context; Does = does }
+                | _ -> None
+            Ok (NumericLiterals.awaitOperand op expr leftTy requires state)
         | _ -> Ok (addConstraint leftTy numberTy state)
 
     /// What a literal operand of an arithmetic operator or a comparison is, where it is not the literal it would be

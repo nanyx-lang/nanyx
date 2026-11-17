@@ -451,6 +451,15 @@ def joinAll: [Iter(c, elem = string)] c -> string = { items ->
 
 Naming a member the context doesn't have, or one that isn't a type, as in `Iter(c, next = int)`, is NYX0267.
 
+An associated type is one of the function's type variables like any other, so a context the function needs of it is written in its type too. Interpolating an element, comparing two with `==`, adding them with `+` or passing one to a function that requires a context of it needs `ToString(elem)`, `Eq(elem)`, `Add(elem)` or that context in the list, and leaving it out is NYX0205, with a fix that adds it. A function that doesn't write its type infers them, as it does for its other variables.
+
+```nanyx fragment
+def iterate: [Iterable(i), ToString(elem), Console] i -> () = { seq ->
+  for seq | item ->
+    println("Got item: {item}")
+}
+```
+
 An instance's associated type is what its members' types make it. An instance [synthesized](#context-synthesis) from a type's attached definitions finds `Bag.next` by name, and its type, `Bag -> #some(int, Bag) | #done`, makes the `elem` of `Iter(Bag)` an `int`. An instance a `use` loads is the same, and a `use` can fix one by name too, as in `use Sized(Bag, elem = int)(...)`. Where no member's type mentions an associated type, the type declares it with an alias attached to it:
 
 ```nanyx fragment
