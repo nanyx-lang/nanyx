@@ -105,6 +105,49 @@ refuse a program that would.
 **Recommendation: B.** It keeps capabilities in types, avoids colouring through context polymorphism, and the
 workflow form stays available for the cases a workflow is good at (generators, parsers), not for async.
 
+## Where `Async` comes from
+
+Nothing starts it: like `Console`, the host provides it. A host that can suspend (the console host on Wasmtime, the
+HTTP host) runs the entry with `Async` in scope, and inference carries it down to every function that calls one that
+waits:
+
+```nanyx fragment
+::host nanyx.console
+
+def fetchName: [Async, Http] string -> string = { url ->
+  def response = http.get(url) \orCrash("no name")
+  response.text
+}
+
+println("Hello, {fetchName("https://example.com/name")}")    -- the top level already has Async and Http
+```
+
+- **No `async { }` block.** "May wait" is the `Async` context, which code has or doesn't. "Runs at the same time" is
+  [`concurrently`](#structured-concurrency). Those are the two things an `async` block mixes up in C# or JavaScript.
+- **Code without `Async` can't get it.** A library that doesn't ask for it provably never waits, as one that doesn't
+  ask for `Console` never prints.
+- **No `runBlocking`.** Inside a host that can suspend there's nothing to bridge, and in one that can't, a blocking
+  runner would need an event loop the host doesn't have. The missing-context error is the honest answer.
+- **The test host provides it too,** and can provide a deterministic one, with simulated time and a fixed task order,
+  so a test of `timeout` or `race` runs instantly and the same way every time.
+
+## Rules that make hidden suspension safe
+
+Explicit `await` exists to mark where other code can run in between, so that a reader knows where shared state may
+change. Direct style hides those points, which is safe in Nanyx under two rules:
+
+- **Values are immutable,** so another task can never change a value you hold, only make its own.
+- **A task can't capture scoped mutable state.** Starting a task refuses a function that captures anything with a
+  scoped context (an `MRef`, an `MList`), as `isolate` does. Within one task, code runs in order and nothing else
+  can touch its cells; between tasks, only immutable values are shared.
+
+And one rule that keeps the feature small:
+
+- **Only the host's `Async` can suspend.** A context whose member suspends the caller and resumes it later is an
+  algebraic effect. Letting any user context do that (generators, backtracking, a user-written scheduler) would make
+  contexts a full effect system, as in Koka and OCaml 5. That can be added later without breaking anything; it isn't
+  needed for async.
+
 ## Structured concurrency
 
 Waiting on one thing is a plain call. Doing several at once is a block whose tasks can't outlive it, as Trio's
@@ -170,6 +213,73 @@ The language doesn't change between these; the hosts and the backend do.
 
 A host that can't suspend at all (a plain WASI command with no async support) doesn't provide `Async`, and a program
 that needs it doesn't type-check there. That's the capability model doing its job.
+
+## Streams: async sequences
+
+A [lazy sequence](./lazy-sequences) carries the contexts its steps need, `[k] seq(a)`, so a sequence whose steps wait
+is just a `seq` with `Async` among them. That's what Kotlin calls a *flow*: a stream of values that are produced
+one at a time, possibly waiting between them, and only when someone reads them. `file.lines` is already this shape,
+with `FileSystem`.
+
+Kotlin's first flow example:
+
+```kotlin
+flow { for (i in 1..3) { delay(100); emit(i) } }
+    .map { it * 2 }
+    .collect { println(it) }
+```
+
+In Nanyx:
+
+```nanyx fragment
+def ticks: [Async] seq(int) = seq.unfold(1) { i ->
+  if i > 3 then #done
+  else
+    clock.sleep(ms = 100)
+    #some(i, i + 1)
+}
+
+for ticks \seq.map { * 2 } | n -> println("{n}")
+```
+
+A server reading events as they arrive looks the same:
+
+```nanyx fragment
+def events: [Async, Http] string -> [Async, Http] seq(Event) = { url ->
+  http.stream(url) \seq.map(parseEvent)
+}
+
+for events(feedUrl) \seq.filter { e -> e.level == #error } \seq.take(10) | e -> alert(e)
+```
+
+| Kotlin | Nanyx |
+|---|---|
+| `flow { emit(x) }` | `seq.unfold` today; a `seq { yield x }` builder once [#1699](https://github.com/nanyx-lang/nanyx/issues/1699) is decided |
+| Cold: nothing runs until it's collected | The same: a `seq` runs only as it's pulled |
+| `map`, `filter`, `take`, `fold` | `seq.map`, `seq.filter`, `seq.take`, `seq.fold`, with no async versions, since they're generic over contexts |
+| `collect` | a `for` loop, or `seq.fold` |
+| A `suspend` lambda in `map` | an `[Async]` lambda, which makes the result an `[Async] seq` |
+| Cancelling the collector's scope stops the flow | cancelling the `concurrently` scope that's pulling it |
+
+Kotlin needs `Flow` beside `Sequence` because `Sequence`'s operators can't suspend. Nanyx's `seq` operators take
+`[c]` functions, so one type is both.
+
+**Where it differs:**
+
+- **Pull, not push.** A Kotlin flow's producer calls the collector; a `seq`'s consumer pulls each element. For a
+  pipeline that runs in one task the two behave the same. The difference shows only when the producer and consumer
+  run at the same time, which is the next point.
+- **Concurrent operators are library code over channels.** `buffer`, `conflate`, `flatMapMerge` and `flowOn` run the
+  producer in a coroutine of its own. In Nanyx each starts a task in a `concurrently` scope that pulls the source and
+  sends into a bounded channel, and gives back a `seq` that reads the channel: `events(url) \seq.buffer(16)`. They
+  need tasks and channels, so they come after the plain operators.
+- **Hot streams are processes.** Kotlin's `SharedFlow` and `StateFlow` run whether or not anyone is collecting and
+  have many subscribers. In Nanyx that's a [process](#processes-mailboxes-and-supervision) that subscribers register
+  with, not a `seq`.
+- **Cancellation ends the sequence.** A waiting step in a cancelled task gets `#cancelled`, but a `seq`'s elements
+  have nowhere to put it. Proposed: a pull in a cancelled task gives `#done`, so the sequence ends and a `for` loop over
+  it finishes normally. Unlike a failed read in `file.lines`, nothing is lost by ending quietly: the scope that was
+  cancelled already knows.
 
 # 3. Tasks and processes
 
@@ -280,9 +390,14 @@ in the code.
 - **Wasm exceptions for user crashes.** WebAssembly 3.0 has `throw` and `try_table`. A `crash` that throws could make
   a boundary cheaper and let the compiler drop reference counts as it unwinds. Real traps (stack overflow, out of
   memory) still need the instance boundary, so this would be an optimisation, not a replacement.
-- **Data races.** Tasks share an instance, so two tasks in one `concurrently` touching the same `MRef` is a race on
-  one thread's interleavings. Should starting a task require that what it captures has no scoped context, as
-  `isolate` does?
+- **Is hidden suspension acceptable?** The [rules above](#rules-that-make-hidden-suspension-safe) mean nothing a task
+  can see changes across a wait, which is what explicit `await` protects. Some people still want to see where code
+  can be interrupted.
+- **Effect handlers in general.** Only the host's `Async` suspends, for now. Should `Async` be designed as the first
+  case of a general feature that user contexts get later?
+- **A cancelled stream.** Does a pull in a cancelled task give `#done`, as [proposed](#streams-async-sequences)?
+- **Channels.** Bounded by default, and what a send to a full one does: wait (back-pressure), drop, or keep only the
+  latest (`conflate`).
 
 # Plan
 
@@ -293,4 +408,5 @@ Not yet filed. In order:
 3. Decide A or B. If B: the `Async` context, `concurrently`, `async.all`, `race` and `timeout`, on instance
    suspension first.
 4. Tasks in one instance, by stack switching, with Asyncify as the fallback.
-5. `nanyx.process`: typed mailboxes and supervisors.
+5. Channels, and the concurrent stream operators on them: `seq.buffer`, `conflate`, `merge`.
+6. `nanyx.process`: typed mailboxes and supervisors, and hot streams on them.
