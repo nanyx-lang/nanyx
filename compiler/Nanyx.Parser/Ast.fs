@@ -738,22 +738,31 @@ module PatternSyntax =
     let isPatternTag (tag: Identifier) = tag <> "" && Char.IsUpper tag[0]
 
     /// What a pattern's def name says of it, which is what a match that uses it needs to know: the tags it returns,
-    /// whether it takes arguments, whether it is partial, and whether its function returns a `bool`, as a partial
-    /// pattern with one tag and no payload does.
+    /// those of them that carry a payload, whether it takes arguments, whether it is partial, and whether its function
+    /// returns a `bool`, as a partial pattern with one tag and no payload does.
     type Shape =
         { Tags: Identifier list
+          WithPayload: Identifier list
           TakesArguments: bool
           IsPartial: bool
           ReturnsBool: bool }
 
     let private flags = [ 'A', (fun shape -> shape.TakesArguments); 'P', (fun shape -> shape.IsPartial); 'B', (fun shape -> shape.ReturnsBool) ]
 
+    /// What follows a tag that carries a payload in a pattern's def name. A tag is read by its length, and the next
+    /// starts with a digit, so this can't be taken for either.
+    let private payloadMark = 'p'
+
     /// The def name of the pattern of shape `shape`: its flags, then each tag after its length, so that the tags can be
-    /// read back whatever they are made of. `#Even | #Odd` is `__pattern__4Even3Odd`, and `#Zero | _` is
-    /// `__pattern_PB_4Zero`.
+    /// read back whatever they are made of, with `p` after each that carries a payload. `#Even | #Odd` is
+    /// `__pattern__4Even3Odd`, `#Zero | _` is `__pattern_PB_4Zero`, and `#Hsl(float, float, float)` is
+    /// `__pattern__3Hslp`.
     let defName (shape: Shape) =
         let written = flags |> List.filter (fun (_, isSet) -> isSet shape) |> List.map (fst >> string) |> String.concat ""
-        prefix + written + "_" + (shape.Tags |> List.map (fun tag -> $"{tag.Length}{tag}") |> String.concat "")
+        let tag (name: Identifier) =
+            let mark = if List.contains name shape.WithPayload then string payloadMark else ""
+            $"{name.Length}{name}{mark}"
+        prefix + written + "_" + (shape.Tags |> List.map tag |> String.concat "")
 
     /// The shape of the pattern whose def is named `name`, the last part of a qualified name, if it is a pattern's.
     let shapeOf (name: Identifier) : Shape option =
@@ -763,7 +772,8 @@ module PatternSyntax =
             None
         else
             let written = local.Substring(prefix.Length, separator - prefix.Length)
-            let rec read (at: int) (tags: Identifier list) =
+            // Each tag, and whether it carries a payload.
+            let rec read (at: int) (tags: (Identifier * bool) list) =
                 if at = local.Length then
                     Some (List.rev tags)
                 else
@@ -773,11 +783,17 @@ module PatternSyntax =
                     else
                         let length = int (local.Substring(at, digits))
                         let start = at + digits
-                        if start + length > local.Length then None else read (start + length) (local.Substring(start, length) :: tags)
+                        if start + length > local.Length then
+                            None
+                        else
+                            let after = start + length
+                            let hasPayload = after < local.Length && local[after] = payloadMark
+                            read (if hasPayload then after + 1 else after) ((local.Substring(start, length), hasPayload) :: tags)
             read (separator + 1) []
             |> Option.filter (fun tags -> not tags.IsEmpty)
             |> Option.map (fun tags ->
-                { Tags = tags
+                { Tags = tags |> List.map fst
+                  WithPayload = tags |> List.filter snd |> List.map fst
                   TakesArguments = written.Contains 'A'
                   IsPartial = written.Contains 'P'
                   ReturnsBool = written.Contains 'B' })
@@ -793,6 +809,7 @@ module PatternSyntax =
     /// The shape of a pattern with the signature `signature`.
     let shape (signature: Signature) : Shape =
         { Tags = signature.Results |> List.map fst
+          WithPayload = signature.Results |> List.filter (snd >> Option.isSome) |> List.map fst
           TakesArguments = signature.Arguments.IsSome
           IsPartial = signature.IsPartial
           ReturnsBool = signature.IsPartial && (match signature.Results with [ _, None ] -> true | _ -> false) }

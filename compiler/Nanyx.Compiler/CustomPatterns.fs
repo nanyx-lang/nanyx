@@ -206,9 +206,17 @@ module internal CustomPatterns =
     /// if it is a pattern's tag that the match is rewritten for; or the error in how it is given arguments.
     let private useOf (scope: Scope) (part: Pattern) : Result<Use, Diagnostic> option =
         let found tag = match resolve scope tag with Found pattern -> Some pattern | _ -> None
-        // A pattern that returns a `bool` returns `true` for its tag (see `lowerDeclaration`).
+        // A pattern that returns a `bool` returns `true` for its tag (see `lowerDeclaration`). A use that leaves out the
+        // payload of a tag that carries one matches the tag whatever its payload is.
         let result (pattern: InScope) tag payload =
-            if pattern.Shape.ReturnsBool then Pattern.at part.Span (LiteralPattern(BoolLit true)) else { part with Kind = TagPattern(tag, payload) }
+            if pattern.Shape.ReturnsBool then
+                Pattern.at part.Span (LiteralPattern(BoolLit true))
+            else
+                let payload =
+                    match payload with
+                    | None when List.contains tag pattern.Shape.WithPayload -> Some (Pattern.at part.Span WildcardPattern)
+                    | written -> written
+                { part with Kind = TagPattern(tag, payload) }
         match part.Kind with
         | TagPattern(tag, payload) when PatternSyntax.isPatternTag tag ->
             found tag
