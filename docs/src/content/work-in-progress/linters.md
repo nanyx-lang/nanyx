@@ -35,7 +35,9 @@ written here:
   compiler's internal representation free to change, and avoid copying large trees across the WebAssembly boundary.
 - The contract is versioned from day one, and a linter declares the version it targets.
 - A fix is a list of text edits, applied by the editor and by `nanyx check --fix`.
-- A linter may see the whole package, not only one module, for rules such as "exported but never used".
+- A linter may see the whole package, not only one module, for rules such as "exported but never used". The
+  official linter sees one module today, so its `unconstructibleType` reports an exported nominal type that another
+  module of the same package gives out, where `@allow` has to cover it.
 - A package names its linters in its manifest's `linters` field ([The package manifest](./package-manifest)).
 
 # Code with errors

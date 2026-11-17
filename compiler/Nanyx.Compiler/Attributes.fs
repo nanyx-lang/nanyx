@@ -16,7 +16,7 @@ module Attributes =
     let customKeywordTypeAttribute = "customKeywordType"
 
     /// The attribute that lets a def break linter rules: `@allow(default/unusedBindings)` before a def, a local one too,
-    /// suppresses that rule's diagnostics inside it (see `Allows`).
+    /// or a top-level type, suppresses that rule's diagnostics inside it (see `Allows`).
     let allowAttribute = "allow"
 
     /// The rules an `@allow` names, each as its linter, its rule and where it is written, or `None` if `argument` is not
@@ -61,7 +61,7 @@ module Attributes =
         |> List.collect inBlock
 
     /// `items` without their `@allow` attributes, which are for the linters (see `Allows`), with the errors in them: an
-    /// `@allow` must name the rules it allows, and be followed by a value definition, perhaps after other attributes.
+    /// `@allow` must name the rules it allows, and be followed by a def or a type, perhaps after other attributes.
     let rec private withoutAllows (items: TopLevelItem list) : TopLevelItem list * Diagnostic list =
         match items with
         | [] -> [], []
@@ -71,7 +71,7 @@ module Attributes =
             let error =
                 match next with
                 | _ when (allowedRules argument).IsNone -> [ allowArgumentError attribute.Span ]
-                | Some (Kind (Def (ValueDef _))) -> []
+                | Some (Kind (Def _)) -> []
                 | _ -> [ Diagnostics.at DiagnosticCodes.MisplacedAttribute attribute.Span $"Attribute '@{name}' must be followed by a definition" ]
             others, error @ errors
         | Kind (ModuleBlock(name, blockItems)) as block :: rest ->

@@ -191,7 +191,7 @@ let ``An unknown linter, rule, severity or host is an error`` () =
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.InvalidManifestValue.Code, "There is no linter 'acme.lint': the linters are 'nanyx.lint'"
           DiagnosticCodes.UnknownManifestField.Code,
-          "The rules of 'nanyx.lint' has no field 'noSuchRule': its fields are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'unannotatedExports', 'unusedResults', 'uselessExpressions', 'shadowedPreludeNames', 'semicolons', 'unusedAllows', 'linterFailed'"
+          "The rules of 'nanyx.lint' has no field 'noSuchRule': its fields are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'unannotatedExports', 'unusedResults', 'uselessExpressions', 'shadowedPreludeNames', 'semicolons', 'unconstructibleType', 'unusedAllows', 'linterFailed'"
           DiagnosticCodes.InvalidManifestValue.Code, "The rule unusedBindings must be #error, #warning, #info, #hint, #off, not the string \"error\""
           DiagnosticCodes.InvalidManifestValue.Code, "The compiler ships no package 'acme.host': give the path of a host the compiler doesn't ship, as `host = (package = \"acme.host\", path = \"../acme.host\")`" ],
         errorsOf
