@@ -24,7 +24,6 @@ Each refactoring below has an issue with its design; none is built yet.
 
 | Refactoring | Issue |
 |---|---|
-| Inline a type alias | [#1826](https://github.com/nanyx-lang/nanyx/issues/1826) |
 | Change a def's signature: add, remove or reorder parameters, updating every call | [#1822](https://github.com/nanyx-lang/nanyx/issues/1822) |
 | Make a parameter named or positional, updating every call | [#1827](https://github.com/nanyx-lang/nanyx/issues/1827) |
 | Move a def to another module | [#1823](https://github.com/nanyx-lang/nanyx/issues/1823) |

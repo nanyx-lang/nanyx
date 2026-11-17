@@ -24,14 +24,7 @@ let private textWith (source: string) (span: SourceSpan) (edits: (int * int * st
 /// The def that declares `symbol` among `syntax`, with the text removing it removes: from its doc comment and
 /// attributes, or the start of its line, to the end of its line and the blank lines after it.
 let private declarationOf (source: string) (syntax: Module) (symbol: Symbol) : Result<Inlined, string> =
-    let removal (start: int) (finish: int) =
-        let lineEnd = source.IndexOf('\n', finish)
-        let finish = if lineEnd < 0 then source.Length else lineEnd + 1
-        // The blank lines after it go with it.
-        let rec blanks (at: int) =
-            let next = source.IndexOf('\n', at)
-            if next >= 0 && source.Substring(at, next - at).Trim() = "" then blanks (next + 1) else at
-        start, blanks finish
+    let removal = removal source
     let found =
         match symbol.Kind with
         | TopLevelValue ->
