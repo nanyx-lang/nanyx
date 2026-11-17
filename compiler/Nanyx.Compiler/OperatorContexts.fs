@@ -3,7 +3,7 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// The context an operator on a value of a type variable is read through (see "Operator contexts" in the docs' work
+/// The context an operator on a value of a type variable is read through (\r?\n/// )
 /// in progress). The compiler keeps no table of them: an operator reads a member, `+` the member `` `+` `` and prefix
 /// `-` the member `negate`, and its context is the prelude's context with the fewest members that has that member.
 /// So `+` is read through `Add`, though `Num` has a `` `+` `` too, and `*` through `Num`.

@@ -198,7 +198,7 @@ This is the implicit counterpart of a type argument, as Haskell's `Typeable` is 
 
 - **It stays static.** The compiler builds the instance where `a` is concrete, so after monomorphisation `typeOf` is a constant, as an explicit `type Point` is.
 - **An explicit `use` can't make it lie.** An explicit `use` overrides a synthesised context as usual, but the only way to make a `Type(a)` is to write `type X` with `X` equal to `a`. An override can only supply the description the compiler would have built, so `Typed` needs no rule against overriding.
-- **It is a value, not a function.** Context members can be values, as `zero: a` is in `Sum`. A function that takes `()` would add nothing, since its result can never change.
+- **It is a value, not a function.** Context members can be values, as `zero: a` is in `Add`. A function that takes `()` would add nothing, since its result can never change.
 - **It doesn't replace type arguments.** In `[Typed(a)] string -> a`, nothing at the call site fixes `a`, so the ambiguity in [types only in output position](#types-only-in-output-position) remains. `Typed` helps only where a value of type `a` is passed in.
 - **The walker stays explicit.** When `encodeAt` recurses into a record's fields, each field's type is one the checker never learns, so there is no `Typed` instance for it; only `f.type`. A library therefore takes `Typed(a)` in its public function and passes the type explicitly in the code that walks it, as `encode` and `encodeAt` do above.
 
@@ -232,7 +232,7 @@ Haskell's `deriving`, Rust's `#[derive]` and procedural macros, and OCaml's ppx 
 
 ## Structural context synthesis
 
-Context synthesis works by name today: the compiler builds `Sum(Point)` from `Point`'s attached definitions, but nothing builds `Eq` of a record from the `Eq` of its fields. It could be extended to build `Eq`, `Hash` or `Show` of a record or union from the instances of its fields. This needs no new syntax and covers equality, hashing and printing well. It cannot express library-specific behaviour such as JSON field names. It may still be worth doing alongside type arguments.
+Context synthesis works by name: the compiler builds `Add(Point)` from `Point`'s attached definitions. Only the [well-known contexts](../advanced/contexts#common-contexts), `Eq`, `Ord`, `Hash` and `ToString`, are also derived from structure, so that `Eq` of a record is built from the `Eq` of its fields. Opening that to any context would need no new syntax, but it cannot express library-specific behaviour such as JSON field names.
 
 ## Source generators
 

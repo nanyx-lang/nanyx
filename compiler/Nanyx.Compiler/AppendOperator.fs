@@ -3,7 +3,7 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// `++`, which joins two strings or two lists (see "Operator contexts" in the docs' work in progress). On a `string`
+/// `++`, which joins two strings or two lists (see "Append(a)" on the docs' Contexts page). On a `string`
 /// and on a `list(a)` it is the built-in operator. It reads the member `` `++` ``, through the prelude's smallest
 /// context that has it, `Append`, whose instances for `string` and `list(a)` are the members the prelude attaches to
 /// them. On a type that attaches `` `++` ``, or a type variable of a function that requires `Append` of it, the

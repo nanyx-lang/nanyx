@@ -24,6 +24,8 @@ by type (`NyxCompiler.LibraryCatalog`, `NyxCompiler.LibrarySearch`, the `nanyx/l
 - **A `memory` block** is part of the scope it is in. Now that a block can name its `Memory`,
   `memory { context m -> … }` ([#1446](https://github.com/nanyx-lang/nanyx/issues/1446)), it may become a scope of
   its own in the info view, since it is where a scoped context lives.
+- **A module's types.** The info view lists no module's types, so it shows no kind; a library browser that lists them
+  should show which are [nominal](../advanced/nominal-and-protected-types), `protected` or `private`.
 - **A pinned position** does not move with edits above it.
 - **Derived instances in search.** Search by type does not look for a context instance derived from a type's parts,
   such as a list's `ToString`, so such a match is shown as still needing it.

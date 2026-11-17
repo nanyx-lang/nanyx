@@ -1,4 +1,4 @@
-/// Keeping what requires a scoped context inside the call that supplies it (see the Context escape page). A function
+/// Keeping what requires a scoped context inside the call that supplies it (see "Values cannot escape memory scope" on the docs' Memory page). A function
 /// _supplies_ a scoped context to a parameter when the parameter's type requires it and the function's own contexts
 /// don't: `memory: [c] ([Memory, c] () -> a) -> a` supplies `Memory` to its block. Each call to such a function
 /// starts a scope of its own, a variable that stands where the callee's type has its scope, and every requirement of

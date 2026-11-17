@@ -26,7 +26,7 @@ rows and handlers" (TyDe 2016), reworked for Nanyx contexts:
   choices are a fixed list rather than coin flips.
 
 It compiles and runs with `nanyx run examples/Nim.nyx`. The strategies were once named instances of `Move`
-(`def perfect = Move(move = ...)`, then `use perfect`), but since [contexts are not types](./context-escape#contexts-are-not-types),
+(`def perfect = Move(move = ...)`, then `use perfect`), but since [contexts are not types](../advanced/contexts#declaring-a-context),
 a named instance is an error ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)), and a reusable strategy is a
 handler function.
 
