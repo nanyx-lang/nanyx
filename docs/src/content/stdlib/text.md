@@ -383,6 +383,15 @@ def StringSlice.startsWith: StringSlice, string -> bool
 
 Whether the bytes `s` views begin with `prefix`, compared without copying them.
 
+## `StringSlice.indexOf`
+
+```nanyx fragment
+def StringSlice.indexOf: StringSlice, string -> #some(int) | #notFound
+```
+
+The byte index, counting from 0 at the start of `s`, of the first occurrence of `needle` in the
+bytes `s` views, found without copying them. An empty `needle` is found at 0.
+
 ## `StringSlice.toString`
 
 ```nanyx fragment

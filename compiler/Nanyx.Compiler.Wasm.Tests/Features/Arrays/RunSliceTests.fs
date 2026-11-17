@@ -118,3 +118,20 @@ println(StringSlice.startsWith(rest, "42"))
 println(StringSlice.toString(StringSlice.slice(rest, 0, 2)))
 """
     |> assertRan "x\n42;\n3\n#some(52)\n#none\ntrue\n42\n"
+
+[<Fact>]
+let ``Run - a string slice finds a needle among the bytes it views`` () =
+    run
+        """
+import nanyx/text
+
+def text = "a\nbc\nd"
+def rest = text \slice(2, 100)
+
+println(StringSlice.indexOf(rest, "\n"))
+println(StringSlice.indexOf(rest, "a"))
+println(StringSlice.indexOf(rest, ""))
+println(StringSlice.indexOf(text \slice(0, 3), "c"))
+println(StringSlice.indexOf(text \slice(0, 4), "c"))
+"""
+    |> assertRan "#some(2)\n#notFound\n#some(0)\n#notFound\n#some(3)\n"
