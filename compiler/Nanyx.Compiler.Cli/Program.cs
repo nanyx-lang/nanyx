@@ -744,7 +744,7 @@ internal static partial class CliCommands
         """;
 
     /// <summary>
-    /// Run the Nanyx language server over standard input and output (for editors; see docs/src/content/work-in-progress/language-server.md).
+    /// Run the Nanyx language server over standard input and output (for editors; see docs/src/content/standard-tools/vs-code-extension.md).
     /// </summary>
     /// <param name="stdio">Accepted and ignored: stdio is the only transport, but LSP clients conventionally pass it.</param>
     /// <param name="ascii">Write the types it shows in ASCII only: type variables a, b, ... rather than α, β, …, and a record's rest as ... rather than ….</param>

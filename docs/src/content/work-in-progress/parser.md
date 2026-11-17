@@ -180,7 +180,7 @@ On 2026-11-16, in [#846](https://github.com/nanyx-lang/nanyx/issues/846):
    [refactorings](./refactorings) need most.
 2. **All the way,** through stage 6, not stopping after the lexer and layout pass.
 3. **Error messages that change at stage 4** are accepted after review, and their tests updated, following the
-   [house style](./error-messages#house-style).
+   [house style](../foundations/principles#friendly-errors).
 
 # Open questions
 

@@ -1,145 +1,32 @@
 ---
 title: "Error messages"
-description: "What diagnostics say and how they are shown"
+description: "What is still open about what diagnostics say and where they point"
 order: 28
 ---
 
 How errors are shown, their suggestions and fixes, and every code are described in
-[Compiler errors](../standard-tools/errors). This page frames the error messages workstream: how the compiler
-builds its messages today, and what comes next. Work is tracked under the `error messages` label.
+[Compiler errors](../standard-tools/errors), and how a message is worded in
+[Principles](../foundations/principles#friendly-errors). This page keeps what is still open in the error messages
+workstream. Work is tracked under the `error messages` label.
 
-# Summary
+Every compiler error has a code and title from the table in `Diagnostics.fs` (`DiagnosticCodes`), the span of the node
+it is about, and a message in the house style. The CLI shows it with the line of source and an underline, and the
+common errors offer fixes. What is left:
 
-[Principles](../foundations/principles#human-readable-errors) promises errors with a code,
-a short title, a detailed message using the program's own names, suggestions, and fixes an editor can apply,
-written in a matter-of-fact passive voice. This workstream is about meeting that promise: what each diagnostic
-says, where it points, and how the CLI and the editor show it.
-
-# Scope
-
-- The catalogue of compiler errors: their codes, titles and wording.
-- Positions: every error points at the code it is about, in the right file.
-- Suggestions and fixes for the common errors ("did you mean", missing context, missing match case).
-- Rendering in the CLI (`nanyx check`, `nanyx run`) and in the language server.
-- A reference page in the docs with a section for each error code.
-
-The `Diagnostic` type itself (code, span, related locations, fixes) is designed in
-[Linters: structured diagnostics](./linters#2-structured-diagnostics), because linters needed it first. That is
-also where codes are settled: one table in `Diagnostics.fs`, numbered in ranges by phase. This workstream fills the
-type with content.
-
-# Where the compiler is today
-
-- **Diagnostics are structured** ([#97](https://github.com/nanyx-lang/nanyx/issues/97)): every compiler error has
-  a code and title from the table in `Diagnostics.fs` (`DiagnosticCodes`), and the span, in its own file, of the
-  node it is about. Few use related locations yet.
-- **Some spans are approximate.** Field names, type annotations and attributes have no spans yet
-  ([#96](https://github.com/nanyx-lang/nanyx/issues/96)), so errors about them are reported at the nearest node
-  that has one. A type mismatch is reported where the constraint that failed was made, which is not always where
-  the conflicting types came from. A mismatch between two records or two tag unions names what only one of them
-  has: `Tag union mismatch: '#some(int) | #bad(string)' vs '#some(int) | #underflow', where only the first has #bad and only the second has #underflow`
-- **A pipe that finds nothing to call says what it looked for** (`PipeLookups.fs`). On a value whose type is not
-  known yet, it names the attached definitions it could not choose between. On a known type, it says the type has
-  no such attached definition and no plain function has the name, and where the definition is if the pipe cannot
-  reach it: under an `as` alias (`'string.trim' is available as 't.string.trim'`), or in a standard library module
-  that is not imported (`'string.trim' is defined in 'nanyx/text'`); failing those, it names what other types
-  attach under the name (`but 'list.shout' is in scope`). A plain function of the name that does not take the
-  value is a `NYX0201` on the name, saying what it takes (`the function 'shout' in scope takes 'int', not
-  'string'`), rather than a mismatch over the whole pipe. A definition two imports attach is `NYX0106`, naming both
-  modules.
-- **Wording follows the [house style](#house-style)** throughout: the parser, the type checker, the backend,
-  packages and the CLI. The CLI's own errors about its arguments, such as two paths where it takes one, have no
-  code: they are not errors in a program. One about the program it is given has its code: a file that is not there
-  is `NYX0002`, and a package with no `@entry` to run is `NYX0045`.
-- **The CLI shows each diagnostic with its source** ([#880](https://github.com/nanyx-lang/nanyx/issues/880)):
-  `file:line:col: error NYX0201: message`, then the line the span starts on, after its number, with the span
-  underlined in carets (to the end of that line when the span goes on past it), as `SourceExcerpt.cs` lays it out.
-  On a terminal that takes ANSI escapes, and when `NO_COLOR` is not set, the severity and the underline are coloured.
-  A related location is still one line, with no excerpt.
-- **Some errors have fixes.** An unknown name that a standard library module exports offers to import it, and a
-  named parameter passed by position (NYX0218) offers to name the arguments when each fits just one parameter.
-- **An unknown name asks "did you mean"** (`NameSuggestions.fs`): the names in scope closest to it by edit distance
-  (a swap of two letters counts as one edit), at most one edit for every three characters, are named in the message
-  (`Unknown identifier 'totl': did you mean 'total'?`), each with a fix that writes it. A dotted name is compared
-  only with names that have the same qualifier, and a name the compiler reserves (`__for`, `__nanyx_exit`) is never
-  offered.
-- **A match that is not exhaustive offers the arms it is missing** (`PatternSpace.missingArms`, laid out by
-  `MatchArmFixes.fs`): each with `???` for a body, after the last arm and indented as it is, or on the same line
-  when the arms are written on one. A tag with a payload is added as `#some(_)`, and an int, string or float as `_`,
-  since those have too many values to name. A match that would take more than a dozen arms, or whose arms have no
-  `|` (a lambda's pattern parameters), gets no fix.
-- **A def that needs a context its type does not declare offers to add it** (`ContextFixes.fs`): every error that
-  says "add [C] to the type of 'f'" (an operator, `++`, an interpolation hole, a call, an ambient context such as
-  `Console`) has a fix that writes `C` after the contexts the type writes, separated by `,`, or in front of the type
-  as `[C] ` when it writes none. It reads where the type is written from `InferState.WrittenTypes`. A context the
-  def could load with `use` instead is only named in the message.
-- **A look-alike character is named** (`LookAlikes.fs`, the parser's table in `Confusables.fs`;
-  [#1480](https://github.com/nanyx-lang/nanyx/issues/1480)): where a parse fails at a character that looks like one
-  Nanyx reads, such as U+2212 for `-`, NYX0037 names it, with a fix that writes what it looks like, in place of the
-  syntax error. A curly quote and its pair on the line are one error. The text is parsed again with the character
-  written so, until it parses or fails somewhere else, which is reported as the syntax error it is. A look-alike in a
-  string or a comment never fails a parse, so it is left alone. Type errors are not found until the look-alikes are
-  fixed, as for any syntax error.
-
-# The error reference
-
-[Compiler errors](../standard-tools/errors) is one hand-written page with a section for every code in `DiagnosticCodes`,
-headed `# NYX0201: Type mismatch`, which says when the error is reported, shows a short program that reports it, and
-says how to fix it. A heading that starts with a code gets the code as its anchor (`#nyx0201`), from
-`rehypeDiagnosticCodeIds` in `docs/site/rehype-plugins.mjs`. Settled in
-[#882](https://github.com/nanyx-lang/nanyx/issues/882), over a generated page per code, whose generated part would say
-little beyond the title.
-
-`ErrorReferenceTests.fs` in `Nanyx.Compiler.Wasm.Tests` keeps the page and the compiler together:
-
-- The page's sections are the codes of `DiagnosticCodes.all`, in that order, each with the compiler's title. A new
-  code fails the test until it has a section, and so does a section for a code that no longer exists.
-- Every ` ```nanyx ` block is compiled as a script, and must report errors of its section's code and no other. The
-  backend compiles it too when the type checker finds nothing, so `NYX03xx` examples work the same way. A block of
-  several files starts each with a line `-- file: <name>`, and the first is the one compiled; a file `app.nyxp`
-  among them makes the others a package. A block whose first line is `-- file: demo.nyxp` is a manifest on its own,
-  read by the manifest checker, as the `NYX0020` to `NYX0024` examples are. The fences `fragment` and `skip=#<issue>` mean what they do in
-  [the tour](./compilation#tour-examples).
-- Every section has an example, except those of the codes no program can report: `NYX0002` (the file given to
-  `nanyx` is missing), `NYX0006` (a broken standard library module), `NYX0045` (a package `nanyx run` is given with nothing to run) and
-  `NYX0302` (a bug in the backend).
-
-The language server sets each compiler diagnostic's `codeDescription.href` to the code's section on nanyx.dev, from
-`DiagnosticCodes.referenceUrl`, so that an editor shows the code as a link. A linter's code has none.
-
-# House style
-
-Decided by the maintainer ([#879](https://github.com/nanyx-lang/nanyx/issues/879)): the style most messages already
-have, written down.
-
-- A message starts with a capital letter and has no full stop at the end.
-- Names and types are in single quotes, `'total'`, `'list(int)'`; code is in backticks, `` `use` ``.
-- It says what was found, then any advice after a colon, as an instruction: "'push' requires the context 'Memory',
-  which 'calculate' does not declare: add [Memory] to the type of 'calculate'".
-- No "I" or "you", and no blame.
-
-[Principles](../foundations/principles#friendly-errors) says the same, and every message was rewritten
-to it in #879. A message about a manifest may start with what it is about, "package" or "a dependency", and starts
-with a capital letter however it is written (`Problems.Add` in `Manifest.fs`). A syntax error the parser has no
-message of its own for is still FParsec's report ("Expecting: ..."), which the recursive-descent parser ([#846](https://github.com/nanyx-lang/nanyx/issues/846)) replaces.
-
-# Goals
-
-- Every compiler error has a stable code and a title, and follows the [house style](#house-style).
-- Every error carries a span and, where it helps, related locations ("expected because of this annotation").
-- The CLI shows the file, the line of source and a marker under the span.
-- The most common errors (unknown name, type mismatch, missing context, non-exhaustive match) offer a
-  suggestion, and a fix where the edit is unambiguous.
-
-# Plan
-
-Done: the inventory of errors as [the error reference](#the-error-reference)
-([#878](https://github.com/nanyx-lang/nanyx/issues/878), [#882](https://github.com/nanyx-lang/nanyx/issues/882)), CLI
-rendering ([#880](https://github.com/nanyx-lang/nanyx/issues/880)), and suggestions and fixes
-([#881](https://github.com/nanyx-lang/nanyx/issues/881)); see [Where the compiler is today](#where-the-compiler-is-today).
-
-1. **Codes and wording.** Done: every error has a code, and every message follows the house style
-   ([#879](https://github.com/nanyx-lang/nanyx/issues/879)).
+- **Related locations.** Few errors use them yet. An error should point, where it helps, at the code that explains it
+  as well: "expected because of this annotation", "first defined here". The CLI shows a related location as one line,
+  with no excerpt.
+- **Where a type mismatch points.** A mismatch is reported where the constraint that failed was made, which is not
+  always where the conflicting types came from (see [Deferred errors](./deferred-errors#open-questions)).
+- **Field names.** The syntax tree keeps no span for a record field's name, so an error about one is reported at the
+  nearest node that has a span.
+- **Syntax errors.** A syntax error the parser has no message of its own for is still FParsec's report
+  ("Expecting: ..."), which the recursive-descent parser ([#846](https://github.com/nanyx-lang/nanyx/issues/846))
+  replaces.
+- **Nominal types.** A mismatch with a nominal type outside its module is explained only when the shapes match
+  ([#1804](https://github.com/nanyx-lang/nanyx/issues/1804)).
+- **Run-time errors.** Integer overflow, division by zero and a float too big for an int stop a program with
+  Wasmtime's backtrace rather than a message ([#1770](https://github.com/nanyx-lang/nanyx/issues/1770)).
 
 # Open questions
 

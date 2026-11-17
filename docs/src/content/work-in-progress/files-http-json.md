@@ -230,7 +230,7 @@ How the first layer is built, in `packages/nanyx.json/src/json.nyx`, in Nanyx:
   back in that order. A key written twice holds its last value, in the place it was first written. Two objects with
   the same members in another order are still `==`, as maps are.
 - **Errors say where.** `JsonError` is `(position: int, line: int, column: int, message: string)`: the byte, and its
-  line and column (in characters), each from 1. The messages follow the compiler's [house style](./error-messages#house-style):
+  line and column (in characters), each from 1. The messages follow the compiler's [house style](../foundations/principles#friendly-errors):
   `Expected ',' or ']' after an element of an array, found the end of the text`.
 - **Text is read a byte at a time,** through a `StringSlice` without copying it, and a string's run between escapes is
   copied once. `\uXXXX` escapes are decoded, with surrogate pairs joined and a lone surrogate an error. Each function
