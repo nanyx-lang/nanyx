@@ -19,8 +19,8 @@ type private Annotation =
       Def: Symbol option
       IsParameter: bool }
 
-/// Every annotation in `syntax` that writes a `_`: a top-level def's, a local def's and a lambda parameter's, each def's
-/// with its symbol, found by its name within the def.
+/// Every annotation in `syntax` that writes a `_`: a top-level def's, a local def's and a lambda parameter's, in module
+/// blocks too, each def's with its symbol, found by its name within the def.
 let private annotations (syntax: Module) (typed: TypedModule) =
     let symbolOf (span: SourceSpan) (name: string) =
         typed.Symbols
@@ -31,39 +31,20 @@ let private annotations (syntax: Module) (typed: TypedModule) =
             && SourceSpan.contains span symbol.Declaration)
         |> Seq.sortBy (fun symbol -> symbol.Declaration.Start)
         |> Seq.tryHead
-    let ofDef (span: SourceSpan) (name: string) (annotation: TypeExpr) = { Type = annotation; Def = symbolOf span name; IsParameter = false }
-    let topLevel =
-        syntax
-        |> List.choose (fun item ->
-            match item.Kind with
-            | Def (ValueDef(_, name, Some annotation, _)) -> Some (ofDef item.Span name annotation)
-            | _ -> None)
-    let local =
-        topLevelValues syntax
-        |> List.collect within
-        |> List.collect (fun expr ->
-            match expr.Kind with
-            | Lambda(parameters, _, _) ->
-                parameters |> List.choose (fun (_, annotation) -> annotation |> Option.map (fun t -> { Type = t; Def = None; IsParameter = true }))
-            | Block statements ->
-                statements
-                |> List.choose (fun statement ->
-                    match statement.Kind with
-                    | DefStatement(_, name, Some annotation, _) -> Some (ofDef statement.Span name annotation)
-                    | _ -> None)
-            | _ -> [])
-    topLevel @ local |> List.filter (fun annotation -> not (TypeExpr.holes annotation.Type).IsEmpty)
+    SyntaxTree.writtenTypes syntax
+    |> List.choose (fun written ->
+        match written.As with
+        | SyntaxTree.DefAnnotation(name, span) -> Some { Type = written.Type; Def = symbolOf span name; IsParameter = false }
+        | SyntaxTree.LambdaParameter -> Some { Type = written.Type; Def = None; IsParameter = true }
+        | SyntaxTree.TypeBody _
+        | SyntaxTree.ParameterConstraint
+        | SyntaxTree.ContextNamed -> None)
+    |> List.filter (fun annotation -> not (TypeExpr.holes annotation.Type).IsEmpty)
 
 /// Each `_` in `annotation`, with whether a function written in its place needs brackets: everywhere but the whole of a
 /// def's annotation, the result of a function, and the type after a list of contexts.
 let private holesOf (annotation: Annotation) =
-    let rec walk (takesFunction: bool) (typeExpr: TypeExpr) =
-        match typeExpr.Kind with
-        | TypeHole -> [ typeExpr, not takesFunction ]
-        | TypeFunc(input, result) -> walk false input @ walk true result
-        | TypeWithContext(contexts, inner) -> (contexts |> List.collect (walk false)) @ walk takesFunction inner
-        | _ -> TypeExpr.children typeExpr |> List.collect (walk false)
-    walk (not annotation.IsParameter) annotation.Type
+    TypeExpr.withBracketing (not annotation.IsParameter) annotation.Type |> List.filter (fun (part, _) -> match part.Kind with TypeHole -> true | _ -> false)
 
 /// `ty` without the context variables of its functions that are not among `bound`: in a def's annotation, a function's
 /// context variable must be one of the def's contexts, which a `_` the compiler filled in did not need.

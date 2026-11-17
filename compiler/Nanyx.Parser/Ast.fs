@@ -1022,6 +1022,17 @@ module TypeExpr =
     let rec within (typeExpr: TypeExpr) : TypeExpr list =
         typeExpr :: (children typeExpr |> List.collect within)
 
+    /// `typeExpr` and every type expression inside it, in order, each with whether a function type written in its
+    /// place needs brackets: everywhere but the result of a function, the type after a list of contexts, and
+    /// `typeExpr` itself when `takesFunction`.
+    let rec withBracketing (takesFunction: bool) (typeExpr: TypeExpr) : (TypeExpr * bool) list =
+        let inner =
+            match typeExpr.Kind with
+            | TypeFunc(input, result) -> withBracketing false input @ withBracketing true result
+            | TypeWithContext(contexts, body) -> (contexts |> List.collect (withBracketing false)) @ withBracketing takesFunction body
+            | _ -> children typeExpr |> List.collect (withBracketing false)
+        (typeExpr, not takesFunction) :: inner
+
     /// The names of the type variables `typeExpr` writes, in the order they first appear.
     let variablesOf (typeExpr: TypeExpr) =
         within typeExpr |> List.choose (fun part -> match part.Kind with TypeVar name -> Some name | _ -> None) |> List.distinct
