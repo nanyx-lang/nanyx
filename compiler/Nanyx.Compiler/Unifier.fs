@@ -845,6 +845,11 @@ module Unifier =
                         if madeUpBefore v then restTaken <- true
                         let newSubst = subst |> Map.add v.Id ty
                         loop newSubst rest
+                // A union of only a rest is that rest, as a context variable solved to make room for more is: met again
+                // where a function's contexts are fitted, it takes them (#1908).
+                | TyUnion [ TyVar _ as var ], other
+                | other, TyUnion [ TyVar _ as var ] ->
+                    loop subst ((var, other, Equal, origin) :: rest)
                 // Two references to one recursive alias are the same type when their arguments are: unfolded, each
                 // would hold the same two references again.
                 | RecursiveAliases.RecursiveAlias(lBody, lArgs), RecursiveAliases.RecursiveAlias(rBody, rArgs) when lBody = rBody ->
@@ -1117,6 +1122,14 @@ module Unifier =
                             // A rest this closed can repeat a tag, which the message leaves out.
                             | _, Ok (rMap, _) -> Error (mismatchMessage l (TyUnion(rMap |> Map.toList |> List.map snd)), origin, TypesDiffer)
                             | _ -> Error (mismatchMessage l r, origin, TypesDiffer)
+                        // A lone tag is given for the member of a closed union that names it, as a union's tags are.
+                        | TyTag(name, _), TyUnion rItems when
+                            (match parseTagUnion rItems with
+                             | Ok (rMap, None) -> rMap.ContainsKey name
+                             | _ -> false) ->
+                            match parseTagUnion rItems with
+                            | Ok (rMap, _) -> loop subst ((l, rMap.[name], Assignable, origin) :: rest)
+                            | Error message -> Error (message, origin, TypesDiffer)
                         // Assignability reaches into what types are built from, so a nominal type stays one-way
                         // there too: `list(Person)` is assignable to `list((name: string))`, but not the reverse.
                         // Values are immutable, so a type's arguments are covariant, and so are a record's fields:
@@ -1128,16 +1141,20 @@ module Unifier =
                         // later widens it to their join, as a union's rest is widened (#679): `Result.bind` chains a
                         // step that fails with `#notFound` and one that fails with `#invalidInt`, and its error is
                         // `#notFound | #invalidInt`. The rest is closed where the def is generalised (see
-                        // `outputOnlyRestVars`). A payload opened so is given what comes for it; any other payload is
-                        // the same type as the one given, as a match's arms need: they close the rest their union
-                        // has for a payload.
+                        // `outputOnlyRestVars`). A payload opened so is given what comes for it; any other union or tag
+                        // is the same type as the one given, as a match's arms need: they close the rest their union
+                        // has for a payload. A payload of another type is given where the other is expected, as an
+                        // argument of a type is: the rest of a stream, `#next(a, [d] seq(a))`, can carry fewer contexts
+                        // than the stream that gives it (#1908).
                         | TyTag(lName, Some lPayload), TyTag(rName, Some rPayload) when lName = rName ->
                             match rPayload with
                             | TyVar v when isPlainVar v ->
                                 loop subst ((rPayload, openedPayload lPayload |> Option.defaultValue lPayload, Equal, origin) :: rest)
                             | TyUnion items when items |> List.exists (function TyVar v -> isMadeUpRest v | _ -> false) ->
                                 loop subst ((lPayload, rPayload, Assignable, origin) :: rest)
-                            | _ -> loop subst ((lPayload, rPayload, Equal, origin) :: rest)
+                            | TyUnion _
+                            | TyTag _ -> loop subst ((lPayload, rPayload, Equal, origin) :: rest)
+                            | _ -> loop subst ((lPayload, rPayload, Assignable, origin) :: rest)
                         | TyRecord(lFields, _), TyRecord(rFields, _) when keySet lFields = keySet rFields ->
                             let pairs = keySet lFields |> Seq.map (fun key -> (lFields.[key], rFields.[key], Assignable, origin)) |> Seq.toList
                             loop subst (pairs @ rest)
@@ -1147,7 +1164,9 @@ module Unifier =
                         // A function that requires fewer contexts fits where one that requires more is expected.
                         | TyFunc(lArg, lRet, lContexts), TyFunc(rArg, rRet, rContexts) ->
                             match FunctionContexts.fit freshRest origin (FunctionContexts.withCellMemory lArg lContexts) (FunctionContexts.withCellMemory rArg rContexts) with
-                            | Ok contexts -> loop subst ((rArg, lArg, Assignable, origin) :: (lRet, rRet, Assignable, origin) :: contexts @ rest)
+                            // The contexts are solved before the result, which may carry them too: fitted first, a
+                            // result's `[d] seq(b)` would solve the variable the contexts' fit then solves again.
+                            | Ok contexts -> loop subst ((rArg, lArg, Assignable, origin) :: contexts @ (lRet, rRet, Assignable, origin) :: rest)
                             | Error extra -> Error (contextsNotAllowedMessage extra l r, origin, ContextsNotAllowed)
                         | _ ->
                         match l, r with
@@ -1164,6 +1183,15 @@ module Unifier =
                             // its functions were checked against them where it was made, and may require fewer.
                             | FunctionContexts.Carried [ TyVar given ], FunctionContexts.Carried expected when isPlainVar given ->
                                 loop subst (arguments @ (TyVar given, TyUnion expected, Equal, origin) :: rest)
+                            // Contexts that are only variables nothing has settled yet, given where a signature's are
+                            // expected, are fitted after the other constraints, which settle them: fitted now, the
+                            // signature's first variable would take them all and its others none (#1908).
+                            | FunctionContexts.Carried (_ :: _ as given), FunctionContexts.Carried expected when
+                                kind = Assignable
+                                && given |> List.forall (function TyVar v -> isPlainVar v | _ -> false)
+                                && expected |> List.exists (function TyVar v -> v.Name.IsSome | _ -> false) ->
+                                putOff <- (left, right, kind, origin) :: putOff
+                                loop subst (rest @ [ (left, right, AssignableLater, origin) ])
                             | FunctionContexts.Carried given, FunctionContexts.Carried expected ->
                                 match FunctionContexts.fit freshRest origin given expected with
                                 | Ok contexts -> loop subst (arguments @ contexts @ rest)

@@ -28,7 +28,7 @@ module Seqs =
     let fromFunction = $"{typeName}.from"
 
     /// The prelude's functions a lambda with a `yield` in it is rewritten into calls to (see `WorkflowDesugaring`):
-    /// `yield x` with the rest of the block is `seq.cons(x, { rest })`, the block's end `seq.delay({ seq.empty() })`,
+    /// `yield x` with the rest of the block is `seq.cons(x, { rest })`, the block's end `seq.empty()`,
     /// and a `for` loop whose body yields `seq.append(seq.concatMap(items, { item -> body }), seq.delay({ rest }))`.
     let consFunction = $"{typeName}.cons"
     let emptyFunction = $"{typeName}.empty"

@@ -44,7 +44,7 @@ The sequence of no elements.
 ## `seq.delay`
 
 ```nanyx fragment
-def seq.delay: ([c] () -> [c] seq(a)) -> [c] seq(a)
+def seq.delay: ([c] () -> [d] seq(a)) -> [c, d] seq(a)
 ```
 
 The sequence `f` gives, worked out when it is pulled, not now: `f` runs each time the sequence is
@@ -115,7 +115,7 @@ and `6`.
 ## `seq.append`
 
 ```nanyx fragment
-def seq.append: seq(a), ([d] seq(a)) -> [d] seq(a)
+def seq.append: ([c] seq(a)), ([d] seq(a)) -> [c, d] seq(a)
 ```
 
 The elements of `s`, then those of `t`.
@@ -123,7 +123,7 @@ The elements of `s`, then those of `t`.
 ## `seq.concatMap`
 
 ```nanyx fragment
-def seq.concatMap: ([c] seq(a)), (a -> seq(b)) -> [c] seq(b)
+def seq.concatMap: ([c] seq(a)), ([d] a -> [d] seq(b)) -> [c, d] seq(b)
 ```
 
 The elements of the sequences `f` gives for each element of `s`, one after another, when it is

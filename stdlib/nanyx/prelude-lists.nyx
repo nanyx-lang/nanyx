@@ -214,15 +214,15 @@ export def list.select: [c, d] list(a), ([c] a -> [d] seq(b)) -> list(b) = { xs,
 --| The first value `f` yields, running it on the elements in turn as [`list.select`] does, or `#notFound`
   when it yields none. It stops at the first yield: `f` runs on no element after the one it yields
   for, and the code after that `yield` doesn't run.
-export def list.selectOne: [c, d] list(a), ([c] a -> [d] seq(b)) -> #some(b) | #notFound = {
-  | [], _ -> #notFound
-  | [x, ...rest], f ->
-    def selected = f(x)
+export def list.selectOne
+  : [c, d] list(a), ([c] a -> [d] seq(b)) -> #some(b) | #notFound
+  = { xs, f ->
+    def selected = xs \list.toSeq \seq.concatMap(f)
 
     match selected.next()
       | #next(y, _) -> #some(y)
-      | #done -> list.selectOne(rest, f)
-}
+      | #done -> #notFound
+  }
 
 --| Whether `test` holds for every element (so `true` for an empty list).
 export def list.all: [c] list(a), ([c] a -> bool) -> bool = {
