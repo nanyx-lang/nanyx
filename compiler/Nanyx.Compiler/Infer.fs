@@ -392,6 +392,13 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     | None -> ty, next
                 Ok (mkTypedExpr expr ty None None None, next)
             | None -> readMember env state expr baseExpr (Some baseName) memberName memberSpan
+        // `t.Encoder.string` names the definition attached to `Encoder` through the import's alias `t`: it is read as
+        // the member `string` of `t.Encoder`, as `Encoder.string` is of `Encoder` (#1833).
+        | MemberAccess _ when (SyntaxTree.dottedName baseExpr |> Option.bind (fun qualifier -> qualifiedDefinition env qualifier memberName)).IsSome ->
+            let qualifier = Expression.from baseExpr (IdentifierExpr (SyntaxTree.dottedName baseExpr).Value)
+            let read = { expr with Kind = MemberAccess(qualifier, memberName, spanOpt) }
+            inferExprKind env state read
+            |> Result.map (fun (typed, next) -> { typed with Expr = expr }, { next with ReadAs = next.ReadAs |> Map.add expr.Id read })
         | _ -> readMember env state expr baseExpr None memberName memberSpan
     // `C(T).member` as a value has the member's type in the context's definition, as a call of it does. A member the
     // context does not have leaves the value's type to what uses it.
