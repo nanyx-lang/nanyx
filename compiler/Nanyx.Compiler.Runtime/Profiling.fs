@@ -55,7 +55,7 @@ module private GuestProfilerApi =
         vec
 
 /// A run of a module that Wasmtime's guest profiler samples (see `GuestProfilerApi`), every `interval`: on an engine with
-/// epoch interruption, a timer moves the epoch on, and the store's deadline callback takes each sample.
+/// epoch interruption, a thread moves the epoch on, and the store's deadline callback takes each sample.
 type GuestProfiler(engine: Engine, ``module``: Module, interval: TimeSpan) =
     // The module's name in the profile, a `wasm_name_t` where the profiler can read it until it finishes.
     let moduleName =
@@ -67,7 +67,12 @@ type GuestProfiler(engine: Engine, ``module``: Module, interval: TimeSpan) =
         profiled.Name <- moduleName
         profiled.Module <- GuestProfilerApi.handleOf ``module``
         GuestProfilerApi.wasmtime_guestprofiler_new(GuestProfilerApi.handleOf engine, moduleName, uint64 interval.Ticks * 100UL, [| profiled |], 1un)
-    let timer = new Threading.Timer((fun _ -> engine.IncrementEpoch()), null, interval, interval)
+    // A thread of its own moves the epoch on, rather than a timer, whose ticks wait for a thread of the pool.
+    let stop = new Threading.ManualResetEventSlim(false)
+    let ticker =
+        let thread = Threading.Thread((fun () -> while not (stop.Wait interval) do engine.IncrementEpoch()), IsBackground = true)
+        thread.Start()
+        thread
 
     /// The configuration of an engine a profiled run needs.
     static member Configure(config: Config) = config.WithEpochInterruption true
@@ -82,7 +87,9 @@ type GuestProfiler(engine: Engine, ``module``: Module, interval: TimeSpan) =
 
     /// Stops sampling, and gives the profile, in the Firefox profiler's format, or why it couldn't be written.
     member _.Finish() : Result<byte array, string> =
-        timer.Dispose()
+        stop.Set()
+        ticker.Join()
+        stop.Dispose()
         let mutable out = GuestProfilerApi.ByteVec()
         let error = GuestProfilerApi.wasmtime_guestprofiler_finish(profiler, &out)
         let mutable name = Marshal.PtrToStructure<GuestProfilerApi.ByteVec> moduleName
