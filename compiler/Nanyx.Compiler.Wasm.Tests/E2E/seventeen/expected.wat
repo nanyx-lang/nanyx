@@ -477,8 +477,7 @@
     i32.const 8
     call $__nanyx_record_set_i64
     local.set $args
-    local.get $args
-    i64.load
+    i64.const 10
     local.set $__inlined8_i64
     local.get $r1_i64
     local.get $__inlined8_i64

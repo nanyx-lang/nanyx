@@ -469,8 +469,7 @@
     local.set $person
     local.get $person
     i64.load offset=8
-    local.get $person
-    i64.load
+    i64.const 30
     call $__nanyx_int_add
     local.get $person
     i64.load offset=16

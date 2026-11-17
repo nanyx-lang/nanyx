@@ -467,8 +467,7 @@
     i32.const 16
     call $__nanyx_record_set_i64
     local.set $t
-    local.get $t
-    i64.load
+    i64.const 10
     local.get $t
     i64.load offset=8
     call $__nanyx_int_add

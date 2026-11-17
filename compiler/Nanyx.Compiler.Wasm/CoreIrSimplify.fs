@@ -3,7 +3,9 @@
 ///
 /// - a call through a closure known at that point is a direct call to the function the closure is over, with the
 ///   closure as its environment, which the inliner may inline in turn;
-/// - a field read from a known closure's environment is the value the closure captured there;
+/// - a field read from a known closure's environment is the value the closure captured there, and one read from a
+///   record made in the function that nothing but such reads, and matches that take it apart, uses is the value it was
+///   made with, so the record is not made (as a function whose parameter is a tuple makes one of its elements, #1884);
 /// - a `match` takes the one arm its known scrutinees match, leaves out the arms they cannot, and no longer tests a
 ///   scrutinee that every arm matches whatever it is;
 /// - the code after an `if` or a `match` that gives a tag is copied into each branch when it matches on that tag, where
@@ -28,6 +30,9 @@ type private Fact =
     | Closure of string * Atom option list
     /// A tag, and its payload where it can be read again.
     | Tag of string * Atom option
+    /// A record that nothing but reads of its fields and matches that take it apart use, and each of its fields where it
+    /// can be read again. One used otherwise may be written where it is passed, as a cell is.
+    | Record of Atom option list
     /// None of these tags.
     | NotTags of Set<string>
 
@@ -203,6 +208,8 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
     let bound = Dictionary<VarKind * string, int>()
     // The variables something assigns or writes into, whose value is not known from their binding.
     let assigned = HashSet<int>()
+    // The variables read other than as the record a field is read from or a match takes apart.
+    let usedWhole = HashSet<int>()
     let mutable changed = false
     // Whether the code after a branch is being tried in each branch, inside which it is not tried again.
     let mutable trying = false
@@ -226,6 +233,23 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
             | Assign(v, _)
             | SetField(v, _, _) -> assigned.Add v.Id |> ignore
             | _ -> ()
+            match e.Kind with
+            | Field _ -> ()
+            | Match(scrutinees, arms) ->
+                scrutinees
+                |> List.iteri (fun index scrutinee ->
+                    let takesApart (arm: Arm) =
+                        match arm.Patterns.[index] with
+                        | PFields _
+                        | PWildcard -> true
+                        | _ -> false
+                    if not (List.forall takesApart arms) then usedWhole.Add scrutinee.Id |> ignore)
+            | _ ->
+                for atom in directAtoms e do
+                    match atom with
+                    | AVar v -> usedWhole.Add v.Id |> ignore
+                    | _ -> ()
+                directVars e |> List.iter (fun v -> usedWhole.Add v.Id |> ignore)
 
     /// Whether `atom` can be read again where it was not: a constant, or a variable that nothing assigns, whose local
     /// it has to itself, and that is a parameter, a local or a name a pattern binds: not a temporary, which is used once,
@@ -258,11 +282,12 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
         | AStaticClosure(name, _, _) -> Some(Closure(name, []))
         | _ -> None
 
-    /// What is known about a variable bound to `value`.
-    let factOfValue (facts: Map<int, Fact>) (value: Expr) : Fact option =
+    /// What is known about the variable `var` bound to `value`.
+    let factOfValue (facts: Map<int, Fact>) (var: Var) (value: Expr) : Fact option =
         match value.Kind with
         | MakeClosure(name, _, captured) -> Some(Closure(name, List.map known captured))
         | MakeTag(name, payload) -> Some(Tag(name, known payload))
+        | MakeRecord fields when not (usedWhole.Contains var.Id) -> Some(Record(fields |> List.map (snd >> known)))
         | Atom atom -> factOf facts atom
         | _ -> None
 
@@ -286,6 +311,16 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
             | Some(Tag _), (None | Some PWildcard) -> Matches []
             | Some(Tag(_, Some payload)), Some inner -> decide facts inner payload
             | Some(NotTags excluded), _ when excluded.Contains name -> Fails
+            | _ -> Unknown
+        | PFields fields, _ ->
+            match factOf facts value with
+            | Some(Record known) ->
+                fields
+                |> List.map (fun (slot, inner) ->
+                    match List.tryItem slot known with
+                    | Some(Some field) -> decide facts inner field
+                    | _ -> Unknown)
+                |> combine
             | _ -> Unknown
         | PAll parts, _ -> parts |> List.map (fun part -> decide facts part value) |> combine
         | _ -> Unknown
@@ -388,7 +423,7 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
                     changed <- true
                     branchedLast <- Some value
                 | None, _ ->
-                    facts <- learn var (factOfValue facts value) facts
+                    facts <- learn var (factOfValue facts var value) facts
                     match value.Kind with
                     | Atom atom when not (assigned.Contains var.Id) -> aliases.[var.Id] <- atom
                     | _ -> ()
@@ -484,6 +519,15 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
             match factOf facts record with
             | Some(Closure(_, captured)) when slot <= captured.Length ->
                 match captured.[slot - 1] with
+                | Some value when atomType value = e.Type ->
+                    changed <- true
+                    { e with Kind = Atom value }
+                | _ -> e
+            | _ -> e
+        | Field(record, slot) ->
+            match factOf facts record with
+            | Some(Record fields) when slot < fields.Length ->
+                match fields.[slot] with
                 | Some value when atomType value = e.Type ->
                     changed <- true
                     { e with Kind = Atom value }

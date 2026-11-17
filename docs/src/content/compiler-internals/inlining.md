@@ -80,6 +80,11 @@ tests and the tags the arms before it tested and failed. From that:
   `call_indirect`.
 - **A field of a known closure's environment** is the value the closure captured there, so an inlined lambda, or a
   member's adapter, reads the caller's variables and not the block.
+- **A field of a record the function makes** is the value it was made with, and a `match` that takes the record apart
+  binds those values, when nothing else uses the record; then nothing reads it, and it is not made. A function whose
+  lone parameter is a tuple takes the tuple's elements and makes the tuple of them, so `{ p -> p.0 }` and
+  `{ (a, _) -> a }` allocate nothing (#1884). A record that is passed or read whole is left alone, since what it is
+  passed to may write it, as a cell's or an `MList`'s helpers do.
 - **A `match` on known scrutinees** takes the arm they match, binding the names its patterns bind; an arm they cannot
   match is left out, and a scrutinee every arm matches whatever it is is no longer tested.
 - **The code after a branch** (an `if` or a `match`) that gives a tag in one of its branches is copied into each

@@ -825,8 +825,7 @@
     local.get $__owned_0
     call $__nanyx_drop_string
     drop
-    local.get $p
-    i64.load
+    i64.const 30
     local.set $__dbg_value_1__in1_i64
     i32.const 0
     local.set $__interp_len
@@ -907,8 +906,7 @@
     local.get $__owned_4
     call $__nanyx_drop_string
     drop
-    local.get $p2
-    i64.load
+    i64.const 25
     local.set $__dbg_value_1__in2_i64
     i32.const 0
     local.set $__interp_len
