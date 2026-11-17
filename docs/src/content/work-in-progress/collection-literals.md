@@ -22,7 +22,10 @@ chosen by the expected type (`def a: Array(int) = [1, 2]`) or by the type's name
   the call of that type's `fromArray`, found as a pipe finds an attached definition (`tryResolveAttachedFunction`). The
   literal keeps its node, and the call is recorded in `ReadAs`, which `ExpressionRewrites.writeAsRead` writes into the
   syntax the backend reads, with the items as they are rewritten. An expected list keeps a list literal a list, and an
-  expected map keeps a map literal a map. Any other expected type with no `fromArray` is NYX0257 at the literal.
+  expected map keeps a map literal a map. Any other expected type with no `fromArray` is NYX0257 at the literal. A
+  literal that is the last statement of a typed def's block, as one written on the lines under the `=` is, takes the
+  def's declared type too: `inferDefValue` records the type in `ExpectedBlockResults` by the statement's node, and
+  `inferBlock` reads it there ([#1776](https://github.com/nanyx-lang/nanyx/issues/1776)).
 - **Spreads.** `__spreadItems(x)` is read as the prelude's `__spreadArray(x)` for an array and `__spreadList(x)` for a
   list (`CollectionLiterals.inferSpread`); anything else is NYX0258.
 - **The standard library.** `fromArray` is attached to `list`, `set`, `map` and `Array` in the prelude, and to `MStack`,
@@ -40,7 +43,8 @@ chosen by the expected type (`def a: Array(int) = [1, 2]`) or by the type's name
 - **A `FromArray` context.** The issue suggested reading `fromArray` through a prelude context synthesised from it, as
   `ToString` is from `toString`, so that generic code could build literals of a type variable. Literals call the
   attached `fromArray` directly instead, and a literal expected as a type variable stays a list.
-- **Where the expected type comes from.** Only a def's written type and a call's parameter: a lambda's result, a
+- **Where the expected type comes from.** Only a def's written type (on its line, or ending its block) and a call's
+  parameter: a lambda's result, a
   record field's type and a pattern's don't make a literal another type yet. A literal that is only a spread, `[...xs]`,
   is parsed as `xs`, so it is never read as another type.
 - **Spreading a set, a `seq` or a slice** waits for an `Iterable` context ([Lazy sequences](./lazy-sequences)).
