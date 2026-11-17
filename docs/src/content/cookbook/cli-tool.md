@@ -15,23 +15,36 @@ cd word_counter
 
 # The code
 
-```nanyx
+The program reads its input with the file system's package, `nanyx.fs`, which the compiler ships. Add it to the
+manifest's `dependencies`, at the compiler's version:
+
+```nanyx fragment
+dependencies = [(package = "nanyx.fs", version = "0.28.0")]
+```
+
+Then `src/main.nyx` reads the file and counts its words:
+
+```nanyx fragment
+module main
+
 import (
-  nanyx/collections
-  nanyx/file
-  nanyx/string
+  nanyx/text
+  nanyx.fs/file as file
+  nanyx.fs/path as path
 )
 
-match file.read("input.txt")
-  | #some(content) ->
-    def words = content
-      \split(on = " ")
-      \filter { != "" }
+@entry
+def main = {
+  match file.read(path.of("input.txt"))
+    | #some(content) ->
+      def words = content
+        \split(on = " ")
+        \filter { != "" }
 
-    def count = words.length
-    println("Word count: {count}")
-  | #error(err) ->
-    println("Error reading file: {err}")
+      println("Word count: {words.length}")
+    | #error(#notFound) -> println("There is no input.txt here")
+    | #error(err) -> println("Error reading file: {err}")
+}
 ```
 
 # Run it
@@ -44,6 +57,6 @@ nanyx run
 
 # Key Concepts
 
-- **File I/O** — the `file` module returns result types for safe error handling
+- **File I/O** — `nanyx.fs`'s `file` module returns `#some(text)` or `#error(FsError)`, and `nanyx run` lets the program read only the current directory (see [file](../stdlib/file))
 - **Pipelines** — chain transformations with `\` for readable data processing
 - **Pattern matching** — handle success and failure cases explicitly

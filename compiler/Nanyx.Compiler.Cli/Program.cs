@@ -203,6 +203,7 @@ internal static partial class CliCommands
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
     /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script names its host with a ::host directive.</param>
     /// <param name="noInline">Compile every call as a call, without inlining: for working on the compiler, to tell whether a misbehaving program is the inliner's doing.</param>
+    /// <param name="allowDir">A directory the program may read and write besides the current directory, which it always may. A path outside them is #permissionDenied.</param>
     [Consolo("run")]
     public static int Run(
         [Consolo("check-memory")] bool checkMemory = false,
@@ -210,23 +211,33 @@ internal static partial class CliCommands
         [Consolo("timings")] bool timings = false,
         [Consolo("host")] string? host = null,
         [Consolo("no-inline")] bool noInline = false,
+        [Consolo("allow-dir")] string? allowDir = null,
         params string[] path)
     {
         var memoryCheck = memory ? MemoryCheck.Report : checkMemory ? MemoryCheck.Check : MemoryCheck.Off;
-        return RunIn(Shell.Process, memoryCheck, path, timings, host, !noInline);
+        return RunIn(Shell.Process, memoryCheck, path, timings, host, !noInline, allowDir is null ? [] : [allowDir]);
     }
 
-    /// <summary>What <c>nanyx run</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int RunIn(Shell shell, MemoryCheck memoryCheck, string[] path, bool timings = false, string? host = null, bool inlineCalls = true)
+    /// <summary>
+    /// What <c>nanyx run</c> does, run in <paramref name="shell"/>. The program may read and write the shell's directory
+    /// and each of <paramref name="allowedDirectories"/>.
+    /// </summary>
+    internal static int RunIn(Shell shell, MemoryCheck memoryCheck, string[] path, bool timings = false, string? host = null, bool inlineCalls = true, string[]? allowedDirectories = null)
     {
         // What follows the program is its own: its arguments, which it reads through `Env`.
         var single = path.FirstOrDefault();
         var programArguments = path.Skip(1).ToArray();
+        var directories = allowedDirectories?.Select(shell.FullPath).ToArray() ?? [];
+        if (directories.FirstOrDefault(directory => !Directory.Exists(directory)) is { } missing)
+        {
+            shell.Error.WriteLine($"error: --allow-dir names {shell.DisplayPath(missing)}, which is not a directory.");
+            return UsageError;
+        }
 
         if (single is not null && !IsPackagePath(shell, single))
         {
             return NoHostForScript(shell, host)
-                ?? Execute(shell, single, Target.Run, outputPath: null, memoryCheck: memoryCheck, timings: timings, programArguments: programArguments, inlineCalls: inlineCalls);
+                ?? Execute(shell, single, Target.Run, outputPath: null, memoryCheck: memoryCheck, timings: timings, programArguments: programArguments, inlineCalls: inlineCalls, allowedDirectories: directories);
         }
 
         if (!TryFindPackage(shell, single, host, out var package, out var failed))
@@ -255,7 +266,7 @@ internal static partial class CliCommands
         }
 
         ReportDeferredRun(compiling, deferred, build.Diagnostics);
-        return RunProgram(compiling, entry.Value, deferred, memoryCheck, timings, [package.Manifest.Name, .. programArguments], inlineCalls);
+        return RunProgram(compiling, entry.Value, deferred, memoryCheck, timings, [package.Manifest.Name, .. programArguments], inlineCalls, directories);
     }
 
     /// <summary>
@@ -805,7 +816,7 @@ internal static partial class CliCommands
         return $"{count} deferred error{(count == 1 ? "" : "s")}";
     }
 
-    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, ProgramFormat format = ProgramFormat.Binary)
+    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, ProgramFormat format = ProgramFormat.Binary, string[]? allowedDirectories = null)
     {
         if (string.IsNullOrWhiteSpace(inputFile))
         {
@@ -826,7 +837,7 @@ internal static partial class CliCommands
 
         if (target == Target.Run)
         {
-            return RunScript(shell, inputFile, memoryCheck, timings, programArguments, inlineCalls);
+            return RunScript(shell, inputFile, memoryCheck, timings, programArguments, inlineCalls, allowedDirectories);
         }
 
         // Script mode: the file's :: directives say what a package's manifest would.
@@ -847,9 +858,10 @@ internal static partial class CliCommands
     /// What <c>nanyx run</c> does with the script <paramref name="inputFile"/>, which exists: compiles and runs it in
     /// <paramref name="shell"/>, and gives the exit code. The compiler's diagnostics and the run's own errors go to the
     /// shell's stderr. The program's command-line arguments are <paramref name="inputFile"/> followed by
-    /// <paramref name="programArguments"/>. The Wasm tests call this to run programs in their own process.
+    /// <paramref name="programArguments"/>, and it may read and write the shell's directory and each of
+    /// <paramref name="allowedDirectories"/>, full paths. The Wasm tests call this to run programs in their own process.
     /// </summary>
-    internal static int RunScript(Shell shell, string inputFile, MemoryCheck memoryCheck, bool timings = false, string[]? programArguments = null, bool inlineCalls = true)
+    internal static int RunScript(Shell shell, string inputFile, MemoryCheck memoryCheck, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, string[]? allowedDirectories = null)
     {
         // `run` is the user-facing command: its stdout belongs to the program, so compiler chatter is kept off it, and
         // on a terminal it goes in the run's box.
@@ -863,7 +875,7 @@ internal static partial class CliCommands
         // program reaches it.
         var deferred = ErrorsDeferred(result);
         ReportDeferredRun(compiling, deferred, result.Diagnostics);
-        return RunProgram(compiling, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls);
+        return RunProgram(compiling, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls, allowedDirectories);
     }
 
     private static int RunParse(Shell shell, string inputFile)
@@ -1012,11 +1024,13 @@ internal static partial class CliCommands
     /// <summary>
     /// Runs a compiled program with the shell's standard streams and the command-line arguments
     /// <paramref name="arguments"/>, its name first, reporting what stops it to the shell's stderr, and gives the exit
-    /// code.
+    /// code. The program may read and write the shell's directory and each of <paramref name="allowedDirectories"/>, full
+    /// paths.
     /// </summary>
-    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true)
+    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null)
     {
         var programArguments = ListModule.OfSeq(arguments ?? ["nanyx"]);
+        var directories = ListModule.OfSeq<string>([shell.Directory, .. allowedDirectories ?? []]);
         var errors = shell.Error;
         var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls);
         if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred, timings))
@@ -1028,11 +1042,11 @@ internal static partial class CliCommands
         (errors as RunBox.Writer)?.Box.Close("output");
         if (memoryCheck == MemoryCheck.Off)
         {
-            var outcome = WasmRunner.run(shell.Io, programArguments, wat);
+            var outcome = WasmRunner.run(shell.Io, programArguments, directories, wat);
             return outcome.IsOk ? 0 : ReportRunError(outcome.ErrorValue, errors);
         }
 
-        var (counted, counters) = WasmRunner.runCounting(shell.Io, programArguments, CodeGen.CheckedExports.start, MemoryReport.Counters, wat);
+        var (counted, counters) = WasmRunner.runCounting(shell.Io, programArguments, directories, CodeGen.CheckedExports.start, MemoryReport.Counters, wat);
         var exitCode = counted.IsError ? ReportRunError(counted.ErrorValue, errors) : CheckNothingLeft(counted.ResultValue, errors);
         // The report follows what stopped the program, or the leak the check found.
         if (memoryCheck == MemoryCheck.Report && counters is not null)

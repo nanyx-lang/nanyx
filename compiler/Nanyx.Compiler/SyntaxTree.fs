@@ -184,6 +184,28 @@ module SyntaxTree =
             | _ -> None)
         |> Set.ofList
 
+    /// The type definitions of `module'`: its top-level ones, then those declared in the blocks of its definitions.
+    let typeDefinitions (module': Module) : Definition list =
+        let topLevel =
+            module'
+            |> List.choose (function
+                | Kind (Def (TypeDef _ as definition)) -> Some definition
+                | _ -> None)
+        let local =
+            module'
+            |> List.collect ofItem
+            |> List.collect expressionsWithin
+            |> List.collect (fun expr ->
+                match expr.Kind with
+                | Block statements ->
+                    statements
+                    |> List.choose (fun statement ->
+                        match statement.Kind with
+                        | TypeDefStatement(name, modifiers, parameters, body) -> Some (TypeDef(name, modifiers, parameters, body))
+                        | _ -> None)
+                | _ -> [])
+        topLevel @ local
+
     /// The blocks of `expr` and of everything within it, each as its statements.
     let rec blocksWithin (expr: Expression) : Statement list list =
         let children, statements = childrenOf expr

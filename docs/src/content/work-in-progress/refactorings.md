@@ -6,7 +6,7 @@ order: 32
 
 > The refactorings below are built, and described for users on
 > [VS Code extension](../standard-tools/vs-code-extension#refactorings). This page keeps how each is built, the rules
-> every refactoring follows, and the [ideas for later](#ideas-for-later).
+> every refactoring follows, and the [planned](#planned) ones.
 
 Nanyx should have the best editing experience we can manage, and that means the editor giving people the tools to
 change a program without breaking it. This workstream is those tools: rename, expand and shrink selection, extract
@@ -216,12 +216,22 @@ Not yet: a `module name =` block can't be renamed.
 - **A new name starts a rename.** A refactoring that invents a name (introduce local, introduce function) leaves the
   cursor on it, ready to rename.
 
-# Ideas for later
+# Planned
 
-- Rename a `module name =` block.
+Each has an issue with its design; none is built yet.
 
-- Change a def's signature: add, remove or reorder parameters, updating every call.
-- Move a def to another module, updating imports.
-- Convert a match to an `if` and back; add the missing arms of a match.
-- Extract a type alias from a written type; turn a structural type into a protected one.
-- Move a file and update the imports of it by path.
+| Refactoring | Issue |
+|---|---|
+| Introduce a type alias from a written type | [#1819](https://github.com/nanyx-lang/nanyx/issues/1819) |
+| Inline a type alias | [#1826](https://github.com/nanyx-lang/nanyx/issues/1826) |
+| Write the inferred types of the `_`s in an annotation | [#1820](https://github.com/nanyx-lang/nanyx/issues/1820) |
+| Change a def's signature: add, remove or reorder parameters, updating every call | [#1822](https://github.com/nanyx-lang/nanyx/issues/1822) |
+| Make a parameter named or positional, updating every call | [#1827](https://github.com/nanyx-lang/nanyx/issues/1827) |
+| Move a def to another module | [#1823](https://github.com/nanyx-lang/nanyx/issues/1823) |
+| Convert a match to an `if` and back | [#1824](https://github.com/nanyx-lang/nanyx/issues/1824) |
+| Make a structural type protected or private, with a constructor | [#1825](https://github.com/nanyx-lang/nanyx/issues/1825) |
+| Turn a `++` chain into an interpolated string, and back | [#1828](https://github.com/nanyx-lang/nanyx/issues/1828) |
+| Implement a context for a type: stubs for its missing attached definitions | [#1829](https://github.com/nanyx-lang/nanyx/issues/1829) |
+| Convert a lambda to its shorthand and back | [#1830](https://github.com/nanyx-lang/nanyx/issues/1830) |
+| Move a file and update the imports of it by path | [#1831](https://github.com/nanyx-lang/nanyx/issues/1831) |
+| Rename a `module name =` block | [#1832](https://github.com/nanyx-lang/nanyx/issues/1832) |

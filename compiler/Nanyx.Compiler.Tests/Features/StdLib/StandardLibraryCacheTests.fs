@@ -104,7 +104,14 @@ let private consoleFile = Path.Combine(ShippedPackages.directoryOf "nanyx.consol
 let ``The checked library has the shipped packages' modules, with paths beside this compiler`` () =
     let shipped = (CheckedLibrary.read CheckedLibrary.path CheckedLibrary.libraryHash.Value).Value.Shipped
     Assert.Equal<string list>(
-        [ "nanyx.console.core/src/console.nyx"; "nanyx.console.core/src/env.nyx"; "nanyx.console/src/console.host.nyx"; "nanyx.console/src/console.prelude.nyx" ],
+        [ "nanyx.console.core/src/console.nyx"
+          "nanyx.console.core/src/env.nyx"
+          "nanyx.console/src/console.host.nyx"
+          "nanyx.console/src/console.prelude.nyx"
+          "nanyx.fs/src/dir.nyx"
+          "nanyx.fs/src/file.nyx"
+          "nanyx.fs/src/filesystem.nyx"
+          "nanyx.fs/src/path.nyx" ],
         shipped |> List.choose (fun entry -> ShippedPackages.tryDisplay entry.Key) |> List.sort)
     for entry in shipped do
         for file, _ in entry.Read do

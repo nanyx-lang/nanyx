@@ -55,6 +55,10 @@ program's arguments: `nanyx run tool.nyx -- -v --all` passes `-v` and `--all`. E
 to the program as it is, a second `--` included. The program also sees the process's environment variables, through
 `variable`, and when it calls `exit(code)`, `run` exits with that code.
 
+Under the console host, the program reads and writes files through [`FileSystem`](../stdlib/filesystem), in the
+current directory and the directories in it, and nowhere else unless `--allow-dir` gives it another directory: a path
+outside them is `#error(#permissionDenied)`, whichever user runs it.
+
 `run` is a debug build: a program with type or name errors still runs, and reports each error if it reaches it (see
 [Deferred errors](../tour/error-handling#deferred-errors)). An error that can't be deferred, such as a syntax error,
 stops it before the program starts.
@@ -65,6 +69,7 @@ run. A script runs under the console host, `nanyx.console`, unless a `::host` di
 | Option | What it does |
 |--------|--------------|
 | `--host <host>` | Runs the package's `@entry` under another host, in place of its manifest's: a host package the compiler ships, `--host nanyx.console`, or the directory of one, `--host ../acme.host`. A host the compiler doesn't ship, or a directory whose manifest doesn't declare a host, is an error. A script names its host with `::host`, so `--host` with a `.nyx` file is an error. |
+| `--allow-dir <directory>` | Lets the program read and write `<directory>`, and what is in it, as well as the current directory. The program reaches it by its absolute path: `nanyx run --allow-dir ../data tool.nyx`, run in `/home/ada/tool`, lets `tool.nyx` read `path.of("/home/ada/data/input.txt")`. A directory that isn't there is an error. |
 | `--check-memory` | Checks the program's memory as it runs: it stops with exit code 70 at a block freed twice or an object used after it was freed, and fails with exit code 1 if the program finishes with memory it never freed. |
 | `--memory` | Checks the program's memory as `--check-memory` does, and once the program stops, however it stops, writes a report to standard error (see below). |
 | `--timings` | Writes how long each module took to check (see [Timings](#timings)). |

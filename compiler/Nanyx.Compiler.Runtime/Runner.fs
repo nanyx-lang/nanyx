@@ -42,25 +42,27 @@ type Program =
 /// runs the program. The program's output goes to its stdout (see `ProgramIo`) through WASI `fd_write`, from
 /// the console host (which declares it with `@extern`) and from `dbg`.
 module WasmRunner =
-    /// Writes the buffers of the `count` WASI iovecs at `iovecs` in `memory` to `stream`, and gives how many bytes that
-    /// was.
-    let private writeIovecs (memory: Memory) (iovecs: int) (count: int) (stream: IO.Stream) =
-        let mutable total = 0
-        for index in 0 .. count - 1 do
-            let iovec = int64 (iovecs + index * 8)
-            let length = memory.ReadInt32(iovec + 4L)
-            stream.Write(Span.op_Implicit(memory.GetSpan(int64 (memory.ReadInt32 iovec), length)): ReadOnlySpan<byte>)
-            total <- total + length
-        total
+    /// The name a program knows the directory `directory` by: its absolute path, written with `/`.
+    let private guestName (directory: string) =
+        let full = IO.Path.GetFullPath(directory).Replace('\\', '/')
+        if full.Length > 1 && full.EndsWith "/" && not (full.EndsWith ":/") then full.TrimEnd '/' else full
 
-    /// WASI's `errno` for a file descriptor that is not open.
-    let private badFileDescriptor = 8
+    /// `wasi` with the directories the program may read and write opened for it (WASI's preopens): the first of
+    /// `directories`, its current directory, as `.` and by its absolute path, and each of the rest by its absolute path.
+    /// The console host finds a relative path in `.`, and an absolute one in the directory whose name it starts with.
+    let private withDirectories (directories: string list) (wasi: WasiConfiguration) =
+        let opened =
+            match directories with
+            | current :: _ -> wasi.WithPreopenedDirectory(current, ".", true)
+            | [] -> wasi
+        directories |> List.distinct |> List.fold (fun (wasi: WasiConfiguration) directory -> wasi.WithPreopenedDirectory(directory, guestName directory, true)) opened
 
-    /// Sets up the program's command-line arguments (`arguments`, its name first), standard streams and environment
-    /// variables. Redirected output is written by a `fd_write` of our own, in place of WASI's, so that it lands in the
-    /// caller's streams.
-    let private configureIo (io: ProgramIo) (arguments: string list) (linker: Linker) (store: Store) =
-        let wasi = WasiConfiguration().WithArgs(arguments)
+    /// Sets up the program's command-line arguments (`arguments`, its name first), standard streams, environment
+    /// variables and the directories it may reach (`directories`, see `withDirectories`), and gives what to do once
+    /// the program has stopped and its store is gone. Redirected output is written by WASI to files of its own, which
+    /// are then copied to the caller's streams and deleted.
+    let private configureIo (io: ProgramIo) (arguments: string list) (directories: string list) (store: Store) : unit -> unit =
+        let wasi = WasiConfiguration().WithArgs(arguments) |> withDirectories directories
         match io with
         | Inherited ->
             store.SetWasiConfiguration(
@@ -69,19 +71,20 @@ module WasmRunner =
                     .WithInheritedStandardOutput()
                     .WithInheritedStandardError()
                     .WithInheritedEnvironment())
+            ignore
         | Redirected(input, output, error, variables) ->
-            store.SetWasiConfiguration(wasi.WithStandardInput(input).WithEnvironmentVariables(variables |> List.map (fun (name, value) -> struct (name, value))))
-            linker.AllowShadowing <- true
-            linker.DefineFunction(
-                "wasi_snapshot_preview1",
-                "fd_write",
-                CallerFunc<int, int, int, int, int>(fun caller fd iovecs count written ->
-                    match fd with
-                    | 1 | 2 ->
-                        let memory = caller.GetMemory "memory"
-                        memory.WriteInt32(int64 written, writeIovecs memory iovecs count (if fd = 1 then output else error))
-                        0
-                    | _ -> badFileDescriptor))
+            let outputFile = IO.Path.GetTempFileName()
+            let errorFile = IO.Path.GetTempFileName()
+            store.SetWasiConfiguration(
+                wasi
+                    .WithStandardInput(input)
+                    .WithStandardOutput(outputFile)
+                    .WithStandardError(errorFile)
+                    .WithEnvironmentVariables(variables |> List.map (fun (name, value) -> struct (name, value))))
+            fun () ->
+                for file, stream in [ outputFile, output; errorFile, error ] do
+                    stream.Write(IO.File.ReadAllBytes file)
+                    IO.File.Delete file
 
     /// Whether `ex` is the program ending itself through WASI `proc_exit` with exit code 0.
     let private exitedCleanly (ex: WasmtimeException) = ex.ExitCode.HasValue && ex.ExitCode.Value = 0
@@ -124,14 +127,13 @@ module WasmRunner =
         | :? TrapException as trap when trap.Type = TrapCode.StackOverflow -> StackOverflow(frameNames trap |> List.tryPick sourceName)
         | _ -> Trapped ex.Message
 
-    /// Instantiates the module described by `wat`, which runs its start function, then calls its export `start` if it
-    /// is given and the module exports it, and gives what `read` makes of the instance afterwards: `None` when the program
-    /// ended itself, through `proc_exit` with exit code 0, so there is no instance or it stopped without freeing what it
-    /// held. Also gives what `inspect` makes of the instance once the program has stopped, however it stopped: `None` only
-    /// when it was never instantiated.
-    let private executeInspecting
-        (io: ProgramIo)
-        (arguments: string list)
+    /// Instantiates `program` in a store that `configure` sets up, which runs its start function, then calls its export
+    /// `start` if it is given and the module exports it, and gives what `read` makes of the instance afterwards: `None`
+    /// when the program ended itself, through `proc_exit` with exit code 0, so there is no instance or it stopped without
+    /// freeing what it held. Also gives what `inspect` makes of the instance once the program has stopped, however it
+    /// stopped: `None` only when it was never instantiated. The store is gone once it returns.
+    let private executeIn
+        (configure: Store -> unit)
         (program: Program)
         (start: string option)
         (read: Instance option -> 'a)
@@ -151,7 +153,7 @@ module WasmRunner =
             use linker = new Linker(engine)
             use store = new Store(engine)
             linker.DefineWasi()
-            configureIo io arguments linker store
+            configure store
             let mutable instantiated = None
             let outcome =
                 try
@@ -172,8 +174,25 @@ module WasmRunner =
                 | :? WasmtimeException as ex -> Error (trapped ex)
             outcome, instantiated |> Option.map inspect
 
-    let private execute (io: ProgramIo) (arguments: string list) (program: Program) (start: string option) (read: Instance option -> 'a) : Result<'a, RunError> =
-        executeInspecting io arguments program start read ignore |> fst
+    /// `executeIn`, with the program's standard streams `io`, its command-line arguments `arguments`, its name first, and
+    /// the directories it may reach, `directories`, its current directory first (see `configureIo`).
+    let private executeInspecting
+        (io: ProgramIo)
+        (arguments: string list)
+        (directories: string list)
+        (program: Program)
+        (start: string option)
+        (read: Instance option -> 'a)
+        (inspect: Instance -> 'b)
+        : Result<'a, RunError> * 'b option =
+        let mutable finish = ignore
+        try
+            executeIn (fun store -> finish <- configureIo io arguments directories store) program start read inspect
+        finally
+            finish ()
+
+    let private execute (io: ProgramIo) (arguments: string list) (directories: string list) (program: Program) (start: string option) (read: Instance option -> 'a) : Result<'a, RunError> =
+        executeInspecting io arguments directories program start read ignore |> fst
 
     /// The value of the exported global `name` of `instance`, an `i32` or an `i64`: 0 when it does not export it.
     let private globalValue (instance: Instance) (name: string) : int64 =
@@ -184,19 +203,22 @@ module WasmRunner =
             | :? int64 as value -> value
             | value -> int64 (value :?> int)
 
-    /// Instantiates (and therefore runs) the module described by `wat`, with its standard streams `io` and its
-    /// command-line arguments `arguments`, its name first.
-    let run (io: ProgramIo) (arguments: string list) (wat: string) : Result<unit, RunError> = execute io arguments (Text wat) None ignore
+    /// Instantiates (and therefore runs) the module described by `wat`, with its standard streams `io`, its
+    /// command-line arguments `arguments`, its name first, and the directories it may read and write, `directories`, its
+    /// current directory first: none for a program that reaches no files.
+    let run (io: ProgramIo) (arguments: string list) (directories: string list) (wat: string) : Result<unit, RunError> =
+        execute io arguments directories (Text wat) None ignore
 
     /// `run` for a module in the binary format, `wasm`.
-    let runBinary (io: ProgramIo) (arguments: string list) (wasm: byte array) : Result<unit, RunError> =
-        execute io arguments (Binary wasm) None ignore
+    let runBinary (io: ProgramIo) (arguments: string list) (directories: string list) (wasm: byte array) : Result<unit, RunError> =
+        execute io arguments directories (Binary wasm) None ignore
 
     /// What `runCounting` gives, for any `Program`.
-    let private counting (io: ProgramIo) (arguments: string list) (start: string) (globals: string array) (program: Program) =
+    let private counting (io: ProgramIo) (arguments: string list) (directories: string list) (start: string) (globals: string array) (program: Program) =
         executeInspecting
             io
             arguments
+            directories
             program
             (Some start)
             (fun instance ->
@@ -215,19 +237,20 @@ module WasmRunner =
     let runCounting
         (io: ProgramIo)
         (arguments: string list)
+        (directories: string list)
         (start: string)
         (globals: string array)
         (wat: string)
         : Result<int array, RunError> * HeapCounters option =
-        counting io arguments start globals (Text wat)
+        counting io arguments directories start globals (Text wat)
 
     /// Runs the module described by `wat`, which exports its start function as `start` rather than running it when
     /// instantiated, and gives the values of its exported `i32` globals `globals` once `start` has returned. A global
     /// the module does not export counts as 0: a module that never allocates has no allocation counters. So does every
     /// global of a program that ended itself with exit code 0, which leaves what it allocated as it is.
-    let runReading (io: ProgramIo) (arguments: string list) (start: string) (globals: string array) (wat: string) : Result<int array, RunError> =
-        runCounting io arguments start globals wat |> fst
+    let runReading (io: ProgramIo) (arguments: string list) (directories: string list) (start: string) (globals: string array) (wat: string) : Result<int array, RunError> =
+        runCounting io arguments directories start globals wat |> fst
 
     /// `runReading` for a module in the binary format, `wasm`.
-    let runBinaryReading (io: ProgramIo) (arguments: string list) (start: string) (globals: string array) (wasm: byte array) : Result<int array, RunError> =
-        counting io arguments start globals (Binary wasm) |> fst
+    let runBinaryReading (io: ProgramIo) (arguments: string list) (directories: string list) (start: string) (globals: string array) (wasm: byte array) : Result<int array, RunError> =
+        counting io arguments directories start globals (Binary wasm) |> fst

@@ -1,0 +1,117 @@
+--| Paths to files and directories.
+
+  A [`Path`] is made from text with [`of`], which normalises it: its parts are separated by `/`,
+  whichever separator the text used, and the empty parts, the `.` parts and each `..` that follows a
+  part are taken out. So `path.of("notes\\./drafts/../todo.txt")` is `notes/todo.txt`. A path that
+  starts with `/`, or with a drive such as `C:`, is absolute; any other is relative, and the empty
+  path is `.`. Import the module as `import nanyx.fs/path as path` to call `path.of`, `path.join` and
+  the rest by those names.
+export module path
+
+import nanyx/text
+
+--| Where a file or a directory is, written with `/` between its parts. Make one with [`of`]: a
+  string is never taken for a path, so a string passed where a path was meant is an error.
+export type Path = protected string
+
+--| `text` with each `\` written as `/`.
+def slashed: string -> string = { text ->
+  string.replace(text, pattern = "\\", replacement = "/")
+}
+
+--| The root that `text`, written with `/`, starts with: `/`, a drive with `/` after it, as `C:/`, or
+  the empty string when the path is relative.
+def rootOf: string -> string = { text ->
+  if string.startsWith(text, "/")
+    then "/"
+    else if isDrive(text) then string.take(text, 2) ++ "/" else ""
+}
+
+--| Whether `text` starts with a drive, a letter and `:`, on its own or followed by `/`.
+def isDrive: string -> bool = { text ->
+  match string.indexOf(text, ":")
+    | #some(index) ->
+      index == 1 and (string.length(text) == 2 or string.startsWith(string.skip(text, 2), "/"))
+    | #notFound -> false
+}
+
+--| `kept`, the parts kept so far (the latest first), once a `..` has taken the latest away: one
+  that is itself `..` is kept, and so is a `..` with none before it in a relative path.
+def upFrom: bool, list(string) -> list(string) = { rooted, kept ->
+  match kept
+    | [] -> (if rooted then [] else [".."])
+    | [latest, ...rest] -> if latest == ".." then ["..", ...kept] else rest
+}
+
+--| The parts of a path that are kept, in order, from `parts`, after `kept` (the latest first).
+def collapse: bool, list(string), list(string) -> list(string) = { rooted, parts, kept ->
+  match parts
+    | [] -> list.reverse(kept)
+    | [part, ...rest] ->
+      if part == "" or part == "."
+        then collapse(rooted, rest, kept)
+        else if part == ".."
+          then collapse(rooted, rest, upFrom(rooted, kept))
+          else collapse(rooted, rest, [part, ...kept])
+}
+
+--| The path `text` names, normalised: `path.of("logs\\today.txt")` is `logs/today.txt`, and
+  `path.of("a/./b/../c")` is `a/c`.
+export def of: string -> Path = { text ->
+  def written = slashed(text)
+  def root = rootOf(written)
+
+  def parts = collapse(
+    root != ""
+    string.split(string.skip(written, string.length(root)), on = "/")
+    []
+  )
+
+  def joined = string.join(parts, "/")
+  Path(if root == "" and joined == "" then "." else root ++ joined)
+}
+
+--| The path `part` names within `base`: `path.join(path.of("logs"), "today.txt")` is
+  `logs/today.txt`. When `part` is absolute, it is the path `part` names, as it is.
+export def join: Path, string -> Path = { Path(base), part ->
+  def written = slashed(part)
+  if rootOf(written) != "" then of(written) else of(base ++ "/" ++ written)
+}
+
+--| The directory `at` is in: `logs` for `logs/today.txt`, and `.` for `today.txt`. A root, and the
+  empty path `.`, have none.
+export def parent: Path -> #some(Path) | #none = { Path(text) ->
+  if text == "." or string.length(rootOf(text)) == string.length(text)
+    then #none
+    else #some(of(text ++ "/.."))
+}
+
+--| The last part of `at`: `today.txt` for `logs/today.txt`. A root, `.` and a path that ends in `..`
+  have none.
+export def fileName: Path -> #some(string) | #none = { Path(text) ->
+  def rest = string.skip(text, string.length(rootOf(text)))
+
+  def name = match string.lastIndexOf(rest, "/")
+    | #some(index) -> string.skip(rest, index + 1)
+    | #notFound -> rest
+
+  if name == "" or name == "." or name == ".." then #none else #some(name)
+}
+
+--| What follows the last `.` in the file name of `at`, without the dot: `txt` for
+  `logs/today.txt`. A name with no `.`, one that ends in `.`, and one whose only `.` starts it, as
+  `.gitignore` does, have none.
+export def extension: Path -> #some(string) | #none = { at ->
+  match fileName(at)
+    | #none -> #none
+    | #some(name) ->
+      match string.lastIndexOf(name, ".")
+        | #some(index) ->
+          if index == 0 or index == string.length(name) - 1
+            then #none
+            else #some(string.skip(name, index + 1))
+        | #notFound -> #none
+}
+
+--| `at` written with `/` between its parts, as [`of`] normalised it.
+export def Path.toString: Path -> string = { Path(text) -> text }
