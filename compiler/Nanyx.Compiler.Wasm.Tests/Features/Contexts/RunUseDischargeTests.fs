@@ -90,3 +90,20 @@ def main: [Console] () -> () = {
 }
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "1\n"
+
+[<Fact>]
+let ``Run - a for loop's body calls a function value with the instance a use in its memory block loads`` () =
+    let source = """context Emit(b) = (emit: b -> ())
+
+def each: list(int), ([Emit(int)] int -> ()) -> int = { xs, f ->
+  memory {
+    mut n = 0
+    use Emit(int)(emit = { x -> n := n + 1 })
+    for xs | x -> f(x)
+    n
+  }
+}
+
+println([1, 2, 3] \each { x -> emit(x) })
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "3\n"
