@@ -460,7 +460,7 @@ let internal typeOfInTypeDef (name: Identifier) (body: TypeExpr) (parameters: (I
 /// The type names written in `typeExpr` that name no type here: `Strnig`, or `Email` where only `m.Email` is in
 /// scope. `parameters` are the names of the parameters of the type definition `typeExpr` is the body of, if it is
 /// one. Contexts are checked apart.
-let rec private typeNamesIn (typeExpr: TypeExpr) : (Identifier * SourceSpan) list =
+let rec internal typeNamesIn (typeExpr: TypeExpr) : (Identifier * SourceSpan) list =
     let ofType = typeNamesIn
     match typeExpr.Kind with
     | TypeName name -> [ name, typeExpr.Span ]
@@ -819,3 +819,30 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
         ContextDefs = nextContexts
         LocalNominals = nextNominals
         LocalPrivateNominals = nextPrivate }
+
+/// The type definitions `items` declares, ordered so that each comes after the types it names that are declared
+/// among them, and otherwise in the order they are written. Each is registered with `registerTypeDef` in this order,
+/// so a type's body reads the types it names as declared, wherever they are written: a type written above an alias it
+/// names, or in a fragment of a partial module whose file sorts first, sees the alias's union and not an unknown name.
+/// Types that name each other keep the order they are written in, as do two definitions of one name.
+let internal inDependencyOrder (items: TopLevelItem list) =
+    let typeDefs =
+        items
+        |> List.choose (function
+            | Kind (Def (TypeDef(name, modifiers, parameters, body))) -> Some (name, modifiers, parameters, body)
+            | _ -> None)
+        |> Array.ofList
+    let indicesByName =
+        typeDefs |> Array.indexed |> Array.groupBy (fun (_, (name, _, _, _)) -> name) |> Array.map (fun (name, defs) -> name, Array.map fst defs) |> Map.ofArray
+    let named (_, _, parameters: (Identifier * TypeExpr option) list, body) =
+        body :: (parameters |> List.choose snd) |> List.collect typeNamesIn |> List.map fst |> List.distinct
+    let visited = Array.create typeDefs.Length false
+    let mutable ordered = []
+    let rec visit index =
+        if not visited.[index] then
+            visited.[index] <- true
+            named typeDefs.[index] |> List.iter (fun name -> indicesByName |> Map.tryFind name |> Option.iter (Array.iter visit))
+            ordered <- typeDefs.[index] :: ordered
+    for index in 0 .. typeDefs.Length - 1 do
+        visit index
+    List.rev ordered
