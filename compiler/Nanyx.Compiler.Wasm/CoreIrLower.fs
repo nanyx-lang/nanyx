@@ -658,6 +658,13 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             CoreIrLowerMembers.coerceAll this.MemberTools scope atoms (if parameterTys.Length = atoms.Length then parameterTys else []) (fun atoms ->
                 CoreIrLowerMembers.contextMembers this.MemberTools scope name expr.Id instanceTy Set.empty knownMembers (fun members ->
                     k (Expr.make (Call(target, atoms @ List.map snd members)) ty)))
+        // Arguments one of which is adapted to its parameter's type by storing are held in locals, so that no other
+        // waits on the stack across the stores (#1949).
+        let atomsOf (arguments: Expression list) =
+            if arguments.Length = parameterTys.Length
+               && List.exists2 (fun argument parameterTy -> CoreIrLowerMembers.coercionStores (tyOf argument) parameterTy) arguments parameterTys then
+                this.AtomsInLocals scope arguments
+            else this.Atoms scope arguments
         // The arguments as the callee takes them.
         match SyntaxTree.flattenCallArgs args with
         | [ Kind (RecordExpr fields) ] when parameters.Length > 1 && fields.Length = parameters.Length ->
@@ -672,7 +679,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | Some value, _
                     | None, Some value -> value
                     | None, None -> cannot $"a call to '{name}' with no argument for {parameter}")
-            this.Atoms scope ordered call
+            atomsOf ordered call
         | [ record ] when parameters.Length > 1 && (match this.TypeIn scope record with IrRecord _ -> true | _ -> false) ->
             // A record that is not a name in scope is held in a local of its own, as each field is read from it.
             let fieldsOf held = CoreIrLowerArguments.fieldsAsArguments newTemp name parameters (this.TypeIn scope record) held call
@@ -691,7 +698,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | [] when parameters.Length = 1 ->
             // `f()` on a function written `{ _ -> ... }`: its one parameter is the unit.
             call [ AUnit ]
-        | flatArgs when flatArgs.Length = parameters.Length -> this.Atoms scope flatArgs call
+        | flatArgs when flatArgs.Length = parameters.Length -> atomsOf flatArgs call
         | _ -> cannot $"a call to '{name}' with its arguments in another shape"
 
     /// The interpolated string of `parts`, at `expr`.
