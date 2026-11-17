@@ -63,7 +63,7 @@ let ``An unknown escape is an error at its backslash`` (source: string, expected
         // FParsec wraps the message across lines.
         let message = error.Message.Replace("\r\n", " ").Replace("\n", " ")
         Assert.Contains(expected, message)
-        Assert.Contains("The escapes in a double-quoted string are", message)
+        Assert.Contains("the escapes in a double-quoted string are", message)
         Assert.Equal(source.IndexOf '\\', error.Span.Start)
         Assert.Equal(source.IndexOf '\\' + 1, error.Span.End)
     | other -> Assert.Fail $"Expected a parse error, got %A{other}"

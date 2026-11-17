@@ -243,7 +243,7 @@ def value = helper(1)
 """
     let result = compileImporting "export def helper: int -> int = { x -> x + 1 }" main
     Assert.Equal<(string * string) list>([ DiagnosticCodes.PathImportWithoutAlias.Code, "\"./mod\"" ], importErrors "export def helper: int -> int = { x -> x + 1 }" main)
-    Assert.Contains("""write import "./mod" as mod""", (result.Diagnostics |> List.head).Message)
+    Assert.Contains("""write `import "./mod" as mod`""", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]
 let ``A script imported by file path with an alias is qualified by the alias`` () =

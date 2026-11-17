@@ -22,7 +22,7 @@ let ``A definition can be named by an operator in backticks`` () =
 [<InlineData("def f = {\n  rec `**!` = { a -> a }\n  1\n}", "`**!` = { a -> a }", "**!")>]
 let ``An operator Nanyx does not have cannot be defined`` (source: string) (at: string) (operator: string) =
     let reported, text = parseErrorOf source
-    Assert.Contains($"`{operator}` is not one of Nanyx's operators, so it cannot be defined. The operators are `**`, `*`", reported)
+    Assert.Contains($"`{operator}` is not one of Nanyx's operators, so it cannot be defined: the operators are `**`, `*`", reported)
     Assert.Equal(at, text)
 
 [<Fact>]

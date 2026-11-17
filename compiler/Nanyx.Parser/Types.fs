@@ -320,7 +320,7 @@ let definableName (start: Position) (name: Identifier) : Parser<unit, ParseState
         reportAtOperator $"`{last}` is built in, so it cannot be defined: `a ?? b` is the value inside `a`'s `#some`, or else `b`"
     elif Names.isOperator last && not (isDefinableOperator last) then
         let operators = binaryOperators |> List.filter (fun op -> isDefinableOperator op.Text) |> List.map (fun op -> $"`{op.Text}`")
-        reportAtOperator $"""`{last}` is not one of Nanyx's operators, so it cannot be defined. The operators are {String.concat ", " operators}"""
+        reportAtOperator $"""`{last}` is not one of Nanyx's operators, so it cannot be defined: the operators are {String.concat ", " operators}"""
     else
         preturn ()
 

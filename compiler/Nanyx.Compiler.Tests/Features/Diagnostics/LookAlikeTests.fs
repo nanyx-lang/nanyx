@@ -25,7 +25,7 @@ let private code = DiagnosticCodes.LookAlikeCharacter.Code
 let ``A minus sign is named where it is written, with a fix that writes a hyphen-minus`` () =
     let source = $"def expected = {minus}7.0\n"
     Assert.Equal<(string * string * string) list>(
-        [ code, "'−' (U+2212 Minus Sign) looks like '-' (Hyphen-Minus), but it isn't one", minus ],
+        [ code, "'−' (U+2212 Minus Sign) looks like `-` (Hyphen-Minus), but it isn't one: write `-`", minus ],
         diagnosticsOf source)
     let fix = (Compiler.compile source).Diagnostics.Head.Fixes |> Assert.Single
     Assert.Equal("Replace '−' with '-'", fix.Title)
@@ -37,7 +37,7 @@ let ``Curly quotes around a string are one diagnostic, whose fix writes both`` (
     match diagnosticsOf source with
     | [ found, message, at ] ->
         Assert.Equal((code, "“"), (found, at))
-        Assert.StartsWith("'“' (U+201C Left Double Quotation Mark) (and its pair, '”') looks like '\"'", message)
+        Assert.StartsWith("'“' (U+201C Left Double Quotation Mark) (and its pair, '”') looks like `\"`", message)
     | other -> failwithf "expected one diagnostic, got %A" other
     Assert.Equal("def greeting = \"hello\"\n", allFixed source)
     Assert.Empty((Compiler.compile (allFixed source)).Diagnostics)
@@ -46,7 +46,7 @@ let ``Curly quotes around a string are one diagnostic, whose fix writes both`` (
 let ``A no-break space is named, and its fix writes a space`` () =
     let source = "def total = 1 + 2\n"
     Assert.Equal<(string * string * string) list>(
-        [ code, "U+00A0 (No-Break Space) looks like a space, but it isn't one", " " ],
+        [ code, "U+00A0 (No-Break Space) looks like a space, but it isn't one: write a space", " " ],
         diagnosticsOf source)
     Assert.Empty((Compiler.compile (allFixed source)).Diagnostics)
 

@@ -264,7 +264,7 @@ let private scan (filePath: string) (source: string) : Piece list * ParseError l
             if at j = '`' then
                 token BacktickedName (j + 1)
             else
-                error i (i + 1) "This name in backticks is never closed: a name in backticks ends with a `` ` `` on its line, and has no `.` in it"
+                error i (i + 1) "This name in backticks is never closed: end it with a `` ` `` on the same line, before any `.`"
                 token Unknown (i + 1)
         elif c = '}' && not holes.IsEmpty && holes.Head = 0 then
             holes <- holes.Tail

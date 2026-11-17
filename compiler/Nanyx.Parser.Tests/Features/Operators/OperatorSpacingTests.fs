@@ -19,7 +19,7 @@ open ParserTestHelpers
 [<InlineData("def s = \"{a+b}\"", "+", "+b}\"")>]
 let ``An operator without a space on each side is an error at the operator`` (source: string) (op: string) (at: string) =
     let reported, text = parseErrorOf source
-    Assert.Contains($"Operators are written with a space on each side: `x {op} y`, not `x{op}y`", reported)
+    Assert.Contains($"`{op}` is not spaced: write an operator with a space on each side, as `x {op} y`, not `x{op}y`", reported)
     Assert.Equal(at, text)
 
 [<Theory>]

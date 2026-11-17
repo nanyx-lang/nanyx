@@ -64,7 +64,7 @@ An import names a file or a module that does not exist. For a file-path import, 
 file's directory, and `.nyx` is added to it.
 
 ```nanyx
-import "./helpers" as helpers  -- error NYX0003: Import not found: .../helpers
+import "./helpers" as helpers  -- error NYX0003: There is no file '.../helpers' to import
 
 def total = 1
 ```
@@ -86,7 +86,7 @@ import "./b" as b
 
 export def one = 1
 -- file: b.nyx
-import "./a" as a  -- error NYX0004: Import cycle detected for .../a.nyx
+import "./a" as a  -- error NYX0004: '.../a.nyx' imports this module, directly or through others, so the imports make a cycle
 
 export def two = 2
 ```
@@ -99,7 +99,7 @@ An import that starts with `nanyx/` names a module the standard library does not
 modules it has.
 
 ```nanyx
-import nanyx/strings  -- error NYX0005: Unknown standard library module 'nanyx/strings' (available: ...)
+import nanyx/strings  -- error NYX0005: Unknown standard library module 'nanyx/strings': the modules are ...
 
 def total = 1
 ```
@@ -147,7 +147,7 @@ directive takes: a package's name missing, a word that is neither a version nor 
 Directives say for a script what a package's manifest would say ([Packages](../tour/packages)).
 
 ```nanyx
-::dependency acme.util latest  -- error NYX0009: 'latest' is neither a version, which starts with a digit, 1.2.0, nor a directory, which starts with . or /, ../util
+::dependency acme.util latest  -- error NYX0009: 'latest' is neither a version, which starts with a digit, as `1.2.0`, nor a directory, which starts with `.` or `/`, as `../util`
 
 def total = 1
 ```
@@ -203,7 +203,7 @@ A file is imported by its path without `as` and a name. The names a file exports
 
 ```nanyx
 -- file: main.nyx
-import "./helpers"  -- error NYX0014: An import of a file path must have an alias: write import "./helpers" as helpers
+import "./helpers"  -- error NYX0014: This import of a file path has no alias: write `import "./helpers" as helpers`
 
 def total = 1
 -- file: helpers.nyx
@@ -219,7 +219,7 @@ name.
 
 ```nanyx
 -- file: main.nyx
-import "./helpers" as h  -- error NYX0015: './helpers' declares the module name 'helpers', so it must be imported by its name, not by file path: write import helpers
+import "./helpers" as h  -- error NYX0015: './helpers' declares the module name 'helpers', so it is imported by its name, not by file path: write `import helpers`
 
 def total = h.one
 -- file: helpers.nyx
@@ -618,7 +618,7 @@ A script's directives were once a manifest's dotted key with a TOML value, `::ho
 are now a name and words: `::host nanyx.console`. A directive in the old form is an error.
 
 ```nanyx
-::formatter.lineWidth = 80  -- error NYX0035: Directives are lines of words now, not a manifest's key and a TOML value: write ::format lineWidth 80
+::formatter.lineWidth = 80  -- error NYX0035: Directives are lines of words now, not a manifest's key and a TOML value: write `::format lineWidth 80`
 
 def total = 1
 ```
@@ -633,7 +633,7 @@ To fix it, write it as the message says, which the error's fix does: `::linters.
 A `::lint` line sets a rule of the linter the nearest `::linter` above it turns on, and there is none above it.
 
 ```nanyx
-::lint unusedBindings #error  -- error NYX0036: ::lint sets a rule of the linter of the nearest ::linter above it, but there is none: turn one on above it, ::linter nanyx.lint
+::lint unusedBindings #error  -- error NYX0036: `::lint` sets a rule of the linter of the nearest `::linter` above it, but there is none: turn one on above it, `::linter nanyx.lint`
 
 def total = 1
 ```
@@ -648,7 +648,7 @@ most fonts it can't be told apart. The parser reports it in place of a syntax er
 it looks like were written, so the file's other syntax errors are still reported.
 
 ```nanyx
-def expected = −7.0  -- error NYX0037: '−' (U+2212 Minus Sign) looks like '-' (Hyphen-Minus), but it isn't one
+def expected = −7.0  -- error NYX0037: '−' (U+2212 Minus Sign) looks like `-` (Hyphen-Minus), but it isn't one: write `-`
 ```
 
 To fix it, write the character it looks like, which the error's fix does. A pair of curly quotes is one error, and its

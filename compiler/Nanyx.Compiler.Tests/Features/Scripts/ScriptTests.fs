@@ -86,17 +86,17 @@ let private directiveError (source: string) =
 
 [<Theory>]
 [<InlineData("::linter nope", "NYX0023", "nope", "there is no linter 'nope'; the linters are 'nanyx.lint'")>]
-[<InlineData("::linter nanyx.lint ../lint", "NYX0009", "../lint", "a linter can't be found by its directory yet")>]
+[<InlineData("::linter nanyx.lint ../lint", "NYX0009", "../lint", "A linter cannot be found by its directory yet")>]
 [<InlineData("::linter nanyx.lint 0.0.1", "NYX0029", "0.0.1", "the compiler ships nanyx.lint")>]
-[<InlineData("::linter", "NYX0009", "::linter", "::linter takes a linter: ::linter nanyx.lint")>]
+[<InlineData("::linter", "NYX0009", "::linter", "`::linter` takes a linter: write `::linter nanyx.lint`")>]
 [<InlineData("::linter nanyx.lint\n::lint nope #error", "NYX0021", "nope", "the rules of nanyx.lint has no field 'nope'")>]
 [<InlineData("::linter nanyx.lint\n::lint unusedBindings #loud", "NYX0023", "#loud", "the rule unusedBindings must be #error, #warning, #info, #hint, #off, not #loud")>]
 [<InlineData("::linter nanyx.lint\n::lint unusedBindings 3", "NYX0023", "3", "not 3")>]
 [<InlineData("::linter nanyx.lint\n::lint unusedBindings error", "NYX0009", "error", "'error' is not a value")>]
-[<InlineData("::linter nanyx.lint\n::lint unusedBindings", "NYX0009", "::lint unusedBindings", "::lint takes a rule of the linter above it and a severity")>]
-[<InlineData("::format lineWidth", "NYX0009", "::format lineWidth", "::format takes a setting and its value")>]
-[<InlineData("::colour red", "NYX0009", "colour", "unknown directive ::colour; the directives are ::host, ::dependency, ::linter, ::lint and ::format")>]
-[<InlineData("::", "NYX0009", "::", "a directive is a name and the words it takes after '::'")>]
+[<InlineData("::linter nanyx.lint\n::lint unusedBindings", "NYX0009", "::lint unusedBindings", "`::lint` takes a rule of the linter above it and a severity")>]
+[<InlineData("::format lineWidth", "NYX0009", "::format lineWidth", "`::format` takes a setting and its value")>]
+[<InlineData("::colour red", "NYX0009", "colour", "Unknown directive `::colour`: the directives are `::host`, `::dependency`, `::linter`, `::lint` and `::format`")>]
+[<InlineData("::", "NYX0009", "::", "`::` has no directive's name after it")>]
 let ``A directive written wrong is an error at the word it is about`` (directive: string, code: string, at: string, message: string) =
     let diagnostic, text = directiveError directive
     Assert.Equal(code, diagnostic.Code)

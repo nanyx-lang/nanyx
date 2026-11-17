@@ -78,7 +78,7 @@ let ``use C(T) = expr does not parse, and the error says to write the call form 
             // FParsec wraps a long message onto several lines.
             let message = err.Message.Replace("\r\n", " ").Replace("\n", " ")
             Assert.Contains($"`use {head} = ...` is not a way to load an instance: write `use {head}(...)`,", message)
-            Assert.Contains($"or define the instance with `def name: {head} = (...)` and load it with `use name`.", message)
+            Assert.Contains($"or define the instance with `def name: {head} = (...)` and load it with `use name`", message)
             Assert.Equal(source.IndexOf head, err.Span.Start)
         | Result.Ok _ -> failwith $"Expected '{line.Trim()}' not to parse"
 

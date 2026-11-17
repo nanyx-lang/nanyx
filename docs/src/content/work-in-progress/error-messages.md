@@ -117,7 +117,9 @@ have, written down.
 
 [Principles](../foundations/principles#friendly-errors) says the same. What's left of #879 is one PR per area (parser,
 type checker, backend, packaging) rewriting the messages that break it, such as `dbg expects a single argument`, and a
-code for every error that lacks one.
+code for every error that lacks one. The parser's own messages, and those for directives, attributes and imports, are
+done. A syntax error the parser has no message of its own for is still FParsec's report ("Expecting: ..."), which the
+recursive-descent parser ([#846](https://github.com/nanyx-lang/nanyx/issues/846)) replaces.
 
 # Goals
 

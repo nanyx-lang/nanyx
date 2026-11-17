@@ -135,7 +135,7 @@ let typeDefCore: Parser<Definition, ParseState> =
     let contextName =
         typeNameIdentifier >>= fun name ->
             if name = "type" then
-                fail "expected context name"
+                fail "`type` is not a context's name"
             else
                 preturn name
 
@@ -247,7 +247,7 @@ let private firstArmIndent: Parser<int64, ParseState> =
 let private armIndentedFrom (armsIndent: int64) (arm: Parser<'a, ParseState>) : Parser<'a, ParseState> =
     ws >>. getPosition .>>. currentLineIndent >>= fun (start, lineIndent) ->
         if start.Column = lineIndent && lineIndent < armsIndent then
-            fail "an arm indented less than the first arm belongs to an enclosing match"
+            fail "An arm indented less than the first arm belongs to an enclosing match"
         else
             arm
 
@@ -317,7 +317,7 @@ do
         let indentedBlock matchIndent =
             lookAhead (wsInline >>. newline >>. wsInline >>. getPosition) >>= fun blockStart ->
                 if blockStart.Column <= matchIndent then
-                    fail "the scrutinee of a match must be on the same line or indented more than the match"
+                    fail "The scrutinee of a match is indented no further than the `match`: write it on the same line, or indent it more"
                 else
                     blockExpr () |>> fun block ->
                         // A block of one expression is just that expression.
@@ -332,7 +332,7 @@ do
             | Some column ->
                 lookAhead (ws >>. getPosition) >>= fun firstArm ->
                     if firstArm.Column >= column then
-                        fail "the arms of a match must be indented less than the block before them"
+                        fail "The arms of a match are indented as far as the block before them: indent them less than the block"
                     else
                         matchArms
         currentLineIndent >>= fun matchIndent ->
@@ -445,7 +445,7 @@ let tupleOrParenExpr =
         let fields = parts |> List.choose (function Choice1Of2 field -> Some field | Choice2Of2 _ -> None)
         if fields.Length = parts.Length then preturn (fieldsToExpr (fields, span))
         elif fields |> List.exists (function PositionalField _ -> true | NamedField _ -> false) then
-            fail "a record with a spread names each of its other fields, as `name = value`"
+            fail "A record with a spread has a field without a name: name each of its other fields, as `name = value`"
         else
             let parts = parts |> List.map (function Choice1Of2 field -> field | Choice2Of2 spread -> PositionalField spread)
             preturn (Expression.at span (FunctionCall(SpreadSyntax.builtIn, None, [ Expression.at span (RecordExpr parts) ]))))
@@ -491,7 +491,7 @@ let private bracketItems =
             let tuples = entries |> List.map (fun (key, value) -> Expression.from key (TupleExpr [ key; value ]))
             preturn (Choice2Of2 tuples, span)
         else
-            fail "a map literal's items are all entries, written `key => value`"
+            fail "A map literal has an item that is not an entry: write each item as `key => value`"
 
 let listExpr =
     bracketItems
@@ -665,9 +665,9 @@ let useValue =
         >>= fun (position, head) ->
             reportFocused position
                 ($"`use {head} = ...` is not a way to load an instance: write `use {head}(...)`, or define the instance "
-                 + $"with `def name: {head} = (...)` and load it with `use name`.")
+                 + $"with `def name: {head} = (...)` and load it with `use name`")
     let context =
-        let contextName = identifierNoWs >>= fun name -> if Char.IsUpper name.[0] then preturn name else fail "context name (capitalised)"
+        let contextName = identifierNoWs >>= fun name -> if Char.IsUpper name.[0] then preturn name else fail $"'{name}' is not a context's name: a context's name is capitalised"
         spannedType (pipe2 contextName typeArgs (fun name args -> TypeApply(name, args)))
     let instance =
         attempt (withSpan (context .>>. parenFields))
@@ -717,7 +717,7 @@ let useInExpr =
 let contextMemberAccess =
     let contextName =
         identifierNoWs >>= fun name ->
-            if Char.IsUpper name.[0] then preturn name else fail "context name (capitalised)"
+            if Char.IsUpper name.[0] then preturn name else fail $"'{name}' is not a context's name: a context's name is capitalised"
     // Parse a context type application with required type args: C(T)
     let contextTypeApply =
         spannedType (
@@ -757,8 +757,8 @@ let private workflowKeywordApplication =
     >>. getPosition .>>. lookAhead (keyword .>> skipMany1 (anyOf " \t") .>> operand)
     >>= fun (position, name) ->
         reportFocused position
-            ($"`{name}` is applied to a value without parentheses, which is how a workflow keyword is used. The "
-             + $"only workflow keywords so far are `try` and `return`. To call a function, write `{name}(...)`.")
+            ($"`{name}` is applied to a value without parentheses, as only a workflow keyword (`try` or `return`) is: "
+             + $"write `{name}(...)` to call a function")
 
 let primaryExprNoWs =
     choice [

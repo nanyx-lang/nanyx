@@ -637,7 +637,7 @@ module Compiler =
                     let checkImport (importOrigin: ModuleOrigin) (readSource: unit -> string) =
                         let importKey = originKey importOrigin
                         if importKey = key || visited.Contains importKey then
-                            Error (Typed, [ Diagnostics.at DiagnosticCodes.ImportCycle item.Span $"Import cycle detected for {importKey}" ])
+                            Error (Typed, [ Diagnostics.at DiagnosticCodes.ImportCycle item.Span $"'{importKey}' imports this module, directly or through others, so the imports make a cycle" ])
                         else
                             // The imported module's errors name this import as the one that brings them in, in place
                             // of the one in that module that brought them into it.
@@ -666,14 +666,14 @@ module Compiler =
                     | Some moduleName, _ ->
                         match StandardLibrary.tryLoadSource moduleName with
                         | None ->
-                            let available = String.concat ", " (StandardLibrary.moduleNames |> List.map (fun name -> StandardLibrary.importPrefix + name))
-                            fail [ Diagnostics.at DiagnosticCodes.UnknownStandardLibraryModule item.Span $"Unknown standard library module '{StandardLibrary.importPrefix}{moduleName}' (available: {available})" ]
+                            let available = Diagnostics.listed (StandardLibrary.moduleNames |> List.map (fun name -> $"'{StandardLibrary.importPrefix}{name}'"))
+                            fail [ Diagnostics.at DiagnosticCodes.UnknownStandardLibraryModule item.Span $"Unknown standard library module '{StandardLibrary.importPrefix}{moduleName}': the modules are {available}" ]
                         | Some moduleSource ->
                             match checkImport (StandardLibraryModule moduleName) (fun () -> moduleSource) with
                             | Error (_, diags) -> fail diags
                             | Ok imported when imported.Name <> Some moduleName ->
                                 let declared = imported.Name |> Option.defaultValue "(none)"
-                                fail [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"Standard library module '{StandardLibrary.importPrefix}{moduleName}' declares the module name '{declared}'" ]
+                                fail [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"The standard library module '{StandardLibrary.importPrefix}{moduleName}' declares the module name '{declared}'" ]
                             | Ok imported -> mergeWritten preludeKey reExportItems (StandardLibraryModule moduleName) item imported merged
                     | None, None ->
                         match origin with
@@ -689,13 +689,13 @@ module Compiler =
                                     | [] -> mergeWritten preludeKey reExportItems (SourceFile importPath) item imported merged
                                     | diags -> fail diags
                         | StandardLibraryModule name ->
-                            fail [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"Standard library module '{name}' may only import other standard library modules" ]
+                            fail [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"The standard library module '{name}' imports a module outside the standard library: import only other standard library modules" ]
                         | InMemory ->
                             let shown =
                                 match item.Source with
                                 | PathImport path -> path
                                 | ModuleImport name -> name
-                            fail [ Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"Import not found: {shown} (only standard library modules can be imported here)" ]) initial
+                            fail [ Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"'{shown}' cannot be imported by source that has no file: import only standard library modules here" ]) initial
             // Then the definitions owned by the types the imports bring in, from their modules (see `OwnedDefinitions`).
             // The standard library imports what it uses itself.
             let merged =
@@ -1149,7 +1149,7 @@ module Compiler =
     let compileFileWith (options: LinterOptions) (filePath: string) : CompileResult =
         if not (File.Exists filePath) then
             { Phase = Parsed
-              Diagnostics = [ Diagnostics.general DiagnosticCodes.FileNotFound $"File not found: {filePath}" ]
+              Diagnostics = [ Diagnostics.general DiagnosticCodes.FileNotFound $"There is no file '{filePath}'" ]
               Typed = None
               TypeChecked = false
               ErrorsDeferred = false
