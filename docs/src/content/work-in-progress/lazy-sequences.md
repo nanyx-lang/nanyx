@@ -24,6 +24,8 @@ order: 25
   ([Context-qualified types](./context-qualified-types#a-context-variable-the-type-is-generic-in-contexts),
   [#1525](https://github.com/nanyx-lang/nanyx/issues/1525), done). Its tail, `seq(a)` in its own body, is a
   `[k] seq(a)` too: a protected type can name itself ([#1663](https://github.com/nanyx-lang/nanyx/issues/1663), done).
+  So a sequence whose steps wait would be an `[Async] seq(a)`, which is what Kotlin calls a flow
+  ([Concurrency, "Streams"](./concurrency-and-crash-boundaries#streams-async-sequences), proposed).
 - A function that takes "anything that can be iterated" requires a context, `Iterable(c)`, which a type gets by
   attaching a `toSeq`. A list is never a sequence by subtyping or by implicit conversion.
 - Sequences are built with `seq.unfold`, from a list with `list.toSeq`, or with a `seq { ... }` workflow whose `yield`
