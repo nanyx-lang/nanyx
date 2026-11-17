@@ -26,7 +26,8 @@ Import its module under a name, `json`, so that its `print` doesn't clash with t
 # Reading JSON
 
 `json.parse` gives back `#some(Json)`, or `#error(JsonError)` when the text isn't JSON. An object is a
-`map(string, Json)`, so `map.get` looks a key up:
+`map(string, Json)`, so `map.get` looks a key up, and one pattern can take the result apart through as many tags as
+it needs:
 
 ```nanyx
 ::dependency nanyx.json
@@ -37,13 +38,13 @@ import nanyx.json/json as json
 def data = '{"name": "Alice", "age": 30}'
 
 match json.parse(data)
-  | #some(#object(user)) -> (match map.get(user, "name")
-    | #some(#string(name)) -> println("Hello, {name}!")
+  | #some(#object(user)) -> (match (map.get(user, "name"), map.get(user, "age"))
+    | (#some(#string(name)), #some(#number(age))) -> println("Hello, {name}, aged {age}!")
     | _ -> println("Who are you?"))
   | #some(_) -> println("Expected an object")
   | #error(e) -> println("Invalid JSON at line {e.line}, column {e.column}: {e.message}")
 
--- Hello, Alice!
+-- Hello, Alice, aged 30.0!
 ```
 
 # Writing JSON
