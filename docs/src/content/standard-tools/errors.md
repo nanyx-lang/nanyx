@@ -764,7 +764,8 @@ imports, or packages of their own.
 # NYX0044: Lockfile that can't be read
 
 The package's `nanyx.lock` is not a lockfile this `nanyx` reads: it is not a record, a locked package lacks a field,
-or it was written in another format. `nanyx` writes the lockfile and keeps it up to date, so it is not edited by hand.
+or it was written in another format. `nanyx` is to write the lockfile and keep it up to date, but nothing writes it
+yet ([#864](https://github.com/nanyx-lang/nanyx/issues/864)), so today a lockfile is written by hand.
 
 ```nanyx
 -- file: demo.nyxp
@@ -780,7 +781,9 @@ export module demo
 export def one = 1
 ```
 
-To fix it, delete the lockfile, and `nanyx pull` writes it again.
+To fix it, correct the lockfile so that it is a record of the format the message names, or delete it if the package
+names no dependency by its version. `nanyx pull` doesn't write a lockfile yet: until
+[#864](https://github.com/nanyx-lang/nanyx/issues/864), it only downloads what one locks.
 
 # NYX0045: Package with nothing to run
 

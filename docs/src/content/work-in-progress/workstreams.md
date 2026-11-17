@@ -32,7 +32,7 @@ the backlog:
 
 [The parser](./parser) proposes moving the parser to a lexer and a hand-written parser, in stages.
 The compilation workstream has pages of its own for the larger pieces of its design:
-[deferred errors](./deferred-errors), [closed and open records](./closed-and-open-records),
+[deferred errors](./deferred-errors),
 [tail calls](./tail-calls), [memory management](./memory-management), [context calls](./context-calls), [inlining](./inlining),
 [lazy sequences](./lazy-sequences) and [the standard library's implementation](./standard-library-implementation).
 [The `nanyx` command](./command-line) says how the CLI is built; what it does is on [The nanyx command](../standard-tools/command-line).

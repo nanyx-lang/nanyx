@@ -251,4 +251,4 @@ Each belongs to the `memory` block it was made in, so a function that uses any o
 
 # Planned
 
-`mut` record fields are planned; see [Work in progress: Mutation](../work-in-progress/mutation).
+`mut` record fields are planned ([#1873](https://github.com/nanyx-lang/nanyx/issues/1873)).

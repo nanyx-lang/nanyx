@@ -19,7 +19,7 @@ order: 10
 - **Literals.** `[k => v, ...]` with no other expected type is a map: the parser makes it a call to the prelude's
   `__map` with the list of the entries as tuples, `__map([(k, v), ...])` (`MapSyntax` in `Nanyx.Parser/Ast.fs`), so the
   type checker and the backend see an ordinary call. A set literal, or a map literal of an expected type, goes through
-  `fromArray` ([Collection literals](./collection-literals)).
+  `fromArray` ([Collections](../tour/collections#syntax)).
 - **Keys need `Eq` and `Hash`**, as [Hash(a)](../advanced/contexts#hasha) describes. The hash
   is not used yet: lookups compare with `==`.
 - **Calling a map is a lookup.** The type checker types `m(k)` as the call to `map.get` (`inferLookup` in
@@ -86,5 +86,5 @@ Settled:
 - **Spelling.** The type is `map(k, v)`, and its functions are attached to it by that name, `map.get`, as `list.map`
   is to `list(a)` (#653).
 - **Builders.** A literal builds any type with an attached `fromArray`
-  ([#1543](https://github.com/nanyx-lang/nanyx/issues/1543), [Collection literals](./collection-literals)), so `[]`
+  ([#1543](https://github.com/nanyx-lang/nanyx/issues/1543), [Collections](../tour/collections#syntax)), so `[]`
   with an expected map type is an empty map, and `set[1, 2]` is a set.
