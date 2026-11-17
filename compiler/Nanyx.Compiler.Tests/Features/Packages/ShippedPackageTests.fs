@@ -49,6 +49,14 @@ let ``The file system's interface package is shipped beside the compiler, with n
     Assert.Equal<string list>([ "dir"; "file"; "filesystem"; "path" ], (ShippedPackages.tryModules "nanyx.fs").Value.PublicModules |> List.sort)
 
 [<Fact>]
+let ``The JSON package is shipped beside the compiler, with one public module and no dependencies`` () =
+    let manifest = manifestOf "nanyx.json"
+    Assert.Equal(("nanyx.json", Toolchain.version), (manifest.Name, manifest.Version))
+    Assert.Equal(None, manifest.Declares)
+    Assert.Empty(manifest.Dependencies)
+    Assert.Equal<string list>([ "json" ], (ShippedPackages.tryModules "nanyx.json").Value.PublicModules)
+
+[<Fact>]
 let ``A library uses Console by depending on the console's interface package and importing it`` () =
     let library (dependencies: string) =
         [ "acme.greet.nyxp",

@@ -95,7 +95,7 @@ let standInFunction (newVar: string -> VarKind -> IrType -> Var) (functionName: 
     let input, result, members =
         match ty with
         | IrFunction(input, result, members) -> input, result, members
-        | _ -> internalError $"a stand-in for a context member of type {IrType.show ty}"
+        | _ -> internalError $"a stand-in for a context member of type '{IrType.show ty}'"
     let environment = newVar ClosureSyntax.envParameter Param (IrRecord [ "0", IrWord ])
     let values = valuesOf input |> List.mapi (fun index ty -> newVar $"__arg{index + 1}" Param ty)
     let passed = members |> List.map (fun (key, ty) -> newVar (contextMemberParameter key) Param ty)

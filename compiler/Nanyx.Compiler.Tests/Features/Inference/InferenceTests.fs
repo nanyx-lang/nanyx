@@ -119,15 +119,15 @@ def n = P(x = 3) \apply { p -> p.x }"""
 let ``Typecheck rejects a lambda of several parameters whose signature's input is not a record`` () =
     let messages source = (Compiler.compile source).Diagnostics |> List.map (fun diagnostic -> diagnostic.Message)
     Assert.Equal<string list>(
-        [ "Type mismatch: #some(x: string, y: string) vs (t0, t1)." ],
+        [ "Type mismatch: '#some(x: string, y: string)' vs '(t0, t1)'" ],
         messages (withFinalNewline """def g: #some(x: string, y: string) -> string = { x, y -> "{x}{y}" }"""))
     Assert.Equal<string list>(
-        [ "Type mismatch: #some(x: string, y: string) vs (t1, t2)." ],
+        [ "Type mismatch: '#some(x: string, y: string)' vs '(t1, t2)'" ],
         messages (
             withFinalNewline """def a: #some(x: string, y: string) = #some(x = "", y = "")
 def g: typeof a -> string = { x, y -> "{x}{y}" }"""))
     Assert.Equal<string list>(
-        [ "Type mismatch: string vs (string, t1)." ], messages "def g: string -> string = { x, y -> x }\n")
+        [ "Type mismatch: 'string' vs '(string, t1)'" ], messages "def g: string -> string = { x, y -> x }\n")
 
 [<Fact>]
 let ``Typecheck gives a lambda argument's parameter a type solved from the arguments before it`` () =

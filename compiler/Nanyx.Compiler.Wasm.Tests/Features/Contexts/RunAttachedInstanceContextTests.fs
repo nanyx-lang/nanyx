@@ -62,7 +62,7 @@ let ``Run - an attached == and hash that require a context make the type a map k
 def main = {
   def m = [a => "a", c => "c"]
   println("{m(b)} {m(c)}")
-  println("{set.count(set.fromList([a, b, c]))}")
+  println("{set.length(set.fromList([a, b, c]))}")
 }
 """
     |> runSource

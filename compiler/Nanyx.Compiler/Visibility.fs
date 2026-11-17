@@ -142,7 +142,7 @@ let internal ambiguousReference (name: string) (expr: Expression) (scheme: TypeS
     match state.AmbiguousImports |> Map.tryFind name with
     | Some (symbol, candidates) when scheme.Symbol = Some symbol ->
         let quoted = candidates |> List.map (fun candidate -> $"'{candidate}'")
-        [ Diagnostics.at DiagnosticCodes.AmbiguousName expr.Span $"'{name}' is ambiguous between {Diagnostics.listed quoted}; import all but one of them with 'as'" ]
+        [ Diagnostics.at DiagnosticCodes.AmbiguousName expr.Span $"'{name}' is ambiguous between {Diagnostics.listed quoted}: import all but one of them with `as`" ]
     | _ -> []
 
 /// The error for `expr`, a reference to `name` bound to `scheme`, if `name` is what a lambda's `context name` binds:

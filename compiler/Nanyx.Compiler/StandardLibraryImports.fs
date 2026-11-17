@@ -39,7 +39,7 @@ let hint (exports: Map<string, string list>) (name: string) : string =
         let defined = if first.Alias.IsSome then name.Substring(name.IndexOf '.' + 1) else name
         let modules = imports |> List.map (fun import -> $"'{import.Path}'") |> List.distinct
         let lines = imports |> List.map (fun import -> $"`{line import}`") |> String.concat " or "
-        $". '{defined}' is defined in {Diagnostics.listed modules}: add {lines}"
+        $", and '{defined}' is defined in {Diagnostics.listed modules}: add {lines}"
 
 /// The error `code` for `name`, written at `span`, which is not in scope, with `message`. When a standard-library
 /// module exports `name` (`exports`), the message goes on to say which import brings it in; otherwise it asks about

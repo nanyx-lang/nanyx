@@ -88,6 +88,7 @@
     <Compile Include="Features\Hosts\RunHostMemoryTests.fs" />
     <Compile Include="Features\Hosts\ChooseHostTests.fs" />
     <Compile Include="Features\Hosts\RunScriptTests.fs" />
+    <Compile Include="Features\Json\RunJsonTests.fs" />
     <Compile Include="Features\Lists\RunListTests.fs" />
     <Compile Include="Features\Lists\RunListKeyTests.fs" />
     <Compile Include="Features\Maps\RunMapTests.fs" />
@@ -173,6 +174,7 @@
     <Compile Include="Features\StdLib\RunStackTests.fs" />
     <Compile Include="Features\StdLib\RunQueueTests.fs" />
     <Compile Include="Features\StdLib\RunTrieTests.fs" />
+    <Compile Include="Features\StdLib\RunCollectionLengthTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />
     <Compile Include="Features\Strings\RunInterpolationTests.fs" />
     <Compile Include="Features\Tags\RunTagTests.fs" />

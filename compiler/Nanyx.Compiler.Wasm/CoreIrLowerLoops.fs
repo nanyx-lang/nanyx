@@ -30,7 +30,7 @@ let forEach
         | _ ->
             match tyOf iterable with
             | IrList elementTy -> [ iterable ], fun atoms -> OverList atoms.Head, elementTy
-            | other -> cannot $"a `for` loop over a value of type {IrType.show other}"
+            | other -> cannot $"a `for` loop over a value of type '{IrType.show other}'"
     let walkers =
         iterables |> List.mapi (fun index _ ->
             newVar $"__for_cursor_{depth}{suffix index}" ForLoop IrWord, newVar $"__for_end_{depth}{suffix index}" ForLoop IrInt)
@@ -134,7 +134,7 @@ let forEachPulling
                         letIn pull (Expr.make (Field(AVar rest, 0)) nextTy) (members wanted (fun memberAtoms ->
                             letIn pulled (Expr.make (CallClosure(pull, memberAtoms, Borrowing)) result) matched))
                     [ rest, Expr.make (Atom atoms.Head) ty ], step
-                | other, _ -> cannot $"a `for` loop over a value of type {IrType.show other}"
+                | other, _ -> cannot $"a `for` loop over a value of type '{IrType.show other}'"
     let names = parameters |> List.map fst
     let walkers = List.map2 walker iterables names
     atoms (walkers |> List.collect fst) (fun atoms ->

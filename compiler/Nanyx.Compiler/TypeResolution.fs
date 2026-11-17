@@ -135,7 +135,7 @@ let internal unknownMember (env: TypeEnv) (span: SourceSpan) (receiver: string o
         match tryResolveAttachedFunction env ty memberName with
         | Some attached ->
             let piped = receiver |> Option.defaultValue "x"
-            $"{missing}. '{attached}' is attached to its type: call it with a pipe, as in `{piped} \\{memberName}`"
+            $"{missing}, but '{attached}' is attached to its type: call it with a pipe, as in `{piped} \\{memberName}`"
         | None -> missing
     Diagnostics.at DiagnosticCodes.UnknownMember span message
 

@@ -37,7 +37,7 @@ def apply: (int -> string) -> string = { f ->
 }
 
 apply { "ignored" } -- OK: the lambda is an int -> string that ignores its argument
-apply { () -> "ignored" } -- error NYX0201: Type mismatch: int vs ()
+apply { () -> "ignored" } -- error NYX0201: Type mismatch: 'int' vs '()'
 ```
 
 Written `{ () -> ... }`, the lambda says it takes unit, and it is an error to pass it where an `int` is given. With no

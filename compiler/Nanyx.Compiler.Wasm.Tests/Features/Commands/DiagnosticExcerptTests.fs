@@ -23,7 +23,7 @@ let ``Check - an error shows its line with the span underlined`` () =
 def total = count + "one"
 """
     Assert.StartsWith(
-        """3:13: error NYX0201: 'string' cannot be used with +: it is not a number. Use ++ to join them
+        """3:13: error NYX0201: 'string' is not a number, so it cannot be used with +: use `++` to join them
   |
 3 | def total = count + "one"
   |             ^^^^^^^^^^^^^

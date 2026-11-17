@@ -33,7 +33,7 @@ let ``Unifier rejects occurs check`` () =
     let result = Unifier.unify constraintSet
     match result with
     | Ok _ -> Assert.True(false, "Expected occurs check failure")
-    | Error (message, _) -> Assert.Contains("Occurs", message)
+    | Error (message, _) -> Assert.EndsWith("which contains it, so the type would be infinite", message)
 
 [<Fact>]
 let ``Unifier rejects closed records with different fields, either way round`` () =
@@ -177,7 +177,7 @@ let ``A union's member that fits is not blamed for a failure in a later constrai
         match Unifier.unify [ tagConstraint; conflict ] with
         | Ok _ -> Assert.Fail "Expected the conflict to fail"
         | Error (message, span) ->
-            Assert.Equal("Type mismatch: int vs string.", message)
+            Assert.Equal("Type mismatch: 'int' vs 'string'", message)
             Assert.Equal(atConflict, span)
     // With every member failing at the union itself, the union is still what is reported.
     match Unifier.unify [ (TyTag("other", None), union, Assignable, atTag) ] with

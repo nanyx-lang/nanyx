@@ -29,6 +29,7 @@
     <Compile Include="Features\Blocks\DoBlockTests.fs" />
     <Compile Include="Features\Calls\NamedArgumentTests.fs" />
     <Compile Include="Features\Calls\FunctionFieldCallTests.fs" />
+    <Compile Include="Features\Calls\BuiltInCallTests.fs" />
     <Compile Include="Features\Contexts\AppendContextTests.fs" />
     <Compile Include="Features\Contexts\AddContextFixTests.fs" />
     <Compile Include="Features\Contexts\ContextTests.fs" />
@@ -78,6 +79,7 @@
     <Compile Include="Features\Diagnostics\DiagnosticCodeTests.fs" />
     <Compile Include="Features\Diagnostics\DiagnosticSpanTests.fs" />
     <Compile Include="Features\Diagnostics\LookAlikeTests.fs" />
+    <Compile Include="Features\Diagnostics\ErrorPartTests.fs" />
     <Compile Include="Features\Equality\EqualityTests.fs" />
     <Compile Include="Features\Equality\UnionRestEqualityTests.fs" />
     <Compile Include="Features\Equality\AttachedEqualityTests.fs" />

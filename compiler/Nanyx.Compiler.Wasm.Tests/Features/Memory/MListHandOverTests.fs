@@ -19,7 +19,7 @@ def built: int -> int = { n ->
   memory {
     def items = MList.empty()
     for 1..n | i -> items += i
-    MList.count(items)
+    MList.length(items)
   }
 }
 
