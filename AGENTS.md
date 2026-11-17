@@ -2,9 +2,8 @@
 
 These rules are for anyone changing the compiler and its tools, whether a person or an agent. The compiler
 moves fast, with dozens of commits a day, and most of them land in the same few files. These rules keep
-those files workable. The reasoning behind them, and the current state of the code, are in
-[Code quality](docs/src/content/compiler-internals/code-quality.md), and its issues carry the `code quality`
-label.
+those files workable. Problems with the code's structure are tracked as GitHub issues with the
+[`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label.
 
 ## Where new code goes
 
@@ -120,6 +119,9 @@ label.
   with a test.
 - **One move per PR.** Branch from `main` and merge quickly. Don't stack refactor PRs: these files change
   too fast for a long-lived branch to merge.
+- **A recursive chain stays in one file.** An F# `let rec … and` chain can't be split across files. Move what is
+  around it into earlier or later files, and shorten the chain by turning its long match arms into `and` functions
+  of their own, or by passing the recursive function in as a parameter, as `Loops.fs` takes `inferExpr`.
 - **Order is behaviour in places.** Keep these orders exactly as they are:
   - FParsec choice order and where `attempt` is placed
   - the order in which the forward refs are filled
