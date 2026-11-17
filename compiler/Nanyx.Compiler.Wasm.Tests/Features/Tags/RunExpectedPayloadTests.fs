@@ -6,11 +6,9 @@ open TranspilerWasmTestHelpers
 // #1798: a literal written where a type is expected is checked against it, through a tag's payload, a list's elements
 // and a map's values, so lists holding different tags of one union are lists of the union (see `ExpectedLiterals`).
 
-let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
-
 [<Fact>]
 let ``Run - a recursive union's value written as one literal, with lists of different tags, checks against the declared type`` () =
-    run
+    runSource
         """
 type T = #n(int) | #b(bool) | #arr(list(T))
 
@@ -22,7 +20,7 @@ println(v)
 
 [<Fact>]
 let ``Run - a list of lists of different tags checks against a declared list type`` () =
-    run
+    runSource
         """
 type T = #n(int) | #b(bool) | #arr(list(T))
 
@@ -36,7 +34,7 @@ println(nested)
 
 [<Fact>]
 let ``Run - a map literal's values and an empty map in a tag's payload check against the declared union`` () =
-    run
+    runSource
         """
 type J = #num(float) | #flag(bool) | #arr(list(J)) | #obj(map(string, J))
 
@@ -50,7 +48,7 @@ match value
 
 [<Fact>]
 let ``Run - an argument's literal is checked against the parameter's type`` () =
-    run
+    runSource
         """
 type T = #n(int) | #b(bool) | #arr(list(T))
 

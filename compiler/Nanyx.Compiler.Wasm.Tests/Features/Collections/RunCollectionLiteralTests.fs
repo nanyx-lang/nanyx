@@ -5,11 +5,9 @@ module TranspilerWasmTests.Features.Collections.Literals
 open Xunit
 open TranspilerWasmTestHelpers
 
-let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
-
 [<Fact>]
 let ``Run - a literal builds the array, set or map a def is declared as`` () =
-    run
+    runSource
         """
 def a: Array(int) = [1, 2, 3]
 def s: set(int) = [1, 2, 2, 3]
@@ -23,7 +21,7 @@ println(map.get(m, "b"))
 
 [<Fact>]
 let ``Run - a type's name before the brackets builds that type`` () =
-    run
+    runSource
         """
 def a = Array[4, 5]
 def s = set[1, 2, 2, 3]
@@ -39,7 +37,7 @@ println("{l}")
 
 [<Fact>]
 let ``Run - a literal passed where a function takes an array builds one`` () =
-    run
+    runSource
         """
 import nanyx/array
 
@@ -53,7 +51,7 @@ println(both([1], [5, 5, 6]))
 
 [<Fact>]
 let ``Run - an empty literal is the expected type's empty value, and a list without one`` () =
-    run
+    runSource
         """
 import nanyx/array
 
@@ -73,7 +71,7 @@ println(list.length(l))
 
 [<Fact>]
 let ``Run - a list and an array spread into an array`` () =
-    run
+    runSource
         """
 def xs = [10, 20]
 def ys = Array[30]
@@ -89,7 +87,7 @@ println("{l}")
 
 [<Fact>]
 let ``Run - a user's type with a fromArray has literals, and one that requires a context makes the literal require it`` () =
-    run
+    runSource
         """
 import nanyx/mstack
 

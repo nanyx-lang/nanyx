@@ -5,11 +5,9 @@ open TranspilerWasmTestHelpers
 
 // #1487: `math.infinity`, `math.nan`, and `math.isNaN`, `math.isInfinite` and `math.isFinite`.
 
-let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
-
 [<Fact>]
 let ``Run - nanyx/math names infinity and NaN`` () =
-    run
+    runSource
         """
 import nanyx/math as math
 
@@ -20,7 +18,7 @@ println("{math.infinity == 1.0 / 0.0} {math.nan == math.nan} {math.infinity > 1.
 
 [<Fact>]
 let ``Run - nanyx/math tells NaN and the infinities from ordinary floats`` () =
-    run
+    runSource
         """
 import nanyx/math as math
 

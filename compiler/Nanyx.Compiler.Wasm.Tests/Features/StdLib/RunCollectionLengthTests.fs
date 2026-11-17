@@ -5,11 +5,9 @@ open TranspilerWasmTestHelpers
 
 // #1769: every collection gives its size as `length`, maps, sets, `MList` and `MStack` among them.
 
-let private run (source: string) = runSource (source.ReplaceLineEndings "\n")
-
 [<Fact>]
 let ``Run - a map, a set, an MList and an MStack give their size as length`` () =
-    run
+    runSource
         """
 import nanyx/mlist
 import nanyx/mstack
