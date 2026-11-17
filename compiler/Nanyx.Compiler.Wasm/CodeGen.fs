@@ -357,9 +357,9 @@ let private extractTypeLayouts (module': Module) : Map<string, string list> * Ma
         | TypeTuple items -> items |> List.map typeExprToTypeString |> String.concat ", " |> sprintf "(%s)"
         | _ -> "unknown"
     let results =
-        module'
+        SyntaxTree.typeDefinitions module'
         |> List.choose (function
-            | Kind (Def (TypeDef(name, _, _, Kind (TypeRecord fields)))) ->
+            | TypeDef(name, _, _, Kind (TypeRecord fields)) ->
                 let fieldInfo =
                     fields
                     |> List.choose (function
@@ -740,9 +740,9 @@ let private lowerTypedModule (typed: TypedModule) : LoweredModule =
     let typeLayouts, typeFieldTypes = extractTypeLayouts module'
 
     let shapeWrappers =
-        module'
+        SyntaxTree.typeDefinitions module'
         |> List.choose (function
-            | Kind (Def (TypeDef(name, _, _, body))) when (match body.Kind with TypeRecord _ -> false | _ -> true) -> Some name
+            | TypeDef(name, _, _, body) when (match body.Kind with TypeRecord _ -> false | _ -> true) -> Some name
             | _ -> None)
         |> Set.ofList
 
