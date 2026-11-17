@@ -271,6 +271,9 @@ module Unifier =
             | Some (TyPrimitive "unit") -> $"#{name}()"
             | Some payload -> $"#{name}({bareTuple payload |> Option.defaultWith (fun () -> printTy p false payload)})"
             | None -> $"#{name}"
+        // A type the checker never learns, a field's in a type's description, is written by its name, without the
+        // number that makes it its own: `b` for `b#12` (see `TypeDescriptions.skolem`).
+        | TyApply(name, []) when name.Contains '#' -> name.Substring(0, name.IndexOf '#')
         // A context with no arguments is written by its name: `Console`, and `Memory` without its scope.
         | FunctionContexts.PlainContext name -> name
         // A cell's type is written as it is in an annotation, without its scope: `mut int`.

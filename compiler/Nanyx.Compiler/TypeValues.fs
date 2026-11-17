@@ -19,6 +19,30 @@ module TypeValues =
         | TyApply(name, [ standsFor ]) when name = typeName -> Some standsFor
         | _ -> None
 
+    /// The description of a record type, `RecordInfo(a)`, which a match on a `Type(a)` finds (see `TypeDescriptions`).
+    let recordInfo = "RecordInfo"
+
+    /// The description of a union of tags, `UnionInfo(a)`.
+    let unionInfo = "UnionInfo"
+
+    /// The description of a nominal type outside its home module, which shows no structure: `NominalInfo`.
+    let nominalInfo = "NominalInfo"
+
+    /// A record's field, which packages the field's type: `Field(a)`.
+    let field = "Field"
+
+    /// A union's case, which packages its payload's type: `Case(a)`.
+    let case = "Case"
+
+    /// A type argument of a generic type, which packages the type: `SomeType`.
+    let someType = "SomeType"
+
+    /// The built-in description types, by name, with the number of type arguments each takes.
+    let descriptionArities = Map.ofList [ recordInfo, 1; unionInfo, 1; nominalInfo, 0; field, 1; case, 1; someType, 0 ]
+
+    /// Whether `name` names a built-in description type.
+    let isDescriptionType (name: string) = descriptionArities.ContainsKey name
+
     /// The prelude's context that gives a type as a value, `Typed(a) = (typeOf: Type(a))`, whose instance the
     /// compiler gives for every type.
     let typedContext = "Typed"

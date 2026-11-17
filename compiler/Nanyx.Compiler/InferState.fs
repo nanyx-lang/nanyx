@@ -385,7 +385,10 @@ type InferState =
             InferredContextVars: Map<Identifier, Ty list>;
             /// The names lambdas give the instances of contexts they are given, `context l`, by each name's symbol (see
             /// `ContextNames`).
-            ContextNames: Map<SymbolId, ContextName> }
+            ContextNames: Map<SymbolId, ContextName>;
+            /// The type each name that stands for a field, a case or a type argument of a description opened its
+            /// packaged type at, by the name's symbol (see `TypeDescriptions.memberType`).
+            OpenedPackages: Map<SymbolId, Ty> }
 
 let emptyState =
         { NextId = 0;
@@ -477,7 +480,8 @@ let emptyState =
             UseDepths = Map.empty;
             SelfTypes = Map.empty;
             InferredContextVars = Map.empty;
-            ContextNames = Map.empty }
+            ContextNames = Map.empty;
+            OpenedPackages = Map.empty }
 
 let internal freshVar (state: InferState) =
     let var = TyVar.ordinary state.NextId None

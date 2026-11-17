@@ -2136,6 +2136,40 @@ def chosen = { big -> if big then type int else type string }  -- error NYX0272:
 
 To fix it, call the function that takes the type argument in each branch, passing each its own type.
 
+# NYX0273: Match on a type's description with a pattern it can't have
+
+A `match` on a `Type` value has an arm whose pattern isn't one of the tags of a type's description, such as `#int`,
+`#list(elem)` or `#record(r)`, or matches a tag's payload with something other than a name or `_`.
+
+```nanyx
+def kind: type a -> string = { t ->
+  match t
+    | #integer -> "a number"  -- error NYX0273: '#integer' is not a tag of a type's description: a match on a `Type` is matched by the tags of the type's description, such as `#int`, `#list(elem)` or `#record(r)`, or `else`
+    | else -> "something else"
+}
+```
+
+To fix it, use the tags the [type's description](../tour/functions#inspecting-a-type) has, and bind a payload to a
+name.
+
+# NYX0274: A packaged type leaves the function that opened it
+
+A value whose type is a record field's, a union case's or a collection element's, which the checker never learns,
+leaves the code that opened it: a lambda over a record's fields gives back a field's value, or a `#list(elem)` arm
+gives back `elem`. Outside, it could be given where another field's type is expected.
+
+```nanyx
+def values: a, type a -> int = { value, t ->
+  match t
+    | #record(r) ->
+        def got = r.fields \list.map { f -> f.get(value) }  -- error NYX0274: This gives a value of 'b', whose type is the type of a field, a case or an element that is only known here: use it here, as in `walk(f.get(value), f.type)`, rather than giving it back
+        0
+    | else -> 0
+}
+```
+
+To fix it, use the value where it is opened, with the field's `type`.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

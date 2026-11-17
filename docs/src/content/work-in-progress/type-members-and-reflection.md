@@ -4,7 +4,7 @@ description: "Associated types on contexts, types passed as arguments, and inspe
 order: 4
 ---
 
-This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), and what is left of them here is how they meet type arguments and the prelude contexts that move to them. **Type arguments** let a function take a type as a parameter and inspect its structure; their design was decided on 2026-11-17 and is filed in stages ([Plan](#plan)). Passing a type is built ([Type arguments](../tour/functions#type-arguments)); inspecting it is not yet. Both are the same thing: a record member whose value is a type.
+This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), and what is left of them here is how they meet type arguments and the prelude contexts that move to them. **Type arguments** let a function take a type as a parameter and inspect its structure; their design was decided on 2026-11-17 and is filed in stages ([Plan](#plan)). Passing a type is built ([Type arguments](../tour/functions#type-arguments)), and so is checking code that inspects one ([Inspecting a type](../tour/functions#inspecting-a-type)); running it is not yet. Both are the same thing: a record member whose value is a type.
 
 # The problems
 
@@ -151,7 +151,7 @@ C#'s source generators run user code at compile time that emits more source. The
 # Open questions
 
 - **Deserialisation-only constructors** for nominal types, logged for later ([#2001](https://github.com/nanyx-lang/nanyx/issues/2001)).
-- **The description's exact shape:** the case names and the fields of `#record`, `#union` and `#nominal`, settled as [#1996](https://github.com/nanyx-lang/nanyx/issues/1996) is built.
+- **Running inspection.** A `Type` value holds nothing at run time yet, so a `match` on one type-checks but the backend can't compile it (NYX0301). The plan: a `Type` value is a number that names a described type, and a generated function builds its description; where a function is specialised at a known type its `match` picks its arm at compile time, and where it is called at a field's type, which is only known when the program runs, that type's values are boxed, as a context member's own type variables are, and an arm converts them. Attributes on fields and `#nominal` outside a type's home module come after ([#1996](https://github.com/nanyx-lang/nanyx/issues/1996)).
 
 # Plan
 
