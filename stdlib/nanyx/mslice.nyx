@@ -15,6 +15,8 @@
 
   Each function is attached to `MSlice`, so with `import nanyx/mslice` it is called as
   `MSlice.sort(s)`, or as `s \sort`; `xs \slice(0, 3)` makes a slice of the mutable array `xs`.
+  Sorting a whole array is here too, as the sort of the slice of all of it: `MArray.sort(xs)`,
+  `MArray.sortBy(xs, key)` and the rest, each stable.
 module mslice
 
 import nanyx/marray
@@ -100,29 +102,183 @@ def reverseBetween: [Memory] MSlice(a), int, int -> () = { s, low, high ->
   else ()
 }
 
---| Sorts the elements of `s` from least to greatest, in place, keeping elements that are equal in
-  the order they were in. It is an insertion sort, which suits the short runs a slice is often of.
+--| Sorts the elements of `s` in the order `order` gives, in place, in the array `s` views: `order(x,
+  y)` is `#less` when `x` goes before `y`. The sort is stable: elements `order` finds `#equal` keep
+  the order they were in. It is a merge sort: runs of 16 are sorted by insertion, then merged in
+  pairs, back and forth between `s` and one scratch array of its length, so it takes time in
+  proportion to n log n and memory for n more elements. Stack-safe: it works on a slice of any
+  length.
+export def MSlice.sortWith
+  : [Memory, c] MSlice(a), ([c] a, a -> #less | #equal | #greater) -> ()
+  = { s, order ->
+    sortRuns(s, 0, order)
+
+    if s.length > runLength then
+      def scratch = MArray.slice(MArray.fromList(MSlice.toList(s)), 0, s.length)
+      mergeRuns(s, scratch, runLength, false, order)
+    else ()
+  }
+
+--| Sorts the elements of `s` from least to greatest by their `Ord`, in place. The sort is stable,
+  as [`MSlice.sortWith`] is.
 export def MSlice.sort: [Memory, Ord(a)] MSlice(a) -> () = { s ->
-  sortFrom(s, 1)
+  MSlice.sortWith(s, { x, y -> compare(x, y) })
 }
 
-def sortFrom: [Memory, Ord(a)] MSlice(a), int -> () = { s, index ->
-  if index < s.length then
-    sinkFrom(s, index)
-    sortFrom(s, index + 1)
-  else ()
+--| Sorts the elements of `s` from greatest to least by their `Ord`, in place. The sort is stable:
+  equal elements keep their order, which sorting and then reversing would not do.
+export def MSlice.sortDescending: [Memory, Ord(a)] MSlice(a) -> () = { s ->
+  MSlice.sortWith(s, { x, y -> compare(y, x) })
 }
 
---| Moves the element at `index` down past each greater one before it.
-def sinkFrom: [Memory, Ord(a)] MSlice(a), int -> () = { s, index ->
-  if index > 0 then
-    match MSlice.at(s, index - 1), MSlice.at(s, index)
-      | #some(before), #some(element) ->
-        if before > element then
+--| Sorts the elements of `s` in ascending order of `key`, in place: `MSlice.sortBy(s, { p ->
+  p.name })`. The sort is stable: elements with the same key keep their order.
+export def MSlice.sortBy: [Memory, Ord(b), c] MSlice(a), ([c] a -> b) -> () = { s, key ->
+  MSlice.sortWith(s, { x, y -> compare(key(x), key(y)) })
+}
+
+--| Sorts the elements of `s` in descending order of `key`, in place. The sort is stable: elements
+  with the same key keep their order.
+export def MSlice.sortByDescending: [Memory, Ord(b), c] MSlice(a), ([c] a -> b) -> () = { s, key ->
+  MSlice.sortWith(s, { x, y -> compare(key(y), key(x)) })
+}
+
+--| Sorts the elements of `xs` in the order `order` gives, in place, as [`MSlice.sortWith`] does.
+export def MArray.sortWith
+  : [Memory, c] MArray(a), ([c] a, a -> #less | #equal | #greater) -> ()
+  = { xs, order ->
+    MSlice.sortWith(MArray.slice(xs, 0, MArray.length(xs)), order)
+  }
+
+--| Sorts the elements of `xs` from least to greatest by their `Ord`, in place, as [`MSlice.sort`]
+  does: `MArray.sort(xs)`.
+export def MArray.sort: [Memory, Ord(a)] MArray(a) -> () = { xs ->
+  MSlice.sort(MArray.slice(xs, 0, MArray.length(xs)))
+}
+
+--| Sorts the elements of `xs` from greatest to least by their `Ord`, in place, as
+  [`MSlice.sortDescending`] does.
+export def MArray.sortDescending: [Memory, Ord(a)] MArray(a) -> () = { xs ->
+  MSlice.sortDescending(MArray.slice(xs, 0, MArray.length(xs)))
+}
+
+--| Sorts the elements of `xs` in ascending order of `key`, in place, as [`MSlice.sortBy`] does.
+export def MArray.sortBy: [Memory, Ord(b), c] MArray(a), ([c] a -> b) -> () = { xs, key ->
+  MSlice.sortBy(MArray.slice(xs, 0, MArray.length(xs)), key)
+}
+
+--| Sorts the elements of `xs` in descending order of `key`, in place, as [`MSlice.sortByDescending`]
+  does.
+export def MArray.sortByDescending: [Memory, Ord(b), c] MArray(a), ([c] a -> b) -> () = { xs, key ->
+  MSlice.sortByDescending(MArray.slice(xs, 0, MArray.length(xs)), key)
+}
+
+--| The lesser of `a` and `b`.
+def smaller: int, int -> int = { a, b ->
+  if a < b then a else b
+}
+
+--| How many elements a run that is sorted by insertion holds, before runs are merged.
+def runLength: int = 16
+
+--| The element of `s` at `index`, which the sort only reads where there is one.
+def element: [Memory] MSlice(a), int -> a = { s, index ->
+  match MSlice.at(s, index)
+    | #some(x) -> x
+    | #none -> crash("MSlice.sortWith read past the end of a slice")
+}
+
+--| Sorts each run of `runLength` elements of `s` from `start` by insertion.
+def sortRuns
+  : [Memory, c] MSlice(a), int, ([c] a, a -> #less | #equal | #greater) -> ()
+  = { s, start, order ->
+    if start < s.length then
+      insertFrom(s, start, start + 1, smaller(start + runLength, s.length), order)
+      sortRuns(s, start + runLength, order)
+    else ()
+  }
+
+--| Sorts the elements of `s` from `start` up to `end` by insertion, those before `index` already
+  sorted.
+def insertFrom
+  : [Memory, c] MSlice(a), int, int, int, ([c] a, a -> #less | #equal | #greater) -> ()
+  = { s, start, index, end, order ->
+    if index < end then
+      sinkFrom(s, start, index, order)
+      insertFrom(s, start, index + 1, end, order)
+    else ()
+  }
+
+--| Moves the element at `index` down past each one before it, back to `start`, that `order` puts
+  after it.
+def sinkFrom
+  : [Memory, c] MSlice(a), int, int, ([c] a, a -> #less | #equal | #greater) -> ()
+  = { s, start, index, order ->
+    if index > start then
+      match order(element(s, index - 1), element(s, index))
+        | #greater ->
           ignore(MSlice.swap(s, index - 1, index))
-          sinkFrom(s, index - 1)
-        else ()
-      | _, _ -> ()
+          sinkFrom(s, start, index - 1, order)
+        | _ -> ()
+    else ()
+  }
+
+--| Merges each pair of sorted runs of `width` elements of `from` into `to`, then the runs twice as
+  long back, until one run is the whole slice. `inScratch` is whether `from` is the scratch array, so
+  that a sort that ends there is copied back.
+def mergeRuns
+  : [Memory, c] MSlice(a), MSlice(a), int, bool, ([c] a, a -> #less | #equal | #greater) -> ()
+  = { from, to, width, inScratch, order ->
+    if width < from.length then
+      mergePairs(from, to, 0, width, order)
+      mergeRuns(to, from, width * 2, not inScratch, order)
+    else if inScratch then
+      copyFrom(from, to, 0)
+    else ()
+  }
+
+--| Merges the pairs of runs of `width` elements of `from` from `start` into `to`.
+def mergePairs
+  : [Memory, c] MSlice(a), MSlice(a), int, int, ([c] a, a -> #less | #equal | #greater) -> ()
+  = { from, to, start, width, order ->
+    if start < from.length then
+      def middle = smaller(start + width, from.length)
+      def end = smaller(start + width * 2, from.length)
+      merge(from, to, start, middle, middle, end, start, order)
+      mergePairs(from, to, start + width * 2, width, order)
+    else ()
+  }
+
+--| Merges the sorted runs of `from` from `left` up to `middle` and from `right` up to `end` into `to`
+  from `index`. An element of the left run goes first when the two are `#equal`, which keeps the
+  sort stable.
+def merge
+  : [Memory, c] MSlice(a), MSlice(a), int, int, int, int, int, ([c] a, a -> #less | #equal | #greater) -> ()
+  = { from, to, left, middle, right, end, index, order ->
+    if left < middle and right < end then
+      def x = element(from, left)
+      def y = element(from, right)
+
+      if order(y, x) is #less then
+        ignore(MSlice.set(to, index, y))
+        merge(from, to, left, middle, right + 1, end, index + 1, order)
+      else
+        ignore(MSlice.set(to, index, x))
+        merge(from, to, left + 1, middle, right, end, index + 1, order)
+    else if left < middle then
+      ignore(MSlice.set(to, index, element(from, left)))
+      merge(from, to, left + 1, middle, right, end, index + 1, order)
+    else if right < end then
+      ignore(MSlice.set(to, index, element(from, right)))
+      merge(from, to, left, middle, right + 1, end, index + 1, order)
+    else ()
+  }
+
+--| Copies the elements of `from` from `index` on into `to`, at the same places.
+def copyFrom: [Memory] MSlice(a), MSlice(a), int -> () = { from, to, index ->
+  if index < from.length then
+    ignore(MSlice.set(to, index, element(from, index)))
+    copyFrom(from, to, index + 1)
   else ()
 }
 
