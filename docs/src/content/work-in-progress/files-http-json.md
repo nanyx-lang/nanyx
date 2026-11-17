@@ -19,11 +19,6 @@ instance: in a request handler, the HTTP host answers other requests meanwhile.
 
 # The file system
 
-- **A library that requires `FileSystem` under a host that doesn't provide it** passes the type checker and fails in
-  the backend with an internal error, as one that requires `Console` does
-  ([#1811](https://github.com/nanyx-lang/nanyx/issues/1811), which keeps
-  [#1783](https://github.com/nanyx-lang/nanyx/issues/1783) open). It should be the error at the call that
-  [Hosts](./hosts#hosts-provide-contexts) describes.
 - **More than one `--allow-dir`.** The CLI's option parser takes one value per option, so `nanyx run` takes one extra
   directory; `WasmRunner` already takes any number.
 - **A test host** that provides `FileSystem` in memory, with [Testing](./testing).

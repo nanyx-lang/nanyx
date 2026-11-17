@@ -185,8 +185,8 @@ So each host is **two packages**:
   interface package.
 
 A library depends only on the interface package. The capability check does the rest: a program whose host doesn't
-provide `Terminal` gets a compile error naming `Terminal` at the library's call, as it is to for `FileSystem`, which today fails later, in the backend
-([#1811](https://github.com/nanyx-lang/nanyx/issues/1811)).
+provide `Terminal` gets a compile error naming `Terminal` at the library's call, as it does for `FileSystem` or
+`Console` ([#1811](https://github.com/nanyx-lang/nanyx/issues/1811)).
 The same interface can have more than one host, so middleware works under a local server, a serverless host or a
 WASI one, and a third-party HTTP host is another implementation of the same interface, with every library already
 written for it. This is the split WASI makes between an interface (WIT) and its implementation, and that WSGI makes
@@ -272,8 +272,7 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
 
 1. **More contexts for the console host**, as they are added: [`Random`](https://github.com/nanyx-lang/nanyx/issues/1237),
    then `Clock`. `FileSystem` is done ([Files, HTTP and JSON](./files-http-json), [#1783](https://github.com/nanyx-lang/nanyx/issues/1783)),
-   but for reporting a library that requires it under a host that doesn't provide it
-   ([#1811](https://github.com/nanyx-lang/nanyx/issues/1811)). `Http` is done too ([#1785](https://github.com/nanyx-lang/nanyx/issues/1785)).
+   and so is `Http` ([#1785](https://github.com/nanyx-lang/nanyx/issues/1785)).
 2. **Console in a page**, for the [playground](./playground): the embedder changes in "`ConsoleHost` in a page"
    above; writing `.wasm` is done ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).
 3. **The browser host**: `init`, `update` and `view`, with `Dom`, `Clock` and `Log`, and the JavaScript it ships

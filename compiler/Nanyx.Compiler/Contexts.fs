@@ -778,7 +778,23 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
             match ctx.Kind with
             | TypeName ctxName when WrittenContexts.isScoped state ctxName -> ScopedCalls.unsupplied state name ctxName span
             | _ -> None)
-    if reportMissing && not unsupplied.IsEmpty then
+    // The contexts only the host could provide, which it does not (see `InferState.UnprovidedContexts`).
+    let unprovided =
+        contexts
+        |> List.choose (fun ctx ->
+            match ctx.Kind with
+            | TypeName ctxName
+            | TypeApply(ctxName, _) -> state.UnprovidedContexts |> Map.tryFind ctxName |> Option.map (fun hostImport -> ctxName, hostImport)
+            | _ -> None)
+        |> List.distinct
+    if reportMissing && not unprovided.IsEmpty then
+        let hostImport = snd unprovided.Head
+        let contextsText =
+            match unprovided |> List.map (fun (ctxName, _) -> $"'{ctxName}'") with
+            | [ single ] -> $"the context {single}"
+            | names -> $"the contexts {Diagnostics.listed names}"
+        Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span $"'{name}' requires {contextsText}, which the host '{hostImport}' does not provide" ]
+    elif reportMissing && not unsupplied.IsEmpty then
         Error [ unsupplied.Head ]
     elif reportMissing && not forged.IsEmpty then
         let ctxName, info = forged.Head
