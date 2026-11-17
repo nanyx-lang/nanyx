@@ -228,10 +228,18 @@ let private currentLineIndent: Parser<int64, ParseState> =
             indent <- indent + 1
         Reply(int64 indent + 1L)
 
-/// The indentation of the line the first of a run of arms is on, read without consuming anything. It is what
-/// `armIndentedFrom` measures the later arms against.
+/// How far a later arm's line must be indented to belong to the run of arms that starts here, read without
+/// consuming anything. It is what `armIndentedFrom` measures the later arms against. When the first arm starts its
+/// line, it is that line's indentation. When the first arm follows other text on its line, as a `for`'s or a
+/// nested `match`'s does on an outer arm's line, the later arms must be indented further than that line, so that
+/// the outer match's next arm, lined up with the line, is not taken for one of them:
+///
+///   match file.lines(path)
+///     | #some(lines) -> for lines | line -> println(line)
+///     | #error(_) -> println("error")
 let private firstArmIndent: Parser<int64, ParseState> =
-    lookAhead (ws >>. currentLineIndent)
+    lookAhead (ws >>. getPosition .>>. currentLineIndent)
+    |>> fun (start, lineIndent) -> if start.Column = lineIndent then lineIndent else lineIndent + 1L
 
 /// `arm`, after the whitespace before it, unless its `|` starts a line indented less than `armsIndent`. Such an
 /// arm belongs to an enclosing match, so that a match (or a multi-branch if) nested in an arm's body ends at the
@@ -251,7 +259,8 @@ let private armIndentedFrom (armsIndent: int64) (arm: Parser<'a, ParseState>) : 
             arm
 
 /// One or more arms, each possibly an or-pattern, flattened into plain arms. The arms end at a `|` that starts a
-/// line indented less than the line the first arm is on (see `armIndentedFrom`).
+/// line indented less than the line the first arm is on, or no further than it when the first arm doesn't start
+/// that line (see `firstArmIndent` and `armIndentedFrom`).
 let matchArms : Parser<(Pattern list * Expression) list, ParseState> =
     firstArmIndent >>= fun armsIndent ->
         many1 (attempt (armIndentedFrom armsIndent matchArmAlternatives)) |>> List.concat

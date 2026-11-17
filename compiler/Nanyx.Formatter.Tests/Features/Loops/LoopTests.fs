@@ -16,6 +16,23 @@ let ``Loops, ranges and with are printed as written`` () =
 }""")
     unchanged "def h = { r -> r with a = 1, b = 2 }\n"
 
+// A loop on a match arm's line parses as the loop (#1835); the formatter brackets it, as it does any open-ended body of
+// an arm that isn't the last, which parses the same.
+[<Fact>]
+let ``A for loop with arms in an arm that isn't the last is bracketed`` () =
+    let source = """def f = { x ->
+  match x
+    | #some(lines) -> for lines | line -> println(line)
+    | #error(_) -> println("error")
+}"""
+    let expected = """def f = { x ->
+  match x
+    | #some(lines) -> (for lines | line -> println(line))
+    | #error(_) -> println("error")
+}"""
+    Assert.Equal(normalized expected, format (normalized source))
+    unchanged (normalized expected)
+
 [<Fact>]
 let ``While loops are printed as written`` () =
     unchanged """memory {
