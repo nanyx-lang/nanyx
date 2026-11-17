@@ -158,8 +158,12 @@ let private command (arguments: string list) : Shell -> int =
             | argument :: rest -> allowing directories (argument :: kept) rest
             | [] -> List.rev directories, List.rev kept
         let allowed, rest = allowing [] [] rest
+        let profile, rest =
+            match rest with
+            | "--profile" :: file :: rest -> file, rest
+            | _ -> null, rest
         let _, _, timings, host, path = options (null, false, false, null, []) rest
-        fun shell -> CliCommands.RunIn(shell, memoryCheck, path, timings, host, not noInline, Array.ofList allowed)
+        fun shell -> CliCommands.RunIn(shell, memoryCheck, path, timings, host, not noInline, Array.ofList allowed, profile)
     | "build" :: rest ->
         let noInline, rest = takeFlag "--no-inline" rest
         let wat, rest = takeFlag "--wat" rest

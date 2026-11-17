@@ -15,14 +15,16 @@ internal static partial class CliCommands
     /// code. The program may read and write the shell's directory and each of <paramref name="allowedDirectories"/>, full
     /// paths. A program whose host answers HTTP requests is served on <paramref name="port"/> instead (see
     /// <see cref="Serve"/>). A package's program names its files from <paramref name="packageRoot"/> where it says
-    /// where it is, as <c>dbg</c> does.
+    /// where it is, as <c>dbg</c> does. With <paramref name="profile"/>, Wasmtime's guest profiler samples the run and the
+    /// profile is written to that file, in the Firefox profiler's format.
     /// </summary>
-    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, int port = 3000, string? packageRoot = null)
+    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, int port = 3000, string? packageRoot = null, string? profile = null)
     {
         var programArguments = ListModule.OfSeq(arguments ?? ["nanyx"]);
         var directories = ListModule.OfSeq<string>([shell.Directory, .. allowedDirectories ?? []]);
         var errors = shell.Error;
-        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot), true, true);
+        // A profiled run is of the code without probes, as a release build runs it.
+        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot), true, profile is null);
         if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred, timings))
         {
             return 1;
@@ -45,7 +47,19 @@ internal static partial class CliCommands
         (errors as RunBox.Writer)?.Box.Close("output");
         if (WasmServer.serves(wat))
         {
+            if (profile is not null)
+            {
+                errors.WriteLine("error: --profile profiles a program that runs once, and this one is served: profiling a served program isn't supported yet.");
+                return UsageError;
+            }
+
             return Serve(shell, programArguments, wasm, port, errors);
+        }
+
+        if (profile is not null)
+        {
+            var profiled = WasmRunner.runProfiled(shell.Io, programArguments, directories, wasm, FuncConvert.FromAction<FSharpResult<byte[], string>>(written => WriteProfile(shell, profile, written, errors)));
+            return profiled.IsOk ? 0 : ReportRunError(profiled.ErrorValue, errors);
         }
 
         if (memoryCheck == MemoryCheck.Off)
@@ -68,6 +82,24 @@ internal static partial class CliCommands
     /// <summary>The root a program names its files from (see <c>WasmOptions.SourceRoot</c>): none for a script.</summary>
     private static FSharpOption<string> SourceRoot(string? packageRoot) =>
         packageRoot is null ? FSharpOption<string>.None : FSharpOption<string>.Some(packageRoot);
+
+    /// <summary>
+    /// Writes the profile <paramref name="written"/> of a run to <paramref name="path"/>, making its directory if need be,
+    /// and says where to <paramref name="errors"/>, or why there is none.
+    /// </summary>
+    private static void WriteProfile(Shell shell, string path, FSharpResult<byte[], string> written, TextWriter errors)
+    {
+        if (written.IsError)
+        {
+            errors.WriteLine($"error: the run's profile couldn't be written: {written.ErrorValue}");
+            return;
+        }
+
+        var fullPath = shell.FullPath(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        File.WriteAllBytes(fullPath, written.ResultValue);
+        errors.WriteLine($"Profile written: {shell.DisplayPath(fullPath)} (open it at https://profiler.firefox.com)");
+    }
 
     /// <summary>
     /// The exit code of a program run with memory checks that returned, given its <see cref="MemoryReport.Counters"/>:
