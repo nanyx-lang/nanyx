@@ -118,7 +118,7 @@ module internal OperatorCalls =
         Diagnostics.at DiagnosticCodes.UnknownFunction span message
 
     /// `expr`, `-x` on an operand of the type `operandTy`: a call to the `negate` of that type or of the function's
-    /// `Add` (see `definition`), or else the negation of a built-in number. `numberTy` is the number that negation is
+    /// `Sub` (see `definition`), or else the negation of a built-in number. `numberTy` is the number that negation is
     /// of, `float` or `int`, as far as the operand's type is known.
     let inferNegation
         (instanceMember: Identifier -> Ty -> (TypeExpr * TypeScheme) option)

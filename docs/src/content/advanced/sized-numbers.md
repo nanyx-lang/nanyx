@@ -58,9 +58,9 @@ with `n`.
 
 # Arithmetic
 
-Arithmetic and comparison work on two values of the same type, through the [`Add(a)` and `Num(a)`](./contexts)
-contexts, which every numeric type has. Nothing is converted implicitly, so adding an `I32` to an `int` is a type
-error until one side is [converted](#conversions).
+Arithmetic and comparison work on two values of the same type, through the [`Add(a)`, `Sub(a)` and
+`Num(a)`](./contexts) contexts, which every numeric type has. Nothing is converted implicitly, so adding an `I32` to an
+`int` is a type error until one side is [converted](#conversions).
 
 ## Overflow
 

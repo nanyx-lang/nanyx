@@ -147,13 +147,14 @@ This keeps APIs reusable while preserving dimension correctness.
 
 ## Arithmetic on measured values
 
-The prelude's numeric contexts are `Add(a)`, with `zero`, `+`, `-` and `negate`, and `Num(a)`, which adds `*`, `/`,
-`%` and `fromInt` ([Add(a)](../advanced/contexts#adda), [Num(a)](../advanced/contexts#numa)). Units need `*` and `/` to
+The prelude's numeric contexts are `Add(a)`, with `zero` and `+`, `Sub(a)`, with `-` and `negate`, and `Num(a)`, which
+adds `*`, `/`, `%` and `fromInt` ([Add(a)](../advanced/contexts#adda), [Sub(a)](../advanced/contexts#suba),
+[Num(a)](../advanced/contexts#numa)). Units need `*` and `/` to
 change the type: `float(Length) / float(Time)` is `float(Length/Time)`. No context of the form `(a, a) -> a` can say
 that, so the plan is:
 
-- **Measured types have `Add` but not `Num`.** `+`, `-` and `negate` on measured values go through `Add`, which
-  requires identical dimensions: `3m + 4m` is a length, but `3m * 4m` is an area.
+- **Measured types have `Add` and `Sub` but not `Num`.** `+`, `-` and `negate` on measured values go through `Add`
+  and `Sub`, which require identical dimensions: `3m + 4m` is a length, but `3m * 4m` is an area.
 - **`*` and `/` on measured values** are typed by the dimension rules above, by the compiler, not through a context:
   when either operand is measured, `a * b` is the underlying type's multiplication at the product of the dimensions.
   Scaling, `2.0 * 3m`, is the case where one dimension is `1`.

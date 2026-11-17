@@ -49,24 +49,22 @@ export def int.toFloat: int -> float = { n ->
 
 -- Arithmetic ------------------------------------------------------------------------------------
 
---| The values of type `a` that add and subtract. `x + y`, `x - y` and `-x` are read through it, and
-  so is `0` beside a value of type `a` in a function whose type requires it:
-  `def total: [Add(a)] list(a) -> a`. A type gets one by attaching the four members,
-  `def Money.zero = ...`, `` def Money.`+` = ... ``, and so on.
-export context Add(a) = (
-  zero: a
-  `+`: (a, a) -> a
-  `-`: (a, a) -> a
-  negate: a -> a
-)
+--| The values of type `a` that add. `x + y` is read through it, and so is `0` beside a value of
+  type `a` in a function whose type requires it: `def total: [Add(a)] list(a) -> a`. A type gets
+  one by attaching the two members, `def Money.zero = ...` and `` def Money.`+` = ... ``.
+export context Add(a) = (zero: a, `+`: (a, a) -> a)
 
---| The numbers of type `a`: [`Add`]'s members, and `x * y`, `x / y` and `x % y`. In a function whose
-  type requires it, any other integer literal beside a value of type `a` is `fromInt` of it, so
-  `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }` work at `int` and `float`.
-  A function that requires `Num(a)` can call one that requires `Add(a)`: a `Num` has every member
-  an `Add` has. On an integer type `/` truncates and `%` takes the sign of `x`; on `float` they are
-  IEEE 754's. `isInteger` says which `a` is: `true` for an integer type, so `x ** -1` stops the
-  program on one.
+--| The values of type `a` that subtract. `x - y` and `-x` are read through it. A type gets one by
+  attaching the two members, `` def Money.`-` = ... `` and `def Money.negate = ...`.
+export context Sub(a) = (`-`: (a, a) -> a, negate: a -> a)
+
+--| The numbers of type `a`: [`Add`]'s and [`Sub`]'s members, and `x * y`, `x / y` and `x % y`. In a
+  function whose type requires it, any other integer literal beside a value of type `a` is `fromInt`
+  of it, so `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }` work at `int` and
+  `float`. A function that requires `Num(a)` can call one that requires `Add(a)` or `Sub(a)`: a
+  `Num` has every member they have. On an integer type `/` truncates and `%` takes the sign of `x`;
+  on `float` they are IEEE 754's. `isInteger` says which `a` is: `true` for an integer type, so
+  `x ** -1` stops the program on one.
 export context Num(a) = (
   zero: a
   `+`: (a, a) -> a
@@ -79,9 +77,9 @@ export context Num(a) = (
   isInteger: bool
 )
 
--- The compiler's own `Add` and `Num` of `int` and `float`: the members attached to `int` and
--- `float`, which are what a function that requires one is passed. `+` on an `int` or a `float` is
--- the built-in operator, not a call.
+-- The compiler's own `Add`, `Sub` and `Num` of `int` and `float`: the members attached to `int`
+-- and `float`, which are what a function that requires one is passed. `+` on an `int` or a `float`
+-- is the built-in operator, not a call.
 
 --| The `int` that adds nothing.
 export def int.zero: int = 0

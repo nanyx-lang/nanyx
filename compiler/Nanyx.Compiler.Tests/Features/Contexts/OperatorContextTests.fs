@@ -19,8 +19,8 @@ let private inferredContexts (typed: TypedModule) =
 let ``A def that does not write its type requires the prelude's smallest context with the operator it uses on a type variable`` () =
     let cases =
         [ "{ x, y -> x + y }", "Add"
-          "{ x, y -> x - y }", "Add"
-          "{ x -> -x }", "Add"
+          "{ x, y -> x - y }", "Sub"
+          "{ x -> -x }", "Sub"
           "{ x, y -> x * y }", "Num"
           "{ x, y -> x / y }", "Num"
           "{ x, y -> x % y }", "Num" ]
@@ -29,12 +29,33 @@ let ``A def that does not write its type requires the prelude's smallest context
 
 [<Fact>]
 let ``Operators on one type variable require the contexts that cover them`` () =
-    // `Num` has every member of `Add`, so adding and multiplying needs `Num` alone.
+    // `Num` has every member of `Add` and `Sub`, so adding, subtracting and multiplying needs `Num` alone.
     Assert.Equal<string list>([ "Num" ], inferredContexts (compileClean "def lerp = { a, b, t -> a + (b - a) * t }\n") |> List.map fst)
     // No one context has `+` and `==`.
     Assert.Equal<string list>([ "Add"; "Eq" ], inferredContexts (compileClean "def f = { x, y -> if x == y then x + x else x }\n") |> List.map fst |> List.sort)
     // A call that requires the same context of the same variable adds nothing.
     Assert.Equal<string list>([ "Add" ], inferredContexts (compileClean "def f = { x, xs -> x + list.sum(xs) }\n") |> List.map fst)
+    // `Add` and `Sub` share no member, so adding and subtracting needs both (#1958).
+    let both = compileClean "def f = { x, y -> x + y - -x }\n"
+    Assert.Equal<string list>([ "Add"; "Sub" ], inferredContexts both |> List.map fst |> List.sort)
+    Assert.Equal(1, inferredContexts both |> List.map snd |> List.distinct |> List.length)
+
+[<Fact>]
+let ``The prelude's operator contexts leave no member with two smallest contexts`` () =
+    // NYX0006 is reported where the prelude is checked, which every module that uses an operator needs.
+    let result = Compiler.compile "def f = { x, y -> (x + y, x - y, -x, x * y) }\n"
+    Assert.DoesNotContain(DiagnosticCodes.InvalidStandardLibraryModule.Code, result.Diagnostics |> List.map _.Code)
+    Assert.Equal<string list>([ "Num" ], inferredContexts result.Typed.Value |> List.map fst)
+
+[<Fact>]
+let ``A type that attaches zero and + but no - is summed`` () =
+    let source =
+        normalized """type Tally = protected (count: int)
+def Tally.zero: Tally = Tally(count = 0)
+def Tally.`+`: Tally, Tally -> Tally = { p, q -> Tally(count = p.count + q.count) }
+def total = [Tally(count = 1), Tally(count = 2)] \list.sum
+"""
+    Assert.Equal("Tally", Unifier.tyToString (compileClean source).Types.["total"])
 
 [<Fact>]
 let ``Operators on two type variables require the contexts of each`` () =
@@ -42,7 +63,7 @@ let ``Operators on two type variables require the contexts of each`` () =
     let cases =
         [ "def r = { x, y, p, q -> (x + y, p * q) }", [ "Add"; "Num" ], "a, a, b, b -> (a, b)"
           "def r = { x, y, p, q -> x == y and p == q }", [ "Eq"; "Eq" ], "a, a, b, b -> bool"
-          "def r = { x, p -> (-x, -p) }", [ "Add"; "Add" ], "a, b -> (a, b)"
+          "def r = { x, p -> (-x, -p) }", [ "Sub"; "Sub" ], "a, b -> (a, b)"
           // The call requires `Add` of the list's elements, another variable than the operator's.
           "def r = { x, y, xs -> (x + y, list.sum(xs)) }", [ "Add"; "Add" ], "a, a, list(b) -> (a, b)" ]
     for source, contexts, ty in cases do
@@ -63,9 +84,9 @@ let ``A def whose type has an open record in it requires the contexts its calls 
 let ``A def that writes two contexts with a member of one name calls each instance's member`` () =
     let source =
         """
-def both: [Add(a), Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p - q) }
+def both: [Add(a), Sub(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p - q) }
 def same: [Eq(a), Eq(b)] a, a, b, b -> bool = { x, y, p, q -> x == y and p != q }
-def negated: [Add(a), Add(b)] a, b -> (a, b) = { x, p -> (-x, -p) }
+def negated: [Sub(a), Sub(b)] a, b -> (a, b) = { x, p -> (-x, -p) }
 def t = both(1, 2, 1.5, 2.0)
 def u = same(1, 1, "a", "b")
 def v = negated(1, 2.5)

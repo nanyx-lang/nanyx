@@ -26,8 +26,8 @@ let ``The remainder of two ints is an int and of two floats a float`` () =
 let ``A function that writes its type must require Add of a type variable it adds, subtracts or negates`` () =
     let cases =
         [ "def add: a, a -> a = { x, y -> x + y }\n", "'add' adds values of type 'a' with +, so its type must require Add(a): add [Add(a)] to the type of 'add'", "x + y"
-          "def sub: a, a -> a = { x, y -> x - y }\n", "'sub' subtracts values of type 'a' with -, so its type must require Add(a): add [Add(a)] to the type of 'sub'", "x - y"
-          "def neg: a -> a = { x -> -x }\n", "'neg' negates values of type 'a' with -, so its type must require Add(a): add [Add(a)] to the type of 'neg'", "-x" ]
+          "def sub: a, a -> a = { x, y -> x - y }\n", "'sub' subtracts values of type 'a' with -, so its type must require Sub(a): add [Sub(a)] to the type of 'sub'", "x - y"
+          "def neg: a -> a = { x -> -x }\n", "'neg' negates values of type 'a' with -, so its type must require Sub(a): add [Sub(a)] to the type of 'neg'", "-x" ]
     for source, message, text in cases do
         Assert.Equal((DiagnosticCodes.MissingContextMembers.Code, message, text), onlyDiagnostic source)
 
@@ -36,7 +36,7 @@ let ``Adding and negating values of a type variable calls the members of the Add
     let source =
         normalized """def double: [Add(a)] a -> a = { x -> x + x }
 def orZero: [Add(a)] a -> a = { x -> x + 0 }
-def flip: [Add(a)] a -> a = { x -> 0 - x + -x }
+def flip: [Add(a), Sub(a)] a -> a = { x -> 0 - x + -x }
 def total = [1.5, 2.5] \list.sum
 """
     let result = Compiler.compile source

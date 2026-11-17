@@ -30,19 +30,14 @@ sum<T>(items: List<T>) where T : ISummable<T>
 In Nanyx, you model that as a context constraint. The prelude already has one for adding, `Add(a)`:
 
 ```nanyx
-context Add(a) = (
-  zero: a
-  `+`: (a, a) -> a
-  `-`: (a, a) -> a
-  negate: a -> a
-)
+context Add(a) = (zero: a, `+`: (a, a) -> a)
 
 def sum: [Add(a)] list(a) -> a = { items ->
   items \fold(zero) { + }
 }
 ```
 
-For multiplying and dividing as well there is `Num(a)`, which has every member of `Add(a)` and more, so a function that requires `[Num(a)]` can call `sum`.
+Subtracting is `Sub(a)`, a context of its own, so a type that adds but doesn't subtract can still be summed. For multiplying and dividing as well there is `Num(a)`, which has every member of `Add(a)` and `Sub(a)` and more, so a function that requires `[Num(a)]` can call `sum`.
 
 The mindset shift here is to think in terms of capabilities (what operations are needed) for a type _which are not required to be intrinsic to the type_. Think of it as "Given a way of summing `a`" rather than "Given a type `a` that **is** `Summable`." A function states what it needs (`Add(a)`), not which concrete type hierarchy it depends on.
 
@@ -61,8 +56,6 @@ def total = {
   use Add(Celsius)(
     zero = Celsius(degrees = 0.0)
     `+` = { a, b -> Celsius(degrees = a.degrees + b.degrees) }
-    `-` = { a, b -> Celsius(degrees = a.degrees - b.degrees) }
-    negate = { a -> Celsius(degrees = -a.degrees) }
   )
   sum([Celsius(degrees = 1.5), Celsius(degrees = 2.0)])
 }
