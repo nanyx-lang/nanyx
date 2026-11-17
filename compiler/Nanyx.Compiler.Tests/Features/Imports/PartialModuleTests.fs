@@ -83,6 +83,50 @@ def main = {
 """
     Assert.Empty(buildOf [ "a.nyx", first; "b.nyx", second; "main.nyx", user ])
 
+/// `shapes.boxes.nyx` names `Shape`, from `shapes.nyx`, which it sorts before.
+let private boxes =
+    """
+@partial export module shapes
+
+export type Box(a) = private (run: Shape -> a)
+
+export def area: Box(float) = Box(run = { _ -> 1.0 })
+
+export def runBox: Box(a), Shape -> a = { box, shape ->
+  def run = box.run
+  run(shape)
+}
+"""
+
+let private shapes =
+    """
+@partial export module shapes
+
+export type Shape = #circle(float) | #group(list(Shape))
+"""
+
+let private shapesUser =
+    """
+module main
+
+import shapes
+
+@entry
+def main = {
+  println(runBox(area, #group([#circle(1.0)])))
+}
+"""
+
+// A type in one fragment named a type in a fragment whose file sorts after it, which failed with mismatches between
+// the type and itself (#1838).
+[<Fact>]
+let ``A type can name a type from a fragment whose file sorts after its own`` () =
+    Assert.Empty(buildOf [ "shapes.boxes.nyx", boxes; "shapes.nyx", shapes; "main.nyx", shapesUser ])
+
+[<Fact>]
+let ``A type can name a type from a fragment whose file sorts before its own`` () =
+    Assert.Empty(buildOf [ "shapes.zboxes.nyx", boxes; "shapes.nyx", shapes; "main.nyx", shapesUser ])
+
 [<Fact>]
 let ``The imports of one fragment apply to the whole module`` () =
     let other =

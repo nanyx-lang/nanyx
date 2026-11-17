@@ -156,8 +156,8 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     // Pre-bind every top-level value before inferring any body, so a definition can refer to one
     // declared later in the module (forward references, mutual recursion). An annotated def is bound
     // at its declared type; an unannotated one at a fresh variable that its inferred type is unified
-    // with once its body has been checked. Type definitions are registered in the same pass, so an
-    // annotation can name a type declared further down.
+    // with once its body has been checked. Type definitions are registered first, each after the types it names (see
+    // `inDependencyOrder`), so an annotation or another type can name a type declared further down.
     // A block the file imports (`import money`) brings its exports in under other names: each is bound wherever the
     // definition it stands for is, so it has the same type and refers to the same symbol.
     let blockImported = blockImports state.ModuleBlocks module'
@@ -182,8 +182,6 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     let mutable preboundFreshVars: Map<string, Ty> = Map.empty
     let prebind (item: TopLevelItem) =
         match item with
-        | Kind (Def (TypeDef(name, modifiers, parameters, body))) ->
-            state <- registerTypeDef state name modifiers parameters body
         | Kind (Def (ValueDef(isExport, name, typeOpt, value))) ->
             beginDef ()
             let symbol, declared = declareSymbol DefValue value.Id name TopLevelValue isExport None state
@@ -210,6 +208,8 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 preboundFreshVars <- preboundFreshVars |> Map.add name ty
                 env <- declareTopLevel name symbol (TypeEnv.mono ty) env
         | _ -> ()
+    for name, modifiers, parameters, body in inDependencyOrder module' do
+        state <- registerTypeDef state name modifiers parameters body
     for item in module' do
         prebind item
 

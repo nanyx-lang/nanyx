@@ -146,3 +146,23 @@ let ``An alias that is one of its own tags' alternatives is an error`` () =
     let code, text = error "type Loop = #stop | Loop\n"
     Assert.Equal(DiagnosticCodes.UnguardedRecursiveAlias.Code, code)
     Assert.Equal("Loop", text)
+
+// A type written above the alias it names read the name before the alias was declared, so its uses didn't match the
+// alias's union (#1838).
+[<Fact>]
+let ``A type can name a recursive alias declared below it`` () =
+    clean """
+type Box(a) = private (run: Shape -> a)
+
+def area: Box(float) = Box(run = { _ -> 1.0 })
+
+def runBox: Box(a), Shape -> a = { box, shape ->
+  def run = box.run
+  run(shape)
+}
+
+def probe = runBox(area, #group([#circle(1.0)]))
+
+type Shape = #circle(float) | #group(list(Shape))
+"""
+    |> ignore
