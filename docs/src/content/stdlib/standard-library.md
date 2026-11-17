@@ -63,6 +63,10 @@ It also ships `nanyx.json`, which a program names in its dependencies to read an
 - [json, decoders](./json-typed) — reading JSON into types of your own (`nanyx.json/json`)
 - [encode](./encode) — writing types of your own as JSON (`nanyx.json/encode`)
 
+And it ships `nanyx.regex`, for regular expressions that take linear time:
+
+- [regex](./regex) — finding, replacing and splitting with patterns (`nanyx.regex/regex`)
+
 # Named parameters
 
 A [named parameter](../tour/functions#named-parameters) must be passed by name. The standard library names a parameter only when a call can't show what it is without the name: usually when two or more parameters after the receiver have the same type, or when a bare literal would leave you guessing its role. It never names the receiver (the value you pipe in), a lambda argument, or a single extra argument that the function's name already explains.
@@ -79,7 +83,7 @@ x \math.clamp(min = 0, max = 10)
 "nanyx" \startsWith("nan")
 ```
 
-The functions with named parameters are `string.split`, `string.splitOnce`, `string.substring`, `string.padStart`, `string.padEnd`, `string.replace`, `math.clamp` and `list.replicate`, and `json.printPretty`'s `indent` in `nanyx.json`. Everything else takes its arguments by position.
+The functions with named parameters are `string.split`, `string.splitOnce`, `string.substring`, `string.padStart`, `string.padEnd`, `string.replace`, `math.clamp` and `list.replicate`, `json.printPretty`'s `indent` in `nanyx.json`, and `Regex.replace`'s `with` in `nanyx.regex`. Everything else takes its arguments by position.
 
 Passing one of these by position is an error that names the parameters to write:
 

@@ -50,8 +50,13 @@ own: `BinaryData` writes a `Lazy` as a part that a read skips, and reads it the 
 the file's bytes, which it keeps. A part may refer back to what was written before it, but nothing refers into a part,
 so a module that refers to another's types holds a copy of them, and the file is larger (7.4 MB against 4.7 MB). A
 process reads the list the first time it imports a library module, in about 20 ms and 8 MB against 330 ms and 245 MB
-when it read every module, and then only the modules it imports: `def x = 1` reads four, in about 185 ms and 85 MB,
-most of it the prelude. A one-line `nanyx check` takes 1.05 to 1.08 s against 1.11 s (Release, medians of 7).
+when it read every module, and then only the modules it imports. The modules those import, all the way down, come into
+the compilation as pending (`CheckedModules.AddImported`), each read only when an import of it, or the type of a node
+inlined from it, first needs it: `def x = 1` under the console host used to read fifteen modules and now reads those
+it imports itself. A module's typed items (`TypedModule.Items`), about half of what the file holds of it, are a `Lazy`
+too, since only tools ask for them. The first compile of `def x = 1` in a process allocates about 260 MB against
+410 MB, and a one-line `nanyx check` takes a median of 1.00 s against 1.34 s on the same busy machine (Release, 15
+runs of each, interleaved).
 
 Each standard-library module the file does not have is checked once per process, the first time a compile imports
 it, and every later compile reuses the result (`checkedStandardLibrary` in `Nanyx.Compiler/Library.fs`, keyed by the

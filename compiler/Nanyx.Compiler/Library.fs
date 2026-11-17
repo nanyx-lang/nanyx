@@ -153,9 +153,36 @@ module Compiler =
     /// full path (from disk, or an editor's unsaved buffer).
     type internal CheckedModules(package: PackageModules option, edited: EditedLibraryFile option, listener: CompileListener, readFile: string -> string) =
         inherit System.Collections.Generic.Dictionary<string, Result<CheckedModule, CompilationPhase * Diagnostic list>>()
+        /// The modules an import brought in with it that have not been needed yet: those read from the checked library are
+        /// read only when something needs them (see `CheckedLibrary`).
+        let pending = System.Collections.Generic.Dictionary<string, Lazy<Result<CheckedModule, CompilationPhase * Diagnostic list>>>()
         new(package, edited, listener) = CheckedModules(package, edited, listener, File.ReadAllText)
         new(package) = CheckedModules(package, None, CompileListener.none)
         member _.Package = package
+
+        /// Adds the module `key`, which an import brought in with it, unless the compilation has it already.
+        member this.AddImported(key: string, imported: Lazy<Result<CheckedModule, CompilationPhase * Diagnostic list>>) =
+            if not (this.ContainsKey key) then
+                if imported.IsValueCreated then this.TryAdd(key, imported.Value) |> ignore
+                else pending.TryAdd(key, imported) |> ignore
+
+        /// The module `key`, if the compilation has it, read now if an import brought it in and nothing needed it before.
+        member this.TryGetChecked(key: string, [<System.Runtime.InteropServices.Out>] checkedModule: byref<Result<CheckedModule, CompilationPhase * Diagnostic list>>) =
+            match pending.TryGetValue key with
+            | true, imported when not (this.ContainsKey key) ->
+                this.[key] <- imported.Value
+                pending.Remove key |> ignore
+            | _ -> ()
+            this.TryGetValue(key, &checkedModule)
+
+        /// Every module the compilation has, each read only when it is asked for: those it checked or needed, and those
+        /// imports brought in that nothing has needed yet.
+        member this.Imported : (string * Lazy<Result<CheckedModule, CompilationPhase * Diagnostic list>>) list =
+            // A forced `lazy`: F#'s `Lazy.CreateFromValue` says its value is not created.
+            let ready checkedModule = let read = lazy checkedModule in read.Force() |> ignore; read
+            [ for KeyValue(key, checkedModule) in this -> key, ready checkedModule
+              for KeyValue(key, imported) in pending do
+                  if not (this.ContainsKey key) then yield key, imported ]
         member _.Listener = listener
         member _.Edited = edited
         member _.ReadFile(path: string) = readFile path
@@ -171,7 +198,7 @@ module Compiler =
     /// them). A checked module is never changed, and sharing one is safe: its type variables are numbered by the module
     /// itself, as they would be if it were checked again, and its syntax nodes and symbols keep ids no other module has.
     let private checkedStandardLibrary =
-        System.Collections.Concurrent.ConcurrentDictionary<string * string, Lazy<Result<CheckedModule, CompilationPhase * Diagnostic list> * (string * Result<CheckedModule, CompilationPhase * Diagnostic list>) list>>()
+        System.Collections.Concurrent.ConcurrentDictionary<string * string, Lazy<Result<CheckedModule, CompilationPhase * Diagnostic list> * (string * Lazy<Result<CheckedModule, CompilationPhase * Diagnostic list>>) list>>()
 
     /// A source file's module as a compilation that imported it checked it (see `checkedSourceFiles`).
     type private CheckedSourceFile =
@@ -182,7 +209,7 @@ module Compiler =
           Read: (string * string) list
           Module: CheckedModule
           /// The modules it imports, all the way down, as `checkedStandardLibrary` keeps them.
-          Imports: (string * Result<CheckedModule, CompilationPhase * Diagnostic list>) list }
+          Imports: (string * Lazy<Result<CheckedModule, CompilationPhase * Diagnostic list>>) list }
 
     /// The source files' modules this process has checked as imports, by `originKey`, each kept while every file its
     /// check read still reads the same, so the language server does not check a large module again each time a file
@@ -502,14 +529,17 @@ module Compiler =
         let merged =
             imported.ReExports
             |> List.fold (fun merged reExported ->
+                // A whole-module re-export gives everything its module gives, or what `item` selects of it.
                 let names =
-                    reExported.Item.Selection
-                    |> Option.defaultValue []
-                    |> List.filter (fun (name, _) -> item.Selection |> Option.forall (List.exists (fun (selected, _) -> selected = name)))
-                if names.IsEmpty then
-                    merged
-                else
-                    let reImport = { Source = reExported.Item.Source; Alias = item.Alias; Selection = Some names; Span = SourceSpan.none }
+                    match reExported.Item.Selection with
+                    | Some names -> Some (names |> List.filter (fun (name, _) -> item.Selection |> Option.forall (List.exists (fun (selected, _) -> selected = name))))
+                    | None ->
+                        let given = ModuleLinking.reExportSources reExported
+                        item.Selection |> Option.map (List.filter (fun (name, _) -> given.ContainsKey name))
+                match names with
+                | Some [] -> merged
+                | names ->
+                    let reImport = { Source = reExported.Item.Source; Alias = item.Alias; Selection = names; Span = SourceSpan.none }
                     mergeWithReExports preludeKey reExported.Origin reImport through reExported.Module merged |> fst) merged
         merged, through
 
@@ -702,6 +732,7 @@ module Compiler =
                                 let item = { Source = source; Alias = None; Selection = Some (names |> List.map (fun name -> name, SourceSpan.none)); Span = SourceSpan.none }
                                 mergeWritten preludeKey [] owner item ownerModule merged
                         | _ -> merged) merged
+            let merged = { merged with Errors = merged.Errors @ ModuleLinking.reExportClashes desugared merged.ReExports }
             let env = merged.Env
             // A name two imports bring in is an error only where it is used, and only if nothing nearer binds it.
             let ambiguousImports =
@@ -854,7 +885,7 @@ module Compiler =
                           // The types of the imported definitions inlined for the backend, then the module's own.
                           Types = resolvedTypes |> Map.fold (fun acc name ty -> acc |> Map.add name ty) merged.InlinedTypes
                           TypeDefs = resolvedTypeDefs
-                          Items = resolvedItems
+                          Items = lazy resolvedItems
                           // Filled in for the root module only, by `compileChecked`.
                           ExprTypes = Map.empty
                           CalleeTypes = Map.empty
@@ -989,7 +1020,7 @@ module Compiler =
     /// this compilation with it. A module already checked is reported to the listener as reused.
     and private typecheckImport (checkedModules: CheckedModules) (origin: ModuleOrigin) (readSource: unit -> string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
-        match checkedModules.TryGetValue key with
+        match checkedModules.TryGetChecked key with
         | true, checkedModule ->
             checkedModules.Listener.ModuleReused key
             checkedModule
@@ -1010,12 +1041,12 @@ module Compiler =
                             lazy
                                 (let own = CheckedModules(None, None, checkedModules.Listener)
                                  let checkedModule = typecheckModule own origin source visited
-                                 checkedModule, [ for KeyValue(importKey, imported) in own -> importKey, imported ])
+                                 checkedModule, own.Imported)
                     let checking = checkedStandardLibrary.GetOrAdd((key, source), check)
                     if checking.IsValueCreated then checkedModules.Listener.ModuleReused key
                     let checkedModule, imports = checking.Value
                     for importKey, imported in imports do
-                        checkedModules.TryAdd(importKey, imported) |> ignore
+                        checkedModules.AddImported(importKey, imported)
                     checkedModule
                 | SourceFile path when checkedModules.Edited.IsNone -> typecheckSourceFile checkedModules origin path visited
                 | SourceFile _
@@ -1048,7 +1079,7 @@ module Compiler =
         | Some kept ->
             checkedModules.Listener.ModuleReused key
             for importKey, imported in kept.Imports do
-                checkedModules.TryAdd(importKey, imported) |> ignore
+                checkedModules.AddImported(importKey, imported)
             Ok kept.Module
         | None ->
             let read = ResizeArray<string * string>()
@@ -1058,9 +1089,9 @@ module Compiler =
                 text
             let own = CheckedModules(checkedModules.Package, None, checkedModules.Listener, reading)
             let checkedModule = typecheckModule own origin (reading path) visited
-            let imports = [ for KeyValue(importKey, imported) in own -> importKey, imported ]
+            let imports = own.Imported
             for importKey, imported in imports do
-                checkedModules.TryAdd(importKey, imported) |> ignore
+                checkedModules.AddImported(importKey, imported)
             match checkedModule with
             | Ok checked when checked.Errors.IsEmpty ->
                 checkedSourceFiles.[key] <- { Package = checkedModules.Package; Read = List.ofSeq read; Module = checked; Imports = imports }
@@ -1132,11 +1163,16 @@ module Compiler =
                 | Def (ValueDef(_, _, _, expr)) ->
                     expr |> mapExpressionKinds (fun node kind -> inlinedNodes.Add node.Id |> ignore; kind) |> ignore
                 | _ -> ()
-            let imported = checkedModules.Values |> Seq.choose (function Result.Ok m -> Some m | Result.Error _ -> None) |> List.ofSeq
+            // Each module the compilation has is read only if a node inlined here is not in those before it.
+            let imported = checkedModules.Imported |> List.map snd
             let resolveInlined (raw: CheckedModule -> Map<NodeId, Ty>) =
                 inlinedNodes
                 |> Seq.choose (fun id ->
-                    imported |> List.tryPick (fun m -> raw m |> Map.tryFind id |> Option.map (fun ty -> id, Unifier.apply m.Subst ty)))
+                    imported
+                    |> List.tryPick (fun read ->
+                        match read.Value with
+                        | Result.Ok m -> raw m |> Map.tryFind id |> Option.map (fun ty -> id, Unifier.apply m.Subst ty)
+                        | Result.Error _ -> None))
                 |> Map.ofSeq
             let typed =
                 { checkedModule.Typed with

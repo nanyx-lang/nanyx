@@ -221,8 +221,14 @@ module InterpolationHoles =
             | None ->
                 match synthesize env with
                 | Some synthesized -> synthesized
-                // The prelude's `builtInFunction` writes a value of its type variable with the compiler's own.
-                | None when not (Set.intersect openVars declaredVars).IsEmpty && annotatedDef <> Some builtInFunction -> Error pending.Errors
+                // The prelude's `builtInFunction` writes a value of its type variable with the compiler's own. The
+                // error names an associated type the value turned out to be, which it could not when it was made.
+                | None when not (Set.intersect openVars declaredVars).IsEmpty && annotatedDef <> Some builtInFunction ->
+                    match argTys with
+                    | [ ty ] ->
+                        let ty = withAssociatedNames state ty
+                        Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers pending.Span (undeclared state ty annotatedDef) |> addToStringFix state ty annotatedDef ]
+                    | _ -> Error pending.Errors
                 | None when argTys |> List.forall (Unifier.unalias >> function TyVar _ -> true | _ -> false) -> Ok (InstanceBuiltIn, state)
                 | None -> Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers pending.Span (noInstance (List.head argTys)) ]
         match found with
