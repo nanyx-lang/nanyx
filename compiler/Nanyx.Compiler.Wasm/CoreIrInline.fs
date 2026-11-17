@@ -40,6 +40,11 @@ let private references (e: Expr) : string list =
         let static' = directAtoms e |> List.choose (function AStaticClosure(name, _, _) -> Some name | _ -> None)
         named @ static')
     |> List.ofSeq
+
+/// The functions `e` calls, by name.
+let private calls (e: Expr) : string list =
+    allExprs e |> Seq.choose (fun e -> match e.Kind with Call(name, _) -> Some name | _ -> None) |> List.ofSeq
+
 /// Whether `f` is a handler: a function whose body ends in a call through one of its parameters, as one that runs its
 /// lambda parameter under a `use` does.
 let private isHandler (f: Function) =
@@ -91,11 +96,12 @@ let private inCycles (functions: Map<string, Function>) (edges: Map<string, stri
                                 cyclic.Add member' |> ignore
     Set.ofSeq cyclic
 
-/// The functions in an order in which each comes after those it calls, but for calls within a cycle.
-let private calleesFirst (functions: Map<string, Function>) (edges: Map<string, string list>) : string list =
+/// The functions `roots` lead to through `edges` among those `wanted`, in an order in which each comes after those it
+/// leads to, but for edges within a cycle.
+let private calleesFirst (wanted: string -> bool) (edges: Map<string, string list>) (roots: string seq) : string list =
     let visited = HashSet<string>()
     let order = ResizeArray<string>()
-    for root in functions.Keys do
+    for root in roots do
         if visited.Add root then
             let work = Stack<string * string list>()
             work.Push((root, edges |> Map.tryFind root |> Option.defaultValue []))
@@ -103,13 +109,14 @@ let private calleesFirst (functions: Map<string, Function>) (edges: Map<string, 
                 match work.Pop() with
                 | name, successor :: rest ->
                     work.Push((name, rest))
-                    if functions.ContainsKey successor && visited.Add successor then
+                    if wanted successor && visited.Add successor then
                         work.Push((successor, edges |> Map.tryFind successor |> Option.defaultValue []))
                 | name, [] -> order.Add name
     List.ofSeq order
 
-/// Inlines calls into one function, `f`, given the functions it may call as they are by now.
-type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string>, f: Function) =
+/// Inlines calls into one function, `f`, given the functions it may call as they are by now, and `prepare`, which
+/// inlines calls into a function before a call to it is looked at.
+type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string>, prepare: string -> unit, f: Function) =
     let mutable nextId =
         let mutable highest = f.Params |> List.fold (fun acc p -> max acc p.Id) 0
         mapVars (fun v -> highest <- max highest v.Id; v) id f.Body |> ignore
@@ -190,6 +197,7 @@ type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string
         let site (call: Expr) : (Function * Atom list) option =
             match call.Kind with
             | Call(name, args) ->
+                if not (cyclic.Contains name) && name <> f.Name then prepare name
                 match functions.TryGetValue name with
                 | true, callee when
                     not (cyclic.Contains callee.Name)
@@ -297,27 +305,55 @@ type private Inliner(functions: Dictionary<string, Function>, cyclic: Set<string
 
 /// `functions` with calls inlined into each. The start function, `start`, is never inlined itself, and nor are the
 /// functions in `kept`: a cached value's (see `CoreIrCachedValues`), which a call reads rather than computes.
+///
+/// With a start, only the functions it reaches once calls are inlined into it are gone over, and the others are left as
+/// they are, for `CoreIrReach` to leave out. A host's instance makes a closure over each member of its contexts, which
+/// inlining shows most programs never call: hello world reaches 1 function of the 148 it is lowered to. A function is
+/// inlined into before any call to it is looked at, so each is inlined into as it would be if all were.
 let inlineCalls (start: string option) (kept: Set<string>) (functions: Function list) : Function list =
     let byName = functions |> List.map (fun f -> f.Name, f) |> Map.ofList
     let edges = byName |> Map.map (fun _ f -> references f.Body)
     let cyclic = inCycles byName edges + kept + Set.ofList (Option.toList start)
+    let callEdges = byName |> Map.map (fun _ f -> calls f.Body)
     let current = Dictionary<string, Function>()
     for f in functions do
         current.[f.Name] <- f
-    for name in calleesFirst byName edges do
-        let f = current.[name]
-        let inliner = Inliner(current, cyclic, f)
-        let mutable body = f.Body
-        let mutable round = 0
-        let mutable changed = true
-        while changed && round < rounds do
-            let simplified, didSimplify = CoreIrSimplify.simplify current { f with Body = body }
-            let next, didInline = inliner.Round simplified
-            body <- next
-            changed <- didSimplify || didInline
-            round <- round + 1
-        current.[name] <- { f with Body = fst (CoreIrSimplify.simplify current { f with Body = body }) }
+    let inlined = HashSet<string>()
+    let rec inlineInto (name: string) =
+        if inlined.Add name then
+            let f = current.[name]
+            let inliner = Inliner(current, cyclic, prepare, f)
+            let mutable body = f.Body
+            let mutable round = 0
+            let mutable changed = true
+            while changed && round < rounds do
+                let simplified, didSimplify = CoreIrSimplify.simplify current { f with Body = body }
+                let next, didInline = inliner.Round simplified
+                body <- next
+                changed <- didSimplify || didInline
+                round <- round + 1
+            current.[name] <- { f with Body = fst (CoreIrSimplify.simplify current { f with Body = body }) }
+    // The functions `name` calls are inlined into first, in order, so that a long chain of calls is not gone down
+    // recursively.
+    and prepare (name: string) =
+        if current.ContainsKey name && not (inlined.Contains name) then
+            for callee in calleesFirst (fun callee -> current.ContainsKey callee && not (inlined.Contains callee)) callEdges [ name ] do
+                inlineInto callee
+    match start with
+    | None ->
+        for name in calleesFirst byName.ContainsKey edges byName.Keys do
+            inlineInto name
+    | Some start ->
+        let reached = HashSet<string>()
+        let pending = Stack<string>([ start ])
+        while pending.Count > 0 do
+            let name = pending.Pop()
+            if current.ContainsKey name && reached.Add name then
+                prepare name
+                references current.[name].Body |> List.iter pending.Push
     // Only once nothing more is inlined: a temporary can be read only where it is computed, which would hide its value
     // from a caller that inlines the function.
     functions
-    |> List.map (fun f -> { current.[f.Name] with Body = CoreIrSimplify.withTemporaries current.[f.Name].Body })
+    |> List.map (fun f ->
+        if inlined.Contains f.Name then { current.[f.Name] with Body = CoreIrSimplify.withTemporaries current.[f.Name].Body }
+        else f)
