@@ -51,17 +51,6 @@ and private statementExpressions (statement: Statement) : Expression list =
     | ImportStatement _
     | AttributeStatement _ -> []
 
-let rec private topLevelExpressions (item: TopLevelItem) : Expression list =
-    match item.Kind with
-    | Def (ValueDef(_, _, _, value))
-    | Expr value -> [ value ]
-    | ModuleBlock(_, items) -> items |> List.collect topLevelExpressions
-    | Def (TypeDef _)
-    | ModuleDecl _
-    | Import _
-    | ReExport _
-    | Attribute _ -> []
-
 /// The expressions whose spans contain `offset`, innermost first. Only expressions that contain the offset are
 /// searched, and those without a span of their own (made-up parents), so a lookup is proportional to depth.
 let expressionsAt (offset: int) (module': Module) : Expression list =
@@ -70,7 +59,7 @@ let expressionsAt (offset: int) (module': Module) : Expression list =
         if contains offset expr.Span then children expr |> List.fold search (expr :: found)
         elif SourceSpan.isNone expr.Span then children expr |> List.fold search found
         else found
-    module' |> List.collect topLevelExpressions |> List.fold search []
+    module' |> List.collect SyntaxTree.ofItem |> List.fold search []
 
 /// `expr` and every expression inside it, each before those inside it, and each arm of a match with the expressions in
 /// its patterns before its body (see `SyntaxTree.expressionsWithinBy`).
@@ -78,7 +67,7 @@ let expressionsWithin (expr: Expression) : Expression list = SyntaxTree.expressi
 
 /// Every expression in `module'`, each before those inside it.
 let allExpressions (module': Module) : Expression list =
-    module' |> List.collect topLevelExpressions |> List.collect expressionsWithin
+    module' |> List.collect SyntaxTree.ofItem |> List.collect expressionsWithin
 
 /// The type expressions whose spans contain `offset`, innermost first.
 let typeExprsAt (offset: int) (module': Module) : TypeExpr list =
