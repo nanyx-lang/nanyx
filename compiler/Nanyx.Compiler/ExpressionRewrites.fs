@@ -63,6 +63,13 @@ module internal ExpressionRewrites =
             match readAs |> Map.tryFind spread.Id with
             | Some { Kind = FunctionCall(callee, span, [ _ ]) } -> FunctionCall(callee, span, [ operand ])
             | _ -> FunctionCall(CollectionSyntax.spread, None, [ operand ])
+        // `written`, a literal's items as a list, with each spread in it read.
+        let spreadsAsRead (written: Expression) =
+            written
+            |> mapExpressionKinds (fun node kind ->
+                match kind with
+                | FunctionCall(name, _, [ operand ]) when name = CollectionSyntax.spread -> spreadAsRead node operand
+                | other -> other)
         if readAs.IsEmpty then
             expr
         else
@@ -74,14 +81,14 @@ module internal ExpressionRewrites =
                 // its items as they are rewritten, in the list of them the call is given, whose spreads are read too.
                 | _, Some { Kind = CollectionSyntax.Construct _ & FunctionCall(callee, span, [ { Kind = FunctionCall(arrayOf, arraySpan, [ items ]) } as array ]) }
                     when (CollectionSyntax.segments { current with Kind = kind }).IsSome ->
-                    let written = CollectionSyntax.withSegments items (CollectionSyntax.segments { current with Kind = kind }).Value
-                    let written =
-                        written
-                        |> mapExpressionKinds (fun node kind ->
-                            match kind with
-                            | FunctionCall(name, _, [ operand ]) when name = CollectionSyntax.spread -> spreadAsRead node operand
-                            | other -> other)
+                    let written = CollectionSyntax.withSegments items (CollectionSyntax.segments { current with Kind = kind }).Value |> spreadsAsRead
                     FunctionCall(callee, span, [ { array with Kind = FunctionCall(arrayOf, arraySpan, [ written ]) } ])
+                // A list literal read as the list of its items with its spreads read (see `CollectionLiterals.spreading`)
+                // takes its items as they are rewritten, and its spreads are read too. The typed tree can hold that list
+                // already, as it does in a top-level def's value, whose spreads are rewritten as they are.
+                | BinaryOp(_, _, left, right), Some { Kind = BinaryOp(_, _, readLeft, readRight) } when left.Id = readLeft.Id && right.Id = readRight.Id -> kind
+                | _, Some ({ Kind = BinaryOp _ } as read) when (CollectionSyntax.segments { current with Kind = kind }).IsSome ->
+                    (CollectionSyntax.withSegments read (CollectionSyntax.segments { current with Kind = kind }).Value |> spreadsAsRead).Kind
                 // `a ?? b` is read as a call that takes `b` in a lambda (see `CoalesceOperator`), which keeps its node.
                 | CoalesceOperator.Call(left, right), Some { Kind = FunctionCall(callee, span, [ _; Kind (Lambda(parameters, _, takesUnit)) as fallback ]) } ->
                     FunctionCall(callee, span, [ left; { fallback with Kind = Lambda(parameters, right, takesUnit) } ])

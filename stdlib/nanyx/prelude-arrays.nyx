@@ -87,3 +87,15 @@ export def __spreadArray: array(a) -> list(a) = { xs ->
 
 --| The list `xs`, which a collection literal spreads, `[...xs]`.
 export def __spreadList: list(a) -> list(a) = { xs -> xs }
+
+--| The elements of the sequence `s`, pulled now, which a collection literal spreads, `[...s]`. It
+  requires the contexts the sequence's steps do.
+export def __spreadSeq: [c] ([c] seq(a)) -> list(a) = { s ->
+  seq.toList(s)
+}
+
+--| The elements of `xs`, through its [`Iterable`], which a collection literal spreads, `[...xs]`: a
+  set's, a slice's, or those of a type that attaches `toSeq`.
+export def __spreadIterable: [Iterable(c)] c -> list(elem) = { xs ->
+  seq.toList(toSeq(xs))
+}

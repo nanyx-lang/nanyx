@@ -155,5 +155,19 @@ def other = Bag[3, 4]
 println(list.length(bag.items))
 ```
 
-The standard library's `list`, `set`, `map`, `Array`, `Stack`, `Queue`, `Trie` and mutable collections get their literals the same way, with nothing special about them. A `fromArray` that requires a context makes the literal require it: `MStack[1, 2]` needs `Memory`, so it is written inside a `memory` block. A list or an array can be spread into a literal, `Array[...xs, 4]`; spreading anything else, such as a set, is an error (NYX0258). A literal of a type with no `fromArray` is an error too (NYX0257).
+The standard library's `list`, `set`, `map`, `Array`, `Stack`, `Queue`, `Trie` and mutable collections get their literals the same way, with nothing special about them. A `fromArray` that requires a context makes the literal require it: `MStack[1, 2]` needs `Memory`, so it is written inside a `memory` block. A literal of a type with no `fromArray` is an error (NYX0257).
+
+Anything that can be iterated can be spread into a literal: a list, an array, a set, a map, a slice, a sequence, or a type of your own that attaches `toSeq`. A sequence is pulled when the literal is built, and spreading one whose steps need a context makes the literal need it:
+
+```nanyx
+import nanyx/slice
+
+def s = set[1, 2]
+
+println([...s, 3])
+println(Array[0, ...(1..3), ...Array.slice(Array[7, 8, 9], 1, 3)])
+```
+
+This prints `[1, 2, 3]` and `[0, 1, 2, 3, 8, 9]`. Spreading something that can't be iterated, such as a record, is an error (NYX0258).
+
 For iteration constructs, see [Loops](./loops). For query-style collection programming, see [Sequences and queries](../advanced/sequences-and-queries).

@@ -83,11 +83,13 @@ module InterpolationHoles =
     let private display (ty: Ty) = Unifier.tyToDisplayString Ascii ty
 
     /// Who requires the context, as a diagnostic about a call to `calleeName` with the context's arguments `argTys`
-    /// names it: the function, the hole, or the `for` loop that walks a value (see `Loops`).
+    /// names it: the function, the hole, the `for` loop that walks a value (see `Loops`), or the spread of one in a
+    /// collection literal (see `CollectionLiterals`).
     let requirer (calleeName: Identifier) (argTys: Ty list) =
         match argTys with
         | [ ty ] when isHole calleeName -> $"Interpolating a value of type '{display ty}'"
         | ty :: _ when calleeName = ForSyntax.toSeq -> $"A `for` loop over a value of type '{display ty}'"
+        | ty :: _ when calleeName = CollectionSyntax.spreadIterable -> $"Spreading a value of type '{display ty}' into a collection literal"
         | _ -> $"'{calleeName}'"
 
     /// Why a value of the type `ty`, which has no `ToString`, cannot be interpolated, and what to do instead.

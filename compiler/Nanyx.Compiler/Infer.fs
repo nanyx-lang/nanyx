@@ -288,7 +288,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     | BinaryOp(op, _, left, right) when (CompositionOperators.functionFor op).IsSome ->
         inferAsCall (inferExpr env) state expr (CompositionOperators.functionFor op).Value [ left; right ]
     | CoalesceOperator.Call(left, right) -> CoalesceOperator.infer (inferExpr env) state expr left right
-    | BinaryOp(_, _, left, right) -> inferOperator env state expr left right
+    // A list literal that spreads a set, a sequence or anything else `Iterable` (see `CollectionLiterals.spreading`).
+    | BinaryOp(_, _, left, right) ->
+        CollectionLiterals.spreading inferExpr env state expr
+        |> Option.defaultWith (fun () -> inferOperator env state expr left right)
     | Pipe(value, name, spanOpt, args) -> inferPipe env state expr value name spanOpt args
     // The names a lambda gives its contexts are bound with its parameters (see `inferLambdaAfterTypeOfs`).
     | ContextNames(_, body) ->

@@ -168,6 +168,7 @@
     <Compile Include="Features\Arrays\RunSliceTests.fs" />
     <Compile Include="Features\Arrays\RunMArraySortTests.fs" />
     <Compile Include="Features\Collections\RunCollectionLiteralTests.fs" />
+    <Compile Include="Features\Collections\RunCollectionSpreadTests.fs" />
     <Compile Include="Features\Collections\RunTableLiteralTests.fs" />
     <Compile Include="Features\Collections\CollectionLiteralAllocationTests.fs" />
     <Compile Include="Features\StdLib\RunIgnoreTests.fs" />

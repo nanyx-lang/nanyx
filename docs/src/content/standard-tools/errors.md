@@ -1875,17 +1875,19 @@ def bag: Bag = [1, 2]  -- error NYX0257: 'Bag' has no `fromArray`, so a square-b
 
 To fix it, attach a `fromArray` to the type, which takes an `Array` of the items, or build the value another way.
 
-# NYX0258: Spread of something other than a list or an array
+# NYX0258: Spread of something that can't be iterated
 
-A spread in a literal that builds another type, `Array[...xs, 4]`, takes a list or an array, whose elements the literal
-copies. Spreading a set or anything else isn't supported.
+A spread in a literal, `[...xs, 4]`, copies the elements of something that can be iterated: a list, an array, a set, a
+map, a sequence, or a type that attaches `toSeq`, which makes it [`Iterable`](../stdlib/prelude-sequences). A record, a
+tag or a function has no elements to spread.
 
 ```nanyx
-def s = set[1, 2]
-def a = Array[...s, 3]  -- error NYX0258: A spread in a square-bracket literal takes a list or an array, not a 'set(int)'
+def p = (x = 1, y = 2)
+def a = Array[...p, 3]  -- error NYX0258: A spread in a square-bracket literal takes something that can be iterated, such as a list, an array, a set or a sequence, not a '(x: int, y: int)'
 ```
 
-To fix it, spread a list of the elements, such as `set.toList(s)`.
+To fix it, spread a collection of the values, such as `[p.x, p.y]`. A named type that has no `toSeq` is reported as
+NYX0205 instead, saying the `toSeq` is missing: attach one to spread it.
 
 # NYX0259: Union with more than one rest variable
 
