@@ -276,6 +276,20 @@ A type gets one by attaching a `fromString`, as `int`, `float` and `bool` do,
 which also fixes its `failure`, so a function can read a value of whichever type it is called at:
 `def readAll: [FromString(a)] list(string) -> list(#some(a) | failure)`.
 
+## `Typed`
+
+```nanyx fragment
+context Typed(a) = (
+  typeOf: Type(a)
+)
+```
+
+The type `a` as a value, which the compiler gives for every type: a function that is given a
+value of type `a` can require `Typed(a)` and read `typeOf`, instead of also taking the type
+argument `type a`, `def encode: [Typed(a)] a -> Json = { value -> encodeAt(value, typeOf) }`. A
+`use` can load another, but the only `Type(a)` value is `type a`, so it stands for the
+same type.
+
 ## `Default`
 
 ```nanyx fragment

@@ -221,6 +221,28 @@ The type's name can't be a built-in type's, as `list: type` would be (NYX0270).
 
 A type argument is known at compile time: it is never chosen with `if` or `match`, and a list never holds two of different types (NYX0272). It costs nothing when the program runs.
 
+A function that is given a value of type `a` needn't take `type a` as well: it can require the prelude's context `Typed(a)`, whose one member is the value `typeOf: Type(a)`. The compiler gives an instance of it for every type, so the caller passes nothing more:
+
+```nanyx
+context Show(a) = (show: a -> string)
+
+def int.show: int -> string = { n ->
+  "int {n}"
+}
+
+def showAt: [Show(a)] a, type a -> string = { value, t ->
+  show(value)
+}
+
+def describe: [Typed(a), Show(a)] a -> string = { value ->
+  showAt(value, typeOf)
+}
+
+println(describe(5)) -- int 5
+```
+
+`Typed` doesn't replace type arguments: in `[Typed(a)] string -> a`, nothing at the call says what `a` is. A `use` can load an instance of `Typed` as of any context, but the only `Type(int)` value is `type int`, so it stands for the same type.
+
 # Callable values
 
 Any value with a function type can be called like a function. A [map](../stdlib/prelude-maps) can be called too, and calling it is a lookup, which gives `#some(v) | #notFound`:
