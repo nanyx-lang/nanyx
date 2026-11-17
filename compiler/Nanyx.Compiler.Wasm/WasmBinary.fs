@@ -227,6 +227,56 @@ let private inlineExports (items: SExpr list) =
     let exports = items |> List.choose (function List [ Atom "export"; Text bytes ] -> Some(Encoding.UTF8.GetString bytes) | _ -> None)
     exports, items |> List.filter (isList "export" >> not)
 
+/// What an import brings in or an export gives out.
+type private ExternalKind =
+    | Func
+    | Table
+    | Memory
+    | Global
+
+    /// The byte the binary format writes for the kind.
+    member kind.Code =
+        match kind with
+        | Func -> 0uy
+        | Table -> 1uy
+        | Memory -> 2uy
+        | Global -> 3uy
+
+/// The kind the keyword `func`, `table`, `memory` or `global` names.
+let private externalKind (keyword: string) =
+    match keyword with
+    | "func" -> Some Func
+    | "table" -> Some Table
+    | "memory" -> Some Memory
+    | "global" -> Some Global
+    | _ -> None
+
+/// The limits `min max?` among `items`, failing with `failure` when they are not there.
+let private limitsOf (failure: string) (items: SExpr list) =
+    match items |> List.choose (function Atom limit when Char.IsDigit limit.[0] -> Some(uint64 (integer limit)) | _ -> None) with
+    | [ least ] -> least, None
+    | [ least; most ] -> least, Some most
+    | _ -> fail failure
+
+/// Writes the limits of a memory or a table.
+let private writeLimits (out: Bytes) (least: uint64, most: uint64 option) =
+    match most with
+    | None ->
+        out.Add 0x00uy
+        unsigned out least
+    | Some most ->
+        out.Add 0x01uy
+        unsigned out least
+        unsigned out most
+
+/// The offset an active segment opens with, `(offset ...)` or a single folded instruction, and the rest of it,
+/// failing with `failure` when it has none.
+let private segmentOffset (failure: string) (items: SExpr list) =
+    match items with
+    | List(Atom "offset" :: offset) :: rest -> offset, rest
+    | (List _ as offset) :: rest -> [ offset ], rest
+    | _ -> fail failure
+
 /// A function's parameters, each with its name if it has one, and its results, as `(param ...)` and `(result ...)`
 /// write them among `items`.
 let private signature (items: SExpr list) =
@@ -274,7 +324,7 @@ type private Assembler(fields: SExpr list) =
     let globals = ResizeArray<Global>()
     let memories = ResizeArray<uint64 * uint64 option>()
     let tables = ResizeArray<byte * uint64 * uint64 option>()
-    let exports = ResizeArray<string * byte * int>()
+    let exports = ResizeArray<string * ExternalKind * int>()
     let elements = ResizeArray<int * SExpr list * SExpr list>()
     let data = ResizeArray<int * SExpr list * byte array>()
     let mutable start: int option = None
@@ -342,20 +392,32 @@ type private Assembler(fields: SExpr list) =
         for field in fields do
             match field with
             | List [ Atom "start"; Atom reference ] -> start <- Some(Assembler.Resolve(functionNames, reference, "function"))
-            | List(Atom "export" :: Text exported :: [ List [ Atom kind; Atom reference ] ]) ->
-                let kindCode, names =
-                    match kind with
-                    | "func" -> 0uy, functionNames
-                    | "table" -> 1uy, tableNames
-                    | "memory" -> 2uy, memoryNames
-                    | "global" -> 3uy, globalNames
-                    | _ -> fail $"an export of an unknown kind {kind}"
-                exports.Add((Encoding.UTF8.GetString exported, kindCode, Assembler.Resolve(names, reference, kind)))
+            | List(Atom "export" :: Text exported :: [ List [ Atom keyword; Atom reference ] ]) ->
+                match externalKind keyword with
+                | Some kind ->
+                    exports.Add((Encoding.UTF8.GetString exported, kind, Assembler.Resolve(this.NamesOf kind, reference, keyword)))
+                | None -> fail $"an export of an unknown kind {keyword}"
             | _ -> ()
+
+    /// The names of the definitions of `kind`.
+    member _.NamesOf(kind: ExternalKind) =
+        match kind with
+        | Func -> functionNames
+        | Table -> tableNames
+        | Memory -> memoryNames
+        | Global -> globalNames
+
+    /// Gives the definition of `kind` at `index` its `$name`, if it has one, and exports it under each of `exported`.
+    member this.Declare(kind: ExternalKind, index: int, id: string option, exported: string list) =
+        id |> Option.iter (fun id ->
+            (this.NamesOf kind).[id] <- index
+            if kind = Func then functionNamesByIndex.[index] <- id.Substring 1)
+        for name in exported do
+            exports.Add((name, kind, index))
 
     /// An import, written as `(import "module" "name" (func ...))` or inside a definition, `(func $f (import ...) ...)`.
     member this.Import(field: SExpr) =
-        let moduleName, importName, kind, items =
+        let moduleName, importName, keyword, items =
             match field with
             | List [ Atom "import"; Text moduleName; Text importName; List(Atom kind :: items) ] -> moduleName, importName, kind, items
             | List(Atom kind :: items) ->
@@ -365,56 +427,35 @@ type private Assembler(fields: SExpr list) =
             | _ -> fail "an import that is not a list"
         let id, items = ownName items
         let exported, items = inlineExports items
-        let add (names: Dictionary<string, int>) (index: int) (exportKind: byte) =
-            id |> Option.iter (fun id -> names.[id] <- index)
-            for name in exported do
-                exports.Add((name, exportKind, index))
-        let description =
-            match kind with
-            | "func" ->
-                let typeIndex, _ = this.TypeUse items
-                add functionNames importedFunctions 0uy
-                id |> Option.iter (fun id -> functionNamesByIndex.[importedFunctions] <- id.Substring 1)
-                importedFunctions <- importedFunctions + 1
-                let out = Bytes()
-                out.Add 0x00uy
-                unsigned out (uint64 typeIndex)
-                List.ofSeq out
-            | "memory" ->
-                add memoryNames importedMemories 2uy
-                importedMemories <- importedMemories + 1
-                let out = Bytes()
-                out.Add 0x02uy
-                Assembler.Limits(out, items)
-                List.ofSeq out
-            | "global" ->
-                add globalNames importedGlobals 3uy
-                importedGlobals <- importedGlobals + 1
-                let ty, isMutable = Assembler.GlobalType items
-                [ 0x03uy; ty; (if isMutable then 1uy else 0uy) ]
-            | "table" ->
-                add tableNames importedTables 1uy
-                importedTables <- importedTables + 1
-                let out = Bytes()
-                out.Add 0x01uy
-                let limits, refType = items |> List.partition (function Atom limit -> Char.IsDigit limit.[0] | _ -> false)
-                out.Add(match refType with [ Atom ty ] -> valueType ty | _ -> 0x70uy)
-                Assembler.Limits(out, limits)
-                List.ofSeq out
-            | _ -> fail $"an import of an unknown kind {kind}"
-        imports.Add { Module = Encoding.UTF8.GetString moduleName; Name = Encoding.UTF8.GetString importName; Description = description }
-
-    /// Writes the limits `min max?` among `items`.
-    static member Limits(out: Bytes, items: SExpr list) =
-        match items |> List.choose (function Atom limit when Char.IsDigit limit.[0] -> Some(uint64 (integer limit)) | _ -> None) with
-        | [ least ] ->
-            out.Add 0x00uy
-            unsigned out least
-        | [ least; most ] ->
-            out.Add 0x01uy
-            unsigned out least
-            unsigned out most
-        | _ -> fail "limits that are not a minimum and an optional maximum"
+        let kind =
+            match externalKind keyword with
+            | Some kind -> kind
+            | None -> fail $"an import of an unknown kind {keyword}"
+        let out = Bytes()
+        out.Add kind.Code
+        match kind with
+        | Func ->
+            let typeIndex, _ = this.TypeUse items
+            this.Declare(Func, importedFunctions, id, exported)
+            importedFunctions <- importedFunctions + 1
+            unsigned out (uint64 typeIndex)
+        | Memory ->
+            this.Declare(Memory, importedMemories, id, exported)
+            importedMemories <- importedMemories + 1
+            writeLimits out (limitsOf "limits that are not a minimum and an optional maximum" items)
+        | Global ->
+            this.Declare(Global, importedGlobals, id, exported)
+            importedGlobals <- importedGlobals + 1
+            let ty, isMutable = Assembler.GlobalType items
+            out.Add ty
+            out.Add(if isMutable then 1uy else 0uy)
+        | Table ->
+            this.Declare(Table, importedTables, id, exported)
+            importedTables <- importedTables + 1
+            let limits, refType = items |> List.partition (function Atom limit -> Char.IsDigit limit.[0] | _ -> false)
+            out.Add(match refType with [ Atom ty ] -> valueType ty | _ -> 0x70uy)
+            writeLimits out (limitsOf "limits that are not a minimum and an optional maximum" limits)
+        imports.Add { Module = Encoding.UTF8.GetString moduleName; Name = Encoding.UTF8.GetString importName; Description = List.ofSeq out }
 
     /// A global's value type and whether it is mutable: `i32` or `(mut i32)`, the first of `items`.
     static member GlobalType(items: SExpr list) =
@@ -429,12 +470,7 @@ type private Assembler(fields: SExpr list) =
         | List(Atom "func" :: items) ->
             let id, items = ownName items
             let exported, items = inlineExports items
-            let index = importedFunctions + functions.Count
-            id |> Option.iter (fun id ->
-                functionNames.[id] <- index
-                functionNamesByIndex.[index] <- id.Substring 1)
-            for name in exported do
-                exports.Add((name, 0uy, index))
+            this.Declare(Func, importedFunctions + functions.Count, id, exported)
             // The type use and the locals come first; a flat body can have `(result ...)` of its own, a block's.
             let header = items |> List.takeWhile (fun item -> isList "type" item || isList "param" item || isList "result" item || isList "local" item)
             let body = List.skip header.Length items
@@ -455,47 +491,28 @@ type private Assembler(fields: SExpr list) =
         | List(Atom "memory" :: items) ->
             let id, items = ownName items
             let exported, items = inlineExports items
-            let index = importedMemories + memories.Count
-            id |> Option.iter (fun id -> memoryNames.[id] <- index)
-            for name in exported do
-                exports.Add((name, 2uy, index))
-            match items |> List.choose (function Atom limit -> Some(uint64 (integer limit)) | _ -> None) with
-            | [ least ] -> memories.Add((least, None))
-            | [ least; most ] -> memories.Add((least, Some most))
-            | _ -> fail "a memory without its size"
+            this.Declare(Memory, importedMemories + memories.Count, id, exported)
+            memories.Add(limitsOf "a memory without its size" items)
         | List(Atom "global" :: items) ->
             let id, items = ownName items
             let exported, items = inlineExports items
-            let index = importedGlobals + globals.Count
-            id |> Option.iter (fun id -> globalNames.[id] <- index)
-            for name in exported do
-                exports.Add((name, 3uy, index))
+            this.Declare(Global, importedGlobals + globals.Count, id, exported)
             let ty, isMutable = Assembler.GlobalType items
             globals.Add { Type = ty; Mutable = isMutable; Init = List.tail items }
         | List(Atom "table" :: items) ->
             let id, items = ownName items
             let exported, items = inlineExports items
-            let index = importedTables + tables.Count
-            id |> Option.iter (fun id -> tableNames.[id] <- index)
-            for name in exported do
-                exports.Add((name, 1uy, index))
-            let sizes = items |> List.choose (function Atom limit when Char.IsDigit limit.[0] -> Some(uint64 (integer limit)) | _ -> None)
+            this.Declare(Table, importedTables + tables.Count, id, exported)
+            let least, most = limitsOf "a table without its size" items
             let refType = items |> List.tryPick (function Atom ty when not (Char.IsDigit ty.[0]) -> Some(valueType ty) | _ -> None)
-            match sizes with
-            | [ least ] -> tables.Add((defaultArg refType 0x70uy, least, None))
-            | [ least; most ] -> tables.Add((defaultArg refType 0x70uy, least, Some most))
-            | _ -> fail "a table without its size"
+            tables.Add((defaultArg refType 0x70uy, least, most))
         | List(Atom "elem" :: items) ->
             let _, items = ownName items
             let table, items =
                 match items with
                 | List [ Atom "table"; Atom reference ] :: rest -> Assembler.Resolve(tableNames, reference, "table"), rest
                 | _ -> 0, items
-            let offset, items =
-                match items with
-                | List(Atom "offset" :: offset) :: rest -> offset, rest
-                | (List _ as offset) :: rest -> [ offset ], rest
-                | _ -> fail "an element segment without an offset"
+            let offset, items = segmentOffset "an element segment without an offset" items
             let items = items |> List.filter (fun item -> item <> Atom "func")
             elements.Add((table, offset, items))
         | List(Atom "data" :: items) ->
@@ -504,11 +521,7 @@ type private Assembler(fields: SExpr list) =
                 match items with
                 | List [ Atom "memory"; Atom reference ] :: rest -> Assembler.Resolve(memoryNames, reference, "memory"), rest
                 | _ -> 0, items
-            let offset, items =
-                match items with
-                | List(Atom "offset" :: offset) :: rest -> offset, rest
-                | (List _ as offset) :: rest -> [ offset ], rest
-                | _ -> fail "a passive data segment, which this assembler doesn't write"
+            let offset, items = segmentOffset "a passive data segment, which this assembler doesn't write" items
             let bytes = items |> Seq.collect (function Text bytes -> bytes | _ -> fail "data that is not a string") |> Array.ofSeq
             data.Add((memory, offset, bytes))
         | List(Atom("type" | "start" | "export") :: _) -> ()
@@ -812,33 +825,18 @@ let assemble (wat: string) : byte array =
         let tables = Bytes()
         vector tables assembler.Tables (fun out (refType, least, most) ->
             out.Add refType
-            match most with
-            | None ->
-                out.Add 0x00uy
-                unsigned out least
-            | Some most ->
-                out.Add 0x01uy
-                unsigned out least
-                unsigned out most)
+            writeLimits out (least, most))
         section out 4uy tables
     if assembler.Memories.Count > 0 then
         let memories = Bytes()
-        vector memories assembler.Memories (fun out (least, most) ->
-            match most with
-            | None ->
-                out.Add 0x00uy
-                unsigned out least
-            | Some most ->
-                out.Add 0x01uy
-                unsigned out least
-                unsigned out most)
+        vector memories assembler.Memories writeLimits
         section out 5uy memories
     if assembler.Globals.Count > 0 then section out 6uy globals
     if assembler.Exports.Count > 0 then
         let exports = Bytes()
         vector exports assembler.Exports (fun out (exported, kind, index) ->
             name out exported
-            out.Add kind
+            out.Add kind.Code
             unsigned out (uint64 index))
         section out 7uy exports
     match assembler.Start with
