@@ -105,6 +105,27 @@ refuse a program that would.
 **Recommendation: B.** It keeps capabilities in types, avoids colouring through context polymorphism, and the
 workflow form stays available for the cases a workflow is good at (generators, parsers), not for async.
 
+## What colouring costs in each
+
+All three options except C put "this can wait" in the type; the difference is who pays for it.
+
+- **With A,** every generic function pays. `list.map(urls, fetch)` gives a `list(Task(Response))`, not the responses,
+  so the library needs a second set of functions for tasks (`async.traverse`, an async `fold`, an async `filter`),
+  the second standard library C# and Rust live with. Every function between the entry and the network call is written
+  in the workflow too.
+- **With B,** the prelude's higher-order functions are already generic in contexts (`[c] a -> b`), so
+  `urls \map { url -> http.get(url) }` works, and is `[Async]` because its lambda is.
+- **What B still costs: a function stored in data.** A record field typed `string -> int` can't hold an `[Async]`
+  function. The field has to be generic in contexts, `[k] string -> int`, in a type declared `[k]`, as `seq`'s pull
+  function is. That's a price `seq` already pays, but library authors will meet it more often once functions that
+  wait are common.
+- **What B costs at run time** is suspending: nothing extra per call in a host that suspends instances or switches
+  stacks, but about half again in code size under Asyncify, which is why that's only the fallback. A pays a closure
+  allocated per `await!`, which in-place reuse can't remove.
+
+So the recommendation isn't "B has no colour". It's that B's colour is a context, and contexts already have the
+polymorphism that makes colours cheap.
+
 ## Where `Async` comes from
 
 Nothing starts it: like `Console`, the host provides it. A host that can suspend (the console host on Wasmtime, the
