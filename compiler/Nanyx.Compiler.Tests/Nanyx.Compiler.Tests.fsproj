@@ -169,6 +169,7 @@
     <Compile Include="Features\Strings\InterpolationTests.fs" />
     <Compile Include="Features\Refactorings\CallAndPipeTests.fs" />
     <Compile Include="Features\Refactorings\InlineTests.fs" />
+    <Compile Include="Features\Refactorings\InlineTypeAliasTests.fs" />
     <Compile Include="Features\Refactorings\IntroduceFunctionTests.fs" />
     <Compile Include="Features\Refactorings\IntroduceLocalTests.fs" />
     <Compile Include="Features\Refactorings\IntroduceTypeAliasTests.fs" />

@@ -13,7 +13,7 @@ let private title = "Introduce type alias"
 
 /// A type written in the module, with the top-level item it is written in, whether that item is exported, and whether
 /// it is in a list of contexts (`[Eq(a)]`), which names contexts rather than types.
-type private WrittenType =
+type internal WrittenType =
     { Type: TypeExpr
       Item: TopLevelItem
       Exported: bool
@@ -52,7 +52,7 @@ let private rootsIn (item: TopLevelItem) : (TypeExpr * bool) list =
     | _ -> []
 
 /// Every type written in `syntax`'s top-level items, in the order they are written.
-let private writtenTypes (syntax: Module) =
+let internal writtenTypes (syntax: Module) =
     syntax
     |> List.collect (fun item ->
         rootsIn item

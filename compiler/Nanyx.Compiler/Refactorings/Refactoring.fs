@@ -78,6 +78,17 @@ module internal RefactoringText =
         let lineStart, _ = lineOf source attributeStart
         if source.Substring(lineStart, attributeStart - lineStart).Trim() = "" then above lineStart else attributeStart
 
+    /// The text removing a definition from `start`, where its doc comment or attributes start, to `finish` removes: to
+    /// the end of its last line, and the blank lines after it.
+    let removal (source: string) (start: int) (finish: int) =
+        let lineEnd = source.IndexOf('\n', finish)
+        let finish = if lineEnd < 0 then source.Length else lineEnd + 1
+        // The blank lines after it go with it.
+        let rec blanks (at: int) =
+            let next = source.IndexOf('\n', at)
+            if next >= 0 && source.Substring(at, next - at).Trim() = "" then blanks (next + 1) else at
+        start, blanks finish
+
     /// The names a new name must not be: every symbol's and import's, and every name the module's values write, since
     /// a local named after a function a call finds by name would hide it.
     let takenNames (syntax: Module) (typed: TypedModule) =
