@@ -382,7 +382,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         let memberSpan = nameSpan spanOpt expr
         match baseExpr.Kind with
         | IdentifierExpr baseName ->
-            match qualifiedDefinition env baseName memberName with
+            match qualifiedDefinition env state baseName memberName with
             | Some (qualifiedName, scheme) when not (referenceErrors qualifiedName expr scheme state).IsEmpty -> Error (referenceErrors qualifiedName expr scheme state)
             | Some (qualifiedName, scheme) ->
                 let ty, next = instantiate (recordReference expr scheme state) scheme
@@ -394,7 +394,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | None -> readMember env state expr baseExpr (Some baseName) memberName memberSpan
         // `t.Encoder.string` names the definition attached to `Encoder` through the import's alias `t`: it is read as
         // the member `string` of `t.Encoder`, as `Encoder.string` is of `Encoder` (#1833).
-        | MemberAccess _ when (SyntaxTree.dottedName baseExpr |> Option.bind (fun qualifier -> qualifiedDefinition env qualifier memberName)).IsSome ->
+        | MemberAccess _ when (SyntaxTree.dottedName baseExpr |> Option.bind (fun qualifier -> qualifiedDefinition env state qualifier memberName)).IsSome ->
             let qualifier = Expression.from baseExpr (IdentifierExpr (SyntaxTree.dottedName baseExpr).Value)
             let read = { expr with Kind = MemberAccess(qualifier, memberName, spanOpt) }
             inferExprKind env state read
