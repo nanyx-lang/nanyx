@@ -192,7 +192,10 @@ How it is built:
   callee is specialised on it too.
 - Anywhere else the local is read, it is a value: a lambda captures it, or it is passed to `list.map`. Only then is
   the local given the member's value, a closure over the wrapper or the top-level value, at the top of the function
-  (`WithKnownValues`, which looks for the locals the body names with `usedOf`).
+  (`WithKnownValues`, which looks for the locals the body names with `usedOf`). A member that is a generic top-level
+  value, such as `list.default: list(a)`, is that value at the member's type where the callee takes it
+  (`CoreIrLowerKnown.knownValue`), as a generic function member is the function at that type
+  ([#1794](https://github.com/nanyx-lang/nanyx/issues/1794)).
 - Lambda lifting turns each binding of a `use` into a local `def`, so a `use`'s member is a local. A `def` whose value
   is a top-level function named as a value, a literal, or a local known already records its local as known
   (`FunctionLowering.NoteDefinedKnown`): such a local never changes, as a cell is a `def` of `mut(...)`. A call that

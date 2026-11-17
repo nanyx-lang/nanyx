@@ -195,7 +195,7 @@ and private argumentAtom (tools: MemberTools) (scope: Scope) (argument: ContextA
     | ClosureOverWrapper wrapper -> k (wrapperClosure tools wrapper memberTy)
     | DerivedClosure(wrapper, at) -> derivedClosure tools scope wrapper at memberTy k
     // A member that is a value (`Point.`0``): the top-level value, evaluated.
-    | DefinitionValue definition -> valueOfKnown tools (knownValue tools.Input definition) k
+    | DefinitionValue definition -> valueOfKnown tools (knownValue tools.Input definition memberTy) k
     | PassedByCaller -> internalError "a member its callers pass, found where it is called"
     // The type checker found every context a call requires, so one missing here is the backend's bug.
     | Unfound key ->
@@ -241,8 +241,8 @@ and contextMembers (tools: MemberTools) (scope: Scope) (name: string) (node: Nod
             | [] -> memberAtoms tools scope None variables (fun atoms -> k (List.rev acc @ List.zip (List.map fst variables) atoms))
             | (_, PassedByCaller, _) :: rest -> pass rest acc
             | (key, _, _) :: rest when knownMembers |> List.exists (fst >> (=) key) -> pass rest acc
-            // A member that is a value (`Point.`0``) is passed as it is.
-            | (key, (DefinitionValue _ as argument), _) :: rest -> argumentAtom tools scope argument None (fun atom -> pass rest ((key, atom) :: acc))
+            // A member that is a value (`Point.`0``) is passed as it is, at the member's type if it is generic.
+            | (key, (DefinitionValue _ as argument), memberTy) :: rest -> argumentAtom tools scope argument memberTy (fun atom -> pass rest ((key, atom) :: acc))
             | (key, Unfound _, Some memberTy) :: rest when CoreIrLowerInstances.neverCalled (substitute (tools.Subst ()) instanceTy) ->
                 let ty = tools.ToIrType (unconstrainedAsUnit memberTy)
                 let standIn = tools.Request (SpecKey.plain $"__stand_in_{IrType.mangle ty}" []) (tools.Subst ()) (StandingIn ty)
