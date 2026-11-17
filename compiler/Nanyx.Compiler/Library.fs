@@ -606,7 +606,8 @@ module Compiler =
             parseWithDocs (checkedModules.FileName origin) source
             // A module split across files is checked as one: its other files' items join this one's.
             |> Result.bind (fun (parsed, docComments) ->
-                PartialModules.assemble parseWithDiagnostics (PartialModules.otherFragments checkedModules.ReadFile checkedModules.Package checkedModules.Edited origin) parsed
+                let packages = Option.toList checkedModules.Package @ Option.toList hostModules
+                PartialModules.assemble parseWithDiagnostics (PartialModules.otherFragments checkedModules.ReadFile packages checkedModules.Edited origin) parsed
                 |> Result.map (fun assembled -> (let ast, _, _ = parsed in ast), docComments, assembled))
             |> Result.mapError (fun diagnostics -> Parsed, diagnostics)
             // A record that names a field twice is reported before anything is inferred from it (see `DuplicateFields`).
