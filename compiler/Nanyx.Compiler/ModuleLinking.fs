@@ -240,6 +240,19 @@ module internal ModuleLinking =
         |> Seq.map (fun (KeyValue(name, ty)) -> (renames |> Map.tryFind name |> Option.defaultValue name), ty)
         |> Map.ofSeq
 
+    /// The instances the calls in the definitions `inlinedItemsForImport` inlines find, with the definitions they name
+    /// by the names those are inlined under: a private `__toString_1` a module derives is `two.__toString_1` (#1812).
+    let internal inlinedInstancesForImport (item: ImportItem) (checkedModule: CheckedModule) : Map<NodeId, ContextInstance option list> =
+        let renames = inlinedRenames item checkedModule
+        let rename (name: string) = renames |> Map.tryFind name |> Option.defaultValue name
+        let renameInstance instance =
+            match instance with
+            | InstanceSynthesized members -> InstanceSynthesized(members |> List.map (fun (memberName, definition) -> memberName, rename definition))
+            | InstanceDerived(memberName, definition, at) -> InstanceDerived(memberName, rename definition, at)
+            | InstanceInScope _
+            | InstanceBuiltIn -> instance
+        checkedModule.Typed.ContextInstances |> Map.map (fun _ found -> found |> List.map (Option.map renameInstance))
+
     /// Keeps the first definition of each name, so a module inlined along two import paths appears once.
     let internal distinctDefinitions (items: TopLevelItem list) : TopLevelItem list =
         let seen = System.Collections.Generic.HashSet<string>()
