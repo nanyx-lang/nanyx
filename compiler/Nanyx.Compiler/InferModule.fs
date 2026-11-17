@@ -280,13 +280,20 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 let typeOpt, contextOpt, declaredTypeExprOpt, expectedDeclaredOpt, envWithCtx =
                     annotation.TypeOpt, annotation.Contexts, annotation.DeclaredTypeExpr, annotation.Declared, annotation.Env
                 // The name is already in `env` from the pre-binding pass: at its declared type, or at the
-                // fresh variable recorded in `preboundFreshVars`. Self-recursion sees the declared type as a
-                // monomorphic binding while the body is checked, as before.
+                // fresh variable recorded in `preboundFreshVars`. While the body is checked, the def sees itself at
+                // its declared type, generic in the variables its annotation writes that no context it requires
+                // names, so it can call itself at other types (`encodeAt(field, f.type)` walks a value's parts). An
+                // annotation with a `typeof` or a `_` is not all known yet, so the def sees itself at it as it is.
                 // The symbol the pre-binding pass made.
                 let symbol, _ = declareSymbol DefValue expr.Id name TopLevelValue isExport None state
                 let envWithRec =
                     match expectedDeclaredOpt with
-                    | Some declaredTy -> TypeEnv.declare name symbol (TypeEnv.mono declaredTy) envWithCtx
+                    | Some declaredTy when preboundFreshVars.ContainsKey name -> TypeEnv.declare name symbol (TypeEnv.mono declaredTy) envWithCtx
+                    | Some declaredTy ->
+                        // A union's rest and a context variable stay the def's own: a call's are what it is given.
+                        let general = TypeEnv.generalize envWithCtx declaredTy
+                        let kept = Set.union (Unifier.restVarIds true declaredTy) (FunctionContexts.variablesIn declaredTy |> Map.keys |> Set.ofSeq)
+                        TypeEnv.declare name symbol { general with Quantified = Set.difference general.Quantified kept } envWithCtx
                     | None -> envWithCtx
                 let nextStateWithReq =
                     let written = recordWrittenType name typeOpt nextState2
