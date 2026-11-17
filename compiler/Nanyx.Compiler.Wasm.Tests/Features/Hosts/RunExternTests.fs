@@ -10,7 +10,7 @@ open TranspilerWasmTestHelpers
 
 /// A test host's source: its imports, `writeStdout` (see `hostWriteStdout`), then `body`.
 let private host (body: string) =
-    "module console.host\n\nimport (\n  nanyx/host.memory\n  nanyx/host.runtime\n)\n\n" + hostWriteStdout + "\n" + body
+    "module test.host\n\nimport (\n  nanyx/host.memory\n  nanyx/host.runtime\n)\n\n" + hostWriteStdout + "\n" + body
 
 /// A host that calls WASI's `args_sizes_get` twice, and writes what it returned each time: 0, for success.
 let private argsSizes =
@@ -75,7 +75,7 @@ writeStdout("{missing()}")
 let ``An extern of a function the runtime imports, with another type, is an error that says the runtime's`` () =
     let source =
         normalized
-            """module console.host
+            """module test.host
 
 import nanyx/host.runtime
 
