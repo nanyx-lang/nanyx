@@ -159,3 +159,39 @@ println(ofElements(["a"]))
 println(describeElements(1..3))
 """
     runSource source |> assertRan "int\nof string\nint\n"
+
+[<Fact>]
+let ``Run - a function that writes the contexts it needs of an associated type interpolates, compares and adds its values`` () =
+    let source =
+        """def iterate: [Iterable(i), ToString(elem), Console] i -> () = { seq ->
+  for seq | item ->
+    println("Got item: {item}")
+}
+
+def doubled: [Iterable(i), Add(elem), ToString(elem), Console] i -> () = { xs ->
+  for xs | x ->
+    println("{x + x}")
+}
+
+def hasTwins: [Iterable(i), Eq(elem), Console] i -> () = { xs ->
+  for xs | x ->
+    if x == x then println("same") else println("differs")
+}
+
+iterate([1, 2, 3])
+doubled([4])
+hasTwins(["a"])
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "Got item: 1\nGot item: 2\nGot item: 3\n8\nsame\n"
+
+[<Fact>]
+let ``Run - a function that writes no type infers the contexts it needs of the elements it iterates`` () =
+    let source =
+        """def iterate = { seq ->
+  for seq | item ->
+    println("Got item: {item == item} {item + item}")
+}
+
+iterate([1, 2])
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "Got item: true 2\nGot item: true 4\n"

@@ -110,6 +110,17 @@ let private associatedVariables (state: InferState) (contexts: TypeExpr list opt
                 | _ -> None)
         | _ -> [])
 
+/// `scheme`, the type of a def that writes it with the contexts `contexts`, generic in the associated types of those
+/// contexts too, though its type may not name them: `elem` in `[Iterable(i)] i -> ()`. A context that the def's value
+/// needs of one, as a hole `"{item}"` needs `ToString(Iterable(i).elem)`, must be written then, as for any of its type
+/// variables.
+let private withAssociatedQuantified (state: InferState) (contexts: TypeExpr list option) (scheme: TypeScheme) : TypeScheme =
+    let associated =
+        associatedVariables state contexts
+        |> List.map (TyVar >> resolveSoFar state >> TypeEnv.freeTyVars)
+        |> Set.unionMany
+    { scheme with Quantified = Set.union scheme.Quantified associated }
+
 /// Infers a module in `initialEnv`, carrying on past an item that fails to check: the types and items of those
 /// that do, and the diagnostics of those that do not. The constraints are not solved here, so a type mismatch is
 /// not among them.
@@ -345,8 +356,12 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         // variable it was pre-bound at does not stop its type being generalized. It is resolved
                         // first, as a local def's is: `{ x -> x + 1 }` is `α -> α` until its constraints are
                         // applied, and generalising that would make every use `α -> α` too.
+                        let generalize state =
+                            let scheme, generalized = generalizeDef (withoutTopLevel name env) state declaredTy
+                            if expectedDeclaredOpt.IsSome then withAssociatedQuantified generalized contextOpt scheme, generalized
+                            else scheme, generalized
                         let scheme, generalizedState =
-                            ArithmeticInference.generalize (fun state -> generalizeDef (withoutTopLevel name env) state declaredTy) (ArithmeticInference.TopLevelDef name) state
+                            ArithmeticInference.generalize generalize (ArithmeticInference.TopLevelDef name) state
                         // The parameterised contexts an unannotated def requires are part of its type, as if written.
                         match resolvePendingInstances env generalizedState name symbol scheme with
                         | Error err ->
