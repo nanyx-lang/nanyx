@@ -74,7 +74,7 @@ let private preludeSource = StandardLibrary.tryLoadSource StandardLibrary.prelud
 [<Fact>]
 let ``The build puts the checked library beside the compiler`` () =
     Assert.True(File.Exists CheckedLibrary.path, $"{CheckedLibrary.path} is missing")
-    let file = CheckedLibrary.read CheckedLibrary.path CheckedLibrary.libraryHash.Value
+    let file = CheckedLibrary.read CheckedLibrary.path CheckedLibrary.build
     Assert.True(file.IsSome, "the checked library was not read")
     Assert.NotEmpty(file.Value.Modules)
     Assert.NotEmpty(file.Value.Shipped)
@@ -94,7 +94,36 @@ let ``A library module whose source has changed is not taken from the checked li
 
 [<Fact>]
 let ``A checked library checked from another library is not read`` () =
-    Assert.True((CheckedLibrary.read CheckedLibrary.path (CheckedLibrary.libraryHash.Value + "0")).IsNone)
+    Assert.True((CheckedLibrary.read CheckedLibrary.path (CheckedLibrary.build + "0")).IsNone)
+
+// A process reads a module of the checked library only when it imports it (#1852).
+
+[<Fact>]
+let ``Reading the checked library reads none of its modules until one is asked for`` () =
+    let file = (CheckedLibrary.read CheckedLibrary.path CheckedLibrary.build).Value
+    let read () = file.Checked |> Map.filter (fun _ checking -> checking.IsValueCreated) |> Map.keys |> List.ofSeq
+    Assert.Empty(read ())
+    match file.Checked[preludeKey].Value with
+    | Ok prelude -> Assert.NotEmpty(prelude.Exports)
+    | Error (phase, diagnostics) -> failwith $"the prelude stopped at {phase}: %A{diagnostics}"
+    Assert.Equal<string list>([ preludeKey ], read ())
+
+[<Fact>]
+let ``A value read back from its part refers to what was written before the part, and shares what it holds twice`` () =
+    let name = "shared"
+    let inner = [ name; name ]
+    let value = (inner, lazy (inner, [ inner; inner ]), inner)
+    use stream = new MemoryStream()
+    use writer = new BinaryWriter(stream)
+    BinaryData.write writer id (value.GetType()) value
+    let bytes = stream.ToArray()
+    let before, later, after = BinaryData.read bytes 0 id (value.GetType()) :?> string list * Lazy<string list * string list list> * string list
+    Assert.False(later.IsValueCreated)
+    Assert.Equal<string list>(inner, after)
+    let held, twice = later.Value
+    Assert.Equal<string list>(inner, held)
+    Assert.True(obj.ReferenceEquals(before, held))
+    Assert.True(obj.ReferenceEquals(twice[0], twice[1]))
 
 // The build checks the packages the compiler ships too (#1637), so a loose script does not check the console host.
 
@@ -102,7 +131,7 @@ let private consoleFile = Path.Combine(ShippedPackages.directoryOf "nanyx.consol
 
 [<Fact>]
 let ``The checked library has the shipped packages' modules, with paths beside this compiler`` () =
-    let shipped = (CheckedLibrary.read CheckedLibrary.path CheckedLibrary.libraryHash.Value).Value.Shipped
+    let shipped = (CheckedLibrary.read CheckedLibrary.path CheckedLibrary.build).Value.Shipped
     Assert.Equal<string list>(
         [ "nanyx.console.core/src/console.nyx"
           "nanyx.console.core/src/env.nyx"
