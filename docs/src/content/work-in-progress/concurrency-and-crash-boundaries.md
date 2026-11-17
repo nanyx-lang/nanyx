@@ -210,7 +210,7 @@ Decided with the maintainer on 2026-11-17, for direction B (which is itself stil
 - **`start!` gives back a `Task(a)`.** A task shares the instance and lives in a scope; a
   [process](#processes-mailboxes-and-supervision) is isolated and comes from `process.start`. The names keep the two
   levels apart.
-- **`Scope` is scoped,** as `Memory` is, so the [context escape](./context-escape) rules keep a `Task`, and `start`,
+- **`Scope` is scoped,** as `Memory` is, so the [escape](../advanced/memory#values-cannot-escape-memory-scope) rules keep a `Task`, and `start`,
   from leaving the block. "No task outlives its block" is checked by the type checker Nanyx already has.
 - **`await` is a function, not a keyword.** A keyword exists to capture the rest of a block; waiting on a task is an
   ordinary call that suspends, like `http.get`, so it's written like one.

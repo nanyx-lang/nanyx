@@ -58,5 +58,5 @@ Settled:
 - **Spelling.** The type is `map(k, v)`, and its functions are attached to it by that name, `map.get`, as `list.map`
   is to `list(a)` (#653).
 - **Builders.** A literal builds any type with an attached `fromArray`
-  ([#1543](https://github.com/nanyx-lang/nanyx/issues/1543), [Collection literals](./collection-literals)), so `[]`
+  ([#1543](https://github.com/nanyx-lang/nanyx/issues/1543), [Collections](../tour/collections#syntax)), so `[]`
   with an expected map type is an empty map, and `set[1, 2]` is a set.
