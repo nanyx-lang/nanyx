@@ -33,6 +33,33 @@ def n = ["a" => 1]
     Assert.Equal("map(string, int)", typeOf "n")
 
 [<Fact>]
+let ``A literal written under a typed def's = takes the declared type`` () =
+    let source =
+        """
+type Stock = (name: string, count: int)
+
+def a: Array(int) =
+  [1, 2]
+
+def m: Map(string, int) =
+  ["a" => 1]
+
+def s: Set(int) =
+  def first = 1
+  [first, 2]
+
+def stocks: Array(Stock) =
+  [| name    | count |
+   | "bolts" | 3     |]
+"""
+    let typed = compileClean (normalized source)
+    let typeOf name = Unifier.tyToDisplayString Ascii typed.Types.[name]
+    Assert.Equal("array(int)", typeOf "a")
+    Assert.Equal("map(string, int)", typeOf "m")
+    Assert.Equal("set(int)", typeOf "s")
+    Assert.Equal("array(Stock)", typeOf "stocks")
+
+[<Fact>]
 let ``An expected type with no fromArray is an error at the literal`` () =
     let source =
         """

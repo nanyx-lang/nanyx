@@ -1311,6 +1311,14 @@ and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression)
     | _ when (annotation.Declared |> Option.bind (CollectionLiterals.targeted inferExpr env state expr)).IsSome ->
         (annotation.Declared |> Option.bind (CollectionLiterals.targeted inferExpr env state expr)).Value
     | _ ->
+        // A literal that ends the def's block builds the declared type too: a long one is written on the lines under `=`.
+        let state =
+            match expr.Kind, annotation.Declared with
+            | Block statements, Some declared ->
+                match List.tryLast statements with
+                | Some { Kind = ExprStatement last } -> { state with ExpectedBlockResults = state.ExpectedBlockResults |> Map.add last.Id declared }
+                | _ -> state
+            | _ -> state
         inferExpr env state expr
         |> Result.map (fun (typed, next) ->
             // An error earlier in the module is set aside (see `Unifier.agreeing`).
@@ -1550,7 +1558,12 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                     | Error err -> errors <- err
             | ExprStatement expr ->
                 if errors.IsEmpty then
-                    match inferExpr env' current expr with
+                    let inferred =
+                        current.ExpectedBlockResults
+                        |> Map.tryFind expr.Id
+                        |> Option.bind (CollectionLiterals.targeted inferExpr env' current expr)
+                        |> Option.defaultWith (fun () -> inferExpr env' current expr)
+                    match inferred with
                     | Ok (typedExpr, next) ->
                         current <- next
                         typedStatements <- typedStatements @ [ TypedExprStatement typedExpr ]
