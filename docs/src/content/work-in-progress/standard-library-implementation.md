@@ -77,7 +77,8 @@ and its explicit imports take precedence over the prelude's, so a module can def
 The prelude is split by topic across `prelude.nyx` and the files beside it that start `@partial module prelude`:
 `prelude-contexts.nyx` (equality, ordering, hashing, joining and text), `prelude-numbers.nyx` (`int` and `float`,
 `Add`, `Num`, powers and bitwise functions on ints), `prelude-sized-numbers.nyx`, `prelude-conversions.nyx`, `prelude-results.nyx` (results,
-options and `proc`), `prelude-lists.nyx` and `prelude-maps.nyx` (maps and sets). `prelude.nyx` keeps the module's doc
+options and `proc`), `prelude-lists.nyx`, `prelude-sequences.nyx` (lazy sequences and ranges), `prelude-maps.nyx`
+(maps and sets) and `prelude-arrays.nyx` (reading an array, and what collection literals are built with). `prelude.nyx` keeps the module's doc
 comment and what fits no topic: `crash`, `ignore`, booleans and memory blocks.
 
 # What is written
@@ -133,7 +134,9 @@ The library is written over a handful of **compiler intrinsics**: operations tha
 Nanyx itself, such as writing to standard output or reading a byte of a string. They are listed with
 their types in one place, `Intrinsics` in `Nanyx.Compiler/Builtins.fs`, are only in scope while a
 standard-library module is being checked (user code cannot call them), and are lowered by the backend
-onto helper functions it emits with the module (`runtimeHelpers` in `Nanyx.Compiler.Wasm/WasmRuntime.fs`). The few that are one\nor two instructions, the wrapping arithmetic and the bitwise operations on ints, are emitted inline instead\n(`wrappingOperations` and `bitwiseOperations` in `Nanyx.Compiler.Wasm/CoreIrEmit.fs`).
+onto helper functions it emits with the module (`runtimeHelpers` in `Nanyx.Compiler.Wasm/WasmRuntime.fs`). The few that are one
+or two instructions, the wrapping arithmetic and the bitwise operations on ints, are emitted inline instead
+(`wrappingOperations` and `bitwiseOperations` in `Nanyx.Compiler.Wasm/CoreIrEmit.fs`).
 Their names all start with `__nanyx_`.
 
 # Adding to it
@@ -141,8 +144,7 @@ Their names all start with `__nanyx_`.
 To add a module: create `stdlib/nanyx/<name>.nyx` declaring `module <name>`, mark what it offers with
 `export`, and rebuild; the glob picks it up and `import nanyx/<name>` resolves. To split a module, start
 `stdlib/nanyx/<name>.nyx` and each other file of it (`stdlib/nanyx/<name>.<part>.nyx`, say) with
-`@partial module <name>`. Definitions inside a
-module must be written before the definitions that use them (self-recursion is fine). Add an intrinsic
+`@partial module <name>`. Add an intrinsic
 only when a function genuinely cannot be written in Nanyx, or not without copying far more than it needs
 to: `__nanyx_string_join` joins a list of strings with one allocation (its body is in
 `Nanyx.Compiler.Wasm/StringJoin.fs`), where `++` would copy the result so far for every piece, so a
