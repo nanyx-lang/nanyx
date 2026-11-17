@@ -79,7 +79,8 @@ calls the functions of [`file`](file) and [`dir`](dir), which are written on the
 - `readFile`: The text of the file at `at`, read as UTF-8.
 - `readFileBytes`: The bytes of the file at `at`.
 - `readFileChunk`: Up to `length` bytes of the file at `at`, from byte `offset` on: fewer at its end, and none
-  past it. The file is opened for each call, and closed before it returns.
+  past it, but for an `offset` past its end, which is an error: the file is shorter than it was.
+  The file is opened for each call, and closed before it returns.
 - `writeFile`: Writes `text` to the file at `at` in UTF-8, in place of what it held, making it when there is
   none.
 - `appendFile`: Writes `text` to the end of the file at `at` in UTF-8, making it when there is none.
