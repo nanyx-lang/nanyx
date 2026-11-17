@@ -250,8 +250,18 @@ match http.get(url)
 ```
 
 The task unwinds by returning, so reference counts are dropped as usual and nothing leaks. A loop that never waits
-can't be cancelled until it does, as in Go. Whether `#cancelled` is a case of every error type that can wait, or the
-waiting calls return `#some(a) | #cancelled | e`, is an [open question](#open-questions).
+can't be cancelled until it does, as in Go.
+
+Decided by the maintainer on 2026-11-17 ([#1890](https://github.com/nanyx-lang/nanyx/issues/1890)):
+
+- **`#cancelled` is a case of every waiting call's error type,** such as `HttpError`, not a wrapper around it, so it's
+  matched and passed on like any other failure.
+- **Cancelling a task cancels every task it started,** in each of its `concurrent` scopes.
+- **So `await` never reports cancellation.** A `Task` can't leave its scope, so the task being awaited was always
+  started by the awaiting one, is cancelled with it, and finishes promptly through its own waiting calls. `await`
+  stays `[Async] Task(a) -> a` and gives back whatever that task returned.
+- **`race` cancels the losers,** and **`timeout`** gives `#some(a) | #timedOut`, cancelling the task when time runs
+  out.
 
 ## How it runs
 
@@ -435,8 +445,6 @@ in the code.
 
 # Open questions
 
-- **How cancellation is typed.** A `#cancelled` case in every waiting call's error type, or a wrapper, or a crash
-  that only a scope sees?
 - **Fresh or reused instances.** `isolate` in a fresh instance gives clean memory; reusing a warm one is faster but
   needs a reset, and anything left behind leaks between calls.
 - **Is the top level supervised?** Erlang-style, `main` could run under a supervisor by default, so a crash in any
@@ -460,7 +468,7 @@ Async is filed in three stages, after the keyword kinds. The crash-boundary step
 |---|---|---|
 | The `#delay` and `#bindF` keyword kinds | [#1879](https://github.com/nanyx-lang/nanyx/issues/1879) | Ready |
 | Async 1: the `Async` context, provided by hosts; a wait suspends the instance | [#1889](https://github.com/nanyx-lang/nanyx/issues/1889) | Ready |
-| Async 2: `concurrent`, `start!` and `await`, tasks on stack switching | [#1890](https://github.com/nanyx-lang/nanyx/issues/1890) | Planning: how cancellation is typed |
+| Async 2: `concurrent`, `start!` and `await`, tasks on stack switching | [#1890](https://github.com/nanyx-lang/nanyx/issues/1890) | Ready |
 | Async 3: channels, and `seq.buffer`, `conflate` and `merge` | [#1891](https://github.com/nanyx-lang/nanyx/issues/1891) | Planning: full channels, cancelled streams |
 | Asyncify, for hosts with neither stack switching nor JSPI | | not filed |
 | Crash reports: `Crash` with message, span and stack, used by the console, HTTP and test hosts | | proposed |
