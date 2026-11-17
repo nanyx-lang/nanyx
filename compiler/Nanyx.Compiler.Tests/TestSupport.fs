@@ -140,6 +140,17 @@ let applyEdits (source: string) (edits: TextEdit list) =
 /// `source` with the edits of `fix` applied.
 let applyFix (source: string) (fix: Fix) = applyEdits source fix.Edits
 
+/// `source` with the edits of `refactoring` applied, checked to compile with no diagnostics and to be laid out as the
+/// formatter lays it out.
+let refactoredText (source: string) (refactoring: NyxCompiler.Refactorings.Refactoring) =
+    let after = applyEdits source refactoring.Edits
+    let result = Compiler.compile after
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%s\n%A" after result.Diagnostics)
+    match Nanyx.Formatter.FormatCommand.formatText Nanyx.Formatter.Formatter.Options.defaults "" after with
+    | Nanyx.Formatter.FormatCommand.Formatting.Formatted formatted -> Assert.Equal(formatted, after)
+    | other -> failwithf "%A" other
+    after
+
 /// `source` with the edits of the only fix of the only diagnostic `compileWithOfficial` gives for it applied.
 let fixed' (source: string) =
     let diagnostic = Assert.Single((compileWithOfficial source).Diagnostics)
