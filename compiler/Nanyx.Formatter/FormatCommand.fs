@@ -76,20 +76,9 @@ let private formatTextOnThisThread (options: Formatter.Options) (path: string) (
 let formatText (options: Formatter.Options) (path: string) (text: string) : Formatting =
     Nanyx.LargeStack.run (fun () -> formatTextOnThisThread options path text)
 
-/// Directories never searched for files: build output, packages and hidden directories.
-let private isSkipped (directory: string) =
-    let name = Path.GetFileName directory
-    name = "bin" || name = "obj" || name = "node_modules" || name.StartsWith "."
-
-let rec private filesUnder (directory: string) : string seq =
-    seq {
-        yield! Directory.EnumerateFiles(directory, "*.nyx") |> Seq.sort
-        for subdirectory in Directory.EnumerateDirectories directory |> Seq.sort do
-            if not (isSkipped subdirectory) then yield! filesUnder subdirectory
-    }
-
 /// The files `paths` stand for, relative to `currentDirectory`: a file is itself, a directory every `.nyx` file under
-/// it, and no paths at all the current directory. A path that does not exist is an error naming it.
+/// it (see `SourceFiles.under`), and no paths at all the current directory. A path that does not exist is an error
+/// naming it.
 let findFiles (currentDirectory: string) (paths: string list) : Result<string list, string> =
     let paths = if List.isEmpty paths then [ "." ] else paths
     let resolve (path: string) = Path.GetFullPath(Path.Combine(currentDirectory, path))
@@ -99,7 +88,7 @@ let findFiles (currentDirectory: string) (paths: string list) : Result<string li
         paths
         |> List.collect (fun path ->
             let full = resolve path
-            if Directory.Exists full then List.ofSeq (filesUnder full) else [ full ])
+            if Directory.Exists full then List.ofSeq (SourceFiles.under full) else [ full ])
         |> List.distinct
         |> Result.Ok
 

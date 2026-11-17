@@ -24,6 +24,7 @@
     <Compile Include="OperatorPrinter.fs" />
     <Compile Include="Formatter.fs" />
     <Compile Include="Settings.fs" />
+    <Compile Include="SourceFiles.fs" />
     <Compile Include="FormatCommand.fs" />
     <Compile Include="RangeFormatting.fs" />
   </ItemGroup>
