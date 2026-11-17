@@ -1,0 +1,600 @@
+-- Part of the module regex, which regex.nyx starts: reading a pattern into a tree of `Node`s. Every
+-- flag is applied as the pattern is read, so the tree has no flags left in it: a letter read under
+-- `(?i)` is the set of both its cases, `.` is every character or every character but a line feed,
+-- and `^` and `$` are the assertions `(?m)` makes them.
+@partial export module regex
+
+-- Sets of characters ----------------------------------------------------------------------------
+--
+-- A set of characters is a list of ranges of code points, each from its first to its last
+-- inclusive. `normalised` sorts a set's ranges and merges those that overlap or touch, which every
+-- set the reader makes goes through before it goes in the tree.
+
+--| The last Unicode code point.
+def lastCodePoint: int = 1114111
+
+--| The ranges of `ranges`, sorted, with those that overlap or touch merged.
+def normalised: list((int, int)) -> list((int, int)) = { ranges ->
+  list.reverse(mergedInto(list.sortBy(ranges, { (low, _) -> low }), []))
+}
+
+--| `ranges`, sorted, merged in front of `done`, the merged ranges so far, last first.
+def mergedInto: list((int, int)), list((int, int)) -> list((int, int)) = { ranges, done ->
+  match ranges, done
+    | [], _ -> done
+    | [(low, high), ...rest], [(lastLow, lastHigh), ...before] ->
+      if low <= lastHigh + 1
+        then mergedInto(rest, [(lastLow, if high > lastHigh then high else lastHigh), ...before])
+        else mergedInto(rest, [(low, high), ...done])
+    | [range, ...rest], [] -> mergedInto(rest, [range])
+}
+
+--| Every code point that `ranges`, sorted and merged, leaves out.
+def complement: list((int, int)) -> list((int, int)) = { ranges ->
+  list.reverse(gapsFrom(ranges, 0, []))
+}
+
+--| The gaps between `ranges` from `next` on, in front of `done`, last first.
+def gapsFrom: list((int, int)), int, list((int, int)) -> list((int, int)) = { ranges, next, done ->
+  match ranges
+    | [] -> (if next <= lastCodePoint then [(next, lastCodePoint), ...done] else done)
+    | [(low, high), ...rest] ->
+      gapsFrom(rest, high + 1, if low > next then [(next, low - 1), ...done] else done)
+}
+
+--| The ranges of letters with a second case, each with how far its other case is from it: the
+  ASCII letters, the Latin-1 letters, and the Greek and Cyrillic alphabets.
+def caseRanges: list((int, int, int)) = [
+  (65, 90, 32)
+  (97, 122, -32)
+  (192, 214, 32)
+  (216, 222, 32)
+  (224, 246, -32)
+  (248, 254, -32)
+  (913, 929, 32)
+  (931, 939, 32)
+  (945, 961, -32)
+  (963, 971, -32)
+  (1024, 1039, 80)
+  (1040, 1071, 32)
+  (1072, 1103, -32)
+  (1104, 1119, -80)
+]
+
+--| `ranges` with the other case of each letter in them, for `(?i)`.
+def withOtherCases: list((int, int)) -> list((int, int)) = { ranges ->
+  def others = list.flatMap(
+    ranges
+    { (low, high) ->
+      list.filterMap(
+        caseRanges
+        { (first, last, shift) ->
+          def from = if low > first then low else first
+          def to = if high < last then high else last
+          if from <= to then #some(from + shift, to + shift) else #skip
+        }
+      )
+    }
+  )
+
+  ranges ++ others
+}
+
+--| The digits, `\d`.
+def digitRanges: list((int, int)) = [(48, 57)]
+
+--| The characters of words, `\w`: ASCII letters, digits and `_`.
+def wordRanges: list((int, int)) = [(48, 57), (65, 90), (95, 95), (97, 122)]
+
+--| Whitespace, `\s`: a tab, a line feed, a form feed, a carriage return and a space.
+def spaceRanges: list((int, int)) = [(9, 10), (12, 13), (32, 32)]
+
+--| The ranges of the POSIX class `name`, as `[[:alpha:]]` names it, or `#notFound`.
+def posixRanges: string -> #some(list((int, int))) | #notFound = {
+  | "alnum" -> #some([(48, 57), (65, 90), (97, 122)])
+  | "alpha" -> #some([(65, 90), (97, 122)])
+  | "ascii" -> #some([(0, 127)])
+  | "blank" -> #some([(9, 9), (32, 32)])
+  | "cntrl" -> #some([(0, 31), (127, 127)])
+  | "digit" -> #some(digitRanges)
+  | "graph" -> #some([(33, 126)])
+  | "lower" -> #some([(97, 122)])
+  | "print" -> #some([(32, 126)])
+  | "punct" -> #some([(33, 47), (58, 64), (91, 96), (123, 126)])
+  | "space" -> #some([(9, 13), (32, 32)])
+  | "upper" -> #some([(65, 90)])
+  | "word" -> #some(wordRanges)
+  | "xdigit" -> #some([(48, 57), (65, 70), (97, 102)])
+  | _ -> #notFound
+}
+
+-- The tree --------------------------------------------------------------------------------------
+
+--| A place in the text that an assertion checks, which matches no character.
+type Assertion = #textStart | #textEnd | #lineStart | #lineEnd | #wordBoundary | #notWordBoundary
+
+--| A pattern, read: what matches nothing, a set of characters, an assertion, patterns one after
+  another, alternatives, a capturing group with its number, and a pattern repeated from a least to
+  a most number of times (`-1` for no most), greedily or lazily.
+type Node = #empty | #chars(list((int, int))) | #assert(Assertion) | #concat(list(Node)) | #alt(list(Node)) | #group(int, Node) | #repeat(Node, int, int, bool)
+
+--| The flags in force where the reader is: `i`, `m` and `s`.
+type Flags = (fold: bool, multiline: bool, dotAll: bool)
+
+--| How far reading a pattern has got: its code points, the one it's at, the groups so far, each
+  name given to a group with the group's number, and the flags in force.
+type Reader = (
+  points: array(int)
+  pos: int
+  groups: int
+  names: list((string, int))
+  flags: Flags
+)
+
+--| What reading part of a pattern gives: the part and the reader after it, or the code point the
+  pattern goes wrong at and why.
+type Parsed = #parsed(Node, Reader) | #failed(int, string)
+
+--| What reading a character in a class gives: a set of them, or the code point the pattern goes
+  wrong at and why.
+type ReadChars = #chars(list((int, int)), Reader) | #failed(int, string)
+
+--| The code point of the pattern at `i`, or -1 past its end.
+def pointAt: Reader, int -> int = { r, i ->
+  match r.points(i)
+    | #some(c) -> c
+    | #none -> -1
+}
+
+--| The code point the reader is at, or -1 at the end of the pattern.
+def peek: Reader -> int = { r ->
+  pointAt(r, r.pos)
+}
+
+--| The reader moved on by `n` code points.
+def skip: Reader, int -> Reader = { r, n ->
+  r with pos = r.pos + n
+}
+
+--| The character `c` as a node, both its cases under `(?i)`.
+def charNode: Reader, int -> Node = { r, c ->
+  charsNode(r, [(c, c)])
+}
+
+--| The set `ranges` as a node, with the other case of each letter in it under `(?i)`.
+def charsNode: Reader, list((int, int)) -> Node = { r, ranges ->
+  #chars(normalised(if r.flags.fold then withOtherCases(ranges) else ranges))
+}
+
+--| A node of the nodes of `nodes`, one after another.
+def concatenation: list(Node) -> Node = { nodes ->
+  match nodes
+    -- `[node]` comes before `[]`, which a match must have for now (#2052).
+    | [node] -> node
+    | [] -> #empty
+    | _ -> #concat(nodes)
+}
+
+--| A node of the alternatives `nodes`.
+def alternation: list(Node) -> Node = { nodes ->
+  match nodes
+    | [node] -> node
+    | _ -> #alt(nodes)
+}
+
+--| Whether `c` is an ASCII letter or digit, or `_`.
+def isWordPoint: int -> bool = { c ->
+  c >= 48 and c <= 57 or c >= 65 and c <= 90 or c >= 97 and c <= 122 or c == 95
+}
+
+--| The value of `c` as a hexadecimal digit, or -1 when it isn't one.
+def hexValue: int -> int = { c ->
+  if c >= 48 and c <= 57
+    then c - 48
+    else if c >= 65 and c <= 70 then c - 55 else if c >= 97 and c <= 102 then c - 87 else -1
+}
+
+--| `c` written as a character, for a message.
+def shown: int -> string = { c ->
+  match string.fromCodePoint(c)
+    | #some(s) -> s
+    | #invalidCodePoint -> "?"
+}
+
+-- Reading ---------------------------------------------------------------------------------------
+
+--| The tree of the whole pattern, the number of its groups and its group names, or where it goes
+  wrong and why.
+def parsePattern
+  : string -> #parsed(Node, int, list((string, int))) | #failed(int, string)
+  = { pattern ->
+    def points = array.fromList(string.codePoints(pattern))
+
+    def start = Reader(
+      points = points
+      pos = 0
+      groups = 0
+      names = []
+      flags = (fold = false, multiline = false, dotAll = false)
+    )
+
+    match parseAlternation(start)
+      | #parsed(node, r) ->
+        if peek(r) == 41
+          then #failed(r.pos, "There is no '(' for this ')' to close")
+          else #parsed(node, r.groups, r.names)
+      | #failed(at, message) -> #failed(at, message)
+  }
+
+--| The alternatives from where `r` is to the `)` that ends their group or the end of the pattern.
+def parseAlternation: Reader -> Parsed = { r ->
+  alternativesFrom(r, [])
+}
+
+--| The alternatives from where `r` is, after `done`, those read so far, last first.
+def alternativesFrom: Reader, list(Node) -> Parsed = { r, done ->
+  match parseConcat(r, [])
+    | #parsed(node, after) ->
+      if peek(after) == 124
+        then alternativesFrom(skip(after, 1), [node, ...done])
+        else #parsed(alternation(list.reverse([node, ...done])), after)
+    | #failed(at, message) -> #failed(at, message)
+}
+
+--| The patterns one after another from where `r` is to the next `|` or `)` or the end, after
+  `done`, those read so far, last first.
+def parseConcat: Reader, list(Node) -> Parsed = { r, done ->
+  def c = peek(r)
+
+  if c == -1 or c == 124 or c == 41
+    then #parsed(concatenation(list.reverse(done)), r)
+    else match parseRepeat(r)
+      | #parsed(#empty, after) -> parseConcat(after, done)
+      | #parsed(node, after) -> parseConcat(after, [node, ...done])
+      | #failed(at, message) -> #failed(at, message)
+}
+
+--| One atom, and the quantifier after it if there is one.
+def parseRepeat: Reader -> Parsed = { r ->
+  match parseAtom(r)
+    | #parsed(node, after) -> quantified(node, after)
+    | #failed(at, message) -> #failed(at, message)
+}
+
+--| What a quantifier reads: the least and the most number of times (`-1` for no most) and the
+  reader after it, no quantifier, or where it goes wrong and why.
+type Quantifier = #quantifier(int, int, Reader) | #none | #failed(int, string)
+
+--| `node`, repeated as the quantifier where `r` is says, if there is one.
+def quantified: Node, Reader -> Parsed = { node, r ->
+  match quantifierAt(r)
+    | #quantifier(least, most, after) ->
+      def lazy = peek(after) == 63
+      def end = if lazy then skip(after, 1) else after
+
+      match quantifierAt(end)
+        | #quantifier(_, _, _) -> #failed(end.pos, "A quantifier can't follow another quantifier")
+        | _ -> #parsed(#repeat(node, least, most, not lazy), end)
+    | #none -> #parsed(node, r)
+    | #failed(at, message) -> #failed(at, message)
+}
+
+--| The most times a quantifier may count to, as RE2 allows.
+def mostRepeats: int = 1000
+
+--| The quantifier where `r` is.
+def quantifierAt: Reader -> Quantifier = { r ->
+  def c = peek(r)
+
+  if c == 42
+    then #quantifier(0, -1, skip(r, 1))
+    else if c == 43
+      then #quantifier(1, -1, skip(r, 1))
+      else if c == 63 then #quantifier(0, 1, skip(r, 1)) else if c == 123 then braces(r) else #none
+}
+
+--| The number written in decimal digits from code point `i`, and the code point after it, or
+  `#none` when there's no digit there.
+def numberAt: Reader, int, int -> #number(int, int) | #none = { r, i, value ->
+  def c = pointAt(r, i)
+
+  if c >= 48 and c <= 57
+    then numberAt(
+      r
+      i + 1
+      if value < 0 then c - 48 else if value > mostRepeats then value else value * 10 + c - 48
+    )
+    else if value < 0 then #none else #number(value, i)
+}
+
+--| The counted quantifier `{m}`, `{m,}` or `{m,n}` at the `{` where `r` is. A `{` that doesn't
+  start one is no quantifier, and matches itself, as in RE2.
+def braces: Reader -> Quantifier = { r ->
+  match numberAt(r, r.pos + 1, -1)
+    | #number(least, i) ->
+      def c = pointAt(r, i)
+
+      if c == 125
+        then counted(r, least, least, i + 1)
+        else if c == 44 and pointAt(r, i + 1) == 125
+          then counted(r, least, -1, i + 2)
+          else if c == 44
+            then (match numberAt(r, i + 1, -1)
+              | #number(most, j) -> (if pointAt(r, j) == 125
+                then counted(r, least, most, j + 1)
+                else #none)
+              | #none -> #none)
+            else #none
+    | #none -> #none
+}
+
+--| The counted quantifier from `least` to `most` that `r`'s `{` starts, which ends before code
+  point `after`, if its counts are in range.
+def counted: Reader, int, int, int -> Quantifier = { r, least, most, after ->
+  if least > mostRepeats or most > mostRepeats
+    then #failed(r.pos, "A count can be at most {mostRepeats}")
+    else if most >= 0 and most < least
+      then #failed(r.pos, "The least count, {least}, is more than the most, {most}")
+      else #quantifier(least, most, r with pos = after)
+}
+
+--| One atom where `r` is: a group, a class, `.`, `^`, `$`, an escape or a character.
+def parseAtom: Reader -> Parsed = { r ->
+  def c = peek(r)
+  def next = skip(r, 1)
+
+  if
+    | c == 40 -> parseGroup(r)
+    | c == 91 -> parseClass(r)
+    | c == 46 ->
+      #parsed(#chars(if r.flags.dotAll then [(0, lastCodePoint)] else complement([(10, 10)])), next)
+    | c == 94 -> #parsed(#assert(if r.flags.multiline then #lineStart else #textStart), next)
+    | c == 36 -> #parsed(#assert(if r.flags.multiline then #lineEnd else #textEnd), next)
+    | c == 92 -> parseEscape(r)
+    | c == 42 or c == 43 or c == 63 -> #failed(
+      r.pos
+      "There is nothing before '{shown(c)}' to repeat"
+    )
+    | else -> #parsed(charNode(r, c), next)
+}
+
+--| The escape at the `\` where `r` is, outside a class: a set of characters or an assertion.
+def parseEscape: Reader -> Parsed = { r ->
+  def c = pointAt(r, r.pos + 1)
+  def after = skip(r, 2)
+
+  if
+    | c == 98 -> #parsed(#assert(#wordBoundary), after)
+    | c == 66 -> #parsed(#assert(#notWordBoundary), after)
+    | c == 65 -> #parsed(#assert(#textStart), after)
+    | c == 122 -> #parsed(#assert(#textEnd), after)
+    | else ->
+      match escapedChars(r)
+        | #chars(ranges, end) -> #parsed(charsNode(end, ranges), end)
+        | #failed(at, message) -> #failed(at, message)
+}
+
+--| The characters the escape at the `\` where `r` is stands for, and the reader after it: a class
+  such as `\d`, a character written by its code, or a character that would otherwise be syntax.
+def escapedChars: Reader -> ReadChars = { r ->
+  def c = pointAt(r, r.pos + 1)
+  def after = skip(r, 2)
+  def one = { point -> #chars([(point, point)], after) }
+
+  if
+    | c == -1 -> #failed(r.pos, "The pattern ends with a '\\' that escapes nothing")
+    | c == 100 -> #chars(digitRanges, after)
+    | c == 68 -> #chars(complement(digitRanges), after)
+    | c == 119 -> #chars(wordRanges, after)
+    | c == 87 -> #chars(complement(wordRanges), after)
+    | c == 115 -> #chars(spaceRanges, after)
+    | c == 83 -> #chars(complement(spaceRanges), after)
+    | c == 110 -> one(10)
+    | c == 116 -> one(9)
+    | c == 114 -> one(13)
+    | c == 102 -> one(12)
+    | c == 118 -> one(11)
+    | c == 97 -> one(7)
+    | c == 120 -> hexEscape(r)
+    | c >= 49 and c <= 57 or c == 107 ->
+      #failed(
+        r.pos
+        "Backreferences such as '\\{shown(c)}' aren't supported: matching takes linear time"
+      )
+    | c == 112 or c == 80 -> #failed(
+      r.pos
+      "Unicode classes such as '\\{shown(c)}' aren't supported"
+    )
+    | isWordPoint(c) -> #failed(r.pos, "'\\{shown(c)}' is not an escape")
+    | else -> one(c)
+}
+
+--| The character written by its code at the `\x` where `r` is: `\x41`, or `\x{1F600}`.
+def hexEscape: Reader -> ReadChars = { r ->
+  if pointAt(r, r.pos + 2) == 123 then hexDigitsFrom(r, r.pos + 3, 0, 0) else
+    def high = hexValue(pointAt(r, r.pos + 2))
+    def low = hexValue(pointAt(r, r.pos + 3))
+
+    if high < 0 or low < 0 then #failed(
+      r.pos
+      "'\\x' needs two hexadecimal digits, or some in braces"
+    ) else
+      def point = high * 16 + low
+      #chars([(point, point)], skip(r, 4))
+}
+
+--| The character whose code is the hexadecimal digits from code point `i` to the `}`, `count`
+  of them read so far, worth `value`.
+def hexDigitsFrom: Reader, int, int, int -> ReadChars = { r, i, count, value ->
+  def c = pointAt(r, i)
+  def digit = hexValue(c)
+
+  if c == 125 and count > 0
+    then (if value > lastCodePoint
+      then #failed(r.pos, "'\\x\{...\}' is past the last code point")
+      else #chars([(value, value)], r with pos = i + 1))
+    else if digit < 0 or count >= 8
+      then #failed(r.pos, "'\\x\{' needs hexadecimal digits and a '\}'")
+      else hexDigitsFrom(r, i + 1, count + 1, value * 16 + digit)
+}
+
+--| The group at the `(` where `r` is: capturing, named, non-capturing, or flags.
+def parseGroup: Reader -> Parsed = { r ->
+  if pointAt(r, r.pos + 1) != 63 then
+    def number = r.groups + 1
+    def inside = skip(r, 1)
+    groupBody(r, (inside with groups = number), { node -> #group(number, node) })
+  else
+    def c = pointAt(r, r.pos + 2)
+    def d = pointAt(r, r.pos + 3)
+
+    if
+      | c == 61 or c == 33 or c == 60 and (d == 61 or d == 33) ->
+        def written = if c == 60 then "<{shown(d)}" else shown(c)
+
+        #failed(
+          r.pos
+          "Lookaround such as '(?{written}' isn't supported: matching takes linear time"
+        )
+      | c == 60 -> namedGroup(r, r.pos + 3)
+      | c == 80 and d == 60 -> namedGroup(r, r.pos + 4)
+      | c == 80 and d == 61 -> #failed(
+        r.pos
+        "Backreferences such as '(?P=' aren't supported: matching takes linear time"
+      )
+      | else -> flagsFrom(r, r.pos + 2, r.flags, true)
+}
+
+--| The group whose name starts at code point `i`, after the `<`, ended by a `>`.
+def namedGroup: Reader, int -> Parsed = { r, i ->
+  def end = nameEnd(r, i)
+
+  if pointAt(r, end) != 62 or end == i then #failed(
+    r.pos
+    "A group's name is letters, digits and '_', between '<' and '>'"
+  ) else
+    def name = string.concat(list.init(end - i, { k -> shown(pointAt(r, i + k)) }))
+    def number = r.groups + 1
+
+    if list.any(r.names, { (other, _) -> other == name })
+      then #failed(r.pos, "Two groups are named '{name}'")
+      else groupBody(
+        r
+        r with (pos = end + 1, groups = number, names = [(name, number), ...r.names])
+        { node -> #group(number, node) }
+      )
+}
+
+--| The code point after the run of word characters from `i`.
+def nameEnd: Reader, int -> int = { r, i ->
+  if isWordPoint(pointAt(r, i)) then nameEnd(r, i + 1) else i
+}
+
+--| The flags from code point `i`, after `(?`, set in `flags` so far, each turned on while `on`,
+  and off after a `-`. A `)` ends them, to apply to the rest of the group they are in, and a `:`
+  starts a group they apply to.
+def flagsFrom: Reader, int, Flags, bool -> Parsed = { r, i, flags, on ->
+  def c = pointAt(r, i)
+  def next = { changed -> flagsFrom(r, i + 1, changed, on) }
+
+  if
+    | c == 105 -> next(flags with fold = on)
+    | c == 109 -> next(flags with multiline = on)
+    | c == 115 -> next(flags with dotAll = on)
+    | c == 45 and on -> flagsFrom(r, i + 1, flags, false)
+    | c == 41 -> #parsed(#empty, r with (pos = i + 1, flags = flags))
+    | c == 58 -> groupBody(r, r with (pos = i + 1, flags = flags), { node -> node })
+    | c == -1 -> #failed(r.pos, "There is no ')' to close this '('")
+    | else -> #failed(i, "'{shown(c)}' is not a flag: the flags are 'i', 'm' and 's'")
+}
+
+--| The group that `open`, the reader at its `(`, starts, its body read from `inside`, made into a
+  node by `make`. The flags it set end with it.
+def groupBody: Reader, Reader, (Node -> Node) -> Parsed = { open, inside, make ->
+  match parseAlternation(inside)
+    | #parsed(node, after) ->
+      def closed = skip(after, 1)
+
+      if peek(after) == 41
+        then #parsed(make(node), closed with flags = open.flags)
+        else #failed(open.pos, "There is no ')' to close this '('")
+    | #failed(at, message) -> #failed(at, message)
+}
+
+--| The class at the `[` where `r` is.
+def parseClass: Reader -> Parsed = { r ->
+  def negated = pointAt(r, r.pos + 1) == 94
+  def first = if negated then r.pos + 2 else r.pos + 1
+
+  -- A `]` first in a class is a character of it.
+  def start = if pointAt(r, first) == 93
+    then classFrom(r, (r with pos = first + 1), [(93, 93)])
+    else classFrom(r, (r with pos = first), [])
+
+  match start
+    | #chars(ranges, after) ->
+      def folded = normalised(if r.flags.fold then withOtherCases(ranges) else ranges)
+      #parsed(#chars(if negated then complement(folded) else folded), after)
+    | #failed(at, message) -> #failed(at, message)
+}
+
+--| The characters of the class that `open`, the reader at its `[`, starts, from where `r` is to its
+  `]`, after `done`, those read so far.
+def classFrom: Reader, Reader, list((int, int)) -> ReadChars = { open, r, done ->
+  def c = peek(r)
+
+  if
+    | c == -1 -> #failed(open.pos, "There is no ']' to close this '['")
+    | c == 93 -> #chars(done, skip(r, 1))
+    | c == 91 and pointAt(r, r.pos + 1) == 58 ->
+      match posixClass(r)
+        | #chars(ranges, after) -> classFrom(open, after, ranges ++ done)
+        | #failed(at, message) -> #failed(at, message)
+    | else ->
+      match classChar(r)
+        | #chars(ranges, after) -> classRange(open, ranges, after, done)
+        | #failed(at, message) -> #failed(at, message)
+}
+
+--| The characters `ranges` just read in a class, or the range they start when a `-` follows them
+  and isn't the class's last character, then the rest of the class.
+def classRange
+  : Reader, list((int, int)), Reader, list((int, int)) -> ReadChars
+  = { open, ranges, r, done ->
+    if peek(r) == 45 and pointAt(r, r.pos + 1) != 93 and pointAt(r, r.pos + 1) != -1
+      then (match ranges, classChar(skip(r, 1))
+        | [(low, low2)], #chars([(high, high2)], after) ->
+          if low != low2 or high != high2
+            then #failed(r.pos, "A range in a class goes from one character to another")
+            else if high < low
+              then #failed(r.pos, "The range '{shown(low)}-{shown(high)}' goes backwards")
+              else classFrom(open, after, [(low, high), ...done])
+        | _, #chars(_, _) -> #failed(r.pos, "A range in a class goes from one character to another")
+        | _, #failed(at, message) -> #failed(at, message))
+      else classFrom(open, r, ranges ++ done)
+  }
+
+--| The character, or the escaped class, where `r` is in a class.
+def classChar: Reader -> ReadChars = { r ->
+  def c = peek(r)
+  def d = pointAt(r, r.pos + 1)
+
+  if c == 92 and (d == 98 or d == 66 or d == 65 or d == 122)
+    then #failed(
+      r.pos
+      "'\\{shown(d)}' matches a place, not a character, so it can't be in a class"
+    )
+    else if c == 92 then escapedChars(r) else #chars([(c, c)], skip(r, 1))
+}
+
+--| The POSIX class at the `[:` where `r` is, as `[:alpha:]`.
+def posixClass: Reader -> ReadChars = { r ->
+  def end = nameEnd(r, r.pos + 2)
+  def name = string.concat(list.init(end - r.pos - 2, { k -> shown(pointAt(r, r.pos + 2 + k)) }))
+
+  if pointAt(r, end) != 58 or pointAt(r, end + 1) != 93
+    then #failed(r.pos, "A POSIX class is written '[:name:]'")
+    else match posixRanges(name)
+      | #some(ranges) -> #chars(ranges, r with pos = end + 2)
+      | #notFound -> #failed(r.pos, "'{name}' is not a POSIX class")
+}

@@ -95,7 +95,9 @@ module internal BinaryData =
             failwith $"BinaryData cannot write a value of type {ty.FullName}: it is not F# data"
 
     let private shapes = System.Collections.Concurrent.ConcurrentDictionary<Type, Shape>()
-    let private shape (ty: Type) = shapes.GetOrAdd(ty, shapeOf)
+    // One delegate for every lookup: passing `shapeOf` itself would make a new one for each value read.
+    let private makeShape = Func<Type, Shape> shapeOf
+    let private shape (ty: Type) = shapes.GetOrAdd(ty, makeShape)
 
     /// Whether a value of the type is written once and referred back to after: one that is not a value type.
     let private shared (ty: Type) = not ty.IsValueType && ty <> typeof<unit>
