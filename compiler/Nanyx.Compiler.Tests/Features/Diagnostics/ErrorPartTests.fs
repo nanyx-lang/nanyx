@@ -9,7 +9,7 @@ open Nanyx.Compiler.Tests.TestSupport
 let private assertOnlyMismatchAt (written: string) (source: string) =
     let code, message, text = onlyDiagnostic (normalized source)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
-    Assert.Equal("'#some(a)' cannot be used with +: it is not a number", message)
+    Assert.Equal("'#some(a)' is not a number, so it cannot be used with +", message)
     Assert.Equal(written, text)
 
 [<Fact>]

@@ -25,7 +25,7 @@ let collect (functions: Function list) : IrType list =
         match ty with
         | IrList element
         | IrArray element -> yield element
-        | other -> internalError $"an array made from, or turned into, {IrType.show other}" ]
+        | other -> internalError $"an array made from, or turned into, '{IrType.show other}'" ]
     |> List.distinct
 
 /// The runtime helpers the functions of `elements` call.

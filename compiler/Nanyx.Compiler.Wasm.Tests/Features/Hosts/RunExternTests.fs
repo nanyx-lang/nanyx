@@ -70,3 +70,25 @@ writeStdout("{missing()}")
     match runHost [ "test" ] (hostWatWith WasmOptions.Default source) with
     | Error (Trapped message) -> Assert.Contains("elsewhere", message); Assert.Contains("missing", message)
     | other -> failwith $"Expected a failure to instantiate, got %A{other}"
+
+[<Fact>]
+let ``An extern of a function the runtime imports, with another type, is an error that says the runtime's`` () =
+    let source =
+        normalized
+            """module console.host
+
+import nanyx/host.runtime
+
+@extern("wasi_snapshot_preview1", "fd_write")
+def fdWrite: [HostRuntime] I32 -> I32
+
+dbg(fdWrite(1))
+"""
+    let consoleHostFile = System.IO.Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "src", "console.host.nyx")
+    let result = Compiler.compileFrom Linters.none (SourceFile consoleHostFile) source
+    Assert.Empty(result.Diagnostics)
+    match tryTranspileTypedModuleToWat result.Typed.Value with
+    | Error diagnostic ->
+        Assert.Equal(DiagnosticCodes.ConflictingExterns.Code, diagnostic.Code)
+        Assert.StartsWith("""A foreign function imports "fd_write" from "wasi_snapshot_preview1" with another type than the runtime's: declare it as `""", diagnostic.Message)
+    | Ok _ -> Assert.Fail "Expected the backend to report the conflicting import"

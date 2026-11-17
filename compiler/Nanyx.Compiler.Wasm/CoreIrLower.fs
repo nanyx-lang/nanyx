@@ -250,7 +250,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | IrFloat | IrF32 -> bindTemp (Expr.make (BoxFloat -0.0) ty) (fun zero -> k (Expr.make (Prim(FloatBinary "-", zero :: atoms)) ty))
                 | IrInt -> k (Expr.make (Prim(Binary "-", AInt 0L :: atoms)) ty)
                 | IrSized integer -> k (Expr.make (Prim(Binary "-", ASized(integer, 0L) :: atoms)) ty)
-                | other -> cannot $"the operator - on a value of type {IrType.show other}")
+                | other -> cannot $"the operator `-` on a value of type '{IrType.show other}'")
         | ForSyntax.Call(iterables, _, parameters, body) when parameters.Length = iterables.Length ->
             let depth = scope.ForDepth
             let lowerBody vars = this.Tail { scope with Vars = vars; ForDepth = depth + 1 } body
@@ -281,7 +281,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 else
                     match cell.Type with
                     | IrRecord [ _, held ] -> Expr.make (Field(AVar cell, 0)) held
-                    | other -> internalError $"a box of type {IrType.show other}"
+                    | other -> internalError $"a box of type '{IrType.show other}'"
             let copy = newVar (uniqueName name) Local value.Type
             let body = k (Expr.make (Atom(AVar copy)) value.Type)
             Expr.make (Let(copy, value, body)) body.Type
@@ -318,7 +318,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let fields =
                 match tyOf record with
                 | IrRecord fields -> fields
-                | other -> cannot $"`with` on a value of type {IrType.show other}"
+                | other -> cannot $"`with` on a value of type '{IrType.show other}'"
             let slotsAndValues =
                 updates
                 |> List.map (function
@@ -343,7 +343,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | FunctionCall(name, _, args) when input.RecordConstructors.Contains name && not (scope.Vars.ContainsKey name) ->
             match SyntaxTree.flattenCallArgs args with
             | [ Kind (RecordExpr fields) ] -> this.Record scope (recordExprFields fields |> sortFields) (tyOf expr) k
-            | _ -> cannot $"the type constructor {name} without a record of its fields"
+            | _ -> cannot $"the type constructor '{name}' without a record of its fields"
         | FunctionCall(name, _, args) when scope.Members.ContainsKey (NamedMember name) && not (namesOwnDefinition input expr) ->
             // A context member in scope: a function value like any other.
             let ty = tyOf expr
@@ -397,7 +397,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let ty = tyOf expr
             match CoreIrLowerLocals.localAt this.LocalTools scope scope.Vars.[name] (input.CalleeTypes |> Map.tryFind expr.Id) with
             | { Type = IrFunction _ } as var -> this.CallValue scope expr.Id var args ty k
-            | var -> cannot $"a call to '{name}', a value of type {IrType.show var.Type}"
+            | var -> cannot $"a call to '{name}', a value of type '{IrType.show var.Type}'"
         | FunctionCall(name, _, args) when definitions.ContainsKey name && not (isFunction name) && not (SyntaxTree.flattenCallArgs args).IsEmpty ->
             // A call through a function value a top-level value holds. The value is evaluated once, into a local, which
             // the call reads twice: as the environment, and for the table slot.
@@ -444,7 +444,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     match fields |> List.tryFindIndex (fst >> (=) fieldName) with
                     | Some slot -> slot, snd fields.[slot]
                     | None -> cannot $"the field '{fieldName}', which the record does not have"
-                | other -> cannot $"the field '{fieldName}' of a value of type {IrType.show other}"
+                | other -> cannot $"the field '{fieldName}' of a value of type '{IrType.show other}'"
             this.Atoms scope [ record ] (fun atoms -> k (Expr.make (Field(atoms.Head, slot)) ty))
         | IfExpr(cond, ifTrue, ifFalse) ->
             let ty = tyOf expr
@@ -458,13 +458,13 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let ty = tyOf expr
             match scope.Members |> Map.tryFind key with
             | Some memberVar -> this.CallValue scope expr.Id memberVar args ty k
-            | None -> cannot $"the context member {ContextMemberKey.text key}, which is not in scope"
+            | None -> cannot $"the context member '{ContextMemberKey.text key}', which is not in scope"
         | ContextMemberAccess(contextType, memberName) ->
             // `C(T).m`: the member of that instance of the context as a value.
             let key = contextMemberKey (Some contextType) memberName
             match scope.Members |> Map.tryFind key with
             | Some memberVar -> k (Expr.make (Atom(AVar memberVar)) memberVar.Type)
-            | None -> cannot $"the context member {ContextMemberKey.text key}, which is not in scope"
+            | None -> cannot $"the context member '{ContextMemberKey.text key}', which is not in scope"
         // `x \f(a, b)` is the call `f(x, a, b)`, typed at the pipe's node.
         | Pipe(value, name, range, args) -> this.Complex scope { expr with Kind = FunctionCall(name, range, pipeCallArguments value args) } k
         | InterpolatedString parts -> this.Interpolation scope expr parts k
@@ -522,7 +522,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match tyOf left with
                 | IrString -> Helpers.stringConcat
                 | IrList _ -> Helpers.listConcat
-                | other -> cannot $"the operator ++ on a value of type {IrType.show other}"
+                | other -> cannot $"the operator `++` on a value of type '{IrType.show other}'"
             let ty = tyOf expr
             this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (CallRuntime(helper, atoms, true)) ty))
         | ("==" | "!="), _, _ when (match tyOf left with
@@ -546,22 +546,22 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // number, is compared with 0. Records, tags and functions have no order: a local function that orders them
             // is not supported. (A record inside a list or tuple is ordered field by field, only where a generic
             // function orders a `list(a)`, see `CoreIrOrdering`.)
-            if IrType.holdsUnordered (tyOf left) then cannot $"the operator {op} on a value of type {IrType.show (tyOf left)}"
+            if IrType.holdsUnordered (tyOf left) then cannot $"the operator `{op}` on a value of type '{IrType.show (tyOf left)}'"
             this.Atoms scope [ left; right ] (fun atoms ->
                 let order = Expr.make (CallRuntime(Helpers.valueCompare, atoms, true)) IrInt
                 bindTemp order (fun result -> k (Expr.make (Prim(Binary op, [ result; AInt 0L ])) IrBool)))
         | _ when IrType.isFloat (tyOf left) || IrType.isFloat (tyOf right) ->
             // Floats are boxed: the operands are unboxed, and an arithmetic result boxed.
             // `%` has no instruction: it calls a runtime helper (see `CoreIrEmit`).
-            if op <> "%" && (wasmFloatInstruction op).IsNone then cannot $"the operator {op} on floats"
+            if op <> "%" && (wasmFloatInstruction op).IsNone then cannot $"the operator `{op}` on floats"
             let ty = tyOf expr
             this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (Prim(FloatBinary op, atoms)) ty))
         | _ ->
-            if (wasmBinaryInstruction op).IsNone then cannot $"the operator {op}"
+            if (wasmBinaryInstruction op).IsNone then cannot $"the operator `{op}`"
             for operand in [ left; right ] do
                 match tyOf operand with
                 | IrInt | IrSized _ | IrBool | IrUnit | IrError -> ()
-                | other -> cannot $"the operator {op} on a value of type {IrType.show other}"
+                | other -> cannot $"the operator `{op}` on a value of type '{IrType.show other}'"
             let ty = tyOf expr
             this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (Prim(Binary op, atoms)) ty))
 
@@ -818,9 +818,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match payloadTy with
                 | None
                 | Some (IrString | IrInt | IrBool) -> name, payloadTy
-                | Some other -> cannot $"interpolating #{name} with a payload of type {IrType.show other}")
+                | Some other -> cannot $"interpolating `#{name}` with a payload of type '{IrType.show other}'")
             |> HoleTag
-        | other -> cannot $"interpolating a value of type {IrType.show other}"
+        | other -> cannot $"interpolating a value of type '{IrType.show other}'"
 
     /// Allocates a record of `fields` (name and value, in the order they are stored), of type `ty`. Each value is
     /// adapted to its field's type (see `CoreIrLowerMembers.coerce`): a pure lambda given for a field of a value of a
@@ -1185,7 +1185,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                         let var = newVar parameter.Name (if knownMember.IsSome then Local else Param) (toIrType (substitute subst ty))
                         knownMember |> Option.iter (fun knownMember -> known.[var.Id] <- (var, knownMember))
                         parameter.Key, var
-                    | None -> cannot $"the context member {ContextMemberKey.text parameter.Key}, whose type is not known")
+                    | None -> cannot $"the context member '{ContextMemberKey.text parameter.Key}', whose type is not known")
             // Then those of the contexts its context variables stand for here.
             let members =
                 members @ (variableMembers name subst |> List.map (fun (key, ty) -> key, newVar (contextMemberParameter key) Param ty))

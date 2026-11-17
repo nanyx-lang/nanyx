@@ -448,6 +448,6 @@ let ``A broken invariant in the emitter is an internal error, said once, that as
         let diagnostic = lowerFailureDiagnostic failure span
         Assert.Equal(DiagnosticCodes.BackendInternalError.Code, diagnostic.Code)
         Assert.Equal(
-            "Internal error: a temporary in the core IR is never used. This is a bug in the compiler: please report it at https://github.com/nanyx-lang/nanyx/issues",
+            "Internal error in the compiler (a temporary in the core IR is never used): report it at https://github.com/nanyx-lang/nanyx/issues",
             diagnostic.Message)
     | failures -> Assert.Fail $"Expected one failure in f, got %A{failures}"

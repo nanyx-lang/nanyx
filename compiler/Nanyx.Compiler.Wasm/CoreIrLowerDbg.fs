@@ -238,5 +238,5 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
                 let elements = local "__dbg_elements" (IrList(tools.ToIrType elementTy))
                 bind elements (Expr.make (CallRuntime(Intrinsics.arrayToList, [ AVar value ], true)) elements.Type) (
                     listText elements elementTy "Array" (showElement elementTy) (ShowingRest(elementTy, false)))
-            | other -> cannot $"`dbg` of a value of type {Unifier.tyToString other}"
+            | other -> cannot $"`dbg` of a value of type '{Unifier.tyToString other}'"
         make [ value ] body
