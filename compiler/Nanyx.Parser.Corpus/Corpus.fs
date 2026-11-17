@@ -25,17 +25,22 @@ type Piece = { Name: string; Source: string; Origin: Origin }
 /// The repository's root.
 let repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", ".."))
 
-let private skipped = [ "bin"; "obj"; "node_modules"; ".git"; ".claude" ]
+/// The directories the corpus is never looked for in: build output, packages, and git's and the agents' (whose
+/// worktrees are whole copies of the repository).
+let private skipped = set [ "bin"; "obj"; "node_modules"; ".git"; ".claude" ]
 
 let private relative (path: string) = Path.GetRelativePath(repositoryRoot, path)
 
-let private isSkipped (path: string) =
-    (relative path).Split([| '/'; '\\' |]) |> Array.exists (fun part -> List.contains part skipped)
-
+/// The files matching `pattern` under `directory`, in order of their paths. A skipped directory is never entered, so
+/// a checkout with worktrees and `node_modules` costs no more than one without.
 let private filesNamed (pattern: string) (directory: string) =
-    Directory.EnumerateFiles(directory, pattern, SearchOption.AllDirectories)
-    |> Seq.filter (isSkipped >> not)
-    |> Seq.sort
+    let rec under (directory: string) =
+        Seq.append
+            (Directory.EnumerateFiles(directory, pattern))
+            (Directory.EnumerateDirectories directory
+             |> Seq.filter (fun child -> not (skipped.Contains(Path.GetFileName child)))
+             |> Seq.collect under)
+    under directory |> Seq.sort
 
 /// The line `index` is on in `text`, counting from 1.
 let private lineAt (text: string) (index: int) = text.AsSpan(0, index).Count '\n' + 1
