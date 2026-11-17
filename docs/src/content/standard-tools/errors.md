@@ -1058,6 +1058,29 @@ pattern int -> #Odd | #Big = { n -> if n > 100 then #Big else #Odd }  -- error N
 
 To fix it, give one of the patterns a tag of its own, or import only one of them.
 
+# NYX0120: Name a whole-module re-export gives twice
+
+A [whole-module re-export](../tour/modules#re-exporting), `export shapes`, gives a name that the module writing it
+defines too, or that a re-export before it gives from another module. An importer couldn't tell which of the two it
+means. The error is at the whole-module re-export, and names both.
+
+```nanyx
+-- file: geometry.nyx
+module geometry
+
+export shapes  -- error NYX0120: 'area' is re-exported from 'shapes', but this module defines 'area' too
+
+def area: int = 1
+-- file: shapes.nyx
+module shapes
+
+export def area: int -> int = { n -> n * n }
+export def perimeter: int -> int = { n -> 4 * n }
+```
+
+To fix it, re-export only the rest of what the module gives: the fix rewrites `export shapes` as
+`export shapes (perimeter)`. Or rename the definition.
+
 # NYX0201: Type mismatch
 
 A value's type is not the type its place needs: an argument is not what the function takes, a definition's value is

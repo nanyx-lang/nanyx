@@ -502,14 +502,17 @@ module Compiler =
         let merged =
             imported.ReExports
             |> List.fold (fun merged reExported ->
+                // A whole-module re-export gives everything its module gives, or what `item` selects of it.
                 let names =
-                    reExported.Item.Selection
-                    |> Option.defaultValue []
-                    |> List.filter (fun (name, _) -> item.Selection |> Option.forall (List.exists (fun (selected, _) -> selected = name)))
-                if names.IsEmpty then
-                    merged
-                else
-                    let reImport = { Source = reExported.Item.Source; Alias = item.Alias; Selection = Some names; Span = SourceSpan.none }
+                    match reExported.Item.Selection with
+                    | Some names -> Some (names |> List.filter (fun (name, _) -> item.Selection |> Option.forall (List.exists (fun (selected, _) -> selected = name))))
+                    | None ->
+                        let given = ModuleLinking.reExportSources reExported
+                        item.Selection |> Option.map (List.filter (fun (name, _) -> given.ContainsKey name))
+                match names with
+                | Some [] -> merged
+                | names ->
+                    let reImport = { Source = reExported.Item.Source; Alias = item.Alias; Selection = names; Span = SourceSpan.none }
                     mergeWithReExports preludeKey reExported.Origin reImport through reExported.Module merged |> fst) merged
         merged, through
 
@@ -702,6 +705,7 @@ module Compiler =
                                 let item = { Source = source; Alias = None; Selection = Some (names |> List.map (fun name -> name, SourceSpan.none)); Span = SourceSpan.none }
                                 mergeWritten preludeKey [] owner item ownerModule merged
                         | _ -> merged) merged
+            let merged = { merged with Errors = merged.Errors @ ModuleLinking.reExportClashes desugared merged.ReExports }
             let env = merged.Env
             // A name two imports bring in is an error only where it is used, and only if nothing nearer binds it.
             let ambiguousImports =
