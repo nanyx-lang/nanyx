@@ -89,6 +89,7 @@
     <Compile Include="Features\Hosts\ConsoleHostTests.fs" />
     <Compile Include="Features\Hosts\ExternTests.fs" />
     <Compile Include="Features\Hosts\ScriptEntryTests.fs" />
+    <Compile Include="Features\Hosts\UnprovidedContextTests.fs" />
     <Compile Include="Features\Imports\ImportTests.fs" />
     <Compile Include="Features\Imports\ImportFixTests.fs" />
     <Compile Include="Features\Imports\ImportHintTests.fs" />

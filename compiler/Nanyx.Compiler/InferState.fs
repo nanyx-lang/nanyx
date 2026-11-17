@@ -136,6 +136,10 @@ type InferState =
             /// `nanyx.console.core/console`, in a module that neither imports it nor sees a host's prelude. Like any ambient context they are the top level's, and a
             /// def has them only if it declares them or infers them.
             CarriedAmbientContexts: Set<Identifier>;
+            /// The contexts an imported function requires that the module's host does not provide, by name, each with
+            /// the host's root module as an import names it: `Console`, required by a library's function, under a host
+            /// whose prelude does not bring it in. A call to such a function is an error (see `Contexts.ensureContextAvailable`).
+            UnprovidedContexts: Map<Identifier, string>;
             /// The contexts a host provides, by the names the module knows them by (`Console`, `c.Console`): a function
             /// named as a value carries those of them it was inferred to require in its type (see `Contexts.inferredAmbientContexts`).
             HostContexts: Set<Identifier>;
@@ -365,6 +369,7 @@ let emptyState =
             WrittenTypes = Map.empty;
             AmbientMembers = Map.empty;
             CarriedAmbientContexts = Set.empty;
+            UnprovidedContexts = Map.empty;
             HostContexts = Set.empty;
             ContextScope = AmbientScope;
             InferredContexts = Map.empty;

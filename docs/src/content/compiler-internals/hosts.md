@@ -98,6 +98,13 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   ([#1458](https://github.com/nanyx-lang/nanyx/issues/1458)). A def that writes `[c.Console]` for an aliased import is passed the members as `[Console]` is: the
   backend reads the layout of the context's own name (`CodeGen.layoutOf`), and a member called under the alias,
   `c.write`, is written by its own name for the backend (`ModuleLinking.writeMemberAliases`).
+- **A context the host doesn't provide.** An imported function may require a context the module can't name, as a
+  library's `[Console]` function does under a host whose prelude doesn't bring `Console` in. Where the imported module
+  has it as an ambient context, it is carried in (`InferState.CarriedAmbientContexts`). Under a host, one that isn't
+  carried in can only come from the host, which doesn't provide it, so `Library.mergeImport` records it in
+  `InferState.UnprovidedContexts`, and a call to a function that requires it is `NYX0205`, naming the contexts and the
+  host (`Contexts.ensureContextAvailable`, [#1811](https://github.com/nanyx-lang/nanyx/issues/1811)). `HostRuntime`,
+  which only a host may require, is left out: it has an error of its own, `NYX0238`.
 - **`Env`** is declared in `nanyx.console.core/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, with
   `FileSystem` and `Http` (see below), so its parameter is `[Async, Console, Env, FileSystem, Http] () -> a`; an entry that requires fewer
   contexts fits. The host's prelude re-exports
