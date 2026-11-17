@@ -83,6 +83,13 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
         await StartAsync(settings);
     }
 
+    /// <summary>Replaces the server started for the test with one started with other settings, whose client also has what <paramref name="configureClient"/> gives it.</summary>
+    protected async Task RestartWithClientAsync(ServerSettings settings, Action<LanguageClientOptions> configureClient)
+    {
+        await StopAsync();
+        await StartAsync(settings, configureClient: configureClient);
+    }
+
     /// <summary>Replaces the server started for the test with one whose client has opened <paramref name="folder"/> as its workspace.</summary>
     protected async Task RestartInFolderAsync(string folder)
     {
@@ -90,7 +97,8 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
         await StartAsync(TestSettings, folder);
     }
 
-    protected async Task StartAsync(ServerSettings settings, string? workspaceFolder = null)
+    /// <summary>Starts a server, with a client that also has what <paramref name="configureClient"/> gives it.</summary>
+    protected async Task StartAsync(ServerSettings settings, string? workspaceFolder = null, Action<LanguageClientOptions>? configureClient = null)
     {
         await StandardLibraryChecked.Value;
         _cancellation.CancelAfter(Timeout);
@@ -129,6 +137,7 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
 
                     _publishedSignal.Release();
                 });
+            configureClient?.Invoke(options);
         });
 
         await _client.Initialize(_cancellation.Token);

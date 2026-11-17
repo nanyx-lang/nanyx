@@ -22,6 +22,13 @@ progress.
   rather than producing code that type-checks differently: a name that would be shadowed, a cell assigned in between,
   a workflow keyword whose meaning depends on its block. Where it can't tell from the syntax, it compiles its result
   and refuses if there are new errors or a name refers to something else. Its tests include the refusals.
+- **Compiling waits until it is picked.** A refactoring that compiles its result offers it as Offer.Deferred: its
+  title and kind, and a function that compiles and gives the Available or Refused offer. Editors ask for code
+  actions on every move of the cursor, so CodeActionHandler lists a deferred one without its edits and decides it in
+  codeAction/resolve, when the user picks it: a request compiles nothing. Refused then, its reason is shown as a
+  message rather than in the menu. A client that can't resolve an action's edits gets them decided in the request. The
+  formatter's settings are read once per text of the document (OpenDocument.RefactoringOptions). Tests decide every
+  offer with Offer.decided.
 - **Its output is formatted.** Edits are laid out as the formatter would lay out the result
   (`RangeFormatting.formatRange`), so applying a refactoring never leaves code `nanyx format` would change.
 - **Code action kinds** are the standard ones, so editors put them in the usual menus: `refactor.extract` (introduce

@@ -279,12 +279,13 @@ let at
                         match edits with
                         | Error reason -> Refused(offerTitle, RefactoringKind.Inline, reason)
                         | Ok edits ->
-                            let untouched = applied source edits
-                            match newError result (recompile untouched) with
-                            | Some reason -> Refused(offerTitle, RefactoringKind.Inline, $"The inlined module would not compile{reason}")
-                            | None ->
-                                let after = appliedAndFormatted options file source edits
-                                Available { Title = offerTitle; Kind = RefactoringKind.Inline; Edits = [ difference file source after ]; Rename = None }
+                            Deferred(offerTitle, RefactoringKind.Inline, fun () ->
+                                let untouched = applied source edits
+                                match newError result (recompile untouched) with
+                                | Some reason -> Refused(offerTitle, RefactoringKind.Inline, $"The inlined module would not compile{reason}")
+                                | None ->
+                                    let after = appliedAndFormatted options file source edits
+                                    Available { Title = offerTitle; Kind = RefactoringKind.Inline; Edits = [ difference file source after ]; Rename = None })
                     let all =
                         if symbol.IsExported then Refused(allTitle, RefactoringKind.Inline, "It is exported: other modules may use it, so it is inlined at a use only")
                         else
