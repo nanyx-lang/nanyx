@@ -53,6 +53,7 @@ module internal WellKnownContexts =
         | None ->
             match ty with
             | TyFunc _
+            | TyContexts _
             | TyVar _
             | TyPrimitive _
             | TyParam _ -> None
@@ -213,6 +214,7 @@ module internal WellKnownContexts =
                     | TySelf _
                     | TyUnion _ -> Ty.children ty |> List.tryPick find
                     | TyFunc _
+                    | TyContexts _
                     | TyVar _
                     | TyPrimitive _
                     | TyParam _ -> None
@@ -230,7 +232,8 @@ module internal WellKnownContexts =
             | TyVar v -> if rests then [] else [ v ]
             | TyPrimitive _
             | TyParam _
-            | TyFunc _ -> []
+            | TyFunc _
+            | TyContexts _ -> []
             | TyAlias(_, _, underlying)
             | TyNominal(_, _, underlying, _) -> collect underlying
             | TyRecord(fields, _)

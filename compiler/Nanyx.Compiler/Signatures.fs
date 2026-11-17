@@ -55,4 +55,5 @@ let writable (typeDefs: Map<string, TypeDefInfo>) (symbols: Map<SymbolId, Symbol
         | TyRecursive(body, args) -> TyRecursive(body, List.map rename args)
         | TySelf args -> TySelf(List.map rename args)
         | TyScope scope -> TyScope(rename scope)
+        | TyContexts contexts -> TyContexts(List.map rename contexts)
     rename ty

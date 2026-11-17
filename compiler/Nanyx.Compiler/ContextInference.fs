@@ -27,6 +27,7 @@ module internal ContextInference =
             | TyUnion args -> args |> List.collect collect
             | TyFunc(arg, ret, contexts) ->
                 (Unifier.writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect) @ collect arg @ collect ret
+            | TyContexts contexts -> Unifier.writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect
             | TyRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyOpenRecord(fields, row) -> (fields |> Map.toList |> List.collect (snd >> collect)) @ [ row ]
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
@@ -97,8 +98,9 @@ module internal ContextInference =
             | TyRecursive _
             | TySelf _
             | TyParam _ -> None
-            // A scoped context's scope is never written.
-            | TyScope _ -> None
+            // A scoped context's scope is never written, nor are the contexts a type carries as an argument.
+            | TyScope _
+            | TyContexts _ -> None
         kind |> Option.map TypeExpr.synthetic
 
     /// The annotation an unannotated def of the type `defTy` would write to require `contexts`, each a context's name
@@ -149,7 +151,8 @@ module internal ContextInference =
             | TyVar _
             | TyPrimitive _
             | TyParam _
-            | TyNominal _ -> []
+            | TyNominal _
+            | TyContexts _ -> []
             | TyAlias(_, args, _)
             | TyApply(_, args)
             | TyRecursive(_, args)

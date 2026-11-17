@@ -160,13 +160,17 @@ type Ty =
     /// A scoped context's scope, a type variable, as the context and a cell's type hold it (see
     /// `FunctionContexts.scoped`). A reader never sees it.
     | TyScope of Ty
+    /// The contexts a type generic in contexts carries, as the last argument of its nominal type (see
+    /// `FunctionContexts.carried`). A reader writes them in front of the type, `[FileSystem] Stream(string)`.
+    | TyContexts of Ty list
 
 /// The types a type is made of, one level down, for walks that treat most cases alike: such a walk matches the cases it
 /// treats differently, and hands the others to `Ty.map`, `Ty.fold` or `Ty.exists`.
 module Ty =
     /// The types `ty` is made of, one level down: a nominal's or an alias's arguments then what it stands for, a function's input, result and contexts, a record's fields in order of their names, an open record's fields
-    /// then its row as a variable, a tag's payload, an applied type's arguments, a union's members, a closed recursive
-    /// definition then its arguments, and the arguments of a reference to the alias inside one.
+    /// then its row as a variable, a tag's payload, an applied type's arguments, a union's members, the contexts a type
+    /// carries, a closed recursive definition then its arguments, and the arguments of a reference to the alias inside
+    /// one.
     let children (ty: Ty) : Ty list =
         match ty with
         | TyVar _
@@ -181,7 +185,8 @@ module Ty =
         | TyOpenRecord(fields, row) -> (fields |> Map.toList |> List.map snd) @ [ TyVar row ]
         | TyTag(_, payload) -> Option.toList payload
         | TyApply(_, args)
-        | TyUnion args -> args
+        | TyUnion args
+        | TyContexts args -> args
         | TyScope scope -> [ scope ]
 
     /// `ty` with `f` applied to each of the types it is made of, one level down (see `children`). An open record's row
@@ -202,6 +207,7 @@ module Ty =
         | TyApply(name, args) -> TyApply(name, List.map f args)
         | TyUnion items -> TyUnion(List.map f items)
         | TyScope scope -> TyScope(f scope)
+        | TyContexts contexts -> TyContexts(List.map f contexts)
 
     /// `f` folded over the types `ty` is made of, one level down, in the order `children` gives them.
     let fold (f: 'State -> Ty -> 'State) (state: 'State) (ty: Ty) : 'State = children ty |> List.fold f state

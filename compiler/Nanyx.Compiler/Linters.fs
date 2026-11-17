@@ -760,7 +760,8 @@ module UnannotatedExports =
 module private Purity =
     let private hasContexts (ty: Ty) =
         match Unifier.unalias ty with
-        | TyFunc(_, _, contexts) -> not contexts.IsEmpty
+        | TyFunc(_, _, contexts)
+        | TyContexts contexts -> not contexts.IsEmpty
         | _ -> false
 
     let rec private typeRequiresContext (ty: Ty) =

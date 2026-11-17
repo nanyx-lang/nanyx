@@ -68,14 +68,14 @@ let ensureBound (name: Identifier) (typeOpt: TypeExpr option) : Result<unit, Dia
 let rec private pairs (isVariable: TyVar -> bool) (general: Ty) (specific: Ty) : (TyVar * Ty) list =
     let all (gs: Ty list) (ss: Ty list) =
         if gs.Length = ss.Length then List.map2 (pairs isVariable) gs ss |> List.concat else []
+    let own (gc: Ty list) (sc: Ty list) =
+        if gc.Length = sc.Length then
+            List.zip gc sc |> List.choose (function TyVar v, s when isVariable v -> Some (v, s) | _ -> None)
+        else []
     match general, specific with
-    | TyFunc(ga, gr, gc), TyFunc(sa, sr, sc) ->
-        let own =
-            if gc.Length = sc.Length then
-                List.zip gc sc |> List.choose (function TyVar v, s when isVariable v -> Some (v, s) | _ -> None)
-            else []
-        own @ pairs isVariable ga sa @ pairs isVariable gr sr
-    // A type generic in contexts carries them as a function type's (see `FunctionContexts.carried`).
+    | TyFunc(ga, gr, gc), TyFunc(sa, sr, sc) -> own gc sc @ pairs isVariable ga sa @ pairs isVariable gr sr
+    // A type generic in contexts carries them as a function type does (see `FunctionContexts.carried`).
+    | TyContexts gc, TyContexts sc -> own gc sc
     | TyApply(_, gs), TyApply(_, ss)
     | TyAlias(_, gs, _), TyAlias(_, ss, _)
     | TyNominal(_, gs, _, _), TyNominal(_, ss, _, _)

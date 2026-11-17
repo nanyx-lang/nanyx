@@ -14,6 +14,7 @@ let rec freeVars (ty: Ty) : int list =
     match ty with
     | TyVar v -> [ v.Id ]
     | TyFunc(input, output, _) -> freeVars input @ freeVars output
+    | TyContexts _ -> []
     // What a nominal type is made from has no variables its arguments don't have, and what one that names itself is
     // made from has the contexts it carries as a value (see `RecursiveNominals`).
     | TyNominal(_, args, _, _) -> args |> List.collect freeVars
@@ -24,6 +25,7 @@ let rec substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
     match ty with
     | TyVar v -> subst |> Map.tryFind v.Id |> Option.defaultValue ty
     | TyFunc(input, output, contexts) -> TyFunc(go input, go output, contexts |> List.map go |> FunctionContexts.flatten)
+    | TyContexts contexts -> TyContexts(contexts |> List.map go |> FunctionContexts.flatten)
     | TyRecord(fields, order) -> TyRecord(fields |> Map.map (fun _ -> go), order)
     | TyOpenRecord(fields, rest) ->
         let fields = fields |> Map.map (fun _ -> go)
@@ -47,7 +49,7 @@ let concreteContexts (contexts: Ty list) : Ty list =
 let rec private recursiveReference (ty: Ty) : (Ty * Ty list) option =
     match ty with
     | RecursiveAliases.RecursiveAlias(body, args)
-    // A nominal type's own arguments, which hold the contexts it carries as a function type's.
+    // A nominal type's own arguments, which hold the contexts it carries (see `FunctionContexts.carried`).
     | TyNominal(_, args, TyRecursive(body, _), _) -> Some (body, args)
     | TyAlias(_, _, underlying) -> recursiveReference underlying
     | _ -> None
@@ -99,21 +101,8 @@ and private bindSchemeWith (rests: bool) (bindings: Map<int, Ty>) (scheme: Ty) (
         | _ -> bindings |> Map.add v.Id instance
     | TyPrimitive a, TyPrimitive b when a = b -> bindings
     | TyFunc(input, output, contexts), TyFunc(input', output', contexts') ->
-        let named = concreteContexts contexts
-        // `Yield(int)` is the instance of a named `Yield(b)` at the type `b` stands for, not another context.
-        let instanceOfNamed (context: Ty) =
-            named
-            |> List.exists (fun namedContext ->
-                match namedContext, context with
-                | TyApply(name, args), TyApply(name', args') -> name = name' && args.Length = args'.Length && not (freeVars namedContext).IsEmpty
-                | _ -> false)
-        let others = concreteContexts contexts' |> List.filter (fun context -> not (List.contains context named || instanceOfNamed context))
-        let bound =
-            contexts
-            |> List.choose (function TyVar v -> Some v | _ -> None)
-            |> List.mapi (fun index v -> v, (if index = 0 then others else []))
-            |> List.fold (fun acc (v, required) -> if acc |> Map.containsKey v.Id then acc else acc |> Map.add v.Id (TyUnion required)) bindings
-        bindScheme (bindScheme bound input input') output output'
+        bindScheme (bindScheme (bindContexts bindings contexts contexts') input input') output output'
+    | TyContexts contexts, TyContexts contexts' -> bindContexts bindings contexts contexts'
     | TyRecord(fields, _), TyRecord(fields', _) when Set.ofSeq fields.Keys = Set.ofSeq fields'.Keys ->
         fields |> Map.fold (fun acc key fieldTy -> bindScheme acc fieldTy fields'.[key]) bindings
     // A function that reads fields of any record that has them, used at a record: its other fields are the rest.
@@ -163,6 +152,23 @@ and private bindSchemeWith (rests: bool) (bindings: Map<int, Ty>) (scheme: Ty) (
     | TyNominal(nominal, _, underlying, _), TyNominal(nominal', _, underlying', _) when nominal = nominal' ->
         bindScheme bindings underlying underlying'
     | _ -> cannot "a generic definition's type does not fit how it is used"
+
+/// `bindings` with the context variables among `contexts`, those of a function type or a type generic in contexts in a
+/// scheme, bound to the contexts among `contexts'`, the instance's, that `contexts` does not name, as a union.
+and private bindContexts (bindings: Map<int, Ty>) (contexts: Ty list) (contexts': Ty list) : Map<int, Ty> =
+    let named = concreteContexts contexts
+    // `Yield(int)` is the instance of a named `Yield(b)` at the type `b` stands for, not another context.
+    let instanceOfNamed (context: Ty) =
+        named
+        |> List.exists (fun namedContext ->
+            match namedContext, context with
+            | TyApply(name, args), TyApply(name', args') -> name = name' && args.Length = args'.Length && not (freeVars namedContext).IsEmpty
+            | _ -> false)
+    let others = concreteContexts contexts' |> List.filter (fun context -> not (List.contains context named || instanceOfNamed context))
+    contexts
+    |> List.choose (function TyVar v -> Some v | _ -> None)
+    |> List.mapi (fun index v -> v, (if index = 0 then others else []))
+    |> List.fold (fun acc (v, required) -> if acc |> Map.containsKey v.Id then acc else acc |> Map.add v.Id (TyUnion required)) bindings
 
 /// The order a record's fields are stored in: by position for a tuple, by name for anything else.
 let storageOrder (names: string list) =
@@ -289,6 +295,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | TyOpenRecord _ -> cannot "a record whose other fields are not known here"
     | TyApply(name, _) -> cannot $"a value of type {name}"
     | TyAlias _ -> cannot "an alias"
+    | TyContexts _ -> cannot "the contexts a type carries, as a value"
     | TyRecursive _
     | TySelf _
     | TyParam _ -> cannot "a recursive alias's definition outside the alias"
