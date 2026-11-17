@@ -636,6 +636,9 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     // A function is passed the compiler's own `ToString` of a tag as a function that writes it.
                     | None, None when InterpolationHoles.passesBuiltIn env ctxName argTys ->
                         Ok (found @ [ Some (InstanceSynthesized InterpolationHoles.builtInMembers) ], current)
+                    // Every type has the compiler's own `Typed` (see `TypeValues`).
+                    | None, None when TypeValues.passesBuiltIn env ctxName argTys ->
+                        Ok (found @ [ Some (InstanceSynthesized TypeValues.builtInMembers) ], current)
                     | None, None when canSynthesize ctxName argTys ->
                         synthesizeInstance env current name ctxName argTys calleeSpan
                         |> Result.map (fun (instance, next) -> found @ [ Some instance ], next)
@@ -903,6 +906,8 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
                 | None -> Some (Ok (Some (InstanceSynthesized (WellKnownContexts.builtInMembers wellKnown)), current))
             | _ when InterpolationHoles.passesBuiltIn env pending.Context argTys ->
                 Some (Ok (Some (InstanceSynthesized InterpolationHoles.builtInMembers), current))
+            | _ when TypeValues.passesBuiltIn env pending.Context argTys ->
+                Some (Ok (Some (InstanceSynthesized TypeValues.builtInMembers), current))
             | _ ->
                 // An instance in scope where the call is, now that its type is known, as one written there is found
                 // when the call's arguments settle it.

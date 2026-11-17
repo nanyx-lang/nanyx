@@ -74,7 +74,7 @@ Decided by the maintainer on 2026-11-17:
 
 Since a `Type` value is known at compile time, reflection stays out of the runtime, which matters for a single WebAssembly module whose unused code is removed:
 
-- The module contains a description only of the types that are written as `type X` somewhere in the program, or that need a [`Typed` instance](#a-synthesised-typeda-context). Nothing has to be kept just in case it is reflected over.
+- The module contains a description only of the types that are written as `type X` somewhere in the program, or that need a [`Typed` instance](#the-synthesised-typeda-context). Nothing has to be kept just in case it is reflected over.
 - Because every `Type` value is a constant after monomorphisation, the compiler can specialise code that walks a type's description. The output is close to what a template would produce, while the checking stays that of ordinary generic code. This is an optimisation, not part of the semantics.
 
 ## Inspection with typed type descriptions
@@ -109,29 +109,12 @@ The type system needs three additions, as decided:
 
 Precedents: Jane Street's `typerep` for OCaml, GHC's `Type.Reflection`, and the "Scrap your boilerplate" approach (`Data`). Swift's `Mirror` and Go's `reflect` have a similar shape but are not typed.
 
-## A synthesised `Typed(a)` context
+## The synthesised `Typed(a)` context
 
-When a function already takes a value of type `a`, the caller shouldn't have to pass `type a` as well. A context that the compiler [synthesises](../advanced/contexts#context-synthesis) for every type supplies it instead:
+`Typed(a) = (typeOf: Type(a))` is built: the compiler gives an instance for every type, nominal ones too, so a function that is given a value of type `a` needn't also take `type a` ([Type arguments](../tour/functions#type-arguments)). It is the implicit counterpart of a type argument, as Haskell's `Typeable` is of `Proxy`, and as Scala's `ClassTag` is usually an implicit parameter. What is left open is what its `typeOf` describes, which comes with descriptions ([#1996](https://github.com/nanyx-lang/nanyx/issues/1996)):
 
-```nanyx
-context Typed(a) = (typeOf: Type(a))
-
-def encode: [Typed(a)] a -> Json = { value ->
-  encodeAt(value, typeOf)
-}
-
-def body = encode(point)
-```
-
-This is the implicit counterpart of a type argument, as Haskell's `Typeable` is of `Proxy`, and as Scala's `ClassTag` is usually an implicit parameter.
-
-- **It stays static.** The compiler builds the instance where `a` is concrete, so after monomorphisation `typeOf` is a constant, as an explicit `type Point` is.
-- **An explicit `use` can't make it lie.** An explicit `use` overrides a synthesised context as usual, but the only way to make a `Type(a)` is to write `type X` with `X` equal to `a`. An override can only supply the description the compiler would have built, so `Typed` needs no rule against overriding.
-- **It is a value, not a function.** Context members can be values, as `zero: a` is in `Add`. A function that takes `()` would add nothing, since its result can never change.
-- **It doesn't replace type arguments.** In `[Typed(a)] string -> a`, nothing at the call site fixes `a`, so the ambiguity in [types only in output position](#types-only-in-output-position) remains. `Typed` helps only where a value of type `a` is passed in.
-- **The walker stays explicit.** When `encodeAt` recurses into a record's fields, each field's type is one the checker never learns, so there is no `Typed` instance for it; only `f.type`. A library therefore takes `Typed(a)` in its public function and passes the type explicitly in the code that walks it, as `encode` and `encodeAt` do above.
-
-`Typed` is synthesised for nominal types too: outside the type's home module its description is the read-only `#nominal`, so synthesis gives nothing away.
+- **The walker stays explicit.** When `encodeAt` recurses into a record's fields, each field's type is one the checker never learns, so there is no `Typed` instance for it; only `f.type`. A library therefore takes `Typed(a)` in its public function and passes the type explicitly in the code that walks it: `def encode: [Typed(a)] a -> Json = { value -> encodeAt(value, typeOf) }`.
+- **A nominal type gives nothing away.** Outside the type's home module its description is the read-only `#nominal`, so giving `Typed` of it everywhere reveals no structure.
 
 # Alternatives considered
 
@@ -179,7 +162,7 @@ C#'s source generators run user code at compile time that emits more source. The
 | Type arguments: `type a`, `into: type`, `Type(a)` values (built) | [#1995](https://github.com/nanyx-lang/nanyx/issues/1995) | |
 | Type descriptions, matched with narrowing | [#1996](https://github.com/nanyx-lang/nanyx/issues/1996) | #1995 |
 | A compiler-provided `build` for decoding | [#1997](https://github.com/nanyx-lang/nanyx/issues/1997) | #1996 |
-| `Typed(a)`, synthesised for every type | [#1998](https://github.com/nanyx-lang/nanyx/issues/1998) | #1995 |
+| `Typed(a)`, synthesised for every type (built) | [#1998](https://github.com/nanyx-lang/nanyx/issues/1998) | #1995 |
 | An associated type as a `Type` value | [#1999](https://github.com/nanyx-lang/nanyx/issues/1999) | #1995 |
 | JSON for any record, on reflection | [#1789](https://github.com/nanyx-lang/nanyx/issues/1789) | #1996, #1997, #1998 |
 | `dbg`, interpolation and `==` as library code (Planning) | [#2000](https://github.com/nanyx-lang/nanyx/issues/2000) | #1997, #1998 |

@@ -18,3 +18,21 @@ module TypeValues =
         match ty with
         | TyApply(name, [ standsFor ]) when name = typeName -> Some standsFor
         | _ -> None
+
+    /// The prelude's context that gives a type as a value, `Typed(a) = (typeOf: Type(a))`, whose instance the
+    /// compiler gives for every type.
+    let typedContext = "Typed"
+
+    /// The prelude value that is the member of the compiler's own `Typed` instance: `__typeOf`, which is `type a`.
+    let builtInTypeOf = "__typeOf"
+
+    /// The members of the compiler's own `Typed` instance, as `InstanceSynthesized` has them.
+    let builtInMembers = [ "typeOf", builtInTypeOf ]
+
+    /// Whether a call that requires `ctxName` at `argTys`, with no instance in scope, is passed the compiler's own
+    /// `Typed`: one of a type with no type variable in it, when `env` has the prelude. A type variable's is required, as
+    /// any context of one is.
+    let passesBuiltIn (env: TypeEnv) (ctxName: string) (argTys: Ty list) =
+        match argTys with
+        | [ ty ] -> ctxName = typedContext && Set.isEmpty (TypeEnv.freeTyVars ty) && (TypeEnv.tryFind builtInTypeOf env).IsSome
+        | _ -> false

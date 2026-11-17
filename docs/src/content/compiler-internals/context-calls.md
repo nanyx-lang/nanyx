@@ -256,5 +256,10 @@ callee's result type all the same, without checking its arguments, so the code a
 passed; `TypeArguments.report` reports it (NYX0271) once the module's constraints are solved, naming that type. A
 `Type` value holds nothing at run time: the backend lays out `Type(a)` as unit and lowers `type Point` to `()`.
 
+The prelude's `Typed(a) = (typeOf: Type(a))` has an instance of the compiler's own for every type with no type
+variable in it (`TypeValues.passesBuiltIn`, checked in `ContextInstances` after an instance in scope and before
+synthesis from attached definitions): `InstanceSynthesized`, whose `typeOf` is the prelude's `__typeOf: Type(a) = type
+a`, specialised at the type as any generic value is. A type variable's `Typed` is required, as any context of one is.
+
 After specialising, the [inliner](./inlining) folds small functions such as `println` into their callers, and makes
 the members of a `use` it brings into the same function as their calls known.

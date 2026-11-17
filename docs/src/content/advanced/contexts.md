@@ -767,6 +767,10 @@ A [private type](./nominal-and-protected-types#private-opaque-types) such as `Us
 
 A value whose type has no `ToString`, such as a function, a private type without a `toString`, or a structure that holds one, is an error at its hole, or at the call to a function that requires `ToString` of it, such as `println`. So is a union open to tags a caller chooses, `#x(a) | r` in a function's type, since those tags may be any: name every tag in the type, or match on the tags it names.
 
+## Typed(a)
+
+`Typed(a)` is the prelude's context for the type `a` as a value: its one member, `typeOf`, is a [type argument](../tour/functions#type-arguments) of type `Type(a)`. Every type has the compiler's own instance, nominal types of other modules too, so a function that is given a value of type `a` can require `Typed(a)` and pass `typeOf` on wherever `type a` is expected, and its callers pass nothing more. A function generic in `a` requires `Typed(a)` to pass it on, as it would any context.
+
 # Context synthesis
 
 When a function requires a context, you don't always have to load or create one manually. If the type in question has [attached definitions](./attached-definitions) that match the context's members, the compiler can **synthesize** the context automatically.
