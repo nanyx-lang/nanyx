@@ -32,6 +32,13 @@ let ``A context's associated type is its last parameter, which its members name`
     | other -> failwith $"Expected the context's members, got %A{other}"
 
 [<Fact>]
+let ``Hovering a context's name shows its associated types as it declares them`` () =
+    let source = withIter "\ndef f: [Iter(c)] c -> () = { xs -> () }\n"
+    let result = Compiler.compile source
+    let hover = Definition.typeDefinitionAt Unicode "" result (offsetOf source "Iter(c)]" 0 1)
+    Assert.Equal(Some "context Iter(c) = (elem: type, next: (c -> #some(elem, c) | #done))", hover |> Option.map _.Type)
+
+[<Fact>]
 let ``A signature names an associated type bare, and a call's instance fixes it`` () =
     let source =
         withIter

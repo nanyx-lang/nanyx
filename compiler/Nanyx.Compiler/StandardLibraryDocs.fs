@@ -72,7 +72,9 @@ let private typeSignature (typed: TypedModule) (symbol: Symbol) (info: TypeDefIn
         | TyRecord(fields, _) when info.IsContext && not members.IsEmpty ->
             let written = members |> List.choose (fun memberSymbol -> fields |> Map.tryFind memberSymbol.Name |> Option.map (fun ty -> memberSymbol.Name, ty))
             let types = Unifier.tysToDisplayStrings Source (List.map snd written)
-            let lines = List.map2 (fun (name, _) ty -> $"  {writtenName name}: {ty}") written types
+            // A context's associated types come first, as it declares them (see `AssociatedTypes`).
+            let associated = info.AssociatedTypes |> List.map (fun name -> $"  {name}: type")
+            let lines = associated @ List.map2 (fun (name, _) ty -> $"  {writtenName name}: {ty}") written types
             "(\n" + String.concat "\n" lines + "\n)"
         | _ -> Unifier.tyToDisplayString Source shape
     fst (Definition.writtenTypeDefinition writeShape symbol info true)
