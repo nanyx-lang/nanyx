@@ -79,6 +79,7 @@ context Num(a) = (
   `/`: a, a -> a
   `%`: a, a -> a
   fromInt: int -> a
+  isInteger: bool
 )
 ```
 
@@ -87,7 +88,8 @@ type requires it, any other integer literal beside a value of type `a` is `fromI
 `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }` work at `int` and `float`.
 A function that requires `Num(a)` can call one that requires `Add(a)`: a `Num` has every member
 an `Add` has. On an integer type `/` truncates and `%` takes the sign of `x`; on `float` they are
-IEEE 754's.
+IEEE 754's. `isInteger` says which `a` is: `true` for an integer type, so `x ** -1` stops the
+program on one.
 
 ## `int.zero`
 
@@ -152,6 +154,14 @@ def int.fromInt: int -> int
 ```
 
 `n` itself.
+
+## `int.isInteger`
+
+```nanyx fragment
+def int.isInteger: bool
+```
+
+`true`: an `int` is an integer type.
 
 ## `int.bitAnd`
 
@@ -277,6 +287,14 @@ def float.fromInt: int -> float
 ```
 
 `n` as a float, as [`int.toFloat`](#inttofloat) gives it.
+
+## `float.isInteger`
+
+```nanyx fragment
+def float.isInteger: bool
+```
+
+`false`: a `float` is not an integer type.
 
 ## `pow`
 

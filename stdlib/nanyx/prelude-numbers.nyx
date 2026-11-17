@@ -65,7 +65,8 @@ export context Add(a) = (
   `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }` work at `int` and `float`.
   A function that requires `Num(a)` can call one that requires `Add(a)`: a `Num` has every member
   an `Add` has. On an integer type `/` truncates and `%` takes the sign of `x`; on `float` they are
-  IEEE 754's.
+  IEEE 754's. `isInteger` says which `a` is: `true` for an integer type, so `x ** -1` stops the
+  program on one.
 export context Num(a) = (
   zero: a
   `+`: (a, a) -> a
@@ -75,6 +76,7 @@ export context Num(a) = (
   `/`: (a, a) -> a
   `%`: (a, a) -> a
   fromInt: int -> a
+  isInteger: bool
 )
 
 -- The compiler's own `Add` and `Num` of `int` and `float`: the members attached to `int` and
@@ -118,6 +120,9 @@ export def int.`%`: int, int -> int = { x, y ->
 export def int.fromInt: int -> int = { n ->
   n
 }
+
+--| `true`: an `int` is an integer type.
+export def int.isInteger: bool = true
 
 --| The bits set in both `x` and `y`: `int.bitAnd(12, 10)` is 8.
 export def int.bitAnd: int, int -> int = { x, y ->
@@ -197,6 +202,9 @@ export def float.fromInt: int -> float = { n ->
   int.toFloat(n)
 }
 
+--| `false`: a `float` is not an integer type.
+export def float.isInteger: bool = false
+
 -- Powers ----------------------------------------------------------------------------------------
 
 --| `acc` times `base` to the power `exponent`, for an `exponent` of zero or more: by repeated
@@ -208,12 +216,15 @@ def powOnto: [Num(a)] a, int, a -> a = { base, exponent, acc ->
 }
 
 --| What `base ** exponent` is: `base` multiplied by itself `exponent` times, so `2 ** 10` is 1024
-  and `x ** 0` is 1. A negative exponent is `1 / base ** -exponent`, so on an `int` it truncates
-  towards zero.
+  and `x ** 0` is 1. A negative exponent is `1 / base ** -exponent` on a type that is not an
+  integer type, so `2.0 ** -1` is 0.5; on an integer type, which can't hold the result, it
+  stops the program, as [`crash`] does.
 export def __pow: [Num(a)] a, int -> a = { base, exponent ->
-  if exponent < 0
-    then fromInt(1) / powOnto(base, -exponent, fromInt(1))
-    else powOnto(base, exponent, fromInt(1))
+  if exponent >= 0
+    then powOnto(base, exponent, fromInt(1))
+    else if isInteger
+      then crash("{exponent} is a negative exponent, and an integer raised to one isn't an integer")
+      else fromInt(1) / powOnto(base, -exponent, fromInt(1))
 }
 
 --| What `f >> g` is: the function that applies `f`, and then `g` to what `f` returns.

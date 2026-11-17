@@ -24,10 +24,6 @@ values are to be typed is on [Units and dimensions](./units-and-dimensions#arith
   parameterised context is inferred to require it ([#550](https://github.com/nanyx-lang/nanyx/issues/550)), but an
   operator in a local def that does not write its type is not inferred to need its context: the def is not generic in
   it, and its arithmetic is on ints or floats.
-- **A negative exponent on an integer type** is to stop the program with a message, as division by zero is to
-  ([#1770](https://github.com/nanyx-lang/nanyx/issues/1770)), since a negative exponent can't give an integer. Today it
-  is `1 / x ** -n`, which truncates to `0`: `__pow` is generic, and cannot tell an integer type from a float without a
-  member to ask ([#1875](https://github.com/nanyx-lang/nanyx/issues/1875)).
 - **`0` elsewhere in generic code.** A `0` that is not an operand of an arithmetic operator or a comparison beside a
   value of the type variable, such as the start of a `fold`, a function's result or an argument, is still an `int`;
   write `zero` there, as `math.abs` does for its result. So `{ xs -> xs \list.fold(0, { a, b -> a + b }) }` is
