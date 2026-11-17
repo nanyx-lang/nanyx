@@ -15,21 +15,51 @@ let noFromArray (span: SourceSpan) (typeName: string) =
     Diagnostics.at DiagnosticCodes.NoFromArray span
         $"'{typeName}' has no `fromArray`, so a square-bracket literal can't build one: attach one to it, as in `def {typeName}.fromArray: Array(a) -> {typeName}`"
 
-/// `expr`, the spread `...operand` in a literal that builds another type: read as the prelude's `__spreadArray(operand)`
-/// for an array, and `__spreadList(operand)` for a list, so the literal's items are one list. Anything else is an error.
+/// The prelude's function a spread of a value of type `ty` is read as, to make a list of its elements: `__spreadList`
+/// for a list, or a type nothing has settled, `__spreadArray` for an array, `__spreadSeq` for a sequence, which may
+/// need contexts, and `__spreadIterable` for any other type a definition can be attached to, which must be `Iterable`.
+/// None for a type that can't be: a record, a tag, a function.
+let private spreadFunction (ty: Ty) : Identifier option =
+    match ty with
+    | Arrays.ArrayType _ -> Some CollectionSyntax.spreadArray
+    | Lists.ListType _
+    | TyVar _ -> Some CollectionSyntax.spreadList
+    | Seqs.SeqType _ -> Some CollectionSyntax.spreadSeq
+    | _ when not (attachedTypeNames ty).IsEmpty -> Some CollectionSyntax.spreadIterable
+    | _ -> None
+
+/// `expr`, the spread `...operand` in a literal: read as the call that makes a list of the operand's elements (see
+/// `spreadFunction`), so the literal's items are one list. A value that can't be iterated is an error.
 let inferSpread (infer: Infer) (env: TypeEnv) (state: InferState) (expr: Expression) (operand: Expression) =
     // The operand is inferred once to see what it is, and that inference set aside: it is inferred again as the
     // argument of the call it is read as.
     match infer env state operand with
     | Error errors -> Error errors
     | Ok (typed, seen) ->
-        match Unifier.unalias (resolveSoFar seen typed.Type) with
-        | Arrays.ArrayType _ -> inferAsCall (infer env) state expr CollectionSyntax.spreadArray [ operand ]
-        | Lists.ListType _
-        | TyVar _ -> inferAsCall (infer env) state expr CollectionSyntax.spreadList [ operand ]
-        | ty ->
+        let ty = Unifier.unalias (resolveSoFar seen typed.Type)
+        match spreadFunction ty with
+        | Some callee -> inferAsCall (infer env) state expr callee [ operand ]
+        | None ->
             Error [ Diagnostics.at DiagnosticCodes.InvalidCollectionSpread operand.Span
-                        $"A spread in a square-bracket literal takes a list or an array, not a '{Unifier.tyToString ty}'" ]
+                        $"A spread in a square-bracket literal takes something that can be iterated, such as a list, an array, a set or a sequence, not a '{Unifier.tyToString ty}'" ]
+
+/// `literal`, a list literal with a spread in it, `[a, ...xs]`, which the parser writes `[a] ++ xs`, when one of its
+/// spreads is not a list: inferred as the list of its items with each spread read as `inferSpread` reads it, which is
+/// recorded in `ReadAs` to be written as it. None when every spread is a list, or a type nothing has settled, so the
+/// literal is the lists joined as written.
+let spreading (infer: Infer) (env: TypeEnv) (state: InferState) (literal: Expression) : Result<TypedExpr * InferState, Diagnostic list> option =
+    match CollectionSyntax.segments literal with
+    | Some segments ->
+        let isList (operand: Expression) =
+            match infer env state operand with
+            | Ok (typed, seen) -> spreadFunction (Unifier.unalias (resolveSoFar seen typed.Type)) = Some CollectionSyntax.spreadList
+            | Error _ -> true
+        let spreads = segments |> List.choose (function Choice2Of2 operand -> Some operand | Choice1Of2 _ -> None)
+        if spreads |> List.forall isList then None
+        else
+            let list = { literal with Kind = (CollectionSyntax.listOf literal.Span segments).Kind }
+            Some (infer env state list |> Result.map (fun (typed, next) -> typed, { next with ReadAs = next.ReadAs |> Map.add literal.Id list }))
+    | None -> None
 
 /// Whether a literal of `ty`, expected where `literal` is written, is built through the type's `fromArray`: a list's
 /// items stay a list, and a map's entries a map, as does anything without a name a definition can be attached to.

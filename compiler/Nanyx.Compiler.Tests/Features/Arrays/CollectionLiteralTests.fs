@@ -5,7 +5,7 @@ open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
 // Square-bracket literals of any type with a `fromArray` (#1543): `[1, 2]` where an `Array(int)` is expected, and
-// `Array[1, 2]`. NYX0257 for a type with none, NYX0258 for a spread of something other than a list or an array.
+// `Array[1, 2]`. NYX0257 for a type with none, NYX0258 for a spread of something that can't be iterated (#1869).
 
 let private codes (source: string) =
     (Compiler.compile (normalized source)).Diagnostics |> List.map _.Code
@@ -88,13 +88,34 @@ def bag = Bag[1, 2]
     Assert.Equal(source.IndexOf "Bag[" + 3, diagnostic.Span.Value.End)
 
 [<Fact>]
-let ``A spread of a set is an error at the set`` () =
+let ``A spread of a record is an error at the record`` () =
     let source =
         """
-def s = set[1, 2]
-def a = Array[...s, 3]
+def p = (x = 1, y = 2)
+def a = Array[...p, 3]
 """
-    Assert.Equal<string list>([ DiagnosticCodes.InvalidCollectionSpread.Code ], codes source)
+    let source = normalized source
+    let diagnostic = Assert.Single (Compiler.compile source).Diagnostics
+    Assert.Equal(DiagnosticCodes.InvalidCollectionSpread.Code, diagnostic.Code)
+    Assert.Equal(source.IndexOf "...p" + 3, diagnostic.Span.Value.Start)
+
+[<Fact>]
+let ``A spread of a type with no toSeq names the spread and the missing definition`` () =
+    let source =
+        """
+type Point = protected (x: int, y: int)
+
+def a = [0, ...Point(x = 1, y = 2)]
+"""
+    let diagnostic = Assert.Single (Compiler.compile (normalized source)).Diagnostics
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+    Assert.Contains("Spreading a value of type 'Point' into a collection literal", diagnostic.Message)
+    Assert.Contains("'Point.toSeq' is not defined", diagnostic.Message)
+
+[<Fact>]
+let ``A list literal that spreads a set is a list of its elements`` () =
+    let types = (Compiler.compile (normalized "def s = set[1, 2]\ndef xs = [...s, 3]\n")).Typed.Value.Types
+    Assert.Equal("list(int)", Unifier.tyToString types.["xs"])
 
 [<Fact>]
 let ``A fromArray that requires a context makes the literal require it`` () =
