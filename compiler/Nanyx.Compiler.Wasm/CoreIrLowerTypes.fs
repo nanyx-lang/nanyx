@@ -232,6 +232,8 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | BoxedType -> IrBox
     // A scoped context's scope means nothing at run time: a value of the context's type is unit.
     | TyScope _ -> IrUnit
+    // Nor does a `Type` value, which is known at compile time (see `TypeValues`).
+    | TypeValues.TypeValueType _ -> IrUnit
     // A cell passed to a function is the box it is held in (see `CellSyntax`).
     | FunctionContexts.CellType(held, _) -> IrRecord [ "0", toIrType held ]
     // So is a `box`, which the standard library's `MRef` is (see `Boxes`).

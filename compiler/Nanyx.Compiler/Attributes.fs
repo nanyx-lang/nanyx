@@ -126,7 +126,7 @@ module Attributes =
         contextMemberAttributes module'
         |> List.choose (fun ((name, argument, _), field) ->
             match argument, field with
-            | KeywordKindTag kind, (TypeField(memberName, _, _, _) | TypeMember(memberName, _)) when name = customKeywordTypeAttribute -> Some (memberName, kind)
+            | KeywordKindTag kind, TypeField(memberName, _, _, _) when name = customKeywordTypeAttribute -> Some (memberName, kind)
             | _ -> None)
         |> Map.ofList
 
@@ -186,7 +186,7 @@ module Attributes =
             match argument, field with
             | _ when name <> customKeywordTypeAttribute ->
                 Some (Diagnostics.at DiagnosticCodes.UnknownAttribute span $"Unknown attribute '@{name}' on a context's member")
-            | KeywordKindTag kind, (TypeField(memberName, _, typeOpt, _) | TypeMember(memberName, typeOpt)) -> keywordTypeError span memberName kind typeOpt
+            | KeywordKindTag kind, TypeField(memberName, _, typeOpt, _) -> keywordTypeError span memberName kind typeOpt
             | KeywordKindTag _, _ -> None
             | Some (Kind (TagExpr(kind, None))), _ ->
                 Some (Diagnostics.at DiagnosticCodes.UnknownKeywordKind span $"Unknown keyword kind '#{kind}': the kinds are {kinds}")

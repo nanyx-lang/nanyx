@@ -33,8 +33,7 @@ let rec private unboundIn (bound: Set<Identifier>) (inFunction: bool) (typeExpr:
     | TypeOpenRecord(fields, _) ->
         fields
         |> List.collect (function
-            | TypeField(_, _, Some t, _)
-            | TypeMember(_, Some t) -> unboundIn bound false t
+            | TypeField(_, _, Some t, _) -> unboundIn bound false t
             | _ -> [])
     | TypeTag(_, Some inner)
     | TypeConstraint(_, inner, _)

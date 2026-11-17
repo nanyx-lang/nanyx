@@ -12,7 +12,8 @@ module SyntaxTree =
         | LiteralExpr _
         | UnitExpr
         | IdentifierExpr _
-        | ContextMemberAccess _ -> [], []
+        | ContextMemberAccess _
+        | TypeValue _ -> [], []
         | FunctionCall(_, _, args)
         | ContextMemberCall(_, _, args)
         | TupleExpr args
@@ -66,7 +67,8 @@ module SyntaxTree =
         | LiteralExpr _
         | UnitExpr
         | IdentifierExpr _
-        | ContextMemberAccess _ -> expr
+        | ContextMemberAccess _
+        | TypeValue _ -> expr
         | FunctionCall(name, range, args) -> rebuild (FunctionCall(name, range, List.map f args))
         | ContextMemberCall(context, name, args) -> rebuild (ContextMemberCall(context, name, List.map f args))
         | TupleExpr items -> rebuild (TupleExpr(List.map f items))
@@ -144,6 +146,8 @@ module SyntaxTree =
         | LambdaParameter
         /// A context an expression names: in a list of contexts it brings into scope, or the one whose member it reads.
         | ContextNamed
+        /// The type `type Point` passes as a type argument.
+        | PassedType
 
     /// A type written in a module, as `writtenTypes` finds it: what it is written as, and the top-level item it is
     /// written in, an item of a module block for one in a block.
@@ -180,6 +184,7 @@ module SyntaxTree =
                 | AttributeStatement _ -> [])
         | ContextMemberAccess(context, _)
         | ContextMemberCall(context, _, _) -> [ context, ContextNamed ]
+        | TypeValue written -> [ written, PassedType ]
         | _ -> []
 
     /// The types written directly in `expr` (not in the expressions inside it): its lambda's parameters' annotations,
@@ -299,6 +304,7 @@ module SyntaxTree =
             parts |> List.collect (function StringExpr value -> referencedNames value | StringText _ -> [])
         | ContextMemberCall(_, memberName, args) -> memberName :: (args |> List.collect referencedNames)
         | ContextMemberAccess _
+        | TypeValue _
         | UnitExpr
         | LiteralExpr _ -> []
 

@@ -31,6 +31,7 @@
     <Compile Include="Sets.fs" />
     <Compile Include="Arrays.fs" />
     <Compile Include="Boxes.fs" />
+    <Compile Include="TypeValues.fs" />
     <Compile Include="InferState.fs" />
     <Compile Include="FieldCalls.fs" />
     <Compile Include="ContextFixes.fs" />
@@ -93,6 +94,7 @@
     <Compile Include="WorkflowRests.fs" />
     <Compile Include="WorkflowMembers.fs" />
     <Compile Include="DefAnnotations.fs" />
+    <Compile Include="TypeArguments.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="InferModule.fs" />
     <Compile Include="RequiredContexts.fs" />

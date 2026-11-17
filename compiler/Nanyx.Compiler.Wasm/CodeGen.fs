@@ -369,12 +369,6 @@ let private extractTypeLayouts (module': Module) : Map<string, string list> * Ma
                                 | Some t -> typeExprToTypeString t
                                 | _ -> "unknown"
                             Some (fieldName, typeName)
-                        | TypeMember(fieldName, typeOpt) ->
-                            let typeName =
-                                match typeOpt with
-                                | Some t -> typeExprToTypeString t
-                                | _ -> "unknown"
-                            Some (fieldName, typeName)
                         | TypeFieldAttribute _ -> None)
                 let sortedFieldNames = fieldInfo |> List.map fst |> List.sort
                 let fieldTypeMap = fieldInfo |> Map.ofList

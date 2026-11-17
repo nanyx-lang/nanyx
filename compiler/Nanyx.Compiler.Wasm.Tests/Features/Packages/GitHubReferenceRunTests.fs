@@ -9,11 +9,7 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Running a package with a file on GitHub not pulled yet says to pull it`` () =
     use directory = new TempDirectory()
-    let write (path: string) (text: string) =
-        let full = Path.Combine(directory.Path, path)
-        Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
-        File.WriteAllText(full, text.ReplaceLineEndings "\n")
-    write
+    directory.Write
         "app/app.nyxp"
         $"""(
   package = (name = "app", version = "0.1.0")
@@ -21,7 +17,7 @@ let ``Running a package with a file on GitHub not pulled yet says to pull it`` (
   {consoleHostEntry}
 )
 """
-    write "app/main.nyx" "module main\n\nimport retry\n\n@entry\ndef main = {\n  println(twice(2))\n}\n"
+    directory.Write "app/main.nyx" "module main\n\nimport retry\n\n@entry\ndef main = {\n  println(twice(2))\n}\n"
     let outcome = nanyxIn (Path.Combine(directory.Path, "app")) [ "run" ]
     Assert.Equal(1, outcome.ExitCode)
     Assert.Contains("NYX0041: The module 'retry' is on GitHub, but it isn't in the package cache: run `nanyx pull` to fetch it", outcome.StandardError)

@@ -196,6 +196,7 @@ module WorkflowDesugaring =
             | InterpolatedString parts -> parts |> List.exists (function StringExpr value -> usesKeyword value | StringText _ -> false)
             | TagExpr(_, None)
             | ContextMemberAccess _
+            | TypeValue _
             | UnitExpr
             | LiteralExpr _
             | IdentifierExpr _ -> false
@@ -304,6 +305,7 @@ module WorkflowDesugaring =
             | Block _
             | UseIn _
             | ContextMemberAccess _
+            | TypeValue _
             | UnitExpr
             | LiteralExpr _
             | IdentifierExpr _ -> [], expr
@@ -448,6 +450,7 @@ module WorkflowDesugaring =
             | MemberAccess(baseExpr, field, rangeOpt) -> MemberAccess(desugarExpr baseExpr, field, rangeOpt)
             | ContextMemberAccess(ctxType, field) -> ContextMemberAccess(ctxType, field)
             | ContextMemberCall(ctxType, field, args) -> ContextMemberCall(ctxType, field, args |> List.map desugarExpr)
+            | TypeValue written -> TypeValue written
             | UseIn(value, body) -> UseIn(desugarExpr value, desugarExpr body)
             // A `#delay` keyword's call, which takes no rest of the block, so it can be anywhere.
             | WorkflowBindExpr(keyword, value) when kindOf keyword = KeywordKind.Delay ->
