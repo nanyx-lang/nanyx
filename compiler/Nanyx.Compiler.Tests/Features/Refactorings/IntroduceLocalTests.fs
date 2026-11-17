@@ -25,14 +25,7 @@ let private rewrittenBy (title: string) (marked: string) =
     | source, offers ->
         match offers |> List.tryPick (function Available refactoring when refactoring.Title.StartsWith title -> Some refactoring | _ -> None) with
         | Some refactoring ->
-            let after = applyEdits source refactoring.Edits
-            let result = Compiler.compile after
-            Assert.True(result.Diagnostics.IsEmpty, sprintf "%s\n%A" after result.Diagnostics)
-            // What it writes is laid out as the formatter lays it out.
-            match FormatCommand.formatText Formatter.Options.defaults "" after with
-            | FormatCommand.Formatting.Formatted formatted -> Assert.Equal(formatted, after)
-            | other -> failwithf "%A" other
-            after
+            refactoredText source refactoring
         | None -> failwithf "expected %s, got %A" title offers
 
 let private rewritten (marked: string) = rewrittenBy "Introduce local" marked

@@ -21,13 +21,7 @@ let private offersAt (marked: string) =
 let private rewritten (marked: string) =
     match offersAt marked with
     | source, [ Available refactoring ] ->
-        let after = applyEdits source refactoring.Edits
-        let result = Compiler.compile after
-        Assert.True(result.Diagnostics.IsEmpty, sprintf "%s\n%A" after result.Diagnostics)
-        match FormatCommand.formatText Formatter.Options.defaults "" after with
-        | FormatCommand.Formatting.Formatted formatted -> Assert.Equal(formatted, after)
-        | other -> failwithf "%A" other
-        after
+        refactoredText source refactoring
     | _, offers -> failwithf "expected one offer, got %A" offers
 
 [<Fact>]
