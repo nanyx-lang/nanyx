@@ -113,7 +113,7 @@ So a unit test never touches the file system, the clock or the environment unles
 
 ## Integration tests
 
-A test marked `@test(#io)` runs with the console host's contexts (`Console & FileSystem & Env & Clock`), real ones, for tests that are meant to read files or the clock:
+A test marked `@test(#io)` runs with the console host's contexts (`Console`, `Env` and `FileSystem`), real ones, for tests that are meant to read files or the environment:
 
 ```nanyx
 @test(#io)
@@ -141,8 +141,7 @@ FAIL geometry.`scales points`  src/geometry.nyx:18:3
     scale(p, 2) = Point(x = 2, y = 5)
     p = Point(x = 1, y = 2)
 FAIL geometry.`parses a point`  src/geometry.nyx:24:14
-  error E001: Type mismatch (deferred from compile time)
-    Expected type `int` but found type `string` in the expression `x + 1`
+  src/geometry.nyx:24:14: error NYX0201: 'string' is not a number, so it cannot be used with + (deferred from compile time)
 
 1 passed, 2 failed
 ```
@@ -171,7 +170,7 @@ These fit the design but are not part of the first version:
 - **Property-based testing.** A library, with a context that generates values, rather than a language feature.
 - **Snapshot tests**, which compare a value's printed form with one stored in a file.
 - **Expecting a crash.** A test cannot catch a crash, but the runner sees one, so an attribute such as `@test(#crashes)` could pass a test only if it crashes.
-- **Docs as tests.** Running the code blocks in these docs as tests, which [compilation](./compilation) already wants.
+- **Docs as tests.** Running the code blocks in docs as tests. The compiler's own tests already run the tour's ([compilation](./compilation#tour-examples)); `nanyx test` could do the same for a package's.
 
 # Prior art
 

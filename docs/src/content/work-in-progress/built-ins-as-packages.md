@@ -23,7 +23,7 @@ workstream.
 
 **Today** the official linter is F#: the `default` linter's rules (`unusedBindings`, `nonTailRecursion`,
 `unusedResults` and the rest) are in `compiler/Nanyx.Compiler/Linters.fs`, about 1,160 lines, run by the compiler's
-[linter host](./linters#4-the-linter-host-internal). Linters written in Nanyx aren't possible yet: their contract is
+[linter host](./linters). Linters written in Nanyx aren't possible yet: their contract is
 [#107](https://github.com/nanyx-lang/nanyx/issues/107).
 
 **It will be a Nanyx package**, `nanyx.lint`, written against the same public contract any linter uses, and reporting

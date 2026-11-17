@@ -5,27 +5,23 @@ order: 34
 ---
 
 This page is how the parser should work, and how to get there from today's parser without a rewrite all at once.
-Decided by the maintainer ([#846](https://github.com/nanyx-lang/nanyx/issues/846)): go ahead, in the stages below.
+The maintainer decided in [#846](https://github.com/nanyx-lang/nanyx/issues/846), which tracks the work, to go all the
+way, through stage 6, in the stages below. Error recovery (stage 5) is what the language server and the
+[refactorings](./refactorings) need most. Error messages that change at stage 4 are accepted after review, following
+the [house style](../foundations/principles#friendly-errors).
 
 # Today
 
-The parser (`compiler/Nanyx.Parser`, about 4,200 lines, 1,089 of them in `Expressions.fs`) is written with
-[FParsec](https://www.quanttec.com/fparsec/) combinators. It reads characters directly: there is no lexer. It
-backtracks with `attempt`, which appears 169 times, and layout (where a block, a match or a pipeline ends) is decided
-by the individual parsers, each measuring indentation itself.
+The parser (`compiler/Nanyx.Parser`) is written with [FParsec](https://www.quanttec.com/fparsec/) combinators. It
+reads characters directly. It backtracks with `attempt`, and layout (where a block, a match or a pipeline ends) is
+decided by the individual parsers, each measuring indentation itself. Most of the parser bugs fixed so far come from
+that approach rather than from the grammar:
 
-That has served the language well, but most of the parser bugs fixed recently come from the approach rather than
-the grammar:
-
-- **Keywords leak into names.** With no lexer, a keyword parser can match the start of a longer name: `typeName`
-  ([#493](https://github.com/nanyx-lang/nanyx/issues/493)), `trueValue` and `nan`
-  ([#521](https://github.com/nanyx-lang/nanyx/issues/521)), `useful`. The reserved words are one list,
-  `Keywords.reserved`, which completion reads too ([#541](https://github.com/nanyx-lang/nanyx/issues/541)), but the
-  parsers that match a keyword each write it out again.
-- **Backtracking hides errors.** An `attempt` that rewinds past the real problem reports it somewhere else, as a
-  list error reported at its block's `{` was ([#758](https://github.com/nanyx-lang/nanyx/issues/758)), and FParsec's
-  "Expecting: any char in ' ', for loop, function call, ..." messages are the same effect. Because choice order and
-  `attempt` placement are behaviour, [Working in this repository](https://github.com/nanyx-lang/nanyx/blob/main/AGENTS.md)
+- **Keywords leak into names.** A keyword parser can match the start of a longer name (`typeName`, `trueValue`). The
+  reserved words are one list, `Keywords.reserved`, but the parsers that match a keyword each write it out again.
+- **Backtracking hides errors.** An `attempt` that rewinds past the real problem reports it somewhere else, and
+  FParsec's "Expecting: any char in ' ', for loop, function call, ..." messages are the same effect. Because choice
+  order and `attempt` placement are behaviour, [Working in this repository](https://github.com/nanyx-lang/nanyx/blob/main/AGENTS.md)
   has a rule just to protect them.
 - **Layout is decided in many places.** A nested match ending at an arm indented back
   ([#249](https://github.com/nanyx-lang/nanyx/issues/249)), a list's `]` on its own line
@@ -33,11 +29,10 @@ the grammar:
   ([#617](https://github.com/nanyx-lang/nanyx/issues/617), [#628](https://github.com/nanyx-lang/nanyx/issues/628)) and
   the block after `use ... in` ([#673](https://github.com/nanyx-lang/nanyx/issues/673)) were each a layout case one
   parser handled and another didn't.
-- **Comments are kept on the side.** The parser records comment positions in its state
-  (`Comments` in `ParseState.fs`); the formatter and doc comments attach them by position afterwards.
-- **The first error ends the parse.** "A parse error hides the rest of the file, because the parser has no error
-  recovery" ([Language server and editor](./language-server)). The editor gets no outline, no hover and no
-  completion below a half-typed line.
+- **Comments are kept on the side.** The parser records comment positions in its state (`Comments` in
+  `ParseState.fs`); the formatter and doc comments attach them by position afterwards.
+- **The first error ends the parse.** The parser has no error recovery, so the editor gets no outline, no hover and
+  no completion below a half-typed line.
 
 # Where to end up
 
@@ -60,51 +55,27 @@ indentation-sensitive layout fits it badly.
 # In stages
 
 The parser changes more often than almost any other part of the compiler, so a long-lived rewrite branch would never
-merge. Each stage below lands on its own, keeps every test passing, and is useful by itself even if the next stage
-never happens. The syntax tree (`Ast.fs`) does not change in stages 1 to 4, so the type checker, the backend, the
-formatter and the language server need no change until the parser underneath them is replaced.
+merge. Each stage lands on its own, keeps every test passing, and is useful by itself. The syntax tree (`Ast.fs`) does
+not change in stages 1 to 4, so the type checker, the backend, the formatter and the language server need no change
+until the parser underneath them is replaced.
 
-## Stage 0: prepare (done)
+## What is built
 
-- **A corpus** (done: `Corpus.fs` in `compiler/Nanyx.Parser.Corpus`, a library only the test projects reference).
-  Every `.nyx` file in the repository (the standard library, the packages, the examples, scratch files and test
-  inputs), every ` ```nanyx ` block in the docs, and every triple-quoted string in the test projects' sources: about
-  4,200 pieces, nine in ten of which parse. The formatter's corpus tests read the files and the docs' blocks from it
-  too.
-- **A differential test** (done: `Differential.fs`, with `CorpusTests.fs` in the parser's tests). It parses each
-  piece with two parsers, writes each result out with every span and without node ids (`SyntaxDump.fs`, which walks
-  the tree by reflection, so it needs no change when `Ast.fs` does), and reports the pieces whose trees, comments,
-  blank lines or errors differ, each at its first differing line. Until there is a second parser it runs today's
-  parser against itself, which checks that a parse depends on nothing but its source. Every later stage is checked
+Stages 0 and 1 are done:
+
+- **The corpus** (`Corpus.fs` in `compiler/Nanyx.Parser.Corpus`, a library only the test projects reference): every
+  `.nyx` file in the repository, every ` ```nanyx ` block in the docs, and every triple-quoted string in the test
+  projects' sources. The formatter's corpus tests read it too.
+- **The differential test** (`Differential.fs`, with `CorpusTests.fs` in the parser's tests). It parses each piece with
+  two parsers, writes each result out with every span and without node ids (`SyntaxDump.fs`, which walks the tree by
+  reflection), and reports the pieces whose trees, comments, blank lines or errors differ, each at its first
+  differing line. Until there is a second parser it runs today's parser against itself. Every later stage is checked
   by it.
-- **The refactors already filed**, which shrink what has to be ported: name the desugared calls in one place
-  (done: the `...Syntax` modules in `Ast.fs`, [#367](https://github.com/nanyx-lang/nanyx/issues/367)), keep one list of reserved words
-  (done: `Keywords.reserved` in `Keywords.fs`, [#541](https://github.com/nanyx-lang/nanyx/issues/541)), build the parser's and formatter's operator tables from one
-  list (done: `binaryOperators` in `Operators.fs`, [#370](https://github.com/nanyx-lang/nanyx/issues/370)), and split
-  the parser out of `Program.fs` (done: `Expressions.fs`, `TopLevel.fs`, `Api.fs` and the files before them,
-  [#366](https://github.com/nanyx-lang/nanyx/issues/366)).
-
-## Stage 1: a lexer, used alongside the parser (done)
-
-`Lexer.fs`: text in, tokens out, each with its offsets and its leading and trailing trivia. The FParsec parser keeps
-parsing characters and doesn't use it yet.
-
-- **Tokens.** A name, a keyword (one of `Keywords.reserved`), a name in backticks, a number (without its sign), a
-  string, a binary operator written with symbols (from `Operators.binaryOperators`, so the operators are still one
-  list), and each piece of punctuation as its own kind. A string with holes is a `StringStart` (`"total: {`), the
-  hole's tokens, a `StringMiddle` (`} of {`) between holes and a `StringEnd` (`} items"`); the lexer counts the braces
-  in a hole, so a lambda in one is the hole's own. Of the symbols, the longest the language has is read, so `x =-1`
-  is `=`, `-`, `1`.
-- **Trivia.** Spaces and tabs, a line break (`\n`, `\r\n` or `\r`), a `--` comment, a doc comment, a block comment, and
-  a directive or `#!` line at the top of a file. A token's trailing trivia is what follows it on its line, up to and
-  including the line break; everything else before the next token is that token's leading trivia, and the trivia
-  after the last token belongs to an `EndOfFile` token.
-- **Lossless, whatever the text.** A character that is no part of the syntax is an `Unknown` token, and a string or
-  block comment that is never closed runs to the end of the text; each reports an error with a span beside the
-  tokens.
-- **Checked** (`LexerTests.fs`, and `CorpusTests.fs` in the parser's tests): every kind of token and trivia, including
-  string escapes, holes, digit separators and block comments; every piece of the corpus written back exactly from its
-  tokens; and every piece the parser reads lexed with no error, finding exactly the comments the parser finds.
+- **The lexer** (`Lexer.fs`): text in, tokens out, each with its offsets and its leading and trailing trivia, lossless
+  whatever the text. A string with holes is a `StringStart`, the hole's tokens, a `StringMiddle` between holes and a
+  `StringEnd`. Operators come from `Operators.binaryOperators`, and keywords from `Keywords.reserved`. The FParsec
+  parser doesn't use it yet. `CorpusTests.fs` checks that every piece of the corpus is written back exactly from its
+  tokens, and that every piece the parser reads lexes with no error and has exactly the comments the parser finds.
 
 Where the lexer reads the text differently from the FParsec parser, which stage 3 has to settle:
 
@@ -115,8 +86,9 @@ Where the lexer reads the text differently from the FParsec parser, which stage 
   `1.` as a float.
 - A `{` in any double-quoted string opens a hole. The parser reads a string literal with no holes, as an import's
   path or a pattern's, with `{` as text.
-- **Useful at once:** the language server's "am I in code, a string or a comment?" check, doc comments and the
-  reserved-word list can use tokens instead of their own scanning.
+
+The language server's "am I in code, a string or a comment?" check, doc comments and the reserved-word list could use
+tokens now instead of their own scanning.
 
 ## Stage 2: the layout pass
 
@@ -166,23 +138,8 @@ Delete the FParsec parser, the fallback and the switch, and the FParsec package.
 `attempt`" rule from [Working in this repository](https://github.com/nanyx-lang/nanyx/blob/main/AGENTS.md), and say
 instead where the layout rules and the reserved words live.
 
-## Later, maybe: a lossless syntax tree
-
-Once comments and whitespace travel with tokens, the formatter could work from a tree that keeps every token and its
-trivia (a concrete syntax tree), instead of re-attaching comments by position. That is a separate decision, after
-stage 6.
-
-# Decided
-
-On 2026-11-16, in [#846](https://github.com/nanyx-lang/nanyx/issues/846):
-
-1. **Do it, in stages, at Priority Soon.** Error recovery (stage 5) is what the language server and the
-   [refactorings](./refactorings) need most.
-2. **All the way,** through stage 6, not stopping after the lexer and layout pass.
-3. **Error messages that change at stage 4** are accepted after review, and their tests updated, following the
-   [house style](./error-messages#house-style).
-
 # Open questions
 
-- **A concrete syntax tree** for the formatter and the refactorings, after stage 6, or not: decided once the
-  refactorings show whether they need one.
+- **A concrete syntax tree.** Once comments and whitespace travel with tokens, the formatter and the refactorings
+  could work from a tree that keeps every token and its trivia, instead of re-attaching comments by position. That is
+  decided after stage 6, once the refactorings show whether they need one.

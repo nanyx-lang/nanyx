@@ -4,8 +4,8 @@ description: "The parser, type checker, backend, runtime and CLI: where they are
 order: 21
 ---
 
-> **Status: outline.** This page frames the compilation workstream: what it covers, where the compiler is today and
-> what comes next. Work is tracked under the `compilation` label.
+This page frames the compilation workstream: what it covers, where the compiler stands and what comes next. Work is
+tracked under the `compilation` label.
 
 # Summary
 
@@ -31,62 +31,36 @@ Out of scope here, with their own workstreams:
   refactors land in this codebase, but the design and tracking live there.
 - Editor features: [Language server](./language-server).
 
-# Where the compiler is today
+# Where the compiler stands
 
-- **Features reach the three phases unevenly.** A construct is often parsed before it type-checks, and
-  type-checks before the backend can generate code for it. Gaps found so far were filed per phase under the
-  `parser`, `type checker` and `wasm backend` labels; most of those are closed.
-- **The backend is an MVP.** It covers integers, strings, tags, lists, records, closures and pattern matching
-  (see [What the backend compiles](#what-the-backend-compiles)). Floats and other value types are partial.
-- **Type and name errors are deferred.** The type checker reports every error in a module, and a debug build
-  (`nanyx run`, `build`, `wasm`) runs in spite of them, reporting each if the program reaches it; `--release`
-  refuses them. See [Deferred errors](./deferred-errors).
-- **A module is checked a def at a time.** The type checker holds one list of constraints for the whole module, adds
-  to its front, and solves it again and again as it goes (`Unifier.unifyDetailed`). A list is solved on top of the
-  last one solved, when that can't change the result; when it can, it is solved on top of the checkpoint the
-  type checker made once it generalised the def before (`Unifier.checkpoint`), if the newer constraints share no
-  variable with it and name no rest the solver made up; and only otherwise afresh, newest first, which fixes the
-  failure reported and the order of a union's tags. Generalising a def looks only at the names in scope whose types
-  have free variables (`TypeEnv.Unquantified`, `envVarsUnder`). So 400 defs that pass a lambda to `list.map` check
-  in about 1 s, and 800 in 1.6 s ([#1266](https://github.com/nanyx-lang/nanyx/issues/1266)). Defs that share a
-  variable (mutual recursion, a use before the def is checked) and a module with a type error still solve afresh.
-  The passes that look at every expression in a module list them with `SyntaxTree.expressionsWithin`, in time linear
-  in their number however deeply they nest, so a chain of 10,000 `+` checks in about 2 s
-  ([#1460](https://github.com/nanyx-lang/nanyx/issues/1460)).
+- **Features can reach the three phases unevenly.** A construct may parse before it type-checks, and type-check
+  before the backend can generate code for it. Gaps are filed per phase under the `parser`, `type checker` and
+  `wasm backend` labels.
+- **Type and name errors are deferred.** A debug build runs in spite of them, reporting each if the program reaches
+  it; `--release` refuses them. See [Deferred errors](./deferred-errors).
 - **A parse error stops everything.** There is no error recovery, so one syntax error hides every problem after
-  it. The language server needs recovery too.
-- **Most of the standard library is designed but not written.** The docs describe it; `stdlib/nanyx/` holds a
-  small part of it; see [Standard library implementation](./standard-library-implementation).
+  it. The language server needs recovery too. See [The parser](./parser).
+- **Some defs are still solved afresh.** The type checker holds one list of constraints for the
+  whole module and solves it again as it goes (`Unifier.unifyDetailed`). A list is solved on top of the last one
+  solved, or of the checkpoint the type checker made once it generalised the def before (`Unifier.checkpoint`), when
+  that can't change the result. Defs that share a variable (mutual recursion, a use before the def is checked) and a
+  module with a type error still solve afresh, newest first.
 
 ## What the backend compiles
 
 The parser, type checker, WebAssembly backend and runtime are libraries; the `nanyx` CLI is the only executable
-(see [The `nanyx` command](../standard-tools/command-line)). The backend writes WebAssembly text from the core IR (see
-[Memory management](./memory-management#core-ir)), which `WasmBinary.fs` assembles to the binary format for `nanyx build`
-and `nanyx wasm` (below), and today covers:
+(see [The `nanyx` command](../standard-tools/command-line)). The backend lowers a typed module to the core IR (see
+[Memory management](./memory-management#core-ir)), writes WebAssembly text from it, and `WasmBinary.fs` assembles the
+text to the binary format for `nanyx build` and `nanyx wasm` (below).
 
-- top-level `def` values exported as wasm functions, except one that declares contexts (see [Context calls](./context-calls)); top-level expressions (and the `@entry` definition) run from a
-  WebAssembly start function. A module with a start function emits only the functions the start reaches, through
-  calls and closures, and binds no static closure that nothing reads, such as a member of a `use` that no call
-  needs (`CoreIrReach.fs`); a module without one emits every definition
-- integer literals and integer binary operators (`+`, `-`, `*`, `/`, `%`, comparisons)
-- bare tag literals (`#ok`, `#error`, etc.) lowered to deterministic, odd `i32` codes; a tag with a payload
-  (`#some(x)`) is a pointer to a heap cell of (code, payload)
-- function calls to known module defs, and closures
-- expression blocks with local `def` assignments (`local.set`/`local.get`)
-- strings are pointers to length-prefixed UTF-8 bytes; `++` and `==` on strings call emitted helpers
-- list literals, `++` on lists, and list patterns (`[]`, `[x, ...rest]`, `[1, y]`) over heap-allocated cons cells
-- every object on the heap has a reference count in its header, and the compiler inserts `dup` and `drop` (Perceus
-  reference counting), so an object is freed once nothing refers to it, and one a `match` takes apart and holds
-  the only reference to is rewritten in place into a new one of the same size (see
-  [Memory management](./memory-management))
-- `dbg(...)` of a value of any type, and the console host's `Console`, write to stdout through WASI `fd_write`; `dbg` writes the
-  value through a printer function generated for its type (`CoreIrLowerDbg.fs`)
-- a function that requires a context (`[Console]`) takes its members as function-table slots; a
-  `use` binding supplies them, otherwise a module-level function of the member's name does (as
-  `HostRuntime`'s reach a host); a function value whose type requires contexts, a lambda or a function
-  passed as a value (`list.map(xs, println)`), is passed their members at each call, as they are where it is called
-  (see [Context calls](./context-calls#functions-that-require-contexts-as-values))
+- Top-level `def` values are exported as wasm functions, except one that declares contexts (see
+  [Context calls](./context-calls)). Top-level expressions (and the `@entry` definition) run from a WebAssembly start
+  function. A module with a start function emits only the functions the start reaches, through calls and closures,
+  and binds no static closure that nothing reads (`CoreIrReach.fs`); a module without one emits every definition.
+- `dbg(...)` of a value of any type, and the console host's `Console`, write to stdout through WASI `fd_write`; `dbg`
+  writes the value through a printer function generated for its type (`CoreIrLowerDbg.fs`).
+- How values are laid out and freed is in [Memory management](./memory-management), and how context members are
+  passed in [Context calls](./context-calls).
 
 A construct the backend cannot lower yet is reported as an `UnsupportedByBackend` error (`NYX0301`) where it is
 written (see [Memory management](./memory-management#core-ir)). A broken invariant of the backend, such as a context
@@ -96,8 +70,8 @@ as a `BackendInternalError` (`NYX0302`) that asks for a bug report. The backend 
 
 ## The binary format
 
-`nanyx build` and `nanyx wasm` write `.wasm` ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)); `--wat`
-writes the text instead, and `nanyx run` runs the text on Wasmtime as before. `WasmBinary.assemble` is an assembler of
+`nanyx build` and `nanyx wasm` write `.wasm`; `--wat` writes the text instead, and `nanyx run` runs the text on
+Wasmtime. `WasmBinary.assemble` is an assembler of
 the compiler's own, so a browser build of the compiler, which has no Wasmtime, writes `.wasm` too. `WatSyntax.fs` reads
 the text as s-expressions, and `WasmBinary.fs` numbers the module's definitions (imports first in each index space,
 the types a type use or a block writes inline added after the declared ones) and writes the sections. It reads what the
@@ -152,23 +126,12 @@ unused. Anything else a block uses, such as `nanyx/math`, it imports itself.
 
 # Plan
 
-Done: the tour's examples run as tests ([Tour examples](#tour-examples)), memory is freed by Perceus reference
-counting over a core IR ([Memory management](./memory-management)), a tail call uses no stack
-([Tail calls](./tail-calls)), a debug build runs in spite of name and type errors
-([Deferred errors](./deferred-errors)), and record types are closed unless they say `...`
-([Closed and open records](./closed-and-open-records)). Those pages say what is left of each.
-
-1. **Docs coverage beyond the tour.** The tour's, the Getting started pages', the Standard Library pages' and the Custom
-   patterns page's examples are compiled ([#1256](https://github.com/nanyx-lang/nanyx/issues/1256) added Getting
-   started). The other sections, `advanced` but for Custom patterns, `cookbook` and `coming-from-other-languages`, are
-   not, and can follow one at a time. Examples there drift: the Contexts page's comments are
-   written with `//` ([#1476](https://github.com/nanyx-lang/nanyx/issues/1476)). The blocks marked `skip=` wait on
-   the issues they name.
+1. **Docs coverage beyond the tour.** The examples of the other sections (`advanced` but for Custom patterns,
+   `cookbook` but for JSON parsing, and `coming-from-other-languages`) are not compiled, and can follow one page at a
+   time. The blocks marked `skip=` wait on the issues they name.
 2. **Parser error recovery.** Keep parsing after a syntax error so later errors (and later analysis) are not
-   lost. Shared with the language server.
-3. **Backend coverage.** Close the remaining value types and constructs the type checker accepts.
-4. **Standard library.** Implement the documented modules, writing intrinsics only where Nanyx cannot.
-
-# Open questions
-
-- How far should parser recovery go before the AST needs explicit error nodes?
+   lost. Shared with the language server; it is stage 5 of [The parser](./parser#stage-5-error-recovery).
+3. **Backend coverage.** Close the remaining value types and constructs the type checker accepts, such as unboxed
+   floats ([Memory management](./memory-management#still-to-do)).
+4. **Standard library.** Implement the documented modules, writing intrinsics only where Nanyx cannot
+   ([Standard library implementation](./standard-library-implementation)).

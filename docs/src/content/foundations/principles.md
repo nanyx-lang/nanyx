@@ -35,7 +35,7 @@ A Nanyx error should include:
 
 ## Friendly errors
 
-In Nanyx error messages are matter of fact, with no "I" or "you": they say what _was found_, rather than addressing the user or directing blame. A message starts with a capital letter, puts names and types in single quotes and code in backticks, and gives any advice after a colon, as an instruction.
+In Nanyx error messages are matter of fact, with no "I" or "you": they say what _was found_, rather than addressing the user or directing blame. A message starts with a capital letter, has no full stop at the end, puts names and types in single quotes and code in backticks, and gives any advice after a colon, as an instruction.
 
 | Preferred | Not preferred |
 |--------------|-----------|
