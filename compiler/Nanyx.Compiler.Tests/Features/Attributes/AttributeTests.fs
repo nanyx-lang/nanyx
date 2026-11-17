@@ -122,7 +122,50 @@ let ``An unknown attribute on a context's member is an error`` () =
     Assert.Equal((16, 23), (diagnostic.Span.Value.Start, diagnostic.Span.Value.End))
 
 [<Fact>]
-let ``An attribute on a field of a type that is not a context is misplaced`` () =
-    let diagnostic = (Compiler.compile "type T = (\n  @customKeywordType(#bind)\n  x: int\n)").Diagnostics |> List.exactlyOne
+let ``An attribute on a field of a record type's definition is kept for the type's description`` () =
+    let typed =
+        compileClean (
+            normalized
+                """type T = (
+  @json(name = "user_id")
+  id: int
+  @range(1, 10)
+  @deprecated
+  level: int
+)
+"""
+        )
+    let attributes = typed.TypeDefs.["T"].FieldAttributes
+    Assert.Equal<FieldAttribute list>([ { Name = "json"; Arguments = [ "name", "user_id" ] } ], attributes.["id"])
+    Assert.Equal<FieldAttribute list>(
+        [ { Name = "range"; Arguments = [ "0", "1"; "1", "10" ] }; { Name = "deprecated"; Arguments = [] } ],
+        attributes.["level"]
+    )
+
+[<Fact>]
+let ``An attribute on a field of a record type that is not a definition is misplaced`` () =
+    let source =
+        normalized
+            """def f: (
+  @json(name = "x")
+  a: int
+) -> int = { r -> r.a }
+"""
+    let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.MisplacedAttribute.Code, diagnostic.Code)
-    Assert.Equal("Attribute '@customKeywordType' can only come before a member of a context declaration", diagnostic.Message)
+    Assert.Equal("Attribute '@json' can only come before a field of a record type's definition or a member of a context declaration", diagnostic.Message)
+
+[<Fact>]
+let ``An attribute on a field takes literals`` () =
+    let source =
+        normalized
+            """def name = "id"
+
+type T = (
+  @json(name = name)
+  id: int
+)
+"""
+    let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
+    Assert.Equal(DiagnosticCodes.UnexpectedAttributeArgument.Code, diagnostic.Code)
+    Assert.StartsWith("Attribute '@json' on a field takes literals", diagnostic.Message)

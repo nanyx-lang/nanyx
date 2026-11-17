@@ -66,6 +66,11 @@ module TypeValues =
     let private naming =
         [ "name", stringTy; "module", stringTy; "parameters", Lists.ofType (TyApply(someType, [])); "doc", stringTy ]
 
+    /// An attribute on a field, as its description gives it: its name, and its argument's values as text, each by its
+    /// field's name or position (see `FieldAttribute`).
+    let attributeTy =
+        recordOf [ "name", stringTy; "arguments", Lists.ofType (recordOf [ "0", stringTy; "1", stringTy ]) ]
+
     /// The members of a value of the description type `name` applied to `args`, whose packaged type is `packaged`.
     let descriptionMembers (name: string) (args: Ty list) (packaged: Ty) : (string * Ty) list =
         let described = List.tryHead args |> Option.defaultValue (TyPrimitive "unit")
@@ -73,10 +78,11 @@ module TypeValues =
         | n when n = recordInfo -> naming @ [ "fields", Lists.ofType (TyApply(field, [ described ])) ]
         | n when n = unionInfo -> naming @ [ "cases", Lists.ofType (TyApply(case, [ described ])) ]
         | n when n = nominalInfo -> naming
-        | n when n = field -> [ "name", stringTy; "type", ofType packaged; "get", TyFunc(described, packaged, []); "doc", stringTy ]
+        | n when n = field ->
+            [ "name", stringTy; "type", ofType packaged; "get", TyFunc(described, packaged, []); "attributes", Lists.ofType attributeTy ]
         | n when n = case ->
             let payload = TyUnion [ TyTag("some", Some packaged); TyTag("none", None) ]
-            [ "name", stringTy; "type", ofType packaged; "get", TyFunc(described, payload, []); "doc", stringTy ]
+            [ "name", stringTy; "type", ofType packaged; "get", TyFunc(described, payload, []) ]
         | _ -> [ "type", ofType packaged ]
 
     /// A value of the description type `name` applied to `args`, as the record it is, its packaged type `packaged`.

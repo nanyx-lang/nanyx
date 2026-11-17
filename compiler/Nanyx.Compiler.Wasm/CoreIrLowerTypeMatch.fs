@@ -31,6 +31,8 @@ type TypeMatchTools =
       UniqueName: string -> string
       ToIrType: Ty -> IrType
       TypeIds: CoreIrTypeIds.TypeIds
+      /// The type definitions in scope, by name (see `LowerInput.TypeDefinitions`).
+      TypeDefinitions: Map<string, TypeDefInfo>
       /// The types of the nodes, as the type checker has them: an arm's pattern has the type the arm narrows `a` to.
       ExprTypes: Map<NodeId, Ty>
       /// Makes a type the checker never learns, by its number, the type a match found it is, from here on.
@@ -123,12 +125,18 @@ let private payloadPattern (tools: TypeMatchTools) (payloadTy: IrType) (pattern:
 let lower (tools: TypeMatchTools) (scope: Scope) (expr: Expression) (value: Expression) (standsFor: Ty) (arms: (Parser.Program.Pattern list * Expression) list) (k: Expr -> Expr) : Expr =
     let ty = tools.TypeOf expr
     let known = not (holdsBoxed standsFor) && (freeVars standsFor).IsEmpty
+    // A nominal type's description depends on the module whose `type` made the value (see `CoreIrTypeIds`), which only
+    // the program knows when it runs: every arm that could match it is lowered, its structure's or `#nominal`'s.
+    let nominal = match Unifier.unalias standsFor with TyNominal _ -> true | _ -> false
+    let finds (pattern: Parser.Program.Pattern) =
+        match pattern.Kind with
+        | TagPattern(tag, _) when nominal && tag = TypeValues.nominalTag -> Some Map.empty
+        | _ -> armFinds tools standsFor pattern
     let chosen =
-        if known then
-            arms
-            |> List.tryPick (fun (patterns, body) -> armFinds tools standsFor (List.head patterns) |> Option.map (fun found -> List.head patterns, body, found))
-            |> Option.toList
-        else arms |> List.map (fun (patterns, body) -> List.head patterns, body, Map.empty)
+        let candidates () = arms |> List.choose (fun (patterns, body) -> finds (List.head patterns) |> Option.map (fun found -> List.head patterns, body, found))
+        if not known then arms |> List.map (fun (patterns, body) -> List.head patterns, body, Map.empty)
+        elif nominal then candidates ()
+        else List.truncate 1 (candidates ())
     match chosen with
     // The one arm that matches a known type, which reads nothing of its description.
     | [ ({ Kind = WildcardPattern | ElsePattern | TagPattern(_, None) }, body, found) ] ->
@@ -186,24 +194,61 @@ let private makeList (tools: TypeMatchTools) (listTy: IrType) (items: ((Atom -> 
 /// The string `text` as an expression.
 let private text (text: string) = Expr.make (Atom(AString text)) IrString
 
-/// The description of `ty`, a type with nothing left to settle, as a value of the description's IR type.
-let private descriptionOf (tools: TypeMatchTools) (ty: Ty) : Expr =
+/// The definition of the alias or nominal type `ty` is, if it has one in scope.
+let private definitionOf (tools: TypeMatchTools) (ty: Ty) : TypeDefInfo option =
+    match ty with
+    | TyAlias(name, _, _) -> tools.TypeDefinitions |> Map.tryFind name
+    | TyNominal(id, _, _, _) -> tools.TypeDefinitions |> Map.tryFind id.Name |> Option.filter (fun info -> info.Home = id.Home)
+    | _ -> None
+
+/// The module `home` as a type's description names it: a standard-library module by its import path, a file by its name.
+let private moduleName (home: ModuleOrigin) =
+    match home with
+    | StandardLibraryModule name -> StandardLibrary.importPrefix + name
+    | SourceFile path -> System.IO.Path.GetFileNameWithoutExtension path
+    | InMemory -> ""
+
+/// Whether a nominal type whose home is `home` shows its structure to code in the file `view`: only to its home module's.
+let private shownTo (view: string) (home: ModuleOrigin) = Compiler.sourceFileName home = view
+
+/// The description of `ty`, a type with nothing left to settle, as code in the file `view` sees it, as a value of the
+/// description's IR type. Its parts are numbered as seen from there too.
+let private descriptionOf (tools: TypeMatchTools) (ty: Ty, view: string) : Expr =
     let description = descriptionType tools
-    let typeId (part: Ty) = Expr.make (Atom(AInt(tools.TypeIds.Of part))) IrInt
+    let typeId (part: Ty) = Expr.make (Atom(AInt(tools.TypeIds.Of(part, view)))) IrInt
     let tagged (tag: string) (payload: Atom) = Expr.make (MakeTag(tag, payload)) description
     let name, parameters = namingOf ty
-    let naming fieldsName (parts: ((Atom -> Expr) -> Expr) list) (partTy: IrType) (k: Map<string, Expr> -> Expr) =
+    let definition = definitionOf tools ty
+    let naming (parts: (string * ((Atom -> Expr) -> Expr) list * IrType) option) (k: Map<string, Expr> -> Expr) =
         let parameterTy = tools.ToIrType (TyApply(TypeValues.someType, []))
         let parameterItems =
             parameters |> List.map (fun parameter k -> makeRecord tools parameterTy (Map.ofList [ "type", typeId parameter ]) k)
+        let named =
+            [ "name", text name
+              "module", text (definition |> Option.map (_.Home >> moduleName) |> Option.defaultValue "")
+              "doc", text (definition |> Option.map _.Doc |> Option.defaultValue "") ]
         makeList tools (IrList parameterTy) parameterItems (fun parameterList ->
-            makeList tools (IrList partTy) parts (fun partList ->
-                k (Map.ofList
-                    [ "name", text name; "module", text ""; "doc", text ""
-                      "parameters", Expr.make (Atom parameterList) (IrList parameterTy)
-                      fieldsName, Expr.make (Atom partList) (IrList partTy) ])))
+            let named = named @ [ "parameters", Expr.make (Atom parameterList) (IrList parameterTy) ]
+            match parts with
+            | Some (partsName, items, partTy) ->
+                makeList tools (IrList partTy) items (fun partList -> k (Map.ofList (named @ [ partsName, Expr.make (Atom partList) (IrList partTy) ])))
+            | None -> k (Map.ofList named))
     let closure (functionName: string) (closureTy: IrType) = Expr.make (Atom(AStaticClosure(functionName, 2, closureTy))) closureTy
+    let attributesOf (fieldName: string) =
+        let attributeTy = tools.ToIrType TypeValues.attributeTy
+        let pairTy = IrRecord [ "0", IrString; "1", IrString ]
+        let attributes = definition |> Option.bind (_.FieldAttributes >> Map.tryFind fieldName) |> Option.defaultValue []
+        let items =
+            attributes
+            |> List.map (fun (attribute: FieldAttribute) k ->
+                let pairs = attribute.Arguments |> List.map (fun (key, value) k -> makeRecord tools pairTy (Map.ofList [ "0", text key; "1", text value ]) k)
+                makeList tools (IrList pairTy) pairs (fun arguments ->
+                    makeRecord tools attributeTy (Map.ofList [ "name", text attribute.Name; "arguments", Expr.make (Atom arguments) (IrList pairTy) ]) k))
+        items, IrList attributeTy
     match tagOf ty, Unifier.unalias ty with
+    // A nominal type shows nothing more than its name outside its home module.
+    | _, TyNominal(id, _, _, _) when not (shownTo view id.Home) ->
+        naming None (fun values -> makeRecord tools (tools.ToIrType (TyApply(TypeValues.nominalInfo, []))) values (tagged TypeValues.nominalTag))
     | tag, _ when TypeValues.builtInDescriptions |> List.exists (fst >> (=) tag) -> Expr.make (Atom(ATag tag)) description
     | tag, _ when tag = TypeValues.functionTag -> Expr.make (Atom(ATag tag)) description
     | tag, (Lists.ListType element | Sets.SetType element | Arrays.ArrayType element) ->
@@ -230,9 +275,14 @@ let private descriptionOf (tools: TypeMatchTools) (ty: Ty) : Expr =
         let fieldItems =
             fields
             |> List.map (fun (fieldName, fieldType) k ->
-                let getter = tools.Request $"__get_{tools.TypeIds.Of ty}_{fieldName}" (FieldGetting(ty, fieldName))
-                makeRecord tools fieldTy (Map.ofList [ "name", text fieldName; "type", typeId fieldType; "get", closure getter getTy; "doc", text "" ]) k)
-        naming "fields" fieldItems fieldTy (fun values ->
+                let getter = tools.Request $"__get_{tools.TypeIds.Of(ty, view)}_{fieldName}" (FieldGetting(ty, fieldName))
+                let attributes, attributesTy = attributesOf fieldName
+                makeList tools attributesTy attributes (fun attributeList ->
+                    let values =
+                        [ "name", text fieldName; "type", typeId fieldType; "get", closure getter getTy
+                          "attributes", Expr.make (Atom attributeList) attributesTy ]
+                    makeRecord tools fieldTy (Map.ofList values) k))
+        naming (Some ("fields", fieldItems, fieldTy)) (fun values ->
             makeRecord tools (tools.ToIrType (TyApply(TypeValues.recordInfo, [ boxedTy ]))) values (tagged TypeValues.recordTag))
     | tag, shape when tag = TypeValues.unionTag ->
         let rec cases (ty: Ty) =
@@ -247,10 +297,10 @@ let private descriptionOf (tools: TypeMatchTools) (ty: Ty) : Expr =
             cases shape
             |> List.distinctBy fst
             |> List.map (fun (caseName, payload) k ->
-                let getter = tools.Request $"__case_{tools.TypeIds.Of ty}_{caseName}" (CaseGetting(ty, caseName))
+                let getter = tools.Request $"__case_{tools.TypeIds.Of(ty, view)}_{caseName}" (CaseGetting(ty, caseName))
                 let payloadTy = payload |> Option.defaultValue (TyPrimitive "unit")
-                makeRecord tools caseTy (Map.ofList [ "name", text caseName; "type", typeId payloadTy; "get", closure getter getTy; "doc", text "" ]) k)
-        naming "cases" caseItems caseTy (fun values ->
+                makeRecord tools caseTy (Map.ofList [ "name", text caseName; "type", typeId payloadTy; "get", closure getter getTy ]) k)
+        naming (Some ("cases", caseItems, caseTy)) (fun values ->
             makeRecord tools (tools.ToIrType (TyApply(TypeValues.unionInfo, [ boxedTy ]))) values (tagged TypeValues.unionTag))
     | tag, _ -> cannot $"a description with the tag '#{tag}'"
 
@@ -271,7 +321,6 @@ let describingFunction (tools: TypeMatchTools) (functionName: string) : Function
       Params = [ id ]
       Result = description
       Body = Expr.make (Match([ id ], List.ofSeq arms)) description }
-
 /// The name of the function that gives the elements of a value of `collection` in their canonical form: by the type,
 /// since collections laid out alike, a list of pairs and a map, have different canonical forms.
 let private canonicalName (collection: Ty) = "__canonical_" + Identifiers.sanitizeIdentifier (Unifier.tyToString collection)

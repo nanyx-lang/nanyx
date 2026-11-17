@@ -125,7 +125,10 @@ type LowerInput =
       /// Whether the module has debug probes (see `CoreIrProbes`).
       Probes: bool
       /// The numbers the types `Type` values stand for are at run time (see `CoreIrTypeIds`).
-      TypeIds: CoreIrTypeIds.TypeIds }
+      TypeIds: CoreIrTypeIds.TypeIds
+      /// The type definitions in scope, by name: what a type's description says of it besides its structure, its doc
+      /// comment and the attributes on its fields (see `CoreIrLowerTypeMatch`).
+      TypeDefinitions: Map<string, TypeDefInfo> }
 
 /// The top-level function `wrapper`, a wrapper lambda lifting made, wraps.
 let wrappedOf (input: LowerInput) (wrapper: string) =

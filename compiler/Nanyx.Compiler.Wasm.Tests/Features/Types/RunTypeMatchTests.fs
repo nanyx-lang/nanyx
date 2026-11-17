@@ -133,3 +133,97 @@ println(json.print(encodeAt(User(name = "Ada", age = 36, roles = [#admin, #membe
     |> assertRan
         """{"name":"Ada","age":36,"roles":[{"tag":"admin","value":null},{"tag":"member","value":2}],"active":true}
 """
+
+let private naming =
+    """def attributesOf: list((name: string, arguments: list((string, string)))) -> string = { attributes ->
+  attributes
+    \list.map { a -> "@" ++ a.name ++ "(" ++ (a.arguments \list.map { p -> p.0 ++ "=" ++ p.1 } \string.join(",")) ++ ")" }
+    \string.join("")
+}
+
+def named: a, type a -> string = { value, t ->
+  match t
+    | #int -> "{value}"
+    | #string -> value
+    | #record(r) ->
+      def fields = r.fields \list.map { f -> f.name ++ attributesOf(f.attributes) ++ " = " ++ named(f.get(value), f.type) } \string.join(", ")
+      "{r.name} ({r.doc}): {fields}"
+    | #nominal(n) -> "nominal {n.name} from {n.module} ({n.doc})"
+    | else -> "?"
+}
+"""
+
+[<Fact>]
+let ``Run - a description has the type's name, doc comment and the attributes on its fields`` () =
+    let source =
+        naming
+        + """
+--| Someone who can sign in.
+type Account = (
+  @json(name = "user_id")
+  id: int
+  @deprecated
+  @range(1, 10)
+  level: int
+)
+
+--| An email address.
+type Email = protected (address: string)
+
+println(named(Account(id = 7, level = 3), type Account))
+println(named(Email(address = "a@b"), type Email))
+"""
+    runSource (source.ReplaceLineEndings "\n")
+    |> assertRan "Account (Someone who can sign in.): id@json(name=user_id) = 7, level@deprecated()@range(0=1,1=10) = 3\nEmail (An email address.): address = a@b\n"
+
+[<Fact>]
+let ``Run - a nominal type from another module is described by its name alone`` () =
+    let people =
+        """module people
+
+--| A person, made by `Person.new`.
+export type Person = protected (name: string)
+
+export def Person.new: string -> Person = { name -> Person(name = name) }
+"""
+    let main =
+        $"""module main
+
+import people as p
+
+{naming}
+type Team = (lead: p.Person, size: int)
+
+@entry
+def main = {{
+  println(named(p.Person.new("Ada"), type p.Person))
+  println(named(Team(lead = p.Person.new("Ada"), size = 3), type Team))
+}}
+"""
+    let outcome, _ = nanyxOnPackage [ "people.nyx", people; "main.nyx", main ] [ "run"; "{package}" ]
+    assertRan "nominal Person from people (A person, made by `Person.new`.)\nTeam (): lead = nominal Person from people (A person, made by `Person.new`.), size = 3\n" outcome
+
+[<Fact>]
+let ``Run - a walker another module exports picks its arm at the types it is called at`` () =
+    let walker =
+        """module walker
+
+export def size: a, type a -> int = { value, t ->
+  match t
+    | #int -> value
+    | #list(elem) -> value \list.map { x -> size(x, elem) } \list.fold(0, { total, n -> total + n })
+    | else -> 0
+}
+"""
+    let main =
+        """module main
+
+import walker as w
+
+@entry
+def main = {
+  println(w.size([[1, 2], [3]], type list(list(int))))
+}
+"""
+    let outcome, _ = nanyxOnPackage [ "walker.nyx", walker; "main.nyx", main ] [ "run"; "{package}" ]
+    assertRan "6\n" outcome

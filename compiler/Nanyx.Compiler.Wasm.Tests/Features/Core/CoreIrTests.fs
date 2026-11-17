@@ -409,7 +409,8 @@ let private lowerInput (typed: TypedModule) : CoreIrLowerInput.LowerInput =
       NamedTypes = Map.empty
       Dbg = CoreIrLowerInput.PrintedFrom None
       Probes = false
-      TypeIds = CoreIrTypeIds.TypeIds() }
+      TypeIds = CoreIrTypeIds.TypeIds()
+      TypeDefinitions = Map.empty }
 
 [<Fact>]
 let ``Every intermediate value in the core IR is named`` () =

@@ -298,7 +298,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | TypeValue _ ->
             match input.ExprTypes |> Map.tryFind expr.Id |> Option.map (substitute subst) with
             | Some (TypeValues.TypeValueType standsFor) when (freeVars standsFor).IsEmpty && not (holdsBoxed standsFor) ->
-                k (Expr.make (Atom(AInt(input.TypeIds.Of standsFor))) IrInt)
+                k (Expr.make (Atom(AInt(input.TypeIds.Of(standsFor, expr.Span.File)))) IrInt)
             | _ -> cannot "a `type` of a type that is only known when the program runs"
         | LiteralExpr(IntLit value) -> k (Expr.make (Atom(intAtom value (tyOf expr))) (tyOf expr))
         | LiteralExpr(BoolLit value) -> k (Expr.make (Atom(ABool value)) IrBool)
@@ -1221,6 +1221,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           UniqueName = uniqueName
           ToIrType = toIrType
           TypeIds = input.TypeIds
+          TypeDefinitions = input.TypeDefinitions
           ExprTypes = input.ExprTypes
           BindPackaged = fun id ty -> subst <- subst |> Map.add id ty
           TypeOf = tyOf
