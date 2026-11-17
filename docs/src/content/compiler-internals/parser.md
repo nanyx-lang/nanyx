@@ -10,9 +10,11 @@ Work in progress describes. This page says what stages 0 and 1 built:
 
 - **The corpus** (`Corpus.fs` in `compiler/Nanyx.Parser.Corpus`, a library only the test projects reference): every
   `.nyx` file in the repository, every ` ```nanyx ` block in the docs, and every triple-quoted string in the test
-  projects' sources. The formatter's corpus tests read it too.
+  projects' sources. The formatter's corpus tests read it too. Listing it never enters `bin`, `obj`, `node_modules`,
+  `.git` or `.claude`, so a checkout's worktrees cost nothing. Each test project parses the corpus once, in parallel,
+  in a value its tests share, and the formatter's tests format and re-parse each piece once the same way.
 - **The differential test** (`Differential.fs`, with `CorpusTests.fs` in the parser's tests). It parses each piece with
-  two parsers, writes each result out with every span and without node ids (`SyntaxDump.fs`, which walks the tree by
+  two parsers, in parallel, writes each result out with every span and without node ids (`SyntaxDump.fs`, which walks the tree by
   reflection), and reports the pieces whose trees, comments, blank lines or errors differ, each at its first
   differing line. Until there is a second parser it runs today's parser against itself. Every later stage is checked
   by it.

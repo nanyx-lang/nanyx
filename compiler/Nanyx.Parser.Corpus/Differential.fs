@@ -13,13 +13,16 @@ type ModuleParser = string -> string -> Result<SourceModule, ParseError>
 type Difference = { Piece: Piece; Reference: string; Candidate: string }
 
 /// The pieces of `pieces` that `candidate` reads differently from `reference`: a different tree, a span or a
-/// comment in a different place, or a different error.
+/// comment in a different place, or a different error. The pieces are read in parallel, and the differences are in
+/// the order of `pieces`.
 let differences (reference: ModuleParser) (candidate: ModuleParser) (pieces: Piece list) : Difference list =
     pieces
-    |> List.choose (fun piece ->
+    |> Array.ofList
+    |> Array.Parallel.choose (fun piece ->
         let expected = SyntaxDump.ofParse (reference piece.Name piece.Source)
         let actual = SyntaxDump.ofParse (candidate piece.Name piece.Source)
         if expected = actual then None else Some { Piece = piece; Reference = expected; Candidate = actual })
+    |> List.ofArray
 
 /// Where `difference` starts: the first line the two results differ on, with the lines before it for context.
 let describe (difference: Difference) =
