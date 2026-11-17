@@ -3,8 +3,9 @@ module TranspilerWasmTests.Features.Regex.RunRegex
 open Xunit
 open TranspilerWasmTestHelpers
 
-// The shipped package `nanyx.regex` (#2032): `Regex.parse`, RE2's syntax, a Pike VM that takes linear time, and the
-// functions that find, replace and split, run as a script that names it in a `::dependency` line.
+// The shipped package `nanyx.regex` (#2032): `Regex.parse`, RE2's syntax, a Pike VM that takes linear time, the
+// functions that find, replace and split, and the patterns `#Matches` and `#MatchesRegex` (#2034), run as a script that
+// names it in a `::dependency` line.
 
 /// What running the script `body` printed, after the lines that make `nanyx.regex` its dependency and import it, and
 /// three helpers: `re`, the regex of a pattern that is right; `show`, which prints the first match of a pattern in a
@@ -360,3 +361,83 @@ println(text \Regex.isMatch(re('(a*)*b')))
 println(text \Regex.isMatch(re('(a|aa)+$')))
 """
     |> expect "false\ntrue\n"
+
+[<Fact>]
+let ``Run - #Matches matches a string against a literal pattern in a match arm, with and without the match`` () =
+    runRegex
+        """def classify = { (line: string) ->
+  match line
+    | #Matches('^\s*$') -> "blank"
+    | #Matches('^(\d+)-(\d+)$')(m) -> "range {m \group(1) \someOr("")} to {m \group(2) \someOr("")}"
+    | #Matches('(?i)^todo:\s*(?<task>.*)$')(m) -> "task {m \named("task") \someOr("")}"
+    | _ -> "other"
+}
+
+println(classify("   "))
+println(classify("10-20"))
+println(classify("TODO: write tests"))
+println(classify("10-"))
+println(if "abc" is #Matches('b') then "has a b" else "no b")
+"""
+    |> expect
+        """blank
+range 10 to 20
+task write tests
+other
+has a b
+"""
+
+[<Fact>]
+let ``Run - #MatchesRegex matches a string against a regex made at run time, with and without the match`` () =
+    runRegex
+        """def words = ["cat", "dog"]
+def animal = re(string.join(words, "|"))
+def digit = re('\d')
+
+def describe = { (text: string) ->
+  match text
+    | #MatchesRegex(animal)(m) -> "an animal at {m.start}: {m.text}"
+    | #MatchesRegex(digit) -> "a digit"
+    | _ -> "nothing"
+}
+
+println(describe("hotdog"))
+println(describe("r2d2"))
+println(describe("x"))
+"""
+    |> expect
+        """an animal at 3: dog
+a digit
+nothing
+"""
+
+[<Fact>]
+let ``Run - a match on #Matches is exhaustive with an arm for everything else, and pattern arms mix with literals`` () =
+    runRegex
+        """def kind: string -> string = {
+  | "" -> "empty"
+  | #Matches('^\d+$') -> "number"
+  | #Matches('^\w+$')(m) -> "word of {string.length(m.text)}"
+  | _ -> "other"
+}
+
+for ["", "42", "abc", "a b"] | text -> println(kind(text))
+"""
+    |> expect
+        """empty
+number
+word of 3
+other
+"""
+
+[<Fact>]
+let ``Run - #Matches given a pattern that is wrong crashes with what Regex.parse says of it`` () =
+    let outcome =
+        runRegex
+            """match "x"
+  | #Matches('(\d+') -> println("matched")
+  | _ -> println("no match")
+"""
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("", outcome.StandardOutput)
+    Assert.Equal("crash: The regex '(\\d+' is wrong at column 1: There is no ')' to close this '('\n", outcome.StandardError)

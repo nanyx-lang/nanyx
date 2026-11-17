@@ -46,24 +46,40 @@ let private code (text: string) =
 let private slug (text: string) =
     Regex.Replace(text.ToLowerInvariant(), @"[^\p{L}\p{M}\p{N}_\- ]", "").Replace(' ', '-')
 
+/// What an entry's heading names: a custom pattern by its tags, `#Even | #Odd`, and anything else by its name as
+/// source writes it.
+let private headingName (name: string) =
+    match PatternSyntax.shapeOf name with
+    | Some shape -> shape.Tags |> List.map (fun tag -> $"#{tag}") |> String.concat " | "
+    | None -> writtenName name
+
 /// The ids of the headings of `exports`, in order: a heading's slug, with `-1`, `-2`, ... after it when an earlier one
-/// has the same, as the site numbers them.
+/// has the same, as the site numbers them. A pattern's is its heading's, as `#Even | #Odd` is `even--odd`.
 let private anchors (exports: Export list) : (Export * string) list =
     exports
     |> List.mapFold (fun (seen: Map<string, int>) export ->
-        let id = slug export.Symbol.Name
+        let name = export.Symbol.Name
+        let id = slug (if (PatternSyntax.shapeOf name).IsSome then headingName name else name)
         match seen |> Map.tryFind id with
         | Some count -> (export, $"{id}-{count}"), seen |> Map.add id (count + 1)
         | None -> (export, id), seen |> Map.add id 1) Map.empty
     |> fst
 
-/// A def's signature, as hover writes its declaration: `def name: type`, after the contexts it requires.
+/// A def's signature, as hover writes its declaration: `def name: type`, after the contexts it requires. A custom
+/// pattern's is its declaration's, `pattern string -> #Even | #Odd`, with `_` for no match.
 let private defSignature (typed: TypedModule) (symbol: Symbol) =
-    match Hover.declaredType typed symbol with
-    | Some (ty, contexts) ->
+    match Hover.declaredType typed symbol, PatternSyntax.shapeOf symbol.Name with
+    | Some (ty, _), Some shape ->
+        let written = Signatures.typeWithContexts Source ty []
+        // A partial pattern with one tag and no payload is a function that returns a `bool` (see `CustomPatterns`).
+        let results =
+            if shape.ReturnsBool then written.Substring(0, written.Length - "bool".Length) + $"#{shape.Tags.Head} | _"
+            else written.Replace("#" + PatternSyntax.noMatchTag, "_")
+        $"pattern {results}"
+    | Some (ty, contexts), _ ->
         let contexts = contexts |> FunctionContexts.flatten |> Unifier.writtenContexts
         $"def {writtenName symbol.Name}: {Signatures.typeWithContexts Source ty contexts}"
-    | None -> $"def {writtenName symbol.Name}"
+    | None, _ -> $"def {writtenName symbol.Name}"
 
 /// A type's definition, as hover writes it, but for a context's members: one to a line, in the order it declares them.
 let private typeSignature (typed: TypedModule) (symbol: Symbol) (info: TypeDefInfo) (members: Symbol list) =
@@ -131,7 +147,7 @@ let private render (moduleDoc: string option) (exports: (Export * string) list) 
         let members =
             export.Members
             |> List.choose (fun (name, doc) -> doc |> Option.map (fun doc -> $"- {code (writtenName name)}: {indented 2 doc}"))
-        [ $"## {code (writtenName export.Symbol.Name)}"
+        [ $"## {code (headingName export.Symbol.Name)}"
           $"```nanyx fragment\n{export.Written}\n```"
           yield! Option.toList export.Doc
           if not members.IsEmpty then String.concat "\n" members ]
