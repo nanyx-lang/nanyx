@@ -165,7 +165,7 @@ import nanyx/slice
 def s = set[1, 2]
 
 println([...s, 3])
-println(Array[0, ...(1..3), ...Array.slice(Array[7, 8, 9], 1, 3)])
+println(Array[0, ...1..3, ...Array.slice(Array[7, 8, 9], 1, 3)])
 ```
 
 This prints `[1, 2, 3]` and `[0, 1, 2, 3, 8, 9]`. Spreading something that can't be iterated, such as a record, is an error (NYX0258).
