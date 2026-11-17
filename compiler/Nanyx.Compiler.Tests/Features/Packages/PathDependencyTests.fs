@@ -42,16 +42,6 @@ import {import}
 @entry
 def run = {{ () -> {body} }}"""
 
-let private errorsOf result =
-    match result with
-    | Result.Error errors -> errors
-    | Result.Ok _ -> failwith "Expected errors"
-
-let private okOf result =
-    match result with
-    | Result.Ok value -> value
-    | Result.Error errors -> failwith (String.concat "\n" (errors |> Seq.map string))
-
 /// The diagnostics of building the package in `app`.
 let private buildDiagnostics (package: TempPackage) =
     (Package.build (okOf (Package.find (package.Path "app")))).Diagnostics

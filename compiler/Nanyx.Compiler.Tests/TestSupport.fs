@@ -137,6 +137,46 @@ let applyEdits (source: string) (edits: TextEdit list) =
     |> List.sortByDescending (fun edit -> edit.Span.Start)
     |> List.fold (fun (text: string) edit -> text.Substring(0, edit.Span.Start) + edit.NewText + text.Substring(edit.Span.End)) source
 
+/// The value of `result`, which must be `Ok`.
+let okOf (result: Result<'T, #seq<'Error>>) =
+    match result with
+    | Result.Ok value -> value
+    | Result.Error errors -> failwith (String.concat "\n" (errors |> Seq.map string))
+
+/// The errors of `result`, which must be an `Error`.
+let errorsOf (result: Result<'T, 'Errors>) =
+    match result with
+    | Result.Error errors -> errors
+    | Result.Ok _ -> failwith "Expected errors"
+
+/// The store of a package under test: its cache and index are its `cache` and `index` directories, and it can't fetch
+/// from GitHub.
+let storeOf (package: TempPackage) : PackageStore =
+    { Cache = package.Path "cache"; Index = package.Path "index"; GitHub = GitHub.unsupported }
+
+/// Puts `bytes`, the packed `found`, in the `artifacts` directory of `package`'s index, and lists it in the index after
+/// the versions listed already, as a release would. Gives its SHA-256.
+let publishToIndex (package: TempPackage) (found: Package) (bytes: byte array) =
+    let name, version = found.Manifest.Name, found.Manifest.Version
+    let artifact = package.Path $"index/artifacts/{PackageArchive.fileName found.Manifest}"
+    Directory.CreateDirectory(Path.GetDirectoryName artifact) |> ignore
+    File.WriteAllBytes(artifact, bytes)
+    let hash = PackageArchive.sha256 bytes
+    File.WriteAllText(package.Path "index/config.json", """{ "format": 1, "index": "index/" }""")
+    let listing = package.Path $"index/index/acme/{name}.json"
+    Directory.CreateDirectory(Path.GetDirectoryName listing) |> ignore
+    let earlier =
+        if File.Exists listing then
+            let text = File.ReadAllText listing
+            text.Substring(text.IndexOf '[' + 1, text.LastIndexOf ']' - text.IndexOf '[' - 1).Trim() + ","
+        else
+            ""
+    File.WriteAllText(
+        listing,
+        $$"""{ "name": "{{name}}", "versions": [{{earlier}} { "version": "{{version}}", "url": "../../artifacts/{{Path.GetFileName artifact}}", "sha256": "{{hash}}", "yanked": false, "available": true }] }"""
+    )
+    hash
+
 /// `source` with the edits of `fix` applied.
 let applyFix (source: string) (fix: Fix) = applyEdits source fix.Edits
 
