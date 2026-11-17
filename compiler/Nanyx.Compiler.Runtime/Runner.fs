@@ -3,6 +3,18 @@ namespace Nanyx.Runtime
 open System
 open Wasmtime
 
+/// Arithmetic a program can't finish, which stops it.
+type ArithmeticFault =
+    /// `+`, `-`, `*` or `/` on an integer type whose result is out of the type's range: the type's name (`int`, `I8`)
+    /// when the helper that stopped names it.
+    | IntegerOverflow of typeName: string option
+    /// `/` or `%` on integers by zero.
+    | DivisionByZero
+    /// A float made an `int` that is NaN, infinite or out of the range of `int`.
+    | FloatNotAnInt
+    /// An int made a sized integer of the type named here, which it doesn't fit.
+    | OutOfRange of typeName: string
+
 type RunError =
     /// The WebAssembly text could not be parsed or validated.
     | InvalidModule of string
@@ -14,6 +26,9 @@ type RunError =
     /// The program ran out of stack, in the function named here when there is one: the innermost on the stack that the
     /// source names, usually one that recurses in a call that is not in tail position.
     | StackOverflow of functionName: string option
+    /// The program stopped at arithmetic it can't finish, in the function named here when there is one: the innermost
+    /// on the stack that the source names.
+    | ArithmeticError of fault: ArithmeticFault * functionName: string option
     /// The program ended itself with a non-zero exit code, through WASI `proc_exit`: a deferred error does, once it
     /// has written itself to stderr.
     | Exited of int
@@ -121,14 +136,58 @@ module WasmRunner =
         elif name.StartsWith "__" then None
         else Some(own name)
 
-    /// What the trap `ex` means: out of memory when it is an `unreachable` in the allocator itself, and out of stack
-    /// when the call stack is exhausted, in the innermost function on it that the source names.
+    /// The integer type and the operation of a runtime helper on integers that the backend names `__nanyx_<type>_<op>`:
+    /// `int` and `add` for `__nanyx_int_add`, `I8` and `from_int` for `__nanyx_i8_from_int` (see `SizedIntegerCode`).
+    let private integerHelper (name: string) =
+        let m = Text.RegularExpressions.Regex.Match(name, "^__nanyx_(int|[iu](?:8|16|32|64))_([a-z_]+)$")
+        if not m.Success then None
+        else
+            let ty = m.Groups.[1].Value
+            Some((if ty = "int" then ty else ty.ToUpperInvariant()), m.Groups.[2].Value)
+
+    /// The runtime helper that makes a float an int, with `i64.trunc_f64_s`, which traps as a bad conversion on NaN and
+    /// as an overflow on an infinity or a float out of the range of `int`.
+    let private floatToInt = "__nanyx_float_to_int"
+
+    /// The arithmetic fault the trap `trap` is, if it is one, by its trap code and the helper it happened in.
+    let private arithmeticFault (trap: TrapException) =
+        let innermost = frameNames trap |> List.tryHead
+        let helper = innermost |> Option.bind integerHelper
+        if trap.Type = TrapCode.IntegerDivisionByZero then Some DivisionByZero
+        elif trap.Type = TrapCode.BadConversionToInteger || (trap.Type = TrapCode.IntegerOverflow && innermost = Some floatToInt) then
+            Some FloatNotAnInt
+        elif trap.Type = TrapCode.IntegerOverflow then
+            match helper with
+            | Some(ty, "from_int") -> Some(OutOfRange ty)
+            | Some(ty, _) -> Some(IntegerOverflow(Some ty))
+            | None -> Some(IntegerOverflow None)
+        else None
+
+    /// What the trap `ex` means: out of memory when it is an `unreachable` in the allocator itself, out of stack when
+    /// the call stack is exhausted, and an arithmetic fault (see `ArithmeticFault`), each of the last two in the
+    /// innermost function on the stack that the source names.
     let internal trapped (ex: WasmtimeException) =
         match ex with
         | :? TrapException as trap when trap.Type = TrapCode.Unreachable && List.tryHead (frameNames trap) = Some allocator ->
             OutOfMemory
         | :? TrapException as trap when trap.Type = TrapCode.StackOverflow -> StackOverflow(frameNames trap |> List.tryPick sourceName)
+        | :? TrapException as trap ->
+            match arithmeticFault trap with
+            | Some fault -> ArithmeticError(fault, frameNames trap |> List.tryPick sourceName)
+            | None -> Trapped ex.Message
         | _ -> Trapped ex.Message
+
+    /// What went wrong in the arithmetic fault `fault`, in the function `functionName` when it is known, as a
+    /// sentence for the user.
+    let describeFault (fault: ArithmeticFault) (functionName: string option) =
+        let where = functionName |> Option.map (fun name -> $" in '{name}'") |> Option.defaultValue ""
+        match fault with
+        | IntegerOverflow(Some ty) -> $"integer overflow{where}: the result is out of the range of {ty}"
+        | IntegerOverflow None -> $"integer overflow{where}"
+        | DivisionByZero -> $"division by zero{where}"
+        | FloatNotAnInt ->
+            $"a float that is NaN, infinite or out of the range of int converted to an int{where} (float.tryToInt gives #outOfRange for one)"
+        | OutOfRange ty -> $"an int out of the range of {ty} converted to {ty}{where}"
 
     /// `program` compiled for `engine`, or why it can't be.
     let internal compile (engine: Engine) (program: Program) : Result<Module, RunError> =

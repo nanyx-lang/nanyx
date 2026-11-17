@@ -72,6 +72,9 @@ def big: I32 = 2_000_000_000
 def bigger = big + big -- runtime error: the sum does not fit in an I32
 ```
 
+`nanyx run` says what went wrong, and in which function where it can: `Runtime error: integer overflow in 'grow': the
+result is out of the range of I32`.
+
 This holds for every integer type, unsigned ones included: subtracting a larger `U32` from a smaller one is an
 overflow like any other, not a wrap to 4 billion. A program that needs a negative difference converts to a signed type
 first.
