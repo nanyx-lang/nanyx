@@ -174,17 +174,14 @@ def variableIn: list(string), string -> #some(string) | #notSet = {
 
 --| The program's command-line arguments, after its name.
 def arguments: [HostRuntime] () -> list(string) = { _ ->
-  match entriesOf({ at, bytes -> argsSizesGet(at, bytes) }, { at, buffer -> argsGet(at, buffer) })
+  match entriesOf(argsSizesGet, argsGet)
     | [] -> []
     | [_, ...rest] -> rest
 }
 
 --| The value of the environment variable `name`, or `#notSet` when it has none.
 def environmentVariable: [HostRuntime] string -> #some(string) | #notSet = { name ->
-  variableIn(
-    entriesOf({ at, bytes -> environSizesGet(at, bytes) }, { at, buffer -> environGet(at, buffer) })
-    name ++ "="
-  )
+  variableIn(entriesOf(environSizesGet, environGet), name ++ "=")
 }
 
 --| Ends the program with the exit code `code`, or 1 for a code that doesn't fit an `I32`. WASI's
