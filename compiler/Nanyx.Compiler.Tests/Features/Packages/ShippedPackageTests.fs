@@ -74,6 +74,14 @@ let ``The JSON package is shipped beside the compiler, with its modules for valu
     Assert.Equal<string list>([ "encode"; "json" ], (ShippedPackages.tryModules "nanyx.json").Value.PublicModules)
 
 [<Fact>]
+let ``The regex package is shipped beside the compiler, with one module and no dependencies`` () =
+    let manifest = manifestOf "nanyx.regex"
+    Assert.Equal(("nanyx.regex", Toolchain.version), (manifest.Name, manifest.Version))
+    Assert.Equal(None, manifest.Declares)
+    Assert.Empty(manifest.Dependencies)
+    Assert.Equal<string list>([ "regex" ], (ShippedPackages.tryModules "nanyx.regex").Value.PublicModules)
+
+[<Fact>]
 let ``A library uses Console by depending on the console's interface package and importing it`` () =
     let library (dependencies: string) =
         [ "acme.greet.nyxp",

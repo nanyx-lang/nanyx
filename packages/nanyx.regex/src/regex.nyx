@@ -1,0 +1,310 @@
+--| Regular expressions: patterns that find, test, replace and split text.
+
+  [`Regex.parse`] reads a pattern into a [`Regex`], or says where it is wrong and why, as a
+  [`RegexError`]. The functions attached to `Regex` take the text first, so they pipe:
+  `"a1b22" \Regex.find(digits)`. [`Regex.isMatch`] says whether a regex matches anywhere in a text,
+  [`Regex.find`] finds the first match, [`Regex.findAll`] each in turn, [`Regex.replace`] and
+  [`Regex.replaceWith`] replace them, and [`Regex.split`] splits a text where they are. A program
+  names `nanyx.regex` in its manifest's `dependencies`, or a script in a `::dependency` line, and
+  imports it as `import nanyx.regex/regex`.
+
+  A pattern is usually written as a raw, single-quoted string, `'\d+'`, so its backslashes need no
+  escaping. The syntax is RE2's: characters, and `\` before any that is syntax; `.`; classes such
+  as `[a-z]`, `[^,;]` and `[[:alpha:]]`; the classes `\d`, `\w` and `\s`, and `\D`, `\W` and `\S`
+  for what they leave out; the escapes `\n`, `\t`, `\r`, `\f`, `\v`, `\a`, `\x41` and `\x{1F600}`;
+  the anchors `^`, `$`, `\A` and `\z`, and `\b` and `\B` for a word's edge; groups `( )`,
+  non-capturing `(?: )` and named `(?<name> )`; alternatives with `|`; and the quantifiers `*`,
+  `+`, `?`, `{m}`, `{m,}` and `{m,n}`, each greedy, or lazy with a `?` after it. The flags `i`
+  (case-insensitive), `m` (`^` and `$` match at each line's start and end) and `s` (`.` matches a
+  line feed too) are turned on with `(?i)`, off with `(?-i)`, for the rest of the group they're
+  in, or for a group of their own with `(?i: )`.
+
+  Matching takes time in proportion to the text's length for every pattern, as RE2's, Go's and
+  Rust's does, so no pattern can make a program hang. The price is theirs too: backreferences and
+  lookaround aren't supported, and each is a `RegexError` that says so.
+
+  Text is matched by Unicode code point, so `.` matches one character however many bytes it is,
+  and a [`Match`]'s `start` and `end` count code points. `\d`, `\w`, `\s` and `\b` are ASCII's, as
+  in RE2, and `(?i)` matches both cases of the ASCII, Latin-1, Greek and Cyrillic letters.
+@partial export module regex
+
+import nanyx/text
+
+-- Regexes ---------------------------------------------------------------------------------------
+
+--| A pattern that has been read, and compiled into a program to match it with. Only
+  [`Regex.parse`] makes one, so a `Regex` always holds a pattern that's right. `pattern` is the
+  pattern as it was written, and `program` is what the package matches it with.
+export type Regex = protected (pattern: string, program: Program)
+
+--| Why [`Regex.parse`] made no regex: the column of the pattern where it goes wrong, counting code
+  points from 1, and what is wrong there.
+export type RegexError = (column: int, message: string)
+
+--| The regex of `pattern`, or where it goes wrong and why.
+export def Regex.parse: string -> #some(Regex) | #error(RegexError) = { pattern ->
+  match parsePattern(pattern)
+    | #parsed(node, groups, names) ->
+      #some(Regex(pattern = pattern, program = compile(node, groups, names)))
+    | #failed(at, message) -> #error(RegexError(column = at + 1, message = message))
+}
+
+--| A regex's pattern, as it was written.
+export def Regex.toString: Regex -> string = { regex ->
+  regex.pattern
+}
+
+-- Matches ---------------------------------------------------------------------------------------
+
+--| Where a regex matched: the text it matched, and the code points it starts at and ends before,
+  counting from 0. [`Match.group`] and [`Match.named`] give what its groups matched.
+export type Match = protected (
+  text: string
+  start: int
+  end: int
+  groups: array(#some(string) | #none)
+  names: list((string, int))
+)
+
+--| What group `number` of the match matched, counting the groups' `(`s from 1, with group 0 the
+  whole match, or `#none` when the group took no part in the match, or there is no such group.
+export def Match.group: Match, int -> #some(string) | #none = { m, number ->
+  def groups = m.groups
+
+  match groups(number)
+    | #some(captured) -> captured
+    | #none -> #none
+}
+
+--| What the group named `name`, as `(?<name> )` names it, matched, or `#none` when it took no part
+  in the match, or there is no group of that name.
+export def Match.named: Match, string -> #some(string) | #none = { m, name ->
+  match list.find(m.names, { (other, _) -> other == name })
+    | #some(_, number) -> Match.group(m, number)
+    | #notFound -> #none
+}
+
+--| The match that `slots` describe in `text`.
+def matchOf: Regex, Text, array(int) -> Match = { regex, text, slots ->
+  def slot = { k ->
+    match slots(k)
+      | #some(at) -> at
+      | #none -> -1
+  }
+
+  def groups = array.init(
+    array.length(slots) / 2
+    { number ->
+      def start = slot(number * 2)
+      def end = slot(number * 2 + 1)
+      if start < 0 or end < 0 then #none else #some(between(text, start, end))
+    }
+  )
+
+  Match(
+    text = between(text, slot(0), slot(1))
+    start = slot(0)
+    end = slot(1)
+    groups = groups
+    names = regex.program.names
+  )
+}
+
+--| The first match of `regex` in `text` at or after code point `start`.
+def findFrom: Regex, Text, int -> #some(Match) | #notFound = { regex, text, start ->
+  match run(regex.program, text, start)
+    | #some(slots) -> #some(matchOf(regex, text, slots))
+    | #none -> #notFound
+}
+
+-- Finding ---------------------------------------------------------------------------------------
+
+--| Whether `regex` matches anywhere in `text`.
+export def Regex.isMatch: string, Regex -> bool = { text, regex ->
+  run(regex.program, textOf(text), 0) != #none
+}
+
+--| The first match of `regex` in `text`: the leftmost, and of those that start there, the one the
+  pattern prefers, as a backtracking engine would find it.
+export def Regex.find: string, Regex -> #some(Match) | #notFound = { text, regex ->
+  findFrom(regex, textOf(text), 0)
+}
+
+--| Each match of `regex` in `text`, in turn, as a sequence that finds each only when it is pulled.
+  Each starts where the last ended; an empty match right where the last ended is skipped, and
+  after an empty match the next is looked for a character further on.
+export def Regex.findAll: string, Regex -> seq(Match) = { text, regex ->
+  def subject = textOf(text)
+
+  seq.unfold(
+    (0, -1)
+    { (from, lastEnd) ->
+      nextMatch(regex, subject, from, lastEnd)
+    }
+  )
+}
+
+--| The next match of `regex` in `text` at or after `from`, the last having ended at `lastEnd`, and
+  where to look after it.
+def nextMatch
+  : Regex, Text, int, int -> #some(Match, (int, int)) | #done
+  = { regex, text, from, lastEnd ->
+    if from > text.length
+      then #done
+      else match findFrom(regex, text, from)
+        | #some(m) ->
+          if m.start == m.end and m.start == lastEnd
+            then nextMatch(regex, text, m.start + 1, lastEnd)
+            else #some(m, ((if m.end > m.start then m.end else m.end + 1), m.end))
+        | #notFound -> #done
+  }
+
+-- Replacing -------------------------------------------------------------------------------------
+
+--| `text` with each match of `regex` replaced by what `replacement` gives for it.
+export def Regex.replaceWith
+  : [c] string, Regex, ([c] Match -> string) -> string
+  = { text, regex, replacement ->
+    def subject = textOf(text)
+
+    def pieces = seq.fold(
+      Regex.findAll(text, regex)
+      (0, [])
+      { (copied, done), m ->
+        (m.end, [replacement(m), between(subject, copied, m.start), ...done])
+      }
+    )
+
+    def (copied, done) = pieces
+    string.concat(list.reverse([between(subject, copied, subject.length), ...done]))
+  }
+
+--| `text` with each match of `regex` replaced by `with`, in which `$1` stands for what group 1
+  matched, `$0` for the whole match, `${name}` for what the group named `name` matched, and `$$`
+  for a `$`. A group that took no part in the match stands for nothing.
+export def Regex.replace: (string, Regex, with: string) -> string = { text, regex, with ->
+  def template = templateOf(with)
+  Regex.replaceWith(text, regex, { m -> expand(template, m) })
+}
+
+--| One piece of a replacement: text, the group of a number, or the group of a name.
+type Piece = #text(string) | #number(int) | #name(string)
+
+--| The pieces of the replacement `with`.
+def templateOf: string -> list(Piece) = { with ->
+  def bytes = string.slice(with, 0, string.length(with))
+  list.reverse(piecesFrom(with, bytes, 0, 0, []))
+}
+
+--| The byte of `bytes` at `i`, or -1 past the end.
+def byteOf: StringSlice, int -> int = { bytes, i ->
+  match StringSlice.byteAt(bytes, i)
+    | #some(b) -> b
+    | #none -> -1
+}
+
+--| The pieces of `with` from byte `i` on, the text from byte `start` not yet in a piece, in front
+  of `done`, last first.
+def piecesFrom
+  : string, StringSlice, int, int, list(Piece) -> list(Piece)
+  = { with, bytes, start, i, done ->
+    def b = byteOf(bytes, i)
+
+    def withText: list(Piece) = if i > start
+      then [#text(string.substring(with, start = start, length = i - start)), ...done]
+      else done
+
+    if
+      | b < 0 -> withText
+      | b != 36 -> piecesFrom(with, bytes, start, i + 1, done)
+      | byteOf(bytes, i + 1) == 36 -> piecesFrom(
+        with
+        bytes
+        i + 2
+        i + 2
+        [#text("$"), ...withText]
+      )
+      | byteOf(bytes, i + 1) == 123 ->
+        def close = closingBrace(bytes, i + 2)
+
+        if close < 0 then piecesFrom(with, bytes, start, i + 1, done) else
+          def name = string.substring(with, start = i + 2, length = close - i - 2)
+
+          match int.fromString(name)
+            | #some(number) -> piecesFrom(
+              with
+              bytes
+              close + 1
+              close + 1
+              [#number(number), ...withText]
+            )
+            | #invalidInt -> piecesFrom(
+              with
+              bytes
+              close + 1
+              close + 1
+              [#name(name), ...withText]
+            )
+      | else ->
+        def end = digitsEnd(bytes, i + 1)
+
+        if end == i + 1 then piecesFrom(with, bytes, start, i + 1, done) else
+          def number = string.substring(with, start = i + 1, length = end - i - 1)
+
+          piecesFrom(
+            with
+            bytes
+            end
+            end
+            [#number(int.fromString(number) \someOr(0)), ...withText]
+          )
+  }
+
+--| The byte of the first `}` at or after `i`, or -1.
+def closingBrace: StringSlice, int -> int = { bytes, i ->
+  def b = byteOf(bytes, i)
+  if b < 0 then -1 else if b == 125 then i else closingBrace(bytes, i + 1)
+}
+
+--| The byte after the run of decimal digits from `i`.
+def digitsEnd: StringSlice, int -> int = { bytes, i ->
+  def b = byteOf(bytes, i)
+  if b >= 48 and b <= 57 then digitsEnd(bytes, i + 1) else i
+}
+
+--| The replacement `template` for the match `m`.
+def expand: list(Piece), Match -> string = { template, m ->
+  string.concat(
+    list.map(
+      template
+      {
+        | #text(s) -> s
+        | #number(number) -> Match.group(m, number) \someOr("")
+        | #name(name) -> Match.named(m, name) \someOr("")
+      }
+    )
+  )
+}
+
+-- Splitting -------------------------------------------------------------------------------------
+
+--| The pieces of `text` between the matches of `regex`, in order. An empty match at the very start
+  splits nothing off, so `"abc" \Regex.split(empty)` is `["a", "b", "c"]`, and an empty text is one
+  empty piece.
+export def Regex.split: string, Regex -> list(string) = { text, regex ->
+  def subject = textOf(text)
+
+  if subject.length == 0 then [""] else
+    def (start, last, done) = seq.fold(
+      Regex.findAll(text, regex)
+      (0, 0, [])
+      { (start, _, done), m ->
+        def pieces = if m.end != 0 then [between(subject, start, m.start), ...done] else done
+        (m.end, m.start, pieces)
+      }
+    )
+
+    list.reverse(
+      if last != subject.length then [between(subject, start, subject.length), ...done] else done
+    )
+}

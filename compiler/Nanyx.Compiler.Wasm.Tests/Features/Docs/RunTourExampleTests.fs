@@ -1,5 +1,5 @@
 /// Every ```nanyx block in the language tour (docs/src/content/tour), the Getting started pages
-/// (docs/src/content/getting-started), the standard library's pages (docs/src/content/stdlib), the custom patterns page (docs/src/content/advanced/custom-patterns.md) and the JSON cookbook page (docs/src/content/cookbook/json-parsing.md), compiled and run as `nanyx run` runs it, so that they keep describing what the compiler
+/// (docs/src/content/getting-started), the standard library's pages (docs/src/content/stdlib), the custom patterns page (docs/src/content/advanced/custom-patterns.md) and the JSON and regular expressions cookbook pages (docs/src/content/cookbook/json-parsing.md and regular-expressions.md), compiled and run as `nanyx run` runs it, so that they keep describing what the compiler
 /// does. The words after `nanyx` on a block's opening fence say what kind of example it is; the conventions are in
 /// docs/src/content/compiler-internals/compilation.md#tour-examples. A standard-library page's generated reference is
 /// left out: its blocks are signatures, and its doc comments' examples are checked where they are written.
@@ -43,6 +43,13 @@ let customPatternExamples () : obj array seq =
 /// The JSON cookbook page's examples, which run as the tour's do: they show the shipped package `nanyx.json`.
 let jsonCookbookExamples () : obj array seq =
     examplesOf "cookbook" "json-parsing.md" |> Map.keys |> Seq.map (fun line -> [| box "json-parsing.md"; box line |])
+
+/// The regular expressions cookbook page's examples, which run as the tour's do: they show the shipped package
+/// `nanyx.regex`.
+let regexCookbookExamples () : obj array seq =
+    examplesOf "cookbook" "regular-expressions.md"
+    |> Map.keys
+    |> Seq.map (fun line -> [| box "regular-expressions.md"; box line |])
 
 /// The tour's examples work on strings with `nanyx/text` without importing it, as though each imported it: after its
 /// directives and its module declaration, if it has them, and before its first line of code. They print with the
@@ -132,3 +139,7 @@ let ``Custom patterns example compiles and runs`` (page: string, line: int) = ch
 [<Theory>]
 [<MemberData(nameof jsonCookbookExamples)>]
 let ``JSON cookbook example compiles and runs`` (page: string, line: int) = check "cookbook" page line
+
+[<Theory>]
+[<MemberData(nameof regexCookbookExamples)>]
+let ``Regular expressions cookbook example compiles and runs`` (page: string, line: int) = check "cookbook" page line

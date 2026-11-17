@@ -37,6 +37,16 @@ def identity = { x -> x }
 -- inferred as `α -> α`, meaning it can take any type `α` and returns the same type `α`
 ```
 
+A function that calls itself is inferred at one type for all its calls, since its type is what is being worked out. A function that writes its type can call itself at another type, because the type is already known:
+
+```nanyx
+def describe: a, int -> string = { x, n ->
+  if n == 0 then "{n}" else describe("s", n - 1) ++ describe(true, n - 1)
+}
+
+println(describe(1.5, 2))
+```
+
 A type variable the compiler made up is named with a Greek letter, `α`, `β`, `γ` and so on, so it is easy to tell from one written in an annotation, which keeps its own name. In the source you write type variables in plain letters, as in `def identity: a -> a`. If you would rather see ASCII in the editor too, turn on [`nanyx.asciiTypes`](../standard-tools/vs-code-extension#how-types-are-shown).
 
 ## Inferring tag unions

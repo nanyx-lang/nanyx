@@ -27,6 +27,13 @@ no debugger and no source mapping. This page is the plan, agreed with the mainta
   provides, so a run is fully determined by what those context members returned. Recording them, and replaying a run
   by answering each call from the recording, gives deterministic repros; with probes marking steps, the debugger can
   step backwards by replaying to the step before. Immutable values shared by reference counts make snapshots cheap.
+- **The host decides where `dbg` output goes.** `dbg` needs no context, but at run time it calls a host import with its location and value ([#2058](https://github.com/nanyx-lang/nanyx/issues/2058)): the console host writes it to stderr, the HTTP host to its log with the request it came from, and the test runner keeps it with the test that printed it.
+- **`dbg` values show in the editor, not the terminal,** for runs the editor starts: the runtime writes each `dbg` hit
+  to a channel (`nanyx run --dbg-to`), and the extension shows the value at the end of its line, with a count and a
+  list of every hit for one hit several times. A `nanyx run` in a terminal prints as before, to stderr.
+- **Live mode is gated on the entry's contexts.** The editor re-runs on save, notebook-style, only when the entry needs
+  nothing beyond `Console`: Nanyx knows from the type that re-running can't write files or send requests. A program
+  that needs more is re-run on save only if the user turns it on for that file.
 - **The console host first.** Debugging a request in the HTTP host, and a single test from the editor, come next; the
   browser host later.
 
@@ -54,3 +61,6 @@ no debugger and no source mapping. This page is the plan, agreed with the mainta
 | Recording a run's effects and replaying it (Planning) | [#2042](https://github.com/nanyx-lang/nanyx/issues/2042) | |
 | Stepping backwards (Planning) | [#2043](https://github.com/nanyx-lang/nanyx/issues/2043) | #2041, #2042 |
 | `nanyx run --profile`, with Wasmtime's guest profiler | [#2044](https://github.com/nanyx-lang/nanyx/issues/2044) | |
+| `dbg` output handled by the host | [#2058](https://github.com/nanyx-lang/nanyx/issues/2058) | |
+| `dbg` values inline in the editor | [#2054](https://github.com/nanyx-lang/nanyx/issues/2054) | #2058 |
+| Live mode: re-run on save when the entry needs only `Console` | [#2055](https://github.com/nanyx-lang/nanyx/issues/2055) | #2054 |
