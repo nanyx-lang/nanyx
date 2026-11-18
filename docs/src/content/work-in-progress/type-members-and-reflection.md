@@ -4,7 +4,7 @@ description: "Associated types on contexts, types passed as arguments, and inspe
 order: 4
 ---
 
-This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), and what is left of them here is how they meet type arguments and the prelude contexts that move to them. **Type arguments** let a function take a type as a parameter and inspect its structure; their design was decided on 2026-11-17 and is filed in stages ([Plan](#plan)). Passing a type and inspecting it are built ([Type arguments](../tour/functions#type-arguments), [Inspecting a type](../tour/functions#inspecting-a-type), and how they compile in [Type descriptions](../compiler-internals/type-descriptions)), and so is decoding with `build` ([Building a value](../tour/functions#building-a-value)). Both are the same thing: a record member whose value is a type.
+This page records the design for two related features. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable; they are built ([Contexts](../advanced/contexts#associated-types)), with nothing left of them to do. **Type arguments** let a function take a type as a parameter and inspect its structure; their design was decided on 2026-11-17 and is filed in stages ([Plan](#plan)). Passing a type and inspecting it are built ([Type arguments](../tour/functions#type-arguments), [Inspecting a type](../tour/functions#inspecting-a-type), and how they compile in [Type descriptions](../compiler-internals/type-descriptions)), and so is decoding with `build` ([Building a value](../tour/functions#building-a-value)). Both are the same thing: a record member whose value is a type.
 
 # The problems
 
@@ -50,11 +50,7 @@ def iterStrings: [Iter(c, a)] c -> () = { items -> ... }
 
 # Associated types
 
-Associated types are built: a context's member of kind `type`, named `Iter(c).elem` or `elem` in a signature and fixed by name in a constraint, `[Iter(c, elem = string)]`, and passed as a type argument, `type Iter(c).elem`, is described on the [Contexts](../advanced/contexts#associated-types) page. Inspecting one waits on descriptions ([#1996](https://github.com/nanyx-lang/nanyx/issues/1996)), as for any type argument.
-
-## The prelude moves to them
-
-Every prelude context whose later parameter is fixed by its first is a context with an associated type: `FromString(a)` has its `failure` ([#1801](https://github.com/nanyx-lang/nanyx/issues/1801)), and `Iterable(c)` its `elem` ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802)). No other context in the prelude or the shipped packages has that shape.
+Associated types are built: a context's member of kind `type`, named `Iter(c).elem` or `elem` in a signature and fixed by name in a constraint, `[Iter(c, elem = string)]`, and passed as a type argument, `type Iter(c).elem`, which a match inspects as it does any type argument, is described on the [Contexts](../advanced/contexts#associated-types) page. The prelude's contexts whose later parameter was fixed by their first have moved to them: `FromString(a)` has its `failure` ([#1801](https://github.com/nanyx-lang/nanyx/issues/1801)), and `Iterable(c)` its `elem` ([#1802](https://github.com/nanyx-lang/nanyx/issues/1802)).
 
 # Type arguments
 
