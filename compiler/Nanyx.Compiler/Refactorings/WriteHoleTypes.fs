@@ -77,7 +77,7 @@ let private writing (typed: TypedModule) (annotation: Annotation) (holes: (TypeE
             let defType = annotation.Def |> Option.bind (fun symbol -> typed.SymbolTypes |> Map.tryFind symbol.Id) |> Option.map named
             let variables = TypeExpr.variablesOf annotation.Type |> List.mapi (fun index name -> TyVar(TyVar.ordinary (-1 - index) (Some name)))
             TyApply("", Option.toList defType @ variables)
-        match Unifier.tysToDisplayStrings Source (around :: tys) |> List.tail with
+        match Unifier.tysToDisplayStringsIn typed.TypeDefs Source (around :: tys) |> List.tail with
         | written when written |> List.exists (Seq.exists (fun c -> c >= '₀' && c <= '₉')) ->
             Error "Its type requires a scoped context at two scopes, which a type can't be written with yet"
         | written ->

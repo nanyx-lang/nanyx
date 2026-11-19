@@ -13,18 +13,19 @@ let withContexts (written: string list) (typeWritten: string) =
 
 /// `ty` written for a reader after the contexts `contexts` it requires, as `withContexts` writes them, and each of
 /// `others` written for a reader, the type variables of them all named together and by `names`, so that a variable of
-/// `ty` has the same name in `others`: a parameter's `α` is the `α` of its def's signature.
-let typesWithContexts (names: TypeNotation) (ty: Ty) (contexts: Ty list) (others: Ty list) : string * string list =
+/// `ty` has the same name in `others`: a parameter's `α` is the `α` of its def's signature. A context of `typeDefs`
+/// that has associated types is written with them by name, as a signature writes it: `[Iter(c)] c -> elem`.
+let typesWithContexts (typeDefs: Map<string, TypeDefInfo>) (names: TypeNotation) (ty: Ty) (contexts: Ty list) (others: Ty list) : string * string list =
     match contexts, others with
-    | [], [] -> Unifier.tyToDisplayString names ty, []
+    | [], [] -> Unifier.tyToDisplayStringIn typeDefs names ty, []
     | _ ->
-        let written = Unifier.tysToDisplayStrings names (ty :: contexts @ others)
+        let written = Unifier.tysToDisplayStringsIn typeDefs names (ty :: contexts @ others)
         let contextsWritten, othersWritten = List.splitAt contexts.Length (List.tail written)
         withContexts contextsWritten (List.head written), othersWritten
 
 /// `ty` written for a reader after the contexts `contexts` it requires, as `typesWithContexts` writes it.
-let typeWithContexts (names: TypeNotation) (ty: Ty) (contexts: Ty list) =
-    fst (typesWithContexts names ty contexts [])
+let typeWithContexts (typeDefs: Map<string, TypeDefInfo>) (names: TypeNotation) (ty: Ty) (contexts: Ty list) =
+    fst (typesWithContexts typeDefs names ty contexts [])
 
 /// `ty` with each type and context it names given the name a module writes it by, from the module's `typeDefs` and
 /// `symbols`: a type a module imports under an alias is named through the alias, `s.Circle`, though the compiler

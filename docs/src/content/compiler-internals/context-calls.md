@@ -230,6 +230,13 @@ instance is chosen by the arguments but its associated types, and fixes those (`
 from attached definitions fixes them by its members' types, as `int.fromString` fixes the `failure` of `FromString(int)`, or by
 an attached alias, `type Bag.elem = int`, and leaving one unfixed or fixing it two ways is an error.
 
+A type is written back for a reader as a signature writes it. Given the module's type definitions
+(`Unifier.tyToDisplayStringIn`, `Signatures.typesWithContexts`), the printer (`TypePrinting.printTy`) leaves out an
+associated argument that is the signature's own variable of that name, `[Iter(c)]`, and writes any other by name,
+`Iter(c, elem = string)` or, for one inference leaves open, `Iter(a, elem = b)`. Hover, `nanyx check`, the type lenses,
+the stdlib reference and the refactorings that write a type do so. Messages made while the constraints are solved
+(`Unifier.tyToString`) don't have the type definitions, so they still write the arguments positionally.
+
 A function's type need not write its associated types, as `elem` in `countAll: [Iter(c)] c -> int`, though its body has
 values of them, whose layout depends on what they are. So the type checker records what each one is at each call, by
 the name the callee's signature gives it (`TypedModule.AssociatedArguments`), or, for one the signature fixes,

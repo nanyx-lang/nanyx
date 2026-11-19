@@ -213,9 +213,9 @@ let private hints (names: TypeNotation) (file: string) (result: CompileResult) :
                                 if (contextOf annotations symbol.Declaration).IsSome then typed.InferredContextTypes
                                 else typed.ContextTypes
                             required |> Map.tryFind symbol.Id |> Option.defaultValue [] |> List.map named
-                        let defWritten, membersWritten = Signatures.typesWithContexts notation defType contexts memberTypes
+                        let defWritten, membersWritten = Signatures.typesWithContexts typed.TypeDefs notation defType contexts memberTypes
                         (if isInferred symbol then [ (symbol, defType), defWritten ] else []), membersWritten
-                    | None -> [], Unifier.tysToDisplayStrings notation memberTypes
+                    | None -> [], Unifier.tysToDisplayStringsIn typed.TypeDefs notation memberTypes
                 let lens, membersWritten = writtenIn names
                 let lensSource, membersSource = writtenIn Source
                 List.map2 (fun (typed, written) (_, source) -> hint typed (written, source)) lens lensSource,
@@ -251,7 +251,7 @@ let topLevelTypes (names: TypeNotation) (file: string) (result: CompileResult) :
             |> Option.map (fun ty ->
                 let contexts = typed.ContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue []
                 { Name = symbol.Name
-                  Type = Signatures.typeWithContexts names ty contexts
+                  Type = Signatures.typeWithContexts typed.TypeDefs names ty contexts
                   Span = symbol.Declaration
                   Kind = symbol.Kind
                   Context = None

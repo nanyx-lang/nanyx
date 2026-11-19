@@ -320,3 +320,43 @@ let ``A Type value of an associated type names a context the signature requires`
     let code, text = singleError (withIter "\ndef f: [Iter(c)] c -> () = { xs ->\n  def t = type Iter(d).elem\n  ()\n}\n")
     Assert.Equal(DiagnosticCodes.UnknownAssociatedType.Code, code)
     Assert.Equal("Iter(d).elem", text)
+
+[<Fact>]
+let ``Hover leaves out an associated type that is the signature's own variable of its name`` () =
+    let source =
+        withIter
+            """
+def headOr: [Iter(c)] c, elem -> elem = { items, fallback ->
+  match next(items)
+    | #some(value, _) -> value
+    | #done -> fallback
+}
+"""
+    let result = Compiler.compile source
+    let hover = Hover.typeAt Ascii result (offsetOf source "headOr:" 0 1)
+    Assert.Equal(Some "def headOr: [Iter(c)] c, elem -> elem", hover |> Option.map _.Type)
+
+[<Fact>]
+let ``A signature writes an associated type a constraint fixes, or inference leaves open, by name`` () =
+    let source =
+        withIter
+            """
+def joinAll: [Iter(c, elem = string)] c -> string = { items ->
+  match next(items)
+    | #some(item, rest) -> item ++ joinAll(rest)
+    | #done -> ""
+}
+
+def headOr: [Iter(c)] c, elem -> elem = { items, fallback ->
+  match next(items)
+    | #some(value, _) -> value
+    | #done -> fallback
+}
+
+def firstOr = { items, fallback -> headOr(items, fallback) }
+"""
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    let types = TypeHints.topLevelTypes Ascii "" result |> List.map (fun hint -> hint.Name, hint.Type) |> Map.ofList
+    Assert.Equal("[Iter(c, elem = string)] c -> string", types.["joinAll"])
+    Assert.Equal("[Iter(a, elem = b)] a, b -> b", types.["firstOr"])

@@ -172,7 +172,7 @@ let private writtenAt (names: TypeNotation) (typed: TypedModule) (symbol: Symbol
         match symbol with
         | Some symbol -> withContextsAt typed symbol ty
         | None -> ty, []
-    let typeWritten, othersWritten = Signatures.typesWithContexts names ty contexts others
+    let typeWritten, othersWritten = Signatures.typesWithContexts typed.TypeDefs names ty contexts others
     (symbol |> Option.map (fun symbol -> declared symbol typeWritten) |> Option.defaultValue typeWritten), othersWritten
 
 /// The hover for what `hoveredAt` found (see `typeAt`).
@@ -263,7 +263,7 @@ let private instantiationOf (names: TypeNotation) (typed: TypedModule) (hovered:
         declaredType typed symbol
         |> Option.bind (fun (general, contexts) ->
             let contexts = contexts |> FunctionContexts.flatten |> Unifier.writtenContexts
-            let declaredWritten = declared symbol (Signatures.typeWithContexts names general contexts)
+            let declaredWritten = declared symbol (Signatures.typeWithContexts typed.TypeDefs names general contexts)
             let contextVariables = FunctionContexts.variablesIn general
             // Each variable with what it is here: a type, or the contexts a context variable stands for, if any.
             let bound =

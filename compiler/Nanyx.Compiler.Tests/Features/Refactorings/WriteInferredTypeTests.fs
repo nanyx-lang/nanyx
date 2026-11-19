@@ -156,3 +156,19 @@ let ``A type that requires a scoped context at two scopes can't be written`` () 
     | Some (Refused(_, RefactoringKind.Rewrite, reason)), _ ->
         Assert.Equal("Its type requires a scoped context at two scopes, which a type can't be written with yet", reason)
     | offer, _ -> failwithf "expected a refusal, got %A" offer
+
+[<Fact>]
+let ``A def that requires a context with an associated type gets it written by name`` () =
+    let after =
+        rewritten
+            """context Iter(c) = (elem: type, next: c -> #some(elem, c) | #done)
+
+def headOr: [Iter(c)] c, elem -> elem = { items, fallback ->
+  match next(items)
+    | #some(value, _) -> value
+    | #done -> fallback
+}
+
+def firstOr$$ = { items, fallback -> headOr(items, fallback) }
+"""
+    Assert.Contains("def firstOr: [Iter(a, elem = b)] a, b -> b = { items, fallback -> headOr(items, fallback) }", after)

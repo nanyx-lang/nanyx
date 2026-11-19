@@ -319,7 +319,7 @@ let private isLocal (symbol: Symbol) =
 
 /// The type of a top-level def or import in scope, after the contexts it requires, as hover writes it.
 let private topLevelType (names: TypeNotation) (typed: TypedModule) (symbol: Symbol) : string option =
-    Hover.declaredType typed symbol |> Option.map (fun (ty, contexts) -> Signatures.typeWithContexts names ty contexts)
+    Hover.declaredType typed symbol |> Option.map (fun (ty, contexts) -> Signatures.typeWithContexts typed.TypeDefs names ty contexts)
 
 /// `written` cut into runs of the lengths of `groups`.
 let rec private splitAs (groups: 'a list list) (written: string list) : string list list =

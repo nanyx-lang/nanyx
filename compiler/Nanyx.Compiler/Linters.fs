@@ -775,7 +775,7 @@ module UnannotatedExports =
             |> Option.map (fun ty ->
                 let contexts = model.ContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue []
                 let named = Signatures.writable model.TypeDefs model.Symbols
-                let written = Signatures.typeWithContexts Source (named ty) (List.map named contexts)
+                let written = Signatures.typeWithContexts model.TypeDefs Source (named ty) (List.map named contexts)
                 let afterName = symbol.Declaration.End
                 { Rule = rule.Id
                   Span = symbol.Declaration
