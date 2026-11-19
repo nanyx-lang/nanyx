@@ -180,6 +180,20 @@ let publishToIndex (package: TempPackage) (found: Package) (bytes: byte array) =
 /// `source` with the edits of `fix` applied.
 let applyFix (source: string) (fix: Fix) = applyEdits source fix.Edits
 
+/// `marked` with `\n` line endings and without its `$$`, and where the `$$` was.
+let unmarked (marked: string) =
+    let marked = normalized marked
+    let offset = marked.IndexOf "$$"
+    marked.Remove(offset, 2), offset
+
+/// `marked` with `\n` line endings and without its `[[` and `]]`, and the span between them.
+let unmarkedSelection (marked: string) =
+    let marked = normalized marked
+    let start = marked.IndexOf "[["
+    let finish = marked.IndexOf "]]" - 2
+    let selection : SourceSpan = { File = ""; Start = start; End = finish; StartLine = 0; StartColumn = 0 }
+    marked.Replace("[[", "").Replace("]]", ""), selection
+
 /// `source` with the edits of `refactoring` applied, checked to compile with no diagnostics and to be laid out as the
 /// formatter lays it out.
 let refactoredText (source: string) (refactoring: NyxCompiler.Refactorings.Refactoring) =

@@ -11,9 +11,7 @@ open Nanyx.Compiler.Tests.TestSupport
 
 /// The offers at `$$` in `marked`, a module in no package, and the source without the mark.
 let private offersAt (marked: string) =
-    let marked = normalized marked
-    let offset = marked.IndexOf "$$"
-    let source = marked.Remove(offset, 2)
+    let source, offset = unmarked marked
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let recompile (texts: (string * string) list) = texts |> List.map (snd >> Compiler.compile)

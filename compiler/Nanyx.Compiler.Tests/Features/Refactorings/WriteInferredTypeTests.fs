@@ -8,16 +8,10 @@ open Nanyx.Compiler.Tests.TestSupport
 
 // Write the inferred type: a def or a lambda parameter that does not write its type gets the one inferred for it.
 
-/// `marked` without its `$$`, and where the `$$` was.
-let private unmark (marked: string) =
-    let marked = normalized marked
-    let offset = marked.IndexOf "$$"
-    marked.Remove(offset, 2), offset
-
 /// The refactoring at `$$` in `marked`, the module compiled as `main.nyx` beside `modules`, each a file's name and
 /// text, and what compiling the text after it gives, if it is available.
 let private offerAt (modules: (string * string) list) (marked: string) =
-    let source, offset = unmark marked
+    let source, offset = unmarked marked
     withTempDir (fun dir ->
         for fileName, text in modules do
             File.WriteAllText(Path.Combine(dir, fileName), normalized text)
