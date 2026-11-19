@@ -269,7 +269,7 @@ module WasmRunner =
                 | :? WasmtimeException as ex -> Error(trapped (spanTable program) ex)
             // The profile is of the whole run, however it ended.
             match profiled, profiler with
-            | Some give, Some profiler -> give (profiler.Finish())
+            | Some give, Some profiler -> give (profiler.Finish() |> Result.map (ProfilePlaces.withDefinitions (spanTable program)))
             | _ -> ()
             outcome, instantiated |> Option.map inspect
 

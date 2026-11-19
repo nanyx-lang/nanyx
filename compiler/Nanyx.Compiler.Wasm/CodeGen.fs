@@ -853,6 +853,17 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
     let lowered =
         let input: CoreIrLowerInput.LowerInput =
             { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
+              DefinitionSpans =
+                // A def's symbol is declared at its name, on the line its `def` starts on, in the file of its value.
+                let declared =
+                    typed.Symbols
+                    |> Map.values
+                    |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue)
+                    |> Seq.map (fun symbol -> (symbol.Name, symbol.Declaration.File), symbol.Declaration)
+                    |> Map.ofSeq
+                defs
+                |> List.choose (fun (name, _, expr) -> declared |> Map.tryFind (name, expr.Span.File) |> Option.map (fun span -> name, span))
+                |> Map.ofList
               Externs = externs
               ExprTypes =
                 allExprTypes
@@ -1172,7 +1183,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             emitted.Text
         if cachedNames.Contains func.Name then
             let build = note (CoreIrEmit.emitFunction context { func with Name = CoreIrCachedValues.buildName func.Name } None)
-            build + "\n\n" + CoreIrCachedValues.getter func (exportNameOf functionContextRequirements specialisations func)
+            build + "\n\n" + CoreIrCachedValues.getter context.ShownFile func (exportNameOf functionContextRequirements specialisations func)
         // An owning entry is a copy of a function, never exported as well.
         elif owningEntries.Contains func.Name then note (CoreIrEmit.emitFunction context func None)
         else note (emitFromCoreIr functionContextRequirements context specialisations func)

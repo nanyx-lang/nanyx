@@ -150,6 +150,12 @@ type Place =
     interface System.IComparable with
         member _.CompareTo _ = 0
 
+module Place =
+    /// The place of the source `span` starts at; none for a span the compiler made up.
+    let ofSpan (span: Parser.Program.SourceSpan) : Place option =
+        if Parser.Program.SourceSpan.isNone span then None
+        else Some { File = span.File; Line = span.StartLine + 1; InlinedAt = None }
+
 /// The place the expressions made now come from: set by the lowering as it lowers each source expression, so that
 /// `Expr.make` gives every expression made from one its place; none outside the lowering.
 type Places private () =
@@ -359,7 +365,11 @@ type Function =
       TypeArguments: IrType list
       Params: Var list
       Result: IrType
-      Body: Expr }
+      Body: Expr
+      /// Where the definition it was lowered from is written: its file and the line it starts on. None for a function
+      /// the compiler makes up, such as a runtime helper or an adapter, and for a def it made, such as a script's
+      /// top-level code. A profile gives each function this place (see `WasmBinary.spanTableName`).
+      Place: Place option }
 
 /// A broken invariant of the backend: a bug in the compiler, not something it does not compile yet. The message says
 /// what went wrong without the "Internal error: " the diagnostic gives it.

@@ -252,6 +252,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     /// The name of the function being lowered, in WebAssembly text.
     let mutable selfName = ""
+    // Where the definition `name` is written: its `def`'s line for a top-level def, its lambda's for a lifted one.
+    let definitionPlace (name: string) =
+        Place.ofSpan (input.DefinitionSpans |> Map.tryFind name |> Option.defaultValue definitions.[name].Span)
 
     /// The members the function being lowered takes after its other parameters, when it is a lifted lambda, which a
     /// `rec` local function passes on when it calls itself.
@@ -287,7 +290,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let aroundPlace = Places.Current
         if not (SourceSpan.isNone expr.Span) then
             current <- Some expr.Span
-            Places.Current <- Some { File = expr.Span.File; Line = expr.Span.StartLine + 1; InlinedAt = None }
+            Places.Current <- Place.ofSpan expr.Span
         let k (value: Expr) =
             current <- around
             Places.Current <- aroundPlace
@@ -1064,8 +1067,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 let lowered, rest = this.Statement scope statements k
                 let written =
                     match statements with
-                    | (ExprStatement written | DefStatement(_, _, _, written) | UseStatement written) :: _ when not (SourceSpan.isNone written.Span) ->
-                        Some { File = written.Span.File; Line = written.Span.StartLine + 1; InlinedAt = None }
+                    | (ExprStatement written | DefStatement(_, _, _, written) | UseStatement written) :: _ -> Place.ofSpan written.Span
                     | _ -> None
                 match written with
                 | Some place when input.Probes ->
@@ -1261,7 +1263,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           TypeArguments = []
           Params = []
           Result = IrUnit
-          Body = body }
+          Body = body
+          Place = None }
 
     /// The definition `name` as a function called `functionName` that reports `messages`, errors deferred to run time,
     /// as soon as it is called: what a definition that cannot be lowered because of them is instead. It takes the
@@ -1281,7 +1284,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           TypeArguments = typeArguments
           Params = parameters
           Result = IrError
-          Body = Expr.make (Crash messages) IrError }
+          Body = Expr.make (Crash messages) IrError
+          Place = definitionPlace name }
 
     /// The types of the parameters of the lifted lambda `name` (its environment aside), whose type where it was written
     /// is `lambdaTy`, and of its result. A lambda bound to a context member in a `use` may have parameters the type
@@ -1333,16 +1337,15 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
               TypeArguments = typeArguments
               Params = parameters
               Result = result
-              Body = body }
+              Body = body
+              Place = definitionPlace name }
         // A function the source writes, in a debug build, starts with a probe that can write its parameters and ends
         // with one (see `CoreIrProbes`).
         let probed (parameters: Var list) (result: IrType) (body: Expr) =
             if not input.Probes then make parameters result body
             else
-                // A def the compiler made, as a script's top-level code is, has no place of its own.
-                let place = if SourceSpan.isNone expr.Span then None else Some { File = expr.Span.File; Line = expr.Span.StartLine + 1; InlinedAt = None }
                 let newResult (ty: IrType) = newVar (uniqueName "__result") Local ty
-                make parameters result (CoreIrProbes.around newResult name place (probeLocals parameters) body)
+                make parameters result (CoreIrProbes.around newResult name (Place.ofSpan expr.Span) (probeLocals parameters) body)
         match lowering with
         | AsDefined ->
             let defTy =

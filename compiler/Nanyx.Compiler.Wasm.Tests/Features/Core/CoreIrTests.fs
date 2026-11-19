@@ -401,6 +401,7 @@ let private lowerInput (typed: TypedModule) : CoreIrLowerInput.LowerInput =
       UseBindingContexts = Map.empty
       BuiltInHoles = Set.empty
       TopLevelReferences = Map.empty
+      DefinitionSpans = Map.empty
       RecordConstructors = Set.empty
       ShapeWrappers = Set.empty
       NominalTypes = Set.empty

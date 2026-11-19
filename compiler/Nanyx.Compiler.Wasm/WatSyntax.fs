@@ -1,6 +1,6 @@
 /// WebAssembly text read as the s-expressions it is written in, for `WasmBinary` to assemble: lists, atoms (keywords,
-/// `$names`, numbers and `key=value` immediates) and strings, with comments left out but the place markers the backend
-/// writes (`;;@ main.nyx:12`, see `CoreIrEmit.placeMarker`).
+/// `$names`, numbers and `key=value` immediates) and strings, with comments left out but the markers the backend writes:
+/// places (`;;@ main.nyx:12`, see `CoreIrEmit.placeMarker`), probes and definitions.
 module Transpiler.Wasm.WatSyntax
 
 open System
@@ -23,6 +23,9 @@ type SExpr =
     /// number and kind, and for an entry the function's name, is at the place of the last place marker before it. To
     /// WebAssembly it is a comment.
     | Probed of id: int * kind: string * functionName: string option
+    /// A definition's marker, `;;@def main.nyx:3`, first in a function's body (see `CoreIrEmit.definitionMarker`): the
+    /// function was defined on this line of this file. To WebAssembly it is a comment.
+    | Defined of file: string * line: int
 
 /// WebAssembly text that is not well formed: what is wrong, and the offset into the text where it was found.
 exception WatSyntaxError of message: string * offset: int
@@ -110,6 +113,9 @@ let read (text: string) : SExpr list =
                         | _ -> raise (WatSyntaxError("a place marker that is not ;;@ file:line", start))
                     // A function's name, after `entry`, may hold spaces, as one in backticks does.
                     match written.Split(' ', 4) with
+                    | _ when written.StartsWith "def " ->
+                        let file, line = place (written.Substring "def ".Length)
+                        items.Add(Defined(file, line))
                     | [| "probe"; id; kind |]
                     | [| "probe"; id; kind; _ |] as probe ->
                         match Int32.TryParse id with

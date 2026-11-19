@@ -329,7 +329,8 @@ let describingFunction (tools: TypeMatchTools) (functionName: string) : Function
       TypeArguments = []
       Params = [ id ]
       Result = description
-      Body = Expr.make (Match([ id ], List.ofSeq arms)) description }
+      Body = Expr.make (Match([ id ], List.ofSeq arms)) description
+      Place = None }
 /// The name of the function that gives the elements of a value of `collection` in their canonical form: by the type,
 /// since collections laid out alike, a list of pairs and a map, have different canonical forms.
 let private canonicalName (collection: Ty) = "__canonical_" + Identifiers.sanitizeIdentifier (Unifier.tyToString collection)
@@ -388,7 +389,8 @@ let canonicalisingFunction (tools: TypeMatchTools) (functionName: string) (colle
       TypeArguments = []
       Params = [ list ]
       Result = result
-      Body = Expr.make (Match([ list ], arms)) result }
+      Body = Expr.make (Match([ list ], arms)) result
+      Place = None }
 
 /// The environment a closure that captures nothing is given, and the box it is called with.
 let getterParameters (tools: TypeMatchTools) =
@@ -421,7 +423,8 @@ let fieldGettingFunction (tools: TypeMatchTools) (functionName: string) (recordT
       TypeArguments = []
       Params = [ environment; boxed ]
       Result = IrBox
-      Body = body }
+      Body = body
+      Place = None }
 
 /// The `get` of the case `caseName` of the union `unionType`: it takes a value of the type, boxed, and gives
 /// `#some(payload)`, boxed in its canonical form, for a value of that case, and `#none` for any other.
@@ -453,4 +456,5 @@ let caseGettingFunction (tools: TypeMatchTools) (functionName: string) (unionTyp
       TypeArguments = []
       Params = [ environment; boxed ]
       Result = resultTy
-      Body = body }
+      Body = body
+      Place = None }

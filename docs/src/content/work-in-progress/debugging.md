@@ -73,6 +73,7 @@ the maintainer on 2026-11-17 and filed in stages ([Plan](#plan)).
 | Recording a run's effects and replaying it (Planning) | [#2042](https://github.com/nanyx-lang/nanyx/issues/2042) | |
 | Stepping backwards (Planning) | [#2043](https://github.com/nanyx-lang/nanyx/issues/2043) | #2041, #2042 |
 | `nanyx run --profile`, with Wasmtime's guest profiler (done) | [#2044](https://github.com/nanyx-lang/nanyx/issues/2044) | |
+| Each function's file and line in a profile (done) | [#2072](https://github.com/nanyx-lang/nanyx/issues/2072) | #2044 |
 | `dbg` output handled by the host (done) | [#2058](https://github.com/nanyx-lang/nanyx/issues/2058) | |
 | `dbg` output kept with each test by the test runner (Planning) | [#2103](https://github.com/nanyx-lang/nanyx/issues/2103) | `nanyx test` |
 | `dbg` values inline in the editor | [#2054](https://github.com/nanyx-lang/nanyx/issues/2054) | #2058 |

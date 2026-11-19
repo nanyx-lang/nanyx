@@ -141,7 +141,8 @@ let listConverterFunction (tools: BoxTools) (newVar: string -> VarKind -> IrType
       TypeArguments = []
       Params = [ list ]
       Result = converted
-      Body = Expr.make (Match([ list ], arms)) converted }
+      Body = Expr.make (Match([ list ], arms)) converted
+      Place = None }
 
 /// The function `functionName` a box of a value of `ty` is a closure over: it takes the box, which holds the value
 /// after its table slot, and returns the value.
@@ -153,4 +154,5 @@ let readerFunction (newVar: string -> VarKind -> IrType -> Var) (functionName: s
       TypeArguments = []
       Params = [ box ]
       Result = ty
-      Body = Expr.make (Let(value, Expr.make (Field(AVar box, 1)) ty, Expr.make (Atom(AVar value)) ty)) ty }
+      Body = Expr.make (Let(value, Expr.make (Field(AVar box, 1)) ty, Expr.make (Atom(AVar value)) ty)) ty
+      Place = None }

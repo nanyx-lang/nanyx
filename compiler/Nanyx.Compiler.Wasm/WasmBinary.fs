@@ -14,15 +14,17 @@ open System.Globalization
 open System.Text
 open Transpiler.Wasm.WatSyntax
 
-/// The name of the custom section that holds the table of places. It holds three vectors, as in the rest of the module.
+/// The name of the custom section that holds the table of places. It holds five vectors, written as in the rest of the module.
 /// The names of files and functions, numbered from 1. The frames, numbered from 1, each a function's name (0 for the
 /// function the code is in), a file's name, a line, and the frame of the call it was inlined at (0 for none), which
 /// comes before it: a place is its innermost frame, and the frames of the calls it was inlined through follow from it.
 /// For each stretch of code, in order, how far after the last one it starts (the first, from the start of the
 /// module) and its place, the number of its innermost frame. And each debug probe (see `CoreIrProbes`), in order of
-/// its number: the number, its kind (see `probeKindCode`), for an entry the function's name (else 0), and its place. A function's code starts a stretch of place 0, none, so
+/// its number: the number, its kind (see `probeKindCode`), for an entry the function's name (else 0), and its place. And each
+/// function with a definition marker (`;;@def main.nyx:3`), in order: its name, as the name section gives it, and the
+/// frame of its definition, which has no function's name. A function's code starts a stretch of place 0, none, so
 /// that the code before its first marker has none. Each number is an unsigned LEB128. The runtime reads it to name the
-/// file and line of each frame of a trap (see `Nanyx.Runtime.SpanTable`).
+/// file and line of each frame of a trap, and of each function in a profile (see `Nanyx.Runtime.SpanTable`).
 let spanTableName = "nanyx.spans"
 
 
@@ -692,6 +694,8 @@ type private CodeWriter
                 | Probed(id, kind, functionName) :: rest ->
                     probes.Add((id, kind, functionName, lastFrames))
                     rest
+                // A function's definition is read by `assemble`.
+                | Defined _ :: rest -> rest
                 | Text _ :: _ -> fail "a string among instructions"
                 | [] -> []
 
@@ -803,7 +807,12 @@ let assemble (wat: string) : byte array =
     let places = ResizeArray<int * (string option * string * int) list>()
     // Each probe's number and kind, and the frames of its place.
     let probes = ResizeArray<int * string * string option * (string option * string * int) list>()
+    // Each function's name, as the name section gives it, with the file and line of its definition.
+    let definitions = ResizeArray<string * string * int>()
     vector code assembler.Functions (fun out func ->
+        match func.Name, func.Body |> List.tryPick (function Defined(file, line) -> Some(file, line) | _ -> None) with
+        | Some id, Some(file, line) -> definitions.Add((id.Substring 1, file, line))
+        | _ -> ()
         let body = Bytes()
         let groups =
             func.LocalTypes
@@ -912,7 +921,7 @@ let assemble (wat: string) : byte array =
         names.AddRange functionNames
         section out 0uy names
     // The table of places (see `spanTableName`).
-    if places |> Seq.exists (fun (_, frames) -> not frames.IsEmpty) || probes.Count > 0 then
+    if places |> Seq.exists (fun (_, frames) -> not frames.IsEmpty) || probes.Count > 0 || definitions.Count > 0 then
         let strings = Dictionary<string, int>()
         let stringNumber (text: string) =
             match strings.TryGetValue text with
@@ -939,7 +948,10 @@ let assemble (wat: string) : byte array =
             |> Seq.sortBy (fun (id, _, _, _) -> id)
             |> Seq.map (fun (id, kind, functionName, frames) ->
                 id, probeKindCode kind, (functionName |> Option.map stringNumber |> Option.defaultValue 0), frameNumber frames)
-            |> List.ofSeq        // The strings and frames are all numbered by now.
+            |> List.ofSeq
+        // Each function's name and the frame of its definition.
+        let defined = definitions |> Seq.map (fun (functionName, file, line) -> stringNumber functionName, frameNumber [ None, file, line ]) |> List.ofSeq
+        // The strings and frames are all numbered by now.
         let table = Bytes()
 
         name table spanTableName
@@ -956,5 +968,8 @@ let assemble (wat: string) : byte array =
         vector table probed (fun out (id, kind, functionName, place) ->
             for number in [ id; kind; functionName; place ] do
                 unsigned out (uint64 number))
+        vector table defined (fun out (functionName, place) ->
+            unsigned out (uint64 functionName)
+            unsigned out (uint64 place))
         section out 0uy table
     out.ToArray()

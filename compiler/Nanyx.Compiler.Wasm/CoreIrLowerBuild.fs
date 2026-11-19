@@ -70,7 +70,8 @@ let decanonicalisingFunction (tools: TypeMatchTools) (functionName: string) (col
       TypeArguments = []
       Params = [ list ]
       Result = result
-      Body = Expr.make (Match([ list ], arms)) result }
+      Body = Expr.make (Match([ list ], arms)) result
+      Place = None }
 
 /// The fields of the record type `recordType`, in the order its description has them (see
 /// `CoreIrLowerTypeMatch.descriptionOf`).
@@ -111,7 +112,8 @@ let makingFunction (tools: TypeMatchTools) (functionName: string) (recordType: T
       TypeArguments = []
       Params = [ environment; values ]
       Result = IrBox
-      Body = Expr.make (Match([ values ], arms)) IrBox }
+      Body = Expr.make (Match([ values ], arms)) IrBox
+      Place = None }
 
 /// The `build` of the case `caseName` of the union `unionType`: it takes the payload, boxed in its canonical form, and
 /// gives the value of that case, boxed.
@@ -138,7 +140,8 @@ let caseBuildingFunction (tools: TypeMatchTools) (functionName: string) (unionTy
       TypeArguments = []
       Params = [ environment; boxed ]
       Result = IrBox
-      Body = body }
+      Body = body
+      Place = None }
 
 /// `value`, a value of the union `given` whose tag is not `#some`, as a value of the union `expected`, which has the same
 /// failures, passed to `k`: each failure is made again as one of `expected`.
@@ -202,7 +205,8 @@ let buildingFieldsFunction (tools: TypeMatchTools) (functionName: string) (build
       TypeArguments = []
       Params = [ fields; given ]
       Result = gathered
-      Body = Expr.make (Match([ fields ], arms)) gathered }
+      Body = Expr.make (Match([ fields ], arms)) gathered
+      Place = None }
 
 /// The function a record description's `build`, of type `buildTy`, is a closure over: its environment holds the
 /// description, and it takes the function that gives each field's value.
@@ -231,7 +235,8 @@ let buildingFunction (tools: TypeMatchTools) (functionName: string) (buildTy: Ir
       TypeArguments = []
       Params = [ environment; given ]
       Result = resultTy
-      Body = body }
+      Body = body
+      Place = None }
 
 /// `r.build`, the `build` of the record description `record`, at `expr`, of the IR type `buildTy`: a closure over the
 /// description (see `buildingFunction`), passed to `k`.

@@ -70,12 +70,14 @@ type Probe =
 
 /// The table of places a module the compiler assembled carries in its custom section `nanyx.spans` (see
 /// `Transpiler.Wasm.WasmBinary.spanTableName`, which says how it is laid out): for each stretch of code, by where it
-/// starts in the module, the place of the source it was made from, and the module's debug probes by their numbers.
+/// starts in the module, the place of the source it was made from, the module's debug probes by their numbers, and
+/// the file and line each function is defined at, by its name in the module's name section.
 type SpanTable =
     private
         { Starts: int array
           Places: InlinedFrame list array
-          Probes: Collections.Generic.Dictionary<int, Probe> }
+          Probes: Collections.Generic.Dictionary<int, Probe>
+          Definitions: Collections.Generic.Dictionary<string, string * int> }
 
 module SpanTable =
     /// The name of the custom section that holds the table.
@@ -155,12 +157,26 @@ module SpanTable =
                             | 2 -> Statement
                             | _ -> Return
                         probes.[id] <- { Id = id; Kind = kind; Place = (if place = 0 then [] else frames.[place - 1]) }
-                { Starts = entries |> Array.map fst; Places = entries |> Array.map snd; Probes = probes })
+                let definitions = Collections.Generic.Dictionary<string, string * int>()
+                if at < finish then
+                    for _ in 1 .. number () do
+                        let functionName = strings.[number () - 1]
+                        match frames.[number () - 1] with
+                        | (_, file, line) :: _ -> definitions.[functionName] <- (file, line)
+                        | [] -> ()
+                { Starts = entries |> Array.map fst; Places = entries |> Array.map snd; Probes = probes; Definitions = definitions })
         with :? IndexOutOfRangeException -> None
 
     /// The probe of the number `id`, if the module has one.
     let probe (table: SpanTable) (id: int) =
         match table.Probes.TryGetValue id with
+        | true, found -> Some found
+        | _ -> None
+
+    /// The file and line of the definition of the function the module's name section calls `functionName`, if the
+    /// table has one: a function the compiler made up, such as a runtime helper, has none.
+    let definitionOf (table: SpanTable) (functionName: string) =
+        match table.Definitions.TryGetValue functionName with
         | true, found -> Some found
         | _ -> None
 

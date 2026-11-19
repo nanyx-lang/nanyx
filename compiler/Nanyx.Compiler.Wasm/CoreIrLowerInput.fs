@@ -59,6 +59,9 @@ type DbgBuild =
 type LowerInput =
     { /// The module's top-level definitions as the backend compiles them, in order: a function is a lambda.
       Definitions: (string * Expression) list
+      /// Where each top-level definition is written, its `def` and all, by name: a profile gives a function the line its
+      /// `def` starts on (see `CoreIr.Function.Place`), which its lambda may start after.
+      DefinitionSpans: Map<string, SourceSpan>
       /// The foreign functions (see `ExternSyntax`), by name: a call to one is a call to the module's import of it, and they
       /// are not among `Definitions`.
       Externs: Map<string, NyxCompiler.Extern>

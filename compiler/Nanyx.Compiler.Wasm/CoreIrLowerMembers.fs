@@ -157,7 +157,8 @@ and valueAdapter (tools: MemberTools) (scope: Scope) (functionName: string) (giv
       TypeArguments = []
       Params = [ value ]
       Result = expected
-      Body = adaptParts tools scope (AVar value) (IrType.unfold given) (IrType.unfold expected) (fun atom -> Expr.make (Atom atom) expected) }
+      Body = adaptParts tools scope (AVar value) (IrType.unfold given) (IrType.unfold expected) (fun atom -> Expr.make (Atom atom) expected)
+      Place = None }
 
 /// What converting a value to or from boxes needs, where `scope` is in scope (see `CoreIrLowerBoxes`).
 and boxTools (tools: MemberTools) (scope: Scope) : CoreIrLowerBoxes.BoxTools =

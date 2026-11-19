@@ -197,7 +197,8 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
           TypeArguments = [ parameters.Head.Type ]
           Params = parameters
           Result = IrString
-          Body = body }
+          Body = body
+          Place = None }
 
     match printer with
     | ShowingRest(elementTy, entries) ->
