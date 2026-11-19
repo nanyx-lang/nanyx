@@ -224,6 +224,7 @@ let fill () =
     Forward.arms.Value <- arms
     Forward.exceptArms.Value <- exceptArms
     Forward.keywordExpression.Value <- keywordExpression
+    Forward.attributeArgument.Value <- attributeArgument
 
 /// A def's value, read from after its `=`: what is on its line, or the block on the lines after it.
 let defValueAfterEquals (c: Cursor) : Expression =

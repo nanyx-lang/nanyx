@@ -80,8 +80,64 @@ let rec statement (c: Cursor) : Statement =
         | "import" | "type" | "context" | "export" | "mut" ->
             c.GiveUp $"a `{c.Text token}` statement, which the descent parser doesn't read yet"
         | _ -> expressionStatement c start
-    | Some token when token.Kind = At -> c.GiveUp "an attribute statement"
+    // `@allow(default/unusedBindings)`, which applies to the local def after it.
+    | Some token when token.Kind = At ->
+        c.Take() |> ignore
+        if not c.Adjacent then raise NoMatch
+        let attributeName, _ = identifierWithSpan c
+        let argument = if c.Adjacent && c.Is LeftParen then Some(Forward.attributeArgument.Value c) else None
+        statementFrom c start (AttributeStatement(attributeName, argument))
     | _ -> expressionStatement c start
+
+/// One line's statement as the statements it stands for: one, or the defs a destructuring def desugars into
+/// (`TopLevel`'s `statementItemsRef`).
+and private statementItems (c: Cursor) : Statement list =
+    let start = c.Start
+    let isDef = c.IsKeyword "def" || (c.IsKeyword "export" && (match c.At 1 with Code next -> c.Text next = "def" | _ -> false))
+    if isDef then
+        match c.Attempt(fun () -> destructuringDefinition c start) with
+        | Some statements -> statements
+        | None -> [ statement c ]
+    else [ statement c ]
+
+/// `def pattern = value`, from `start`, as the defs it desugars into: the value bound to a made-up name, and a def of
+/// each name the pattern binds, each spanning the whole (see `Destructuring.destructuringDefWith`). A pattern the
+/// descent parser gives up at is no destructuring def here, as an ordinary def's name is none.
+and private destructuringDefinition (c: Cursor) (start: int) : Statement list =
+    let isExport = c.IsKeyword "export"
+    if isExport then c.Take() |> ignore
+    let defToken = c.Expect(Keyword, "def")
+    let defSpan = c.SpanOf defToken
+    let temp = DestructuringSyntax.temp (int64 defSpan.StartLine + 1L) (int64 defSpan.StartColumn + 1L)
+    let pattern, names =
+        c.Collecting(fun () ->
+            try
+                let patternStart = c.Start
+                match sepBy1 c (fun () -> DescentPatterns.pattern c) (fun () -> c.Expect Comma |> ignore) with
+                | [ single ] -> single
+                | several -> Pattern.at (c.SpanFrom patternStart) (TuplePattern several)
+            with GiveUp _ -> raise NoMatch)
+    match pattern.Kind with
+    | IdentifierPattern _ -> raise NoMatch
+    | _ -> ()
+    if not (c.Is Equals) then raise NoMatch
+    let value = defValue c
+    let declareBindings (bindings: (Identifier * Expression) list) =
+        for name, bound in bindings do
+            c.Declare DefValue bound.Id (names |> List.filter (fun (declared, _) -> declared = name))
+        match names with
+        | (_, first) :: _ -> c.NoteDocumentable start first.Start
+        | [] -> ()
+        bindings
+    let bindings =
+        match Destructuring.destructuringBindings temp pattern value with
+        | Some bindings -> declareBindings bindings
+        | None ->
+            let body, bindings = Destructuring.matchingBindings temp pattern (names |> List.map fst |> List.distinct) value
+            c.Declare ArmBody body.Id names
+            declareBindings bindings
+    let span = endingAt (snd bindings.Head).Span (c.SpanFrom start)
+    bindings |> List.mapi (fun index (name, bound) -> Statement.at span (DefStatement(isExport && index > 0, name, None, bound)))
 
 /// An expression on a line of its own (`TopLevel`'s `exprStatement`).
 and private expressionStatement (c: Cursor) (start: int) =
@@ -276,12 +332,12 @@ and indentedBlock (c: Cursor) : Expression =
 
 /// The statements on one line: one, and then each after a `;` (`Expressions.statementsOnLine`).
 and private statementsOnLine (c: Cursor) : Statement list =
-    let statements = ResizeArray [ statement c ]
+    let statements = ResizeArray(statementItems c)
     while c.Is Semicolon && c.OnSameLine do
         c.Take() |> ignore
         if not c.OnSameLine || c.Is Semicolon || c.Is RightBrace || c.Is RightParen || c.Is RightBracket then
             c.GiveUp "a `;` with no statement after it, which is a mistake"
-        statements.Add(statement c)
+        statements.AddRange(statementItems c)
     List.ofSeq statements
 
 /// A body on the line it starts on: what `value` reads, or a statement that defines a name, and then each statement
@@ -289,13 +345,13 @@ and private statementsOnLine (c: Cursor) : Statement list =
 and internal sameLineBody (c: Cursor) (value: Cursor -> Expression) : Expression =
     let start = c.Start
     let defines = c.IsKeyword "def" || c.IsKeyword "rec" || c.IsKeyword "mut"
-    let leading = if defines then Choice1Of2 [ statement c ] else Choice2Of2(value c)
+    let leading = if defines then Choice1Of2(statementItems c) else Choice2Of2(value c)
     let rest = ResizeArray()
     while c.Is Semicolon && c.OnSameLine do
         c.Take() |> ignore
         if not c.OnSameLine || c.Is Semicolon || c.Is RightBrace || c.Is RightParen || c.Is RightBracket then
             c.GiveUp "a `;` with no statement after it, which is a mistake"
-        rest.Add(statement c)
+        rest.AddRange(statementItems c)
     match leading, List.ofSeq rest with
     | Choice2Of2 value, [] -> value
     | leading, rest ->
@@ -403,14 +459,49 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
         let body = expression Crossing c
         skipLayout c
         fun _ -> Lambda([ (implicitArgument, None) ], body, false)
+    // `context l` or `context l: Log`, the names of the instances of the contexts the lambda is given, before its
+    // parameters, with a comma after the last if parameters follow (see `ContextNames`).
+    let contextNames () =
+        if not (c.IsKeyword "context" && (match c.At 1 with Code next -> next.Kind = Name | _ -> false)) then None
+        else
+            let one () =
+                c.Expect(Keyword, "context") |> ignore
+                let instance, span = identifierWithSpan c
+                c.NoteName instance span
+                let typeOpt =
+                    if c.Is Colon && c.OnSameLine then
+                        c.Take() |> ignore
+                        Some(DescentTypes.typeUnion c)
+                    else None
+                instance, typeOpt, span
+            let names = sepBy1 c one (fun () -> c.Expect Comma |> ignore; if not (c.IsKeyword "context") then raise NoMatch)
+            if c.Is Comma then c.Take() |> ignore
+            Some names
+    let underContextNames (names: (Identifier * TypeExpr option * SourceSpan) list option) (body: Expression) =
+        match names with
+        | Some names -> Expression.at body.Span (ContextNames(names, body))
+        | None -> body
+    // `{ (x: int): int -> ... }`: the lambda's result type, its body a block that defines its value under a made-up
+    // name and gives it back (see `LambdaResultSyntax`).
+    let withResult (resultType: TypeExpr option) (body: Expression) =
+        match resultType with
+        | Some resultType ->
+            let made kind = Expression.at body.Span kind
+            made (Block [ Statement.at body.Span (DefStatement(false, LambdaResultSyntax.name, Some resultType, body))
+                          Statement.at body.Span (ExprStatement(made (IdentifierExpr LambdaResultSyntax.name))) ])
+        | None -> body
     let withParameters () =
-        if c.IsKeyword "context" then c.GiveUp "a lambda that names its context's instance"
+        let contexts = c.Attempt contextNames |> Option.flatten
         let written = parameters c
-        if c.Is Colon && c.OnSameLine then c.GiveUp "a lambda's result type"
+        let resultType =
+            if c.Is Colon && c.OnSameLine then
+                c.Take() |> ignore
+                Some(DescentTypes.typeUnion c)
+            else None
         if not (c.Is Arrow && c.OnSameLine) then raise NoMatch
         c.Take() |> ignore
         // Names and then arms match the arms against the parameters, which stay in scope in each arm.
-        if nextCodeIs c Bar then
+        if nextCodeIs c Bar && contexts.IsNone && resultType.IsNone then
             let named = written |> List.map (function Choice1Of2 named -> named | Choice2Of2 _ -> c.GiveUp "a pattern parameter before arms, which is a mistake")
             let armsStart = nextCodeStart c
             let written = arms c
@@ -420,7 +511,7 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
                 let scrutinees = named |> List.map (fun (name, _) -> Expression.at armsSpan (IdentifierExpr name))
                 Lambda(named, Expression.at span (Match(scrutinees, written)), false)
         else
-        let body = lambdaBody c
+        let body = withResult resultType (lambdaBody c)
         skipLayout c
         let destructured =
             written
@@ -429,8 +520,8 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
                 | index, Choice2Of2(pattern, names) -> Some(index + 1, pattern, names)
                 | _ -> None)
         match written, destructured with
-        | [ Choice2Of2({ Kind = UnitPattern }, _) ], _ -> fun _ -> Lambda([], body, true)
-        | _, [] -> fun _ -> Lambda(written |> List.choose (function Choice1Of2 named -> Some named | _ -> None), body, false)
+        | [ Choice2Of2({ Kind = UnitPattern }, _) ], _ -> fun _ -> Lambda([], underContextNames contexts body, true)
+        | _, [] -> fun _ -> Lambda(written |> List.choose (function Choice1Of2 named -> Some named | _ -> None), underContextNames contexts body, false)
         | _ ->
             let named =
                 written |> List.mapi (fun index parameter ->
@@ -441,7 +532,7 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
             fun span ->
                 let scrutinees = destructured |> List.map (fun (position, pattern, _) -> Expression.at pattern.Span (IdentifierExpr(patternArgument position)))
                 let patterns = destructured |> List.map (fun (_, pattern, _) -> pattern)
-                Lambda(named, Expression.at span (Match(scrutinees, [ patterns, body ])), false)
+                Lambda(named, underContextNames contexts (Expression.at span (Match(scrutinees, [ patterns, body ]))), false)
     let withoutParameters () =
         let body = lambdaBody c
         skipLayout c
