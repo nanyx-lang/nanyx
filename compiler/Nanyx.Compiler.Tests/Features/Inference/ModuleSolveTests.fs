@@ -14,9 +14,6 @@ let private mapDefs (from: int) (count: int) =
 
 let private moduleOf (lines: string list) = String.concat "\n" ("module m" :: "" :: lines) + "\n"
 
-let private typeOf (name: string) (result: CompileResult) =
-    result.Typed.Value.Types |> Map.find name |> Unifier.tyToString
-
 [<Fact>]
 let ``A failure among many defs is reported where solving the module afresh reports it`` () =
     let source = moduleOf (mapDefs 1 30 @ [ "def bad: string = list.map([1, 2, 3], { x -> x + 1 }) \\list.length" ] @ mapDefs 31 30)
@@ -35,9 +32,9 @@ let ``A union built across defs keeps its tags in the order solving the module a
             @ [ "def tint = { n: int -> if n > 5 then shade(n) else #light }" ])
     let result = Compiler.compile source
     Assert.Empty(result.Diagnostics)
-    Assert.Equal("int -> #red | #green | #blue", typeOf "colour" result)
-    Assert.Equal("int -> #dark | #red | #green | #blue", typeOf "shade" result)
-    Assert.Equal("int -> #dark | #red | #green | #blue | #light", typeOf "tint" result)
+    Assert.Equal("int -> #red | #green | #blue", typeIn result.Typed.Value "colour")
+    Assert.Equal("int -> #dark | #red | #green | #blue", typeIn result.Typed.Value "shade")
+    Assert.Equal("int -> #dark | #red | #green | #blue | #light", typeIn result.Typed.Value "tint")
 
 [<Fact>]
 let ``Defs that share a variable, as mutually recursive ones do, are solved together`` () =
@@ -49,5 +46,5 @@ let ``Defs that share a variable, as mutually recursive ones do, are solved toge
             @ mapDefs 11 10)
     let result = Compiler.compile source
     Assert.Empty(result.Diagnostics)
-    Assert.Equal("int -> bool", typeOf "isEven" result)
-    Assert.Equal("int -> bool", typeOf "isOdd" result)
+    Assert.Equal("int -> bool", typeIn result.Typed.Value "isEven")
+    Assert.Equal("int -> bool", typeIn result.Typed.Value "isOdd")

@@ -8,11 +8,6 @@ open Nanyx.Compiler.Tests.TestSupport
 /// A function that never gives a value, for the tests to call: it calls itself for ever.
 let private stop = "def stop: int -> undefined = { x -> stop(x) }\n"
 
-/// The type of each of `names` in `source`, which must compile with no diagnostics, as an annotation writes it.
-let private typesOf (source: string) (names: string list) =
-    let typed = compileClean source
-    names |> List.map (fun name -> Unifier.tyToString typed.Types.[name])
-
 [<Fact>]
 let ``undefined can be written in an annotation`` () =
     Assert.Equal<string list>([ "int -> undefined" ], typesOf stop [ "stop" ])

@@ -6,8 +6,6 @@ open Nanyx.Compiler.Tests.TestSupport
 
 // A protected or private type that names itself in its definition (#1663).
 
-let private typeOf (typed: TypedModule) (name: string) = Unifier.tyToDisplayString Ascii typed.Types.[name]
-
 /// `source`, its line endings made `\n`, compiled with no errors.
 let private clean (source: string) = compileClean (source.ReplaceLineEndings "\n")
 
@@ -39,8 +37,8 @@ def sum: Node -> int = { node ->
 
 def total = sum(n)
 """
-    Assert.Equal("Node", typeOf typed "n")
-    Assert.Equal("int", typeOf typed "total")
+    Assert.Equal("Node", asciiTypeIn typed "n")
+    Assert.Equal("int", asciiTypeIn typed "total")
 
 [<Fact>]
 let ``A generic protected type names itself at its parameters`` () =
@@ -56,7 +54,7 @@ def firstRest: Stream(a) -> #some(Stream(a)) | #none = { s ->
     | #done -> #none
 }
 """
-    Assert.Equal("Stream(int)", typeOf typed "u")
+    Assert.Equal("Stream(int)", asciiTypeIn typed "u")
 
 [<Fact>]
 let ``A private type names itself`` () =
@@ -72,7 +70,7 @@ def length: Chain -> int = { chain ->
     | #none -> 1
 }
 """
-    Assert.Equal("Chain -> int", typeOf typed "length")
+    Assert.Equal("Chain -> int", asciiTypeIn typed "length")
 
 [<Fact>]
 let ``A type generic in contexts that names itself carries its own contexts there`` () =
@@ -89,7 +87,7 @@ def rest: [c] ([c] Stream(a)), ([c] Stream(a)) -> [c] Stream(a) = { s, fallback 
 def loudRest: [Console] () -> [Console] Stream(int) = { rest(loud, loud) }
 """
         )
-    Assert.EndsWith("([c] Stream(a)), ([c] Stream(a)) -> [c] Stream(a)", typeOf typed "rest")
+    Assert.EndsWith("([c] Stream(a)), ([c] Stream(a)) -> [c] Stream(a)", asciiTypeIn typed "rest")
 
 [<Fact>]
 let ``A def whose value nests constructors of a recursive type generic in contexts keeps its declared contexts`` () =
@@ -101,7 +99,7 @@ let ``A def whose value nests constructors of a recursive type generic in contex
 
 def v1: ([d] int -> b) -> [d] Rq(b) = { f -> Rq(next = { #next(f(1), Rq(next = { #done })) }) }
 """
-    Assert.Equal("([d] int -> b) -> [d] Rq(b)", typeOf typed "v1")
+    Assert.Equal("([d] int -> b) -> [d] Rq(b)", asciiTypeIn typed "v1")
 
 [<Fact>]
 let ``The rest of a value of a type generic in contexts is not pure`` () =

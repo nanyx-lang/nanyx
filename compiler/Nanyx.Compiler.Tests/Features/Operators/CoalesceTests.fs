@@ -4,16 +4,12 @@ module Nanyx.Compiler.Tests.Features.Coalesce
 
 open Xunit
 open NyxCompiler
-
-let private typesOf (source: string) =
-    let result = Compiler.compile (source.ReplaceLineEndings "\n")
-    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    fun name -> Unifier.tyToString result.Typed.Value.Types.[name]
+open Nanyx.Compiler.Tests.TestSupport
 
 [<Fact>]
 let ``?? gives the type of the value inside #some`` () =
     let typeOf =
-        typesOf """def lookup: string -> #some(int) | #missing = { k -> #missing }
+        typeOf """def lookup: string -> #some(int) | #missing = { k -> #missing }
 def found = lookup("a") ?? 0
 def chained = lookup("a") ?? lookup("b") ?? 0
 def compared = lookup("a") ?? 0 == 1
@@ -28,7 +24,7 @@ def viaHelper = someOrElse(lookup("a"), { 0 })
 
 [<Fact>]
 let ``?? takes a nested option as its fallback when #some holds one`` () =
-    let typeOf = typesOf "def nested: #some(#some(int) | #none) | #none = #none\ndef inner = nested ?? #none\n"
+    let typeOf = typeOf "def nested: #some(#some(int) | #none) | #none = #none\ndef inner = nested ?? #none\n"
     Assert.Equal("#some(int) | #none", typeOf "inner")
 
 [<Fact>]

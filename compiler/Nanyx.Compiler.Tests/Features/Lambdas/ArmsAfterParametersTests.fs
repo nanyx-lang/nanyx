@@ -8,8 +8,6 @@ open Nanyx.Compiler.Tests.TestSupport
 // A lambda that names its parameters and then gives arms, `{ m, f -> | ... }`, matches the arms against the
 // parameters in order, as `{ | ... }` does (#985).
 
-let private typeOf (source: string) (name: string) = Unifier.tyToString (compileClean source).Types.[name]
-
 [<Fact>]
 let ``Arms after parameters check to the same type as arms alone`` () =
     let source =

@@ -4,10 +4,6 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-/// The type of `name` in `source`, which has no diagnostics, as the compiler prints it.
-let private typeOf (name: string) (source: string) =
-    Unifier.tyToString ((compileClean (source.ReplaceLineEndings "\n")).Types.[name])
-
 [<Fact>]
 let ``A literal takes the numeric type the code around it expects`` () =
     let source =
@@ -25,13 +21,13 @@ def classify = { (b: I8) ->
   | _ -> "other"
 }
 """
-    Assert.Equal("U8", typeOf "small" source)
-    Assert.Equal("F32", typeOf "ratio" source)
-    Assert.Equal("U64", typeOf "huge" source)
-    Assert.Equal("I32 -> I32", typeOf "inc" source)
-    Assert.Equal("U16", typeOf "scaled" source)
-    Assert.Equal("list(U8)", typeOf "bytes" source)
-    Assert.Equal("I8 -> string", typeOf "classify" source)
+    Assert.Equal("U8", typeOf source "small")
+    Assert.Equal("F32", typeOf source "ratio")
+    Assert.Equal("U64", typeOf source "huge")
+    Assert.Equal("I32 -> I32", typeOf source "inc")
+    Assert.Equal("U16", typeOf source "scaled")
+    Assert.Equal("list(U8)", typeOf source "bytes")
+    Assert.Equal("I8 -> string", typeOf source "classify")
 
 [<Fact>]
 let ``A literal nothing settles is an int, or a float with a decimal point`` () =
@@ -46,11 +42,11 @@ def local = {
 }
 def odd = { x -> x % 2 }
 """
-    Assert.Equal("int", typeOf "big" source)
-    Assert.Equal("float", typeOf "half" source)
-    Assert.Equal("float", typeOf "nan" source)
-    Assert.Equal("() -> int", typeOf "local" source)
-    Assert.Equal("int -> int", typeOf "odd" source)
+    Assert.Equal("int", typeOf source "big")
+    Assert.Equal("float", typeOf source "half")
+    Assert.Equal("float", typeOf source "nan")
+    Assert.Equal("() -> int", typeOf source "local")
+    Assert.Equal("int -> int", typeOf source "odd")
 
 [<Theory>]
 [<InlineData("def a: U8 = 300", "'300' does not fit in U8 (0 to 255)", "300")>]

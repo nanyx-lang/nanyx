@@ -4,10 +4,6 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-/// The type of `name` in `source`, which has no diagnostics, as the compiler prints it.
-let private typeOf (name: string) (source: string) =
-    Unifier.tyToString ((compileClean (source.ReplaceLineEndings "\n")).Types.[name])
-
 [<Theory>]
 [<InlineData("I8")>]
 [<InlineData("I16")>]
@@ -23,9 +19,9 @@ def f = {{ (a: {name}), (b: {name}) -> -a * b + a / b - a %% b }}
 def less = {{ (a: {name}), (b: {name}) -> a < b }}
 def same = {{ (a: {name}), (b: {name}) -> a == b }}
 """
-    Assert.Equal($"{name}, {name} -> {name}", typeOf "f" source)
-    Assert.Equal($"{name}, {name} -> bool", typeOf "less" source)
-    Assert.Equal($"{name}, {name} -> bool", typeOf "same" source)
+    Assert.Equal($"{name}, {name} -> {name}", typeOf source "f")
+    Assert.Equal($"{name}, {name} -> bool", typeOf source "less")
+    Assert.Equal($"{name}, {name} -> bool", typeOf source "same")
 
 [<Fact>]
 let ``A sized integer is not an int`` () =
@@ -47,8 +43,8 @@ def total: [Num(a)] list(a) -> a = {
 def bytes = total([U8.fromInt(1), U8.fromInt(2)])
 def text = I16.toString(I16.zero)
 """
-    Assert.Equal("U8", typeOf "bytes" source)
-    Assert.Equal("string", typeOf "text" source)
+    Assert.Equal("U8", typeOf source "bytes")
+    Assert.Equal("string", typeOf source "text")
 
 [<Fact>]
 let ``A definition attached to a sized integer is reached by a pipe`` () =
@@ -57,7 +53,7 @@ let ``A definition attached to a sized integer is reached by a pipe`` () =
 def I32.halve = { (n: I32) -> n / I32.fromInt(2) }
 def half = { (n: I32) -> n \halve }
 """
-    Assert.Equal("I32 -> I32", typeOf "half" source)
+    Assert.Equal("I32 -> I32", typeOf source "half")
 
 [<Theory>]
 [<InlineData("int")>]
@@ -69,4 +65,4 @@ let ``Each integer type has arithmetic that wraps around`` (name: string) =
         $"""
 def hash = {{ (a: {name}), (b: {name}) -> {name}.wrappingMul({name}.wrappingAdd(a, b), {name}.wrappingSub(a, b)) }}
 """
-    Assert.Equal($"{name}, {name} -> {name}", typeOf "hash" source)
+    Assert.Equal($"{name}, {name} -> {name}", typeOf source "hash")

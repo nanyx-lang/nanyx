@@ -226,6 +226,24 @@ let compileClean (source: string) =
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     result.Typed.Value
 
+/// The types of the top-level defs of `source`, its line endings made `\n`, which must compile with no diagnostics.
+let definedTypes (source: string) = (compileClean (normalized source)).Types
+
+/// The type of the top-level def `name` in `typed`, as `Unifier.tyToString` writes it.
+let typeIn (typed: TypedModule) (name: string) = Unifier.tyToString typed.Types.[name]
+
+/// The type of the top-level def `name` in `typed`, as the editor writes it in ASCII.
+let asciiTypeIn (typed: TypedModule) (name: string) = Unifier.tyToDisplayString Ascii typed.Types.[name]
+
+/// The type of the top-level def `name` in `source` (see `definedTypes`), as `Unifier.tyToString` writes it. Given
+/// only `source`, it compiles it once, and gives the type of each name it is then given.
+let typeOf (source: string) =
+    let types = definedTypes source
+    fun (name: string) -> Unifier.tyToString types.[name]
+
+/// The types of the top-level defs `names` in `source`, as `typeOf` gives them.
+let typesOf (source: string) (names: string list) = List.map (typeOf source) names
+
 /// The type a hover shows at the first `text` in `source`, which must compile with no diagnostics.
 let hoverType (source: string) (text: string) =
     let result = Compiler.compile source

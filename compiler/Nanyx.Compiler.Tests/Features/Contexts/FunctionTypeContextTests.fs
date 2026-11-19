@@ -7,9 +7,6 @@ open Nanyx.Compiler.Tests.TestSupport
 
 // A function type carries the contexts its function requires where it is called: `[Console] int -> int`.
 
-let private typeOf (source: string) (name: string) =
-    Unifier.tyToString (compileClean source).Types.[name]
-
 [<Fact>]
 let ``A parameter's function type keeps the contexts written on it`` () =
     let source =

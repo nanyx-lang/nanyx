@@ -6,13 +6,6 @@ open Nanyx.Compiler.Tests.TestSupport
 
 // `_` in a type: the part of the annotation that inference fills in.
 
-let private typesOf (source: string) =
-    let result = Compiler.compile source
-    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    result.Typed.Value.Types
-
-let private typeOf (source: string) (name: string) = Unifier.tyToString (typesOf source).[name]
-
 [<Fact>]
 let ``A hole in a type argument is inferred from the value`` () =
     Assert.Equal("list(int)", typeOf "def xs: list(_) = [1, 2]" "xs")
@@ -23,7 +16,7 @@ let ``A hole in a function type is inferred from the lambda`` () =
     let source =
         normalized """def add: (int, _) -> _ = { a, b -> a + b }
 def greet: _ -> string = { name -> "hi " ++ name }"""
-    let types = typesOf source
+    let types = definedTypes source
     Assert.Equal("int, int -> int", Unifier.tyToString types.["add"])
     Assert.Equal("string -> string", Unifier.tyToString types.["greet"])
 
@@ -36,7 +29,7 @@ let ``A hole for a whole type is the same as no annotation`` () =
     let source =
         normalized """def f: _ = { x -> x + 1 }
 def n: _ = f(2)"""
-    let types = typesOf source
+    let types = definedTypes source
     Assert.Equal("int -> int", Unifier.tyToString types.["f"])
     Assert.Equal("int", Unifier.tyToString types.["n"])
 
@@ -48,7 +41,7 @@ let ``Holes are generalised as an unannotated def is, not as named variables`` (
 def a = id(1)
 def b = id("s")
 def inc: _ -> _ = { x -> x + 1 }"""
-    let types = typesOf source
+    let types = definedTypes source
     Assert.Equal("int", Unifier.tyToString types.["a"])
     Assert.Equal("string", Unifier.tyToString types.["b"])
     Assert.Equal("int -> int", Unifier.tyToString types.["inc"])
@@ -59,7 +52,7 @@ let ``Each hole is a type of its own`` () =
 
 [<Fact>]
 let ``A hole can be used before its def`` () =
-    let types = typesOf "def n = double(4)\ndef double: _ -> _ = { x -> x * 2 }"
+    let types = definedTypes "def n = double(4)\ndef double: _ -> _ = { x -> x * 2 }"
     Assert.Equal("int", Unifier.tyToString types.["n"])
 
 [<Fact>]

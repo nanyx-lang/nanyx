@@ -7,9 +7,6 @@ open Nanyx.Compiler.Tests.TestSupport
 // A lambda's type carries the contexts it uses, which it requires where it is called: `{ n -> println(n) }` is
 // `[Console] int -> ()`. A function that requires fewer contexts fits where one that requires more is expected.
 
-let private typeOf (source: string) (name: string) =
-    Unifier.tyToString (compileClean source).Types.[name]
-
 let private mk =
     """
 def mk: [Console] () -> ([Console] int -> int) = {
