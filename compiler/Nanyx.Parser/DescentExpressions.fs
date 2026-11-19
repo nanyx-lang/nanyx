@@ -1,8 +1,9 @@
 /// The recursive-descent parser's expressions: the operator expressions of `Expressions.fs` and what they are made of,
 /// read from the layout pass's tokens. It reads literals, strings with holes, names, calls, tags, member access,
 /// tuples, records, lists and maps, the prefix `not` and `-`, pipes and the binary operators, with the precedence and
-/// grouping of `Operators.binaryOperators`. It gives up at a lambda and at what starts with a keyword (`if`, `match`,
-/// `for`, `use`, ...), which come with blocks and statements (see the Work in progress page "The parser").
+/// grouping of `Operators.binaryOperators`. Lambdas are `DescentBlocks`', through `lambdaRef`. It gives up at what starts
+/// with a keyword (`if`, `match`, `for`, `use`, ...), which comes with blocks and statements (see the Work in progress
+/// page "The parser").
 module Parser.Program.DescentExpressions
 
 open System
@@ -52,6 +53,19 @@ let private across (c: Cursor) (fits: Cursor -> bool) =
     else
         c.Index <- start
         false
+
+/// Reads a lambda, `{ ... }`, at the cursor: `DescentBlocks.lambda`, which reads statements and so comes after this file.
+/// It is filled before anything is read (see `DescentBlocks.fill`), as the FParsec parser's forward refs are.
+let internal lambdaRef: (Cursor -> Expression) ref = ref (fun c -> c.GiveUp "a lambda, before the lambda parser is filled")
+
+/// The arguments of `f(fields) { ... }`: the trailing lambda is the last positional argument, as in a pipe, so
+/// `f(a, b) { ... }` is `f(a, b, { ... })`, and `f(a, y = 1) { ... }` is `f(a, { ... }, y = 1)`
+/// (`Expressions.withTrailingLambda`).
+let private withTrailingLambda (fields: RecordField list) (span: SourceSpan) (lambda: Expression) =
+    let positional, named = fields |> List.partition (function PositionalField _ -> true | NamedField _ -> false)
+    match named with
+    | [] -> (positional |> List.choose (function PositionalField e -> Some e | NamedField _ -> None)) @ [ lambda ]
+    | _ -> [ Expression.at span (RecordExpr(positional @ [ PositionalField lambda ] @ named)) ]
 
 /// The keywords that start a primary expression of their own, before the FParsec parser would read them as names.
 let private constructKeywords =
@@ -115,7 +129,10 @@ let rec private doubleQuoted (c: Cursor) : Expression =
     addText (c.Expect StringStart)
     let mutable going = true
     while going do
-        parts.Add(StringExpr(expression Crossing c))
+        // A hole that doesn't read makes the FParsec parser read the string as text, `{` and all.
+        let hole = try expression Crossing c with NoMatch -> c.GiveUp "a hole that doesn't read, which the FParsec parser reads as text"
+        parts.Add(StringExpr hole)
+        if not (c.Is StringMiddle || c.Is StringEnd) then c.GiveUp "a hole that doesn't read, which the FParsec parser reads as text"
         if c.Is StringMiddle then addText (c.Take())
         else
             addText (c.Expect StringEnd)
@@ -145,25 +162,32 @@ and private parenFields (c: Cursor) : RecordField list * SourceSpan =
     c.Expect RightParen |> ignore
     fields, span
 
-/// `(args)`, as a call's arguments: none, one, a tuple of them, or a record. A lambda after them is a trailing one.
+/// `(args)`, as a call's arguments: none, one, a tuple of them, or a record, and the lambda after them on the line,
+/// a trailing one, if there is one.
 and private callArguments (c: Cursor) : Expression list =
-    let args =
+    let fields =
         if c.Is LeftParen && (match c.At 1 with Code next -> next.Kind = RightParen | _ -> false) then
             c.Take() |> ignore
             c.Take() |> ignore
-            []
-        else
-            let fields, span = parenFields c
-            [ fieldsToExpr fields span ]
-    if lambdaFollows c then c.GiveUp "a call with a trailing lambda"
-    args
+            None
+        else Some(parenFields c)
+    let trailing = if lambdaFollows c then Some(lambdaRef.Value c) else None
+    match fields, trailing with
+    | Some(fields, span), Some lambda -> withTrailingLambda fields span lambda
+    | Some(fields, span), None -> [ fieldsToExpr fields span ]
+    | None, Some lambda -> [ lambda ]
+    | None, None -> []
 
 /// A call, `f(args)`, and then each call on the result before it, `f()(args)` (see `CallResultSyntax`).
 and private call (c: Cursor) : Expression =
     let start = c.Start
     let callee, calleeSpan = qualifiedName c
-    if lambdaFollows c then c.GiveUp "a call with a trailing lambda"
-    if c.Adjacent && c.Is LeftBracket then collectionConstruct c start callee calleeSpan else
+    if c.Adjacent && c.Is LeftBracket then collectionConstruct c start callee calleeSpan
+    // `f { ... }`: a lambda alone after the name is the only argument.
+    elif lambdaFollows c then
+        let lambda = lambdaRef.Value c
+        Expression.at (c.SpanFrom start) (FunctionCall(callee, Some calleeSpan, [ lambda ]))
+    else
     if not (c.Adjacent && c.Is LeftParen) then raise NoMatch
     let args = callArguments c
     let mutable result = Expression.at (c.SpanFrom start) (FunctionCall(callee, Some calleeSpan, args))
@@ -298,7 +322,7 @@ and private primary (c: Cursor) : Expression =
     let nextAdjacent = next |> Option.exists (fun next -> next.Start = token.End)
     match token.Kind with
     | Keyword when constructKeywords.Contains(c.Text token) -> c.GiveUp $"`{c.Text token}`, which starts what the descent parser doesn't read yet"
-    | LeftBrace -> c.GiveUp "a lambda"
+    | LeftBrace -> lambdaRef.Value c
     | StringStart -> doubleQuoted c
     | Name when nextAdjacent && next |> Option.exists (fun next -> next.Kind = Operator && c.Text next = "!") ->
         c.GiveUp "a workflow keyword with `!`"
@@ -339,11 +363,23 @@ and private primary (c: Cursor) : Expression =
 
 /// A primary expression and the `.field`s after it, with the span of its text (`Expressions.memberAccessChain`).
 and private accessed (c: Cursor) : Operand =
-    let start = c.Start
-    let mutable expr = primary c
-    let mutable text = c.SpanFrom start
+    // In a shorthand lambda's body, the first operand is the argument it leaves out, made up at the operator or `.`
+    // written in its place, which takes up no text (`Expressions.implicitArgumentOperand`).
+    let madeUp = c.ImplicitArgumentNext
+    let mutable expr, text =
+        match madeUp with
+        | Some span ->
+            c.ImplicitArgumentNext <- None
+            Expression.at span (IdentifierExpr implicitArgument), span
+        | None ->
+            let start = c.Start
+            let expr = primary c
+            expr, c.SpanFrom start
+    // The made-up argument's first `.field` is written where the argument would be, not straight after it.
+    let mutable first = madeUp.IsSome
     let field () =
-        if not (c.Adjacent && c.Is Dot) then raise NoMatch
+        if not ((c.Adjacent || first) && c.Is Dot) then raise NoMatch
+        first <- false
         c.Take() |> ignore
         if not c.Adjacent then raise NoMatch
         match c.Token with
@@ -405,7 +441,7 @@ and private pipeTarget (c: Cursor) : (Identifier * SourceSpan * Expression list)
                 fields |> List.choose (function PositionalField e -> Some e | NamedField _ -> None)
             | _ -> [ Expression.at span (RecordExpr fields) ]
         else []
-    if lambdaFollows c then c.GiveUp "a pipe with a trailing lambda"
+    let args = if lambdaFollows c then args @ [ lambdaRef.Value c ] else args
     (callee, calleeSpan, args), c.SpanFrom start
 
 /// `value` and then each `\` step after it (`Expressions.withPipes`): on the line, or for `Crossing` on any line after
@@ -437,13 +473,13 @@ and private operand (lines: Lines) (c: Cursor) : Operand =
             match lines with
             | Crossing -> across c (fun c -> c.Token.IsSome) |> ignore
             | Inline -> if not c.OnSameLine then raise NoMatch
-        | Some token when token.Kind = Operator && c.Text token = "-" ->
+        | Some token when token.Kind = Operator && c.Text token = "-" && c.ImplicitArgumentNext.IsNone ->
             match c.At 1 with
             | Code next when next.Start = token.End && next.Kind <> Number ->
                 c.Take() |> ignore
                 prefixes.Add((NegateSyntax.builtIn, c.SpanOf token))
             | _ -> going <- false
-        | Some token when token.Kind = Operator && c.Text token = "!" -> c.GiveUp "a prefix `!`, which is a mistake"
+        | Some token when token.Kind = Operator && c.Text token = "!" && c.ImplicitArgumentNext.IsNone -> c.GiveUp "a prefix `!`, which is a mistake"
         | _ -> going <- false
     let term =
         prefixes

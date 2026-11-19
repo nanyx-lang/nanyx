@@ -111,6 +111,8 @@ let checkPatterns (file: string) (parsed: SourceModule) (roots: Pattern list) : 
 type ExpressionEntry =
     /// A def's value on its line, `DescentExpressions.defValue`.
     | DefValue
+    /// A def's value written as an indented block on the lines after it, `DescentBlocks.indentedBlock`.
+    | DefBlock
     /// A statement, or a script's top-level expression, `expression Inline`.
     | StatementValue
 
@@ -129,14 +131,16 @@ let rec private isMadeUp (value: Expression) =
 
 /// The expressions in the FParsec parser's tree of `parsed` that a part of the grammar reads whole: each def's value
 /// written on its line, each statement's expression and each script's top-level expression. A value the parser makes up
-/// is left out (a declaration's, which starts where its def does, or a destructuring def's), and so is one that is a
-/// block, which the descent parser reads with statements, but for the block a call on a call's result is.
+/// is left out (a declaration's, which starts where its def does, or a destructuring def's), and so is a block other
+/// than a def's value on the lines after it or the block a call on a call's result is.
 let expressionRoots (parsed: SourceModule) : (ExpressionEntry * Expression) list =
     let roots = ResizeArray()
     let add entry (owner: SourceSpan) (value: Expression) =
         match value.Kind with
         // A call on a call's result is a block the parser makes up (see `CallResultSyntax`), which reads as a call.
         | Block({ Kind = DefStatement(_, name, _, _) } :: _) when name = CallResultSyntax.name -> roots.Add((entry, value))
+        | Block({ Kind = DefStatement(_, name, _, _) } :: _) when isMadeUpName name -> ()
+        | Block _ when entry = DefValue && not (SourceSpan.isNone value.Span) && value.Span.Start > owner.Start -> roots.Add((DefBlock, value))
         | Block _ -> ()
         | _ when SourceSpan.isNone value.Span || isMadeUp value || value.Span.Start <= owner.Start -> ()
         | Match _ when entry = DefValue -> ()
@@ -165,5 +169,9 @@ let checkExpressions (file: string) (parsed: SourceModule) (roots: (ExpressionEn
     roots
     |> checkEach file parsed snd (fun (root: Expression) -> root.Span.Start) (fun cursor (entry, _) ->
         match entry with
-        | DefValue -> DescentExpressions.defValue cursor
-        | StatementValue -> DescentExpressions.expression DescentExpressions.Inline cursor)
+        | DefValue -> DescentBlocks.defValueAfterEquals cursor
+        | DefBlock ->
+            match cursor.At -1 with
+            | Layout.Indent _ -> DescentBlocks.defValueAfterEquals cursor
+            | _ -> raise (GiveUp "a def's block the layout pass doesn't open")
+        | StatementValue -> DescentBlocks.statementValue cursor)

@@ -32,7 +32,7 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   pieces differ on purpose, each listed with why in the test: where the two read text differently is listed in
   [The parser](../work-in-progress/parser) in Work in progress.
 - **The recursive-descent parser** (`DescentCursor.fs` and a file per part of the grammar, so far `DescentTypes.fs`,
-  `DescentLiterals.fs`, `DescentPatterns.fs` and `DescentExpressions.fs`):
+  `DescentLiterals.fs`, `DescentPatterns.fs`, `DescentExpressions.fs` and `DescentBlocks.fs`):
   the FParsec parser's grammar read from the layout pass's tokens. `DescentCursor` has the cursor, which reads the
   tokens and goes back for an alternative (`NoMatch`, which `Cursor.Attempt` catches, as FParsec's `attempt` and `<|>`
   do), and the names and documentable starts the FParsec parser keeps in `ParseState`. At anything it doesn't read yet,
@@ -50,10 +50,17 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   tags, member access, `with`, tuples, records, lists and maps, the prefix `not` and `-`, pipes, `:=`, and the binary
   operators and ranges by precedence climbing over `binaryOperators`, giving up where two operators can't be written
   side by side. It reads as either of the FParsec parser's operator tables does (`Lines`): `Crossing` goes on after an
-  operator at the end of a line, and `Inline`, for a statement, doesn't. It gives up at a lambda and at what starts with
-  a keyword (`if`, `match`, `for`, `use`, ...), which come with blocks and statements. `CorpusTests.fs` checks it on
-  every def's value and every statement in the corpus, and `DescentExpressionTests.fs` on the places where reading one
-  takes care. Nothing reads with the pattern and expression parsers yet but those tests.
+  operator at the end of a line, and `Inline`, for a statement, doesn't. It gives up at what starts with a keyword
+  (`if`, `match`, `for`, `use`, ...). `DescentBlocks.fs` reads lambdas, which `DescentExpressions` reads through a
+  forward reference (`lambdaRef`, filled by `DescentBlocks.fill`), a def's value written as an indented block, and the
+  statements of a block: `def`, `export def`, `rec`, `mut` and expressions, several on a line after `;`. A lambda's
+  statements are any number at any column until its `}`, as the FParsec parser reads them, and a block's run from the
+  `Indent` that opens it to the `Dedent` that closes it, with a line indented further that its statement before didn't
+  take as a statement of its own. It gives up at a lambda of match arms, one that names its context's instance or
+  writes its result type, a destructuring def, and a `use`, `import`, type or attribute statement. `CorpusTests.fs`
+  checks it on every def's value and every statement in the corpus, and `DescentExpressionTests.fs` and
+  `DescentBlockTests.fs` on the places where reading one takes care. Nothing reads with the pattern, expression and
+  block parsers yet but those tests.
 
 # The layout rules
 

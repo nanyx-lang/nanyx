@@ -74,9 +74,8 @@ let ``Fields written one per line need no commas`` () =
     Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.Same ], outcomesIn source)
 
 [<Theory>]
-[<InlineData("{ x -> x }", "a lambda")>]
 [<InlineData("if a then b else c", "`if`, which starts what the descent parser doesn't read yet")>]
-[<InlineData("f(x) { y -> y }", "a call with a trailing lambda")>]
+[<InlineData("{\n  | #a -> 1\n  | _ -> 2\n}", "a lambda of match arms")>]
 [<InlineData("a < b < c", "two operators that can't be written side by side, which is a mistake")>]
 let ``An expression the descent parser doesn't read is left to the FParsec parser`` (value: string, reason: string) =
     let source = $"def v = {value}\n"
