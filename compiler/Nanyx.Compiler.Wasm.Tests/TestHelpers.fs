@@ -365,10 +365,20 @@ let assertRan (expectedOutput: string) (outcome: RunOutcome) =
     Assert.Equal(expectedOutput, outcome.StandardOutput)
     Assert.Equal("", outcome.StandardError)
 
-/// `outcome` with the location each `dbg` line starts with, `[main.nyx:12] `, left out: for a test that prints values
-/// with `dbg` and is about something else.
+/// Asserts that `outcome` ran to its end, writing `expectedOutput` to stdout and `expectedDbg`, what its `dbg`s printed,
+/// to stderr.
+let assertRanWithDbg (expectedOutput: string) (expectedDbg: string) (outcome: RunOutcome) =
+    Assert.True((outcome.ExitCode = 0), $"Expected exit code 0, got {outcome.ExitCode}. stderr:\n{outcome.StandardError}")
+    Assert.Equal(expectedDbg, outcome.StandardError)
+    Assert.Equal(expectedOutput, outcome.StandardOutput)
+
+/// `outcome` with what `dbg` wrote to stderr after what the program wrote to stdout, as its stdout, with the location
+/// each `dbg` line starts with, `[main.nyx:12] `, left out: for a test that prints values with `dbg` and is about
+/// something else. A test that reads both in the order they were written prints them all with one or the other.
 let withoutDbgLocations (outcome: RunOutcome) =
-    { outcome with StandardOutput = Regex.Replace(outcome.StandardOutput, @"^\[main\.nyx:\d+\] ", "", RegexOptions.Multiline) }
+    { outcome with
+        StandardOutput = outcome.StandardOutput + Regex.Replace(outcome.StandardError, @"^\[main\.nyx:\d+\] ", "", RegexOptions.Multiline)
+        StandardError = "" }
 
 /// `stderr` without the stack a crash or a runtime error writes under its message (the lines that start with two
 /// spaces): for a test of the message.

@@ -4,9 +4,10 @@ open Xunit
 open Transpiler.Wasm.CodeGen
 open TranspilerWasmTestHelpers
 
-/// Runs `source` with its memory checked, and asserts it printed `expected`. Both are normalised to `\n`, and the line break that starts `expected` is left out.
+/// Runs `source` with its memory checked, and asserts its `dbg`s printed `expected`, to stderr, and it printed nothing
+/// else. Both are normalised to `\n`, and the line break that starts `expected` is left out.
 let private printsAs (expected: string) (source: string) =
-    runSource (source.ReplaceLineEndings "\n") |> assertRan (expected.ReplaceLineEndings("\n").TrimStart('\n'))
+    runSource (source.ReplaceLineEndings "\n") |> assertRanWithDbg "" (expected.ReplaceLineEndings("\n").TrimStart('\n'))
 
 [<Fact>]
 let ``Run - dbg as a pipe prints each kind of value`` () =
@@ -258,10 +259,9 @@ def doubled =
     \dbg
 println(list.length(doubled))
 """
-    |> printsAs """
-[main.nyx:5] [2, 4, 6]
-3
-"""
+    |> normalized
+    |> runSource
+    |> assertRanWithDbg "3\n" "[main.nyx:5] [2, 4, 6]\n"
 
 [<Fact>]
 let ``Run - dbg in a package names its file by its path in the package`` () =
@@ -273,7 +273,7 @@ def main = {
   dbg(42)
 }
 """
-    fst (nanyxOnPackage [ "main.nyx", normalized source ] [ "run"; "{package}" ]) |> assertRan "[src/main.nyx:6] 42\n"
+    fst (nanyxOnPackage [ "main.nyx", normalized source ] [ "run"; "{package}" ]) |> assertRanWithDbg "" "[src/main.nyx:6] 42\n"
 
 /// `source` compiled as a release build is, and run: what it printed.
 let private releasePrints (expected: string) (source: string) =
@@ -295,3 +295,24 @@ println(shown)
 "piped" \dbg \println
 """
     |> releasePrints "once\nonce\npiped\n"
+[<Fact>]
+let ``Run - dbg writes to stderr, in order with what the program writes there itself (#2058)`` () =
+    """
+dbg(1)
+eprintln("between")
+println("out")
+dbg(2)
+"""
+    |> normalized
+    |> runSource
+    |> assertRanWithDbg "out\n" "[main.nyx:2] 1\nbetween\n[main.nyx:5] 2\n"
+
+[<Fact>]
+let ``A module the runtime runs gives what dbg prints to nanyx:debug first; one written to run elsewhere writes it itself (#2058)`` () =
+    let source = normalized "dbg(1)\n"
+    let runByRuntime = transpileWatWith { WasmOptions.Default with Places = true; Probes = true } source
+    Assert.Contains("""(import "nanyx:debug" "dbg" """, runByRuntime)
+    Assert.Contains("call $dbg_str", runByRuntime)
+    let elsewhere = transpileWat source
+    Assert.DoesNotContain("nanyx:debug", elsewhere)
+    Assert.Contains("call $dbg_str", elsewhere)

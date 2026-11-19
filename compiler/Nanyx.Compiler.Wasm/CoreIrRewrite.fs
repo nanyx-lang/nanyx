@@ -38,7 +38,7 @@ let directAtoms (e: Expr) : Atom list =
     | Assign(_, atom)
     | SetField(_, _, atom)
     | If(atom, _, _) -> [ atom ]
-    | Dbg(location, text) -> [ location; text ]
+    | Dbg(_, text) -> [ text ]
     | Prim(_, atoms)
     | Call(_, atoms)
     | MakeList atoms
@@ -120,7 +120,7 @@ let rec mapVarsAndPlaces (var: Var -> Var) (depth: int -> int) (place: Place opt
         | MakeClosure(name, arity, captured) -> MakeClosure(name, arity, atoms captured)
         | CallClosure(closure, args, entry) -> CallClosure(var closure, atoms args, entry)
         | Interpolate parts -> Interpolate(parts |> List.map (function Hole(v, holeType) -> Hole(var v, holeType) | text -> text))
-        | Dbg(location, value) -> Dbg(atom location, atom value)
+        | Dbg(site, value) -> Dbg(site, atom value)
         | FloatConstant _
         | Crash _ -> e.Kind
         | Probe(kind, locals) -> Probe(kind, locals |> List.map (fun local -> { local with Var = var local.Var }))

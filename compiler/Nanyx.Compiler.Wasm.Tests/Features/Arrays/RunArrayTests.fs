@@ -112,4 +112,4 @@ let ``Run - arrays of records, tags, floats and narrow integers`` () =
 let ``Run - dbg writes an array after its type's name`` () =
     printing [ "def xs = dbg(array.fromList([\"a\", \"b\"]))"; "println(array.length(xs))" ]
     |> runSource
-    |> withoutDbgLocations |> assertRan "Array[\"a\", \"b\"]\n2\n"
+    |> withoutDbgLocations |> assertRan "2\nArray[\"a\", \"b\"]\n"

@@ -13,7 +13,7 @@
     i32.sub
     i32.load
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -28,7 +28,7 @@
     i32.sub
     i32.load
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -40,7 +40,7 @@
     i32.const 4
     i32.const 1
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -642,12 +642,13 @@
     local.get $r
   )
 
-  (data (i32.const 256) "\00\00\00\00\05\00\00\00[12] \00\00\00")
-  (data (i32.const 272) "\00\00\00\00\05\00\00\00Hello\00\00\00")
+  (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
+  (data (i32.const 268) "\00\00\00\00\05\00\00\00[12] \00\00\00")
+  (data (i32.const 284) "\00\00\00\00\05\00\00\00Hello\00\00\00")
 
   (func $f__known (result i64) (local $x__in2_i64 i64) (local $__owned_0 i32) (local $__owned_1 i32)
-    i32.const 264
-    i32.const 280
+    i32.const 276
+    i32.const 292
     local.tee $__owned_1
     call $__nanyx_string_quote
     local.get $__owned_1
@@ -666,8 +667,8 @@
   )
 
   (func $main (result i64) (local $x__in2__in1_i64 i64) (local $__owned_0 i32) (local $__owned_1 i32)
-    i32.const 264
-    i32.const 280
+    i32.const 276
+    i32.const 292
     local.tee $__owned_1
     call $__nanyx_string_quote
     local.get $__owned_1
@@ -687,7 +688,7 @@
   (export "main" (func $main))
 
   (func $__lambda_1 (param $__env i32) (param $s i32) (result i32) (local $__owned_0 i32) (local $__owned_1 i32)
-    i32.const 264
+    i32.const 276
     local.get $s
     local.tee $__owned_1
     call $__nanyx_string_quote

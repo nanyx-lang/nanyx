@@ -48,7 +48,11 @@ type EmitContext =
       /// (see `CoreIrCounting`): a probe gives a printer that does a reference of its own.
       TakesOver: string -> int -> bool
       /// A new probe's number, unique in the module, which the runtime knows it by (see `WasmBinary.spanTableName`).
-      ProbeId: unit -> int }
+      ProbeId: unit -> int
+      /// Whether a `dbg` gives what it prints to the runtime's `nanyx:debug` `dbg` first, which a module the runtime runs
+      /// has (see `WasmOptions.Probes`): the host decides where it goes. Without it, or where the runtime leaves it to
+      /// the program, the program writes it to its stderr through `$dbg_str`.
+      DbgToRuntime: bool }
 
 /// The marker that says the code after it, up to the next one, was made from source at `place`: a line comment,
 /// `;;@ main.nyx:12`, that `WasmBinary` writes into the module's table of places (see `WatSyntax.Placed`). Code inlined
@@ -238,7 +242,7 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | Assign(_, atom)
     | SetField(_, _, atom)
     | If(atom, _, _) -> ofAtoms [ atom ]
-    | Dbg(location, text) -> ofAtoms [ location; text ]
+    | Dbg(_, text) -> ofAtoms [ text ]
     | ForEach loop -> ofAtoms (ForLoop.sourceAtoms loop)
     | Dup(_, body)
     | Drop(_, body)
@@ -263,6 +267,8 @@ let probingEnabled = "__nanyx_probing_enabled"
 let probing = "__nanyx_probing"
 let probeCall = "__nanyx_probe"
 let probeLocal = "__nanyx_probe_local"
+/// `dbg`, which a debug build the runtime runs imports from `nanyx:debug` (see `EmitContext.DbgToRuntime`).
+let dbgImport = "__nanyx_dbg"
 
 /// The variables a probe at the start of `rest`, the rest of a chain, may write (see `CoreIrProbes`): those `rest` reads
 /// but does not bind itself. One it never reads again may have been given up already, so a probe leaves it out.
@@ -878,7 +884,26 @@ type private FunctionEmitter(context: EmitContext) =
                 | Owning -> join "\n    " [ touching "i32.load"; "i32.const 1"; "i32.add" ]
             join "\n    " [ read; atomsAfter true args; read; slot; $"{call}_indirect (type ${indirectTypeName parameters result})" ]
         | Interpolate parts -> this.Interpolation parts
-        | Dbg(location, text) -> join "\n    " [ atoms [ location; text ]; "call $dbg_str"; "i32.const 0" ]
+        | Dbg(site, text) ->
+            let prefix = this.Atom deferred onStack (AString site.Prefix)
+            if context.DbgToRuntime then
+                // The runtime is given it first, and the program writes it itself if the runtime leaves it to it.
+                let held = freshLocal "__dbg_text" "i32"
+                join "\n    "
+                    [ this.Atom deferred onStack (AString site.File)
+                      $"i32.const {site.Line}"
+                      $"i32.const {site.Column}"
+                      atomsAfter true [ text ]
+                      $"local.tee ${held}"
+                      $"call ${dbgImport}"
+                      "i32.eqz"
+                      "if"
+                      prefix
+                      $"local.get ${held}"
+                      "call $dbg_str"
+                      "end"
+                      "i32.const 0" ]
+            else join "\n    " [ prefix; atomsAfter true [ text ]; "call $dbg_str"; "i32.const 0" ]
         | If(cond, ifTrue, ifFalse) ->
             let condCode = atoms [ cond ]
             let result = CoreIrLayout.valueType expr.Type

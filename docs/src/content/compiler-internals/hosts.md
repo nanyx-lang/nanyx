@@ -176,6 +176,14 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   and answers each request in a store and an instance of its own, on a thread of its own. An instance that traps or
   exits without responding is answered with a 500, the reason goes to standard error, and the server carries on.
   `Request.path` takes the path from the whole URL the runtime passes.
+- **Where `dbg` prints.** `dbg` needs no context, and a host package does nothing for it: the runtime that runs the
+  host's program decides. A module `nanyx run` runs gives each `dbg` to `nanyx:debug` `dbg` first, with its file, line,
+  column and text, and the handler says whether it has dealt with it (`Probing.defineDbg`). The console runner
+  (`WasmRunner`) leaves it to the program, which writes `[file:line] text` to its stderr through WASI `fd_write`, in
+  order with what else it writes there; the HTTP server (`WasmServer`) writes it to its log, `dbg (GET /path): ...`,
+  and never into the response. A module written by `nanyx build` or `nanyx wasm` has no such import and writes it to
+  stderr itself, so another runtime can run it ([Debug probes](./debug-probes#dbg),
+  [#2058](https://github.com/nanyx-lang/nanyx/issues/2058)).
 - **Host settings.** A host declares the settings it takes, with their defaults, in its own manifest's `host`; a
   program's manifest sets them in its `host`'s `settings`, and one the host doesn't take, or of another kind than its
   default, is an error at the setting (`HostSettings`, checked when `Package` reads the host). A script's `::host` has

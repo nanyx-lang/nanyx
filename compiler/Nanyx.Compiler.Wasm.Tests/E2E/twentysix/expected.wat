@@ -13,7 +13,7 @@
     i32.sub
     i32.load
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -28,7 +28,7 @@
     i32.sub
     i32.load
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -40,7 +40,7 @@
     i32.const 4
     i32.const 1
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -621,8 +621,9 @@
   (table $ctx_table 1 funcref)
   (elem (i32.const 0) $__lambda_47)
 
-  (data (i32.const 256) "\00\00\00\00\0e\00\00\00[input.nyx:5] \00\00")
-  (data (i32.const 280) "\00\00\00\00\00\00\00\00\00\00\00\00")
+  (data (i32.const 256) "\00\00\00\00\09\00\00\00input.nyx\00\00\00")
+  (data (i32.const 276) "\00\00\00\00\0e\00\00\00[input.nyx:5] \00\00")
+  (data (i32.const 300) "\00\00\00\00\00\00\00\00\00\00\00\00")
 
   (global $items__built (mut i32) (i32.const 0))
   (global $items__value (mut i32) (i32.const 0))
@@ -987,7 +988,7 @@
   (func $__nanyx_start (local $__inlined9__in1__in1__in3 i32) (local $keep__in1__in1__in1__in3 i32) (local $__inlined14__in1__in1__in3 i32) (local $__match_tmp_0__in1__in1__in3_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__for_cursor_0__in1__in1__in3 i32) (local $__for_end_0__in1__in1__in3_i64 i64) (local $__for___for_element_0__in1__in1__in3_i64 i64) (local $__owned_0 i32)
     call $items
     local.set $__inlined9__in1__in1__in3
-    i32.const 288
+    i32.const 308
     local.set $keep__in1__in1__in1__in3
     local.get $__inlined9__in1__in1__in3
     local.get $keep__in1__in1__in1__in3
@@ -1010,7 +1011,7 @@
         local.set $__for___for_element_0__in1__in1__in3_i64
         local.get $__for___for_element_0__in1__in1__in3_i64
     local.set $__match_tmp_0__in1__in1__in3_i64
-    i32.const 264
+    i32.const 284
     i32.const 0
     local.set $__interp_len
     local.get $__match_tmp_0__in1__in1__in3_i64

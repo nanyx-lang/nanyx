@@ -13,7 +13,7 @@
     i32.sub
     i32.load
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -28,7 +28,7 @@
     i32.sub
     i32.load
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -40,7 +40,7 @@
     i32.const 4
     i32.const 1
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -722,14 +722,15 @@
     local.get $end
   )
 
-  (data (i32.const 256) "\00\00\00\00\04\00\00\00[9] \00\00\00\00")
-  (data (i32.const 272) "\00\00\00\00\05\00\00\00[10] \00\00\00")
-  (data (i32.const 288) "\00\00\00\00\05\00\00\00[11] \00\00\00")
-  (data (i32.const 304) "\00\00\00\00\05\00\00\00Alice\00\00\00")
-  (data (i32.const 320) "\00\00\00\00\03\00\00\00Bob\00")
+  (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
+  (data (i32.const 268) "\00\00\00\00\04\00\00\00[9] \00\00\00\00")
+  (data (i32.const 284) "\00\00\00\00\05\00\00\00[10] \00\00\00")
+  (data (i32.const 300) "\00\00\00\00\05\00\00\00[11] \00\00\00")
+  (data (i32.const 316) "\00\00\00\00\05\00\00\00Alice\00\00\00")
+  (data (i32.const 332) "\00\00\00\00\03\00\00\00Bob\00")
 
   (func $printPerson (param $p i32) (result i32) (local $__dbg_value_1_i64 i64) (local $__dbg_value_2_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32)
-    i32.const 264
+    i32.const 276
     local.get $p
     i32.load offset=8
     call $__nanyx_dup_string
@@ -746,7 +747,7 @@
     local.get $p
     i64.load
     local.set $__dbg_value_1_i64
-    i32.const 280
+    i32.const 292
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_1_i64
@@ -774,7 +775,7 @@
     local.get $p
     i64.load offset=12
     local.set $__dbg_value_2_i64
-    i32.const 296
+    i32.const 308
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_2_i64
@@ -810,14 +811,14 @@
     i64.const 30
     i32.const 0
     call $__nanyx_record_set_i64
-    i32.const 312
+    i32.const 324
     i32.const 8
     call $__nanyx_record_set
     i64.const 100
     i32.const 12
     call $__nanyx_record_set_i64
     local.set $p
-    i32.const 264
+    i32.const 276
     local.get $p
     i32.load offset=8
     call $__nanyx_dup_string
@@ -833,7 +834,7 @@
     drop
     i64.const 30
     local.set $__dbg_value_1__in1_i64
-    i32.const 280
+    i32.const 292
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_1__in1_i64
@@ -863,7 +864,7 @@
     local.get $p
     call $__nanyx_drop_rec_age_int_name_string_score_int
     local.set $__dbg_value_2__in1_i64
-    i32.const 296
+    i32.const 308
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_2__in1_i64
@@ -894,14 +895,14 @@
     i64.const 25
     i32.const 0
     call $__nanyx_record_set_i64
-    i32.const 328
+    i32.const 340
     i32.const 8
     call $__nanyx_record_set
     i64.const 80
     i32.const 12
     call $__nanyx_record_set_i64
     local.set $p2
-    i32.const 264
+    i32.const 276
     local.get $p2
     i32.load offset=8
     call $__nanyx_dup_string
@@ -917,7 +918,7 @@
     drop
     i64.const 25
     local.set $__dbg_value_1__in2_i64
-    i32.const 280
+    i32.const 292
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_1__in2_i64
@@ -947,7 +948,7 @@
     local.get $p2
     call $__nanyx_drop_rec_age_int_name_string_score_int
     local.set $__dbg_value_2__in2_i64
-    i32.const 296
+    i32.const 308
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_2__in2_i64

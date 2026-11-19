@@ -1216,9 +1216,9 @@ let rec closeHelpers (acc: Set<string>) (pending: string list) =
             |> Option.defaultValue []
         closeHelpers (acc.Add name) (deps @ rest)
 
-// `$dbg_str` prints its second string after its first, where the `dbg` was called, then a newline: what `dbg` prints
-// (see `CoreIrLowerDbg`). Each is a write of its own, from the buffer described at address 0: WASI may write only the
-// first of several buffers given at once.
+// `$dbg_str` prints its second string after its first, where the `dbg` was called, then a newline, to stderr: what `dbg`
+// prints (see `CoreIrLowerDbg`). Each is a write of its own, from the buffer described at address 0: WASI may write only
+// the first of several buffers given at once.
 let dbgFunctions =
         let write (pointer: string) (length: string) =
             [ "    i32.const 0"
@@ -1227,7 +1227,7 @@ let dbgFunctions =
               "    i32.const 4"
               $"    {length}"
               "    i32.store"
-              "    i32.const 1"
+              "    i32.const 2"
               "    i32.const 0"
               "    i32.const 1"
               "    i32.const 8"

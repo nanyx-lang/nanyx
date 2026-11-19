@@ -119,7 +119,7 @@ dbg(pick(0, 5))
 dbg(pick(7, 5))
 println(label("x"))
 """
-    runSource source |> withoutDbgLocations |> assertRan "100\n42\n5\n7\n<x>\n"
+    runSource source |> withoutDbgLocations |> assertRan "<x>\n100\n42\n5\n7\n"
 
 [<Fact>]
 let ``Run - if-matching`` () =

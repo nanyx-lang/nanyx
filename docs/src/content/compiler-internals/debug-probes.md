@@ -47,6 +47,15 @@ the table, and it says whether it wants the locals. `ShadowStack` keeps the fram
 each at the place of the last probe it passed: an entry pushes a frame, a statement moves the top one, and a return pops
 it. A function inlined into another has a frame of its own, since its probes were inlined with it.
 
+# `dbg`
+
+A module with probes gives what each `dbg` prints to the runtime too: `nanyx:debug` `dbg(file, line, column, text)`,
+the file's name and the text as strings, says whether the runtime has dealt with it, and when it hasn't the program
+writes `[file:line] text` to its stderr itself, as a module without the import does (`EmitContext.DbgToRuntime`). The
+runtime's handler is the host's (`Probing.defineDbg`): `WasmRunner` leaves it to the program, so that it keeps its place
+among what else the program writes to stderr, and `WasmServer` writes it to the server's log with the request it came
+from ([Hosts](../advanced/hosts#where-dbg-prints)).
+
 # What it costs
 
 Without a listener, a probe is a read of a local and a branch. Against the same program built without probes, with the

@@ -11,6 +11,18 @@ type IProbeListener =
     /// A local of the frame of the last probe, by its name, written as `dbg` writes values.
     abstract Local: name: string * text: string -> unit
 
+/// A `dbg` a debug build reached: where it is written, its line and column counted from 1, and the value's text, as
+/// `dbg`'s printer wrote it.
+type DbgHit =
+    { File: string
+      Line: int
+      Column: int
+      Text: string }
+
+    /// `[main.nyx:12] 84`, as a program writes it itself (see `Transpiler.Wasm.CoreIr.DbgSite`).
+    override this.ToString() =
+        if this.File = "" then $"[{this.Line}] {this.Text}" else $"[{this.File}:{this.Line}] {this.Text}"
+
 /// The call stack of a program, kept from the entry and return probes of a debug build: a frame for each function it
 /// is in, innermost first, each at the place of the last probe it passed. A function inlined into another still has a
 /// frame, since its probes were inlined with it, and a tail call ends its caller's frame before the callee's starts.
@@ -65,3 +77,16 @@ module Probing =
                     let memory = caller.GetMemory "memory"
                     listener.Local(stringAt memory name, stringAt memory text)
                 | None -> ()))
+
+    /// Defines `dbg` in `linker`, which a debug build the runtime runs calls at each `dbg` it reaches, with the address of
+    /// the file's name, the line, the column and the address of the value's text. `handle` is given the hit, and says
+    /// whether it has dealt with it: when it hasn't, the program writes it to its own stderr, as a module that another
+    /// runtime runs, without the import, does. The console runner leaves it to the program, so that it keeps its place
+    /// among what else the program writes there; the HTTP server writes it to its log, with the request it came from.
+    let defineDbg (linker: Linker) (handle: DbgHit -> bool) =
+        linker.DefineFunction(
+            moduleName,
+            "dbg",
+            CallerFunc<int, int, int, int, int>(fun caller file line column text ->
+                let memory = caller.GetMemory "memory"
+                if handle { File = stringAt memory file; Line = line; Column = column; Text = stringAt memory text } then 1 else 0))

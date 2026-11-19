@@ -28,12 +28,12 @@ let ``Run - dbg prints integers, strings and tags in order`` () =
 
 main()
 """
-    runSource source |> withoutDbgLocations |> assertRan (withFinalNewline """42
+    runSource source |> withoutDbgLocations |> assertRan (withFinalNewline """done
+42
 -7
 "text"
 #ok
-#some(5)
-done""")
+#some(5)""")
 
 [<Fact>]
 let ``Run - dbg prints a tag-typed value by its tag and payload`` () =
@@ -55,12 +55,12 @@ def main = {
 main()
 """
     runSource source
-    |> withoutDbgLocations |> assertRan (withFinalNewline """#some("first")
+    |> withoutDbgLocations |> assertRan (withFinalNewline """done
+#some("first")
 #none
 #err
 #some("first")
-#some("first")
-done""")
+#some("first")""")
 
 [<Fact>]
 let ``Run - console print and println write to stdout`` () =

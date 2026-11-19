@@ -15,12 +15,9 @@ open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrLowerTypes
 
-/// What a `dbg` at `span` prints before its value in a debug build that names files from `root` (see `DbgBuild`):
-/// `[main.nyx:12] `, its line counted from 1.
-let location (root: string option) (span: Parser.Program.SourceSpan) =
-    let file = shownFile root span.File
-    let line = span.StartLine + 1
-    if file = "" then $"[{line}] " else $"[{file}:{line}] "
+/// Where a `dbg` at `span` is written, in a debug build that names files from `root` (see `DbgBuild`).
+let site (root: string option) (span: Parser.Program.SourceSpan) : DbgSite =
+    { File = shownFile root span.File; Line = span.StartLine + 1; Column = span.StartColumn + 1 }
 
 /// A function that writes values as text.
 type Printer =

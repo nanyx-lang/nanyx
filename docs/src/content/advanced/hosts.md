@@ -107,6 +107,21 @@ settings = (port = 8080))`, and `nanyx run` serves it there, on 3000 when no por
 settings it takes, each with its default, so a setting it doesn't take is an error at the setting. See the
 [HTTP server cookbook](../cookbook/http-server).
 
+# Where `dbg` prints
+
+[`dbg`](../stdlib/console#dbg) needs no context, so it works under every host, but where what it prints goes is the
+host's to decide. A debug build that `nanyx run` runs gives each `dbg` it reaches to the runtime first, with where it is
+written and the value's text:
+
+- **The console host** writes it to standard error, `[main.nyx:12] 84`, in order with what the program writes there
+  itself.
+- **The HTTP host** writes it to the server's log, with the request it came from, `dbg (GET /hello): [src/main.nyx:5]
+  "Ada"`, and never into the response.
+- **A host of your own** gets the console host's: the line on standard error. So does a module written by `nanyx build`
+  or `nanyx wasm` and run by another WebAssembly runtime, which writes it there itself.
+
+A release build has no `dbg` to print.
+
 # Hosts and contexts
 
 A host provides the contexts a program may require, and only those. A function that requires a context the host doesn't provide can't be called from the entry point, so a host that provides no `FileSystem` guarantees that neither the program nor any library it uses touches the file system. A library says what it needs in its types, `[Console]`, and runs under every host that provides it.
