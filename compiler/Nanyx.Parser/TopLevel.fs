@@ -204,8 +204,12 @@ let private topLevelUse: Parser<TopLevelItem, ParseState> =
     >>= fun position ->
         reportFocused position "A `use` belongs in a block, where it loads an instance for the rest of the block: put it in the body of a def such as `def main = { ... }`"
 
+/// A `module name =` block, which may be nested in another: forwarded, since a block's items include blocks.
+let private nestedModuleBlock, nestedModuleBlockRef = createParserForwardedToRef<TopLevelItem, ParseState>()
+
 let private moduleBlockItem: Parser<TopLevelItem, ParseState> =
     choice [
+        attempt nestedModuleBlock
         importLine
         attributeItem
         topLevelUse
@@ -251,6 +255,8 @@ let moduleBlockDecl: Parser<TopLevelItem, ParseState> =
             updateUserState (fun state -> { state with ModuleBlocks = state.ModuleBlocks @ [ name, span ] }) >>% block
         | _ -> preturn block
     <?> "module block declaration"
+
+do nestedModuleBlockRef := moduleBlockDecl
 
 // Parser for top-level items
 let topLevelItem: Parser<TopLevelItem, ParseState> =

@@ -124,3 +124,20 @@ let ``A module block names only the imported types it imports itself`` () =
             [ DiagnosticCodes.OutsideModuleBlock.Code, "Person" ],
             compile "import people\n\nmodule greet =\n  export def name: Person -> string = { p -> p.name }\n")
         Assert.Empty(compile "module greet =\n  import people\n  export def name: Person -> string = { p -> p.name }\n"))
+
+[<Fact>]
+let ``A module block nested in another is imported by the outer block and qualified with both`` () =
+    let source =
+        normalized """module tally =
+  module steps =
+    export def step = 1
+
+  import steps
+  export def total = step + 1
+
+import tally
+
+def t: int = total
+def s: int = tally.steps.step
+"""
+    Assert.Empty(codesAt source)

@@ -46,6 +46,7 @@
     <Compile Include="Features\Matches\AndPatternTests.fs" />
     <Compile Include="Features\Matches\RecordPatternTests.fs" />
     <Compile Include="Features\Misc\MiscTests.fs" />
+    <Compile Include="Features\Modules\ModuleBlockTests.fs" />
     <Compile Include="Features\Multiline\MultilineTests.fs" />
     <Compile Include="Features\Names\BacktickedNameTests.fs" />
     <Compile Include="Features\Operators\OperatorTests.fs" />
