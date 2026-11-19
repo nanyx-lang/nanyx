@@ -8,11 +8,9 @@ open Nanyx.Compiler.Tests.TestSupport
 
 // Inline: a def's uses become its value, a function's calls its body.
 
-/// The offers at `^` in `marked`, and the source without the mark.
+/// The offers at `$$` in `marked`, and the source without the mark.
 let private offersAt (marked: string) =
-    let marked = normalized marked
-    let offset = marked.IndexOf "^"
-    let source = marked.Replace("^", "")
+    let source, offset = unmarked marked
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     source, Inline.at Formatter.Options.defaults "" source result offset Compiler.compile |> List.map Offer.decided
@@ -43,7 +41,7 @@ let ``On a local's name every use becomes its value and the def is removed`` () 
         rewrittenBy
             "Inline `side`"
             """def area = { (s: int) ->
-  def ^side = s * 2
+  def $$side = s * 2
   side * side
 }
 """)
@@ -61,7 +59,7 @@ let ``On a use only that use is inlined`` () =
             "Inline this use"
             """def area = { (s: int) ->
   def side = s * 2
-  ^side + side
+  $$side + side
 }
 """)
 
@@ -76,7 +74,7 @@ let ``A function's call becomes its body with the arguments put in`` () =
         rewrittenBy
             "Inline `double`"
             """def total = { (n: int) ->
-  def ^double = { (x: int) -> x * 2 }
+  def $$double = { (x: int) -> x * 2 }
   double(n) + 1
 }
 """)
@@ -89,7 +87,7 @@ let ``An argument used twice that is not a name is bound by a def first`` () =
             """def square = { (x: int) -> x * x }
 
 def total = { (n: int) ->
-  def r = ^square(n + 1)
+  def r = $$square(n + 1)
   r
 }
 """
@@ -106,7 +104,7 @@ let ``A function whose body is a block has its statements put before the stateme
 }
 
 def total = { (n: int) ->
-  def r = ^describe(n)
+  def r = $$describe(n)
   r
 }
 """
@@ -117,7 +115,7 @@ let ``A function used as a value becomes the lambda`` () =
     let after =
         rewrittenBy
             "Inline `double`"
-            """def ^double = { (x: int) -> x * 2 }
+            """def $$double = { (x: int) -> x * 2 }
 
 def total = { (xs: list(int)) -> xs \map(double) }
 """
@@ -129,7 +127,7 @@ let ``An exported def is inlined only at a use`` () =
         "It is exported: other modules may use it, so it is inlined at a use only",
         refusal
             "Inline `scale`"
-            """export def ^scale = 3
+            """export def $$scale = 3
 
 def total = scale * 2
 """)
@@ -140,7 +138,7 @@ let ``A recursive def is refused`` () =
         "It is recursive",
         refusal
             "Inline `count`"
-            """def ^count: int -> int = { n -> if n == 0 then 0 else count(n - 1) }
+            """def $$count: int -> int = { n -> if n == 0 then 0 else count(n - 1) }
 
 def total = count(3)
 """)
@@ -152,7 +150,7 @@ let ``A value whose name would be shadowed at a use is refused`` () =
         refusal
             "Inline `side`"
             """def area = { (s: int) ->
-  def ^side = s * 2
+  def $$side = s * 2
   def inner = { (s: int) -> side + s }
   inner(1)
 }
@@ -166,7 +164,7 @@ let ``A value that reads a cell is refused`` () =
             "Inline `seen`"
             """def counted = { () -> memory {
   mut count = 0
-  def ^seen = count + 1
+  def $$seen = count + 1
   count := 5
   seen
 } }
@@ -180,11 +178,11 @@ let ``A value that calls a function requiring a context is refused`` () =
             "Inline `line`"
             """context Log = (next: () -> int)
 def twice: [Log] () -> int = { () ->
-  def ^line = next()
+  def $$line = next()
   line + line
 }
 """)
 
 [<Fact>]
 let ``Nothing is offered on a parameter`` () =
-    Assert.Empty(snd (offersAt "def area = { (^s: int) -> s * 2 }\n"))
+    Assert.Empty(snd (offersAt "def area = { ($$s: int) -> s * 2 }\n"))

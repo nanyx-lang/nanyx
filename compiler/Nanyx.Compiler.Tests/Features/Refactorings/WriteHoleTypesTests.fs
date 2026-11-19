@@ -10,9 +10,7 @@ open Nanyx.Compiler.Tests.TestSupport
 
 /// The offers at `$$` in `marked`, and the source without the mark.
 let private offersAt (marked: string) =
-    let marked = normalized marked
-    let offset = marked.IndexOf "$$"
-    let source = marked.Remove(offset, 2)
+    let source, offset = unmarked marked
     let result = Compiler.compile source
     source, result, WriteHoleTypes.at Formatter.Options.defaults "" source result offset Compiler.compile |> List.map Offer.decided
 

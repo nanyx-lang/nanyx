@@ -10,13 +10,9 @@ open Nanyx.Compiler.Tests.TestSupport
 
 /// The offers for the selection between `[[` and `]]` in `marked`, and the source without the marks.
 let private offersAt (marked: string) =
-    let marked = normalized marked
-    let start = marked.IndexOf "[["
-    let finish = marked.IndexOf "]]" - 2
-    let source = marked.Replace("[[", "").Replace("]]", "")
+    let source, selection = unmarkedSelection marked
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    let selection : Parser.Program.SourceSpan = { File = ""; Start = start; End = finish; StartLine = 0; StartColumn = 0 }
     source, IntroduceLocal.at Formatter.Options.defaults "" source result selection
 
 /// The text after the offer titled starting `title` at the selection, checked to compile.

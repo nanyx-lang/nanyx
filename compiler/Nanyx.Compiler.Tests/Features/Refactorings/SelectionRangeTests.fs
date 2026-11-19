@@ -8,9 +8,7 @@ open Nanyx.Compiler.Tests.TestSupport
 
 /// The text of each selection range at `$$` in `marked`, smallest first, stopping before the whole file.
 let private chain (marked: string) : string list =
-    let marked = normalized marked
-    let offset = marked.IndexOf "$$"
-    let source = marked.Remove(offset, 2)
+    let source, offset = unmarked marked
     (SelectionRanges.at "" source offset).Value
     |> List.map (fun span -> source.Substring(span.Start, span.End - span.Start))
     |> List.filter (fun text -> text <> source)

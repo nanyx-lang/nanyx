@@ -8,11 +8,9 @@ open Nanyx.Compiler.Tests.TestSupport
 
 // Convert between a call and a pipe.
 
-/// The offers at `^` in `marked`, and the source without the mark.
+/// The offers at `$$` in `marked`, and the source without the mark.
 let private offersAt (marked: string) =
-    let marked = normalized marked
-    let offset = marked.IndexOf "^"
-    let source = marked.Replace("^", "")
+    let source, offset = unmarked marked
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     source, CallAndPipe.at Formatter.Options.defaults "" source result offset Compiler.compile |> List.map Offer.decided
@@ -35,7 +33,7 @@ def total = 1 \add(2)
         rewritten
             """def add = { (a: int), (b: int) -> a + b }
 
-def total = ^add(1, 2)
+def total = $$add(1, 2)
 """)
 
 [<Fact>]
@@ -45,7 +43,7 @@ let ``A call of one argument becomes a pipe without brackets`` () =
         rewritten
             """def double = { (a: int) -> a * 2 }
 
-def total = ^double(3)
+def total = $$double(3)
 """)
 
 [<Fact>]
@@ -55,7 +53,7 @@ let ``A chain of calls converts as a whole`` () =
         rewritten
             """def xs = [1, 2, 3]
 
-def total = list.filter(^list.map(xs, { x -> x * 2 }), { x -> x > 2 })
+def total = list.filter($$list.map(xs, { x -> x * 2 }), { x -> x > 2 })
 """)
 
 [<Fact>]
@@ -65,7 +63,7 @@ let ``A pipe becomes a call`` () =
         rewritten
             """def add = { (a: int), (b: int) -> a + b }
 
-def total = 1 \^add(2)
+def total = 1 \$$add(2)
 """)
 
 [<Fact>]
@@ -75,7 +73,7 @@ let ``A chain of pipes converts as a whole`` () =
         rewritten
             """def xs = [1, 2, 3]
 
-def total = xs \^map { x -> x * 2 } \filter { x -> x > 2 }
+def total = xs \$$map { x -> x * 2 } \filter { x -> x > 2 }
 """)
 
 [<Fact>]
@@ -83,14 +81,14 @@ let ``An attached definition is piped by its own name`` () =
     Assert.Contains(
         "def tidy = { (s: string) -> s \\trim }",
         rewritten
-            """def tidy = { (s: string) -> ^string.trim(s) }
+            """def tidy = { (s: string) -> $$string.trim(s) }
 """)
 
 [<Fact>]
 let ``A pipe of an attached definition becomes a call by its whole name`` () =
     let after =
         rewritten
-            """def tidy = { (s: string) -> s \^trim }
+            """def tidy = { (s: string) -> s \$$trim }
 """
     Assert.Contains("string.trim(s)", after)
 
@@ -104,7 +102,7 @@ let ``Where the own name would find another definition the whole name is kept`` 
 
 def trim = { (n: int) -> n }
 
-def shout = { (s: string) -> ^text.trim(s) }
+def shout = { (s: string) -> $$text.trim(s) }
 """)
 
 [<Fact>]
@@ -114,10 +112,10 @@ let ``A value that is an operator is bracketed in the pipe`` () =
         rewritten
             """def double = { (a: int) -> a * 2 }
 
-def total = ^double(1 + 2)
+def total = $$double(1 + 2)
 """)
 
 [<Fact>]
 let ``Nothing is offered off a call or pipe`` () =
-    Assert.Empty(snd (offersAt "def ^total = 1 + 2\n"))
+    Assert.Empty(snd (offersAt "def $$total = 1 + 2\n"))
 

@@ -7,15 +7,9 @@ open Nanyx.Compiler.Tests.TestSupport
 
 // Rename: a name and every use of it, within the module: a symbol, a context's member or a record's field.
 
-/// `marked` without its `$$`, and where the `$$` was.
-let private unmark (marked: string) =
-    let marked = normalized marked
-    let offset = marked.IndexOf "$$"
-    marked.Remove(offset, 2), offset
-
 /// Renaming the name at `$$` in `marked` to `newName`: the text after it, or why it is refused.
 let private renamed (newName: string) (marked: string) =
-    let source, offset = unmark marked
+    let source, offset = unmarked marked
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Rename.edits "" source result offset newName Compiler.compile |> Result.map (applyEdits source)
@@ -194,7 +188,7 @@ let ``A module block that exports names is refused, as other modules may use the
 
 [<Fact>]
 let ``A standard library name can't be renamed`` () =
-    let source, offset = unmark "def n = [1, 2] \\su$$m\n"
+    let source, offset = unmarked "def n = [1, 2] \\su$$m\n"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     match Rename.prepare Rename.Module "" source result offset with
@@ -348,7 +342,7 @@ def getX = { r -> r.x }
 
 [<Fact>]
 let ``A field of a record whose type is not known can't be renamed`` () =
-    let source, offset = unmark "def getX = { r -> r.x$$ }\n"
+    let source, offset = unmarked "def getX = { r -> r.x$$ }\n"
     let result = Compiler.compile source
     match Rename.prepare Rename.Module "" source result offset with
     | Some (Error reason) -> Assert.StartsWith("Rename can't tell which record's `x` this is", reason)
@@ -356,7 +350,7 @@ let ``A field of a record whose type is not known can't be renamed`` () =
 
 [<Fact>]
 let ``Prepare gives the name's own part`` () =
-    let source, offset = unmark "def string.sh$$out = { (s: string) -> s }\n"
+    let source, offset = unmarked "def string.sh$$out = { (s: string) -> s }\n"
     let result = Compiler.compile source
     match Rename.prepare Rename.Module "" source result offset with
     | Some (Ok target) -> Assert.Equal(("shout", "shout"), (target.Name, source.Substring(target.Span.Start, target.Span.End - target.Span.Start)))
