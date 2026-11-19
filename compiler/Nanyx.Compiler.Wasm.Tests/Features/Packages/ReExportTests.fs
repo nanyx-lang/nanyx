@@ -66,7 +66,7 @@ import geo as g
 
 @entry
 def main = {
-  let s: Shape = Shape(width = 2, height = 5)
+  def s: Shape = Shape(width = 2, height = 5)
   println("{area(s)} {g.area(square(3))} {volume(2)}")
 }
 """
