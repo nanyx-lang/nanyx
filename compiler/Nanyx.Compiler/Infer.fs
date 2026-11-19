@@ -601,9 +601,9 @@ and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression)
         let state =
             match expr.Kind, annotation.Declared with
             | Block statements, Some declared ->
-                match List.tryLast statements with
-                | Some { Kind = ExprStatement last } -> { state with ExpectedBlockResults = state.ExpectedBlockResults |> Map.add last.Id declared }
-                | _ -> state
+                match SyntaxTree.blockValue statements with
+                | Some last -> { state with ExpectedBlockResults = state.ExpectedBlockResults |> Map.add last.Id declared }
+                | None -> state
             | _, Some declared -> ExpectedLiterals.expect declared state expr
             | _ -> state
         inferExpr env state expr
@@ -676,10 +676,7 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
     let rec returnedLambda (expr: Expression) =
         match expr.Kind with
         | Lambda _ -> Some expr
-        | Block statements ->
-            match List.tryLast statements with
-            | Some { Kind = ExprStatement last } -> returnedLambda last
-            | _ -> None
+        | Block statements -> SyntaxTree.blockValue statements |> Option.bind returnedLambda
         | _ -> None
     let expectReturned (current: InferState) =
         match returnedLambda body, expectedReturnOpt |> Option.map (resolveSoFar current >> Unifier.unalias) with

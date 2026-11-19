@@ -68,9 +68,9 @@ let rec expectResult (body: Expression) (expected: Ty) (state: InferState) : Inf
     match body.Kind with
     | Match _ -> ExpectedLiterals.expect expected state body
     | Block statements ->
-        match List.tryLast statements with
-        | Some { Kind = ExprStatement last } -> expectResult last expected state
-        | _ -> state
+        match SyntaxTree.blockValue statements with
+        | Some last -> expectResult last expected state
+        | None -> state
     | _ -> state
 
 /// The error for a pattern of a `Type` match that isn't one of its description's tags.
