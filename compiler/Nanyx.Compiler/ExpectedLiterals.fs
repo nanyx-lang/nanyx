@@ -26,14 +26,7 @@ let elementOf (state: InferState) (expr: Expression) : Ty option =
 
 /// The type the payload of the tag `name`, at `expr`, is checked against: that of the tag of the union expected there.
 let payloadOf (state: InferState) (expr: Expression) (name: string) : Ty option =
-    let payloadIn =
-        function
-        | TyTag(tag, Some payload) when tag = name -> Some payload
-        | _ -> None
-    match expectedOf state expr with
-    | Some (TyUnion items) -> items |> List.tryPick payloadIn
-    | Some ty -> payloadIn ty
-    | None -> None
+    expectedOf state expr |> Option.bind (Unifier.payloadOfTag name)
 
 /// `state` with each value of the map literal `expr` checked against the value type of the map expected of it, if
 /// `expr` is a map literal and one is.
