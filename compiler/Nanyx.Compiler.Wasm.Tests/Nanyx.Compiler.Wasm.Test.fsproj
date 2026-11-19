@@ -110,6 +110,7 @@
     <Compile Include="Features\Lists\RunListKeyTests.fs" />
     <Compile Include="Features\Maps\RunMapTests.fs" />
     <Compile Include="Features\Maps\RunMapEqualityTests.fs" />
+    <Compile Include="Features\Maps\RunMapMatchTests.fs" />
     <Compile Include="Features\Loops\RunLoopTests.fs" />
     <Compile Include="Features\Loops\RunSeqLoopTests.fs" />
     <Compile Include="Features\Loops\RunIterableLoopTests.fs" />

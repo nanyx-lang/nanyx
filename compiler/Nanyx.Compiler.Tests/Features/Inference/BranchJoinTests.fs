@@ -84,3 +84,21 @@ def r = if true then #a(#x, 1) else #a(#y, "one")
 """
     let code, _ = singleError (source.ReplaceLineEndings "\n")
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+
+[<Fact>]
+let ``A match of an arm's variable and a tag checks when a call with a context variable follows it`` () =
+    // The arm `v` is settled as `J` by the constraints before the join. Constrained as its variable, it was made
+    // `#null` when the module was solved afresh, which the call of `list.fold`, whose lambda's contexts are a
+    // variable, made it be (#2070).
+    let source = """
+type J = #num(int) | #null | #obj(map(string, J))
+
+def pick: map(string, J), list(string) -> int = { o, cases ->
+  def payload =
+    match map.get(o, "value")
+      | #some(v) -> v
+      | _ -> #null
+  list.fold(cases, 0, { found, c -> found })
+}
+"""
+    compileClean (source.ReplaceLineEndings "\n") |> ignore
