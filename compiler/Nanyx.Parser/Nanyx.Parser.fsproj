@@ -25,6 +25,7 @@
     <Compile Include="Destructuring.fs" />
     <Compile Include="Directives.fs" />
     <Compile Include="Lexer.fs" />
+    <Compile Include="Layout.fs" />
     <Compile Include="Expressions.fs" />
     <Compile Include="TopLevel.fs" />
     <Compile Include="DocComments.fs" />

@@ -13,6 +13,7 @@
     <Compile Include="Corpus.fs" />
     <Compile Include="SyntaxDump.fs" />
     <Compile Include="Differential.fs" />
+    <Compile Include="BlockStructure.fs" />
   </ItemGroup>
 
   <ItemGroup>
