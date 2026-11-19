@@ -19,7 +19,7 @@ apart a value it holds the only reference to and builds a new one of the same si
 place. Generic code is monomorphised, so every object's layout is known when it is compiled. The host's garbage
 collector (WasmGC) is not used: it would give up reuse and deterministic freeing, and need hosts with GC support.
 
-An `int` and a `U64` are `i64`s, a `float` an `f64`, and every other value an `i32` (see [Value representation](#value-representation)).
+An `int` and a `U64` are `i64`s, a `float` an `f64`, an `F32` an `f32`, and every other value an `i32` (see [Value representation](#value-representation)).
 On the heap, after each object's header:
 
 | Value | Layout |
@@ -28,7 +28,6 @@ On the heap, after each object's header:
 | List | 0 for the empty list, else a pointer to a cell of (head, tail) |
 | Record, tuple | the fields one after another in field-name order, the layout's number in the 4 bytes before |
 | Closure | the function's table slot, then the captured values; the table slot of its environment's drop function in the 4 bytes before |
-| `F32` | a 4-byte box holding the `f32` |
 | Tag with a payload | a pointer to a cell of (code, payload) |
 
 String literals live in the data segment, with a header of their own. A tag without a payload is not on the heap: it is its code,
@@ -58,8 +57,7 @@ not specialised (see [Open questions](../work-in-progress/memory-management#open
 
 ## Value representation
 
-Every value is held at its own width, in locals, fields and payloads alike, except an `F32`, which is still boxed.
-Unboxing it is still to do.
+Every value is held at its own width, in locals, fields and payloads alike, and no number is boxed.
 
 An `int` is an `i64` in locals, parameters and results, and takes 8 bytes in a field, a list cell's head, a tag's
 payload and a closure's captures, with the narrower sized integers in their own width and every other value in 4
@@ -80,8 +78,11 @@ A `float` is an `f64` in locals, parameters and results, and takes 8 bytes where
 `f64.store` and read with `f64.load`; the storing helpers have an `_f64` variant for it. It is not on the heap, so nothing
 counts it (`CoreIrDrop.isHeapType`), and arithmetic on floats allocates nothing. A float constant is an `f64.const`.
 The float intrinsics and the helper that writes a float as text take and give `f64`s, and an extern passes a float as
-the `f64` it is. An `F32` is boxed, in a 4-byte box holding the `f32`: each operator on `F32`s unboxes its operands
-and boxes an arithmetic result.
+the `f64` it is.
+
+An `F32` is held as a `float` is, as an `f32`: in locals, parameters and results, and in 4 bytes in memory, written
+with `f32.store` and read with `f32.load`, with an `_f32` variant of each storing helper. Nothing counts it either, and
+arithmetic on `F32`s allocates nothing. `%` on `F32`s is taken as a float's, which is exact, and narrowed back.
 
 Pointers stay 32-bit: linear memory stays `memory32`. A 64-bit address space (Wasm `memory64`) only matters past
 4 GB of heap, and would double the size of every pointer field.
@@ -90,7 +91,7 @@ Pointers stay 32-bit: linear memory stays `memory32`. A 64-bit address space (Wa
 
 Every heap object has a reference count in the word before its info word, so a pointer `p` to an object with one has
 its count at `p - 8` and the info word at `p - 4`: a string's length, a record's layout, and a closure's environment
-drop function (below). An object with no info word (a list cell, a tag's cell, an `F32`'s box) has its count just
+drop function (below). An object with no info word (a list cell, a tag's cell) has its count just
 before its fields, at `p - 4`. Every `dup` and `drop` knows the type of what it counts, so it knows which; giving
 the commonest objects, list cells, an empty info word would make each 20 bytes rather than 16 (with the
 allocator's size word). The drop function for the object's type knows the rest, so no other run-time layout
@@ -220,7 +221,7 @@ shape. A body is an expression with a type on every node:
 | `callRuntime(helper, atoms)` | calls a runtime helper: an intrinsic, or what `++` and `==` on strings, lists and tags need |
 | `makeClosure(f, atoms)` | allocates a closure block: the lifted function's table slot, then what it captures (one or more) |
 | `callClosure(closure, atoms)` | calls through a function value, passing the closure block as the environment, to its borrowing or its owning entry (see Closures have two entries) |
-| `floatConstant(value)` | a float constant: an `f64`, or an `F32` in a box of its own |
+| `floatConstant(value)` | a float constant: an `f64`, or an `f32` for an `F32` |
 | `forEach(loop)` | a `for` loop over lists and ranges in step, its body run for each step until one of them ends |
 | `crash(messages)` | an error deferred to run time: writes the messages to stderr and ends the program |
 | `interpolate(parts)` | builds an interpolated string from its text and its holes, each already stored in its hole local |

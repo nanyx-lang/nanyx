@@ -1,9 +1,9 @@
 /// WebAssembly text from the core IR (`CoreIr.fs`).
 ///
 /// Each value is held in the WebAssembly type of its type (see `CoreIrLayout`): an int in an `i64`, a float in an `f64`,
-/// everything else in an `i32`. A local of an int is named with `_i64` after the variable's name, and one of a float with
-/// `_f64` (see `localName`), since variables of the
-/// same kind and name share a local, and may be of different types. A temporary is not stored: its value is computed
+/// an `F32` in an `f32`, everything else in an `i32`. A local of a value not held in an `i32` is named with its value
+/// type after the variable's name, `_i64`, `_f64` or `_f32` (see `localName`), since variables of the same kind and name
+/// share a local, and may be of different types. A temporary is not stored: its value is computed
 /// where it is used, as a nested expression would be. An operand that stores to a local on the way to its value (a
 /// `def` or a `match` among a call's arguments, say) is a temporary whose value is the whole sequence, stores and all
 /// (see `Atoms` in `CoreIrLower.fs`), so no store ever happens while a temporary waits to be used.
@@ -109,8 +109,8 @@ type Emitted =
 let private join (separator: string) (parts: string seq) =
     parts |> Seq.filter (fun part -> part <> "") |> String.concat separator
 
-/// The name of the local `var` is kept in: its name, with `_i64` or `_f64` after it for a value held in an `i64` or an
-/// `f64`.
+/// The name of the local `var` is kept in: its name, with its value type after it (`_i64`, `_f64` or `_f32`) for a value
+/// not held in an `i32`.
 let private localName (var: Var) =
     match CoreIrLayout.valueType var.Type with
     | "i32" -> var.Name
@@ -176,13 +176,13 @@ let private arithmetic = set [ "+"; "-"; "*"; "/"; "%" ]
 
 /// The code that converts a value of `from` on the stack to one of `into`, when they are held differently: only a
 /// value of no known type (see `IrError`) is held differently from a value it is taken as. It is an `i32`, and an int
-/// that becomes one keeps its low 32 bits. A float and such a value have nothing to keep of each other: each is 0 as
-/// the other.
+/// that becomes one keeps its low 32 bits. A float or an `F32` and such a value have nothing to keep of each other: each
+/// is 0 as the other.
 let private conversion (from: IrType) (into: IrType) =
     match CoreIrLayout.valueType from, CoreIrLayout.valueType into with
     | fromType, intoType when fromType = intoType -> ""
-    | "f64", intoType
-    | _, ("f64" as intoType) -> $"drop\n    {intoType}.const 0"
+    | ("f64" | "f32"), intoType
+    | _, ("f64" | "f32" as intoType) -> $"drop\n    {intoType}.const 0"
     | "i64", _ -> "i32.wrap_i64"
     | _ -> "i64.extend_i32_s"
 
@@ -629,11 +629,9 @@ type private FunctionEmitter(context: EmitContext) =
             | None -> internalError $"no instruction for the operator `{op}`"
         | Prim(Not, operands) -> join "\n    " [ atoms operands; "i32.eqz" ]
         | Prim(FloatBinary op, [ left; right ]) ->
-            // The instruction on the values; a comparison's result is the i32 it leaves. An `F32` is an `f32` in a box:
-            // each operand is unboxed and an arithmetic result boxed, and its remainder is taken as a float's, which is
-            // exact, and narrowed back.
+            // The instruction on the values; a comparison's result is the i32 it leaves. An `F32` is an `f32`, whose
+            // remainder is taken as a float's, which is exact, and narrowed back.
             let isF32 = atomType left = IrF32
-            let load = if isF32 then touching "f32.load" else ""
             let widen = if isF32 && op = "%" then "f64.promote_f32" else ""
             let instruction =
                 if op = "%" then Some (join "\n    " [ $"call ${helper Helpers.floatRem}"; (if isF32 then "f32.demote_f64" else "") ])
@@ -641,12 +639,10 @@ type private FunctionEmitter(context: EmitContext) =
                 else wasmFloatInstruction op
             match instruction with
             | Some instruction ->
-                let compute = join "\n    " [ atoms [ left ]; load; widen; atomsAfter true [ right ]; load; widen; instruction ]
-                if not isF32 || [ "eq"; "ne"; "lt"; "le"; "gt"; "ge" ] |> List.exists instruction.EndsWith then compute
-                else $"{compute}\n    call ${helper Helpers.f32Box}"
+                join "\n    " [ atoms [ left ]; widen; atomsAfter true [ right ]; widen; instruction ]
             | None -> internalError $"no instruction for the operator `{op}` on floats"
         | Prim(FloatBinary op, _) -> internalError $"the operator `{op}` on floats with other than two operands"
-        | FloatConstant value when expr.Type = IrF32 -> $"f32.const {wasmFloatConst value}\n    call ${helper Helpers.f32Box}"
+        | FloatConstant value when expr.Type = IrF32 -> $"f32.const {wasmFloatConst value}"
         | FloatConstant value -> $"f64.const {wasmFloatConst value}"
         | Probe(kind, locals) -> join "\n    " [ this.Probe expr kind locals Set.empty; "i32.const 0" ]
         | Crash messages ->
@@ -745,20 +741,19 @@ type private FunctionEmitter(context: EmitContext) =
             // An integer as one of another integer type, which the prelude has checked it fits.
             join "\n    " [ atoms [ arg ]; yield! SizedIntegerCode.cast (integerType (atomType arg)) (integerType expr.Type) ]
         | CallRuntime(name, [ arg ], _) when name = Intrinsics.toFloat ->
-            // A number as the nearest float, or `F32` in a box of its own.
+            // A number as the nearest float or `F32`.
             let into = if expr.Type = IrF32 then "f32" else "f64"
             let converted =
                 match atomType arg with
-                | IrFloat -> [ (if into = "f32" then "f32.demote_f64" else "") ]
-                | IrF32 -> [ touching "f32.load"; (if into = "f64" then "f64.promote_f32" else "") ]
-                | integer -> [ SizedIntegerCode.toFloat (integerType integer) into ]
-            let box = if into = "f32" then $"call ${helper Helpers.f32Box}" else ""
-            join "\n    " [ atoms [ arg ]; yield! converted; box ]
+                | IrFloat -> if into = "f32" then "f32.demote_f64" else ""
+                | IrF32 -> if into = "f64" then "f64.promote_f32" else ""
+                | integer -> SizedIntegerCode.toFloat (integerType integer) into
+            join "\n    " [ atoms [ arg ]; converted ]
         | CallRuntime(name, [ arg ], _) when name = Intrinsics.fromInt ->
             // An int as a sized integer, by the helper of the type it is taken as, or as the nearest `F32`.
             match expr.Type with
             | IrSized integer -> join "\n    " [ atoms [ arg ]; $"call ${helper (SizedIntegerCode.fromIntHelper integer)}" ]
-            | IrF32 -> join "\n    " [ atoms [ arg ]; "f32.convert_i64_s"; $"call ${helper Helpers.f32Box}" ]
+            | IrF32 -> join "\n    " [ atoms [ arg ]; "f32.convert_i64_s" ]
             | other -> internalError $"'{Intrinsics.fromInt}' at '{IrType.show other}', which is not a sized integer"
         | CallRuntime(name, args, _) when memoryAccesses.ContainsKey name ->
             let instruction, writes = memoryAccesses.[name]
@@ -832,25 +827,12 @@ type private FunctionEmitter(context: EmitContext) =
                 $"local.get ${held}\n    {dropValue ty}"
                 $"local.get ${result}" ]
         | CallImport(declared, args) ->
-            // Each argument as the value type the import takes, an `F32` out of its box; an `F32` it returns is boxed,
-            // and an import that returns nothing leaves unit, 0.
+            // Each argument is the value type the import takes, and so is what it returns; an import that returns
+            // nothing leaves unit, 0.
             if args.Length <> declared.Parameters.Length then
                 internalError $"a call to the import {declared.Module}.{declared.Name} with {args.Length} arguments for {declared.Parameters.Length} parameters"
-            let unboxed (value: ExternValue) =
-                match value with
-                | ExternValue.F32 -> touching "f32.load"
-                | ExternValue.F64
-                | ExternValue.I32
-                | ExternValue.I64 -> ""
-            let arguments = List.zip args declared.Parameters |> List.mapi (fun index (arg, value) -> join "\n    " [ atomsAfter (index > 0) [ arg ]; unboxed value ])
-            let result =
-                match declared.Result with
-                | Some ExternValue.F32 -> $"call ${helper Helpers.f32Box}"
-                | Some ExternValue.F64
-                | Some ExternValue.I32
-                | Some ExternValue.I64 -> ""
-                | None -> "i32.const 0"
-            join "\n    " [ yield! arguments; $"call ${importName declared}"; result ]
+            let result = if declared.Result.IsNone then "i32.const 0" else ""
+            join "\n    " [ atoms args; $"call ${importName declared}"; result ]
         | CallRuntime(name, args, returnsValue) ->
             // An int argument and an int result are converted where the helper holds them in `i32`s, and a helper that
             // returns nothing leaves unit, 0.
@@ -1215,10 +1197,8 @@ type private FunctionEmitter(context: EmitContext) =
                 let held = match ty with IrSized _ -> CoreIrLayout.valueType ty | _ -> "i64"
                 $"{valueCode}\n      {held}.const {value}\n      {held}.eq"
             | PFloat value ->
-                // The value, or what an `F32`'s box holds.
-                let held = if ty = IrF32 then "f32" else "f64"
-                let unbox = if ty = IrF32 then touching "f32.load" else ""
-                join "\n      " [ valueCode; unbox; $"{held}.const {wasmFloatConst value}"; $"{held}.eq" ]
+                let held = CoreIrLayout.valueType ty
+                join "\n      " [ valueCode; $"{held}.const {wasmFloatConst value}"; $"{held}.eq" ]
             | PBool value ->
                 let flag = if value then 1 else 0
                 $"{valueCode}\n      i32.const {flag}\n      i32.eq"

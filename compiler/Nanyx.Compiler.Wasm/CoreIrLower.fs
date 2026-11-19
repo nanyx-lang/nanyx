@@ -636,7 +636,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 let order = Expr.make (CallRuntime(Helpers.valueCompare, atoms, true)) IrInt
                 bindTemp order (fun result -> k (Expr.make (Prim(Binary op, [ result; AInt 0L ])) IrBool)))
         | _ when IrType.isFloat (tyOf left) || IrType.isFloat (tyOf right) ->
-            // An instruction on the floats' values (an `F32`'s unboxed, and its arithmetic result boxed).
+            // An instruction on the floats' values.
             // `%` has no instruction: it calls a runtime helper (see `CoreIrEmit`).
             if op <> "%" && (wasmFloatInstruction op).IsNone then cannot $"the operator `{op}` on floats"
             let ty = tyOf expr

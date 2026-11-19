@@ -17,7 +17,7 @@ type IrType =
     | IrString
     /// A float: an `f64`, on the heap only as a part of something else.
     | IrFloat
-    /// An `F32`, in a box of its own: the value is a pointer to the `f32`.
+    /// An `F32`: an `f32`, on the heap only as a part of something else.
     | IrF32
     /// A value of no known type, because of an error deferred to run time (a debug build of a module with errors).
     | IrError
@@ -110,7 +110,7 @@ type ClosureEntry =
 type PrimOp =
     /// An operator on ints or booleans: `+`, `==`, `and`, ...
     | Binary of string
-    /// An operator on floats or on `F32`s: each operand is unboxed, and an arithmetic result boxed.
+    /// An operator on floats or on `F32`s, on their values.
     | FloatBinary of string
     | Not
 
@@ -220,7 +220,7 @@ and ExprKind =
     /// What `dbg(value)` prints in a debug build: the second string, the value's text (see `CoreIrLowerDbg`), after the
     /// first, where the `dbg` was called (`[main.nyx:12] `), then a newline. It is unit.
     | Dbg of location: Atom * text: Atom
-    /// A float constant: an `f64`, or an `f32` in a box of its own where the expression is an `F32`.
+    /// A float constant: an `f64`, or an `f32` where the expression is an `F32`.
     | FloatConstant of float
     /// An error deferred to run time, or a crash: writes these messages to stderr and ends the program, with a trap in
     /// `Helpers.crashed`, from which the runtime reports the stack.
