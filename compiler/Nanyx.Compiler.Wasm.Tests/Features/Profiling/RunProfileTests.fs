@@ -29,6 +29,26 @@ let ``run --profile writes a profile whose samples name the program's functions`
     Assert.True(thread.["samples"].["length"].GetValue<int>() > 0)
 
 [<Fact>]
+let ``run --profile gives each function the file and line of its def`` () =
+    use directory = new TempDirectory()
+    directory.Write "main.nyx" ("-- fib, with its type on a line of its own.\ndef fib\n  : int -> int\n  = { n -> if n < 2 then n else fib(n - 1) + fib(n - 2) }\n\nprintln(fib(35))\n")
+    let profile = Path.Combine(directory.Path, "main.json")
+    let outcome = nanyxWithInput "" [ "run"; "--profile"; profile; Path.Combine(directory.Path, "main.nyx") ]
+    Assert.Equal(0, outcome.ExitCode)
+    let thread = JsonNode.Parse(File.ReadAllText profile).["threads"].[0]
+    let strings = thread.["stringArray"].AsArray() |> Seq.map (fun text -> text.GetValue<string>()) |> Array.ofSeq
+    let functions = thread.["funcTable"]
+    let placeOf (functionName: string) =
+        let index = functions.["name"].AsArray() |> Seq.findIndex (fun name -> strings.[name.GetValue<int>()] = functionName)
+        let file = functions.["fileName"].[index]
+        let line = functions.["lineNumber"].[index]
+        (if isNull file then None else Some strings.[file.GetValue<int>()]), (if isNull line then None else Some(line.GetValue<int>()))
+    // The line its `def` starts on, not its lambda's.
+    Assert.Equal((Some "main.nyx", Some 2), placeOf "fib")
+    // A runtime helper has no place.
+    Assert.Equal((None, None), placeOf "__nanyx_start")
+
+[<Fact>]
 let ``run --profile with a memory check is a usage error`` () =
     use directory = new TempDirectory()
     directory.Write "main.nyx" "println(1)\n"

@@ -107,3 +107,38 @@ type GuestProfiler(engine: Engine, ``module``: Module, interval: TimeSpan) =
             GuestProfilerApi.wasm_byte_vec_delete(&message)
             GuestProfilerApi.wasmtime_error_delete error
             Error text
+
+/// The places a profile gives its functions.
+module ProfilePlaces =
+    open System.Text.Json.Nodes
+
+    /// `profile`, in the Firefox profiler's format, with the file and line of each function's definition that `table`
+    /// has, by the function's name, in each thread's `funcTable` (its `fileName`, an index into the thread's
+    /// `stringArray`, and its `lineNumber`). Wasmtime's guest profiler gives a frame's address in its machine code, not
+    /// in the module, so a profile places functions, not the lines they ran.
+    let withDefinitions (table: SpanTable option) (profile: byte array) : byte array =
+        match table with
+        | None -> profile
+        | Some table ->
+            let root = JsonNode.Parse(profile: byte array)
+            for thread in root.["threads"].AsArray() do
+                let strings = thread.["stringArray"].AsArray()
+                let functions = thread.["funcTable"]
+                let names = functions.["name"].AsArray()
+                let fileNames = functions.["fileName"].AsArray()
+                let lineNumbers = functions.["lineNumber"].AsArray()
+                // Each file's index in the thread's strings, which a file is added to the first time it is named.
+                let fileIndex (file: string) =
+                    match strings |> Seq.tryFindIndex (fun text -> text.GetValue<string>() = file) with
+                    | Some index -> index
+                    | None ->
+                        strings.Add(JsonValue.Create file)
+                        strings.Count - 1
+                for index in 0 .. names.Count - 1 do
+                    let functionName = strings.[names.[index].GetValue<int>()].GetValue<string>()
+                    match SpanTable.definitionOf table functionName with
+                    | Some(file, line) ->
+                        fileNames.[index] <- JsonValue.Create(fileIndex file)
+                        lineNumbers.[index] <- JsonValue.Create line
+                    | None -> ()
+            Text.Encoding.UTF8.GetBytes(root.ToJsonString())

@@ -31,8 +31,13 @@ let globals (func: Function) : string list =
       $"  (global ${valueGlobal func.Name} (mut {valueType}) ({valueType}.const 0))" ]
 
 /// The getter of a cached value, exported under `exportName` if given: it builds the value on its first read, and gives
-/// each read a reference of its own, as the function it stands for did by computing a new value.
-let getter (func: Function) (exportName: string option) : string =
+/// each read a reference of its own, as the function it stands for did by computing a new value. Its body starts with
+/// the marker of the definition's place, where `shownFile` names files for markers, as the function that builds it does.
+let getter (shownFile: (string -> string) option) (func: Function) (exportName: string option) : string =
+    let defined =
+        match func.Place, shownFile with
+        | Some place, Some shownFile -> [ "    " + CoreIrEmit.definitionMarker shownFile place ]
+        | _ -> []
     let dup =
         if CoreIrDrop.isHeapType func.Result then [ $"    call ${CoreIrDrop.dupName func.Result}" ] else []
     let export =
@@ -40,6 +45,7 @@ let getter (func: Function) (exportName: string option) : string =
         | Some exported -> [ $"""  (export "{exported}" (func ${func.Name}))""" ]
         | None -> []
     [ $"  (func ${func.Name} (result {CoreIrLayout.valueType func.Result})"
+      yield! defined
       $"    global.get ${builtGlobal func.Name}"
       "    i32.eqz"
       "    if"

@@ -182,4 +182,5 @@ let adapter (tools: LiftedTools) (functionName: string) (givenTy: IrType) (expec
       TypeArguments = []
       Params = environment :: values @ List.map snd passed
       Result = result
-      Body = body }
+      Body = body
+      Place = None }

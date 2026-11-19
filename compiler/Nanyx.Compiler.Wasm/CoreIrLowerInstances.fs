@@ -104,4 +104,5 @@ let standInFunction (newVar: string -> VarKind -> IrType -> Var) (functionName: 
       TypeArguments = []
       Params = environment :: values @ passed
       Result = result
-      Body = Expr.make (Crash [ "a context member at a type nothing constrains was called" ]) result }
+      Body = Expr.make (Crash [ "a context member at a type nothing constrains was called" ]) result
+      Place = None }

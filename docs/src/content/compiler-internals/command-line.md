@@ -41,9 +41,14 @@ wasmtime-dotnet doesn't wrap: the runtime calls Wasmtime's C API from the native
 (`wasmtime_guestprofiler_new`, `_sample` and `_finish`, in Wasmtime 48), with the engine, store and module handles
 wasmtime-dotnet keeps internal, read by reflection. The engine is made with epoch interruption; a timer moves the epoch
 on every 10 ms, and the store's epoch deadline callback takes a sample each time. Once the program stops, however it
-stops, the profile is written. Its frames are named from the module's name section; the profiler gives each frame the
+stops, the profile is written. Its frames are named from the module's name section. The profiler gives each frame the
 address of Wasmtime's compiled code, not an offset in the module, so the table of places (see
-[Crash stacks](./crash-stacks)) can't give them lines.
+[Crash stacks](./crash-stacks)) can't give a frame the line it ran. It gives each function the line it is defined on
+instead: the backend starts each function's body with a definition marker, `;;@def main.nyx:3`, from the line its `def`
+starts on (a lambda's own line for a lambda), and `WasmBinary` writes each into the table by the function's name.
+`ProfilePlaces.withDefinitions` (in `Profiling.fs`) then fills in the `fileName` and `lineNumber` of each function of
+the profile's `funcTable` that the table has a definition for. Functions the compiler makes up, such as runtime
+helpers, have none.
 
 # The stopwatch
 

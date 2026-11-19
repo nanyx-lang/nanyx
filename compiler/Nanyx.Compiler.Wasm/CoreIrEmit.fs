@@ -66,6 +66,10 @@ let placeMarker (shownFile: string -> string) (place: Place) =
         | None -> here
     $";;@ {frames place}"
 
+/// The marker that says the function it starts was defined at `place`, the file and line of its definition: a line
+/// comment, `;;@def main.nyx:3`, that `WasmBinary` writes into the module's table of places (see `WatSyntax.Defined`).
+let definitionMarker (shownFile: string -> string) (place: Place) = $";;@def {shownFile place.File}:{place.Line}"
+
 /// Whether the code of an expression of `kind` gets a marker of where it was written: what calls or can trap, which a
 /// stack names the line of.
 let private marked (kind: ExprKind) =
@@ -1381,7 +1385,11 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
     let emitter = FunctionEmitter(context)
     emitter.Declared <- (func.Params |> List.map localName) @ (declaredLocals func.Body |> List.map fst) |> Set.ofList
     let bodyCode = emitter.SequenceAs true func.Result func.Body
-    let bodyCode = emitter.ProbingCopy @ [ bodyCode ] |> String.concat "\n    " |> withoutRepeatedMarkers
+    let defined =
+        match func.Place, context.ShownFile with
+        | Some place, Some shownFile -> [ definitionMarker shownFile place ]
+        | _ -> []
+    let bodyCode = defined @ emitter.ProbingCopy @ [ bodyCode ] |> String.concat "\n    " |> withoutRepeatedMarkers
     let header =
         [ func.Params |> List.map (fun p -> $"(param ${localName p} {CoreIrLayout.valueType p.Type})") |> String.concat " "
           $"(result {CoreIrLayout.valueType func.Result})"

@@ -53,8 +53,10 @@ marker that repeats the one before it is left out.
 `WasmBinary`, the compiler's own assembler, reads each marker (`WatSyntax.Placed`) and notes where in the module the
 code after it starts. It writes them into a custom section, `nanyx.spans` (`WasmBinary.spanTableName` says how it is
 laid out): the names of files and functions, the frames, each with the frame of the call it was inlined at so that
-inlined code shares its outer frames, and each stretch of code by how far after the last it starts. The function names
-the frames fall back on are in the name section. Across the examples, the table adds 16% to a release build's module.
+inlined code shares its outer frames, each stretch of code by how far after the last it starts, a debug build's probes
+(see [Debug probes](./debug-probes)), and each function's definition, by its name: the frame of the marker `;;@def
+main.nyx:3` that starts its body, which a profile gives the function (see [Profiling](./command-line#profiling)). The
+function names the frames fall back on are in the name section. Across the examples, the table adds 16% to a release build's module.
 
 # The runtime
 
