@@ -76,24 +76,24 @@ let enter (env: TypeEnv) (state: InferState) (call: Expression) (callee: Identif
             OpenScopes = List.map snd supplied @ state.OpenScopes }
 
 /// Whether the def `defName`, where it writes its type, has the scoped context `context` in its body: the type writes
-/// it, or the def supplies it to a function it is given, as `memory` does, or it takes a cell, for `Memory`.
+/// it, or it takes a cell, for `Memory`. A parameter whose type requires the context doesn't give the body one: the def
+/// that supplies it to such a parameter, as `memory` does, loads an instance with `use` to call it (#2101).
 let private declares (state: InferState) (defName: Identifier) (context: Identifier) =
     let names (contexts: TypeExpr list) =
         contexts |> List.exists (fun ctx -> match ctx.Kind with TypeName name -> WrittenContexts.declaredScoped state name = context | _ -> false)
-    let inParameters (signature: TypeExpr) =
+    let takesCell (signature: TypeExpr) =
         match signature.Kind with
-        | TypeFunc(input, _) ->
+        | TypeFunc(input, _) when context = MemoryCells.context ->
             TypeExpr.within input
             |> List.exists (fun typeExpr ->
                 match typeExpr.Kind with
-                | TypeWithContext(contexts, _) -> names contexts
-                | TypeApply(name, [ _ ]) -> name = CellPassingSyntax.typeName && context = MemoryCells.context
+                | TypeApply(name, [ _ ]) -> name = CellPassingSyntax.typeName
                 | _ -> false)
         | _ -> false
     match state.WrittenTypes |> Map.tryFind defName with
-    | Some { Kind = TypeWithContext(contexts, signature) } -> names contexts || inParameters signature
+    | Some { Kind = TypeWithContext(contexts, signature) } -> names contexts || takesCell signature
     | Some { Kind = TypeContext contexts } -> names contexts
-    | Some signature -> inParameters signature
+    | Some signature -> takesCell signature
     | None -> false
 
 /// The error for `subject` (`'open'`, which `instead` says how to move: `call 'open'`) at `span` requiring the scoped

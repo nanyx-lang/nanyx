@@ -74,7 +74,7 @@ The full form of a context definition is `scoped export context Name(params) = p
 scoped export context Memory = protected ()
 ```
 
-A scoped context must be either `protected` or `private`, so that each of its instances comes from the function its module provides to supply it: `scoped context Tx = (...)` is an error. Any module may declare one. What requires a scoped context leaving its scope is NYX0233.
+A scoped context must be either `protected` or `private`, so that each of its instances comes from the function its module provides to supply it: `scoped context Tx = (...)` is an error. That function loads an instance with `use` to call what it supplies, as `memory` does with `use Memory() in block()`: a parameter whose type requires the context doesn't give the function one, so calling it without the `use` is an error (NYX0211). Any module may declare one. What requires a scoped context leaving its scope is NYX0233.
 
 ## Types in a scope
 
@@ -85,7 +85,7 @@ scoped export context Tx = private ()
 
 export type Cursor = [Tx] protected (query: string, row: int)
 
-export def transaction: [c] ([Tx, c] () -> a) -> a = { block -> block() }
+export def transaction: [c] ([Tx, c] () -> a) -> a = { block -> use Tx() in block() }
 export def open: [Tx] string -> Cursor = { query -> Cursor(query = query, row = 0) }
 export def next: [Tx] Cursor -> int = { c -> c.row + 1 }
 
