@@ -102,3 +102,16 @@ def pick: map(string, J), list(string) -> int = { o, cases ->
 }
 """
     compileClean (source.ReplaceLineEndings "\n") |> ignore
+
+[<Fact>]
+let ``Tag arms join with an arm of a named union whichever comes first`` () =
+    // With `#e` first, each later branch was made `#e`'s type, so `#c(nodes)` met `#e` (#2052).
+    let arms =
+        [ "    | [] -> #e"; "    | [node] -> node"; "    | _ -> #c(nodes)" ]
+    for order in [ [ 0; 1; 2 ]; [ 1; 0; 2 ]; [ 0; 2; 1 ]; [ 2; 0; 1 ] ] do
+        let source =
+            "type T = #e | #c(list(T)) | #a(list(T))\n\n"
+            + "def f: list(T) -> T = { nodes ->\n  match nodes\n"
+            + String.concat "\n" (order |> List.map (fun i -> arms.[i]))
+            + "\n}\n"
+        Assert.Equal("list(T) -> T", typeIn (compileClean source) "f")

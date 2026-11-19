@@ -35,7 +35,8 @@ let private joinCarried (state: InferState) (branchTypes: Ty list) : (Ty * Infer
 /// `#error(#notFound | #denied)`, or both are tuples or records, which are joined field by field: `#a(#x, 1)` against
 /// `#a(#y, 2)` is `#a(#x | #y, int)`. When every branch is a record (or tuple) with the same fields, the fields are joined one by
 /// one, so `if c then (s, #some(x)) else (s, #none)` is `(string, #some(a) | #none)`. Otherwise the
-/// branches have to agree as before: every later branch is constrained equal to the first.
+/// branches have to agree: every branch is constrained equal to the first, or, where the first is a tag, to the first
+/// branch settled to a named type, which the tags are each one of.
 ///
 /// `rowVars` are the rest variables of the tag unions being matched on. A branch of one of those types
 /// (a catch-all arm returning what it caught) joins the union as its rest, so
@@ -195,4 +196,15 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
                     | TyAlias(_, [], _)
                     | TyNominal(_, [], _, _) as named -> named
                     | _ -> ty
-                head, tail |> List.fold (fun st ty -> addConstraint (settled head) (settled ty) st) state
+                // The branches are each made the type of one of them. Where some are tags and another is settled to a
+                // named type, that is the named type, which the tags are each one of: made the first tag's type, the
+                // other tags would be made that tag, so `| [] -> #e | [node] -> node | _ -> #c(nodes)` would make
+                // `#c(...)` an `#e` (#2052).
+                let isNamed ty = match settled ty with TyAlias _ | TyNominal _ -> true | _ -> false
+                let anchorIndex =
+                    match tagsOf head with
+                    | Some _ -> branchTypes |> List.tryFindIndex isNamed |> Option.defaultValue 0
+                    | None -> 0
+                let anchor = branchTypes.[anchorIndex]
+                let others = branchTypes |> List.removeAt anchorIndex
+                anchor, others |> List.fold (fun st ty -> addConstraint (settled anchor) (settled ty) st) state
