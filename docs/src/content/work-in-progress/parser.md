@@ -105,14 +105,11 @@ fallback.
   FParsec parser reads, 4,778 read whole to its tree with no fallback, and none differ. The other 6 are test fixtures
   written as mistakes that the FParsec parser reads leniently (a `match` with no arms, which it reads as a name, and a
   string's hole that doesn't parse, which it reads as text), where the new parser gives up.
-- **Not yet:** `parse` still reads every file with the FParsec parser; only the tests read with the new one. Making
-  `parse` use it, with the FParsec parser as the fallback for what it gives up at, changes what a user sees wherever a
-  file outside the corpus reads differently, and has the side state `parse` returns to match too (the names nodes
-  declare, the starts of documentable constructs, the trivia and string texts), so it is a decision of its own.
-- **Settled in stage 3 so far:** the lexer's `true` and `false` names, its numbers without a sign, and its `1` and `.`
-  for `1.`, which the descent parser's literals read as the FParsec parser does (`DescentLiterals.fs`). A pattern that
-  is a string with holes is still open: the FParsec parser reads its `{` as text, and the descent parser gives up there,
-  though the corpus has none outside the arms the parser makes up.
+- **`parse` reads with it:** `Api.runModuleParser` reads every file with the recursive-descent parser, and with the
+  FParsec parser only where that one gives up, so that a mistake is reported as it was. `CorpusTests.fs` checks, on
+  every piece of the corpus, that the two read the same items and keep the same side state (the names nodes declare,
+  where documentable constructs start, module blocks, comments and string texts), and that the new parser gives up on
+  every piece the FParsec parser rejects, so that no mistake goes unreported.
 - **Done when** the new parser handles the whole corpus and every parser test with no fallback, and every tree
   matches.
 

@@ -30,6 +30,8 @@ type Cursor(file: string, source: string, laid: Laid array) =
     let mutable stringTexts: (int * int) list = []
     // Where the argument a shorthand lambda's body leaves out is made up, as `ParseState.ImplicitArgumentNext` keeps it.
     let mutable implicitArgumentNext: SourceSpan option = None
+    // The `module name =` blocks read so far, each with its text, as `ParseState.ModuleBlocks` keeps them.
+    let mutable moduleBlocks: (ModuleName * SourceSpan) list = []
 
     member _.Source = source
     member _.Index
@@ -142,7 +144,7 @@ type Cursor(file: string, source: string, laid: Laid array) =
     member _.Attempt(read: unit -> 'a) : 'a option =
         let start = index
         let declaredBefore, documentableBefore, pendingBefore, stringTextsBefore = declared, documentable, pending, stringTexts
-        let implicitBefore = implicitArgumentNext
+        let implicitBefore, moduleBlocksBefore = implicitArgumentNext, moduleBlocks
         try
             Some(read ())
         with NoMatch ->
@@ -152,9 +154,32 @@ type Cursor(file: string, source: string, laid: Laid array) =
             pending <- pendingBefore
             stringTexts <- stringTextsBefore
             implicitArgumentNext <- implicitBefore
+            moduleBlocks <- moduleBlocksBefore
             None
 
     member _.Declared = declared
+
+    member _.ModuleBlocks = moduleBlocks
+
+    /// Notes the `module name =` block `name`, whose text is at `span`.
+    member _.NoteModuleBlock (name: ModuleName) (span: SourceSpan) = moduleBlocks <- moduleBlocks @ [ name, span ]
+
+    /// The comments of the text, most recent first, as the FParsec parser notes them (`ParseState.Comments`): each `--`
+    /// comment, block comment and doc comment, from the trivia of the tokens.
+    member _.Comments : NotedComment list =
+        laid
+        |> Seq.collect (function Code token -> Seq.append token.Leading token.Trailing | _ -> Seq.empty)
+        |> Seq.choose (fun trivia ->
+            match trivia.Kind with
+            | LineComment
+            | BlockComment -> Some { NotedComment.Start = trivia.Start; End = trivia.End; IsDoc = false }
+            | DocComment -> Some { NotedComment.Start = trivia.Start; End = trivia.End; IsDoc = true }
+            | Whitespace
+            | LineBreak
+            | Directive -> None)
+        |> Seq.distinct
+        |> Seq.rev
+        |> List.ofSeq
 
     /// Where the argument a shorthand lambda's body leaves out is made up, until its first operand takes it (see
     /// `Expressions.implicitArgumentOperand`): the operator or `.` written in its place.

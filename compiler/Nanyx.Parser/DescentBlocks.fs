@@ -31,6 +31,14 @@ let internal nextCodeStart (c: Cursor) =
     c.Index <- index
     start
 
+/// That no comment comes between the last token taken and the next code token, where the FParsec parser skips only
+/// spaces and line breaks: before a lambda's `}`, but after a body of statements on lines of their own. A comment there
+/// is a mistake it reports.
+let internal noCommentBefore (c: Cursor) =
+    let next = nextCodeStart c
+    if c.Source.Substring(c.LastEnd, max 0 (next - c.LastEnd)).Contains "--" then
+        c.GiveUp "a comment before a lambda's `}` that the FParsec parser doesn't skip, which is a mistake"
+
 /// Whether the cursor is at a closing bracket or brace, which ends whatever block is open inside it.
 let private atClose (c: Cursor) = c.Is RightParen || c.Is RightBracket || c.Is RightBrace
 
@@ -313,6 +321,10 @@ and internal nameAndType (c: Cursor) : Identifier * SourceSpan * TypeExpr option
         parts.Add(fst (name c))
     let nameSpan = c.SpanFrom start
     if first.IsNone || not (c.Is Colon || c.Is Equals) then c.GiveUp "a destructuring def"
+    // An operator Nanyx doesn't have, or `??`, which is syntax, can't be defined (`Types.definableName`).
+    let last = parts[parts.Count - 1]
+    if last = coalesceOperator || (Names.isOperator last && not (isDefinableOperator last)) then
+        c.GiveUp "a def of an operator Nanyx doesn't have, which is a mistake"
     String.concat "." parts, nameSpan, defType c
 
 /// `= value` after a def's name and type: on the line, or at the start of a line indented further than the def's. The
@@ -382,13 +394,19 @@ and internal sameLineBody (c: Cursor) (value: Cursor -> Expression) : Expression
 /// number at any column until the `}`, or a body on the line (`Expressions.blockBody`).
 and private lambdaBody (c: Cursor) : Expression =
     if c.Is RightBrace then raise NoMatch
-    if c.OnSameLine then sameLineBody c (expression Crossing)
+    if c.OnSameLine then
+        let body = sameLineBody c (expression Crossing)
+        noCommentBefore c
+        body
     else
         skipLayout c
         let start = c.Start
         let statements = ResizeArray()
         while not (c.Is RightBrace) do
             statements.AddRange(statementsOnLine c)
+            // A statement after another on its line, with no `;` between them, is a mistake the FParsec parser
+            // reports (a name applied to a value, as only a workflow keyword is).
+            if c.OnSameLine && not (c.Is RightBrace) then c.GiveUp "a statement after another on its line, which is a mistake"
             skipLayout c
         blockOf c start (List.ofSeq statements)
 
@@ -446,8 +464,9 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
         | Some token when token.Kind = Operator && (binaryOperatorNamed (c.Text token)).IsSome -> token
         | _ -> raise NoMatch
     let empty () =
+        if not (nextCodeIs c RightBrace) then raise NoMatch
+        noCommentBefore c
         skipLayout c
-        if not (c.Is RightBrace) then raise NoMatch
         fun span -> Lambda([], Expression.at span UnitExpr, false)
     let binaryAlone () =
         let token = shorthandOperator ()
@@ -472,6 +491,7 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
                 else raise NoMatch
         c.ImplicitArgumentNext <- Some leftOut
         let body = expression Crossing c
+        noCommentBefore c
         skipLayout c
         fun _ -> Lambda([ (implicitArgument, None) ], body, false)
     // `context l` or `context l: Log`, the names of the instances of the contexts the lambda is given, before its
@@ -521,6 +541,7 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
             let armsStart = nextCodeStart c
             let written = arms c
             let armsSpan = c.SpanFrom armsStart
+            noCommentBefore c
             skipLayout c
             fun span ->
                 let scrutinees = named |> List.map (fun (name, _) -> Expression.at armsSpan (IdentifierExpr name))
@@ -555,6 +576,7 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
     // `{ | pattern -> ... }`: arms, matched against as many arguments as the most patterns an arm has.
     let matchArms () =
         let written = arms c
+        noCommentBefore c
         skipLayout c
         fun span ->
             let made kind = Expression.at span kind

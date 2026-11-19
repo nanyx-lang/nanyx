@@ -203,14 +203,14 @@ let ``The recursive-descent parser reads every expression it reads as the FParse
     Assert.Equal<string array>([||], gaveUp |> Array.filter (isLater >> not))
 
 [<Fact>]
-let ``The recursive-descent parser reads every file it reads as the FParsec parser does`` () =
+let ``The recursive-descent parser reads every file it reads as the FParsec parser does, with the same side state`` () =
+    // The items, and what each parser keeps beside them, which `parse` returns: the names nodes declare, where
+    // documentable constructs start, module blocks, comments and string texts.
     let outcomes =
-        parses.Value
+        Corpus.all.Value
         |> Array.ofList
-        |> Array.Parallel.choose (fun (piece, parse) ->
-            match parse with
-            | Result.Error _ -> None
-            | Result.Ok parsed -> Some(piece.Name, DescentCheck.checkModule piece.Name parsed))
+        |> Array.Parallel.choose (fun piece ->
+            DescentCheck.checkModuleWithState piece.Name piece.Source |> Option.map (fun outcome -> piece.Name, outcome))
     let differing =
         outcomes |> Array.choose (function
             | name, DescentCheck.Differs(fparsec, descent) -> Some $"{name}:\n--- FParsec\n{fparsec}--- descent\n{descent}"
@@ -224,3 +224,17 @@ let ``The recursive-descent parser reads every file it reads as the FParsec pars
         gaveUp)
     let same = outcomes |> Array.filter (snd >> (=) DescentCheck.Same) |> Array.length
     Assert.True(same > outcomes.Length - 10, $"Only {same} of {outcomes.Length} files are read with no fallback")
+
+[<Fact>]
+let ``The recursive-descent parser gives up wherever the FParsec parser reports a mistake`` () =
+    // `parse` reads with the recursive-descent parser and falls back to the FParsec parser where it gives up, so that a
+    // mistake is still reported, as the FParsec parser reports it. A piece the FParsec parser rejects and the new
+    // parser reads would lose its error.
+    let lenient =
+        Corpus.all.Value
+        |> Array.ofList
+        |> Array.Parallel.choose (fun piece ->
+            match readWithBothParsers piece.Name piece.Source with
+            | Result.Error _, Result.Ok _ -> Some piece.Name
+            | _ -> None)
+    Assert.Equal<string array>([||], lenient)
