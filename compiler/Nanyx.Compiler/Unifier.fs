@@ -206,6 +206,16 @@ module Unifier =
         | TyUnion items -> parseTagUnion items
         | _ -> parseTagUnion [ ty ]
 
+    /// The payload of the tag `name` in `ty`, a tag or a union of them, when it has the tag with a payload.
+    let payloadOfTag (name: string) (ty: Ty) : Ty option =
+        let payloadIn =
+            function
+            | TyTag(tag, Some payload) when tag = name -> Some payload
+            | _ -> None
+        match ty with
+        | TyUnion items -> items |> List.tryPick payloadIn
+        | _ -> payloadIn ty
+
     /// Whether `ty` is given where `expected` is, and one is a tag or union while the other is a variable: what the
     /// variable stands for has still to be found.
     let private isPendingUnion ty expected =

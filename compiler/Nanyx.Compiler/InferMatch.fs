@@ -158,13 +158,8 @@ let internal inferMatch
                     // payload pattern matches its payload. A fresh variable would leave the tags a nested pattern
                     // gives it to be solved after the scrutinee's own type reaches it, so two of them would meet
                     // each other first (#1808).
-                    let knownPayload =
-                        match scrutineeTy with
-                        | TyTag(name, Some payloadTy) when name = tagName -> Some payloadTy
-                        | TyUnion items -> items |> List.tryPick (function TyTag(name, Some payloadTy) when name = tagName -> Some payloadTy | _ -> None)
-                        | _ -> None
                     let payloadTy, nextState =
-                        match knownPayload with
+                        match Unifier.payloadOfTag tagName scrutineeTy with
                         | Some payloadTy -> payloadTy, state'
                         | None -> freshVar state'
                     let constrained = addAssignableConstraint (TyTag(tagName, Some payloadTy)) scrutineeTy nextState
