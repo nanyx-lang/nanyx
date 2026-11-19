@@ -6,8 +6,6 @@ open Nanyx.Compiler.Tests.TestSupport
 
 // The prelude's lazy sequence, `seq(a)`, and ranges as values of it (#192).
 
-let private typeOf (typed: TypedModule) (name: string) = Unifier.tyToDisplayString Ascii typed.Types.[name]
-
 /// `source`, its line endings made `\n`, compiled with no errors.
 let private clean (source: string) = compileClean (source.ReplaceLineEndings "\n")
 
@@ -20,10 +18,10 @@ def endless = 0..
 def written: Seq(int) = 1..3
 def aliased: seq(int) -> Seq(int) = { s -> s }
 """
-    Assert.Equal("seq(int)", typeOf typed "bounded")
-    Assert.Equal("seq(int)", typeOf typed "endless")
-    Assert.Equal("seq(int)", typeOf typed "written")
-    Assert.Equal("seq(int) -> seq(int)", typeOf typed "aliased")
+    Assert.Equal("seq(int)", asciiTypeIn typed "bounded")
+    Assert.Equal("seq(int)", asciiTypeIn typed "endless")
+    Assert.Equal("seq(int)", asciiTypeIn typed "written")
+    Assert.Equal("seq(int) -> seq(int)", asciiTypeIn typed "aliased")
 
 [<Fact>]
 let ``The seq functions are attached to seq, and a pipe finds them`` () =
@@ -33,8 +31,8 @@ def doubled = (1..10) \seq.map { * 2 } \seq.toList
 def piped: [Console] () -> list(int) = { (1..3) \map { x -> x + 1 } \toList }
 def firstEvens = (0..) \seq.filter { x -> x % 2 == 0 } \seq.take(3) \Seq.toList
 """
-    Assert.Equal("list(int)", typeOf typed "doubled")
-    Assert.Equal("list(int)", typeOf typed "firstEvens")
+    Assert.Equal("list(int)", asciiTypeIn typed "doubled")
+    Assert.Equal("list(int)", asciiTypeIn typed "firstEvens")
 
 [<Fact>]
 let ``A sequence mapped with a function that needs a context carries it`` () =
@@ -47,7 +45,7 @@ def loud = { () ->
   }
 }
 """
-    Assert.Equal("() -> [Console] seq(int)", typeOf typed "loud")
+    Assert.Equal("() -> [Console] seq(int)", asciiTypeIn typed "loud")
 
 [<Fact>]
 let ``A sequence that carries a context is pulled only where the context is`` () =
@@ -77,8 +75,8 @@ def made: () -> [Console] seq(int) = {
   }
 }
 """
-    Assert.Equal("[Console] seq(int)", typeOf typed "loud")
-    Assert.Equal("() -> [Console] seq(int)", typeOf typed "made")
+    Assert.Equal("[Console] seq(int)", asciiTypeIn typed "loud")
+    Assert.Equal("() -> [Console] seq(int)", asciiTypeIn typed "made")
 
 [<Fact>]
 let ``A sequence mapped with a function that needs a context is still pulled only where the context is`` () =

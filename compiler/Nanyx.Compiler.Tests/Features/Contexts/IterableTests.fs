@@ -15,15 +15,10 @@ def Bag.toSeq: Bag(a) -> seq(a) = { b -> list.toSeq(b.items) }
 def elements: [Iterable(c)] c -> seq(elem) = { xs -> toSeq(xs) }
 """
 
-let private typesOf (source: string) =
-    let result = Compiler.compile (source.ReplaceLineEndings "\n")
-    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    result.Typed.Value.Types
-
 [<Fact>]
 let ``toSeq fixes elem, for a user's type and for the prelude's`` () =
     let types =
-        typesOf (
+        definedTypes (
             bag
             + """
 def fromBag = elements(Bag(items = ["a"]))
@@ -51,7 +46,7 @@ def n = shout([1, 2])
 
 [<Fact>]
 let ``another context may name the associated type an Iterable fixes`` () =
-    typesOf """def describe: [Iterable(c), ToString(elem)] c -> list(string) = { xs -> seq.toList(seq.map(toSeq(xs), { x -> "{x}" })) }
+    definedTypes """def describe: [Iterable(c), ToString(elem)] c -> list(string) = { xs -> seq.toList(seq.map(toSeq(xs), { x -> "{x}" })) }
 
 def described = describe([1, 2])
 """

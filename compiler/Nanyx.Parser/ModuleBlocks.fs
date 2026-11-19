@@ -85,7 +85,10 @@ let private rewriteExpressionInModule (valueMap: Map<string, string>) (typeMap: 
     and rewriteType typeExpr = rewriteTypeExprInModule typeMap rewrite typeExpr
     rewrite expr
 
-let rec private expandModuleBlock (prefix: string) (items: TopLevelItem list) : TopLevelItem list =
+/// The items of the `module name =` block written at `blockSpan`, whose full name is `prefix`, with their names
+/// qualified by it. A block nested in it becomes a module declaration, its items, and the outer block's module declared
+/// again after them, so that the items after the nested block are checked in the outer block's module.
+let rec private expandModuleBlock (prefix: string) (blockSpan: SourceSpan) (items: TopLevelItem list) : TopLevelItem list =
     let localTypeNames =
         items
         |> List.choose (function
@@ -134,7 +137,8 @@ let rec private expandModuleBlock (prefix: string) (items: TopLevelItem list) : 
         | ModuleBlock(name, nested) ->
             // The nested block becomes a module declaration, written where the block was.
             let nestedPrefix = qualifyModuleName prefix name
-            TopLevelItem.at item.Span (ModuleDecl(false, nestedPrefix)) :: expandModuleBlock nestedPrefix nested
+            TopLevelItem.at item.Span (ModuleDecl(false, nestedPrefix)) :: expandModuleBlock nestedPrefix item.Span nested
+            @ [ TopLevelItem.at blockSpan (ModuleDecl(false, prefix)) ]
         | Import _
         | ReExport _
         | Attribute _ -> [ item ]
@@ -157,7 +161,7 @@ let internal expandMidFileModules (items: TopLevelItem list) : TopLevelItem list
                     match currentModule with
                     | Some root when not (String.IsNullOrWhiteSpace root) -> qualifyModuleName root name
                     | _ -> name
-                let expanded = TopLevelItem.at item.Span (ModuleDecl(false, prefix)) :: expandModuleBlock prefix innerItems
+                let expanded = TopLevelItem.at item.Span (ModuleDecl(false, prefix)) :: expandModuleBlock prefix item.Span innerItems
                 loop currentModule rest ((List.rev expanded) @ acc)
             | _ -> loop currentModule rest (item :: acc)
     loop None items []

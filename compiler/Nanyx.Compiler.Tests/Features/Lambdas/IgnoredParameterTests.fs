@@ -9,8 +9,6 @@ open Nanyx.Compiler.Tests.TestSupport
 let private applySource = """def apply: (int -> string) -> string = { f -> f(1) }
 """
 
-let private typeOf (source: string) (name: string) = Unifier.tyToString (compileClean source).Types.[name]
-
 [<Fact>]
 let ``A lambda without parameters passed for a one-parameter function ignores the parameter`` () =
     let source = applySource + """def x = apply { "ignored" }

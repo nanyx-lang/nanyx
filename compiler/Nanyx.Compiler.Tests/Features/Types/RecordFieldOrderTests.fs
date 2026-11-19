@@ -8,7 +8,7 @@ open Nanyx.Compiler.Tests.TestSupport
 // record and a tag's payload, in hover, `nanyx check`, error messages and the standard library's pages.
 
 /// The type of each top-level def of `source`, as `nanyx check` writes it.
-let private typesOf (source: string) =
+let private sourceTypesOf (source: string) =
     let result = Compiler.compile (normalized source)
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     result.Typed.Value.Types |> Map.map (fun _ ty -> Unifier.tyToDisplayString TypeNotation.Source ty)
@@ -16,7 +16,7 @@ let private typesOf (source: string) =
 [<Fact>]
 let ``Named parameters are written in the order they are declared`` () =
     let types =
-        typesOf
+        sourceTypesOf
             """def slice: (string, start: int, length: int) -> string = { s, start, length -> s }
 def made = (zeta = 1, alpha = 2)
 """
@@ -31,7 +31,7 @@ let ``An imported definition's named parameters are written as its module declar
 
 [<Fact>]
 let ``The annotation's order wins over the value's`` () =
-    Assert.Equal("(y: int, x: int)", (typesOf "def point: (y: int, x: int) = (x = 1, y = 2)\n").["point"])
+    Assert.Equal("(y: int, x: int)", (sourceTypesOf "def point: (y: int, x: int) = (x = 1, y = 2)\n").["point"])
 
 [<Fact>]
 let ``A record and a tag's payload are written in order in an error message`` () =

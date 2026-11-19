@@ -7,7 +7,7 @@ open Nanyx.Compiler.Tests.TestSupport
 // Record patterns: a name alone in a pattern takes the record's field of that name, as `name = name`.
 
 /// The type of each local the compiled `source` declares by `name`.
-let private typesOf (source: string) =
+let private localHintsOf (source: string) =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     localInlayHints Unicode "" result |> List.map (fun hint -> hint.Name, hint.Type)
@@ -19,7 +19,7 @@ let ``A name alone in a pattern binds the field of that name`` () =
   | (age, name) -> "{name} is {age}" }
 """
     Assert.Equal<(string * string) list>(
-        [ "r", "(name: string, age: int)"; "age", "int"; "name", "string" ], typesOf source)
+        [ "r", "(name: string, age: int)"; "age", "int"; "name", "string" ], localHintsOf source)
 
 [<Fact>]
 let ``A tag's named payload is taken apart by name, in a match and in a lambda's parameter`` () =
@@ -30,12 +30,12 @@ def g: typeof a -> string = { t -> match t
   | #some(y, x) -> "{x}{y}" }
 """
     Assert.Equal<(string * string) list>(
-        [ "x", "string"; "y", "int"; "t", "#some(x: string, y: int)"; "y", "int"; "x", "string" ], typesOf source)
+        [ "x", "string"; "y", "int"; "t", "#some(x: string, y: int)"; "y", "int"; "x", "string" ], localHintsOf source)
 
 [<Fact>]
 let ``A tuple pattern still matches a tuple by position`` () =
     let source = "def f: (string, int) -> string = { p -> match p\n  | (s, n) -> s }\n"
-    Assert.Equal<(string * string) list>([ "p", "(string, int)"; "s", "string"; "n", "int" ], typesOf source)
+    Assert.Equal<(string * string) list>([ "p", "(string, int)"; "s", "string"; "n", "int" ], localHintsOf source)
 
 // A record type is closed, so a pattern by member name names every field, or ends in `...` to leave the others out.
 [<Fact>]
@@ -52,7 +52,7 @@ let ``A record pattern that ends in ... leaves the other fields out`` () =
   | (name = "Alice", ...) -> "A"
   | (name = n, age = _) -> n }
 """
-    Assert.Equal<(string * string) list>([ "r", "(name: string, age: int)"; "n", "string" ], typesOf source)
+    Assert.Equal<(string * string) list>([ "r", "(name: string, age: int)"; "n", "string" ], localHintsOf source)
 
 [<Fact>]
 let ``A record pattern on a value of no known type yet takes exactly its fields, or at least them with ...`` () =
@@ -84,7 +84,7 @@ def f: list(Request) -> string = { requests ->
 }
 """
     Assert.Equal<(string * string) list>(
-        [ "requests", "list(Request)"; "msg", "string"; "v", "int"; "tail", "list(Request)" ], typesOf source)
+        [ "requests", "list(Request)"; "msg", "string"; "v", "int"; "tail", "list(Request)" ], localHintsOf source)
 
 [<Fact>]
 let ``A record pattern in a list pattern's element binds the field's type`` () =
@@ -97,7 +97,7 @@ def f: list((name: string, age: int)) -> int = { people ->
 }
 """
     Assert.Equal<(string * string) list>(
-        [ "people", "list(name: string, age: int)"; "a", "int"; "n", "string"; "b", "int" ], typesOf source)
+        [ "people", "list(name: string, age: int)"; "a", "int"; "n", "string"; "b", "int" ], localHintsOf source)
 
 [<Fact>]
 let ``A name that is not one of the record's fields is matched by position, and the record has none there`` () =

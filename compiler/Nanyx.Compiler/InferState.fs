@@ -594,6 +594,12 @@ let internal recordSymbolType (symbol: SymbolId option) (ty: Ty) (state: InferSt
     | Some symbol -> { state with SymbolTypes = state.SymbolTypes |> Map.add symbol ty }
     | None -> state
 
+/// Records the type inference gave an expression, so it can be looked up by node once unification has resolved it.
+let internal recordExprType (result: Result<TypedExpr * InferState, Diagnostic list>) =
+    result
+    |> Result.map (fun (typedExpr, state) ->
+        typedExpr, { state with ExprTypes = state.ExprTypes |> Map.add typedExpr.Expr.Id typedExpr.Type })
+
 /// Records that the declaration `symbol` writes its own type, if `isAnnotated`.
 let internal recordAnnotated (symbol: SymbolId option) (isAnnotated: bool) (state: InferState) =
     match symbol with

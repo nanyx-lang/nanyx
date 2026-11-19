@@ -4,11 +4,6 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-/// The type of `r` in `source`, which must compile clean.
-let private typeOfR (source: string) =
-    let typed = compileClean (source.ReplaceLineEndings "\n")
-    Unifier.tyToString typed.Types.["r"]
-
 [<Fact>]
 let ``Branches that each end in a union with a rest of its own join into one union`` () =
     let source = """
@@ -26,7 +21,7 @@ def f = { g, h, n ->
 
 def r = f({ n -> #c }, { n -> #d }, 3)
 """
-    Assert.Equal("#a | #b | #c | #d", typeOfR source)
+    Assert.Equal("#a | #b | #c | #d", typeOf source "r")
 
 [<Fact>]
 let ``A call whose type an earlier branch already joined into a union joins as that union`` () =
@@ -47,21 +42,21 @@ def f = { g, n ->
 
 def r = f({ n -> #c }, 3)
 """
-    Assert.Equal("#a | #b | #c", typeOfR source)
+    Assert.Equal("#a | #b | #c", typeOf source "r")
 
 [<Fact>]
 let ``Same-named tags with tuple payloads join the tags in the tuples' parts`` () =
     let source = """
 def r = if true then #a(#x, 1) else #a(#y, 2)
 """
-    Assert.Equal("#a(#x | #y, int)", typeOfR source)
+    Assert.Equal("#a(#x | #y, int)", typeOf source "r")
 
 [<Fact>]
 let ``Same-named tags with record payloads join the tags in the records' fields`` () =
     let source = """
 def r = if true then #a(kind = #x, n = 1) else #a(kind = #y, n = 2)
 """
-    Assert.Equal("#a(kind: #x | #y, n: int)", typeOfR source)
+    Assert.Equal("#a(kind: #x | #y, n: int)", typeOf source "r")
 
 [<Fact>]
 let ``Branches and list elements giving a tag with differing tuple payloads check against a union that allows both`` () =

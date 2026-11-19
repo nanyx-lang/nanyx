@@ -24,6 +24,7 @@
     <Compile Include="FunctionContexts.fs" />
     <Compile Include="RecursiveNominals.fs" />
     <Compile Include="Seqs.fs" />
+    <Compile Include="TypePrinting.fs" />
     <Compile Include="Unifier.fs" />
     <Compile Include="Solving.fs" />
     <Compile Include="Lists.fs" />
@@ -97,6 +98,8 @@
     <Compile Include="TypeArguments.fs" />
     <Compile Include="TypeDescriptions.fs" />
     <Compile Include="TypeMatches.fs" />
+    <Compile Include="InferMatch.fs" />
+    <Compile Include="InferCalls.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="InferModule.fs" />
     <Compile Include="RequiredContexts.fs" />

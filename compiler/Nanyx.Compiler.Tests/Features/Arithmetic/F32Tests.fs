@@ -4,10 +4,6 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-/// The type of `name` in `source`, which has no diagnostics, as the compiler prints it.
-let private typeOf (name: string) (source: string) =
-    Unifier.tyToString ((compileClean (source.ReplaceLineEndings "\n")).Types.[name])
-
 [<Fact>]
 let ``F32 is a number of its own name`` () =
     let source =
@@ -20,9 +16,9 @@ def total: [Num(a)] list(a) -> a = {
 }
 def floats = total([F32.fromInt(1), F32.zero])
 """
-    Assert.Equal("F32, F32 -> F32", typeOf "f" source)
-    Assert.Equal("F32, F32 -> bool", typeOf "less" source)
-    Assert.Equal("F32", typeOf "floats" source)
+    Assert.Equal("F32, F32 -> F32", typeOf source "f")
+    Assert.Equal("F32, F32 -> bool", typeOf source "less")
+    Assert.Equal("F32", typeOf source "floats")
 
 [<Fact>]
 let ``An F32 is not a float`` () =

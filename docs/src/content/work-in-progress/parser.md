@@ -59,10 +59,11 @@ merge. Each stage lands on its own, keeps every test passing, and is useful by i
 not change in stages 1 to 4, so the type checker, the backend, the formatter and the language server need no change
 until the parser underneath them is replaced.
 
-## Stages 0 and 1
+## Stages 0 to 2
 
-Stages 0 and 1 are done: the corpus, the differential test and the lexer, described in
-[The parser](../compiler-internals/parser) in the Compiler internals section.
+Stages 0 to 2 are done: the corpus, the differential test, the lexer and the layout pass, described in
+[The parser](../compiler-internals/parser) in the Compiler internals section, with the layout rules and where the
+layout pass reads text differently from the FParsec parser.
 
 Where the lexer reads the text differently from the FParsec parser, which stage 3 has to settle:
 
@@ -74,24 +75,24 @@ Where the lexer reads the text differently from the FParsec parser, which stage 
 - A `{` in any double-quoted string opens a hole. The parser reads a string literal with no holes, as an import's
   path or a pattern's, with `{` as text.
 
+Where the layout pass reads text differently from the FParsec parser, which stage 3 has to settle:
+
+- The parser takes a top-level item at any column, and the layout pass takes a line indented further than the top
+  level as a continuation.
+- The parser takes the statements of a lambda's block, and a match's arms, at different columns, and the layout pass
+  takes a line indented further than the block's first item as a continuation of the item before it.
+
+Only test fragments and a program's output, and one `unformatted` example on the formatter's page, are written that way.
+
 The language server's "am I in code, a string or a comment?" check, doc comments and the reserved-word list could use
 tokens now instead of their own scanning.
 
-## Stage 2: the layout pass
-
-Turn the token stream into one with explicit block tokens: an `Indent` where a line starts further in than the line
-that opened its block, a `Dedent` where it comes back, and a `Newline` between statements at the same depth. Write
-the layout rules down on this page as one list, from what the FParsec parsers do today, including the cases above
-(#249, #248, #617, #628, #673).
-
-- **Done when** the block structure the layout pass gives every corpus file matches what today's parser makes of it,
-  checked by a test.
-
 ## Stage 3: the new parser, a part of the grammar at a time
 
-Write the recursive-descent parser over the layout tokens, producing today's syntax tree. It starts with only part
-of the grammar, and when it meets something it doesn't handle yet it gives up on the file, and `parse` falls back to
-the FParsec parser for that file. So it can land early, with every test still passing through the fallback.
+Write the recursive-descent parser over the layout tokens (`Layout.layout`), producing today's syntax tree. It starts
+with only part of the grammar, and when it meets something it doesn't handle yet it gives up on the file, and `parse`
+falls back to the FParsec parser for that file. So it can land early, with every test still passing through the
+fallback.
 
 - **Order:** type expressions first (`Types.fs` is the most self-contained), then patterns, then expressions by
   precedence, then statements and blocks, then top-level definitions, imports and directives.

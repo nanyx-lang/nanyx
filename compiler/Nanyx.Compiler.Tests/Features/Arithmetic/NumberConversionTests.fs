@@ -4,11 +4,6 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-/// The types of `names` in `source`, which has no diagnostics, as the compiler prints them.
-let private typesOf (names: string list) (source: string) =
-    let typed = compileClean (source.ReplaceLineEndings "\n")
-    names |> List.map (fun name -> Unifier.tyToString typed.Types.[name])
-
 [<Fact>]
 let ``A conversion that keeps every value gives the value, and any other an option of it`` () =
     let source =
@@ -27,7 +22,7 @@ def single = int.toF32
           "I8 -> #some(U64) | #outOfRange"
           "U64 -> float"
           "int -> F32" ],
-        typesOf [ "widened"; "unsigned"; "narrowed"; "signChanged"; "float"; "single" ] source)
+        typesOf source [ "widened"; "unsigned"; "narrowed"; "signChanged"; "float"; "single" ])
 
 [<Fact>]
 let ``A floating-point number converts to an int as a mode says, or to the other floating-point type`` () =
@@ -40,4 +35,4 @@ def double = F32.toFloat
 """
     Assert.Equal<string list>(
         [ "float -> int"; "F32 -> #some(int) | #outOfRange"; "float -> F32"; "F32 -> float" ],
-        typesOf [ "whole"; "maybe"; "single"; "double" ] source)
+        typesOf source [ "whole"; "maybe"; "single"; "double" ])

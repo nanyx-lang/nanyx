@@ -32,6 +32,7 @@
     <Compile Include="Features\Integration\IntegrationTests.fs" />
     <Compile Include="Features\Keywords\GrammarKeywordTests.fs" />
     <Compile Include="Features\Lambdas\LambdaTests.fs" />
+    <Compile Include="Features\Layout\LayoutTests.fs" />
     <Compile Include="Features\Lexer\LexerTests.fs" />
     <Compile Include="Features\Literals\LiteralsTests.fs" />
     <Compile Include="Features\Literals\StringEscapeTests.fs" />
@@ -45,6 +46,7 @@
     <Compile Include="Features\Matches\AndPatternTests.fs" />
     <Compile Include="Features\Matches\RecordPatternTests.fs" />
     <Compile Include="Features\Misc\MiscTests.fs" />
+    <Compile Include="Features\Modules\ModuleBlockTests.fs" />
     <Compile Include="Features\Multiline\MultilineTests.fs" />
     <Compile Include="Features\Names\BacktickedNameTests.fs" />
     <Compile Include="Features\Operators\OperatorTests.fs" />

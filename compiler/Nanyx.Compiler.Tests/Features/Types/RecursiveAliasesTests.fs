@@ -4,8 +4,6 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-let private typeOf (typed: TypedModule) (name: string) = Unifier.tyToDisplayString Ascii typed.Types.[name]
-
 /// `source`, its line endings made `\n`, compiled with no errors.
 let private clean (source: string) = compileClean (source.ReplaceLineEndings "\n")
 
@@ -45,8 +43,8 @@ def mapTree: Tree(a), (a -> b) -> Tree(b) = { t, f ->
 [<Fact>]
 let ``A tag union alias can name itself in its tags' payloads`` () =
     let typed = clean (expr + "def result = eval(#add(#num(2), #add(#num(3), #num(4))))\n")
-    Assert.Equal("Expr -> int", typeOf typed "eval")
-    Assert.Equal("int", typeOf typed "result")
+    Assert.Equal("Expr -> int", asciiTypeIn typed "eval")
+    Assert.Equal("int", asciiTypeIn typed "result")
 
 [<Fact>]
 let ``A recursive alias with a type parameter is built, matched and recursed over`` () =
@@ -56,11 +54,11 @@ def names = mapTree(t, { n -> "n{n}" })
 def count = size(names)
 """
     let typed = clean source
-    Assert.Equal("Tree(a) -> int", typeOf typed "size")
-    Assert.Equal("Tree(a), (a -> b) -> Tree(b)", typeOf typed "mapTree")
-    Assert.Equal("Tree(int)", typeOf typed "t")
-    Assert.Equal("Tree(string)", typeOf typed "names")
-    Assert.Equal("int", typeOf typed "count")
+    Assert.Equal("Tree(a) -> int", asciiTypeIn typed "size")
+    Assert.Equal("Tree(a), (a -> b) -> Tree(b)", asciiTypeIn typed "mapTree")
+    Assert.Equal("Tree(int)", asciiTypeIn typed "t")
+    Assert.Equal("Tree(string)", asciiTypeIn typed "names")
+    Assert.Equal("int", asciiTypeIn typed "count")
 
 [<Fact>]
 let ``A value that does not fit a recursive alias is a mismatch`` () =
@@ -94,7 +92,7 @@ def asTerm: Expr -> Term = { e -> e }
 def roundTrip: list(Term) -> list(Expr) = { terms -> terms }
 """
     let typed = clean source
-    Assert.Equal("Expr -> Term", typeOf typed "asTerm")
+    Assert.Equal("Expr -> Term", asciiTypeIn typed "asTerm")
 
 [<Fact>]
 let ``An alias of a recursive alias stands for it`` () =
@@ -109,7 +107,7 @@ def total: Numbers -> int = {
 def result = total(insert(#leaf, 1))
 """
     let typed = clean source
-    Assert.Equal("int", typeOf typed "result")
+    Assert.Equal("int", asciiTypeIn typed "result")
 
 [<Fact>]
 let ``A recursive alias can be imported`` () =

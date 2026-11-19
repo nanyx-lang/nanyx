@@ -6,11 +6,6 @@ open Nanyx.Compiler.Tests.TestSupport
 
 // `for xs, ys | x, y -> ...` walks several iterables in step, and `a..` is a range without an end, a `seq` that never ends.
 
-let private typesOf (source: string) =
-    let result = Compiler.compile source
-    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    result.Typed.Value.Types
-
 /// The code of the one diagnostic `source` compiles to.
 let private singleCode (source: string) =
     let result = Compiler.compile source
@@ -19,13 +14,13 @@ let private singleCode (source: string) =
 
 [<Fact>]
 let ``a range without an end is a seq of ints`` () =
-    let types = typesOf "def naturals = 0..\ndef later = 1 + 2.."
+    let types = definedTypes "def naturals = 0..\ndef later = 1 + 2.."
     Assert.Equal("seq(int)", Unifier.tyToString types.["naturals"])
     Assert.Equal("seq(int)", Unifier.tyToString types.["later"])
 
 [<Fact>]
 let ``each arm of a zipped loop matches one element of each iterable`` () =
-    typesOf (
+    definedTypes (
         withFinalNewline """def label: list(string) -> () = { names -> for names, 0.. | name, i -> name ++ "{i}" }
 def pairs = for [true], 1..3, ["a"] | flag, n, s -> if flag then n + 1 else 0
 def both = { xs, ys -> for xs, ys | x, y -> x + y }""")
