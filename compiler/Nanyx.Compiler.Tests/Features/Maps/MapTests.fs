@@ -4,12 +4,6 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-/// The type of each of `names`, as `source` compiled with no diagnostics gives it.
-let private typesOf (source: string) (names: string list) =
-    let result = Compiler.compile source
-    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    names |> List.map (fun name -> Unifier.tyToString result.Typed.Value.Types.[name])
-
 [<Fact>]
 let ``A map literal is a map from its keys' type to its values' type`` () =
     let source = withFinalNewline """def m = ["a" => 1, "b" => 2]

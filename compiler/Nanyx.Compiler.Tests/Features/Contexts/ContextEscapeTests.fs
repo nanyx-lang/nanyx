@@ -73,7 +73,7 @@ def blockUse = {
 """
             |> _.ReplaceLineEndings("\n")
         )
-    let typeOf name = Unifier.tyToString result.Types.[name]
+    let typeOf = typeIn result
     Assert.Equal("[Foo] () -> string", typeOf "viaUse")
     Assert.Equal("() -> ([Foo] () -> string)", typeOf "blockUse")
 

@@ -7,9 +7,6 @@ open Nanyx.Compiler.Tests.TestSupport
 // A lambda that gives back a lambda, checked against `a -> b -> c`, checks the one it gives back against `b -> c`, so
 // that lambda's parameters have their types while its body is inferred (#1749).
 
-let private typeOf (source: string) (name: string) =
-    Unifier.tyToString (compileClean (source.ReplaceLineEndings "\n")).Types.[name]
-
 [<Fact>]
 let ``A returned lambda's parameter takes its type from the def's annotation`` () =
     let source =

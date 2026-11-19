@@ -6,14 +6,9 @@ open Nanyx.Compiler.Tests.TestSupport
 
 // `memory { ... }`, and the cells `mut` makes in it: `:=` changes one, and its name reads it.
 
-let private typesOf (source: string) =
-    let result = Compiler.compile source
-    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    result.Typed.Value.Types
-
 [<Fact>]
 let ``A memory block's cells are read by name and changed with :=`` () =
-    let types = typesOf """
+    let types = definedTypes """
 def sum: list(int) -> int = { xs ->
   memory {
     mut total = 0
@@ -49,7 +44,7 @@ def longest: list(string) -> string = { names ->
 
 [<Fact>]
 let ``A cell's type is its value's, and an annotation says what it holds`` () =
-    let types = typesOf """
+    let types = definedTypes """
 def tags = memory {
   mut found: list(string) = []
   found := found ++ ["a"]
@@ -60,7 +55,7 @@ def tags = memory {
 
 [<Fact>]
 let ``A lambda in the block may read and change its cells`` () =
-    let types = typesOf """
+    let types = definedTypes """
 def counted = memory {
   mut n = 0
   def bump = { by -> n := n + by }
@@ -197,7 +192,7 @@ def f = memory {
 
 [<Fact>]
 let ``A lambda that only uses what a cell holds may leave the block`` () =
-    let types = typesOf """
+    let types = definedTypes """
 def adder = memory {
   mut x = 1
   x := x + 1

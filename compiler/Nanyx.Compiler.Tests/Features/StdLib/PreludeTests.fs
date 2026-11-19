@@ -21,7 +21,7 @@ def piped = name \ mapSome({ s -> 1 })
 def mapped = f(1) \ Result.mapError({ e -> 0 })"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
+    let typeOf = typeIn result.Typed.Value
     Assert.Equal("#some(int) | #empty", typeOf "called")
     Assert.Equal("#some(int) | #empty", typeOf "piped")
     Assert.Equal("Result(int, int)", typeOf "mapped")
@@ -48,7 +48,7 @@ def described = Result.mapOr(r, "none", { n -> "n" })
 def recovered = Result.orElse(r, { e -> #error(1.5) })"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
+    let typeOf = typeIn result.Typed.Value
     Assert.Equal("list(string)", typeOf "listed")
     Assert.Equal("list(string)", typeOf "present")
     Assert.Equal("string", typeOf "described")
@@ -95,7 +95,7 @@ def s = string.toString("a")
 def texts = [1, 2] \ map(int.toString)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
+    let typeOf = typeIn result.Typed.Value
     for name in [ "i"; "f"; "b"; "s" ] do
         Assert.Equal("string", typeOf name)
     Assert.Equal("list(string)", typeOf "texts")
@@ -132,7 +132,7 @@ def flag = { s -> match readOne(s)
 }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
+    let typeOf = typeIn result.Typed.Value
     Assert.Equal("string -> #some(int) | #invalidInt", typeOf "number")
     Assert.Equal("string -> #some(int) | #invalidBool", typeOf "flag")
 
@@ -148,7 +148,7 @@ def total = list.fold(xs, 0, { acc, x -> acc + x })
 def pairs = list.zip(xs, names)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
+    let typeOf = typeIn result.Typed.Value
     Assert.Equal("list(int)", typeOf "doubled")
     Assert.Equal("list(string)", typeOf "names")
     Assert.Equal("list(int)", typeOf "big")
@@ -165,7 +165,7 @@ def sorted = xs \ sortBy({ x -> 0 - x })
 def counted = list.unfold(3, { n -> if n == 0 then #done else #some("x", n - 1) })"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
+    let typeOf = typeIn result.Typed.Value
     Assert.Equal("list(int)", typeOf "unique")
     Assert.Equal("list(int)", typeOf "sorted")
     Assert.Equal("list(string)", typeOf "counted")
@@ -180,7 +180,7 @@ def columns = list.unzip([(1, "a"), (2, "b")])
 def second = xs \ list.get(1)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
+    let typeOf = typeIn result.Typed.Value
     Assert.Equal("list(int)", typeOf "rest")
     Assert.Equal("(list(int), list(int))", typeOf "halves")
     Assert.Equal("(list(int), list(string))", typeOf "columns")

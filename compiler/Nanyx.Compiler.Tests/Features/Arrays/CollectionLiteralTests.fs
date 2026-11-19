@@ -23,7 +23,7 @@ def e = []
 def n = ["a" => 1]
 """
     let typed = compileClean (normalized source)
-    let typeOf name = Unifier.tyToDisplayString Ascii typed.Types.[name]
+    let typeOf = asciiTypeIn typed
     Assert.Equal("array(int)", typeOf "a")
     Assert.Equal("array(int)", typeOf "b")
     Assert.Equal("set(int)", typeOf "s")
@@ -53,7 +53,7 @@ def stocks: Array(Stock) =
    | "bolts" | 3     |]
 """
     let typed = compileClean (normalized source)
-    let typeOf name = Unifier.tyToDisplayString Ascii typed.Types.[name]
+    let typeOf = asciiTypeIn typed
     Assert.Equal("array(int)", typeOf "a")
     Assert.Equal("map(string, int)", typeOf "m")
     Assert.Equal("set(int)", typeOf "s")

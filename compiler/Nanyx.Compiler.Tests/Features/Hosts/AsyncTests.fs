@@ -23,7 +23,7 @@ let private compiledFile (source: string) =
     Package.compileSourceWith Linters.none (package.Path "src/main.nyx") source
 
 /// The type a hover shows for the def `name` in `source`, compiled as `compiledFile` compiles it, with no diagnostics.
-let private typeOf (name: string) (source: string) =
+let private hoveredTypeOf (name: string) (source: string) =
     let result = compiledFile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Hover.typeAt Unicode result (source.IndexOf $"def {name}" + 4)
@@ -43,7 +43,7 @@ import nanyx.http.core/http as http
 [<Fact>]
 let ``A function that calls http.get is inferred to require Async and Http`` () =
     let ty =
-        typeOf "fetchName" (
+        hoveredTypeOf "fetchName" (
             withHttp
                 """def fetchName = { url: string ->
   def response = http.get(url) \orCrash("no name")
@@ -55,7 +55,7 @@ let ``A function that calls http.get is inferred to require Async and Http`` () 
 [<Fact>]
 let ``list.map takes a lambda that requires Async, and the function calling it requires Async`` () =
     let ty =
-        typeOf "bodies" (
+        hoveredTypeOf "bodies" (
             withHttp
                 """def bodies = { urls: list(string) ->
   urls \list.map { url -> http.get(url) \orCrash("no answer") } \list.map { response -> response.body }
@@ -66,7 +66,7 @@ let ``list.map takes a lambda that requires Async, and the function calling it r
 [<Fact>]
 let ``The host provides Async to the entry point`` () =
     let ty =
-        typeOf "main" (
+        hoveredTypeOf "main" (
             withHttp
                 """def fetchName: [Async, Http] string -> string = { url ->
   def response = http.get(url) \orCrash("no name")
@@ -94,7 +94,7 @@ let ``http.get in a def whose type doesn't declare Async is the missing-context 
 [<Fact>]
 let ``A file read requires Async too`` () =
     let ty =
-        typeOf "contents" (
+        hoveredTypeOf "contents" (
             withFinalNewline
                 """module main
 
