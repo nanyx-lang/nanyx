@@ -99,3 +99,41 @@ let ``The parser reads the whole corpus the same way every time`` () =
     let first = parses.Value |> List.map (fun (piece, parse) -> (piece.Name, piece.Source), parse) |> Map.ofList
     let found = Differential.differences (fun name source -> first[(name, source)]) parseModuleWithTrivia pieces
     Assert.True(found.IsEmpty, Differential.report 10 pieces.Length found)
+
+/// The pieces whose block structure the layout pass reads differently from the FParsec parser on purpose, each named
+/// by its file and its first line, with why. None is a program: the FParsec parser takes their lines in a way the
+/// layout rules don't (see the Work in progress page "The parser").
+let private layoutDifferences =
+    [ "SelectionRangeTests.fs", "def side = max(s, 2)", "a fragment whose top-level items are at different columns"
+      "SelectionRangeTests.fs", "def side = s", "a fragment whose top-level items are at different columns"
+      "ContextTests.fs", "def a = counted(3)", "a fragment whose top-level items are at different columns"
+      "MemoryReportTests.fs", "Memory", "a program's output, not Nanyx"
+      "RunHttpClientTests.fs", "200", "a program's output, not Nanyx"
+      "InliningTests.fs", "def long: int -> int = { a0 ->", "a template whose block's lines are at different columns"
+      "formatter.md", "-- before", "an arm indented further than the one before it, which the formatter lines up" ]
+
+/// The entry of `layoutDifferences` that is `piece`, if there is one.
+let private knownLayoutDifference (piece: Piece) =
+    let file = System.IO.Path.GetFileName(piece.Name.Split(':')[0])
+    let firstLine = (piece.Source.TrimStart().Split('\n')[0]).TrimEnd()
+    layoutDifferences |> List.tryFind (fun (name, first, _) -> name = file && first = firstLine)
+
+[<Fact>]
+let ``The layout pass gives every piece that parses the block structure the parser does`` () =
+    let compared =
+        parses.Value
+        |> Array.ofList
+        |> Array.Parallel.choose (fun (piece, parse) ->
+            match parse with
+            | Result.Error _ -> None
+            | Result.Ok parsed ->
+                let expected = BlockStructure.describe parsed.Source (BlockStructure.ofTree parsed)
+                let actual = BlockStructure.describe parsed.Source (BlockStructure.ofLayout parsed.Source)
+                Some(piece, (expected = actual), $"{piece.Name}:\n--- parser\n{expected}\n--- layout\n{actual}"))
+    let differing = compared |> Array.filter (fun (piece, same, _) -> not same && (knownLayoutDifference piece).IsNone)
+    let shown = differing |> Array.truncate 10 |> Array.map (fun (_, _, text) -> text) |> String.concat "\n\n"
+    Assert.True(differing.Length = 0, $"{differing.Length} pieces differ:\n\n{shown}")
+    // Each known difference is still one, so that the list is no longer than it needs to be.
+    let stillDiffering =
+        compared |> Array.choose (fun (piece, same, _) -> if same then None else knownLayoutDifference piece) |> Set.ofArray
+    Assert.Equal<string list>([], layoutDifferences |> List.filter (stillDiffering.Contains >> not) |> List.map (fun (file, first, _) -> $"{file}: {first}"))
