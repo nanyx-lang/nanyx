@@ -66,7 +66,10 @@ let ``An and-pattern may go on after a line break`` () =
     | Result.Error error -> failwith error.Message
 
 [<Theory>]
-[<InlineData("{ < 0 }", "a guard, which is a lambda")>]
-[<InlineData("#DivisibleBy(3)(n)", "a custom pattern's arguments, which are expressions")>]
-let ``A pattern that holds an expression is left to the FParsec parser`` (pattern: string, reason: string) =
-    Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.GaveUp reason ], outcomesOf [ pattern ])
+[<InlineData("{ < 0 }")>]
+[<InlineData("{ x -> x % 2 == 0 }")>]
+[<InlineData("#DivisibleBy(3)")>]
+[<InlineData("#DivisibleBy(3)(n)")>]
+[<InlineData("#Between(1, 10)")>]
+let ``A pattern that holds an expression is read as the FParsec parser reads it`` (pattern: string) =
+    Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.Same ], outcomesOf [ pattern ])

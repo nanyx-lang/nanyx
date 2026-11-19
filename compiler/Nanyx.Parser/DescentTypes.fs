@@ -286,7 +286,7 @@ and private typeAtom (c: Cursor) : TypeExpr =
           fun () -> typeIdentifier c ]
 
 /// A type, `mut T` (a cell's type), and no `?` after it.
-and private typePostfix (c: Cursor) =
+and internal typePostfix (c: Cursor) =
     let start = c.Start
     let atom =
         if c.IsKeyword CellPassingSyntax.typeName then

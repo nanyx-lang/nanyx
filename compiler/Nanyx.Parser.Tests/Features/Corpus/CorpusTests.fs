@@ -176,9 +176,8 @@ let ``The recursive-descent parser reads every pattern it reads as the FParsec p
             | _ -> None)
     Assert.True(outcomes.Length > 3500, $"Only {outcomes.Length} patterns are compared")
     Assert.True(differing.Length = 0, $"{differing.Length} of {outcomes.Length} patterns differ:\n\n" + (differing |> Array.truncate 5 |> String.concat "\n\n"))
-    // It gives up only at what holds an expression, which it doesn't read yet.
     let gaveUp = outcomes |> Array.choose (function _, DescentCheck.GaveUp reason -> Some reason | _ -> None) |> Array.distinct |> Array.sort
-    Assert.Equal<string array>([| "a custom pattern's arguments, which are expressions"; "a guard, which is a lambda" |], gaveUp)
+    Assert.Equal<string array>([||], gaveUp)
 
 [<Fact>]
 let ``The recursive-descent parser reads every expression it reads as the FParsec parser does`` () =
@@ -197,16 +196,13 @@ let ``The recursive-descent parser reads every expression it reads as the FParse
             | _ -> None)
     Assert.True(outcomes.Length > 15000, $"Only {outcomes.Length} expressions are compared")
     Assert.True(differing.Length = 0, $"{differing.Length} of {outcomes.Length} expressions differ:\n\n" + (differing |> Array.truncate 5 |> String.concat "\n\n"))
-    // It gives up only at what comes with the keyword-led expressions and the statements they go with, which it
-    // doesn't read yet, and at what the FParsec parser reads only to report it.
+    // It gives up only at the statements that come with the top level (a destructuring def, an attribute, a local type,
+    // an import), at the few forms still to write (a table, a lambda that names its context's instance or writes its
+    // result type), and at what the FParsec parser reads only to report it.
     let laterParts =
-        set [ "a lambda of match arms"; "a table literal"; "a workflow keyword with `!`"; "a destructuring def"
-              "`except`, whose arms the descent parser doesn't read yet"; "a `\\match`, whose arms the descent parser doesn't read yet"
-              "a lambda that names its context's instance"; "a lambda's result type"; "an attribute statement"
+        set [ "a destructuring def"; "an attribute statement"; "a table literal"; "a lambda that names its context's instance"
+              "a lambda's result type"; "a `match` with no arms, which is a mistake"
               "a hole that doesn't read, which the FParsec parser reads as text" ]
-    let isLater (reason: string) =
-        laterParts.Contains reason
-        || reason.EndsWith "`, which starts what the descent parser doesn't read yet"
-        || reason.EndsWith " statement, which the descent parser doesn't read yet"
+    let isLater (reason: string) = laterParts.Contains reason || reason.EndsWith " statement, which the descent parser doesn't read yet"
     let gaveUp = outcomes |> Array.choose (function _, DescentCheck.GaveUp reason -> Some reason | _ -> None) |> Array.distinct |> Array.sort
     Assert.Equal<string array>([||], gaveUp |> Array.filter (isLater >> not))

@@ -205,6 +205,22 @@ let name (c: Cursor) : Identifier * SourceSpan =
         inner, c.SpanOf token
     | _ -> identifierWithSpan c
 
+/// The parts of the grammar a file reads before the file that reads them, filled by `DescentControl.fill` before anything
+/// is read, as the FParsec parser's forward refs are (`Refs.fs`). Each gives up until it is filled.
+module Forward =
+    let private unfilled (what: string) (c: Cursor) : 'a = c.GiveUp $"{what}, before the descent parser is filled"
+    /// `{ ... }` (`DescentBlocks.lambda`).
+    let lambda: (Cursor -> Expression) ref = ref (unfilled "a lambda")
+    /// An expression as `Expressions.expression` reads it (`DescentExpressions.expression Crossing`).
+    let expression: (Cursor -> Expression) ref = ref (unfilled "an expression")
+    /// A match's arms, from the first `|` (`DescentBlocks.arms`).
+    let arms: (Cursor -> MatchArm list) ref = ref (unfilled "match arms")
+    /// What follows `except`: arms, or one arm without its `|` (`DescentBlocks.exceptArms`).
+    let exceptArms: (Cursor -> MatchArm list) ref = ref (unfilled "`except` arms")
+    /// An expression that starts with a keyword: `if`, `match`, `for`, `while`, `do`, `use ... in`, `return`, `try`,
+    /// `yield`, `mut x` and `type T` (`DescentControl.keywordExpression`).
+    let keywordExpression: (Cursor -> Expression) ref = ref (unfilled "a keyword's expression")
+
 /// Takes `item`s separated by what `separator` takes, at least one, as FParsec's `sepBy1` with an `attempt` around the
 /// separator and the item after it.
 let sepBy1 (cursor: Cursor) (item: unit -> 'a) (separator: unit -> unit) : 'a list =

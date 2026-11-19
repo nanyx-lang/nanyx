@@ -65,8 +65,15 @@ let ``Lambdas nest in arguments over several lines`` () =
     allSame "def v = items \\map { item ->\n  def price = item.price\n  price * 2\n} \\filter { > 0 }\n"
 
 [<Theory>]
-[<InlineData("{ x ->\n  | 1 -> 2\n  | _ -> 3\n}", "a lambda of match arms")>]
 [<InlineData("{ context l -> l }", "a lambda that names its context's instance")>]
 [<InlineData("{ (x: int): int -> x }", "a lambda's result type")>]
 let ``A lambda the descent parser doesn't read yet is left to the FParsec parser`` (value: string, reason: string) =
     Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.GaveUp reason ], outcomesIn $"def v = {value}\n")
+
+[<Theory>]
+[<InlineData("{\n  | #a -> 1\n  | _ -> 2\n}")>]
+[<InlineData("{ | 0 -> 1 | n -> n }")>]
+[<InlineData("{ m, f ->\n  | #some(v), _ -> f(v)\n  | other, _ -> other\n}")>]
+[<InlineData("{ a, b -> | 0, _ -> b | _, _ -> a }")>]
+let ``A lambda of match arms is read as the FParsec parser reads it`` (value: string) =
+    allSame $"def v = {value}\n"

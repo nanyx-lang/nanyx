@@ -1,9 +1,8 @@
 /// The recursive-descent parser's expressions: the operator expressions of `Expressions.fs` and what they are made of,
 /// read from the layout pass's tokens. It reads literals, strings with holes, names, calls, tags, member access,
 /// tuples, records, lists and maps, the prefix `not` and `-`, pipes and the binary operators, with the precedence and
-/// grouping of `Operators.binaryOperators`. Lambdas are `DescentBlocks`', through `lambdaRef`. It gives up at what starts
-/// with a keyword (`if`, `match`, `for`, `use`, ...), which comes with blocks and statements (see the Work in progress
-/// page "The parser").
+/// grouping of `Operators.binaryOperators`. Lambdas, arms and what starts with a keyword (`if`, `match`, `for`, `use`,
+/// ...) come with blocks and statements, in later files, and are read through `Forward`.
 module Parser.Program.DescentExpressions
 
 open System
@@ -42,7 +41,7 @@ let private startsLine (c: Cursor) =
 /// Skips the layout tokens at the cursor when what comes after them is a code token `fits` takes, as FParsec's `ws`
 /// goes across lines; a line indented less than the one before (a `Dedent`) is somewhere the descent parser doesn't
 /// follow it yet.
-let private across (c: Cursor) (fits: Cursor -> bool) =
+let internal across (c: Cursor) (fits: Cursor -> bool) =
     let start = c.Index
     let mutable dedented = false
     while (match c.At 0 with Code _ -> false | Dedent _ -> dedented <- true; true | _ -> true) do
@@ -53,10 +52,6 @@ let private across (c: Cursor) (fits: Cursor -> bool) =
     else
         c.Index <- start
         false
-
-/// Reads a lambda, `{ ... }`, at the cursor: `DescentBlocks.lambda`, which reads statements and so comes after this file.
-/// It is filled before anything is read (see `DescentBlocks.fill`), as the FParsec parser's forward refs are.
-let internal lambdaRef: (Cursor -> Expression) ref = ref (fun c -> c.GiveUp "a lambda, before the lambda parser is filled")
 
 /// The arguments of `f(fields) { ... }`: the trailing lambda is the last positional argument, as in a pipe, so
 /// `f(a, b) { ... }` is `f(a, b, { ... })`, and `f(a, y = 1) { ... }` is `f(a, { ... }, y = 1)`
@@ -154,7 +149,7 @@ and private recordField (c: Cursor) : RecordField =
     | None -> PositionalField(expression Crossing c)
 
 /// The fields in brackets after a name, at least one, and the span from the first to the last.
-and private parenFields (c: Cursor) : RecordField list * SourceSpan =
+and internal parenFields (c: Cursor) : RecordField list * SourceSpan =
     c.Expect LeftParen |> ignore
     let start = c.Start
     let fields = byCommaOrLine c (fun () -> recordField c)
@@ -171,7 +166,7 @@ and private callArguments (c: Cursor) : Expression list =
             c.Take() |> ignore
             None
         else Some(parenFields c)
-    let trailing = if lambdaFollows c then Some(lambdaRef.Value c) else None
+    let trailing = if lambdaFollows c then Some(Forward.lambda.Value c) else None
     match fields, trailing with
     | Some(fields, span), Some lambda -> withTrailingLambda fields span lambda
     | Some(fields, span), None -> [ fieldsToExpr fields span ]
@@ -185,7 +180,7 @@ and private call (c: Cursor) : Expression =
     if c.Adjacent && c.Is LeftBracket then collectionConstruct c start callee calleeSpan
     // `f { ... }`: a lambda alone after the name is the only argument.
     elif lambdaFollows c then
-        let lambda = lambdaRef.Value c
+        let lambda = Forward.lambda.Value c
         Expression.at (c.SpanFrom start) (FunctionCall(callee, Some calleeSpan, [ lambda ]))
     else
     if not (c.Adjacent && c.Is LeftParen) then raise NoMatch
@@ -321,11 +316,14 @@ and private primary (c: Cursor) : Expression =
     let next = match c.At 1 with Code next -> Some next | _ -> None
     let nextAdjacent = next |> Option.exists (fun next -> next.Start = token.End)
     match token.Kind with
-    | Keyword when constructKeywords.Contains(c.Text token) -> c.GiveUp $"`{c.Text token}`, which starts what the descent parser doesn't read yet"
-    | LeftBrace -> lambdaRef.Value c
+    // `name! x`, a workflow keyword applied the older way, before any keyword's own reading (`workflowBindExpr`).
+    | Keyword when c.Text token <> WorkflowSyntax.returnKeyword && nextAdjacent && next |> Option.exists (fun next -> next.Kind = Operator && c.Text next = "!") ->
+        Forward.keywordExpression.Value c
+    | Keyword when constructKeywords.Contains(c.Text token) -> Forward.keywordExpression.Value c
+    | LeftBrace -> Forward.lambda.Value c
     | StringStart -> doubleQuoted c
     | Name when nextAdjacent && next |> Option.exists (fun next -> next.Kind = Operator && c.Text next = "!") ->
-        c.GiveUp "a workflow keyword with `!`"
+        Forward.keywordExpression.Value c
     | LeftParen when next |> Option.exists (fun next -> next.Kind = RightParen) ->
         c.Take() |> ignore
         c.Take() |> ignore
@@ -427,9 +425,14 @@ and private withUpdates (c: Cursor) ((expr: Expression), (text: SourceSpan)) : O
 
 /// What a `\` applies the value before it to, with the span from the function's name: a call of a function with the
 /// value as its first argument.
-and private pipeTarget (c: Cursor) : (Identifier * SourceSpan * Expression list) * SourceSpan =
-    if c.IsKeyword "match" then c.GiveUp "a `\\match`, whose arms the descent parser doesn't read yet"
+and private pipeTarget (c: Cursor) : Choice<Identifier * SourceSpan * Expression list, MatchArm list> * SourceSpan =
     let start = c.Start
+    // `\match` and arms: a match on the value.
+    if c.IsKeyword "match" then
+        c.Take() |> ignore
+        let arms = Forward.arms.Value c
+        Choice2Of2 arms, c.SpanFrom start
+    else
     let callee, calleeSpan = qualifiedName c
     let args =
         if c.Adjacent && c.Is LeftParen then
@@ -441,8 +444,8 @@ and private pipeTarget (c: Cursor) : (Identifier * SourceSpan * Expression list)
                 fields |> List.choose (function PositionalField e -> Some e | NamedField _ -> None)
             | _ -> [ Expression.at span (RecordExpr fields) ]
         else []
-    let args = if lambdaFollows c then args @ [ lambdaRef.Value c ] else args
-    (callee, calleeSpan, args), c.SpanFrom start
+    let args = if lambdaFollows c then args @ [ Forward.lambda.Value c ] else args
+    Choice1Of2(callee, calleeSpan, args), c.SpanFrom start
 
 /// `value` and then each `\` step after it (`Expressions.withPipes`): on the line, or for `Crossing` on any line after
 /// it, or for `Inline` on a line indented more than its first, which has no layout token before it.
@@ -455,10 +458,14 @@ and private withPipes (lines: Lines) (c: Cursor) (value: Operand) : Operand =
     while pipeNext () do
         c.Take() |> ignore
         if not c.OnSameLine then raise NoMatch
-        let (callee, calleeSpan, args), targetSpan = pipeTarget c
+        let step, targetSpan = pipeTarget c
         let acc, accText = result
         let span = SourceSpan.between accText targetSpan
-        result <- Expression.at span (Pipe(acc, callee, Some calleeSpan, args)), span
+        let kind =
+            match step with
+            | Choice1Of2(callee, calleeSpan, args) -> Pipe(acc, callee, Some calleeSpan, args)
+            | Choice2Of2 arms -> Match([ acc ], arms)
+        result <- Expression.at span kind, span
     result
 
 /// An operand: a primary expression after any `not` and `-` before it, and the pipes after it (`Expressions.operand`).
@@ -554,7 +561,8 @@ and private climb (lines: Lines) (c: Cursor) (minimum: int) (parent: BinaryOpera
 
 /// An expression as `Expressions.expression` reads it (`Crossing`), or `exprWithoutCrossingNewlines` (`Inline`).
 and expression (lines: Lines) (c: Cursor) : Expression =
-    if c.IsKeyword "match" then c.GiveUp "`match`, which starts what the descent parser doesn't read yet"
+    if c.IsKeyword "match" then Forward.keywordExpression.Value c else
+    let start = c.Start
     let operators = climb lines c 0 None
     let value =
         match lines with
@@ -572,7 +580,15 @@ and expression (lines: Lines) (c: Cursor) : Expression =
         match lines with
         | Crossing -> across c (fun c -> c.IsKeyword "except")
         | Inline -> c.IsKeyword "except"
-    if exceptNext then c.GiveUp "`except`, whose arms the descent parser doesn't read yet"
+    // `value except arms`: the cases of the value the arms match replaced, the others passed through.
+    let value =
+        if exceptNext then
+            let valueText = c.SpanFrom start
+            let exceptStart = c.Start
+            c.Take() |> ignore
+            let arms = Forward.exceptArms.Value c
+            Expression.at (SourceSpan.between valueText (c.SpanFrom exceptStart)) (Except(value, arms))
+        else value
     // `target := value`, a call to the built-in "__assign" whose name span is the `:=` (see `AssignSyntax`).
     if c.Is ColonEquals && c.OnSameLine then
         let operatorSpan = c.SpanOf(c.Take())
