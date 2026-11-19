@@ -40,9 +40,10 @@ context, once that call has settled its type (`resolveReferenceInstances` in `Co
 `int` is passed `ToString(int)`, `math.max` passed to `fold` over a `list(int)` is passed `Ord(int)`, and at a type
 variable `a` of a function that requires `ToString(a)`, that function's member. One whose type the call leaves open, and
 whose context is not in scope by its members' names, finds its instance once something settles the type, as such a
-call does: in a def that doesn't write its type once the def is inferred, which then requires the context, and anywhere
-else once the module is, as in `def u: Point = apply(des, "ab")`, where only the type `u` writes settles `des`'s
-`Decode(a)` ([#2017](https://github.com/nanyx-lang/nanyx/issues/2017)). So is a function named point-free as
+call does: once the def around it is inferred if that def doesn't write its type, and otherwise once the module is, as
+in `def u: Point = apply(des, "ab")`, where only the type `u` writes settles `des`'s `Decode(a)`
+([#2017](https://github.com/nanyx-lang/nanyx/issues/2017)). One whose type is still open then finds none
+(`InferState.PendingReferences`), as at a type nothing constrains (below). So is a function named point-free as
 a def's value, at the type the def writes (`resolveValueInstances`): `def g: [Console] int -> () = println`. Such a
 def is not run in the contexts it writes, as a lambda is: its value is a function that requires them, so they are
 part of its type, as they are of `def k = say` (`Contexts.extractDefContexts`, which the backend reads too). A context

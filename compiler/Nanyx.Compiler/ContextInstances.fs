@@ -613,6 +613,7 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                             Ok (found @ [ None ],
                                 { current with
                                     PendingContextInstances = pending :: current.PendingContextInstances
+                                    PendingReferences = current.PendingReferences.Add call.Id
                                     HoleScopes = current.HoleScopes |> Map.add call.Id (env, annotatedDef) })
                         | Error _, _ -> Ok (found @ [ None ], current)
                     // A value that failed to check, or one made of such a value (a list of them), has every context, so
@@ -860,6 +861,13 @@ let internal localFunctionAsLambda (env: TypeEnv) (state: InferState) (value: Ex
 /// type it is for, or from the type's parts, as a call does. A hole finds its instance as
 /// `InterpolationHoles.resolvePending` says.
 let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Identifier) (symbol: SymbolId option) (scheme: TypeScheme) : Result<TypeExpr option * InferState, Diagnostic list> =
+    // A function named as a value at a type still open is found no instance, as before anything settled it: it is
+    // never called at that type, as `dbg(twice)` isn't (see `CoreIrLowerInstances.neverCalled` in the backend).
+    let neverCalled (pending: PendingContextInstance) =
+        state.PendingReferences.Contains pending.Call
+        && pending.ArgTys |> List.exists (resolveSoFar state >> TypeEnv.freeTyVars >> Set.isEmpty >> not)
+    let state =
+        { state with PendingContextInstances = state.PendingContextInstances |> List.filter (fun pending -> pending.Def <> name || not (neverCalled pending)) }
     let arithmetic, state = ArithmeticInference.require state name scheme
     let operators (isPending: PendingContextInstance -> bool) = state.PendingContextInstances |> List.filter (fun pending -> pending.Def = name && isPending pending)
     let comparisons, orderings = operators EqualityOperators.isPending, operators OrderingOperators.isPending

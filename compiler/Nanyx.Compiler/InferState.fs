@@ -180,6 +180,10 @@ type InferState =
             DeferredContextUses: DeferredContextUse list;
             /// The calls whose instances are found once the def around them is inferred (see `PendingContextInstance`).
             PendingContextInstances: PendingContextInstance list;
+            /// The nodes of the functions named as values among `PendingContextInstances`: one whose type is still open
+            /// once it is resolved is never called at that type, and needs no instance (see
+            /// `ContextInstances.resolvePendingInstances`).
+            PendingReferences: Set<NodeId>;
             /// The arithmetic operators left to be read once the def around them is inferred (see `PendingArithmetic`).
             PendingArithmetic: PendingArithmetic list;
             /// The number literals of the module so far, the latest first, to be checked against their types once those
@@ -412,6 +416,7 @@ let emptyState =
             ScriptEntryValues = Set.empty;
             DeferredContextUses = [];
             PendingContextInstances = [];
+            PendingReferences = Set.empty;
             PendingArithmetic = [];
             NumericLiterals = [];
             UnsettledLiterals = [];

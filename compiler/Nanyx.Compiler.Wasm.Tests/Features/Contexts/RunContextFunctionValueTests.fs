@@ -290,11 +290,3 @@ let ``Run - a function named as a value at the type the def writes (#2017)`` () 
 println("{u.x}")
 """
     runSource (normalized source) |> assertRan "2\n"
-
-[<Fact>]
-let ``Run - a function named as a value in an unannotated def requires its context there (#2017)`` () =
-    let source = decode + """def first = { text -> apply(des, text) }
-def u: Point = first("abc")
-println("{u.x}")
-"""
-    runSource (normalized source) |> assertRan "3\n"
