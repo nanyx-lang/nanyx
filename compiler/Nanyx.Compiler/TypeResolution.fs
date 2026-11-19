@@ -769,12 +769,10 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
     let paramEntries =
         parameters
         |> List.map (fun (paramName, _) ->
-            let tyVar, next = freshVar current
+            let var, next = freshTyVar current
             current <- next
-            match tyVar with
             // The variable keeps the parameter's name, so the type is shown as it is written.
-            | TyVar var -> paramName, { var with Name = Some paramName }
-            | _ -> failwith "Expected TyVar")
+            paramName, { var with Name = Some paramName })
     let updatedTypeVars =
         paramEntries
         |> List.fold (fun acc (paramName, var) -> acc |> Map.add (WrittenVar paramName) var) current.TypeVars
@@ -783,23 +781,18 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
     let scope, updatedTypeVars =
         match scopedBy with
         | Some context ->
-            let var, next = freshVar current
+            let var, next = freshTyVar current
             current <- next
-            match var with
-            | TyVar var ->
-                let scope = { var with Name = Some context; Kind = SignatureScope context }
-                Some scope, updatedTypeVars |> Map.add (ScopeOf context) scope
-            | _ -> failwith "Expected TyVar"
+            let scope = { var with Name = Some context; Kind = SignatureScope context }
+            Some scope, updatedTypeVars |> Map.add (ScopeOf context) scope
         | None -> None, updatedTypeVars
     // A type generic in contexts reads its context variable in its body as its own (see `TypeDefInfo.ContextVariable`).
     let contextVariable, updatedTypeVars =
         match TypeDefModifier.scopeContexts modifiers |> List.filter (fst >> Names.isTypeVariable) with
         | [ name, _ ] ->
-            let var, next = freshVar current
+            let var, next = freshTyVar current
             current <- next
-            match var with
-            | TyVar var -> Some { var with Name = Some name }, updatedTypeVars |> Map.add (WrittenVar name) { var with Name = Some name }
-            | _ -> failwith "Expected TyVar"
+            Some { var with Name = Some name }, updatedTypeVars |> Map.add (WrittenVar name) { var with Name = Some name }
         | _ -> None, updatedTypeVars
     let stateWithParams = { current with TypeVars = updatedTypeVars }
     let isPrivate = isPrivateType modifiers
