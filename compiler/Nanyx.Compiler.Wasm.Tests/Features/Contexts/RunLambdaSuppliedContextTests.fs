@@ -88,7 +88,7 @@ let ``Run - a block that calls two functions requiring a scoped context is given
     let source =
         """scoped context Tx = private ()
 
-def transaction: [c] ([Tx, c] () -> a) -> a = { block -> block() }
+def transaction: [c] ([Tx, c] () -> a) -> a = { block -> use Tx() in block() }
 def step: [Tx] int -> int = { n -> n + 1 }
 
 println(transaction { step(step(1)) })
