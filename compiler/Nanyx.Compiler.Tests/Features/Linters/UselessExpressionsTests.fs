@@ -169,3 +169,22 @@ let ``A pure lambda thrown away is reported`` () =
 }
 """
     Assert.Equal<string list>([ "{ x: int -> x + n }" ], reported source |> List.map snd)
+
+[<Fact>]
+let ``A pure value a for loop's body ends with is reported, with a fix only where it is a statement`` () =
+    let source =
+        """def f: [Console] list(int) -> () = { xs ->
+  for xs | x -> x * 2
+  for xs | x ->
+    println("{x}")
+    x + 1
+}
+"""
+    let source = source.ReplaceLineEndings "\n"
+    match reported source with
+    | [ single, "x * 2"; last, "x + 1" ] ->
+        Assert.Empty(single.Fixes)
+        let fixedSource = applyFix source last.Fixes.Head
+        Assert.DoesNotContain("x + 1", fixedSource)
+        Assert.Equal<string list>([ "x * 2" ], reported fixedSource |> List.map snd)
+    | other -> failwith $"Expected two reports, got %A{other}"
