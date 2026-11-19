@@ -195,10 +195,32 @@ let ``The recursive-descent parser reads every expression it reads as the FParse
             | _ -> None)
     Assert.True(outcomes.Length > 15000, $"Only {outcomes.Length} expressions are compared")
     Assert.True(differing.Length = 0, $"{differing.Length} of {outcomes.Length} expressions differ:\n\n" + (differing |> Array.truncate 5 |> String.concat "\n\n"))
-    // It gives up only at the statements that come with the top level (a local type, an import), and at what the
-    // FParsec parser reads only to report it.
+    // It gives up only at what the FParsec parser reads only to report it, or reads leniently.
     let laterParts =
         set [ "a `match` with no arms, which is a mistake"; "a hole that doesn't read, which the FParsec parser reads as text" ]
-    let isLater (reason: string) = laterParts.Contains reason || reason.EndsWith " statement, which the descent parser doesn't read yet"
+    let isLater (reason: string) = laterParts.Contains reason
     let gaveUp = outcomes |> Array.choose (function _, DescentCheck.GaveUp reason -> Some reason | _ -> None) |> Array.distinct |> Array.sort
     Assert.Equal<string array>([||], gaveUp |> Array.filter (isLater >> not))
+
+[<Fact>]
+let ``The recursive-descent parser reads every file it reads as the FParsec parser does`` () =
+    let outcomes =
+        parses.Value
+        |> Array.ofList
+        |> Array.Parallel.choose (fun (piece, parse) ->
+            match parse with
+            | Result.Error _ -> None
+            | Result.Ok parsed -> Some(piece.Name, DescentCheck.checkModule piece.Name parsed))
+    let differing =
+        outcomes |> Array.choose (function
+            | name, DescentCheck.Differs(fparsec, descent) -> Some $"{name}:\n--- FParsec\n{fparsec}--- descent\n{descent}"
+            | _ -> None)
+    Assert.True(differing.Length = 0, $"{differing.Length} of {outcomes.Length} files differ:\n\n" + (differing |> Array.truncate 3 |> String.concat "\n\n"))
+    // It gives up only at what the FParsec parser reads only by reading a keyword as a name or a string's hole as text,
+    // in fixtures written to be mistakes.
+    let gaveUp = outcomes |> Array.choose (function _, DescentCheck.GaveUp reason -> Some reason | _ -> None) |> Array.distinct |> Array.sort
+    Assert.Equal<string array>(
+        [| "a `match` with no arms, which is a mistake"; "a hole that doesn't read, which the FParsec parser reads as text" |],
+        gaveUp)
+    let same = outcomes |> Array.filter (snd >> (=) DescentCheck.Same) |> Array.length
+    Assert.True(same > outcomes.Length - 10, $"Only {same} of {outcomes.Length} files are read with no fallback")

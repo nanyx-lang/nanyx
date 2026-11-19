@@ -117,6 +117,15 @@ type Cursor(file: string, source: string, laid: Laid array) =
         | Code token -> token.End
         | _ -> 0
 
+    /// Where the `--` comment after the last code token taken, on its line, ends, if there is one.
+    member _.TrailingCommentEnd =
+        let mutable i = index - 1
+        while i >= 0 && (match laid[i] with Code _ -> false | _ -> true) do
+            i <- i - 1
+        match if i >= 0 then Some laid[i] else None with
+        | Some(Code token) -> token.Trailing |> List.tryPick (fun trivia -> if trivia.Kind = LineComment then Some trivia.End else None)
+        | _ -> None
+
     /// The span from `start` to the end of the last code token taken.
     member this.SpanFrom(start: int) = lines.Span file start (max start this.LastEnd)
 
@@ -219,6 +228,10 @@ module Forward =
     let exceptArms: (Cursor -> MatchArm list) ref = ref (unfilled "`except` arms")
     /// An attribute's argument, written straight after its name (`DescentExpressions.attributeArgument`).
     let attributeArgument: (Cursor -> Expression) ref = ref (unfilled "an attribute's argument")
+    /// A type's or a context's definition (`DescentTopLevel.typeDefinition`).
+    let typeDefinition: (Cursor -> Definition) ref = ref (unfilled "a type definition")
+    /// What follows `import`: one item, or several in brackets (`DescentTopLevel.importItems`).
+    let importItems: (Cursor -> ImportItem list) ref = ref (unfilled "an import")
     /// An expression that starts with a keyword: `if`, `match`, `for`, `while`, `do`, `use ... in`, `return`, `try`,
     /// `yield`, `mut x` and `type T` (`DescentControl.keywordExpression`).
     let keywordExpression: (Cursor -> Expression) ref = ref (unfilled "a keyword's expression")

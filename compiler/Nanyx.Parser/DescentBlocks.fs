@@ -77,7 +77,14 @@ let rec statement (c: Cursor) : Statement =
             match c.Attempt(fun () -> useStatement c start) with
             | Some statement -> statement
             | None -> expressionStatement c start
-        | "import" | "type" | "context" | "export" | "mut" ->
+        | "import" ->
+            c.Take() |> ignore
+            if not c.OnSameLine then raise NoMatch
+            statementFrom c start (ImportStatement(Forward.importItems.Value c))
+        | "type" | "context" -> typeDefinitionStatement c start
+        | "export" when (match c.At 1 with Code next -> c.Text next = "type" || c.Text next = "context" | _ -> false) ->
+            typeDefinitionStatement c start
+        | "export" | "mut" ->
             c.GiveUp $"a `{c.Text token}` statement, which the descent parser doesn't read yet"
         | _ -> expressionStatement c start
     // `@allow(default/unusedBindings)`, which applies to the local def after it.
@@ -87,7 +94,15 @@ let rec statement (c: Cursor) : Statement =
         let attributeName, _ = identifierWithSpan c
         let argument = if c.Adjacent && c.Is LeftParen then Some(Forward.attributeArgument.Value c) else None
         statementFrom c start (AttributeStatement(attributeName, argument))
+    | Some token when token.Kind = Name && c.Text token = "scoped" && (match c.At 1 with Code next -> next.Kind = Keyword | _ -> false) ->
+        typeDefinitionStatement c start
     | _ -> expressionStatement c start
+
+/// A local type's or context's definition.
+and private typeDefinitionStatement (c: Cursor) (start: int) =
+    match Forward.typeDefinition.Value c with
+    | TypeDef(name, modifiers, parameters, body) -> statementFrom c start (TypeDefStatement(name, modifiers, parameters, body))
+    | ValueDef _ -> raise NoMatch
 
 /// One line's statement as the statements it stands for: one, or the defs a destructuring def desugars into
 /// (`TopLevel`'s `statementItemsRef`).
@@ -103,7 +118,7 @@ and private statementItems (c: Cursor) : Statement list =
 /// `def pattern = value`, from `start`, as the defs it desugars into: the value bound to a made-up name, and a def of
 /// each name the pattern binds, each spanning the whole (see `Destructuring.destructuringDefWith`). A pattern the
 /// descent parser gives up at is no destructuring def here, as an ordinary def's name is none.
-and private destructuringDefinition (c: Cursor) (start: int) : Statement list =
+and internal destructuringDefinition (c: Cursor) (start: int) : Statement list =
     let isExport = c.IsKeyword "export"
     if isExport then c.Take() |> ignore
     let defToken = c.Expect(Keyword, "def")
@@ -289,7 +304,7 @@ and private wrappedDefinition (c: Cursor) (start: int) (builtIn: Identifier) =
 
 /// A def's name, qualified with dots, its span, and its type, if it writes one. A pattern in its place is a
 /// destructuring def.
-and private nameAndType (c: Cursor) : Identifier * SourceSpan * TypeExpr option =
+and internal nameAndType (c: Cursor) : Identifier * SourceSpan * TypeExpr option =
     let start = c.Start
     let first = c.Attempt(fun () -> name c)
     let parts = ResizeArray(Option.toList (Option.map fst first))
@@ -302,7 +317,7 @@ and private nameAndType (c: Cursor) : Identifier * SourceSpan * TypeExpr option 
 
 /// `= value` after a def's name and type: on the line, or at the start of a line indented further than the def's. The
 /// value is an indented block on the lines after it, or what is on the line.
-and private defValue (c: Cursor) : Expression =
+and internal defValue (c: Cursor) : Expression =
     c.Expect Equals |> ignore
     match c.At 0 with
     | Indent _ ->
