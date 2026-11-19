@@ -98,6 +98,10 @@ fallback.
   precedence, then statements and blocks, then top-level definitions, imports and directives.
 - **Each step:** port one area, add it to the new parser, and run the differential test. The share of the corpus the
   new parser handles without falling back goes up with each PR, and is reported in it.
+- **So far:** types (`DescentTypes.fs`), described in [The parser](../compiler-internals/parser) in the Compiler
+  internals section. Each of the 5,900 annotations and type definitions' bodies in the corpus reads to the FParsec
+  parser's tree, but 24 that hold an expression, where it gives up. No whole file is read without the fallback yet: that
+  starts once statements and the top level are read.
 - **Done when** the new parser handles the whole corpus and every parser test with no fallback, and every tree
   matches.
 

@@ -33,7 +33,7 @@ let private normalize (source: string) (groups: int list seq) =
     |> List.ofSeq
 
 /// The children of `value` in the tree, found by reflection so that this needs no change when `Ast.fs` does.
-let private children (value: obj) : obj seq =
+let internal children (value: obj) : obj seq =
     match value with
     | null
     | :? string

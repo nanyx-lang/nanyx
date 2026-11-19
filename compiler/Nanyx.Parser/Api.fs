@@ -76,10 +76,14 @@ let parseModuleFile (filePath: string) (input: string) : Result<Module, string> 
 /// Parses source that has no file of its own.
 let parseModule (input: string) : Result<Module, string> = parseModuleFile "" input
 
-/// Parses `input` as the type in a def's annotation is written: `bool -> string`, `list(a), (a -> bool) -> list(a)`.
+/// Parses `input` as the type in a def's annotation is written: `bool -> string`, `list(a), (a -> bool) -> list(a)`. The
+/// recursive-descent parser reads it, and the FParsec parser when that one gives up, which reports any mistake.
 let parseTypeSignature (input: string) : Result<TypeExpr, string> =
     let normalized = normalizeSource input
-    match runParserOnString typeSignatureParser (ParseState.empty ()) "" normalized with
-    | ParserResult.Success(typeExpr, _, _) -> Result.Ok typeExpr
-    | ParserResult.Failure(message, _, _) -> Result.Error message
+    match DescentTypes.readTypeSignature normalized with
+    | Some typeExpr -> Result.Ok typeExpr
+    | None ->
+        match runParserOnString typeSignatureParser (ParseState.empty ()) "" normalized with
+        | ParserResult.Success(typeExpr, _, _) -> Result.Ok typeExpr
+        | ParserResult.Failure(message, _, _) -> Result.Error message
 
