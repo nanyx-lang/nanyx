@@ -169,9 +169,8 @@ def charsNode: Reader, list((int, int)) -> Node = { r, ranges ->
 --| A node of the nodes of `nodes`, one after another.
 def concatenation: list(Node) -> Node = { nodes ->
   match nodes
-    -- `[node]` comes before `[]`, which a match must have for now (#2052).
-    | [node] -> node
     | [] -> #empty
+    | [node] -> node
     | _ -> #concat(nodes)
 }
 
