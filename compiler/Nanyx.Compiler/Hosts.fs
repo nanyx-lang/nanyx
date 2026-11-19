@@ -45,12 +45,9 @@ module Hosts =
     /// clash with.
     let importAlias = "__host"
 
-    /// The standard-library module whose context, `HostRuntime`, the toolchain provides only to hosts.
-    let runtimeModule = "host.runtime"
-
     /// The standard-library modules a host is written on, whose functions all require `HostRuntime`: the one that
     /// declares it, and `nanyx/host.memory`.
-    let private runtimeModules = [ runtimeModule; "host.memory" ]
+    let private runtimeModules = [ ModuleOrigin.hostRuntimeName; "host.memory" ]
 
     /// The package of the console host the compiler ships: what a script runs under, unless it names another, and what
     /// `nanyx new` names.
