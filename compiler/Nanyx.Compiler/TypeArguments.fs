@@ -73,9 +73,9 @@ let rec private withParameters (names: Set<Identifier>) (t: TypeExpr) : TypeExpr
 let rec private result (expr: Expression) : Expression =
     match expr.Kind with
     | Block statements ->
-        match List.tryLast statements with
-        | Some { Kind = ExprStatement value } -> result value
-        | _ -> expr
+        match SyntaxTree.blockValue statements with
+        | Some value -> result value
+        | None -> expr
     | _ -> expr
 
 /// The type `expr` passes, when it is written `type Point`, or a block that ends in one.

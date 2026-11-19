@@ -254,6 +254,12 @@ module SyntaxTree =
                 | _ -> [])
         topLevel @ local
 
+    /// The value of the block of `statements`: the expression its last statement is, if it is one.
+    let blockValue (statements: Statement list) : Expression option =
+        match List.tryLast statements with
+        | Some { Kind = ExprStatement value } -> Some value
+        | _ -> None
+
     /// The blocks of `expr` and of everything within it, each as its statements.
     let rec blocksWithin (expr: Expression) : Statement list list =
         let children, statements = childrenOf expr
