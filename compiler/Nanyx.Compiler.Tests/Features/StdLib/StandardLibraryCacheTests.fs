@@ -167,3 +167,33 @@ let ``A shipped module whose files have changed is not taken from the checked li
     let changed (path: string) =
         if path = consoleFile then File.ReadAllText path + "\ndef changed = 1\n" else File.ReadAllText path
     Assert.True((CheckedLibrary.tryFindShipped consoleFile changed).IsNone)
+// A compile needs the library's exports, for the hint an unknown name gets, and the modules the shipped packages' files
+// declare, to resolve a loose script's host: the checked library has both, so that no compile parses every library file
+// for them (#1852).
+
+[<Fact>]
+let ``The checked library has the library's exports, as its sources give them`` () =
+    let file = (CheckedLibrary.read CheckedLibrary.path CheckedLibrary.build).Value
+    Assert.Equal<Map<string, string list>>(ImportFixes.standardLibraryExports.Value, file.Exports)
+    Assert.Equal<Map<string, string list>>(ImportFixes.standardLibraryExportPaths.Value, CheckedLibrary.standardLibraryExportPaths.Value)
+
+[<Fact>]
+let ``The checked library has the module each file of the console host's packages declares`` () =
+    let files = (CheckedLibrary.read CheckedLibrary.path CheckedLibrary.build).Value.Files
+    Assert.Equal(Some (Some ("console", true)), files |> List.tryFind (fun file -> file.Path = consoleFile) |> Option.map _.Declares)
+    for file in files do
+        Assert.Equal(File.ReadAllText file.Path, file.Text)
+        Assert.Equal(Some file.Declares, PackageModules.declaration file.Path)
+
+[<Fact>]
+let ``A file's declaration is taken from elsewhere only while the file reads the same`` () =
+    withTempDir (fun dir ->
+        let path = Path.Combine(dir, "shapes.nyx")
+        File.WriteAllText(path, "module shapes\n")
+        PackageModules.knowDeclaration path "module other\n" (Some ("other", false))
+        Assert.Equal(Some (Some ("shapes", false)), PackageModules.declaration path)
+        let known = Path.Combine(dir, "known.nyx")
+        File.WriteAllText(known, "module shapes\n")
+        // The text is the file's, so the declaration given is taken, and the file is not parsed for it.
+        PackageModules.knowDeclaration known "module shapes\n" (Some ("taken", true))
+        Assert.Equal(Some (Some ("taken", true)), PackageModules.declaration known))

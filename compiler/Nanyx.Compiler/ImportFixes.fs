@@ -30,9 +30,14 @@ module ImportFixes =
             |> List.map (fun (name, pairs) -> name, pairs |> List.map snd |> List.distinct)
             |> Map.ofList)
 
-    /// `standardLibraryExports` with each module named by its import path, as `nanyx/text`.
-    let standardLibraryExportPaths : Lazy<Map<string, string list>> =
-        lazy (standardLibraryExports.Value |> Map.map (fun _ modules -> modules |> List.map ((+) StandardLibrary.importPrefix)))
+    /// `exports`, the standard-library modules that export each name, with each module named by its import path, as
+    /// `nanyx/text`.
+    let exportPaths (exports: Map<string, string list>) =
+        exports |> Map.map (fun _ modules -> modules |> List.map ((+) StandardLibrary.importPrefix))
+
+    /// `standardLibraryExports` with each module named by its import path. A compile takes them from the checked library
+    /// instead, if it can (see `CheckedLibrary.standardLibraryExportPaths`).
+    let standardLibraryExportPaths : Lazy<Map<string, string list>> = lazy (exportPaths standardLibraryExports.Value)
 
     /// A name as it is written in source: identifiers joined by dots.
     let private writtenName = Regex(@"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
@@ -220,14 +225,6 @@ module ImportFixes =
                 { diagnostic with Message = message; Fixes = diagnostic.Fixes @ fixes }
             | _ -> diagnostic)
 
-    /// `addFrom` for the standard library's modules alone, given the modules that export each name, by their import
-    /// paths (`exports`).
-    let addWith (exports: Map<string, string list>) (source: string) (syntax: Module) (diagnostics: Diagnostic list) : Diagnostic list =
-        addFrom [] exports source syntax diagnostics
-
-    /// `addFrom` for the modules of the file's package and its dependencies, `packageExports`, and the standard library.
-    let add (packageExports: (string * Set<string>) list) (source: string) (syntax: Module) (diagnostics: Diagnostic list) : Diagnostic list =
-        addFrom packageExports standardLibraryExportPaths.Value source syntax diagnostics
 
     /// Where an import goes in a module's text, and what to insert there, as the quick fix places it.
     type ImportInsertion =

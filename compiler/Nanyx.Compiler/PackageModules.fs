@@ -69,6 +69,20 @@ module PackageModules =
             declaredNames.[filePath] <- (info.LastWriteTimeUtc, info.Length, declared)
             declared
 
+    /// Takes `declared` as the module name the file at `filePath` declares, and whether it exports it, if the file reads
+    /// `text`, as another reading of it found (the checked library's: see `CheckedLibrary.knowShippedDeclarations`), so
+    /// that it is not parsed again. A file that reads otherwise, or that has been read already, is left as it is.
+    let internal knowDeclaration (filePath: string) (text: string) (declared: (string * bool) option) =
+        let info = FileInfo filePath
+        let readsTheSame () =
+            try File.ReadAllText filePath = text with _ -> false
+        if info.Exists && not (declaredNames.ContainsKey filePath) && readsTheSame () then
+            declaredNames.TryAdd(filePath, (info.LastWriteTimeUtc, info.Length, Some declared)) |> ignore
+
+    /// The module name the file at `filePath` declares as it is on disk, and whether it exports it, if it declares one;
+    /// None in the outer option if it does not parse.
+    let internal declaration (filePath: string) = readDeclaration filePath
+
     /// The module name the file at `filePath` declares as it is on disk, and whether it exports it.
     let internal declaredModule (filePath: string) = readDeclaration filePath |> Option.flatten
 

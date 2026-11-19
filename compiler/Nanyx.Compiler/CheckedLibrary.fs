@@ -38,13 +38,25 @@ type internal CheckedShippedEntry =
       Read: (string * string) list
       Imports: string list }
 
+/// A source file of a package the compiler ships, as the file has it: its full path, its text, and the module it
+/// declares, if it declares one, with whether it exports it. It is what `PackageModules` reads of the file to know the
+/// package's modules, which a compile of a loose script needs before it imports anything.
+type internal CheckedShippedFile =
+    { Path: string
+      Text: string
+      Declares: (string * bool) option }
+
 /// The checked library as it is written: its modules and the modules of the packages the compiler ships, each with the
 /// keys of what it imports, and what checking each of them and of their imports gave, by key, each read only when it is
-/// first asked for.
+/// first asked for; with the standard-library modules that export each name, and the module each source file of the
+/// shipped packages declares, which every compile needs and would otherwise parse every library file for.
 type internal CheckedLibraryFile =
     { Modules: CheckedLibraryEntry list
       Shipped: CheckedShippedEntry list
-      Checked: Map<string, Lazy<CheckedResult>> }
+      Checked: Map<string, Lazy<CheckedResult>>
+      /// The standard-library modules that export each name, as `ImportFixes.standardLibraryExports` has them.
+      Exports: Map<string, string list>
+      Files: CheckedShippedFile list }
 
 /// The standard library checked once, when the compiler is built, so that a compile does not check the prelude and the
 /// modules it imports again (#837), with the modules of the packages the compiler ships, which a loose script imports
@@ -103,8 +115,15 @@ module internal CheckedLibrary =
         else
             text
 
-    /// Writes the library's `modules` and the shipped packages' `shipped` to the file at `path`.
-    let write (path: string) (modules: (string * string * CheckedLibraryModule) list) (shipped: CheckedShippedModule list) =
+    /// Writes the library's `modules`, the shipped packages' `shipped`, the library's `exports` and the shipped packages'
+    /// source `files` to the file at `path`.
+    let write
+        (path: string)
+        (modules: (string * string * CheckedLibraryModule) list)
+        (shipped: CheckedShippedModule list)
+        (exports: Map<string, string list>)
+        (files: CheckedShippedFile list)
+        =
         let checkedResults =
             [ for _, _, (_, imports) in modules do
                   yield! imports
@@ -123,7 +142,9 @@ module internal CheckedLibrary =
                 shipped
                 |> List.sortBy _.Key
                 |> List.map (fun entry -> { CheckedShippedEntry.Key = entry.Key; Read = entry.Read; Imports = List.map fst entry.Imports })
-              Checked = checkedResults }
+              Checked = checkedResults
+              Exports = exports
+              Files = files |> List.sortBy _.Path }
         use stream = File.Create path
         use writer = new BinaryWriter(stream)
         writer.Write magic
@@ -153,6 +174,24 @@ module internal CheckedLibrary =
 
     let private shipped =
         lazy (file.Value |> Option.map (fun file -> file.Shipped |> List.map (fun entry -> entry.Key, entry) |> Map.ofList) |> Option.defaultValue Map.empty)
+
+    /// The standard-library modules that export each name, by their import paths (see
+    /// `ImportFixes.standardLibraryExportPaths`): as the file has them, or from the library's sources if there is no file.
+    let standardLibraryExportPaths : Lazy<Map<string, string list>> =
+        lazy
+            (match file.Value with
+             | Some file -> ImportFixes.exportPaths file.Exports
+             | None -> ImportFixes.standardLibraryExportPaths.Value)
+
+    /// Tells `PackageModules` the module each source file of the shipped packages declares, as the file has it, so that
+    /// a compile does not parse the files to learn their modules' names (see `PackageModules.knowDeclaration`).
+    let knowShippedDeclarations : Lazy<unit> =
+        lazy
+            (match file.Value with
+             | Some file ->
+                 for shippedFile in file.Files do
+                     PackageModules.knowDeclaration shippedFile.Path shippedFile.Text shippedFile.Declares
+             | None -> ())
 
     /// What checking the module `key` gave, as the file has it, read when it is first asked for.
     let private checkedResult (key: string) = file.Value.Value.Checked[key]
