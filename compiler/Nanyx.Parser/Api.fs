@@ -10,8 +10,8 @@ open Parser.Program
 let internal normalizeSource (input: string) =
     input.Replace("\r\n", "\n").Replace("\r", "\n").TrimEnd()
 
-/// Parses normalised source, returning the top-level items as written and the final state.
-let internal runModuleParser (filePath: string) (normalized: string) : Result<TopLevelItem list * ParseState, ParseError> =
+/// Parses normalised source with the FParsec parser, returning the top-level items as written and the final state.
+let private runFParsec (filePath: string) (normalized: string) : Result<TopLevelItem list * ParseState, ParseError> =
     let initialState = ParseState.empty ()
     // A parse fails at a point: its span is the character there, or nothing at the end of the input.
     let errorAt (position: Position) message =
@@ -39,6 +39,20 @@ let internal runModuleParser (filePath: string) (normalized: string) : Result<To
         | Some (position, message), _ -> reportAt position (ErrorMessageList(ErrorMessage.Message message))
         | None, Some (position, messages) when position.Index > error.Position.Index -> reportAt position messages
         | None, _ -> Result.Error (errorAt error.Position errorMsg)
+
+/// Parses normalised source, returning the top-level items as written and the final state: the recursive-descent parser
+/// reads it (`DescentTopLevel`), and the FParsec parser where that one gives up, which reports any mistake (see the
+/// Work in progress page "The parser").
+let internal runModuleParser (filePath: string) (normalized: string) : Result<TopLevelItem list * ParseState, ParseError> =
+    match DescentTopLevel.tryReadModuleWithState filePath normalized with
+    | Result.Ok read -> Result.Ok read
+    | Result.Error _ -> runFParsec filePath normalized
+
+/// How each parser reads the source of the file at `filePath`, for the corpus check that they read it the same: the
+/// FParsec parser's items and state, and the recursive-descent parser's, or why it gives up.
+let readWithBothParsers (filePath: string) (input: string) =
+    let normalized = normalizeSource input
+    runFParsec filePath normalized, DescentTopLevel.tryReadModuleWithState filePath normalized
 
 /// Parses the source of the file at `filePath`, as `parseModuleFileWithNames` does, together with its doc comments,
 /// each attached to what it documents, which are found the first time they are asked for.

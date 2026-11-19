@@ -186,3 +186,54 @@ let checkModule (file: string) (parsed: SourceModule) : Outcome =
         let expected = SyntaxDump.dump parsed.Items
         let actual = SyntaxDump.dump items
         if expected = actual then Same else Differs(expected, actual)
+
+/// Each node of `items` with an id, by its id: what it is, where, and its kind's case, which stand for it when the names
+/// two parsers' nodes declare are compared, since each parser numbers its nodes as it makes them.
+let private nodesById (items: TopLevelItem list) : Map<NodeId, string> =
+    let found = System.Collections.Generic.Dictionary<NodeId, string>()
+    let rec walk (value: obj) =
+        if not (isNull value) then
+            let valueType = value.GetType()
+            match valueType.GetProperty "Id", valueType.GetProperty "Span", valueType.GetProperty "Kind" with
+            | null, _, _
+            | _, null, _
+            | _, _, null -> ()
+            | id, span, kind ->
+                match id.GetValue value, span.GetValue value, kind.GetValue value with
+                | (:? NodeId as nodeId), (:? SourceSpan as span), kindValue when not (isNull kindValue) ->
+                    let case = Microsoft.FSharp.Reflection.FSharpValue.GetUnionFields(kindValue, kindValue.GetType()) |> fst
+                    found[nodeId] <- $"{valueType.Name} [{span.Start}..{span.End}) {case.Name}"
+                | _ -> ()
+            for child in BlockStructure.children value do
+                walk child
+    walk items
+    found |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq
+
+/// The side state of a reading, written out one fact per line in order, with each node named by `nodesById`.
+let private describeState (items: TopLevelItem list) (state: ParseState) : string =
+    let nodes = nodesById items
+    let names (declared: (Identifier * SourceSpan) list) =
+        declared |> List.map (fun (name, span) -> $"{name}@{span.Start}") |> String.concat ", "
+    let declared =
+        state.Declared
+        |> Map.toList
+        |> List.map (fun ((holder, declarer), declared) ->
+            let node = nodes |> Map.tryFind holder |> Option.defaultValue "a node not in the tree"
+            $"declares {node} {declarer}: {names declared}")
+    let documentable = state.DocumentableStarts |> Map.toList |> List.map (fun (start, target) -> $"documentable {start} -> {target}")
+    let blocks = state.ModuleBlocks |> List.map (fun (name, span) -> $"module block {name} [{span.Start}..{span.End})")
+    let comments = state.Comments |> List.map (fun comment -> $"comment [{comment.Start}..{comment.End}) doc={comment.IsDoc}")
+    let strings = state.StringTexts |> List.distinct |> List.map (fun (start, finish) -> $"string text [{start}..{finish})")
+    declared @ documentable @ blocks @ comments @ strings |> List.sort |> String.concat "\n"
+
+/// How the new parser reads the whole of the file at `file`, `source`, with what it keeps beside its items (the names
+/// nodes declare, where documentable constructs start, module blocks, comments and string texts), compared with the
+/// FParsec parser's: `None` when the FParsec parser can't read it.
+let checkModuleWithState (file: string) (source: string) : Outcome option =
+    match readWithBothParsers file source with
+    | Result.Error _, _ -> None
+    | Result.Ok _, Result.Error reason -> Some(GaveUp reason)
+    | Result.Ok(fparsecItems, fparsecState), Result.Ok(descentItems, descentState) ->
+        let expected = SyntaxDump.dump fparsecItems + describeState fparsecItems fparsecState
+        let actual = SyntaxDump.dump descentItems + describeState descentItems descentState
+        Some(if expected = actual then Same else Differs(expected, actual))

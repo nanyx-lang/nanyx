@@ -265,7 +265,9 @@ and private moduleItem (c: Cursor) (start: int) (inBlock: bool) : TopLevelItem l
                     c.Index <- index
                     going <- false
             let last = blockItems[blockItems.Count - 1]
-            [ TopLevelItem.at (endingAt last.Span (c.SpanFrom start)) (ModuleBlock(first, List.ofSeq blockItems)) ]
+            let text = c.SpanFrom start
+            c.NoteModuleBlock first text
+            [ TopLevelItem.at (endingAt last.Span text) (ModuleBlock(first, List.ofSeq blockItems)) ]
         | _ -> c.GiveUp "a module block the layout pass doesn't open"
     elif inBlock then raise NoMatch
     else
@@ -363,9 +365,9 @@ let fill () =
     Forward.typeDefinition.Value <- typeDefinition
     Forward.importItems.Value <- importItems
 
-/// The items of `source`, the text of the file at `file`, if the descent parser reads all of it
-/// (`TopLevel.moduleParser`), or why it gives up.
-let tryReadModule (file: string) (source: string) : Result<TopLevelItem list, string> =
+/// The items of `source`, the text of the file at `file`, and what the FParsec parser would keep beside them
+/// (`ParseState`), if the descent parser reads all of it (`TopLevel.moduleParser`), or why it gives up.
+let tryReadModuleWithState (file: string) (source: string) : Result<TopLevelItem list * ParseState, string> =
     fill ()
     try
         let c = cursorOf file (Header.Directives.blank source)
@@ -374,10 +376,21 @@ let tryReadModule (file: string) (source: string) : Result<TopLevelItem list, st
         while not (c.Is EndOfFile) do
             all.AddRange(items c false)
             skipLayout c
-        Ok(List.ofSeq all)
+        let state =
+            { ParseState.empty () with
+                Declared = c.Declared
+                DocumentableStarts = c.DocumentableStarts
+                StringTexts = c.StringTexts
+                Comments = c.Comments
+                ModuleBlocks = c.ModuleBlocks }
+        Ok(List.ofSeq all, state)
     with
     | GiveUp reason -> Error reason
     | NoMatch -> Error "no reading matched"
+
+/// The items of `source`, the text of the file at `file`, if the descent parser reads all of it, or why it gives up.
+let tryReadModule (file: string) (source: string) : Result<TopLevelItem list, string> =
+    tryReadModuleWithState file source |> Result.map fst
 
 /// The items of `source`, the text of the file at `file`, if the descent parser reads all of it: `None` when it gives
 /// up, for the FParsec parser to read it instead.

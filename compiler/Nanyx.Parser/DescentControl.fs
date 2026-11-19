@@ -24,7 +24,17 @@ let private matchExpression (c: Cursor) =
         match c.At 0 with
         | Indent _ ->
             c.Index <- c.Index + 1
-            [ unwrapSingle (indentedBlock c) ]
+            let blockStart = c.Start
+            let block = unwrapSingle (indentedBlock c)
+            // The arms must be indented less than a block scrutinee, so that it can't be taken for them.
+            let column (offset: int) = offset - (if offset = 0 then 0 else c.Source.LastIndexOf('\n', offset - 1) + 1)
+            let index = c.Index
+            skipLayout c
+            let armsColumn = if c.Is Bar then Some(column c.Start) else None
+            c.Index <- index
+            if armsColumn |> Option.exists (fun arms -> arms >= column blockStart) then
+                c.GiveUp "a block scrutinee indented no more than the arms, which is a mistake"
+            [ block ]
         | Code _ when c.OnSameLine -> sepBy1 c (fun () -> expression Crossing c) (fun () -> c.Expect Comma |> ignore)
         | _ -> c.GiveUp "a match's scrutinee the layout pass doesn't open"
     // With no arms, the FParsec parser reads `match` as a name, and fails after it.

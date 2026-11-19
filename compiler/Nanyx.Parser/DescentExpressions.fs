@@ -108,7 +108,7 @@ let private fieldsToExpr (fields: RecordField list) (span: SourceSpan) =
         Expression.at span (TupleExpr(fields |> List.choose (function PositionalField e -> Some e | NamedField _ -> None)))
     | _ -> Expression.at span (RecordExpr fields)
 
-/// A string with holes: its text decoded, with each hole's expression. One with none is a literal (`literal`).
+/// A double-quoted string: its text decoded, with each hole's expression, or a literal when it has none.
 let rec private doubleQuoted (c: Cursor) : Expression =
     let start = c.Start
     let decoded (text: string) =
@@ -116,11 +116,19 @@ let rec private doubleQuoted (c: Cursor) : Expression =
         | Some value -> value
         | None -> c.GiveUp "a backslash in a string that isn't an escape"
     let parts = ResizeArray<StringPart>()
+    // Each run of text is noted, as `Expressions.interpolatedStringExprNoWs` notes it: only one that isn't empty.
     let addText (token: Token) =
         let written = c.Text token
         let text = written.Substring(1, written.Length - 2)
-        c.NoteStringText (token.Start + 1) (token.End - 1)
-        if text <> "" then parts.Add(StringText(decoded text))
+        if text <> "" then
+            c.NoteStringText (token.Start + 1) (token.End - 1)
+            parts.Add(StringText(decoded text))
+    // A string with no holes is read the same way, the FParsec parser's first reading of a double-quoted string.
+    if c.Is StringLiteral then
+        addText (c.Take())
+        let text = parts |> Seq.choose (function StringText text -> Some text | StringExpr _ -> None) |> String.concat ""
+        Expression.at (c.SpanFrom start) (LiteralExpr(StringLit text))
+    else
     addText (c.Expect StringStart)
     let mutable going = true
     while going do
@@ -354,6 +362,7 @@ and private primary (c: Cursor) : Expression =
     | Keyword when constructKeywords.Contains(c.Text token) -> Forward.keywordExpression.Value c
     | LeftBrace -> Forward.lambda.Value c
     | StringStart -> doubleQuoted c
+    | StringLiteral when (c.Text token).StartsWith "\"" -> doubleQuoted c
     | Name when nextAdjacent && next |> Option.exists (fun next -> next.Kind = Operator && c.Text next = "!") ->
         Forward.keywordExpression.Value c
     | LeftParen when next |> Option.exists (fun next -> next.Kind = RightParen) ->

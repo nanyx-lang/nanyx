@@ -70,8 +70,13 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   the FParsec parser, and a script's expressions; and a block's `import`s and local types, through `Forward`.
   `CorpusTests.fs` checks every file of the corpus whole against the FParsec parser's items, and it checks it on
   every def's value and every statement in the corpus, and `DescentExpressionTests.fs`, `DescentBlockTests.fs` and
-  `DescentControlTests.fs` and `DescentTopLevelTests.fs` on the places where reading one takes care. Nothing reads
-  with the new parser yet but those tests and `parseTypeSignature`: `parse` still reads with the FParsec parser.
+  `DescentControlTests.fs` and `DescentTopLevelTests.fs` on the places where reading one takes care.
+  `Api.runModuleParser`, which every parse goes through, reads with it (`DescentTopLevel.tryReadModuleWithState`, which
+  gives the items and the `ParseState` the FParsec parser would keep beside them: the names nodes declare from the
+  cursor, comments from the lexer's trivia), and with the FParsec parser where it gives up, which reports any mistake
+  as it always has. `CorpusTests.fs` checks the two read every piece the same, side state included
+  (`DescentCheck.checkModuleWithState`, through `Api.readWithBothParsers`), and that the new parser gives up on every
+  piece the FParsec parser rejects, so that it never reads a mistake the FParsec parser would report.
 
 # The layout rules
 
