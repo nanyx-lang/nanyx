@@ -325,8 +325,9 @@ and private bar (c: Cursor) =
     c.NoteDocumentable token.Start c.Start
 
 and internal typeUnion (c: Cursor) =
-    let start = c.Start
+    // A `|` before the first type is no part of the union's span, which starts at that type.
     if c.Is Bar then bar c
+    let start = c.Start
     sepBy1 c (fun () -> typeIntersection c) (fun () -> if across c Bar None then bar c else raise NoMatch)
     |> singleOrCombined c start TypeUnion
 

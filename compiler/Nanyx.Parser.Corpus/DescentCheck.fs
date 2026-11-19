@@ -75,7 +75,7 @@ let private checkEach (file: string) (parsed: SourceModule) (node: 'root -> 'nod
 let checkTypes (file: string) (parsed: SourceModule) (roots: (TypeEntry * TypeExpr) list) : Outcome list =
     roots
     |> checkEach file parsed snd (fun (root: TypeExpr) -> root.Span.Start) (fun cursor (entry, _) ->
-        DescentControl.fill ()
+        DescentTopLevel.fill ()
         match entry with
         | Annotation -> DescentTypes.typeSignature cursor
         | TypeBody -> DescentTypes.typeExpr cursor)
@@ -106,7 +106,7 @@ let patternRoots (parsed: SourceModule) : Pattern list =
 
 /// How the new parser reads each of `roots`, the patterns `patternRoots` finds in `parsed`, from the file at `file`.
 let checkPatterns (file: string) (parsed: SourceModule) (roots: Pattern list) : Outcome list =
-    checkEach file parsed id (fun (root: Pattern) -> root.Span.Start) (fun cursor _ -> DescentControl.fill (); DescentPatterns.pattern cursor) roots
+    checkEach file parsed id (fun (root: Pattern) -> root.Span.Start) (fun cursor _ -> DescentTopLevel.fill (); DescentPatterns.pattern cursor) roots
 
 /// Where an expression `expressionRoots` finds was read: what reads it.
 type ExpressionEntry =
@@ -170,9 +170,19 @@ let checkExpressions (file: string) (parsed: SourceModule) (roots: (ExpressionEn
     roots
     |> checkEach file parsed snd (fun (root: Expression) -> root.Span.Start) (fun cursor (entry, _) ->
         match entry with
-        | DefValue -> DescentControl.defValueAfterEquals cursor
+        | DefValue -> DescentTopLevel.fill (); DescentControl.defValueAfterEquals cursor
         | DefBlock ->
+            DescentTopLevel.fill ()
             match cursor.At -1 with
             | Layout.Indent _ -> DescentControl.defValueAfterEquals cursor
             | _ -> raise (GiveUp "a def's block the layout pass doesn't open")
-        | StatementValue -> DescentControl.statementValue cursor)
+        | StatementValue -> DescentTopLevel.fill (); DescentControl.statementValue cursor)
+
+/// How the new parser reads the whole of `parsed`, the file at `file`: its items, compared with the FParsec parser's.
+let checkModule (file: string) (parsed: SourceModule) : Outcome =
+    match DescentTopLevel.tryReadModule file parsed.Source with
+    | Error reason -> GaveUp reason
+    | Ok items ->
+        let expected = SyntaxDump.dump parsed.Items
+        let actual = SyntaxDump.dump items
+        if expected = actual then Same else Differs(expected, actual)

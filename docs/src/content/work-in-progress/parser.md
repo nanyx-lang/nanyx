@@ -98,13 +98,17 @@ fallback.
   precedence, then statements and blocks, then top-level definitions, imports and directives.
 - **Each step:** port one area, add it to the new parser, and run the differential test. The share of the corpus the
   new parser handles without falling back goes up with each PR, and is reported in it.
-- **So far:** types (`DescentTypes.fs`), patterns (`DescentLiterals.fs`, `DescentPatterns.fs`), expressions
-  (`DescentExpressions.fs`), lambdas, blocks, arms and statements (`DescentBlocks.fs`), and the expressions that start
-  with a keyword (`DescentControl.fs`), described in [The parser](../compiler-internals/parser) in the Compiler
-  internals section. Each of the 5,900 annotations and type definitions' bodies and each of the 3,940 patterns in the
-  corpus reads to the FParsec parser's tree. Of the 16,107 def values and statements in the corpus, 16,093 read to the
-  FParsec parser's tree, and it gives up at the others: a local type or an import in a block, which come with the top
-  level, and a few mistakes. No whole file is read without the fallback yet: that starts once the top level is read.
+- **So far:** the whole grammar: types (`DescentTypes.fs`), patterns (`DescentLiterals.fs`, `DescentPatterns.fs`),
+  expressions (`DescentExpressions.fs`), lambdas, blocks, arms and statements (`DescentBlocks.fs`), the expressions that
+  start with a keyword (`DescentControl.fs`) and the top level (`DescentTopLevel.fs`), described in
+  [The parser](../compiler-internals/parser) in the Compiler internals section. Of the 4,784 pieces of the corpus the
+  FParsec parser reads, 4,778 read whole to its tree with no fallback, and none differ. The other 6 are test fixtures
+  written as mistakes that the FParsec parser reads leniently (a `match` with no arms, which it reads as a name, and a
+  string's hole that doesn't parse, which it reads as text), where the new parser gives up.
+- **Not yet:** `parse` still reads every file with the FParsec parser; only the tests read with the new one. Making
+  `parse` use it, with the FParsec parser as the fallback for what it gives up at, changes what a user sees wherever a
+  file outside the corpus reads differently, and has the side state `parse` returns to match too (the names nodes
+  declare, the starts of documentable constructs, the trivia and string texts), so it is a decision of its own.
 - **Settled in stage 3 so far:** the lexer's `true` and `false` names, its numbers without a sign, and its `1` and `.`
   for `1.`, which the descent parser's literals read as the FParsec parser does (`DescentLiterals.fs`). A pattern that
   is a string with holes is still open: the FParsec parser reads its `{` as text, and the descent parser gives up there,

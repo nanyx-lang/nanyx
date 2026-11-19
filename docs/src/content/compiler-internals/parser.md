@@ -32,7 +32,8 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   pieces differ on purpose, each listed with why in the test: where the two read text differently is listed in
   [The parser](../work-in-progress/parser) in Work in progress.
 - **The recursive-descent parser** (`DescentCursor.fs` and a file per part of the grammar, so far `DescentTypes.fs`,
-  `DescentLiterals.fs`, `DescentPatterns.fs`, `DescentExpressions.fs`, `DescentBlocks.fs` and `DescentControl.fs`):
+  `DescentLiterals.fs`, `DescentPatterns.fs`, `DescentExpressions.fs`, `DescentBlocks.fs`, `DescentControl.fs` and
+  `DescentTopLevel.fs`):
   the FParsec parser's grammar read from the layout pass's tokens. `DescentCursor` has the cursor, which reads the
   tokens and goes back for an alternative (`NoMatch`, which `Cursor.Attempt` catches, as FParsec's `attempt` and `<|>`
   do), and the names and documentable starts the FParsec parser keeps in `ParseState`. At anything it doesn't read yet,
@@ -61,11 +62,16 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   with a keyword: `match`, `if` (with `is`, and with arms), `for`, `while`, `do`, `use ... in`, `return`, `try`,
   `yield` and `name!`, `mut x` as an argument and `type T`. The files before it read lambdas, expressions, arms and
   these through forward references (`DescentCursor.Forward`), which `DescentControl.fill` fills, as the FParsec parser's
-  `Refs.fs` are. A type's field defaults and attributes, and a table literal, are read too. It gives up at an `import`
-  and a local type in a block, which come with the top level. `CorpusTests.fs` checks it on
+  `Refs.fs` are. A type's field defaults and attributes, and a table literal, are read too. `DescentTopLevel.fs` reads
+  a whole file (`readModule`), with its directives blanked as the FParsec parser has them: a module declaration and
+  `module name =` blocks (whose items are the lines at the first item's column, as the FParsec parser reads them),
+  imports and re-exports, attributes, type and context definitions with their modifiers, parameters and `where`, pattern
+  definitions, defs and foreign declarations, destructuring defs, which are tried before any other item as they are in
+  the FParsec parser, and a script's expressions; and a block's `import`s and local types, through `Forward`.
+  `CorpusTests.fs` checks every file of the corpus whole against the FParsec parser's items, and it checks it on
   every def's value and every statement in the corpus, and `DescentExpressionTests.fs`, `DescentBlockTests.fs` and
-  `DescentControlTests.fs` on the places where reading one takes care. Nothing reads with the pattern, expression and
-  block parsers yet but those tests.
+  `DescentControlTests.fs` and `DescentTopLevelTests.fs` on the places where reading one takes care. Nothing reads
+  with the new parser yet but those tests and `parseTypeSignature`: `parse` still reads with the FParsec parser.
 
 # The layout rules
 
