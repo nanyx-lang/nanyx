@@ -58,6 +58,15 @@ too, since only tools ask for them. The first compile of `def x = 1` in a proces
 410 MB, and a one-line `nanyx check` takes a median of 1.00 s against 1.34 s on the same busy machine (Release, 15
 runs of each, interleaved).
 
+The file also holds what every compile needs that would otherwise take parsing many files: the standard-library modules
+that export each name (`CheckedLibraryFile.Exports`), for the hint an unknown name gets and the definitions a library
+module attaches to a built-in type (`CheckedLibrary.standardLibraryExportPaths`), and the module each source file of
+the shipped packages declares, with the file's text (`CheckedLibraryFile.Files`), which `buildHostOf` hands to
+`PackageModules.knowDeclaration` before it reads the console host's modules, so that a file that reads the same is not
+parsed for its name. Without them the first compile of `def x = 1` parsed every library source and every file of the
+console host's packages: with them it allocates about 146 MB against 261 MB, and a one-line `nanyx check` takes a
+median of 1.22 s against 1.61 s on a slower machine (Release, 15 runs of each, interleaved).
+
 Each standard-library module the file does not have is checked once per process, the first time a compile imports
 it, and every later compile reuses the result (`checkedStandardLibrary` in `Nanyx.Compiler/Library.fs`, keyed by the
 module and its source).

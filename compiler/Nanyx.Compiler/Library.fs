@@ -582,7 +582,9 @@ module Compiler =
     let private buildHostOf (checkedModules: CheckedModules) : Host option * PackageModules option =
         match checkedModules.Package with
         | Some package -> package.Host, package.HostPackage
-        | None -> Some HostPackages.console.Value, ShippedPackages.tryModules Hosts.consolePackage
+        | None ->
+            CheckedLibrary.knowShippedDeclarations.Force()
+            Some HostPackages.console.Value, ShippedPackages.tryModules Hosts.consolePackage
 
     /// Parses, desugars and type-checks one module, resolving and checking the modules it imports first. An
     /// error says which phase it came from. The check is reported to the listener of `checkedModules` as it starts
@@ -694,7 +696,7 @@ module Compiler =
                         WorkflowMemberPlaces = memberPlaces
                         Home = origin
                         ScriptEntry = script |> Option.map snd
-                        StandardLibraryExports = ImportFixes.standardLibraryExportPaths }
+                        StandardLibraryExports = CheckedLibrary.standardLibraryExportPaths }
                   Errors = []
                   Inlined = []
                   PreludeInlined = []
@@ -1115,7 +1117,8 @@ module Compiler =
             checkedModule
 
     /// Checks every module of the standard library, and of the console host's package and the packages it depends on,
-    /// as an import of it from a loose script does, and writes them to the file at `path` (see `CheckedLibrary`). Only the
+    /// as an import of it from a loose script does, and writes them to the file at `path` (see `CheckedLibrary`), with the
+    /// library's exports and the module each file of those packages declares. Only the
     /// build of the compiler does, in a process of its own, before it checks anything else: the ids of what it checks
     /// start at `CheckedLibrary.firstId`.
     let writeCheckedLibrary (path: string) =
@@ -1128,11 +1131,9 @@ module Compiler =
                 let source = StandardLibrary.tryLoadSource name |> Option.defaultValue ""
                 typecheckImport checkedModules (StandardLibraryModule name) (fun () -> source) Set.empty |> ignore
             let rec packages (modules: PackageModules) = modules :: List.collect packages modules.Dependencies
+            let shippedPackages = buildHostOf checkedModules |> snd |> Option.map packages |> Option.defaultValue []
             let shippedFiles =
-                buildHostOf checkedModules
-                |> snd
-                |> Option.map packages
-                |> Option.defaultValue []
+                shippedPackages
                 // A module in several files is checked from its first, which brings in the others.
                 |> List.collect (fun modules -> modules.Modules |> Map.values |> Seq.choose List.tryHead |> List.ofSeq)
                 |> List.distinct
@@ -1143,7 +1144,17 @@ module Compiler =
                       match checkedSourceFiles.TryGetValue(originKey (SourceFile file)) with
                       | true, kept -> { CheckedShippedModule.Key = originKey (SourceFile file); Read = kept.Read; Module = kept.Module; Imports = kept.Imports }
                       | false, _ -> () ]
-            CheckedLibrary.write path [ for KeyValue((key, source), checking) in checkedStandardLibrary -> key, source, checking.Value ] shipped)
+            let declarations =
+                [ for file in shippedPackages |> List.collect _.Files |> List.distinct do
+                      match PackageModules.declaration file with
+                      | Some declares -> { CheckedShippedFile.Path = file; Text = File.ReadAllText file; Declares = declares }
+                      | None -> () ]
+            CheckedLibrary.write
+                path
+                [ for KeyValue((key, source), checking) in checkedStandardLibrary -> key, source, checking.Value ]
+                shipped
+                ImportFixes.standardLibraryExports.Value
+                declarations)
 
     let parse (source: string) : Result<Module, Diagnostic list> =
         match parseModuleFileWithNames "" source with
@@ -1220,7 +1231,7 @@ module Compiler =
                           match checkedModules.Package, origin with
                           | Some package, SourceFile path when PackageModules.contains package path -> PackageExports.importable package checkedModules.ReadFile path
                           | _ -> []
-                      ImportFixes.add packageExports (normalizeSource source) checkedModule.Syntax checkedModule.Errors
+                      ImportFixes.addFrom packageExports CheckedLibrary.standardLibraryExportPaths.Value (normalizeSource source) checkedModule.Syntax checkedModule.Errors
                       |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax
               Typed = Some typed
               TypeChecked = checkedModule.Errors.IsEmpty
