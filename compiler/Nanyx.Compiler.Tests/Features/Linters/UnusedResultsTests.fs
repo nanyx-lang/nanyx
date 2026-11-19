@@ -90,7 +90,7 @@ let ``A block's last expression is not reported`` () =
     Assert.Empty(reported source)
 
 [<Fact>]
-let ``A for loop and what its body gives are not reported`` () =
+let ``A for loop and a pure value its body gives are not reported`` () =
     let source =
         """def f: [Console] list(int) -> int = { xs ->
   for xs | x ->
@@ -100,6 +100,42 @@ let ``A for loop and what its body gives are not reported`` () =
 }
 """
     Assert.Empty(reported source)
+
+[<Fact>]
+let ``A call a for loop's body ends with is reported`` () =
+    let source =
+        """def printGreeting: [Console] string -> string = { name ->
+  println("Hello, {name}")
+  name
+}
+
+def main: [Console] () -> () = {
+  for ["Ann", "Bo"] | name -> printGreeting(name)
+  for ["Ann", "Bo"] | name ->
+    println(name)
+    printGreeting(name)
+}
+"""
+    let reports = reported source
+    Assert.Equal<string list>([ "printGreeting(name)"; "printGreeting(name)" ], reports |> List.map snd)
+    for diagnostic, _ in reports do
+        Assert.StartsWith("The result of `printGreeting`, of type 'string', is never used", diagnostic.Message)
+
+[<Fact>]
+let ``A call in each arm a for loop's body ends with is reported`` () =
+    let source =
+        """def printGreeting: [Console] string -> string = { name ->
+  println("Hello, {name}")
+  name
+}
+
+def main: [Console] () -> () = {
+  for ["Ann", "Bo"]
+  | "Ann" -> printGreeting("you")
+  | name -> if name == "Bo" then printGreeting(name) else name
+}
+"""
+    Assert.Equal<string list>([ "printGreeting(\"you\")"; "printGreeting(name)" ], reported source |> List.map snd)
 
 [<Fact>]
 let ``A workflow's statements are not reported`` () =

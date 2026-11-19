@@ -65,7 +65,7 @@ def f = { pair ->
   def (a, b) = pair
   def doubled = [a, b] \ list.map({ * 2 })
   for doubled
-    | n -> n
+    | n -> ignore(n)
 }
 def quarter = { n -> proc {
   def h = try half(n)

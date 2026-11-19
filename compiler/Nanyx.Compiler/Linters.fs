@@ -828,9 +828,10 @@ module private Purity =
 /// though it is not `()`: `readLine()` on a line of its own. Left alone: a statement whose type is `()`, a type variable
 /// (it may be `()`) or `undefined` (it never gives a value, which `unreachableCode` is about); a workflow keyword's
 /// statement, whose value the workflow takes; and a block's last statement, which is the block's value. A `for` loop
-/// is `()`, so what its body gives is not reported either. Nor is a call of the built-in `dbg`, written on a line of
-/// its own to print a value. Nor is a pure statement (see `Purity`), which `uselessExpressions` reports. Its fix passes
-/// the value to `ignore`.
+/// is `()` and throws away what its body gives, so a value its body ends with is reported as a statement's is: in each
+/// arm of an `if` or a `match` the body ends with. Not reported: a call of the built-in `dbg`, written on a line of its
+/// own to print a value, and a pure statement (see `Purity`), which `uselessExpressions` reports. Its fix passes the
+/// value to `ignore`.
 module UnusedResults =
     let rule =
         { Id = "unusedResults"
@@ -876,20 +877,49 @@ module UnusedResults =
         | ContextMemberCall(_, name, _) -> $"The result of `{name}`"
         | _ -> "This value"
 
-    /// Each statement of a block, other than its last, whose value is thrown away, with the value, its type and what
-    /// a message calls it.
-    let internal discarded (model: SemanticModel) : (Statement * Expression * Ty * string) list =
-        model.Syntax
-        |> List.collect SyntaxTree.ofItem
-        |> List.collect SyntaxTree.blocksWithin
-        |> List.collect (fun statements ->
-            statements
-            |> List.take (statements.Length - 1)
-            |> List.choose (fun statement ->
-                match statement.Kind with
-                | ExprStatement value -> discardedType model value |> Option.map (fun ty -> statement, value, ty, whatIsUnused value)
-                | _ -> None))
-        |> List.sortBy (fun (statement, _, _, _) -> statement.Span.Start)
+    /// The values `body` ends with, each with the statement it is when it is one a fix can remove: the value of the
+    /// last statement of a block, of each arm of an `if` or a `match`, or `body` itself. A block's last statement is
+    /// removable when the block has others.
+    let rec private endsWith (body: Expression) : (Statement option * Expression) list =
+        match body.Kind with
+        | Block statements ->
+            match List.tryLast statements with
+            | Some ({ Kind = ExprStatement value } as last) ->
+                match value.Kind with
+                | Block _
+                | IfExpr _
+                | Match _ -> endsWith value
+                | _ -> [ (if statements.Length > 1 then Some last else None), value ]
+            | _ -> []
+        | IfExpr(_, whenTrue, whenFalse) -> endsWith whenTrue @ endsWith whenFalse
+        | Match(_, arms) -> arms |> List.collect (snd >> endsWith)
+        | _ -> [ None, body ]
+
+    /// Each value that is thrown away: a statement of a block other than its last, and a value a `for` loop's body ends
+    /// with. Each comes with the statement a fix can remove, if any, its type and what a message calls it.
+    let internal discarded (model: SemanticModel) : (Statement option * Expression * Ty * string) list =
+        let expressions = model.Syntax |> List.collect SyntaxTree.ofItem
+        let statements =
+            expressions
+            |> List.collect SyntaxTree.blocksWithin
+            |> List.collect (fun statements ->
+                statements
+                |> List.take (statements.Length - 1)
+                |> List.choose (fun statement ->
+                    match statement.Kind with
+                    | ExprStatement value -> Some (Some statement, value)
+                    | _ -> None))
+        let loopBodies =
+            expressions
+            |> List.collect SyntaxTree.expressionsWithin
+            |> List.collect (fun expr ->
+                match expr.Kind with
+                | ForSyntax.Call(_, _, _, body) -> endsWith body
+                | _ -> [])
+        statements @ loopBodies
+        |> List.choose (fun (statement, value) ->
+            discardedType model value |> Option.map (fun ty -> statement, value, ty, whatIsUnused value))
+        |> List.sortBy (fun (_, value, _, _) -> value.Span.Start)
 
     let lint (model: SemanticModel) : Report list =
         discarded model
@@ -921,7 +951,10 @@ module UselessExpressions =
               Span = value.Span
               Message = $"{what}, of type '{Unifier.tyToDisplayString Ascii ty}', does nothing and is never used: remove it, or use its value"
               Related = []
-              Fixes = [ { Title = "Remove the statement"; Edits = [ SourceEdits.removal model.Source statement.Span ] } ] })
+              Fixes =
+                statement
+                |> Option.map (fun statement -> { Title = "Remove the statement"; Edits = [ SourceEdits.removal model.Source statement.Span ] })
+                |> Option.toList })
 
 /// The official linter's `shadowedPreludeNames` rule: a top-level def, a local def, a lambda's argument or a variable a
 /// pattern binds whose name is one the prelude brings into scope, which it hides wherever it is in scope itself. Only
