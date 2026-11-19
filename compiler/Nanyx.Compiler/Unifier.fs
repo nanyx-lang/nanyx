@@ -97,57 +97,57 @@ module Unifier =
     let private quotedList (items: Ty list) =
         items |> List.map (fun item -> $"'{tyToString item}'") |> String.concat ", "
 
+    /// What only one of two types has, as a message says it: `only the first requires 'Console' and only the second
+    /// requires 'Log'`, each of `onlyLeft` and `onlyRight` that has any written by `render` after `verb`.
+    let private differencesText (verb: string) (render: 'a list -> string) (onlyLeft: 'a list) (onlyRight: 'a list) =
+        let onlyIn which items = if List.isEmpty items then None else Some $"only the {which} {verb} {render items}"
+        [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat " and "
+
+    /// `names` sorted, each written by `format`, as a message lists tags or fields.
+    let private sortedNames (format: string -> string) (names: string list) =
+        names |> List.sort |> List.map format |> String.concat ", "
+
+    /// `the context 'Console'`, or `the contexts 'Console', 'Log'`, as a message names `contexts`.
+    let private theContexts (contexts: Ty list) =
+        $"""{(if contexts.Length = 1 then "the context" else "the contexts")} {quotedList contexts}"""
+
+    /// Says that a value of type `given` is given where one of type `expected` is expected.
+    let private givenWhereExpected (given: Ty) (expected: Ty) =
+        $"'{tyToString given}' is given where '{tyToString expected}' is expected"
+
     /// Says which contexts make two function types differ: `onlyLeft` are those the first requires that the second has
     /// no room for, and `onlyRight` the reverse.
     let private contextsMessage (onlyLeft: Ty list) (onlyRight: Ty list) left right =
-        let onlyIn which contexts =
-            match contexts with
-            | [] -> None
-            | _ -> Some $"only the {which} requires {quotedList contexts}"
-        let differences = [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat " and "
+        let differences = differencesText "requires" quotedList onlyLeft onlyRight
         $"Context mismatch: '{tyToString left}' vs '{tyToString right}', where {differences}"
 
     /// Says that a function of type `given`, which requires `extra`, is given where one of type `expected` is, which
     /// has no room for them.
     let private contextsNotAllowedMessage (extra: Ty list) (given: Ty) (expected: Ty) =
-        let what = if extra.Length = 1 then "the context" else "the contexts"
-        $"'{tyToString given}' is given where '{tyToString expected}' is expected, which does not require {what} {quotedList extra}: write the contexts it may require on the type expected, as a context's member does in `log: [Console] string -> ()`, or a context variable for any, as in `[c] a -> b`"
+        $"{givenWhereExpected given expected}, which does not require {theContexts extra}: write the contexts it may require on the type expected, as a context's member does in `log: [Console] string -> ()`, or a context variable for any, as in `[c] a -> b`"
 
     /// Says that a value of a type generic in contexts that carries `extra` is given where one that does not is expected.
     let private carriedNotAllowedMessage (extra: Ty list) (given: Ty) (expected: Ty) =
-        let what = if extra.Length = 1 then "the context" else "the contexts"
-        $"'{tyToString given}' is given where '{tyToString expected}' is expected, whose functions don't require {what} {quotedList extra}: write them in front of the type expected, or a context variable for any, as in `[c] {tyToString expected}`"
+        $"{givenWhereExpected given expected}, whose functions don't require {theContexts extra}: write them in front of the type expected, or a context variable for any, as in `[c] {tyToString expected}`"
 
     /// Says which contexts make two values of a type generic in contexts, `left` and `right`, differ where they must be
     /// the same type: `onlyLeft` are those the first carries that the second has no room for, and `onlyRight` the reverse.
     let private carriedMismatchMessage (onlyLeft: Ty list) (onlyRight: Ty list) left right =
-        let onlyIn which contexts =
-            match contexts with
-            | [] -> None
-            | _ -> Some $"only the {which} carries {quotedList contexts}"
-        let differences = [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat " and "
+        let differences = differencesText "carries" quotedList onlyLeft onlyRight
         $"Context mismatch: '{tyToString left}' vs '{tyToString right}', where {differences}: write the same contexts in front of both, or a context variable for any"
 
     /// Says which tags make two unions differ: `onlyLeft` are tags only the first has that the second cannot take,
     /// and `onlyRight` the reverse. `Tag union mismatch: '...' vs '...', where only the first has #bad and only the
     /// second has #underflow`.
     let private tagUnionMessage (onlyLeft: Set<string>) (onlyRight: Set<string>) left right =
-        let onlyIn which tags =
-            if Set.isEmpty tags then None
-            else Some $"""only the {which} has {tags |> Set.toList |> List.sort |> List.map (sprintf "#%s") |> String.concat ", "}"""
-        let differences = [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat " and "
+        let differences = differencesText "has" (sortedNames (sprintf "#%s")) (Set.toList onlyLeft) (Set.toList onlyRight)
         $"Tag union mismatch: '{tyToString left}' vs '{tyToString right}', where {differences}"
 
     /// Says which fields only one of two records has: `Record field mismatch: '...' vs '...', where only the first has
     /// 'a' and only the second has 'y'`.
     let private recordKeyMessage leftKeys rightKeys left right =
-        let onlyIn which keys =
-            if Set.isEmpty keys then None
-            else Some $"""only the {which} has {keys |> Set.toList |> List.sort |> List.map (sprintf "'%s'") |> String.concat ", "}"""
         let differences =
-            [ onlyIn "first" (Set.difference leftKeys rightKeys); onlyIn "second" (Set.difference rightKeys leftKeys) ]
-            |> List.choose id
-            |> String.concat " and "
+            differencesText "has" (sortedNames (sprintf "'%s'")) (Set.toList (Set.difference leftKeys rightKeys)) (Set.toList (Set.difference rightKeys leftKeys))
         $"Record field mismatch: '{tyToString left}' vs '{tyToString right}', where {differences}"
 
     let private keySet (fields: Map<string, Ty>) =
