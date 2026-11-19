@@ -85,6 +85,15 @@ module TypePrinting =
             TyApply($"{name}{subscript (List.findIndex ((=) scope) p.Scopes.[name] + 1)}", [])
         | _ -> FunctionContexts.withoutScope context
 
+    /// Whether `printTy` writes `ty` with contexts in front: a type generic in contexts that carries some, or the contexts
+    /// it carries on their own.
+    let rec private writtenWithContexts (ty: Ty) =
+        match ty with
+        | FunctionContexts.CarryingNominal(_, _, contexts) -> not (writtenContexts contexts).IsEmpty
+        | TyContexts _ -> true
+        | TyRecursive(body, _) -> writtenWithContexts body
+        | _ -> false
+
     /// `ty` with the fewest brackets the grammar allows. `,` binds tighter than `->`, which groups to the right,
     /// and `|` binds tighter than both, so a function needs brackets only where it is an item of a comma list
     /// (`(int, (a -> b))`), the input of another function (`(a -> b) -> c`) or a member of a union; a union never
@@ -95,11 +104,9 @@ module TypePrinting =
         let grouped ty =
             match ty with
             | TyFunc _ -> $"({printTy p false ty})"
-            | _ ->
-                // A type generic in contexts written with them reads as a function type's would.
-                match printTy p false ty with
-                | text when text.StartsWith "[" -> $"({text})"
-                | text -> text
+            // A type generic in contexts written with them reads as a function type's would.
+            | _ when writtenWithContexts ty -> $"({printTy p false ty})"
+            | _ -> printTy p false ty
         // The items of a tuple, each bracketed where a comma list needs it.
         let items tys = tys |> List.map grouped |> String.concat ", "
         let bareTuple ty =
@@ -141,8 +148,8 @@ module TypePrinting =
                 | [] -> name
                 | [ arg ] -> $"{name}({soleArgument arg})"
                 | args -> $"{name}({items args})"
-            match List.tryLast args with
-            | Some (FunctionContexts.Carried contexts) ->
+            match ty with
+            | FunctionContexts.CarryingNominal(_, _, contexts) ->
                 match writtenContexts contexts |> List.map (contextAsPrinted p) |> List.distinct with
                 | [] -> named
                 | written -> $"""[{written |> List.map (printTy p false) |> String.concat ", "}] {named}"""

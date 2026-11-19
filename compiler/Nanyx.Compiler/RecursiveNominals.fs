@@ -93,8 +93,8 @@ module RecursiveNominals =
     let close (id: NominalId) (variables: TyVar list) (contextVariable: TyVar option) (ty: Ty) : Ty =
         let positions = variables |> List.mapi (fun index variable -> variable.Id, index) |> Map.ofList
         let ownContexts (args: Ty list) =
-            match contextVariable, List.tryLast args with
-            | Some variable, Some (FunctionContexts.Carried []) -> List.truncate (args.Length - 1) args @ [ FunctionContexts.carried [ TyVar variable ] ]
+            match contextVariable, args with
+            | Some variable, FunctionContexts.CarryingArguments(own, []) -> own @ [ FunctionContexts.carried [ TyVar variable ] ]
             | _ -> args
         let rec replace ty =
             match ty with

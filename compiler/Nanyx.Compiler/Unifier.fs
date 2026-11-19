@@ -467,9 +467,7 @@ module Unifier =
             match ty with
             | TyVar v -> [ v, false, inInput ]
             | TyPrimitive _ -> []
-            | TyNominal(_, args, _, _) when (match List.tryLast args with Some (FunctionContexts.Carried _) -> true | _ -> false) ->
-                let carried = match List.last args with FunctionContexts.Carried contexts -> contexts | _ -> []
-                List.collect (collect true) (List.truncate (args.Length - 1) args) @ List.collect ofContext carried
+            | FunctionContexts.CarryingNominal(_, own, carried) -> List.collect (collect true) own @ List.collect ofContext carried
             | TyNominal(_, _, underlying, _) -> collect true underlying
             | TyAlias(_, args, underlying) -> List.collect (collect inInput) (underlying :: args)
             | TyFunc(arg, ret, contexts) -> collect true arg @ collect inInput ret @ List.collect ofContext contexts
@@ -919,29 +917,30 @@ module Unifier =
                         // contexts a type generic in contexts carries are like a function type's: one with fewer fits where
                         // one with more is expected (see `FunctionContexts.carried`).
                         | TyNominal(lNominal, lArgs, _, _), TyNominal(rNominal, rArgs, _, _) when lNominal = rNominal && lArgs.Length = rArgs.Length ->
-                            let arguments =
-                                List.zip lArgs rArgs
-                                |> List.filter (function FunctionContexts.Carried _, FunctionContexts.Carried _ -> false | _ -> true)
-                                |> List.map (fun (lTy, rTy) -> (lTy, rTy, Equal, origin))
-                            match List.last lArgs, List.last rArgs with
-                            // A value whose contexts nothing has settled yet, as a constructor's, carries those expected:
-                            // its functions were checked against them where it was made, and may require fewer.
-                            | FunctionContexts.Carried [ TyVar given ], FunctionContexts.Carried expected when isPlainVar given ->
-                                loop subst (arguments @ (TyVar given, TyUnion expected, Equal, origin) :: rest)
-                            // Contexts that are only variables nothing has settled yet, given where a signature's are
-                            // expected, are fitted after the other constraints, which settle them: fitted now, the
-                            // signature's first variable would take them all and its others none (#1908).
-                            | FunctionContexts.Carried (_ :: _ as given), FunctionContexts.Carried expected when
-                                kind = Assignable
-                                && given |> List.forall (function TyVar v -> isPlainVar v | _ -> false)
-                                && expected |> List.exists (function TyVar v -> v.Name.IsSome | _ -> false) ->
-                                putOff <- (left, right, kind, origin) :: putOff
-                                loop subst (rest @ [ (left, right, AssignableLater, origin) ])
-                            | FunctionContexts.Carried given, FunctionContexts.Carried expected ->
-                                match FunctionContexts.fit freshRest origin given expected with
-                                | Ok contexts -> loop subst (arguments @ contexts @ rest)
-                                | Error extra -> Error (carriedNotAllowedMessage extra l r, origin, ContextsNotAllowed)
-                            | _ -> loop subst (arguments @ rest)
+                            let equalArguments lArgs rArgs = List.map2 (fun lTy rTy -> (lTy, rTy, Equal, origin)) lArgs rArgs
+                            match l, r with
+                            | FunctionContexts.CarryingNominal(_, lOwn, given), FunctionContexts.CarryingNominal(_, rOwn, expected) ->
+                                let arguments = equalArguments lOwn rOwn
+                                match given, expected with
+                                // A value whose contexts nothing has settled yet, as a constructor's, carries those
+                                // expected: its functions were checked against them where it was made, and may require
+                                // fewer.
+                                | [ TyVar given ], expected when isPlainVar given ->
+                                    loop subst (arguments @ (TyVar given, TyUnion expected, Equal, origin) :: rest)
+                                // Contexts that are only variables nothing has settled yet, given where a signature's are
+                                // expected, are fitted after the other constraints, which settle them: fitted now, the
+                                // signature's first variable would take them all and its others none (#1908).
+                                | _ :: _, expected when
+                                    kind = Assignable
+                                    && given |> List.forall (function TyVar v -> isPlainVar v | _ -> false)
+                                    && expected |> List.exists (function TyVar v -> v.Name.IsSome | _ -> false) ->
+                                    putOff <- (left, right, kind, origin) :: putOff
+                                    loop subst (rest @ [ (left, right, AssignableLater, origin) ])
+                                | given, expected ->
+                                    match FunctionContexts.fit freshRest origin given expected with
+                                    | Ok contexts -> loop subst (arguments @ contexts @ rest)
+                                    | Error extra -> Error (carriedNotAllowedMessage extra l r, origin, ContextsNotAllowed)
+                            | _ -> loop subst (equalArguments lArgs rArgs @ rest)
                         // A value of a nominal type's shape is no value of it, but the mismatch says which type's shape
                         // it has, so that the error can say why (see `ProtectedShapes`). Trying the shape changes
                         // nothing the solving goes on with.

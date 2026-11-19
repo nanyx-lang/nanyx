@@ -12,10 +12,7 @@ open NyxCompiler.InferState
 let private joinCarried (state: InferState) (branchTypes: Ty list) : (Ty * InferState) option =
     let carriedOf ty =
         match resolveSoFar state ty with
-        | TyNominal(id, args, underlying, isPrivate) ->
-            match List.tryLast args with
-            | Some (FunctionContexts.Carried _ as carried) -> Some (id, args, underlying, isPrivate, carried)
-            | _ -> None
+        | TyNominal(_, args, underlying, isPrivate) & FunctionContexts.CarryingNominal(id, _, carried) -> Some (id, args, underlying, isPrivate, carried)
         | _ -> None
     match branchTypes |> List.map carriedOf with
     | Some (id, args, underlying, isPrivate, _) :: _ as branches when
