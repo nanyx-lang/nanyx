@@ -38,7 +38,11 @@ where it is named; the wrapper calls the function with its arguments and them al
 where a function named as an argument of a call, by its name or qualified (`math.max`), finds each parameterised
 context, once that call has settled its type (`resolveReferenceInstances` in `ContextInstances.fs`), so `println` at
 `int` is passed `ToString(int)`, `math.max` passed to `fold` over a `list(int)` is passed `Ord(int)`, and at a type
-variable `a` of a function that requires `ToString(a)`, that function's member. So is a function named point-free as
+variable `a` of a function that requires `ToString(a)`, that function's member. One whose type the call leaves open, and
+whose context is not in scope by its members' names, finds its instance once something settles the type, as such a
+call does: in a def that doesn't write its type once the def is inferred, which then requires the context, and anywhere
+else once the module is, as in `def u: Point = apply(des, "ab")`, where only the type `u` writes settles `des`'s
+`Decode(a)` ([#2017](https://github.com/nanyx-lang/nanyx/issues/2017)). So is a function named point-free as
 a def's value, at the type the def writes (`resolveValueInstances`): `def g: [Console] int -> () = println`. Such a
 def is not run in the contexts it writes, as a lambda is: its value is a function that requires them, so they are
 part of its type, as they are of `def k = say` (`Contexts.extractDefContexts`, which the backend reads too). A context

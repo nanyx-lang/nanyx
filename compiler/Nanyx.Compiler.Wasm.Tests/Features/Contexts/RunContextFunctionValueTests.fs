@@ -274,3 +274,27 @@ viaAnnotated()
 viaInferred()
 """
     runSource (normalized source) |> assertRan "1.5\n(3, 4)\n(1, 2)(1, 2)\n7\n"
+// A function that requires a parameterised context, named as a value at a type only the type a def writes settles,
+// finds its instance once that type is known (#2017).
+let private decode =
+    """context Decode(a) = (decode: string -> a)
+type Point = (x: int, y: int)
+def Point.decode: string -> Point = { text -> (x = text.length, y = 2) }
+def des: [Decode(a)] string -> a = { text -> decode(text) }
+def apply: (string -> a), string -> a = { f, text -> f(text) }
+"""
+
+[<Fact>]
+let ``Run - a function named as a value at the type the def writes (#2017)`` () =
+    let source = decode + """def u: Point = apply(des, "ab")
+println("{u.x}")
+"""
+    runSource (normalized source) |> assertRan "2\n"
+
+[<Fact>]
+let ``Run - a function named as a value in an unannotated def requires its context there (#2017)`` () =
+    let source = decode + """def first = { text -> apply(des, text) }
+def u: Point = first("abc")
+println("{u.x}")
+"""
+    runSource (normalized source) |> assertRan "3\n"

@@ -545,7 +545,7 @@ let rec private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeNam
 /// of that type), finds each parameterised context the callee requires (see `TypedModule.ContextInstances`), once its
 /// arguments have settled what the context is for. A context for a type inference has not worked out yet is left to
 /// be found by its members' names, as one that is not parameterised is. A function named as a value whose type is not
-/// settled there finds no instance, and is not an error (see `resolveReferenceInstances`).
+/// settled there finds its instance later, as such a call does (see `resolveReferenceInstances`).
 and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeTy: Ty option) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
     let contexts = contextRequirementsOf env state name |> Option.defaultValue []
     match TypeEnv.tryFind name env, calleeTy with
@@ -592,7 +592,29 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     match instanceInScope env current ctxName argTys, wellKnown |> Option.orElseWith derived with
                     | Some inScope, _ ->
                         Ok (found @ [ Some (InstanceInScope inScope) ], withAssociatedOfInstance env current calleeSpan ctxName argTys argTysAsRead)
-                    | None, _ when reference && not settled -> Ok (found @ [ None ], current)
+                    // A function named as a value at a type not settled yet, whose context is not in scope by its
+                    // members' names, finds its instance once something settles the type, as a call does: in an
+                    // unannotated def once the def is inferred, and anywhere else once the module is, such as where
+                    // only the type a def writes settles it (`def u: Point = apply(des, "ab")`).
+                    | None, _ when reference && not settled ->
+                        match ensureContextAvailable (Some call.Id) true env current name [ ctx ] calleeSpan, current.ContextScope with
+                        | Ok _, _ -> Ok (found @ [ None ], current)
+                        | Error errors, scope when not (snd (Solving.solve current.Constraints) |> List.exists (snd >> SourceSpan.contains call.Span)) ->
+                            let def, annotatedDef =
+                                match scope with
+                                | DefScope(defName, true) -> defName, None
+                                | DefScope(defName, false) -> InterpolationHoles.moduleEnd, Some defName
+                                | AmbientScope
+                                | ScriptValueScope _
+                                | ValueScope _ -> InterpolationHoles.moduleEnd, None
+                            let pending =
+                                { Def = def; Call = call.Id; Callee = name; Index = found.Length; Count = contexts.Length
+                                  Context = ctxName; ArgTys = argTysAsRead; Span = calleeSpan; Errors = errors; ChecksOnly = false }
+                            Ok (found @ [ None ],
+                                { current with
+                                    PendingContextInstances = pending :: current.PendingContextInstances
+                                    HoleScopes = current.HoleScopes |> Map.add call.Id (env, annotatedDef) })
+                        | Error _, _ -> Ok (found @ [ None ], current)
                     // A value that failed to check, or one made of such a value (a list of them), has every context, so
                     // that the call is not an error too. It has the compiler's own `ToString`, so the backend still has
                     // a member to pass. A hole of one is written by the backend, which reports the error where the hole is.
