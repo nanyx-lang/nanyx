@@ -39,9 +39,10 @@ let private isMemberless (info: TypeDefInfo) =
     info.IsContext && info.IsNominal && info.Members.IsEmpty && info.Parameters.IsEmpty && not info.IsScoped
     && info.Home <> StandardLibraryModule ModuleOrigin.hostRuntimeName
 
-/// `env` where an instance of `info` is supplied, if it is a context with no members (#1479): `TypeEnv.Supplied` holds it.
+/// `env` where an instance of `info` is supplied, if it is a context with no members (#1479) or a scoped one, which
+/// a `use` of its instance supplies, as `memory` does `Memory` (#2101): `TypeEnv.Supplied` holds it.
 let private withSupplied (info: TypeDefInfo) (env: TypeEnv) : TypeEnv =
-    if isMemberless info then { env with Supplied = env.Supplied.Add(TypeDefInfo.nominalId info) } else env
+    if isMemberless info || (info.IsContext && info.IsScoped) then { env with Supplied = env.Supplied.Add(TypeDefInfo.nominalId info) } else env
 
 /// Whether the context `ctxName` is one with no members (see `isMemberless`) that the host provides, as `Async`: an
 /// ambient context, as one whose members the host's prelude stands in for is, but known by its name alone.
@@ -57,9 +58,9 @@ let internal ambientContexts (state: InferState) : Set<Identifier> =
     |> Set.ofSeq
     |> Set.union (state.HostContexts |> Set.filter (isAmbientMemberless state))
 
-/// Whether something nearer than the host supplies the context with no members `ctxName` in `env`: a def that declares
-/// it, or a `use`.
-let private suppliedMemberless (env: TypeEnv) (state: InferState) (ctxName: Identifier) =
+/// Whether something nearer than the host supplies the context `ctxName`, one with no members or a scoped one, in
+/// `env`: a def that declares it, or a `use` (see `withSupplied`).
+let private isSupplied (env: TypeEnv) (state: InferState) (ctxName: Identifier) =
     tryFindTypeDef ctxName state |> Option.exists (fun info -> env.Supplied.Contains(TypeDefInfo.nominalId info))
 
 /// `env` with the members of the instance a `use` of a value of type `ty` loads, each bound by its name. When the
@@ -414,7 +415,7 @@ let private availableAmbientContexts (env: TypeEnv) (state: InferState) : Set<Id
     let memberless =
         state.HostContexts
         |> Set.filter (fun ctxName ->
-            isAmbientMemberless state ctxName && (state.ContextScope = AmbientScope || suppliedMemberless env state ctxName))
+            isAmbientMemberless state ctxName && (state.ContextScope = AmbientScope || isSupplied env state ctxName))
     let fromMembers = Set.union fromMembers memberless
     match state.ContextScope with
     | AmbientScope -> Set.union fromMembers state.CarriedAmbientContexts
@@ -474,7 +475,7 @@ let private ambientProviders (env: TypeEnv) (state: InferState) : Map<Identifier
     let carried =
         state.CarriedAmbientContexts
         |> Set.toList
-        |> List.append (state.HostContexts |> Set.filter (fun ctxName -> isAmbientMemberless state ctxName && not (suppliedMemberless env state ctxName)) |> Set.toList)
+        |> List.append (state.HostContexts |> Set.filter (fun ctxName -> isAmbientMemberless state ctxName && not (isSupplied env state ctxName)) |> Set.toList)
         |> List.choose (fun ctxName -> ambientProvider state.ContextScope |> Option.map (fun provider -> ctxName, provider))
     Map.ofList (carried @ ofMembers)
 
@@ -742,7 +743,7 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
     // A context with no members the host provides is needed from the host wherever nothing nearer supplies it.
     let fromHost (ctx: TypeExpr) =
         match ctx.Kind with
-        | TypeName ctxName -> isAmbientMemberless state ctxName && not (suppliedMemberless env state ctxName)
+        | TypeName ctxName -> isAmbientMemberless state ctxName && not (isSupplied env state ctxName)
         | _ -> false
     let recordProviders (current: InferState) =
         match call with
@@ -786,12 +787,14 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
                     if members |> List.exists isOther then Some (ctxName, info) else None
                 | _ -> None
             | _ -> None)
-    // A scoped context has no members to find: it is available where something supplies it (see `ScopedCalls`).
+    // A scoped context has no members to find: it is available where something supplies it (see `ScopedCalls`), or
+    // where a `use` loads an instance of it.
     let unsupplied =
         contexts
         |> List.choose (fun ctx ->
             match ctx.Kind with
-            | TypeName ctxName when WrittenContexts.isScoped state ctxName -> ScopedCalls.unsupplied state name ctxName span
+            | TypeName ctxName when WrittenContexts.isScoped state ctxName && not (isSupplied env state ctxName) ->
+                ScopedCalls.unsupplied state name ctxName span
             | _ -> None)
     // The contexts only the host could provide, which it does not (see `InferState.UnprovidedContexts`).
     let unprovided =

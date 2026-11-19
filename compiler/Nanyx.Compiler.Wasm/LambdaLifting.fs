@@ -410,7 +410,15 @@ let lift (externArities: Map<string, int>) (synthesized: Set<string>) (memberCap
                             counter <- counter + 1
                             [ Statement.from value (DefStatement(false, local, None, recur value)) ], instance, membersOf (Expression.from value (IdentifierExpr local))
                         | _ -> [], None, []
-                    if bindings.IsEmpty then [ statement ]
+                    // An instance with no members, such as the prelude's `use Memory()`, binds nothing at run time.
+                    let noMembers =
+                        match value.Kind with
+                        | RecordExpr []
+                        | FunctionCall(_, _, [])
+                        | FunctionCall(_, _, [ Kind (RecordExpr []) ]) -> true
+                        | _ -> false
+                    if bindings.IsEmpty && noMembers then []
+                    elif bindings.IsEmpty then [ statement ]
                     else
                         let locals =
                             bindings

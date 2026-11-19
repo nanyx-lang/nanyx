@@ -12,7 +12,7 @@ let private tx = """
 scoped context Tx = private ()
 type Cursor = [Tx] protected (row: int)
 def open: [Tx] int -> Cursor = { r -> Cursor(row = r) }
-def transaction: [c] ([Tx, c] () -> a) -> a = { block -> block() }
+def transaction: [c] ([Tx, c] () -> a) -> a = { block -> use Tx() in block() }
 """
 
 /// The code of each diagnostic `source` compiles to, with the text it is reported at.
@@ -29,13 +29,34 @@ def f: () -> Cursor = { open(1) }
     Assert.Equal<(string * string) list>([ DiagnosticCodes.UndeclaredContext.Code, "open" ], errors)
 
 [<Fact>]
-let ``A def that writes the scoped context, or supplies it to what it is given, can`` () =
+let ``A def that writes the scoped context, or loads an instance of it with use, can`` () =
     let source = tx + """
 def f: [Tx] () -> Cursor = { open(1) }
-def run: [c] ([Tx, c] () -> a) -> a = { block -> block() }
+def run: [c] ([Tx, c] () -> a) -> a = { block -> use Tx() in block() }
 def row = transaction { open(2).row }
 """
     compileClean (source.ReplaceLineEndings "\n") |> ignore
+
+[<Fact>]
+let ``A def cannot call a parameter that requires a scoped context without supplying it`` () =
+    let source = """
+module foos
+
+scoped export context Foo = private ()
+
+export def withFoo: ([Foo] () -> ()) -> () = { f ->
+  f()
+}
+"""
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.UndeclaredContext.Code, "f" ], errorsOf source)
+
+[<Fact>]
+let ``A parameter that requires a scoped context can be called inside a lambda, which requires the context in turn`` () =
+    let source = tx + """
+def later: ([Tx] () -> int) -> [Tx] () -> int = { f -> { f() } }
+"""
+    let typed = compileClean (source.ReplaceLineEndings "\n")
+    Assert.Equal("([Tx] () -> int) -> ([Tx] () -> int)", Unifier.tyToString typed.Types.["later"])
 
 [<Fact>]
 let ``A def that writes no type is inferred to require the scoped context, and its callers are checked`` () =

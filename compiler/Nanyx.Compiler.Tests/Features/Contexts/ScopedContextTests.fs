@@ -59,7 +59,7 @@ let ``Calls in one block that require a scoped context require the block's, once
     let typed = compileClean ("""
 scoped context Tx = private ()
 
-def transaction: [c] ([Tx, c] () -> a) -> a = { block -> block() }
+def transaction: [c] ([Tx, c] () -> a) -> a = { block -> use Tx() in block() }
 def step: [Tx] int -> int = { n -> n + 1 }
 
 def twice: [Console] () -> () = { println(transaction { step(step(1)) }) }

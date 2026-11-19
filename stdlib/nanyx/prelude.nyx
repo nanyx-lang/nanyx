@@ -50,5 +50,5 @@ scoped export context Memory = protected ()
   name its `Memory`, `memory { context m -> ... }`, and `use m` in an inner block makes the cells after it belong
   to this one.
 export def memory: [c] ([Memory, c] () -> a) -> a = { block ->
-  block()
+  use Memory() in block()
 }
