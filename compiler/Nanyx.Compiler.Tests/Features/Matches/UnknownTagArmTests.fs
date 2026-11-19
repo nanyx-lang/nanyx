@@ -50,7 +50,7 @@ def r =
     | #c -> 1"""
     let code, message, text = onlyDiagnostic source
     Assert.Equal("NYX0201", code)
-    Assert.StartsWith("This arm can never match: the value is a 'T', whose tags are #a and #b, so it has no #c", message)
+    Assert.StartsWith("This arm can never match: the value is a '#a(int) | #b', whose tags are #a and #b, so it has no #c", message)
     Assert.Equal("#c", text)
 
 [<Fact>]
@@ -91,3 +91,17 @@ let ``A match on an open union accepts an arm for a tag it doesn't name`` () =
 def one = g(#nothing)
 def two = g(#some(2))""")
     Assert.Empty(result.Diagnostics)
+
+[<Fact>]
+let ``A match on a value inferred as a single tag accepts an arm for another tag`` () =
+    let source =
+        withFinalNewline """def simple = #nil
+
+def check =
+  match simple
+    | #nil -> "empty"
+    | #some(x) -> "has value"
+    | _ -> "other"
+
+println(check)"""
+    Assert.Empty((Compiler.compile source).Diagnostics)

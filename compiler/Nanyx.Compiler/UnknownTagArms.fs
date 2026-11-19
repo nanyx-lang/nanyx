@@ -11,13 +11,13 @@ module internal UnknownTagArms =
         | TyAlias(_, _, underlying) -> unwrap underlying
         | _ -> ty
 
-    /// The tags of `ty` with their payloads, in the order it names them, if it is a closed union of tags or a single
-    /// tag. A union with a rest, or anything else, can have any tag.
+    /// The tags of `ty` with their payloads, in the order it names them, if it is a closed union of tags. A union
+    /// with a rest can have any tag. So can a single tag, as far as this check goes: it is often the type inferred
+    /// for one value (`def simple = #nil`), and a match on that is written for the union it stands in for.
     let private closedTags (ty: Ty) : (string * Ty option) list option =
         match unwrap ty with
-        | TyUnion items when not items.IsEmpty && items |> List.forall (function TyTag _ -> true | _ -> false) ->
+        | TyUnion items when items.Length > 1 && items |> List.forall (function TyTag _ -> true | _ -> false) ->
             items |> List.choose (function TyTag(name, payload) -> Some (name, payload) | _ -> None) |> Some
-        | TyTag(name, payload) -> Some [ name, payload ]
         | _ -> None
 
     /// The span of the tag's name at the start of a tag pattern written at `span`, `#` included.
