@@ -72,6 +72,17 @@ module internal ArithmeticOperators =
     /// own variable, as in `1.0 / 0.0`, are whatever number the code around them settles (see `NumericLiterals`), and so
     /// are operands of a type still a variable elsewhere, which the rest of the def may settle (`awaitOperand`).
     /// Otherwise the operands are the number `numberTy`, `int` or `float`.
+    /// The built-in operators work on `int`, `float` and the sized numbers. An operation is on the type of whichever
+    /// operand is already known to be one of the others, and defaults to `int` otherwise. (Ordering is
+    /// `OrderingOperators`'.)
+    let numericOperandType (state: InferState) (leftTy: Ty) (rightTy: Ty) =
+        let known ty =
+            match Unifier.unalias (resolveSoFar state ty) with
+            | TyPrimitive "float"
+            | SizedNumberType _ as number -> Some number
+            | _ -> None
+        known leftTy |> Option.orElse (known rightTy) |> Option.defaultValue TypeResolution.numericType
+
     let check (state: InferState) (expr: Expression) (op: string) (leftTy: Ty) (rightTy: Ty) (numberTy: Ty) : Result<InferState, Diagnostic list> =
         let tys = [ leftTy; rightTy ] |> List.map (resolveSoFar state)
         let declaredVar = tys |> List.tryPick (function TyVar({ Name = Some _ } as v) -> Some v | _ -> None)

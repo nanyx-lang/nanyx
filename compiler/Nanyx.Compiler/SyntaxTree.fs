@@ -266,6 +266,10 @@ module SyntaxTree =
     let operatorFunction (op: string) =
         if op = ArithmeticOperators.power then Some ArithmeticOperators.powerFunction else CompositionOperators.functionFor op
 
+    /// Where the name of a call, pipe or member access is written (`spanOpt`), or the whole expression if not known.
+    let nameSpan (spanOpt: SourceSpan option) (expr: Expression) : SourceSpan =
+        spanOpt |> Option.defaultValue expr.Span
+
     /// The dotted name `expr` is written as, when it is a name or a chain of member accesses on one: `t.Encoder.string`.
     let rec dottedName (expr: Expression) : string option =
         match expr.Kind with
