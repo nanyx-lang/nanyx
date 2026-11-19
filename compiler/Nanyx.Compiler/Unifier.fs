@@ -539,6 +539,15 @@ module Unifier =
             let var = TyVar (TyVar.ordinary nextRestId None)
             nextRestId <- nextRestId + 1
             var
+        // Whether `attempt`, a trial of more solving, succeeds, leaving this solve's state as it was before it: a trial
+        // must not show in the order the constraints were solved, nor take the made-up rests the solving goes on with.
+        let fitsWithoutEffect (attempt: unit -> Result<'a, 'b>) =
+            let taken, putOffBefore, nextBefore = restTaken, putOff, nextRestId
+            let fits = (attempt ()).IsOk
+            restTaken <- taken
+            putOff <- putOffBefore
+            nextRestId <- nextBefore
+            fits
         // A tag's payload that is a closed union, open to more tags through a rest made up for it (#679).
         let openedPayload (payload: Ty) =
             match payload, parseTagsOf payload with
@@ -964,12 +973,7 @@ module Unifier =
                         // nothing the solving goes on with.
                         | other, RecursiveNominals.Nominal(nominal, _, underlying, isPrivate) when
                             not (match other with TyNominal _ -> true | _ -> false)
-                            && (let taken, putOffBefore, nextBefore = restTaken, putOff, nextRestId
-                                let fits = (loop subst [ (other, underlying, Assignable, origin) ]).IsOk
-                                restTaken <- taken
-                                putOff <- putOffBefore
-                                nextRestId <- nextBefore
-                                fits) ->
+                            && fitsWithoutEffect (fun () -> loop subst [ (other, underlying, Assignable, origin) ]) ->
                             Error (mismatchMessage l r, origin, NominalShape(nominal, isPrivate, underlying))
                         | TyNominal(_, _, _, true), _
                         | _, TyNominal(_, _, _, true) ->
