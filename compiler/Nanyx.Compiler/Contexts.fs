@@ -37,7 +37,7 @@ let internal checkMemberRequirements (state: InferState) (typeOpt: TypeExpr opti
 /// (see `ScopedCalls`), and `HostRuntime`, which the toolchain gives a host, is checked by `Hosts`.
 let private isMemberless (info: TypeDefInfo) =
     info.IsContext && info.IsNominal && info.Members.IsEmpty && info.Parameters.IsEmpty && not info.IsScoped
-    && info.Home <> StandardLibraryModule "host.runtime"
+    && info.Home <> StandardLibraryModule ModuleOrigin.hostRuntimeName
 
 /// `env` where an instance of `info` is supplied, if it is a context with no members (#1479): `TypeEnv.Supplied` holds it.
 let private withSupplied (info: TypeDefInfo) (env: TypeEnv) : TypeEnv =
