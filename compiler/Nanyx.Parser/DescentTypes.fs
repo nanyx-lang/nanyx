@@ -307,7 +307,7 @@ and private bar (c: Cursor) =
     let token = c.Expect Bar
     c.NoteDocumentable token.Start c.Start
 
-and private typeUnion (c: Cursor) =
+and internal typeUnion (c: Cursor) =
     let start = c.Start
     if c.Is Bar then bar c
     sepBy1 c (fun () -> typeIntersection c) (fun () -> if across c Bar None then bar c else raise NoMatch)

@@ -28,14 +28,19 @@ type Cursor(file: string, source: string, laid: Laid array) =
     let mutable pending: (Identifier * SourceSpan) list = []
     // Where the text of each string literal read so far is, most recent first, as `ParseState.StringTexts` keeps it.
     let mutable stringTexts: (int * int) list = []
+    // Where the argument a shorthand lambda's body leaves out is made up, as `ParseState.ImplicitArgumentNext` keeps it.
+    let mutable implicitArgumentNext: SourceSpan option = None
 
     member _.Source = source
     member _.Index
         with get () = index
         and set value = index <- value
 
-    /// The item at `offset` from the cursor, a code token or a layout token.
-    member _.At(offset: int) = if index + offset < laid.Length then laid[index + offset] else laid[laid.Length - 1]
+    /// The item at `offset` from the cursor, a code token or a layout token. Before the first there is a line break.
+    member _.At(offset: int) =
+        if index + offset < 0 then Newline 0
+        elif index + offset < laid.Length then laid[index + offset]
+        else laid[laid.Length - 1]
 
     /// The next code token, if the cursor is at one, not at a layout token.
     member this.Token =
@@ -128,6 +133,7 @@ type Cursor(file: string, source: string, laid: Laid array) =
     member _.Attempt(read: unit -> 'a) : 'a option =
         let start = index
         let declaredBefore, documentableBefore, pendingBefore, stringTextsBefore = declared, documentable, pending, stringTexts
+        let implicitBefore = implicitArgumentNext
         try
             Some(read ())
         with NoMatch ->
@@ -136,9 +142,16 @@ type Cursor(file: string, source: string, laid: Laid array) =
             documentable <- documentableBefore
             pending <- pendingBefore
             stringTexts <- stringTextsBefore
+            implicitArgumentNext <- implicitBefore
             None
 
     member _.Declared = declared
+
+    /// Where the argument a shorthand lambda's body leaves out is made up, until its first operand takes it (see
+    /// `Expressions.implicitArgumentOperand`): the operator or `.` written in its place.
+    member _.ImplicitArgumentNext
+        with get () = implicitArgumentNext
+        and set value = implicitArgumentNext <- value
     member _.StringTexts = stringTexts
 
     /// Notes `name`, written at `span`, as declared by the construct being read (see `ParseState.noteName`).

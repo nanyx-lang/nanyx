@@ -197,11 +197,16 @@ let ``The recursive-descent parser reads every expression it reads as the FParse
             | _ -> None)
     Assert.True(outcomes.Length > 15000, $"Only {outcomes.Length} expressions are compared")
     Assert.True(differing.Length = 0, $"{differing.Length} of {outcomes.Length} expressions differ:\n\n" + (differing |> Array.truncate 5 |> String.concat "\n\n"))
-    // It gives up only at what comes with blocks and statements, which it doesn't read yet.
+    // It gives up only at what comes with the keyword-led expressions and the statements they go with, which it
+    // doesn't read yet, and at what the FParsec parser reads only to report it.
     let laterParts =
-        set [ "a lambda"; "a call with a trailing lambda"; "a pipe with a trailing lambda"; "a table literal"
-              "a workflow keyword with `!`"; "`except`, whose arms the descent parser doesn't read yet"
-              "a `\\match`, whose arms the descent parser doesn't read yet" ]
-    let isLater (reason: string) = laterParts.Contains reason || reason.EndsWith "`, which starts what the descent parser doesn't read yet"
+        set [ "a lambda of match arms"; "a table literal"; "a workflow keyword with `!`"; "a destructuring def"
+              "`except`, whose arms the descent parser doesn't read yet"; "a `\\match`, whose arms the descent parser doesn't read yet"
+              "a lambda that names its context's instance"; "a lambda's result type"; "an attribute statement"
+              "a hole that doesn't read, which the FParsec parser reads as text" ]
+    let isLater (reason: string) =
+        laterParts.Contains reason
+        || reason.EndsWith "`, which starts what the descent parser doesn't read yet"
+        || reason.EndsWith " statement, which the descent parser doesn't read yet"
     let gaveUp = outcomes |> Array.choose (function _, DescentCheck.GaveUp reason -> Some reason | _ -> None) |> Array.distinct |> Array.sort
     Assert.Equal<string array>([||], gaveUp |> Array.filter (isLater >> not))
