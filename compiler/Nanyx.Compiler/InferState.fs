@@ -488,9 +488,14 @@ let emptyState =
             ContextNames = Map.empty;
             OpenedPackages = Map.empty }
 
+/// A new type variable, and `state` with it taken.
+let internal freshTyVar (state: InferState) : TyVar * InferState =
+    TyVar.ordinary state.NextId None, { state with NextId = state.NextId + 1 }
+
+/// A new type variable as a type (see `freshTyVar`), and `state` with it taken.
 let internal freshVar (state: InferState) =
-    let var = TyVar.ordinary state.NextId None
-    TyVar var, { state with NextId = state.NextId + 1 }
+    let var, next = freshTyVar state
+    TyVar var, next
 
 /// The scope of the scoped context `context` the signature being read writes, shared by every one of that name in it:
 /// the one it already has, or a new one (see `TyVarKind.SignatureScope`).
