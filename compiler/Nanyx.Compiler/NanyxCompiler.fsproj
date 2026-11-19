@@ -24,6 +24,7 @@
     <Compile Include="FunctionContexts.fs" />
     <Compile Include="RecursiveNominals.fs" />
     <Compile Include="Seqs.fs" />
+    <Compile Include="TypePrinting.fs" />
     <Compile Include="Unifier.fs" />
     <Compile Include="Solving.fs" />
     <Compile Include="Lists.fs" />
