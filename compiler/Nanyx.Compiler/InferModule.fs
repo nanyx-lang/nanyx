@@ -171,9 +171,25 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     // `inDependencyOrder`), so an annotation or another type can name a type declared further down.
     // A block the file imports (`import money`) brings its exports in under other names: each is bound wherever the
     // definition it stands for is, so it has the same type and refers to the same symbol.
-    let blockImported = blockImports state.ModuleBlocks module'
-    let aliases = blockImported |> List.collect (blockAliases state.ModuleBlocks module') |> Map.ofList
+    // A block can re-export another file's module, whose names are bound here already, by its imports.
+    let importedBy (item: ImportItem) =
+        let brought = state.ImportSites |> Map.filter (fun _ sites -> sites |> List.contains item.Span)
+        let values = env.Names |> Map.toList |> List.choose (fun (name, scheme) -> scheme.Symbol |> Option.filter brought.ContainsKey |> Option.map (fun _ -> name))
+        let types = state.TypeDefs |> Map.toList |> List.choose (fun (name, info) -> info.Symbol |> Option.filter brought.ContainsKey |> Option.map (fun _ -> name))
+        values @ types
+    let blockImported =
+        blockImports state.ModuleBlocks module'
+        |> List.map (fun blockImport -> { blockImport with Names = blockAliases state.ModuleBlocks module' importedBy blockImport |> Map.ofList })
+    errors <- errors @ (blockImported |> List.collect (unexportedBlockSelections state.ModuleBlocks module' importedBy))
+    let aliases = blockImported |> List.fold (fun acc blockImport -> Map.fold (fun acc alias qualified -> Map.add alias qualified acc) acc blockImport.Names) Map.empty
     state <- { state with BlockImports = blockImported; BlockAliases = aliases }
+    // A name that stands for another file's definition, which a block re-exports, is bound to it as the import is.
+    env <-
+        aliases
+        |> Map.fold (fun acc alias qualified ->
+            match TypeEnv.tryFind qualified initialEnv with
+            | Some scheme when alias <> qualified -> TypeEnv.declare alias scheme.Symbol scheme acc
+            | _ -> acc) env
     let aliasesOf =
         aliases |> Map.toList |> List.groupBy snd |> List.map (fun (qualified, pairs) -> qualified, List.map fst pairs) |> Map.ofList
     let declareTopLevel (name: string) symbol scheme (env: TypeEnv) =

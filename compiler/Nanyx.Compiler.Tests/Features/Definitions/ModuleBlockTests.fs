@@ -141,3 +141,36 @@ def t: int = total
 def s: int = tally.steps.step
 """
     Assert.Empty(codesAt source)
+
+/// A block `outer` that re-exports the block nested in it and a selection of another file's module.
+let private reExportingBlock =
+    normalized """module outer =
+  export inner
+  export util (double)
+
+  module inner =
+    export def inc: int -> int = { x -> x + 1 }
+
+  export def twice: int -> int = { x -> double(inc(x)) }
+
+"""
+
+let private utilModule = [ "util.nyx", "module util\n\nexport def double: int -> int = { x -> x * 2 }\nexport def triple: int -> int = { x -> x * 3 }\n" ]
+
+[<Fact>]
+let ``A module block's import brings in what the block re-exports, of a nested block and of another file's module`` () =
+    let result = compileImportingAll utilModule (reExportingBlock + "import outer\n\ndef value = twice(inc(1)) + double(2)\n")
+    Assert.Empty(result.Diagnostics)
+
+[<Fact>]
+let ``What a module block re-exports of another file's module is not imported outside it unless the block is`` () =
+    let source = reExportingBlock + "def value = double(2)\n"
+    let diagnostic = Assert.Single((compileImportingAll utilModule source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.OutsideModuleBlock.Code, diagnostic.Code)
+
+[<Fact>]
+let ``A module block's import that selects names brings in only those`` () =
+    Assert.Empty(codesAt (moneyBlock + "import money as (zero)\n\ndef value = zero\n"))
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.NotExported.Code, "Coin"; DiagnosticCodes.UnknownFunction.Code, "Money.new" ],
+        codesAt (moneyBlock + "import money as (Coin, zero)\n\ndef price = Money.new(1)\n"))

@@ -75,6 +75,9 @@ type internal CheckedModule =
       /// What the module re-exports (`export m (a, b)`), each with the module it re-exports from, for its importers to
       /// import too.
       ReExports: ReExported list
+      /// The names it gives its importers from its own `module name =` blocks, by re-exporting them at its top level
+      /// (`export shapes`), each with the definition or type of the block it stands for: `area` for `shapes.area`.
+      BlockReExports: (string * string) list
       /// The kinds of the workflow keywords its context declarations mark with `@customKeywordType`, and those of the
       /// modules it re-exports from, by the member's name: how its importers desugar them (see `WorkflowDesugaring`).
       KeywordKinds: Map<Identifier, KeywordKind> }

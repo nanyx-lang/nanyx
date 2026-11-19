@@ -100,7 +100,12 @@ type BlockImport =
       /// The block's full name, which its definitions are qualified with: `money`, or `app.money` in `module app`.
       Prefix: string
       /// Where the block is written.
-      Block: SourceSpan }
+      Block: SourceSpan
+      /// Whether it is a re-export, `export money`, which imports the block too.
+      IsReExport: bool
+      /// The names it brings in, each with the name of the definition or type it stands for (see
+      /// `Visibility.blockAliases`): none until inference finds them.
+      Names: Map<string, string> }
 
 /// An unannotated local def whose value is being inferred, which may call itself (see `LambdaContexts.enterSelf`).
 type SelfDef =
@@ -301,6 +306,10 @@ type InferState =
             /// The names a block import brings in, each with the qualified name of the definition or type it stands
             /// for: `zero` (or `m.zero`, under `as m`) for `money.zero`.
             BlockAliases: Map<string, string>;
+            /// The names imports bring in that a module gives from its own blocks (see `CheckedModule.BlockReExports`),
+            /// as written (`area`, or `g.area` under `as g`), each with the symbol of the definition it stands for and
+            /// the name that definition is inlined under.
+            ImportedBlockNames: Map<string, SymbolId * string>;
             /// The imports each imported definition is brought in by, as where they are written: a `module name =`
             /// block's imports are its own. An import the compiler made up (the prelude's) has no place.
             ImportSites: Map<SymbolId, SourceSpan list>;
@@ -457,6 +466,7 @@ let emptyState =
             Origin = SourceSpan.none;
             BlockImports = [];
             BlockAliases = Map.empty;
+            ImportedBlockNames = Map.empty;
             ImportSites = Map.empty;
             ContextInstances = Map.empty;
             AssociatedArguments = Map.empty;

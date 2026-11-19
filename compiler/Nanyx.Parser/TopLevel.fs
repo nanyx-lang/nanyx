@@ -211,6 +211,7 @@ let private moduleBlockItem: Parser<TopLevelItem, ParseState> =
     choice [
         attempt nestedModuleBlock
         importLine
+        reExportLine
         attributeItem
         topLevelUse
         attempt typeDef

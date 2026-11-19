@@ -187,3 +187,79 @@ let ``Re-exporting a name the module does not export is an error at the name`` (
     Assert.Equal(DiagnosticCodes.NotExported.Code, diagnostic.Code)
     Assert.Equal("'util' does not export 'quadruple'", diagnostic.Message)
     Assert.Equal("quadruple", textAt source diagnostic.Span.Value)
+/// `geo`, which re-exports its own `shapes` block whole, and `sel`, which re-exports one name of its `shapes`.
+let private blockModules =
+    [ "geo.nyx",
+      """
+module geo
+
+export shapes
+
+module shapes =
+  export type Shape = (width: int, height: int)
+  export def area: Shape -> int = { s -> s.width * s.height }
+  export def square: int -> Shape = { n -> Shape(width = n, height = n) }
+  def unit: int = 1
+
+export def twice: int -> int = { n -> 2 * area(square(n)) }
+"""
+      "sel.nyx",
+      """
+module sel
+
+export shapes (area)
+
+module shapes =
+  export def area: int -> int = { n -> n * n }
+  export def side: int -> int = { n -> n }
+""" ]
+    |> List.map (fun (file, text) -> file, text.ReplaceLineEndings "\n")
+
+[<Fact>]
+let ``An importer of a module gets what it re-exports of its own block, unqualified`` () =
+    clean (compileImportingAll blockModules "module main\nimport geo\ndef s: Shape = Shape(width = 1, height = 2)\ndef value = area(s) + area(square(2)) + twice(1)")
+
+[<Fact>]
+let ``What a module re-exports of its own block is under the alias it is imported with, and can be selected`` () =
+    clean (compileImportingAll blockModules "module main\nimport geo as g\ndef value = g.area(g.square(2))")
+    clean (compileImportingAll blockModules "module main\nimport geo as (area, square)\ndef value = area(square(2))")
+
+[<Fact>]
+let ``A re-export of a block that selects names gives only those`` () =
+    clean (compileImportingAll blockModules "module main\nimport sel\ndef value = area(2)")
+    let diagnostic = Assert.Single((compileImportingAll blockModules "module main\nimport sel\ndef value = side(2)").Diagnostics)
+    Assert.Equal(DiagnosticCodes.UnknownFunction.Code, diagnostic.Code)
+
+[<Fact>]
+let ``A name a module re-exports of its own block refers to the definition in the block`` () =
+    let source = "module main\nimport geo\ndef value = area(square(2))"
+    let result = compileImportingAll blockModules source
+    clean result
+    let typed = result.Typed.Value
+    let declared =
+        typed.References
+        |> Map.values
+        |> Seq.choose (fun id -> typed.Symbols |> Map.tryFind id)
+        |> Seq.find (fun symbol -> symbol.Name = "geo.shapes.area")
+    Assert.EndsWith("geo.nyx", declared.Declaration.File)
+    let geo = snd blockModules.[0]
+    Assert.Equal("area", geo.Substring(declared.Declaration.Start, declared.Declaration.End - declared.Declaration.Start))
+    Assert.True(declared.Declaration.Start > geo.IndexOf "module shapes =")
+
+[<Fact>]
+let ``A re-export of a block that does not export a name it selects is an error at the name`` () =
+    let source = "module main\n\nexport shapes (volume)\n\nmodule shapes =\n  export def area: int = 1\n"
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.NotExported.Code, diagnostic.Code)
+    Assert.Equal("'shapes' does not export 'volume'", diagnostic.Message)
+    Assert.Equal("volume", textAt source diagnostic.Span.Value)
+
+[<Fact>]
+let ``A whole re-export of a block that gives a name the module defines itself is a clash`` () =
+    let source = "module main\n\nexport shapes\n\nmodule shapes =\n  export def area: int = 1\n  export def side: int = 2\n\nexport def area: int = 3\n"
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.ReExportClash.Code, diagnostic.Code)
+    Assert.Equal("'area' is re-exported from 'shapes', but this module defines 'area' too", diagnostic.Message)
+    Assert.Equal("shapes", textAt source diagnostic.Span.Value)
+    let fix = Assert.Single diagnostic.Fixes
+    Assert.StartsWith("module main\n\nexport shapes (side)\n", applyEdits source fix.Edits)

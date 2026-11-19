@@ -342,7 +342,7 @@ module Compiler =
         // An import that selects such a context selects its members too.
         let contextOfMember = hostMembers |> List.map (fun (context, (name, _, _)) -> name, context) |> Map.ofList
         let hostMembers = hostMembers |> List.map snd
-        let exportedValues = SyntaxTree.exportedValueNames imported.Own |> Set.union (hostMembers |> List.map (fun (name, _, _) -> name) |> Set.ofList)
+        let exportedValues = ModuleLinking.exportedValues imported |> Set.union (hostMembers |> List.map (fun (name, _, _) -> name) |> Set.ofList)
         // An import brings in every export, or only those it selects.
         let selected = item.Selection |> Option.map (ModuleLinking.selectedExports imported)
         let isSelected (name: string) =
@@ -362,13 +362,13 @@ module Compiler =
                     else acc |> Map.add name (sources @ [ importedKey, moduleName ])) merged.UnqualifiedSources
             else
                 merged.UnqualifiedSources
-        let exportedTypes = ModuleLinking.exportedTypeNames imported.Own
+        let exportedTypes = ModuleLinking.exportedTypes imported
         let exportedValueTypes =
             hostMembers
-            |> List.fold (fun acc (name, ty, _) -> acc |> Map.add name ty) (imported.Typed.Types |> Map.filter (fun name _ -> exportedValues.Contains name))
+            |> List.fold (fun acc (name, ty, _) -> acc |> Map.add name ty) (ModuleLinking.withBlockReExports imported imported.Typed.Types |> Map.filter (fun name _ -> exportedValues.Contains name))
         let exportedTypeDefs =
-            imported.Typed.TypeDefs |> Map.filter (fun name _ -> exportedTypes.Contains name)
-        let exports = hostMembers |> List.fold (fun acc (name, _, symbol) -> acc |> Map.add name symbol) imported.Exports
+            ModuleLinking.withBlockReExports imported imported.Typed.TypeDefs |> Map.filter (fun name _ -> exportedTypes.Contains name)
+        let exports = hostMembers |> List.fold (fun acc (name, _, symbol) -> acc |> Map.add name symbol) (ModuleLinking.withBlockReExports imported imported.Exports)
         // The exported definitions, declared in the imported module's file.
         let exportedSymbols =
             exports
@@ -434,11 +434,11 @@ module Compiler =
                 Set.union (state.HiddenTypeNames - Set.ofSeq visible.Keys) hidden
         // A function that requires a context requires it wherever it is called, under the name it is imported as.
         let contextRequirements =
-            imported.ContextRequirements
+            ModuleLinking.withBlockReExports imported imported.ContextRequirements
             |> Map.filter (fun name _ -> isSelected name)
             |> Map.fold (fun acc name contexts -> acc |> Map.add (ModuleLinking.importedName qualifier name) contexts) state.ContextRequirements
         let contextSignatures =
-            imported.ContextSignatures
+            ModuleLinking.withBlockReExports imported imported.ContextSignatures
             |> Map.filter (fun name _ -> isSelected name)
             |> Map.fold (fun acc name signature -> acc |> Map.add (ModuleLinking.importedName qualifier name) signature) state.ContextSignatures
         let typeDefs = ModuleLinking.mergeTypeDefs typeDefs exportedTypeDefs
@@ -509,6 +509,16 @@ module Compiler =
                         acc |> Map.add id (item.Span :: (acc |> Map.tryFind id |> Option.defaultValue []))) state.ImportSites
                 ContextRequirements = contextRequirements
                 ContextSignatures = contextSignatures
+                ImportedBlockNames =
+                    imported.BlockReExports
+                    |> List.filter (fun (name, _) -> isSelected name)
+                    |> List.fold (fun acc (name, target) ->
+                        let written = ModuleLinking.importedName qualifier name
+                        match imported.Exports |> Map.tryFind target, imported.Typed.TypeDefs |> Map.tryFind target |> Option.bind _.Symbol with
+                        | Some symbol, _ -> acc |> Map.add written (symbol.Id, ModuleLinking.inlinedName item imported target)
+                        // A type is inlined under its own name.
+                        | None, Some symbol -> acc |> Map.add written (symbol, target)
+                        | None, None -> acc) state.ImportedBlockNames
                 // A call to an imported function checks what it compares the rests of its unions with as a
                 // call to one of the module's own does.
                 CheckedRests =
@@ -713,7 +723,9 @@ module Compiler =
                   ImportedFiles = Map.empty
                   ReExports = []
                   Merged = Set.empty }
-            let reExportItems = ModuleLinking.reExportsOf desugared
+            // A re-export written in a block counts for the block's exports, not the file's (see `Visibility.blockExports`).
+            let reExportItems =
+                ModuleLinking.reExportsOf desugared |> List.filter (fun item -> (NyxCompiler.InferState.blockAround moduleBlocks item.Span).IsNone)
             let merged =
                 imports
                 |> List.fold (fun (merged: MergedImports) item ->
@@ -840,7 +852,28 @@ module Compiler =
                     match script, runtimeErrors with
                     | Some _, _ :: _ -> mismatchErrors |> List.filter (fun diagnostic -> not (diagnostic.Code = DiagnosticCodes.ContextsNotAllowed.Code && diagnostic.Span.IsNone))
                     | _ -> mismatchErrors
-                let moduleErrors = nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
+                // What the file gives from its own blocks by re-exporting them, and what those blocks re-export of other
+                // files' modules, which is a re-export of each of those that selects what the block gives of it.
+                let blockReExports = ModuleLinking.blockReExports state desugared
+                let blockModuleReExports =
+                    blockReExports
+                    |> List.collect (fun (blockImport, own) ->
+                        let ownNames = own |> List.map fst |> Set.ofList
+                        let given = blockImport.Names.Keys |> Seq.filter (ownNames.Contains >> not) |> Set.ofSeq
+                        Visibility.moduleReExportsIn moduleBlocks desugared blockImport
+                        |> List.choose (fun reExported ->
+                            match importModule reExported with
+                            | Ok (reExportedOrigin, imported) ->
+                                let reExport = { Origin = reExportedOrigin; Item = reExported; Module = imported }
+                                match (ModuleLinking.reExportSources reExport).Keys |> Seq.filter given.Contains |> List.ofSeq with
+                                | [] -> None
+                                | names ->
+                                    let selection = names |> List.map (fun name -> name, blockImport.Import.Span)
+                                    Some { reExport with Item = { reExported with Selection = Some selection; Span = blockImport.Import.Span } }
+                            | Error _ -> None))
+                let blockReExportErrors =
+                    ModuleLinking.blockReExportClashes desugared merged.ReExports (blockReExports |> List.map (fun (blockImport, own) -> blockImport.Import, own))
+                let moduleErrors = blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let defer =
                     if moduleErrors.IsEmpty then fun expr -> expr, []
@@ -962,9 +995,10 @@ module Compiler =
                         |> Set.union state.CarriedAmbientContexts
                         |> Seq.choose (fun name -> state.TypeDefs |> Map.tryFind name |> Option.map (fun info -> name, info))
                         |> Map.ofSeq
-                     ReExports = merged.ReExports
+                     ReExports = merged.ReExports @ blockModuleReExports
+                     BlockReExports = blockReExports |> List.collect snd
                      KeywordKinds =
-                        merged.ReExports
+                        merged.ReExports @ blockModuleReExports
                         |> List.fold (fun kinds reExported -> Attributes.withKeywordKinds reExported.Module.KeywordKinds kinds) Map.empty
                         |> Attributes.withKeywordKinds (Attributes.keywordKinds desugared) }
 
