@@ -31,7 +31,8 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   the offset it starts at, keeping only the items that start their line and the groups of two items or more. A few
   pieces differ on purpose, each listed with why in the test: where the two read text differently is listed in
   [The parser](../work-in-progress/parser) in Work in progress.
-- **The recursive-descent parser** (`DescentCursor.fs` and a file per part of the grammar, so far `DescentTypes.fs`):
+- **The recursive-descent parser** (`DescentCursor.fs` and a file per part of the grammar, so far `DescentTypes.fs`,
+  `DescentLiterals.fs` and `DescentPatterns.fs`):
   the FParsec parser's grammar read from the layout pass's tokens. `DescentCursor` has the cursor, which reads the
   tokens and goes back for an alternative (`NoMatch`, which `Cursor.Attempt` catches, as FParsec's `attempt` and `<|>`
   do), and the names and documentable starts the FParsec parser keeps in `ParseState`. At anything it doesn't read yet,
@@ -40,7 +41,11 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   a `where` constraint). `parseTypeSignature`, which `nanyx search` reads a query's type with, uses it. `CorpusTests.fs`
   checks it against the FParsec parser on every def's annotation and type definition's body in the corpus
   (`DescentCheck.fs` in the corpus project): each must read to the same tree with the same spans, or give up at an
-  expression.
+  expression. It reads literals as the FParsec parser does, with a `+` or `-` written straight before a number as its
+  sign and `1.` as a float, though the lexer reads both apart. It reads patterns, trying the alternatives in the
+  FParsec parser's order, and gives up at one that holds an expression other than a literal (a guard that is a lambda, a
+  custom pattern's arguments). `CorpusTests.fs` checks it on every pattern of every match arm in the corpus, and
+  `DescentPatternTests.fs` on the places where reading one takes care. Nothing reads with it yet but those tests.
 
 # The layout rules
 

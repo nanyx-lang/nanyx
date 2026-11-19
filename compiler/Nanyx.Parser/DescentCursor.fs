@@ -24,6 +24,10 @@ type Cursor(file: string, source: string, laid: Laid array) =
     // The names the nodes declare and where documentable constructs start, as `ParseState` keeps them.
     let mutable declared: DeclaredNames = Map.empty
     let mutable documentable: Map<int, int> = Map.empty
+    // The names noted for a construct not built yet, most recent first, as `ParseState.PendingNames` keeps them.
+    let mutable pending: (Identifier * SourceSpan) list = []
+    // Where the text of each string literal read so far is, most recent first, as `ParseState.StringTexts` keeps it.
+    let mutable stringTexts: (int * int) list = []
 
     member _.Source = source
     member _.Index
@@ -123,16 +127,34 @@ type Cursor(file: string, source: string, laid: Laid array) =
     /// Runs `read`, and if it doesn't match, puts the cursor back and gives `None`, as FParsec's `attempt` does.
     member _.Attempt(read: unit -> 'a) : 'a option =
         let start = index
-        let declaredBefore, documentableBefore = declared, documentable
+        let declaredBefore, documentableBefore, pendingBefore, stringTextsBefore = declared, documentable, pending, stringTexts
         try
             Some(read ())
         with NoMatch ->
             index <- start
             declared <- declaredBefore
             documentable <- documentableBefore
+            pending <- pendingBefore
+            stringTexts <- stringTextsBefore
             None
 
     member _.Declared = declared
+    member _.StringTexts = stringTexts
+
+    /// Notes `name`, written at `span`, as declared by the construct being read (see `ParseState.noteName`).
+    member _.NoteName (name: Identifier) (span: SourceSpan) = pending <- (name, span) :: pending
+
+    /// Notes that the text of a string literal is from `start` to `finish` (see `ParseState.stringText`).
+    member _.NoteStringText (start: int) (finish: int) = stringTexts <- (start, finish) :: stringTexts
+
+    /// Runs `read`, and gives with what it read the names noted while it ran, in the order they are written, which are
+    /// no longer pending (see `ParseState.collectingNames`).
+    member _.Collecting(read: unit -> 'a) : 'a * (Identifier * SourceSpan) list =
+        let before = pending
+        let value = read ()
+        let noted = pending |> List.take (pending.Length - before.Length) |> List.rev
+        pending <- before
+        value, noted
     member _.DocumentableStarts = documentable
 
     /// Records that `holder` declares `names` as `declarer` (see `ParseState.declare`).

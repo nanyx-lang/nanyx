@@ -98,10 +98,16 @@ fallback.
   precedence, then statements and blocks, then top-level definitions, imports and directives.
 - **Each step:** port one area, add it to the new parser, and run the differential test. The share of the corpus the
   new parser handles without falling back goes up with each PR, and is reported in it.
-- **So far:** types (`DescentTypes.fs`), described in [The parser](../compiler-internals/parser) in the Compiler
-  internals section. Each of the 5,900 annotations and type definitions' bodies in the corpus reads to the FParsec
-  parser's tree, but 24 that hold an expression, where it gives up. No whole file is read without the fallback yet: that
-  starts once statements and the top level are read.
+- **So far:** types (`DescentTypes.fs`) and patterns (`DescentLiterals.fs`, `DescentPatterns.fs`), described in
+  [The parser](../compiler-internals/parser) in the Compiler internals section. Each of the 5,900 annotations and type
+  definitions' bodies in the corpus reads to the FParsec parser's tree, but 24 that hold an expression, where it gives
+  up. Of the 3,940 patterns in the corpus's match arms, 3,876 (98%) read to the FParsec parser's tree, and it gives up
+  at the 64 that hold an expression: 47 guards that are lambdas and 17 custom patterns with arguments. No whole file is
+  read without the fallback yet: that starts once statements and the top level are read.
+- **Settled in stage 3 so far:** the lexer's `true` and `false` names, its numbers without a sign, and its `1` and `.`
+  for `1.`, which the descent parser's literals read as the FParsec parser does (`DescentLiterals.fs`). A pattern that
+  is a string with holes is still open: the FParsec parser reads its `{` as text, and the descent parser gives up there,
+  though the corpus has none outside the arms the parser makes up.
 - **Done when** the new parser handles the whole corpus and every parser test with no fallback, and every tree
   matches.
 
