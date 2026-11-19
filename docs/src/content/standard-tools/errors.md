@@ -1093,6 +1093,21 @@ def count: int = "three"  -- error NYX0201: Type mismatch: 'string' vs 'int'
 To fix it, change the value, or the annotation, so that the two types agree. Where the types come from far apart, an
 annotation on a definition in between shows which of them is wrong.
 
+A match arm for a tag that the value's union doesn't have can never match, so it is reported too, with the union's
+tags and the one it most likely means:
+
+```nanyx
+def o: #some(int) | #none = #none
+
+def r =
+  match o
+    | #some(n) -> n
+    | #none -> 0
+    | #nothing -> 2  -- error NYX0201: This arm can never match: the value is a '#some(int) | #none', whose tags are #some and #none, so it has no #nothing: did you mean #none?
+```
+
+A union with a rest, such as `#some(a) | r`, can have any tag, so a match on one accepts an arm for any tag.
+
 # NYX0202: Annotation too general
 
 A definition's annotation promises more than its body gives: it says a type variable could be any type, but the body
