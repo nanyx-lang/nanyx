@@ -324,8 +324,6 @@ def runFrom
 def run: Program, Text, int -> #some(array(int)) | #none = { program, text, start ->
   memory {
     def marks = MArray.init(array.length(program.insts), { _ -> -1 })
-    -- The result's type is written, which the checker needs for now (#2053).
-    def found: #some(array(int)) | #none = runFrom(program, text, marks, start, [], #none)
-    found
+    runFrom(program, text, marks, start, [], #none)
   }
 }

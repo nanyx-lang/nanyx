@@ -85,3 +85,28 @@ def strings = memory {
 """
     let code, _ = singleError (normalized source)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+
+[<Fact>]
+let ``A memory block's unannotated result can be a recursive function's tag union`` () =
+    // `run` in nanyx.regex once needed the block's result bound with its type written to check (#2053).
+    let source =
+        """
+import nanyx/marray
+
+def step: [Memory] MArray(int), int, (#some(array(int)) | #none) -> #some(array(int)) | #none = { marks, pos, found ->
+  if pos >= 3
+    then found
+    else
+      def marked = MArray.set(marks, 0, pos)
+      step(marks, pos + 1, #some(array.init(2, { _ -> pos })))
+}
+
+def run: int -> #some(array(int)) | #none = { start ->
+  memory {
+    def marks = MArray.init(4, { _ -> -1 })
+    step(marks, start, #none)
+  }
+}
+"""
+    let typed = compileClean (normalized source)
+    Assert.Equal("int -> #some(array(int)) | #none", typeIn typed "run")
