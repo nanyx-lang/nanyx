@@ -20,6 +20,7 @@
     <Compile Include="Features\Contexts\ContextNameTests.fs" />
     <Compile Include="Features\Corpus\CorpusTests.fs" />
     <Compile Include="Features\Corpus\DescentPatternTests.fs" />
+    <Compile Include="Features\Corpus\DescentExpressionTests.fs" />
     <Compile Include="Features\CustomPatterns\CustomPatternTests.fs" />
     <Compile Include="Features\Directives\DirectiveTests.fs" />
     <Compile Include="Features\Errors\BracketErrorTests.fs" />

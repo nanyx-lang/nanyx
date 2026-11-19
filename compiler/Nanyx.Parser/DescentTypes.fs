@@ -13,22 +13,8 @@ let private singleOrCombined (c: Cursor) (start: int) (combine: TypeExpr list ->
     | [ single ] -> single
     | multiple -> TypeExpr.at (c.SpanFrom start) (combine multiple)
 
-/// A name, or a name in backticks, written as the code token at the cursor, with the span of what is written. As in
-/// the FParsec parser, a keyword is a name here: a field may be called `type`.
-let private name (c: Cursor) : Identifier * SourceSpan =
-    match c.Token with
-    | Some token when token.Kind = Name || token.Kind = Keyword -> c.Take() |> ignore; c.Text token, c.SpanOf token
-    | Some token when token.Kind = BacktickedName ->
-        let written = c.Text token
-        let inner = written.Substring(1, written.Length - 2)
-        if Names.isReservedOperatorSpelling inner || System.String.IsNullOrWhiteSpace inner then c.GiveUp "a name in backticks that can't be one"
-        c.Take() |> ignore
-        inner, c.SpanOf token
-    | _ -> raise NoMatch
-
 /// An identifier as the FParsec parser reads one, which may be a keyword: `#match` is a tag.
-let private identifier (c: Cursor) =
-    if c.Is Keyword then c.Text(c.Take()) else c.Text(c.Expect Name)
+let private identifier (c: Cursor) = fst (identifierWithSpan c)
 
 /// `.name`, written straight after what is before it.
 let private dotName (c: Cursor) =
