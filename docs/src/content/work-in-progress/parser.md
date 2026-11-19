@@ -115,11 +115,14 @@ fallback.
 
 ## Stage 4: make it the default
 
-`parse` uses the new parser, and the FParsec one stays for a release behind a switch (an environment variable or a
-hidden CLI option), so a regression can be checked against it.
+`parse` uses the new parser alone, and reports mistakes itself; the FParsec one stays for a release behind the
+environment variable `NANYX_PARSER=fparsec` (see [The parser](../compiler-internals/parser)), so a regression can be
+checked against it.
 
-- Tests that assert a parse error's message or position will change, mostly for the better. Each changed
-  expectation is reviewed, not just updated.
+- **Done so far:** the new parser is the default. Where the FParsec parser has a message of its own for a mistake, the
+  new parser gives the same message at the same place; anything else is reported at the furthest point it read to,
+  with what it expected there and what it found, in place of FParsec's "Expecting: ..." lists. Each test whose
+  expected message changed is reviewed, not just updated.
 - **Done when** the new parser is the default and a release has gone out with it.
 
 ## Stage 5: error recovery

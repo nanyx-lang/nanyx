@@ -17,6 +17,40 @@ exception GiveUp of reason: string
 /// `attempt` and `<|>` do. Only the parsers that list the alternatives catch it (see `Cursor.Attempt`).
 exception NoMatch
 
+/// A mistake in the text, reported where it is, with the message the FParsec parser gives for it: reading stops there,
+/// as it does at the FParsec parser's `reportFocused`.
+exception Reported of ParseError
+
+/// How a token reads in a message: its text in backticks, or the end of the file.
+let describeToken (source: string) (token: Token) =
+    match token.Kind with
+    | EndOfFile -> "the end of the file"
+    | StringStart
+    | StringLiteral -> "a string"
+    | Number -> "a number"
+    | _ -> $"`{source.Substring(token.Start, token.End - token.Start)}`"
+
+/// How a token kind reads as what was expected.
+let private describeKind (kind: TokenKind) =
+    match kind with
+    | Name -> "a name"
+    | Number -> "a number"
+    | StringLiteral -> "a string"
+    | LeftParen -> "`(`"
+    | RightParen -> "`)`"
+    | LeftBracket -> "`[`"
+    | RightBracket -> "`]`"
+    | LeftBrace -> "`{`"
+    | RightBrace -> "`}`"
+    | Comma -> "`,`"
+    | Colon -> "`:`"
+    | Equals -> "`=`"
+    | Arrow -> "`->`"
+    | Bar -> "`|`"
+    | Dot -> "`.`"
+    | Hash -> "`#`"
+    | other -> $"{other}"
+
 /// A cursor over `laid`, the layout pass's tokens of `source`, the text of the file at `file`.
 type Cursor(file: string, source: string, laid: Laid array) =
     let lines = LineTable source
@@ -32,6 +66,12 @@ type Cursor(file: string, source: string, laid: Laid array) =
     let mutable implicitArgumentNext: SourceSpan option = None
     // The `module name =` blocks read so far, each with its text, as `ParseState.ModuleBlocks` keeps them.
     let mutable moduleBlocks: (ModuleName * SourceSpan) list = []
+    // The furthest item any reading reached or failed at, and what the readings that failed there expected, for the
+    // message when no reading of the text matches, as FParsec merges its errors at the furthest position.
+    let mutable furthest = 0
+    // How many lambdas the cursor is inside, as `ParseState.LambdaDepth` keeps it.
+    let mutable lambdaDepth = 0
+    let mutable expected: string list = []
 
     member _.Source = source
     member _.Index
@@ -84,12 +124,49 @@ type Cursor(file: string, source: string, laid: Laid array) =
         match this.Token with
         | Some token ->
             index <- index + 1
+            if index > furthest then
+                furthest <- index
+                expected <- []
             token
         | None -> raise NoMatch
 
+    /// Notes that a reading expected `description` at the cursor, for the message if no reading matches.
+    member _.Expecting(description: string) =
+        if index > furthest then
+            furthest <- index
+            expected <- [ description ]
+        elif index = furthest && not (List.contains description expected) then
+            expected <- expected @ [ description ]
+
+    /// Fails to match, noting that `description` was expected at the cursor.
+    member this.Fail(description: string) : 'a =
+        this.Expecting description
+        raise NoMatch
+
     /// Takes the code token at the cursor if it is `kind` (with the text `text`), or fails to match.
     member this.Expect(kind: TokenKind, ?text: string) =
-        if this.Is(kind, ?text = text) then this.Take() else raise NoMatch
+        if this.Is(kind, ?text = text) then this.Take()
+        else this.Fail(match text with Some text -> $"`{text}`" | None -> describeKind kind)
+
+    /// Reports the mistake `message` at `offset` (see `Reported`).
+    member _.Report (offset: int) (message: string) : 'a =
+        raise (Reported { Message = message; Span = lines.Span file offset (min source.Length (offset + 1)) })
+
+    /// The message for text no reading matches: what was found at the furthest item reached, and what was expected
+    /// there, if anything was noted.
+    member _.Unexpected() : ParseError =
+        let at = min furthest (laid.Length - 1)
+        let mutable i = at
+        while i < laid.Length - 1 && (match laid[i] with Code _ -> false | _ -> true) do
+            i <- i + 1
+        let token = match laid[i] with Code token -> token | _ -> { Kind = EndOfFile; Start = source.Length; End = source.Length; Leading = []; Trailing = [] }
+        let found = describeToken source token
+        let message =
+            match expected with
+            | [] -> $"Unexpected {found}"
+            | [ single ] -> $"Expected {single}, found {found}"
+            | several -> $"""Expected {String.concat ", " (List.take (several.Length - 1) several)} or {List.last several}, found {found}"""
+        { Message = message; Span = lines.Span file token.Start (min source.Length (max (token.Start + 1) token.End)) }
 
     /// Takes the code token at the cursor if it is `kind` (with the text `text`), and says whether it did.
     member this.Skip(kind: TokenKind, ?text: string) =
@@ -144,7 +221,7 @@ type Cursor(file: string, source: string, laid: Laid array) =
     member _.Attempt(read: unit -> 'a) : 'a option =
         let start = index
         let declaredBefore, documentableBefore, pendingBefore, stringTextsBefore = declared, documentable, pending, stringTexts
-        let implicitBefore, moduleBlocksBefore = implicitArgumentNext, moduleBlocks
+        let implicitBefore, moduleBlocksBefore, lambdaDepthBefore = implicitArgumentNext, moduleBlocks, lambdaDepth
         try
             Some(read ())
         with NoMatch ->
@@ -155,11 +232,16 @@ type Cursor(file: string, source: string, laid: Laid array) =
             stringTexts <- stringTextsBefore
             implicitArgumentNext <- implicitBefore
             moduleBlocks <- moduleBlocksBefore
+            lambdaDepth <- lambdaDepthBefore
             None
 
     member _.Declared = declared
 
     member _.ModuleBlocks = moduleBlocks
+
+    member _.LambdaDepth
+        with get () = lambdaDepth
+        and set value = lambdaDepth <- value
 
     /// Notes the `module name =` block `name`, whose text is at `span`.
     member _.NoteModuleBlock (name: ModuleName) (span: SourceSpan) = moduleBlocks <- moduleBlocks @ [ name, span ]
@@ -234,7 +316,8 @@ let name (c: Cursor) : Identifier * SourceSpan =
     | Some token when token.Kind = BacktickedName ->
         let written = c.Text token
         let inner = written.Substring(1, written.Length - 2)
-        if Names.isReservedOperatorSpelling inner || String.IsNullOrWhiteSpace inner then c.GiveUp "a name in backticks that can't be one"
+        if Names.isReservedOperatorSpelling inner then c.Report token.Start $"'{inner}' is syntax, not an operator, so it cannot be a name"
+        if String.IsNullOrWhiteSpace inner then c.Report token.Start "A name in backticks cannot be blank"
         c.Take() |> ignore
         inner, c.SpanOf token
     | _ -> identifierWithSpan c
@@ -261,6 +344,49 @@ module Forward =
     /// `yield`, `mut x` and `type T` (`DescentControl.keywordExpression`).
     let keywordExpression: (Cursor -> Expression) ref = ref (unfilled "a keyword's expression")
 
+/// Reports the first backslash in `text`, a double-quoted string's text that starts at `offset`, that isn't an escape,
+/// with the message the FParsec parser gives for it (`Lexical.escapeSequence`).
+let reportBadEscape (c: Cursor) (offset: int) (text: string) : 'a =
+    let mutable i = 0
+    let mutable found = None
+    while found.IsNone && i < text.Length do
+        if text[i] = '\\' then
+            let next = if i + 1 < text.Length then Some text[i + 1] else None
+            let codePoint () =
+                if next = Some 'u' && i + 2 < text.Length && text[i + 2] = '{' then
+                    let close = text.IndexOf('}', i + 3)
+                    if close > 0 then StringEscapes.tryCodePoint (text.Substring(i + 3, close - i - 3)) |> Option.map (fun _ -> close + 1) else None
+                else None
+            match next with
+            | Some n when StringEscapes.simple |> List.exists (fst >> (=) n) -> i <- i + 2
+            | _ ->
+                match codePoint () with
+                | Some after -> i <- after
+                | None ->
+                    let message =
+                        match next with
+                        | Some 'u' -> "`\\u{...}` is a code point in hex, from 0 to 10FFFF, and not a surrogate"
+                        | Some n when not (Char.IsControl n) -> $"`\\{n}` is not an escape"
+                        | _ -> "A backslash on its own is not an escape"
+                    found <- Some(offset + i, message)
+        else i <- i + 1
+    match found with
+    | Some(at, message) ->
+        c.Report at
+            $"{message}: the escapes in a double-quoted string are {StringEscapes.written}, so write a backslash as `\\\\`, or use a single-quoted string, which is raw"
+    | None -> c.GiveUp "a string whose escapes don't decode"
+
+/// Reports a `$` before a type's name at the cursor, the way a nominal type's name was written before `protected`
+/// declared one (`ParseState.typeNameIdentifier`).
+let noDollar (c: Cursor) =
+    if c.Is Dollar then
+        match c.At 1 with
+        | Code next when next.Kind = Name && next.Start = c.Start + 1 ->
+            let name = c.Source.Substring(next.Start, next.End - next.Start)
+            c.Report c.Start
+                $"A type's name is written without a `$`: write `{name}`, and declare a nominal type with `protected` after its `=`, as in `type {name} = protected string`"
+        | _ -> ()
+
 /// Takes `item`s separated by what `separator` takes, at least one, as FParsec's `sepBy1` with an `attempt` around the
 /// separator and the item after it.
 let sepBy1 (cursor: Cursor) (item: unit -> 'a) (separator: unit -> unit) : 'a list =
@@ -286,7 +412,7 @@ let many (cursor: Cursor) (item: unit -> 'a) : 'a list =
 /// A cursor over the layout of `source`, the text of the file at `file`.
 let cursorOf (file: string) (source: string) =
     let lexed = Lexer.lex file source
-    if not lexed.Errors.IsEmpty then raise (GiveUp "the lexer found a mistake")
+    if not lexed.Errors.IsEmpty then raise (Reported lexed.Errors.Head)
     Cursor(file, source, Layout.layout source lexed.Tokens)
 
 /// Puts `cursor` at the code token that starts at `offset`, if there is one.

@@ -20,9 +20,10 @@ common errors offer fixes. What is left:
   always where the conflicting types came from (see [Deferred errors](./deferred-errors#open-questions)).
 - **Field names.** The syntax tree keeps no span for a record field's name, so an error about one is reported at the
   nearest node that has a span.
-- **Syntax errors.** A syntax error the parser has no message of its own for is still FParsec's report
-  ("Expecting: ..."), which the recursive-descent parser ([#846](https://github.com/nanyx-lang/nanyx/issues/846))
-  replaces.
+- **Syntax errors.** A syntax error the parser has no message of its own for says what it expected at the furthest
+  point it read to and what it found there, `Expected `]`, found `xs``. Where several readings failed there, the list
+  of what they expected can be long; error recovery ([#846](https://github.com/nanyx-lang/nanyx/issues/846), stage 5)
+  is where these get better.
 - **Nominal types.** A mismatch with a nominal type outside its module is explained only when the shapes match
   ([#1804](https://github.com/nanyx-lang/nanyx/issues/1804)).
 

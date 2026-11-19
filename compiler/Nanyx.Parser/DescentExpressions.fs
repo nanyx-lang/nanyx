@@ -72,7 +72,7 @@ let private lambdaFollows (c: Cursor) = c.Is LeftBrace && c.OnSameLine
 /// A name qualified with dots written with no spaces, `m.Email.parse`, as `qualifiedIdentifier` reads it, with its span.
 let private qualifiedName (c: Cursor) : Identifier * SourceSpan =
     let start = c.Start
-    if c.Is Dollar then c.GiveUp "a `$` before a type's name, which is a mistake"
+    noDollar c
     let head, _ = name c
     let parts = ResizeArray [ head ]
     while c.Adjacent && c.Is Dot do
@@ -80,6 +80,12 @@ let private qualifiedName (c: Cursor) : Identifier * SourceSpan =
         if not c.Adjacent then raise NoMatch
         parts.Add(fst (name c))
     String.concat "." parts, c.SpanFrom start
+
+/// Skips the layout tokens at the cursor: in brackets, where the FParsec parser's `ws` skips everything, the only ones
+/// are those of a block opened inside them, a lambda's or arms', which may close after a `,` or before the bracket.
+let private skipLayoutTokens (c: Cursor) =
+    while (match c.At 0 with Code _ -> false | _ -> true) do
+        c.Index <- c.Index + 1
 
 /// One expression, or several separated by commas written one per line when the first starts its line (see
 /// `Expressions.byCommaOrLine`).
@@ -90,14 +96,20 @@ let private byCommaOrLine (c: Cursor) (item: unit -> 'a) : 'a list =
     let items = ResizeArray [ item () ]
     let mutable going = true
     while going do
-        if c.Is Comma && c.OnSameLine then
+        let index = c.Index
+        skipLayoutTokens c
+        if c.Is Comma && (c.OnSameLine || index <> c.Index) then
             c.Take() |> ignore
+            skipLayoutTokens c
             items.Add(item ())
         elif firstStartsLine && c.Token.IsSome && not c.OnSameLine && startsLine c && fst (columnAndIndent c.Source c.Start) = firstColumn then
             match c.Attempt item with
             | Some next -> items.Add next
             | None -> going <- false
-        else going <- false
+        else
+            c.Index <- index
+            going <- false
+    skipLayoutTokens c
     List.ofSeq items
 
 /// A lone positional field is its expression, positional fields are a tuple, and a named one makes a record.
@@ -111,10 +123,10 @@ let private fieldsToExpr (fields: RecordField list) (span: SourceSpan) =
 /// A double-quoted string: its text decoded, with each hole's expression, or a literal when it has none.
 let rec private doubleQuoted (c: Cursor) : Expression =
     let start = c.Start
-    let decoded (text: string) =
+    let decoded (offset: int) (text: string) =
         match StringEscapes.decode text with
         | Some value -> value
-        | None -> c.GiveUp "a backslash in a string that isn't an escape"
+        | None -> reportBadEscape c offset text
     let parts = ResizeArray<StringPart>()
     // Each run of text is noted, as `Expressions.interpolatedStringExprNoWs` notes it: only one that isn't empty.
     let addText (token: Token) =
@@ -122,7 +134,7 @@ let rec private doubleQuoted (c: Cursor) : Expression =
         let text = written.Substring(1, written.Length - 2)
         if text <> "" then
             c.NoteStringText (token.Start + 1) (token.End - 1)
-            parts.Add(StringText(decoded text))
+            parts.Add(StringText(decoded (token.Start + 1) text))
     // A string with no holes is read the same way, the FParsec parser's first reading of a double-quoted string.
     if c.Is StringLiteral then
         addText (c.Take())
@@ -275,7 +287,7 @@ and private bracketItems (c: Cursor) : Choice<Choice<Expression list, Expression
         Choice1Of2 segments, span
     elif entries.Length = items.Length then
         Choice2Of2(entries |> List.map (fun (key, value) -> Expression.from key (TupleExpr [ key; value ]))), span
-    else c.GiveUp "a map literal with an item that isn't an entry, which is a mistake"
+    else c.Report start "A map literal has an item that is not an entry: write each item as `key => value`"
 
 /// `[| a | b |` and then rows of cells, a table: the list of a record for each row, with the header's fields
 /// (`Expressions.tableExpr`). Each row is on a line of its own, and spans its `|`s.
@@ -297,7 +309,8 @@ and private table (c: Cursor) : Expression =
             cells.Add(expression Crossing c)
             if not c.OnSameLine then raise NoMatch
             c.Expect Bar |> ignore
-        if cells.Count <> header.Count then c.GiveUp "a table's row with a different number of cells, which is a mistake"
+        if cells.Count <> header.Count then
+            c.Report rowStart $"This row has {cells.Count} cells, but the table's header names {header.Count} fields: each row has a value for each field"
         let fields =
             Seq.zip header cells
             |> Seq.map (fun ((field, fieldSpan), value) ->
@@ -305,7 +318,7 @@ and private table (c: Cursor) : Expression =
                 NamedField(field, value))
             |> List.ofSeq
         rows.Add(Expression.at (c.SpanFrom rowStart) (RecordExpr fields))
-    if rows.Count = 0 then c.GiveUp "a table with no rows, which is a mistake"
+    if rows.Count = 0 then c.Report c.LastEnd "A table literal has a row of values under its header"
     c.Expect RightBracket |> ignore
     Expression.at (c.SpanFrom start) (ListExpr(List.ofSeq rows))
 
@@ -343,7 +356,7 @@ and private bracketed (c: Cursor) : Expression =
     let fields = parts |> List.choose (function Choice1Of2 field -> Some field | Choice2Of2 _ -> None)
     if fields.Length = parts.Length then fieldsToExpr fields span
     elif fields |> List.exists (function PositionalField _ -> true | NamedField _ -> false) then
-        c.GiveUp "a record with a spread and a field without a name, which is a mistake"
+        c.Report start "A record with a spread has a field without a name: name each of its other fields, as `name = value`"
     else
         let parts = parts |> List.map (function Choice1Of2 field -> field | Choice2Of2 spread -> PositionalField spread)
         Expression.at span (FunctionCall(SpreadSyntax.builtIn, None, [ Expression.at span (RecordExpr parts) ]))
@@ -382,6 +395,17 @@ and private primary (c: Cursor) : Expression =
                 let literal, span = literal c
                 Expression.at span (LiteralExpr literal)
             | None ->
+                // A name applied to a value without brackets, in a lambda, as only a workflow keyword is
+                // (`Expressions.workflowKeywordApplication`).
+                match c.At 1 with
+                | Code next when c.LambdaDepth > 0 && token.Kind = Name && Char.IsLower((c.Text token)[0]) && not (Keywords.reserved.Contains(c.Text token))
+                                 && next.Start > token.End && c.Source.Substring(token.End, next.Start - token.End) |> Seq.forall (fun ch -> ch = ' ' || ch = '\t')
+                                 && (List.contains next.Kind [ Name; Number; StringLiteral; StringStart; Hash; LeftParen; LeftBracket ]) ->
+                    let applied = c.Text token
+                    c.Report token.Start
+                        ($"`{applied}` is applied to a value without parentheses, as only a workflow keyword (`try`, `yield` or `return`) is: "
+                         + $"write `{applied}(...)` to call a function")
+                | _ -> ()
                 let identifier, span = name c
                 Expression.at span (IdentifierExpr identifier)
     | Hash -> tag c
@@ -398,7 +422,7 @@ and private primary (c: Cursor) : Expression =
         Expression.at (c.SpanFrom start) (IdentifierExpr "???")
     | LeftBracket -> list c
     | LeftParen -> bracketed c
-    | _ -> raise NoMatch
+    | _ -> c.Fail "an expression"
 
 /// A primary expression and the `.field`s after it, with the span of its text (`Expressions.memberAccessChain`).
 and private accessed (c: Cursor) : Operand =
@@ -527,7 +551,7 @@ and private operand (lines: Lines) (c: Cursor) : Operand =
                 c.Take() |> ignore
                 prefixes.Add((NegateSyntax.builtIn, c.SpanOf token))
             | _ -> going <- false
-        | Some token when token.Kind = Operator && c.Text token = "!" && c.ImplicitArgumentNext.IsNone -> c.GiveUp "a prefix `!`, which is a mistake"
+        | Some token when token.Kind = Operator && c.Text token = "!" && c.ImplicitArgumentNext.IsNone -> c.Report token.Start "There is no prefix `!` in Nanyx: write the keyword `not`, as in `not x`"
         | _ -> going <- false
     let term =
         prefixes
@@ -535,7 +559,16 @@ and private operand (lines: Lines) (c: Cursor) : Operand =
         |> Seq.fold (fun ((inner: Expression), innerText) (builtIn, prefixSpan) ->
             let span = SourceSpan.between prefixSpan innerText
             Expression.at span (FunctionCall(builtIn, None, [ inner ])), span) (accessed c)
-    withPipes lines c term
+    let piped = withPipes lines c term
+    // `&&` and `||` are not operators: Boolean operations are the keywords `and` and `or` (`OperatorTables.symbolicBoolean`).
+    match c.Token with
+    | Some token when c.OnSameLine && (token.Kind = Ampersand || token.Kind = Bar) ->
+        match c.At 1 with
+        | Code next when next.Kind = token.Kind && next.Start = token.End ->
+            let written, keyword = if token.Kind = Ampersand then "&&", "and" else "||", "or"
+            c.Report token.Start $"`{written}` is not an operator in Nanyx: write `{keyword}`"
+        | _ -> piped
+    | _ -> piped
 
 /// The binary operator at the cursor, if one is written after an operand on its line, as the operator table for
 /// `lines` takes it: `None` when what is there ends the expression.
@@ -576,7 +609,11 @@ and private climb (lines: Lines) (c: Cursor) (minimum: int) (parent: BinaryOpera
         | Some op when op.Precedence >= minimum ->
             match previous with
             | Some p when p.Precedence = op.Precedence && (p.Associativity <> op.Associativity || op.Associativity = NonAssociative) ->
-                c.GiveUp "two operators that can't be written side by side, which is a mistake"
+                let message =
+                    if isComparison p.Text && isComparison op.Text then
+                        $"Comparisons do not chain: write `a {p.Text} b and b {op.Text} c`, or put one comparison in parentheses"
+                    else $"`{p.Text}` and `{op.Text}` cannot be written side by side: put one of them in parentheses"
+                c.Report c.Start message
             | _ -> ()
             let token = c.Take()
             let opSpan = c.SpanOf token
@@ -584,7 +621,8 @@ and private climb (lines: Lines) (c: Cursor) (minimum: int) (parent: BinaryOpera
                 let isSpace (ch: char) = ch = ' ' || ch = '\t' || ch = '\r' || ch = '\n'
                 let before = if token.Start > 0 then c.Source[token.Start - 1] else ' '
                 let after = if token.End < c.Source.Length then c.Source[token.End] else ' '
-                if not ((isSpace before || before = '{') && isSpace after) then c.GiveUp "an operator that isn't spaced, which is a mistake"
+                if not ((isSpace before || before = '{') && isSpace after) then
+                    c.Report token.Start $"`{op.Text}` is not spaced: write an operator with a space on each side, as `x {op.Text} y`, not `x{op.Text}y`"
             match lines with
             | Crossing -> across c (fun c -> c.Token.IsSome) |> ignore
             | Inline -> if not c.OnSameLine then raise NoMatch

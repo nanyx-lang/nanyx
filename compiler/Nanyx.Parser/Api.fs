@@ -40,19 +40,26 @@ let private runFParsec (filePath: string) (normalized: string) : Result<TopLevel
         | None, Some (position, messages) when position.Index > error.Position.Index -> reportAt position messages
         | None, _ -> Result.Error (errorAt error.Position errorMsg)
 
+/// Whether the FParsec parser reads every file, as it did before the recursive-descent parser: the environment variable
+/// `NANYX_PARSER` set to `fparsec`, which stays for a release so that a regression can be checked against it (see The
+/// parser in the Compiler internals section).
+let private usesFParsec =
+    lazy (String.Equals(Environment.GetEnvironmentVariable "NANYX_PARSER", "fparsec", StringComparison.OrdinalIgnoreCase))
+
 /// Parses normalised source, returning the top-level items as written and the final state: the recursive-descent parser
-/// reads it (`DescentTopLevel`), and the FParsec parser where that one gives up, which reports any mistake (see the
-/// Work in progress page "The parser").
+/// reads it (`DescentTopLevel`), and reports any mistake, or the FParsec parser, when `NANYX_PARSER` is `fparsec`.
 let internal runModuleParser (filePath: string) (normalized: string) : Result<TopLevelItem list * ParseState, ParseError> =
-    match DescentTopLevel.tryReadModuleWithState filePath normalized with
-    | Result.Ok read -> Result.Ok read
-    | Result.Error _ -> runFParsec filePath normalized
+    if usesFParsec.Value then runFParsec filePath normalized
+    else
+        match DescentTopLevel.tryReadModuleWithState filePath normalized with
+        | Result.Ok read -> Result.Ok read
+        | Result.Error failure -> Result.Error failure.Error
 
 /// How each parser reads the source of the file at `filePath`, for the corpus check that they read it the same: the
 /// FParsec parser's items and state, and the recursive-descent parser's, or why it gives up.
 let readWithBothParsers (filePath: string) (input: string) =
     let normalized = normalizeSource input
-    runFParsec filePath normalized, DescentTopLevel.tryReadModuleWithState filePath normalized
+    runFParsec filePath normalized, DescentTopLevel.tryReadModuleWithState filePath normalized |> Result.mapError _.Reason
 
 /// Parses the source of the file at `filePath`, as `parseModuleFileWithNames` does, together with its doc comments,
 /// each attached to what it documents, which are found the first time they are asked for.
@@ -73,6 +80,16 @@ let parseModuleFileWithNames (filePath: string) (input: string) : Result<Module 
 let parseModuleWithTrivia (filePath: string) (input: string) : Result<SourceModule, ParseError> =
     let normalized = normalizeSource input
     runModuleParser filePath normalized
+    |> Result.map (fun (items, state) ->
+        { Items = items
+          Trivia = collectTrivia filePath normalized state.Comments state.StringTexts
+          Source = normalized })
+
+/// Parses the source of the file at `filePath` as `parseModuleWithTrivia` does, with the FParsec parser whatever
+/// `NANYX_PARSER` says: the reference the corpus check holds the recursive-descent parser to while both exist.
+let parseModuleWithTriviaByFParsec (filePath: string) (input: string) : Result<SourceModule, ParseError> =
+    let normalized = normalizeSource input
+    runFParsec filePath normalized
     |> Result.map (fun (items, state) ->
         { Items = items
           Trivia = collectTrivia filePath normalized state.Comments state.StringTexts

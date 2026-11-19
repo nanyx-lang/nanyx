@@ -102,8 +102,12 @@ let private reExportItem (c: Cursor) : ImportItem =
 /// A type's or a context's parameter, a single lowercase letter, with a bound after `::` if it has one
 /// (`Types.typeParam`).
 let private typeParameter (c: Cursor) : Identifier * TypeExpr option =
-    let parameter, _ = identifierWithSpan c
-    if not (Names.isTypeVariable parameter) then c.GiveUp "a type parameter that isn't a single lowercase letter, which is a mistake"
+    let parameter, span = identifierWithSpan c
+    if not (Names.isTypeVariable parameter) then
+        if Char.IsLower parameter[0] then
+            c.Report span.Start
+                $"A type parameter is a single lowercase letter, such as 'a', so '{parameter}' cannot be one: longer lowercase names are reserved for associated types"
+        else c.Report span.Start $"A type parameter is a single lowercase letter, such as 'a', so '{parameter}' cannot be one"
     if c.Is DoubleColon then
         c.Take() |> ignore
         parameter, Some(DescentTypes.typeExpr c)
@@ -124,7 +128,8 @@ let private kindModifier (c: Cursor) : TypeDefModifier list =
     match c.Token with
     | Some token when token.Kind = Keyword && (kindOf (c.Text token)).IsSome ->
         c.Take() |> ignore
-        if c.IsKeyword "private" || c.IsKeyword "protected" then c.GiveUp "a type both private and protected, which is a mistake"
+        if c.IsKeyword "private" || c.IsKeyword "protected" then
+            c.Report (if c.Text token = "private" then c.Start else token.Start) "A private type is nominal already, so it is not also `protected`: keep `private`"
         [ (kindOf (c.Text token)).Value; KindAt(c.SpanOf token) ]
     | _ -> []
 
@@ -167,6 +172,7 @@ let typeDefinition (c: Cursor) : Definition =
             else []
         let exported = if c.IsKeyword "export" then (c.Take() |> ignore; [ Export ]) else []
         c.Expect(Keyword, "context") |> ignore
+        noDollar c
         let name, nameSpan = identifierWithSpan c
         if name = "type" then raise NoMatch
         let parameters = typeParameters c
@@ -183,6 +189,7 @@ let typeDefinition (c: Cursor) : Definition =
             elif c.IsKeyword "context" then (c.Take() |> ignore; modifiers.Add Context)
             else going <- false
         c.Expect(Keyword, "type") |> ignore
+        noDollar c
         let nameStart = c.Start
         let typeName, _ = identifierWithSpan c
         let name =
@@ -304,7 +311,7 @@ and private definitionOrExpression (c: Cursor) (start: int) (inBlock: bool) : To
     if c.IsKeyword "use" then
         match c.Attempt(fun () -> DescentControl.statementValue c) with
         | Some value -> single (Expr value)
-        | None -> c.GiveUp "a `use` at the top level, which is a mistake"
+        | None -> c.Report start "A `use` belongs in a block, where it loads an instance for the rest of the block: put it in the body of a def such as `def main = { ... }`"
     elif c.IsKeyword "type" || c.IsKeyword "context" || (c.IsKeyword "export" && (nextText = "type" || nextText = "context")) || (c.Is(Name, "scoped") && (nextText = "export" || nextText = "context")) then
         single (Def(typeDefinition c))
     elif not inBlock && (c.IsKeyword "pattern" || (c.IsKeyword "export" && nextText = "pattern")) then
@@ -325,8 +332,13 @@ and private patternDefinition (c: Cursor) (start: int) : TopLevelItem list =
     let span = c.SpanFrom signatureStart
     let shape =
         match signature with
-        | PatternSyntax.Signature s when s.Results |> List.forall (fst >> PatternSyntax.isPatternTag) -> s
-        | _ -> c.GiveUp "a pattern whose type is a mistake"
+        | PatternSyntax.Signature s ->
+            match s.Results |> List.tryFind (fst >> PatternSyntax.isPatternTag >> not) with
+            | Some(tag, _) ->
+                c.Report signatureStart $"A pattern's tags are capitalised, which tells them apart from other tags: write `#{Char.ToUpperInvariant tag[0]}{tag.Substring 1}`"
+            | None -> s
+        | _ ->
+            c.Report signatureStart "A pattern's type ends in the tags it returns, as in `pattern int -> #Even | #Odd`, with `| _` after them if it can fail to match"
     afterEquals c
     let body = DescentExpressions.defValue c
     let name = PatternSyntax.defName (PatternSyntax.shape shape)
@@ -347,6 +359,12 @@ and private valueDefinition (c: Cursor) (start: int) : TopLevelItem list =
         | Some typeExpr when not (c.Is Equals) ->
             if not (lineEnds c) then raise NoMatch
             Expression.at { c.SpanFrom start with End = typeExpr.Span.End } (FunctionCall(ExternSyntax.builtIn, None, []))
+        // With no type either, it spans to the end of the spaces after its name, as the FParsec parser's does.
+        | None when not (c.Is Equals) && lineEnds c ->
+            let mutable finish = c.LastEnd
+            while finish < c.Source.Length && (c.Source[finish] = ' ' || c.Source[finish] = '\t') do
+                finish <- finish + 1
+            Expression.at { c.SpanFrom start with End = finish } (FunctionCall(ExternSyntax.builtIn, None, []))
         | _ -> defValue c
     c.Declare DefValue value.Id [ name, nameSpan ]
     c.NoteDocumentable start nameSpan.Start
@@ -365,12 +383,28 @@ let fill () =
     Forward.typeDefinition.Value <- typeDefinition
     Forward.importItems.Value <- importItems
 
+/// `error`, or where it is at a `::` line, which is a directive after the code has started, the message that says where
+/// directives go (`Api.runModuleParser`).
+let private directiveAfterCode (source: string) (error: ParseError) =
+    let start = error.Span.Start
+    let atLineStart = start = 0 || (start <= source.Length && source[start - 1] = '\n')
+    if atLineStart && String.CompareOrdinal(source, start, "::", 0, 2) = 0 then
+        { error with Message = "A directive (a `::` line) must come before the first line of code" }
+    else error
+
+/// Why the descent parser doesn't read a file: the reason, for the corpus check's report, and the error a user is
+/// shown, which is the mistake reported where it is (`Reported`) or what was found where no reading matched.
+type DescentFailure = { Reason: string; Error: ParseError }
+
 /// The items of `source`, the text of the file at `file`, and what the FParsec parser would keep beside them
-/// (`ParseState`), if the descent parser reads all of it (`TopLevel.moduleParser`), or why it gives up.
-let tryReadModuleWithState (file: string) (source: string) : Result<TopLevelItem list * ParseState, string> =
+/// (`ParseState`), if the descent parser reads all of it (`TopLevel.moduleParser`), or why it doesn't.
+let tryReadModuleWithState (file: string) (source: string) : Result<TopLevelItem list * ParseState, DescentFailure> =
     fill ()
+    let blanked = Header.Directives.blank source
+    let mutable cursor = None
     try
-        let c = cursorOf file (Header.Directives.blank source)
+        let c = cursorOf file blanked
+        cursor <- Some c
         let all = ResizeArray()
         skipLayout c
         while not (c.Is EndOfFile) do
@@ -385,14 +419,14 @@ let tryReadModuleWithState (file: string) (source: string) : Result<TopLevelItem
                 ModuleBlocks = c.ModuleBlocks }
         Ok(List.ofSeq all, state)
     with
-    | GiveUp reason -> Error reason
-    | NoMatch -> Error "no reading matched"
+    | Reported error -> Error { Reason = error.Message; Error = error }
+    | GiveUp reason -> Error { Reason = reason; Error = directiveAfterCode blanked (cursor.Value.Unexpected()) }
+    | NoMatch -> Error { Reason = "no reading matched"; Error = directiveAfterCode blanked (cursor.Value.Unexpected()) }
 
-/// The items of `source`, the text of the file at `file`, if the descent parser reads all of it, or why it gives up.
+/// The items of `source`, the text of the file at `file`, if the descent parser reads all of it, or why it doesn't.
 let tryReadModule (file: string) (source: string) : Result<TopLevelItem list, string> =
-    tryReadModuleWithState file source |> Result.map fst
+    tryReadModuleWithState file source |> Result.map fst |> Result.mapError _.Reason
 
-/// The items of `source`, the text of the file at `file`, if the descent parser reads all of it: `None` when it gives
-/// up, for the FParsec parser to read it instead.
+/// The items of `source`, the text of the file at `file`, if the descent parser reads all of it: `None` when it doesn't.
 let readModule (file: string) (source: string) : TopLevelItem list option =
     tryReadModule file source |> Result.toOption

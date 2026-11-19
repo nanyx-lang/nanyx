@@ -8,7 +8,7 @@ open Nanyx.Parser
 
 /// How the new parser reads each def's value and each statement of `source`.
 let private outcomesIn (source: string) =
-    match parseModuleWithTrivia "t.nyx" source with
+    match parseModuleWithTriviaByFParsec "t.nyx" source with
     | Result.Ok parsed -> DescentCheck.checkExpressions "t.nyx" parsed (DescentCheck.expressionRoots parsed)
     | Result.Error error -> failwith error.Message
 
@@ -77,7 +77,7 @@ let ``Fields written one per line need no commas`` () =
 [<InlineData("a < b < c", "two operators that can't be written side by side, which is a mistake")>]
 let ``An expression the descent parser doesn't read is left to the FParsec parser`` (value: string, reason: string) =
     let source = $"def v = {value}\n"
-    match parseModuleWithTrivia "t.nyx" source with
+    match parseModuleWithTriviaByFParsec "t.nyx" source with
     | Result.Ok parsed ->
         let outcomes = DescentCheck.checkExpressions "t.nyx" parsed (DescentCheck.expressionRoots parsed)
         Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.GaveUp reason ], outcomes)
@@ -86,7 +86,7 @@ let ``An expression the descent parser doesn't read is left to the FParsec parse
 [<Fact>]
 let ``A type's field defaults and attributes are read as expressions`` () =
     let source = "type Options = (\n  retries: int = 3\n  @customKeywordType(#bind)\n  bind: () -> () = { () }\n  label: string = \"x {retries}\"\n)\n"
-    match parseModuleWithTrivia "t.nyx" source with
+    match parseModuleWithTriviaByFParsec "t.nyx" source with
     | Result.Ok parsed ->
         let roots = DescentCheck.typeRoots parsed
         Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.Same ], DescentCheck.checkTypes "t.nyx" parsed roots)

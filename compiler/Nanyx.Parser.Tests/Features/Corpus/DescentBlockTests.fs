@@ -8,7 +8,7 @@ open Nanyx.Parser
 
 /// How the new parser reads each def's value and each statement of `source`.
 let private outcomesIn (source: string) =
-    match parseModuleWithTrivia "t.nyx" source with
+    match parseModuleWithTriviaByFParsec "t.nyx" source with
     | Result.Ok parsed -> DescentCheck.checkExpressions "t.nyx" parsed (DescentCheck.expressionRoots parsed)
     | Result.Error error -> failwith error.Message
 

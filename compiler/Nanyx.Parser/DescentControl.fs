@@ -33,7 +33,7 @@ let private matchExpression (c: Cursor) =
             let armsColumn = if c.Is Bar then Some(column c.Start) else None
             c.Index <- index
             if armsColumn |> Option.exists (fun arms -> arms >= column blockStart) then
-                c.GiveUp "a block scrutinee indented no more than the arms, which is a mistake"
+                c.Report (nextCodeStart c) "The arms of a match are indented as far as the block before them: indent them less than the block"
             [ block ]
         | Code _ when c.OnSameLine -> sepBy1 c (fun () -> expression Crossing c) (fun () -> c.Expect Comma |> ignore)
         | _ -> c.GiveUp "a match's scrutinee the layout pass doesn't open"
@@ -150,7 +150,7 @@ let private doExpression (c: Cursor) =
     | Indent _ ->
         c.Index <- c.Index + 1
         indentedBlock c
-    | _ -> c.GiveUp "a `do` without a block, which is a mistake"
+    | _ -> c.Report (c.LastEnd - 2) "`do` starts a block: put its statements on the lines after it, indented"
 
 /// `use value in body`: the body an expression, or a block on the lines after `in`.
 let private useIn (c: Cursor) =
@@ -179,13 +179,15 @@ let private workflow (c: Cursor) =
         let value = expression Crossing c
         Expression.at (c.SpanFrom start) (WorkflowReturnExpr value)
     elif token.Kind = Keyword && not bang then
-        if name = WorkflowSyntax.yieldKeyword && c.Adjacent && c.Is LeftParen then c.GiveUp "`yield(...)`, which is a mistake"
+        if name = WorkflowSyntax.yieldKeyword && c.Adjacent && c.Is LeftParen then
+            c.Report start $"`{WorkflowSyntax.yieldKeyword}` is not a function: write `{WorkflowSyntax.yieldKeyword} x`, with no parentheses"
         if not c.OnSameLine then raise NoMatch
         let value = expression Crossing c
         Expression.at (c.SpanFrom start) (WorkflowBindExpr(name, value))
     else
-        c.Expect(Operator, "!") |> ignore
-        if name = WorkflowSyntax.yieldKeyword then c.GiveUp "`yield!`, which is a mistake"
+        let bangToken = c.Expect(Operator, "!")
+        if name = WorkflowSyntax.yieldKeyword then
+            c.Report bangToken.Start $"`{name}` is written without `!`: write `{name} x`, as `try x` and `return x` are"
         across c (fun c -> c.Token.IsSome) |> ignore
         let value = expression Crossing c
         Expression.at (c.SpanFrom start) (WorkflowBindExpr(name, value))
@@ -194,9 +196,11 @@ let private workflow (c: Cursor) =
 let private cellArgument (c: Cursor) =
     let start = c.Start
     c.Expect(Keyword, "mut") |> ignore
-    if not c.OnSameLine then c.GiveUp "`mut` as an expression, which is a mistake"
+    let notExpression () : 'a =
+        c.Report start "`mut` is not an expression: declare a cell on a line of its own, as `mut count = 0` in place of `def count = mut 0`"
+    if not c.OnSameLine || not (c.Is Name) then notExpression ()
     let cell, span = identifierWithSpan c
-    if not ((c.Is Comma || c.Is RightParen) && c.OnSameLine) then c.GiveUp "`mut` as an expression, which is a mistake"
+    if not ((c.Is Comma || c.Is RightParen) && c.OnSameLine) then notExpression ()
     Expression.at (c.SpanFrom start) (FunctionCall(CellPassingSyntax.argument, None, [ Expression.at span (IdentifierExpr cell) ]))
 
 /// `type Point`, a type passed as a type argument (see `TypeValue`).

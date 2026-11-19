@@ -7,12 +7,13 @@ open Parser.Program
 open Nanyx.Parser
 open Nanyx.Parser.Corpus
 
-/// Each piece of the corpus with its parse, parsed once, in parallel, for every test that reads it.
+/// Each piece of the corpus with its parse by the FParsec parser, the reference the recursive-descent parser is held
+/// to while both exist, parsed once, in parallel, for every test that reads it.
 let private parses =
     lazy
         (Corpus.all.Value
          |> Array.ofList
-         |> Array.Parallel.map (fun piece -> piece, parseModuleWithTrivia piece.Name piece.Source)
+         |> Array.Parallel.map (fun piece -> piece, parseModuleWithTriviaByFParsec piece.Name piece.Source)
          |> List.ofArray)
 
 [<Fact>]
@@ -26,7 +27,8 @@ let ``The corpus has the files, the docs' code blocks and the tests' sources`` (
 [<Fact>]
 let ``Every file of the standard library and the packages parses`` () =
     let failures =
-        parses.Value
+        Corpus.all.Value
+        |> List.map (fun piece -> piece, parseModuleWithTrivia piece.Name piece.Source)
         |> List.filter (fun (piece, _) -> piece.Origin = SourceFile && (piece.Name.StartsWith "stdlib" || piece.Name.StartsWith "packages"))
         |> List.choose (fun (piece, parse) ->
             match parse with
@@ -95,9 +97,7 @@ let ``The lexer reads every piece that parses without an error, and finds the co
 [<Fact>]
 let ``The parser reads the whole corpus the same way every time`` () =
     let pieces = Corpus.all.Value
-    // The parse every test shares is the reference, so each piece is parsed once more here, not twice.
-    let first = parses.Value |> List.map (fun (piece, parse) -> (piece.Name, piece.Source), parse) |> Map.ofList
-    let found = Differential.differences (fun name source -> first[(name, source)]) parseModuleWithTrivia pieces
+    let found = Differential.differences parseModuleWithTrivia parseModuleWithTrivia pieces
     Assert.True(found.IsEmpty, Differential.report 10 pieces.Length found)
 
 /// The pieces whose block structure the layout pass reads differently from the FParsec parser on purpose, each named

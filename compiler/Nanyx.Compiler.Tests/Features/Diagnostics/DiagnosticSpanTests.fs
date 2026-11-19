@@ -109,7 +109,7 @@ let ``A parse error has a code and the position where parsing failed`` () =
 
 [<Fact>]
 let ``A parse error's message leaves out the file however long its path is`` () =
-    // FParsec wraps the line naming the file and position when the path is long.
+    // The FParsec parser wraps the line naming the file and position when the path is long.
     withTempDir (fun root ->
         let directory = Path.Combine(root, String.replicate 6 "a-rather-long-directory-name-")
         Directory.CreateDirectory directory |> ignore
@@ -119,7 +119,7 @@ let ``A parse error's message leaves out the file however long its path is`` () 
         Assert.Equal(DiagnosticCodes.SyntaxError.Code, diagnostic.Code)
         Assert.DoesNotContain("a-rather-long", diagnostic.Message)
         Assert.DoesNotContain("Ln:", diagnostic.Message)
-        Assert.StartsWith("def = 2", diagnostic.Message))
+        Assert.Equal("Expected a name after `def`, found `=`", diagnostic.Message))
 
 [<Fact>]
 let ``An unknown standard library module is reported at the import`` () =
