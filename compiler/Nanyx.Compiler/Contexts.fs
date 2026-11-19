@@ -72,7 +72,7 @@ let internal extendEnvWithRecordFields (provider: ContextProvider) (state: Infer
         let plain (info: TypeDefInfo) = info.IsContext && info.Parameters.IsEmpty
         match resolveSoFar state ty with
         | TyNominal(id, _, _, _) ->
-            state.TypeDefs |> Map.tryPick (fun _ info -> if plain info && TypeDefInfo.nominalId info = id then Some info else None)
+            tryFindNominalDef id state |> Option.filter plain
         | TyAlias(name, [], _)
         | TyApply(name, []) -> state.TypeDefs |> Map.tryFind name |> Option.filter plain
         | _ -> None

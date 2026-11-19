@@ -65,6 +65,19 @@ module FunctionContexts =
         | TyContexts contexts -> Some contexts
         | _ -> None
 
+    /// The arguments of a type generic in contexts (see `carried`): those of its own, and the contexts it carries, which
+    /// are its last.
+    let (|CarryingArguments|_|) (args: Ty list) : (Ty list * Ty list) option =
+        match List.tryLast args with
+        | Some (Carried contexts) -> Some (List.truncate (args.Length - 1) args, contexts)
+        | _ -> None
+
+    /// A type generic in contexts (see `carried`): its nominal type, the arguments of its own, and the contexts it carries.
+    let (|CarryingNominal|_|) (ty: Ty) : (NominalId * Ty list * Ty list) option =
+        match ty with
+        | TyNominal(nominal, CarryingArguments(own, contexts), _, _) -> Some (nominal, own, contexts)
+        | _ -> None
+
     /// The name of a context that takes no arguments a reader writes: `Console`, or a scoped context, whose scope is not
     /// one.
     let (|PlainContext|_|) (context: Ty) : string option =

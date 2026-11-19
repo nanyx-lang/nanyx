@@ -589,6 +589,10 @@ let internal recordSymbolType (symbol: SymbolId option) (ty: Ty) (state: InferSt
     | Some symbol -> { state with SymbolTypes = state.SymbolTypes |> Map.add symbol ty }
     | None -> state
 
+/// The definition of the nominal type `nominal` among those `state` knows, by whichever name it is known.
+let internal tryFindNominalDef (nominal: NominalId) (state: InferState) : TypeDefInfo option =
+    state.TypeDefs |> Map.tryPick (fun _ info -> if TypeDefInfo.nominalId info = nominal then Some info else None)
+
 /// Records the type inference gave an expression, so it can be looked up by node once unification has resolved it.
 let internal recordExprType (result: Result<TypedExpr * InferState, Diagnostic list>) =
     result
