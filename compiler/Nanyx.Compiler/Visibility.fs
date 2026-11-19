@@ -7,8 +7,8 @@ open NyxCompiler
 open NyxCompiler.InferState
 
 /// The imports in `module'` that name a `module name =` block of the same file, by its short name, rather than
-/// another file. At the top level of the file, that is a block written at the top level; in a block, a block nested
-/// directly in it, or else one written beside it.
+/// another file, and the re-exports that do, which import it too. At the top level of the file, that is a block written
+/// at the top level; in a block, a block nested directly in it, or else one written beside it.
 let blockImports (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module) : BlockImport list =
     let parentOf (block: SourceSpan) =
         moduleBlocks
@@ -23,9 +23,10 @@ let blockImports (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module
             | _ -> None)
     module'
     |> List.collect (function
-        | Kind (Import items) -> items
+        | Kind (Import items) -> items |> List.map (fun item -> item, false)
+        | Kind (ReExport item) -> [ item, true ]
         | _ -> [])
-    |> List.choose (fun item ->
+    |> List.choose (fun (item, isReExport) ->
         match item.Source with
         | ModuleImport name when not (name.Contains '/') && not (name.Contains '.') ->
             let site = blockAround moduleBlocks item.Span |> Option.map snd
@@ -36,27 +37,79 @@ let blockImports (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module
                 | Some site -> named |> List.filter (fun (_, block) -> parentOf block = parentOf site)
                 | None -> []
             List.tryHead (children @ siblings)
-            |> Option.bind (fun (_, block) -> prefixOf block |> Option.map (fun prefix -> { Import = item; Prefix = prefix; Block = block }))
+            |> Option.bind (fun (_, block) ->
+                prefixOf block
+                |> Option.map (fun prefix -> { Import = item; Prefix = prefix; Block = block; IsReExport = isReExport; Names = Map.empty }))
         | _ -> None)
 
-/// The names `blockImport` brings in, each with the qualified name it stands for: the block's own exported
-/// definitions and types, under the import's alias if it has one.
-let internal blockAliases (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module) (blockImport: BlockImport) : (string * string) list =
-    let ownName (item: TopLevelItem) (name: string) =
-        if name.StartsWith(blockImport.Prefix + ".") && blockAround moduleBlocks item.Span |> Option.map snd = Some blockImport.Block then
-            Some (name.Substring(blockImport.Prefix.Length + 1), name)
-        else
-            None
-    module'
-    |> List.choose (fun item ->
-        match item.Kind with
-        | Def (ValueDef(true, name, _, _)) -> ownName item name
-        | Def (TypeDef(name, modifiers, _, _)) when modifiers |> List.contains Export -> ownName item name
-        | _ -> None)
+/// Whether `name`, one of the names something gives, is one `selection` asks for: a name it selects, or a definition
+/// attached to a type it selects, as `Money.new` with `Money`.
+let private isSelected (selection: (Identifier * SourceSpan) list option) (name: string) =
+    selection
+    |> Option.forall (List.exists (fun (selected, _) -> name = selected || name.StartsWith(selected + ".")))
+
+/// Everything the block `blockImport` names gives, whatever the import selects, each by its short name with the name of
+/// the definition or type it stands for where the block is written: its own exported definitions and types, `area` for
+/// `shapes.area`, and what it re-exports. A re-export of another block gives what that block gives; one of another
+/// file's module gives the names the re-export brings in, which `importedBy` finds.
+let private blockGives (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module) (importedBy: ImportItem -> string list) (blockImport: BlockImport) : (string * string) list =
+    let imports = blockImports moduleBlocks module'
+    let rec gives (seen: Set<SourceSpan>) (blockImport: BlockImport) =
+        let inBlock (item: TopLevelItem) = blockAround moduleBlocks item.Span |> Option.map snd = Some blockImport.Block
+        let own (item: TopLevelItem) (name: string) =
+            if name.StartsWith(blockImport.Prefix + ".") && inBlock item then [ name.Substring(blockImport.Prefix.Length + 1), name ] else []
+        module'
+        |> List.collect (fun item ->
+            match item.Kind with
+            | Def (ValueDef(true, name, _, _)) -> own item name
+            | Def (TypeDef(name, modifiers, _, _)) when modifiers |> List.contains Export -> own item name
+            | ReExport reExported when inBlock item ->
+                match imports |> List.tryFind (fun other -> other.Import = reExported) with
+                | Some other when seen.Contains other.Block -> []
+                | Some other -> gives (seen.Add other.Block) other |> List.filter (fst >> isSelected reExported.Selection)
+                | None -> importedBy reExported |> List.map (fun name -> name, name)
+            | _ -> [])
+    gives (Set.singleton blockImport.Block) blockImport |> List.distinct
+
+/// What the block `blockImport` names gives the code that imports or re-exports it (see `blockGives`), limited to what
+/// it selects.
+let internal blockExports (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module) (importedBy: ImportItem -> string list) (blockImport: BlockImport) : (string * string) list =
+    blockGives moduleBlocks module' importedBy blockImport |> List.filter (fst >> isSelected blockImport.Import.Selection)
+
+/// The re-exports of other files' modules written in the block `blockImport` names, or in a block it re-exports, in
+/// turn: what the block gives that another file defines comes through them.
+let internal moduleReExportsIn (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module) (blockImport: BlockImport) : ImportItem list =
+    let imports = blockImports moduleBlocks module'
+    let rec within (seen: Set<SourceSpan>) (block: SourceSpan) =
+        module'
+        |> List.collect (fun item ->
+            match item.Kind with
+            | ReExport reExported when blockAround moduleBlocks item.Span |> Option.map snd = Some block ->
+                match imports |> List.tryFind (fun other -> other.Import = reExported) with
+                | Some other when seen.Contains other.Block -> []
+                | Some other -> within (seen.Add other.Block) other.Block
+                | None -> [ reExported ]
+            | _ -> [])
+    within (Set.singleton blockImport.Block) blockImport.Block
+
+/// The names `blockImport` brings in, each with the name it stands for: what the block exports (see `blockExports`),
+/// under the import's alias if it has one.
+let internal blockAliases (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module) (importedBy: ImportItem -> string list) (blockImport: BlockImport) : (string * string) list =
+    blockExports moduleBlocks module' importedBy blockImport
     |> List.map (fun (short, qualified) ->
         match blockImport.Import.Alias with
         | Some alias -> $"{alias}.{short}", qualified
         | None -> short, qualified)
+
+/// The error for each name `blockImport` selects that the block does not give, with the names closest to it.
+let internal unexportedBlockSelections (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module) (importedBy: ImportItem -> string list) (blockImport: BlockImport) : Diagnostic list =
+    let given = blockGives moduleBlocks module' importedBy blockImport |> List.map fst |> Set.ofList
+    blockImport.Import.Selection
+    |> Option.defaultValue []
+    |> List.filter (fun (name, _) -> not (given.Contains name))
+    |> List.map (fun (name, span) ->
+        let blockName = match blockImport.Import.Source with ModuleImport name -> name | PathImport path -> path
+        NameSuggestions.unknown DiagnosticCodes.NotExported span $"'{blockName}' does not export '{name}'" given name)
 
 /// Whether code at `span` is in the home module of the nominal type `nominal`: the module that defines it, and within
 /// that the `module name =` block it is defined in, if any. Only its home module can make one from its shape.
@@ -86,13 +139,19 @@ let internal addDeclaredConstraintAt (span: SourceSpan) (actualTy: Ty) (declared
 /// in it, the blocks it imports and what it imports itself, and its imports are its own.
 let internal blockIsolationAt (state: InferState) (name: string) (symbolId: SymbolId option) (span: SourceSpan) : Diagnostic list =
     let exprBlock = blockAround state.ModuleBlocks span
+    // A block import written where `span` is brings `name` in, perhaps from what the block re-exports.
+    let broughtInHere () =
+        state.BlockImports
+        |> List.exists (fun blockImport -> blockImport.Names.ContainsKey name && blockAround state.ModuleBlocks blockImport.Import.Span = exprBlock)
     match symbolId |> Option.bind (fun id -> state.Symbols |> Map.tryFind id) with
     | _ when SourceSpan.isNone span || state.ModuleBlocks.IsEmpty -> []
     | None -> []
     | Some symbol ->
         match state.ImportSites |> Map.tryFind symbol.Id with
         | Some sites ->
-            let visible = sites |> List.exists (fun site -> SourceSpan.isNone site || blockAround state.ModuleBlocks site = exprBlock)
+            let visible =
+                sites |> List.exists (fun site -> SourceSpan.isNone site || blockAround state.ModuleBlocks site = exprBlock)
+                || broughtInHere ()
             match exprBlock with
             | _ when visible -> []
             | Some (blockName, _) ->
@@ -109,6 +168,7 @@ let internal blockIsolationAt (state: InferState) (name: string) (symbolId: Symb
                        |> List.exists (fun blockImport ->
                            SourceSpan.contains blockImport.Block symbol.Declaration
                            && blockAround state.ModuleBlocks blockImport.Import.Span = exprBlock)
+                    || broughtInHere ()
                 if imported then []
                 else
                     [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock span $"'{name}' is defined outside module '{blockName}', which sees only its own definitions and what it imports"

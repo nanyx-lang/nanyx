@@ -18,3 +18,19 @@ let ``A module block nested in another parses, and its names are qualified with 
         Assert.Equal<string list>([ "module tally"; "module tally.steps"; "tally.steps.step"; "module tally"; "tally.total" ], names)
         Assert.Equal<string list>([ "steps"; "tally" ], blocks |> List.map fst)
     | Result.Error error -> Assert.Fail error.Message
+
+[<Fact>]
+let ``A module block can re-export a module, whole or some of what it exports`` () =
+    let source = "module shapes =\n  export solids\n  export util (double, Point)\n  export def area = 1\n"
+    match parseModuleFileWithNames "t.nyx" source with
+    | Result.Ok(items, _, _) ->
+        let reExports =
+            items
+            |> List.choose (function
+                | Kind(ReExport item) -> Some(item.Source, item.Selection |> Option.map (List.map fst))
+                | _ -> None)
+        Assert.Equal<(ImportSource * string list option) list>(
+            [ ModuleImport "solids", None; ModuleImport "util", Some [ "double"; "Point" ] ],
+            reExports
+        )
+    | Result.Error error -> Assert.Fail error.Message

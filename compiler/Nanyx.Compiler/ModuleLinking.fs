@@ -40,11 +40,12 @@ module internal ModuleLinking =
             | other -> other)
 
     /// `module'` with each name a block import brought in (`zero`, `Money.new`) written as the definition it stands
-    /// for (`money.zero`), which is the only name the backend knows. Only a name inference resolved to that definition
+    /// for (`money.zero`), which is the only name the backend knows, and each name an import brought in from what a
+    /// module re-exports of its blocks written as the name its definition is inlined under. Only a name inference resolved to that definition
     /// is rewritten, not a local that shadows it. So is each context a def's type requires (`Tx`, as `db.Tx`), whose
     /// members the backend finds by the context's layout, which the block's type definition has under its own name.
     let internal writeBlockAliases (state: NyxCompiler.Infer.InferState) (module': Module) : Module =
-        if state.BlockAliases.IsEmpty then
+        if state.BlockAliases.IsEmpty && state.ImportedBlockNames.IsEmpty then
             module'
         else
             let declaredContext (context: TypeExpr) =
@@ -58,9 +59,13 @@ module internal ModuleLinking =
                     Some { annotation with Kind = TypeWithContext(contexts |> List.map declaredContext, inner) }
                 | _ -> typeOpt
             let resolved (node: Expression) (name: string) =
-                match state.BlockAliases |> Map.tryFind name, state.References |> Map.tryFind node.Id |> Option.bind (fun id -> state.Symbols |> Map.tryFind id) with
+                let reference = state.References |> Map.tryFind node.Id
+                match state.BlockAliases |> Map.tryFind name, reference |> Option.bind (fun id -> state.Symbols |> Map.tryFind id) with
                 | Some qualified, Some symbol when symbol.Name = qualified -> qualified
-                | _ -> name
+                | _ ->
+                    match state.ImportedBlockNames |> Map.tryFind name with
+                    | Some (symbol, inlined) when reference = Some symbol -> inlined
+                    | _ -> name
             let rewrite =
                 mapExpressionKinds (fun current kind ->
                     match kind with
@@ -165,12 +170,47 @@ module internal ModuleLinking =
             | _ -> None)
         |> Set.ofList
 
+    /// `byName`, something of `imported`'s by the names of its definitions or types, with the same under each name it
+    /// gives from its blocks (see `CheckedModule.BlockReExports`).
+    let internal withBlockReExports (imported: CheckedModule) (byName: Map<string, 'a>) : Map<string, 'a> =
+        imported.BlockReExports
+        |> List.fold (fun acc (name, target) ->
+            match byName |> Map.tryFind target with
+            | Some found -> acc |> Map.add name found
+            | None -> acc) byName
+
+    /// The names of the values `imported` exports: its own exported definitions, and those it re-exports from its
+    /// blocks.
+    let internal exportedValues (imported: CheckedModule) : Set<string> =
+        let own = SyntaxTree.exportedValueNames imported.Own
+        imported.BlockReExports |> List.fold (fun acc (name, target) -> if own.Contains target then acc.Add name else acc) own
+
+    /// The names of the types and contexts `imported` exports: its own, and those it re-exports from its blocks.
+    let internal exportedTypes (imported: CheckedModule) : Set<string> =
+        let own = exportedTypeNames imported.Own
+        imported.BlockReExports |> List.fold (fun acc (name, target) -> if own.Contains target then acc.Add name else acc) own
+
+    /// What the file `module'` gives its importers by re-exporting its own `module name =` blocks at its top level, as
+    /// `export shapes`: each re-export, with the names it gives that stand for a definition or type of the file. What a
+    /// block re-exports from another file's module is a re-export of that module (see `Library`).
+    let internal blockReExports (state: NyxCompiler.Infer.InferState) (module': Module) : (NyxCompiler.InferState.BlockImport * (string * string) list) list =
+        let defined =
+            module'
+            |> List.choose (function
+                | Kind (Def (ValueDef(_, name, _, _)))
+                | Kind (Def (TypeDef(name, _, _, _))) -> Some name
+                | _ -> None)
+            |> Set.ofList
+        state.BlockImports
+        |> List.filter (fun blockImport -> blockImport.IsReExport && (NyxCompiler.InferState.blockAround state.ModuleBlocks blockImport.Import.Span).IsNone)
+        |> List.map (fun blockImport -> blockImport, blockImport.Names |> Map.toList |> List.filter (snd >> defined.Contains))
+
     /// The exports of `imported` that `selection` brings in unqualified: each name it selects, and the definitions
     /// attached to each type it selects, as `Email.parse` with `Email`.
     let internal selectedExports (imported: CheckedModule) (selection: (Identifier * SourceSpan) list) : Set<string> =
         let names = selection |> List.map fst |> Set.ofList
-        let types = exportedTypeNames imported.Own |> Set.intersect names
-        SyntaxTree.exportedValueNames imported.Own
+        let types = exportedTypes imported |> Set.intersect names
+        exportedValues imported
         |> Set.filter (fun name -> types |> Set.exists (fun typeName -> name.StartsWith(typeName + ".")))
         |> Set.union names
 
@@ -198,12 +238,16 @@ module internal ModuleLinking =
             | _ -> None)
         |> Map.ofList
 
+    /// The name the import `item` of `checkedModule` inlines its definition `name` under (see `inlinedItemsForImport`).
+    let internal inlinedName (item: ImportItem) (checkedModule: CheckedModule) (name: string) =
+        inlinedRenames item checkedModule |> Map.tryFind name |> Option.defaultValue name
+
     /// The names `imported`, from `origin`, gives its importers, each with the module that defines it: its own exports,
     /// and what it re-exports, which for a whole-module re-export (`export m`) is everything `m` gives, so through
     /// chains of them.
     let rec internal exportSources (origin: ModuleOrigin) (imported: CheckedModule) : Map<string, ModuleOrigin> =
         let own =
-            Set.union (SyntaxTree.exportedValueNames imported.Own) (exportedTypeNames imported.Own)
+            Set.union (exportedValues imported) (exportedTypes imported)
             |> Seq.map (fun name -> name, origin)
             |> Map.ofSeq
         imported.ReExports
@@ -223,10 +267,11 @@ module internal ModuleLinking =
         | ModuleImport name -> name
         | PathImport path -> $"\"{path}\""
 
-    /// An error for each name a whole-module re-export (`export m`) gives that the module `own` defines itself, or that
-    /// a re-export before it gives from another module, at the whole-module one, naming both. Its fix turns the
-    /// whole-module re-export into one that selects the rest of what it gives.
-    let internal reExportClashes (own: Module) (reExports: ReExported list) : Diagnostic list =
+    /// An error for each name a whole re-export gives that the module `own` defines itself, or that a re-export before
+    /// it gives from elsewhere, at the whole one, naming both. Each re-export is given with what it gives, by where each
+    /// name is defined: in a module, or in a block of `own`, by the name of its definition there. Its fix turns the whole
+    /// re-export into one that selects the rest of what it gives.
+    let private clashesAmong (own: Module) (reExports: (ImportItem * Map<string, Choice<ModuleOrigin, string>>) list) : Diagnostic list =
         let defined =
             own
             |> List.choose (function
@@ -234,19 +279,18 @@ module internal ModuleLinking =
                 | Kind (Def (TypeDef(name, _, _, _))) -> Some name
                 | _ -> None)
             |> Set.ofList
-        let fix (reExport: ReExported) (sources: Map<string, ModuleOrigin>) (clashing: Set<string>) =
+        let fix (item: ImportItem) (sources: Map<string, _>) (clashing: Set<string>) =
             match sources.Keys |> Seq.filter (clashing.Contains >> not) |> List.ofSeq with
             | [] -> []
             | rest ->
-                let written = writtenSource reExport.Item
+                let written = writtenSource item
                 [ { Title = $"Re-export only what doesn't clash from '{written}'"
-                    Edits = [ { Span = reExport.Item.Span; NewText = $"""{written} ({String.concat ", " rest})""" } ] } ]
+                    Edits = [ { Span = item.Span; NewText = $"""{written} ({String.concat ", " rest})""" } ] } ]
         reExports
-        |> List.fold (fun (given: Map<string, ModuleOrigin * ReExported>, errors) reExport ->
-            let sources = reExportSources reExport
-            let written = writtenSource reExport.Item
+        |> List.fold (fun (given: Map<string, Choice<ModuleOrigin, string> * ImportItem>, errors) (item, sources) ->
+            let written = writtenSource item
             let clashes =
-                match reExport.Item.Selection with
+                match item.Selection with
                 | Some _ -> []
                 | None ->
                     sources
@@ -257,22 +301,38 @@ module internal ModuleLinking =
                         else
                             match given |> Map.tryFind name with
                             | Some (other, earlier) when other <> source ->
-                                let message = $"'{name}' is re-exported from '{written}', but also from '{writtenSource earlier.Item}', where it is another definition"
-                                Some (name, message, earlier.Item.Span)
+                                let message = $"'{name}' is re-exported from '{written}', but also from '{writtenSource earlier}', where it is another definition"
+                                Some (name, message, earlier.Span)
                             | _ -> None)
-            let fixes = fix reExport sources (clashes |> List.map (fun (name, _, _) -> name) |> Set.ofList)
+            let fixes = fix item sources (clashes |> List.map (fun (name, _, _) -> name) |> Set.ofList)
             let errors =
                 errors
                 @ (clashes
                    |> List.map (fun (_, message, earlier) ->
-                       { Diagnostics.at DiagnosticCodes.ReExportClash reExport.Item.Span message with Fixes = fixes }
+                       { Diagnostics.at DiagnosticCodes.ReExportClash item.Span message with Fixes = fixes }
                        |> Diagnostics.withRelated earlier "Re-exported here too"))
-            Map.fold (fun acc name source -> acc |> Map.add name (source, reExport)) given sources, errors) (Map.empty, [])
+            Map.fold (fun acc name source -> acc |> Map.add name (source, item)) given sources, errors) (Map.empty, [])
         |> snd
+
+    let private ofModules (reExports: ReExported list) =
+        reExports |> List.map (fun reExport -> reExport.Item, reExportSources reExport |> Map.map (fun _ origin -> Choice1Of2 origin))
+
+    /// An error for each name a whole-module re-export (`export m`) gives that the module `own` defines itself, or that
+    /// a re-export before it gives from another module (see `clashesAmong`).
+    let internal reExportClashes (own: Module) (reExports: ReExported list) : Diagnostic list =
+        clashesAmong own (ofModules reExports)
+
+    /// `reExportClashes` for the re-exports of `own`'s blocks (see `blockReExports`), each with the names it gives
+    /// and what they stand for, among its re-exports of other modules, `reExports`.
+    let internal blockReExportClashes (own: Module) (reExports: ReExported list) (blockReExports: (ImportItem * (string * string) list) list) : Diagnostic list =
+        let blocks = blockReExports |> List.map (fun (item, given) -> item, given |> List.map (fun (name, target) -> name, Choice2Of2 target) |> Map.ofList)
+        let spans = blocks |> List.map (fun (item, _) -> item.Span) |> Set.ofList
+        clashesAmong own (ofModules reExports @ blocks |> List.sortBy (fun (item, _) -> item.Span.Start))
+        |> List.filter (fun diagnostic -> diagnostic.Span |> Option.exists spans.Contains)
 
     /// The error for each name `item` selects that `imported` does not export, with the exports closest to it.
     let internal unexportedSelections (item: ImportItem) (imported: CheckedModule) : Diagnostic list =
-        let exports = imported.ReExports |> List.fold (fun names reExport -> Set.union names (Set.ofSeq (reExportSources reExport).Keys)) (Set.union (SyntaxTree.exportedValueNames imported.Own) (exportedTypeNames imported.Own))
+        let exports = imported.ReExports |> List.fold (fun names reExport -> Set.union names (Set.ofSeq (reExportSources reExport).Keys)) (Set.union (exportedValues imported) (exportedTypes imported))
         let shown =
             match item.Source with
             | ModuleImport name -> name

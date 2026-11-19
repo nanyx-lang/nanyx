@@ -218,7 +218,7 @@ export collections.set
 
 A module that imports `collections` gets `map`, `insert` and the rest as if `collections` had defined them, under the alias it imports `collections` with, if any. They are still the definitions in `collections.list` and `collections.map`, which is where the editor goes to find them. A re-export also imports what it names into the module that writes it, as `import collections.list as (map, filter, fold)` would. What it names follows the rules for [selective imports](#selective-imports): a type brings the definitions attached to it, and a name the module doesn't export is an error.
 
-A module alone on its line, `export collections.set`, re-exports everything it exports, as `import collections.set` with no selection imports it all, including what it re-exports itself, so re-exports chain. Two modules that re-export each other this way make an [import cycle](#circular-dependencies). A whole-module re-export can't give a name the module that writes it defines too, or that a re-export before it gives from another module: that is an error ([NYX0120](../standard-tools/errors#nyx0120)), whose fix re-exports only the rest. A module can re-export another file's module whole, but not yet one of its own `module name =` blocks.
+A module alone on its line, `export collections.set`, re-exports everything it exports, as `import collections.set` with no selection imports it all, including what it re-exports itself, so re-exports chain. Two modules that re-export each other this way make an [import cycle](#circular-dependencies). A whole-module re-export can't give a name the module that writes it defines too, or that a re-export before it gives from another module: that is an error ([NYX0120](../standard-tools/errors#nyx0120)), whose fix re-exports only the rest. A module can re-export one of its own [module blocks](#using-a-module-block-in-its-own-file) the same way, by the block's short name: `export money` gives its importers `Money`, `Money.new` and the rest of what `money` exports, unqualified, as if the module had defined them, and `export money (Money)` only what it selects.
 
 # Declaration order
 
@@ -316,12 +316,14 @@ This gives a single file the encapsulation of a separate module: only `money` ca
 
 A block is imported exactly as a file module is:
 
-- `import money` brings its exports in unqualified; `import money as m` brings them in as `m.Money`, `m.Money.new` and so on.
+- `import money` brings its exports in unqualified; `import money as m` brings them in as `m.Money`, `m.Money.new` and so on; `import money as (Money)` brings in only what it selects.
 - Only exports can be used, however the block is reached.
 - The import can come before or after the block, since declaration order doesn't matter in a module.
 - The name is the block's short name (`money`), even when the file declares a module of its own and the block's full name is `myModule.money`. A block can import the blocks nested directly inside it the same way.
 
-A block is also isolated as a file module is. It sees its own definitions and types, the blocks nested in it, the prelude, and what it imports itself, but not the rest of its file. So a block that needs `nanyx/text` imports it inside the block, and an import inside a block is that block's alone. A block is a module rather than a program, so it can't have top-level code: everything in it is a definition, a type or an import.
+A block is also isolated as a file module is. It sees its own definitions and types, the blocks nested in it, the prelude, and what it imports itself, but not the rest of its file. So a block that needs `nanyx/text` imports it inside the block, and an import inside a block is that block's alone. A block is a module rather than a program, so it can't have top-level code: everything in it is a definition, a type, an import or a re-export.
+
+A block can [re-export](#re-exporting) too, of a block nested in it or of another file's module, in either form: `export inner` or `export util (double)` in a block makes `inner`'s exports, or `double`, part of what the block exports, so an import of the block brings them in with its own.
 
 Create hierarchies with dot notation:
 
