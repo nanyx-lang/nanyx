@@ -7,7 +7,7 @@ open Transpiler.Wasm.WasmAllocator
 /// How a value of the program's is written in memory: the WebAssembly value type it is held in, and how many bytes of
 /// it are written (see `CoreIrLayout.storage`).
 type Storage =
-    /// An `i32` in 4 bytes: a pointer, a code, a bool, a boxed `F32`, an `I32` or a `U32`.
+    /// An `i32` in 4 bytes: a pointer, a code, a bool, an `I32` or a `U32`.
     | Word
     /// An `i64` in 8 bytes: an int or a `U64`.
     | Wide
@@ -17,12 +17,15 @@ type Storage =
     | Half
     /// An `f64` in 8 bytes: a float.
     | Double
+    /// An `f32` in 4 bytes: an `F32`.
+    | Single
 
     /// The WebAssembly value type the value is held in, in locals and on the stack.
     member this.ValueType =
         match this with
         | Wide -> "i64"
         | Double -> "f64"
+        | Single -> "f32"
         | Word
         | Byte
         | Half -> "i32"
@@ -32,7 +35,8 @@ type Storage =
         match this with
         | Byte -> 1
         | Half -> 2
-        | Word -> 4
+        | Word
+        | Single -> 4
         | Wide
         | Double -> 8
 
@@ -44,6 +48,7 @@ type Storage =
         | Word -> "i32.store"
         | Wide -> "i64.store"
         | Double -> "f64.store"
+        | Single -> "f32.store"
 
     /// An instruction that reads the value's bits back, zero-extended: enough to copy it, not to compute with it, which
     /// `CoreIrLayout.load` is for.
@@ -54,16 +59,17 @@ type Storage =
         | Word -> "i32.load"
         | Wide -> "i64.load"
         | Double -> "f64.load"
+        | Single -> "f32.load"
 
     /// Every way a value is stored, each with its own variant of the storing helpers.
-    static member All = [ Word; Wide; Byte; Half; Double ]
+    static member All = [ Word; Wide; Byte; Half; Double; Single ]
 
 /// Where a tag cell's payload is: after its code (see the memory model at `runtimeHelpers`).
 let tagPayloadOffset = 4
 
 /// The header in front of an object on the heap, before its pointer (see the memory model at `runtimeHelpers`).
 module Header =
-    /// A list cell's, a tag cell's or an `F32`'s box's: its count. `newCell` makes it.
+    /// A list cell's or a tag cell's: its count. `newCell` makes it.
     let countOnly = 4
 
     /// A string's, a record's or a closure's: its count, then its info word. `newObject` makes it.
@@ -102,8 +108,7 @@ module Helpers =
     /// Not a helper: the hash intrinsic, which calls the hash function of its operand's type (see `CoreIrHashing`).
     let valueHash = NyxCompiler.Intrinsics.hash
     let floatToString = "__nanyx_float_to_string"
-    /// An `F32` is boxed, in a block of 4 bytes, and written as text by a helper of its own.
-    let f32Box = "__nanyx_f32_box"
+    /// An `F32` is written as text by a helper of its own.
     let f32ToString = "__nanyx_f32_to_string"
     /// `%` on floats, which WebAssembly has no instruction for.
     let floatRem = "__nanyx_float_rem"
@@ -185,6 +190,7 @@ module Helpers =
         | Byte -> $"{name}_i8"
         | Half -> $"{name}_i16"
         | Double -> $"{name}_f64"
+        | Single -> $"{name}_f32"
 
 /// A function `name` for `a ++ b` on lists: it copies the cells of `a`, in order, in front of `b`, which it takes
 /// over and shares (lists being immutable). `copyHead` runs on each head before it goes into its copy, to take a
@@ -367,12 +373,12 @@ let private checkedIntHelper (name: string) (instruction: string) (overflowed: s
 /// pointer and a 0 byte after; a list is 0 (empty) or a pointer to a cell of (head, tail); a record (or tuple) is a
 /// pointer to its fields in field-name order, with its layout's number (see `RecordTable`) in the 4 bytes before the
 /// pointer. A tag without a payload is its code (see `tagCode`), which is odd; a tag with one is a pointer to a cell of
-/// (code, payload). An int takes 8 bytes in a field, a head or a payload, and every other value 4 (see
-/// `CoreIrLayout`).
+/// (code, payload). An int or a float takes 8 bytes in a field, a head or a payload, a narrow integer 1 or 2, and every
+/// other value 4 (see `CoreIrLayout`).
 ///
 /// Every object on the heap has a header: its reference count, then its info word if it has one (a string's length,
 /// a record's layout, a closure's drop function). So the count is at `p - 8` for strings, records and closures, made
-/// by `newObject`, and at `p - 4` for list cells, tag cells and float boxes, made by `newCell`. A count of 0 marks
+/// by `newObject`, and at `p - 4` for list cells and tag cells, made by `newCell`. A count of 0 marks
 /// an object that is never freed: a string literal in the data segment. `retain` takes a reference and `release`
 /// gives one up. The header's sizes are in `Header`. A helper borrows its operands and gives back a value of its own,
 /// which reference counting relies on (see `CoreIrCounting.operands`), except those `Helpers.operandUse` names.
@@ -766,20 +772,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "    i32.load"
             "  end"
             ")" ]
-      // An `F32` is boxed: a 4-byte block holding the f32, passed around by pointer.
-      Helpers.f32Box,
-      lines
-          [ $"(func ${Helpers.f32Box} (param $value f32) (result i32)"
-            "  (local $box i32)"
-            "  i32.const 4"
-            $"  call ${Helpers.newCell}"
-            "  local.set $box"
-            "  local.get $box"
-            "  local.get $value"
-            "  f32.store"
-            "  local.get $box"
-            ")" ]
-      // Formats a float, or a boxed `F32`, as the shortest decimal that reads back as the same value (see
+      // Formats a float, or an `F32`, as the shortest decimal that reads back as the same value (see
       // `FloatText`).
       yield!
           FloatText.helpers
@@ -860,7 +853,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  local.get $value"
             "  i32.wrap_i64"
             ")" ]
-      // The truncated remainder, C's `fmod`, on unboxed floats: `a - trunc(a / b) * b`, with the sign of `a`. When `b`
+      // The truncated remainder, C's `fmod`, on floats: `a - trunc(a / b) * b`, with the sign of `a`. When `b`
       // is infinite the quotient is zero and `0 * b` NaN, so the remainder is `a` itself (NaN when `a` is infinite).
       Helpers.floatRem,
       lines
@@ -1154,7 +1147,6 @@ let helperDependencies =
       yield! storingDependencies Helpers.tagBox (fun _ -> [ Helpers.newCell ])
       Helpers.tagCode, []
       Helpers.floatToString, floatTextDependencies
-      Helpers.f32Box, [ Helpers.newCell ]
       Helpers.f32ToString, floatTextDependencies
       FloatText.bigSet, []
       FloatText.bigMulSmall, []

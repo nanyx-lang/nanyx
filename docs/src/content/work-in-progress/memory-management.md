@@ -9,11 +9,6 @@ reuses memory. How it works today is in [Memory management](../compiler-internal
 internals section, and what a user sees in [Reference counting](../foundations/reference-counting). It is part of the
 [compilation](./compilation) workstream, and its issues carry the `compilation` and `wasm backend` labels.
 
-# Still to do
-
-- **Unbox `F32`.** A `float` is an `f64`, but an `F32` is still a pointer to a box on the heap
-  ([#1876](https://github.com/nanyx-lang/nanyx/issues/1876)).
-
 # Open questions
 
 - **Code size.** Monomorphisation multiplies generic functions; how much does that grow programs, and when should

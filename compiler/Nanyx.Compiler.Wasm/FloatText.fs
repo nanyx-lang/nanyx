@@ -325,10 +325,10 @@ let private f64 =
       MantissaBits = 52
       ExponentOffset = 1075 }
 
-/// An `F32`, an `f32` in a box, whose bits are loaded into the low half of `$bits`.
+/// An `F32`, an `f32`, whose bits are the low half of `$bits`.
 let private f32 =
-    { Parameter = "i32"
-      Bits = [ "local.get $value"; "i64.load32_u" ]
+    { Parameter = "f32"
+      Bits = [ "local.get $value"; "i32.reinterpret_f32"; "i64.extend_i32_u" ]
       Negative = [ "local.get $bits"; "i64.const 0x80000000"; "i64.and"; "i64.eqz"; "i32.eqz" ]
       Magnitude = "0x7fffffff"
       Infinity = "0x7f800000"

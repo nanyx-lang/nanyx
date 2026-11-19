@@ -83,7 +83,6 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
         // By its bits, as a float is, with `-0.0` as `0.0`.
         [ "(local $x f32)" ],
         [ "local.get $a"
-          "f32.load"
           "local.tee $x"
           "f32.const 0"
           "f32.eq"
