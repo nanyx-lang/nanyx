@@ -98,6 +98,7 @@
     <Compile Include="TypeArguments.fs" />
     <Compile Include="TypeDescriptions.fs" />
     <Compile Include="TypeMatches.fs" />
+    <Compile Include="InferMatch.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="InferModule.fs" />
     <Compile Include="RequiredContexts.fs" />
