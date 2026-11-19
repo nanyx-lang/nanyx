@@ -133,7 +133,7 @@ let typeDefinitionAt (names: TypeNotation) (file: string) (result: CompileResult
     | Some typed, Some (symbol, span) when symbol.Kind = TypeDefinition ->
         typeDefinitionOf typed symbol
         |> Option.map (fun info ->
-            let definition, note = writtenTypeDefinition (Unifier.tyToDisplayString names) symbol info (symbol.Declaration.File = file)
+            let definition, note = writtenTypeDefinition (Unifier.tyToDisplayStringIn typed.TypeDefs names) symbol info (symbol.Declaration.File = file)
             { Type = definition; Span = span; Note = note })
     | _ -> None
 

@@ -70,7 +70,7 @@ let private anchors (exports: Export list) : (Export * string) list =
 let private defSignature (typed: TypedModule) (symbol: Symbol) =
     match Hover.declaredType typed symbol, PatternSyntax.shapeOf symbol.Name with
     | Some (ty, _), Some shape ->
-        let written = Signatures.typeWithContexts Source ty []
+        let written = Signatures.typeWithContexts typed.TypeDefs Source ty []
         // A partial pattern with one tag and no payload is a function that returns a `bool` (see `CustomPatterns`).
         let results =
             if shape.ReturnsBool then written.Substring(0, written.Length - "bool".Length) + $"#{shape.Tags.Head} | _"
@@ -78,7 +78,7 @@ let private defSignature (typed: TypedModule) (symbol: Symbol) =
         $"pattern {results}"
     | Some (ty, contexts), _ ->
         let contexts = contexts |> FunctionContexts.flatten |> Unifier.writtenContexts
-        $"def {writtenName symbol.Name}: {Signatures.typeWithContexts Source ty contexts}"
+        $"def {writtenName symbol.Name}: {Signatures.typeWithContexts typed.TypeDefs Source ty contexts}"
     | None, _ -> $"def {writtenName symbol.Name}"
 
 /// A type's definition, as hover writes it, but for a context's members: one to a line, in the order it declares them.

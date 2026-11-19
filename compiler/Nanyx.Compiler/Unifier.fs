@@ -398,14 +398,19 @@ module Unifier =
         |> Seq.append (unnamedRests |> Seq.map (fun id -> id, TyPrimitive ""))
         |> Map.ofSeq
 
-    /// `ty` as `tyToString` writes it, with a spread written in `notation`.
-    let private printIn (notation: TypeNotation) (ty: Ty) : string =
-        printTy (printingFor (match notation with Unicode -> "…" | Ascii | Source -> "...") ty) true ty
+    /// `ty` as `tyToString` writes it, with a spread written in `notation`, and the associated types of the contexts of
+    /// `typeDefs` written by name (see `TypePrinting.printTy`).
+    let private printIn (typeDefs: Map<string, TypeDefInfo>) (notation: TypeNotation) (ty: Ty) : string =
+        printTy (printingFor (match notation with Unicode -> "…" | Ascii | Source -> "...") (associatedIn typeDefs) ty) true ty
 
     /// `ty` for a reader, in `notation`, with the variables the compiler made up named as `displayRenaming`
-    /// describes, and a rest that appears nowhere else written as a bare spread: `(name: α, …)`, `#some(α) | …`.
-    let tyToDisplayString (notation: TypeNotation) (ty: Ty) : string =
-        printIn notation (apply (displayRenaming notation (loneRests notation ty) ty) ty)
+    /// describes, a rest that appears nowhere else written as a bare spread: `(name: α, …)`, `#some(α) | …`, and the
+    /// associated types of the contexts of `typeDefs` written by name: `[Iter(c)] c -> elem`, `Iter(c, elem = int)`.
+    let tyToDisplayStringIn (typeDefs: Map<string, TypeDefInfo>) (notation: TypeNotation) (ty: Ty) : string =
+        printIn typeDefs notation (apply (displayRenaming notation (loneRests notation ty) ty) ty)
+
+    /// `ty` for a reader, as `tyToDisplayStringIn` writes it, where no context has associated types.
+    let tyToDisplayString (notation: TypeNotation) (ty: Ty) : string = tyToDisplayStringIn Map.empty notation ty
 
     /// The rests of `tys` that are lone (see `loneRests`) in every one of them they appear in.
     let private loneAcross (notation: TypeNotation) (tys: Ty list) : Set<int> =
@@ -415,13 +420,16 @@ module Unifier =
         |> Set.unionMany
         |> Set.filter (fun id -> loneIn |> List.forall (fun (lone, all) -> lone.Contains id || not (all.Contains id)))
 
-    /// Each of `tys` for a reader, as `tyToDisplayString` writes it, with a variable they share given the same name
+    /// Each of `tys` for a reader, as `tyToDisplayStringIn` writes it, with a variable they share given the same name
     /// in each. The first one's variables are named first, so it reads as it would alone unless the others use a
     /// name from an annotation that it would have been given. A rest is a bare spread only where it is lone in
     /// every one of `tys` it appears in, so it is not named in one and not in another.
-    let tysToDisplayStrings (notation: TypeNotation) (tys: Ty list) : string list =
+    let tysToDisplayStringsIn (typeDefs: Map<string, TypeDefInfo>) (notation: TypeNotation) (tys: Ty list) : string list =
         let renamed = displayRenaming notation (loneAcross notation tys) (TyApply("", tys))
-        tys |> List.map (apply renamed >> printIn notation)
+        tys |> List.map (apply renamed >> printIn typeDefs notation)
+
+    /// Each of `tys` for a reader, as `tysToDisplayStringsIn` writes them, where no context has associated types.
+    let tysToDisplayStrings (notation: TypeNotation) (tys: Ty list) : string list = tysToDisplayStringsIn Map.empty notation tys
 
     /// The type variables `tysToDisplayStrings` writes in `tys`, in the order it names them, each with the name it
     /// writes. A rest it writes as a bare spread is not among them.
@@ -430,7 +438,7 @@ module Unifier =
         let renamed = displayRenaming notation lone (TyApply("", tys))
         varsInPrintOrder (TyApply("", tys))
         |> List.filter (fun v -> not (lone.Contains v.Id))
-        |> List.map (fun v -> v, printIn notation (apply renamed (TyVar v)))
+        |> List.map (fun v -> v, printIn Map.empty notation (apply renamed (TyVar v)))
 
     /// The rest variables of `ty` that only stand for tags it gives out: ones that appear in no function's input.
     /// Nothing can add a tag to such a union, so it has no more tags than those written: its rest is empty. In

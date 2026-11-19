@@ -63,19 +63,27 @@ module TypePrinting =
         | TyRecursive(body, _) -> scopedContextsInPrintOrder body
         | _ -> []
 
-    /// How `printTy` writes a type: an open record's or union's rest is spread with `Spread`, and each scoped context
-    /// of a name `ty` requires at more than one scope is numbered by its scope's place in `Scopes`.
-    type internal Printing = { Spread: string; Scopes: Map<string, Ty list> }
+    /// How `printTy` writes a type: an open record's or union's rest is spread with `Spread`, each scoped context of a
+    /// name `ty` requires at more than one scope is numbered by its scope's place in `Scopes`, and `Associated` gives
+    /// the names of the associated types of a context, its last arguments (see `AssociatedTypes`).
+    type internal Printing = { Spread: string; Scopes: Map<string, Ty list>; Associated: string -> string list }
+
+    /// The names of the associated types of each context of `typeDefs`, by the name it is known by there: none for
+    /// any other name.
+    let associatedIn (typeDefs: Map<string, TypeDefInfo>) (context: string) : string list =
+        match typeDefs.TryFind context with
+        | Some info when info.IsContext -> info.AssociatedTypes
+        | _ -> []
 
     /// `Printing` for `ty`: the scopes of each scoped context it requires at more than one, in order of first appearance.
-    let internal printingFor (spread: string) (ty: Ty) : Printing =
+    let internal printingFor (spread: string) (associated: string -> string list) (ty: Ty) : Printing =
         let scopes =
             scopedContextsInPrintOrder ty
             |> List.groupBy fst
             |> List.map (fun (name, found) -> name, found |> List.map snd |> List.distinct)
             |> List.filter (fun (_, scopes) -> scopes.Length > 1)
             |> Map.ofList
-        { Spread = spread; Scopes = scopes }
+        { Spread = spread; Scopes = scopes; Associated = associated }
 
     /// `context` as `p` writes it among a function type's contexts: a scoped one numbered when `p` numbers its name, as
     /// `Memory₁`, and without its scope.
@@ -154,6 +162,23 @@ module TypePrinting =
                 | [] -> named
                 | written -> $"""[{written |> List.map (printTy p false) |> String.concat ", "}] {named}"""
             | _ -> named
+        // A context's associated types are written by name, `Iter(c, elem = string)`, and left out where the argument
+        // is the signature's own variable of that name, as a signature writes them: `Iter(c)`. A context a signature
+        // writes is an alias of its members' record, and one inference finds an application.
+        | TyAlias(name, args, _)
+        | TyApply(name, args) when (let associated = p.Associated name in not associated.IsEmpty && associated.Length <= args.Length) ->
+            let associated = p.Associated name
+            let own, ofAssociated = List.splitAt (args.Length - associated.Length) args
+            let named =
+                List.zip associated ofAssociated
+                |> List.choose (fun (associatedName, arg) ->
+                    match arg with
+                    | TyVar v when v.Name = Some associatedName -> None
+                    | _ -> Some $"{associatedName} = {grouped arg}")
+            match own, named with
+            | [], [] -> name
+            | [ arg ], [] -> $"{name}({soleArgument arg})"
+            | _ -> $"""{name}({String.concat ", " (List.map grouped own @ named)})"""
         // An alias is written by name, as the user wrote it: `Customer`, `Validator(int)`.
         | TyAlias(name, [], _) -> name
         | TyAlias(name, [ arg ], _) -> $"{name}({soleArgument arg})"
@@ -249,7 +274,7 @@ module TypePrinting =
         | TyContexts contexts -> $"""[{writtenContexts contexts |> List.map (contextAsPrinted p >> printTy p false) |> String.concat ", "}]"""
 
     /// `ty` as it would be written in a def's annotation: see `printTy`.
-    let tyToString (ty: Ty) : string = printTy (printingFor "..." ty) true ty
+    let tyToString (ty: Ty) : string = printTy (printingFor "..." (fun _ -> []) ty) true ty
 
     /// The type variables of `ty` in the order `tyToString` prints them, each as many times as it is printed. A
     /// nominal's or alias's underlying type is not printed, so its variables are not included (its arguments' are).
