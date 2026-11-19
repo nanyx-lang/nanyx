@@ -81,7 +81,7 @@ def main = {
   println(Result.mapOr(bad, "none", int.toString))
 }
 """
-    runSource source |> withoutDbgLocations |> assertRan "40\n0\nnone\n"
+    runSource source |> withoutDbgLocations |> assertRan "none\n40\n0\n"
 
 [<Fact>]
 let ``Run - Result.orElse keeps a success and passes an error to the fallback`` () =

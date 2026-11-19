@@ -13,7 +13,7 @@ let ``A top-level value is built once however often it is read`` () =
 println(x)
 println(x + 1)
 """
-    runSource source |> withoutDbgLocations |> assertRan "1\n1\n2\n"
+    runSource source |> withoutDbgLocations |> assertRan "1\n2\n1\n"
 
 [<Fact>]
 let ``A top-level value a function reads is built once across calls`` () =
@@ -25,7 +25,7 @@ def next = { n -> n + x }
 println(next(1))
 println(next(2))
 """
-    runSource source |> withoutDbgLocations |> assertRan "10\n11\n12\n"
+    runSource source |> withoutDbgLocations |> assertRan "11\n12\n10\n"
 
 [<Fact>]
 let ``A generic top-level value is built once for each type it is read at`` () =
@@ -40,7 +40,7 @@ println(ints == moreInts)
 println(strings == [])
 """
     // Each instance is built on its first read: `ints` builds the one at list(int), which `moreInts` reads.
-    runSource source |> withoutDbgLocations |> assertRan "[]\ntrue\n[]\ntrue\n"
+    runSource source |> withoutDbgLocations |> assertRan "true\ntrue\n[]\n[]\n"
 
 [<Fact>]
 let ``A generic record value read again and again at one type is allocated once`` () =

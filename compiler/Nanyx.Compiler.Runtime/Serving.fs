@@ -50,7 +50,8 @@ module WasmServer =
         HttpImport.writtenRequest request.HttpMethod (request.Url.ToString()) headers (body.ToArray())
 
     /// Answers the request `context` holds with a fresh instance of `module'`, run with the standard streams `io` and
-    /// the command-line arguments `arguments`; a request it doesn't answer is a 500, and why is given to `report`.
+    /// the command-line arguments `arguments`; a request it doesn't answer is a 500, and why is given to `report`, as is
+    /// what its `dbg`s print.
     /// `gate` is held while what the instance wrote to redirected streams is copied to them.
     let private answer engine (module': Module) (table: SpanTable option) io arguments (gate: obj) (report: string -> unit) (context: HttpListenerContext) =
         let request = incoming context
@@ -107,7 +108,8 @@ module WasmServer =
 
     /// Serves `program` on `port` of this machine until `stop` is cancelled, answering each request with a fresh
     /// instance of it, with the standard streams `io` and the command-line arguments `arguments`, its name first. Once it
-    /// is listening, it calls `listening` with where; it gives what goes wrong to `report`.
+    /// is listening, it calls `listening` with where; it gives what goes wrong to `report`, and what each request's `dbg`s
+    /// print, with the request (see `Probing.defineDbg`).
     let serve
         (io: ProgramIo)
         (arguments: string list)

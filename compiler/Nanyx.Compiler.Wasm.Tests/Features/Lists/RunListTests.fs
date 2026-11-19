@@ -192,7 +192,7 @@ dbg(list.length(list.distinct([red, green, red, red])))
 dbg(list.length(list.distinct([true, true])))
 println(show(list.distinct([])))
 """
-    runSource source |> withoutDbgLocations |> assertRan "1 2 3 []\nb,a\n2\n1\n[]\n"
+    runSource source |> withoutDbgLocations |> assertRan "1 2 3 []\nb,a\n[]\n2\n1\n"
 
 [<Fact>]
 let ``Run - list.distinct compares records, tuples and lists by their structure`` () =
@@ -297,8 +297,6 @@ no 9
 has b
 at 1
 not found
-3
-0
 empty
 not empty
 last 5
@@ -309,7 +307,9 @@ no last
 []
 3 11 24 31 45 []
 1 2 2 3 3 3 []
-[]""")
+[]
+3
+0""")
 
 [<Fact>]
 let ``Run - List.skipWhile, partition, unzip and get`` () =

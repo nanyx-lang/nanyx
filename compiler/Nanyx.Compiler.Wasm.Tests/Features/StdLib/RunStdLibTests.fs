@@ -31,7 +31,7 @@ println("[" ++ string.repeat("ab", 0) ++ "]")
 println(string.substring("nanyx", start = 1, length = 3))
 println(string.substring("nanyx", start = 3, length = 10))
 """
-    runSource source |> withoutDbgLocations |> assertRan "0\n5\nhello, nanyx!\n[padded]\n[]\nababab\n[]\nany\nyx\n"
+    runSource source |> withoutDbgLocations |> assertRan "hello, nanyx!\n[padded]\n[]\nababab\n[]\nany\nyx\n0\n5\n"
 
 [<Fact>]
 let ``Run - text startsWith, endsWith and contains`` () =
@@ -133,7 +133,7 @@ let ``Run - text lines and words`` () =
         "dbg(string.length(string.concat(string.lines(\"\"))))\n" +
         "println(string.join(string.words(\"  one two\tthree\n\"), \"|\"))\n" +
         (withFinalNewline """dbg(string.length(string.concat(string.words("   "))))""")
-    runSource source |> withoutDbgLocations |> assertRan "a|b|c\na||b\n0\none|two|three\n0\n"
+    runSource source |> withoutDbgLocations |> assertRan "a|b|c\na||b\none|two|three\n0\n0\n"
 
 [<Fact>]
 let ``Run - text chars takes a string apart by code point`` () =

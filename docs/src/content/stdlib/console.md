@@ -16,14 +16,15 @@ match readLine()
 
 # dbg
 
-`dbg` is built into the language rather than defined in this module, but it writes through `Console` too:
+`dbg` is built into the language rather than defined in this module, and needs no context:
 
 ```nanyx fragment
-dbg: [Console] a -> a
+dbg: a -> a
 ```
 
 It prints any value after where it was called, the file and the line, and gives the value back, so it can be put in
-the middle of a pipeline:
+the middle of a pipeline. It prints to standard error, or wherever the host puts it: the HTTP host writes it to the
+server's log ([Where `dbg` prints](../advanced/hosts#where-dbg-prints)).
 
 ```nanyx fragment
 [1, 2, 3]

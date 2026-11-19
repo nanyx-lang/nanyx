@@ -305,7 +305,7 @@ def main = {
   println("{countTo(0)}")
 }
 """
-    runSource source |> withoutDbgLocations |> assertRan "15 11 2\nHello, Ada\n11\n7\n11\n3\n"
+    runSource source |> withoutDbgLocations |> assertRan "15 11 2\nHello, Ada\n11\n3\n7\n11\n"
 
 [<Fact>]
 let ``Run - a function that only calls the closure it is given compiles without making one`` () =
@@ -457,7 +457,7 @@ def main = {
   println("{mapSomeOr(#none, 7, { n -> n + 1 })}")
 }
 """
-    runSource source |> withoutDbgLocations |> assertRan "7 8\n2\n0 2\n7\n"
+    runSource source |> withoutDbgLocations |> assertRan "7 8\n0 2\n7\n2\n"
 
 [<Fact>]
 let ``Run - a lambda of no parameters checked against a one-parameter type ignores the parameter (#813)`` () =

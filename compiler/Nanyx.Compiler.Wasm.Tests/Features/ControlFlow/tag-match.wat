@@ -13,7 +13,7 @@
     i32.sub
     i32.load
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -28,7 +28,7 @@
     i32.sub
     i32.load
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -40,7 +40,7 @@
     i32.const 4
     i32.const 1
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -569,7 +569,8 @@
     local.get $end
   )
 
-  (data (i32.const 256) "\00\00\00\00\05\00\00\00[12] \00\00\00")
+  (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
+  (data (i32.const 268) "\00\00\00\00\05\00\00\00[12] \00\00\00")
 
   (global $r__built (mut i32) (i32.const 0))
   (global $r__value (mut i64) (i64.const 0))
@@ -618,7 +619,7 @@
   (func $__nanyx_start (local $__dbg_value__in1__in3_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__owned_0 i32)
     call $r
     local.set $__dbg_value__in1__in3_i64
-    i32.const 264
+    i32.const 276
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value__in1__in3_i64

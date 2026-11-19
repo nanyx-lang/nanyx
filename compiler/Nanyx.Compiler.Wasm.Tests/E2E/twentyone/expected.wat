@@ -13,7 +13,7 @@
     i32.sub
     i32.load
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -28,7 +28,7 @@
     i32.sub
     i32.load
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -40,7 +40,7 @@
     i32.const 4
     i32.const 1
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -620,7 +620,8 @@
   )
 
   (data (i32.const 256) "\00\00\00\00\15\00\00\00Hello from other.nyx!\00\00\00")
-  (data (i32.const 288) "\00\00\00\00\0e\00\00\00[input.nyx:6] \00\00")
+  (data (i32.const 288) "\00\00\00\00\09\00\00\00input.nyx\00\00\00")
+  (data (i32.const 308) "\00\00\00\00\0e\00\00\00[input.nyx:6] \00\00")
 
   (func $other_message (result i32)
     i32.const 264
@@ -628,7 +629,7 @@
   (export "other.message" (func $other_message))
 
   (func $main (result i32) (local $__owned_0 i32) (local $__owned_1 i32)
-    i32.const 296
+    i32.const 316
     i32.const 264
     local.tee $__owned_1
     call $__nanyx_string_quote

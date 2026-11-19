@@ -107,10 +107,9 @@ def describe = { n: int ->
 
 println(describe(6))
 """
-    |> printsAs """
-[main.nyx:2] 7
-odd
-"""
+    |> normalized
+    |> runSource
+    |> assertRanWithDbg "odd\n" "[main.nyx:2] 7\n"
 
 [<Fact>]
 let ``Run - a match on two values runs a pattern on each value it is used on`` () =
@@ -310,10 +309,9 @@ def fizz = { (n: int) ->
 
 println(fizz(4))
 """
-    |> printsAs """
-[main.nyx:3] 1
-4
-"""
+    |> normalized
+    |> runSource
+    |> assertRanWithDbg "4\n" "[main.nyx:3] 1\n"
 
 [<Fact>]
 let ``Run - an imported pattern runs as the module's own does`` () =

@@ -13,7 +13,7 @@
     i32.sub
     i32.load
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -28,7 +28,7 @@
     i32.sub
     i32.load
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -40,7 +40,7 @@
     i32.const 4
     i32.const 1
     i32.store
-    i32.const 1
+    i32.const 2
     i32.const 0
     i32.const 1
     i32.const 8
@@ -617,7 +617,8 @@
     local.get $end
   )
 
-  (data (i32.const 256) "\00\00\00\00\04\00\00\00[9] \00\00\00\00")
+  (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
+  (data (i32.const 268) "\00\00\00\00\04\00\00\00[9] \00\00\00\00")
 
   (func $sum (param $xs i32) (result i64) (local $__match_tmp_0 i32) (local $__payload_x_i64 i64) (local $__payload_rest i32)
     local.get $xs
@@ -732,7 +733,7 @@
     local.get $__owned_0
     call $__nanyx_drop_list_int
     local.set $__dbg_value__in1__in1__in3_i64
-    i32.const 264
+    i32.const 276
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value__in1__in1__in3_i64

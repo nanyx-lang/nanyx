@@ -264,7 +264,7 @@ show(run(7))
 showInt(sum(1))
 showInt(sum(5))
 """
-    runSource source |> withoutDbgLocations |> assertRan "1\nn = 1\n3\nerror\nerror\nsum = 3\nerror\n"
+    runSource source |> withoutDbgLocations |> assertRan "n = 1\nerror\nerror\nsum = 3\nerror\n1\n3\n"
 
 [<Fact>]
 let ``Run - a proc block gives back whichever failure stopped it`` () =

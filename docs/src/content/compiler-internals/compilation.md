@@ -20,10 +20,13 @@ text to the binary format for `nanyx build` and `nanyx wasm` (below).
   [Context calls](./context-calls)). Top-level expressions (and the `@entry` definition) run from a WebAssembly start
   function. A module with a start function emits only the functions the start reaches, through calls and closures,
   and binds no static closure that nothing reads (`CoreIrReach.fs`); a module without one emits every definition.
-- `dbg(...)` of a value of any type, and the console host's `Console`, write to stdout through WASI `fd_write`; `dbg`
-  writes the value through a printer function generated for its type (`CoreIrLowerDbg.fs`), after where it was
-  called: the line, and the file's path in its package or a script's name (`WasmOptions.SourceRoot`). A release build
-  (`WasmOptions.Release`) lowers `dbg(x)` to `x`.
+- `dbg(...)` of a value of any type writes the value through a printer function generated for its type
+  (`CoreIrLowerDbg.fs`), after where it was called: the line, and the file's path in its package or a script's name
+  (`WasmOptions.SourceRoot`). A release build (`WasmOptions.Release`) lowers `dbg(x)` to `x`. The host decides where
+  it goes: a module the runtime runs gives each `dbg` to `nanyx:debug` `dbg` first, with the file, line, column and
+  text, and writes it to stderr itself, through WASI `fd_write` (`$dbg_str`), when the runtime leaves it to the program,
+  as the console runner does; a module written to a file, which another runtime may run, has no such import and always
+  writes it itself (`EmitContext.DbgToRuntime`, `Probing.defineDbg`).
 - How values are laid out and freed is in [Memory management](./memory-management), and how context members are
   passed in [Context calls](./context-calls).
 
