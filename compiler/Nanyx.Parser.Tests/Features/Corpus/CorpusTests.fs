@@ -179,3 +179,29 @@ let ``The recursive-descent parser reads every pattern it reads as the FParsec p
     // It gives up only at what holds an expression, which it doesn't read yet.
     let gaveUp = outcomes |> Array.choose (function _, DescentCheck.GaveUp reason -> Some reason | _ -> None) |> Array.distinct |> Array.sort
     Assert.Equal<string array>([| "a custom pattern's arguments, which are expressions"; "a guard, which is a lambda" |], gaveUp)
+
+[<Fact>]
+let ``The recursive-descent parser reads every expression it reads as the FParsec parser does`` () =
+    let outcomes =
+        parses.Value
+        |> Array.ofList
+        |> Array.Parallel.collect (fun (piece, parse) ->
+            match parse with
+            | Result.Error _ -> [||]
+            | Result.Ok parsed ->
+                let roots = DescentCheck.expressionRoots parsed
+                DescentCheck.checkExpressions piece.Name parsed roots |> List.map (fun outcome -> piece.Name, outcome) |> Array.ofList)
+    let differing =
+        outcomes |> Array.choose (function
+            | name, DescentCheck.Differs(fparsec, descent) -> Some $"{name}:\n--- FParsec\n{fparsec}--- descent\n{descent}"
+            | _ -> None)
+    Assert.True(outcomes.Length > 15000, $"Only {outcomes.Length} expressions are compared")
+    Assert.True(differing.Length = 0, $"{differing.Length} of {outcomes.Length} expressions differ:\n\n" + (differing |> Array.truncate 5 |> String.concat "\n\n"))
+    // It gives up only at what comes with blocks and statements, which it doesn't read yet.
+    let laterParts =
+        set [ "a lambda"; "a call with a trailing lambda"; "a pipe with a trailing lambda"; "a table literal"
+              "a workflow keyword with `!`"; "`except`, whose arms the descent parser doesn't read yet"
+              "a `\\match`, whose arms the descent parser doesn't read yet" ]
+    let isLater (reason: string) = laterParts.Contains reason || reason.EndsWith "`, which starts what the descent parser doesn't read yet"
+    let gaveUp = outcomes |> Array.choose (function _, DescentCheck.GaveUp reason -> Some reason | _ -> None) |> Array.distinct |> Array.sort
+    Assert.Equal<string array>([||], gaveUp |> Array.filter (isLater >> not))

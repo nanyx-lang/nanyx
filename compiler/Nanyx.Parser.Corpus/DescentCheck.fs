@@ -53,23 +53,31 @@ let typeRoots (parsed: SourceModule) : (TypeEntry * TypeExpr) list =
     walk parsed.Items
     List.ofSeq roots
 
-/// How the new parser reads each of `roots`, the types `typeRoots` finds in `parsed`, from the file at `file`.
-let checkTypes (file: string) (parsed: SourceModule) (roots: (TypeEntry * TypeExpr) list) : Outcome list =
+/// How the new parser reads each of `roots` in `parsed`, from the file at `file`: from the code token where the FParsec
+/// parser's node, `node root`, starts, with `read`, written out and compared with that node written out.
+let private checkEach (file: string) (parsed: SourceModule) (node: 'root -> 'node) (start: 'node -> int) (read: Cursor -> 'root -> 'node) (roots: 'root list) : Outcome list =
     match (try Ok(cursorOf file parsed.Source) with GiveUp reason -> Error reason) with
     | Error reason -> roots |> List.map (fun _ -> GaveUp reason)
     | Ok cursor ->
         roots
-        |> List.map (fun (entry, root) ->
-            if not (seek cursor root.Span.Start) then GaveUp "no token starts where the type does"
+        |> List.map (fun root ->
+            if not (seek cursor (start (node root))) then GaveUp "no token starts where the FParsec parser's node does"
             else
                 try
-                    let read = match entry with Annotation -> DescentTypes.typeSignature cursor | TypeBody -> DescentTypes.typeExpr cursor
-                    let expected = SyntaxDump.dump root
-                    let actual = SyntaxDump.dump read
+                    let expected = SyntaxDump.dump (node root)
+                    let actual = SyntaxDump.dump (read cursor root)
                     if expected = actual then Same else Differs(expected, actual)
                 with
                 | GiveUp reason -> GaveUp reason
                 | NoMatch -> GaveUp "no reading matched")
+
+/// How the new parser reads each of `roots`, the types `typeRoots` finds in `parsed`, from the file at `file`.
+let checkTypes (file: string) (parsed: SourceModule) (roots: (TypeEntry * TypeExpr) list) : Outcome list =
+    roots
+    |> checkEach file parsed snd (fun (root: TypeExpr) -> root.Span.Start) (fun cursor (entry, _) ->
+        match entry with
+        | Annotation -> DescentTypes.typeSignature cursor
+        | TypeBody -> DescentTypes.typeExpr cursor)
 
 /// The patterns in the FParsec parser's tree of `parsed` that a part of the grammar reads whole: each pattern of each
 /// arm of a match or an `except`, with the arms the parser makes up for an `if ... is`, a lambda's pattern parameter and
@@ -97,18 +105,65 @@ let patternRoots (parsed: SourceModule) : Pattern list =
 
 /// How the new parser reads each of `roots`, the patterns `patternRoots` finds in `parsed`, from the file at `file`.
 let checkPatterns (file: string) (parsed: SourceModule) (roots: Pattern list) : Outcome list =
-    match (try Ok(cursorOf file parsed.Source) with GiveUp reason -> Error reason) with
-    | Error reason -> roots |> List.map (fun _ -> GaveUp reason)
-    | Ok cursor ->
-        roots
-        |> List.map (fun root ->
-            if not (seek cursor root.Span.Start) then GaveUp "no token starts where the pattern does"
-            else
-                try
-                    let read = DescentPatterns.pattern cursor
-                    let expected = SyntaxDump.dump root
-                    let actual = SyntaxDump.dump read
-                    if expected = actual then Same else Differs(expected, actual)
-                with
-                | GiveUp reason -> GaveUp reason
-                | NoMatch -> GaveUp "no reading matched")
+    checkEach file parsed id (fun (root: Pattern) -> root.Span.Start) (fun cursor _ -> DescentPatterns.pattern cursor) roots
+
+/// Where an expression `expressionRoots` finds was read: what reads it.
+type ExpressionEntry =
+    /// A def's value on its line, `DescentExpressions.defValue`.
+    | DefValue
+    /// A statement, or a script's top-level expression, `expression Inline`.
+    | StatementValue
+
+/// Whether `name` is one the parser makes up for a def (see `CallResultSyntax`, `LambdaResultSyntax`,
+/// `UseInstanceSyntax` and `DestructuringSyntax`).
+let private isMadeUpName (name: Identifier) =
+    name = CallResultSyntax.name || name = LambdaResultSyntax.name || name = UseInstanceSyntax.name || DestructuringSyntax.isTemp name
+
+/// Whether `value` is one the parser makes up for a def: the made-up name, or a field of it, a destructuring def's.
+let rec private isMadeUp (value: Expression) =
+    match value.Kind with
+    | IdentifierExpr name -> isMadeUpName name
+    | MemberAccess(inner, _, None) -> isMadeUp inner
+    | FunctionCall(name, None, _) -> isMadeUpName name || name = RecSyntax.builtIn || name = MutSyntax.builtIn
+    | _ -> false
+
+/// The expressions in the FParsec parser's tree of `parsed` that a part of the grammar reads whole: each def's value
+/// written on its line, each statement's expression and each script's top-level expression. A value the parser makes up
+/// is left out (a declaration's, which starts where its def does, or a destructuring def's), and so is one that is a
+/// block, which the descent parser reads with statements, but for the block a call on a call's result is.
+let expressionRoots (parsed: SourceModule) : (ExpressionEntry * Expression) list =
+    let roots = ResizeArray()
+    let add entry (owner: SourceSpan) (value: Expression) =
+        match value.Kind with
+        // A call on a call's result is a block the parser makes up (see `CallResultSyntax`), which reads as a call.
+        | Block({ Kind = DefStatement(_, name, _, _) } :: _) when name = CallResultSyntax.name -> roots.Add((entry, value))
+        | Block _ -> ()
+        | _ when SourceSpan.isNone value.Span || isMadeUp value || value.Span.Start <= owner.Start -> ()
+        | Match _ when entry = DefValue -> ()
+        | _ -> roots.Add((entry, value))
+    let rec walk (value: obj) =
+        match value with
+        | :? TopLevelItem as item ->
+            match item.Kind with
+            | Def(ValueDef(_, name, _, value)) when not (isMadeUpName name) -> add DefValue item.Span value
+            | Expr value -> add StatementValue SourceSpan.none value
+            | _ -> ()
+        | :? Statement as statement ->
+            match statement.Kind with
+            | DefStatement(_, name, _, value) when not (isMadeUpName name) -> add DefValue statement.Span value
+            | ExprStatement value -> add StatementValue SourceSpan.none value
+            | _ -> ()
+        | _ -> ()
+        for child in BlockStructure.children value do
+            walk child
+    walk parsed.Items
+    List.ofSeq roots
+
+/// How the new parser reads each of `roots`, the expressions `expressionRoots` finds in `parsed`, from the file at
+/// `file`.
+let checkExpressions (file: string) (parsed: SourceModule) (roots: (ExpressionEntry * Expression) list) : Outcome list =
+    roots
+    |> checkEach file parsed snd (fun (root: Expression) -> root.Span.Start) (fun cursor (entry, _) ->
+        match entry with
+        | DefValue -> DescentExpressions.defValue cursor
+        | StatementValue -> DescentExpressions.expression DescentExpressions.Inline cursor)

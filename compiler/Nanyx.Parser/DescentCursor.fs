@@ -171,6 +171,27 @@ type Cursor(file: string, source: string, laid: Laid array) =
     /// Gives up on the file (see `GiveUp`).
     member _.GiveUp(reason: string) : 'a = raise (GiveUp reason)
 
+/// An identifier as the FParsec parser's `identifierNoWs` reads one, with its span: a name, or a keyword, since `#match`
+/// is a tag and a field may be called `type`.
+let identifierWithSpan (c: Cursor) : Identifier * SourceSpan =
+    match c.Token with
+    | Some token when token.Kind = Name || token.Kind = Keyword ->
+        c.Take() |> ignore
+        c.Text token, c.SpanOf token
+    | _ -> raise NoMatch
+
+/// A name as the FParsec parser's `nameNoWs` reads one, with the span of what is written: an identifier, or a name in
+/// backticks, which is the text inside them.
+let name (c: Cursor) : Identifier * SourceSpan =
+    match c.Token with
+    | Some token when token.Kind = BacktickedName ->
+        let written = c.Text token
+        let inner = written.Substring(1, written.Length - 2)
+        if Names.isReservedOperatorSpelling inner || String.IsNullOrWhiteSpace inner then c.GiveUp "a name in backticks that can't be one"
+        c.Take() |> ignore
+        inner, c.SpanOf token
+    | _ -> identifierWithSpan c
+
 /// Takes `item`s separated by what `separator` takes, at least one, as FParsec's `sepBy1` with an `attempt` around the
 /// separator and the item after it.
 let sepBy1 (cursor: Cursor) (item: unit -> 'a) (separator: unit -> unit) : 'a list =

@@ -9,17 +9,9 @@ open Parser.Program.Layout
 open Parser.Program.DescentCursor
 open Parser.Program.DescentLiterals
 
-/// An identifier as the FParsec parser reads one, which may be a keyword: `#match` is a tag.
-let private identifier (c: Cursor) : Identifier * SourceSpan =
-    match c.Token with
-    | Some token when token.Kind = Name || token.Kind = Keyword ->
-        c.Take() |> ignore
-        c.Text token, c.SpanOf token
-    | _ -> raise NoMatch
-
 /// A name a pattern binds, noted as declared by the construct being read (see `Cursor.NoteName`).
 let private boundName (c: Cursor) : Identifier * SourceSpan =
-    let name, span = identifier c
+    let name, span = identifierWithSpan c
     // The FParsec parser reads `m.x` as the name `m`, and then fails at the `.`.
     if c.Adjacent && (c.Is Dot || c.Is DotDot || c.Is Ellipsis) then c.GiveUp "a pattern's name with a `.` straight after it"
     c.NoteName name span
@@ -84,7 +76,7 @@ let rec private tuplePattern (c: Cursor) =
 and private recordPatternByPosition (c: Cursor) =
     let start = c.Start
     if c.Is Dollar then c.GiveUp "a `$` before a type's name, which is a mistake"
-    let typeName, _ = identifier c
+    let typeName, _ = identifierWithSpan c
     if not c.Adjacent then raise NoMatch
     c.Expect LeftParen |> ignore
     let patterns = commaSeparated c (fun () -> pattern c)
@@ -96,7 +88,7 @@ and private recordMemberPattern (c: Cursor) =
     let start = c.Start
     c.Expect LeftParen |> ignore
     let memberPattern () =
-        let name, nameSpan = identifier c
+        let name, nameSpan = identifierWithSpan c
         c.Expect Equals |> ignore
         let value = pattern c
         c.Declare NamedFieldValue value.Id [ name, nameSpan ]
@@ -160,7 +152,7 @@ and private tagPattern (c: Cursor) =
     let start = c.Start
     c.Expect Hash |> ignore
     if not c.Adjacent then raise NoMatch
-    let tagName, _ = identifier c
+    let tagName, _ = identifierWithSpan c
     let parenPayload () =
         let open' = c.Expect LeftParen
         let patterns = commaSeparated c (fun () -> pattern c)

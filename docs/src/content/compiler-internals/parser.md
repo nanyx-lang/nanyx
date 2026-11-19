@@ -32,7 +32,7 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   pieces differ on purpose, each listed with why in the test: where the two read text differently is listed in
   [The parser](../work-in-progress/parser) in Work in progress.
 - **The recursive-descent parser** (`DescentCursor.fs` and a file per part of the grammar, so far `DescentTypes.fs`,
-  `DescentLiterals.fs` and `DescentPatterns.fs`):
+  `DescentLiterals.fs`, `DescentPatterns.fs` and `DescentExpressions.fs`):
   the FParsec parser's grammar read from the layout pass's tokens. `DescentCursor` has the cursor, which reads the
   tokens and goes back for an alternative (`NoMatch`, which `Cursor.Attempt` catches, as FParsec's `attempt` and `<|>`
   do), and the names and documentable starts the FParsec parser keeps in `ParseState`. At anything it doesn't read yet,
@@ -45,7 +45,15 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   sign and `1.` as a float, though the lexer reads both apart. It reads patterns, trying the alternatives in the
   FParsec parser's order, and gives up at one that holds an expression other than a literal (a guard that is a lambda, a
   custom pattern's arguments). `CorpusTests.fs` checks it on every pattern of every match arm in the corpus, and
-  `DescentPatternTests.fs` on the places where reading one takes care. Nothing reads with it yet but those tests.
+  `DescentPatternTests.fs` on the places where reading one takes care. It reads expressions: literals, strings with
+  holes, names (a keyword that doesn't start a construct of its own is a name, as `identifierNoWs` reads it), calls,
+  tags, member access, `with`, tuples, records, lists and maps, the prefix `not` and `-`, pipes, `:=`, and the binary
+  operators and ranges by precedence climbing over `binaryOperators`, giving up where two operators can't be written
+  side by side. It reads as either of the FParsec parser's operator tables does (`Lines`): `Crossing` goes on after an
+  operator at the end of a line, and `Inline`, for a statement, doesn't. It gives up at a lambda and at what starts with
+  a keyword (`if`, `match`, `for`, `use`, ...), which come with blocks and statements. `CorpusTests.fs` checks it on
+  every def's value and every statement in the corpus, and `DescentExpressionTests.fs` on the places where reading one
+  takes care. Nothing reads with the pattern and expression parsers yet but those tests.
 
 # The layout rules
 
