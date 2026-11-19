@@ -29,13 +29,16 @@ type private Context =
 let private isKeyword (source: string) (words: string list) (token: Token) =
     token.Kind = Keyword && List.contains (source.Substring(token.Start, token.End - token.Start)) words
 
-/// Whether `token`, at the end of its line, opens a block on the lines after it (rule 2).
+/// Whether `token`, at the end of its line, opens a block on the lines after it (rule 2). A keyword written straight
+/// after `#` or `.` is a name, a tag's or a field's (`#match`), and opens nothing.
 let private opensBlock (source: string) (token: Token) =
     match token.Kind with
     | Equals
     | Arrow
     | LeftBrace -> true
-    | _ -> isKeyword source [ "then"; "else"; "do"; "in"; "match" ] token
+    | _ ->
+        let isName = token.Start > 0 && (source[token.Start - 1] = '#' || source[token.Start - 1] = '.')
+        not isName && isKeyword source [ "then"; "else"; "do"; "in"; "match" ] token
 
 /// Whether a line that starts with `token` at a block's column, after a line that ends with `previous`, continues the
 /// item before it (rule 5).

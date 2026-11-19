@@ -99,14 +99,15 @@ fallback.
 - **Each step:** port one area, add it to the new parser, and run the differential test. The share of the corpus the
   new parser handles without falling back goes up with each PR, and is reported in it.
 - **So far:** types (`DescentTypes.fs`), patterns (`DescentLiterals.fs`, `DescentPatterns.fs`), expressions
-  (`DescentExpressions.fs`), and lambdas, blocks and statements (`DescentBlocks.fs`), described in
-  [The parser](../compiler-internals/parser) in the Compiler internals section. Each of the 5,900 annotations and type
-  definitions' bodies in the corpus reads to the FParsec parser's tree, but 24 that hold an expression, where it gives
-  up. Of the 3,940 patterns in the corpus's match arms, 3,876 (98%) read to the FParsec parser's tree, and it gives up
-  at the 64 that hold an expression: 47 guards that are lambdas and 17 custom patterns with arguments. Of the 16,107
-  def values and statements in the corpus, 11,774 (73%) read to the FParsec parser's tree, and it gives up at the
-  others where they hold what starts with a keyword (`match`, `if`, `for`, `use`, ...) or a lambda of match arms. No
-  whole file is read without the fallback yet: that starts once those and the top level are read.
+  (`DescentExpressions.fs`), lambdas, blocks, arms and statements (`DescentBlocks.fs`), and the expressions that start
+  with a keyword (`DescentControl.fs`), described in [The parser](../compiler-internals/parser) in the Compiler
+  internals section. Each of the 5,900 annotations and type definitions' bodies in the corpus reads to the FParsec
+  parser's tree, but 24 that hold an expression in a field's default or attribute, where it gives up. Each of the
+  3,940 patterns in the corpus's match arms reads to the FParsec parser's tree. Of the 16,107 def values and statements
+  in the corpus, 15,959 (99%) read to the FParsec parser's tree, and it gives up at the others: the statements that
+  come with the top level (a destructuring def, an attribute, a local type, an import), a table literal, a lambda that
+  names its context's instance or writes its result type, and a few mistakes. No whole file is read without the
+  fallback yet: that starts once the top level is read.
 - **Settled in stage 3 so far:** the lexer's `true` and `false` names, its numbers without a sign, and its `1` and `.`
   for `1.`, which the descent parser's literals read as the FParsec parser does (`DescentLiterals.fs`). A pattern that
   is a string with holes is still open: the FParsec parser reads its `{` as text, and the descent parser gives up there,

@@ -32,6 +32,7 @@
     <Compile Include="DescentPatterns.fs" />
     <Compile Include="DescentExpressions.fs" />
     <Compile Include="DescentBlocks.fs" />
+    <Compile Include="DescentControl.fs" />
     <Compile Include="Expressions.fs" />
     <Compile Include="TopLevel.fs" />
     <Compile Include="DocComments.fs" />

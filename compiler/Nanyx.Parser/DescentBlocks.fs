@@ -1,8 +1,7 @@
-/// The recursive-descent parser's lambdas, blocks and statements: the lambda forms of `Expressions.fs`, a def's value
-/// written as an indented block, and the statements of a block (`def`, `rec`, `mut` and expression statements, several
-/// on a line after `;`), read from the layout pass's tokens. It gives up at a lambda of match arms and at the
-/// statements that come with the keyword-led expressions (`use`, `import`, a local type, an attribute), which are still
-/// to be written (see the Work in progress page "The parser").
+/// The recursive-descent parser's lambdas, blocks, match arms and statements: the lambda forms of `Expressions.fs`, a
+/// def's value written as an indented block, a match's arms, and the statements of a block (`def`, `rec`, `mut`, `use`
+/// and expression statements, several on a line after `;`), read from the layout pass's tokens. It gives up at an
+/// `import`, a local type and an attribute in a block, which come with the top level.
 module Parser.Program.DescentBlocks
 
 open Parser.Program.Lexer
@@ -12,17 +11,25 @@ open Parser.Program.DescentExpressions
 
 /// Skips the layout tokens at the cursor, as FParsec's `ws` skips the line breaks and indentation between a lambda's
 /// statements, which may be at any column until its `}`.
-let private skipLayout (c: Cursor) =
+let internal skipLayout (c: Cursor) =
     while (match c.At 0 with Code _ -> false | _ -> true) do
         c.Index <- c.Index + 1
 
 /// Whether the first code token at or after the cursor, past any layout tokens, is `kind`.
-let private nextCodeIs (c: Cursor) (kind: TokenKind) =
+let internal nextCodeIs (c: Cursor) (kind: TokenKind) =
     let index = c.Index
     skipLayout c
     let found = c.Is kind
     c.Index <- index
     found
+
+/// Where the first code token at or after the cursor starts, past any layout tokens.
+let internal nextCodeStart (c: Cursor) =
+    let index = c.Index
+    skipLayout c
+    let start = c.Start
+    c.Index <- index
+    start
 
 /// Whether the cursor is at a closing bracket or brace, which ends whatever block is open inside it.
 let private atClose (c: Cursor) = c.Is RightParen || c.Is RightBracket || c.Is RightBrace
@@ -66,7 +73,11 @@ let rec statement (c: Cursor) : Statement =
             definition c start true
         | "rec" -> wrappedDefinition c start RecSyntax.builtIn
         | "mut" when (match c.At 1 with Code next -> next.Kind = Name | _ -> false) -> wrappedDefinition c start MutSyntax.builtIn
-        | "import" | "type" | "context" | "use" | "export" | "mut" ->
+        | "use" ->
+            match c.Attempt(fun () -> useStatement c start) with
+            | Some statement -> statement
+            | None -> expressionStatement c start
+        | "import" | "type" | "context" | "export" | "mut" ->
             c.GiveUp $"a `{c.Text token}` statement, which the descent parser doesn't read yet"
         | _ -> expressionStatement c start
     | Some token when token.Kind = At -> c.GiveUp "an attribute statement"
@@ -74,8 +85,130 @@ let rec statement (c: Cursor) : Statement =
 
 /// An expression on a line of its own (`TopLevel`'s `exprStatement`).
 and private expressionStatement (c: Cursor) (start: int) =
-    if c.IsKeyword "match" then c.GiveUp "`match`, which starts what the descent parser doesn't read yet"
     statementFrom c start (ExprStatement(expression Inline c))
+
+/// `use value`, with no `in` after it: the value's instance is loaded for the statements after it in the block.
+and private useStatement (c: Cursor) (start: int) =
+    c.Expect(Keyword, "use") |> ignore
+    let value = useValue c
+    let index = c.Index
+    skipLayout c
+    let inFollows = c.IsKeyword "in"
+    c.Index <- index
+    if inFollows then raise NoMatch
+    statementFrom c start (UseStatement value)
+
+/// The value a `use` loads: an instance written out, `Add(Point)(zero = ..., ...)`, which is a block that defines it
+/// under a made-up name and gives it back (see `UseInstanceSyntax`), or any expression, `use addInt`.
+and internal useValue (c: Cursor) : Expression =
+    let instance () =
+        let start = c.Start
+        let contextName, _ = identifierWithSpan c
+        if not (System.Char.IsUpper contextName[0]) || not (c.Adjacent && c.Is LeftParen) then raise NoMatch
+        c.Take() |> ignore
+        let typeArgument () =
+            let named () =
+                let argStart = c.Start
+                let argName, _ = identifierWithSpan c
+                if not (c.Is Equals && c.OnSameLine) then raise NoMatch
+                c.Take() |> ignore
+                let value = DescentTypes.typeExpr c
+                TypeExpr.at (c.SpanFrom argStart) (TypeNamedArgument(argName, value))
+            match c.Attempt named with
+            | Some argument -> argument
+            | None -> DescentTypes.typeExpr c
+        let arguments = sepBy1 c typeArgument (fun () -> c.Expect Comma |> ignore)
+        c.Expect RightParen |> ignore
+        let context = TypeExpr.at (c.SpanFrom start) (TypeApply(contextName, arguments))
+        if c.Is Equals then c.GiveUp "`use C(T) = ...`, which is a mistake"
+        if not (c.Adjacent && c.Is LeftParen) then raise NoMatch
+        let fields, membersSpan = parenFields c
+        let span = c.SpanFrom start
+        let members = Expression.at membersSpan (RecordExpr fields)
+        let definition = Statement.at span (DefStatement(false, UseInstanceSyntax.name, Some context, members))
+        let result = Statement.at span (ExprStatement(Expression.at span (IdentifierExpr UseInstanceSyntax.name)))
+        Expression.at span (Block [ definition; result ])
+    match c.Attempt instance with
+    | Some instance -> instance
+    | None -> expression Crossing c
+
+/// Arms read by `arm`, each from its `|`, run as the layout pass lays them out: on the line, or each starting a line of
+/// the block of arms the first opens. A first arm on the line after, at the column of the arms of an enclosing match,
+/// takes the arms after it at that column, as the FParsec parser's `firstArmIndent` does. An arm `isLast` picks ends
+/// them, as an `if`'s `else` arm does. The `Dedent` that closes each block of arms they open is theirs.
+and internal armsWith (c: Cursor) (isLast: 'a -> bool) (arm: unit -> 'a list) : 'a list =
+    let mutable opened = 0
+    let mutable onNewLines = false
+    let mutable first = true
+    let atBar () =
+        match c.At 0 with
+        | Code token -> token.Kind = Bar
+        | Indent _ when nextCodeIs c Bar ->
+            c.Index <- c.Index + 1
+            opened <- opened + 1
+            true
+        | Newline _ when (opened > 0 || onNewLines || first) && nextCodeIs c Bar ->
+            if first then onNewLines <- true
+            c.Index <- c.Index + 1
+            true
+        | _ -> false
+    if not (atBar ()) then raise NoMatch
+    first <- false
+    let arms = ResizeArray(arm ())
+    while not (arms |> Seq.exists isLast) && atBar () do
+        arms.AddRange(arm ())
+    for _ in 1..opened do
+        match c.At 0 with
+        | Dedent _ -> c.Index <- c.Index + 1
+        | _ -> c.GiveUp "a block of arms the layout pass closes somewhere else"
+    List.ofSeq arms
+
+/// One arm: its alternatives, each patterns separated by commas, and the body they share after `->`, which declares
+/// the names they bind (`Expressions.armAlternativesAfter`). Each alternative is an arm of its own.
+and private arm (c: Cursor) : MatchArm list =
+    let alternatives, names =
+        c.Collecting(fun () ->
+            let alternative () = sepBy1 c (fun () -> DescentPatterns.pattern c) (fun () -> c.Expect Comma |> ignore)
+            let all = ResizeArray [ alternative () ]
+            let mutable going = true
+            while going do
+                match c.At 0 with
+                | Code token when token.Kind = Bar ->
+                    c.Take() |> ignore
+                    all.Add(alternative ())
+                | Newline _ when nextCodeIs c Bar ->
+                    c.Index <- c.Index + 1
+                    c.Take() |> ignore
+                    all.Add(alternative ())
+                | _ -> going <- false
+            List.ofSeq all)
+    if not (c.Is Arrow) then raise NoMatch
+    c.Take() |> ignore
+    let body = armBody c
+    c.Declare ArmBody body.Id names
+    alternatives |> List.map (fun patterns -> patterns, body)
+
+/// An arm's body after its `->`: a block on the lines after it, or a body on the line (`Expressions.matchArmBody`).
+and internal armBody (c: Cursor) : Expression =
+    match c.At 0 with
+    | Indent _ ->
+        c.Index <- c.Index + 1
+        indentedBlock c
+    | Code _ when c.OnSameLine -> sameLineBody c (expression Inline)
+    | _ -> c.GiveUp "an arm's body the layout pass doesn't open"
+
+/// A match's arms, each from its `|` (`Expressions.matchArms`).
+and arms (c: Cursor) : MatchArm list =
+    armsWith c (fun _ -> false) (fun () ->
+        c.Expect Bar |> ignore
+        arm c)
+
+/// What follows `except`: arms, or one arm without its `|` (`Expressions.exceptArms`).
+and exceptArms (c: Cursor) : MatchArm list =
+    if nextCodeIs c Bar then arms c
+    else
+        skipLayout c
+        arm c
 
 /// `def name: T = value`, from `start`, where an `export` before it starts.
 and private definition (c: Cursor) (start: int) (isExport: bool) =
@@ -153,7 +286,7 @@ and private statementsOnLine (c: Cursor) : Statement list =
 
 /// A body on the line it starts on: what `value` reads, or a statement that defines a name, and then each statement
 /// after a `;`, which make it a block of them all (`Expressions.sameLineBody`).
-and private sameLineBody (c: Cursor) (value: Cursor -> Expression) : Expression =
+and internal sameLineBody (c: Cursor) (value: Cursor -> Expression) : Expression =
     let start = c.Start
     let defines = c.IsKeyword "def" || c.IsKeyword "rec" || c.IsKeyword "mut"
     let leading = if defines then Choice1Of2 [ statement c ] else Choice2Of2(value c)
@@ -184,7 +317,6 @@ and private lambdaBody (c: Cursor) : Expression =
         let start = c.Start
         let statements = ResizeArray()
         while not (c.Is RightBrace) do
-            if c.IsKeyword "match" then c.GiveUp "`match`, which starts what the descent parser doesn't read yet"
             statements.AddRange(statementsOnLine c)
             skipLayout c
         blockOf c start (List.ofSeq statements)
@@ -277,7 +409,17 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
         if c.Is Colon && c.OnSameLine then c.GiveUp "a lambda's result type"
         if not (c.Is Arrow && c.OnSameLine) then raise NoMatch
         c.Take() |> ignore
-        if nextCodeIs c Bar then c.GiveUp "a lambda of match arms"
+        // Names and then arms match the arms against the parameters, which stay in scope in each arm.
+        if nextCodeIs c Bar then
+            let named = written |> List.map (function Choice1Of2 named -> named | Choice2Of2 _ -> c.GiveUp "a pattern parameter before arms, which is a mistake")
+            let armsStart = nextCodeStart c
+            let written = arms c
+            let armsSpan = c.SpanFrom armsStart
+            skipLayout c
+            fun span ->
+                let scrutinees = named |> List.map (fun (name, _) -> Expression.at armsSpan (IdentifierExpr name))
+                Lambda(named, Expression.at span (Match(scrutinees, written)), false)
+        else
         let body = lambdaBody c
         skipLayout c
         let destructured =
@@ -304,7 +446,16 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
         let body = lambdaBody c
         skipLayout c
         fun _ -> Lambda([], body, false)
-    if nextCodeIs c Bar then c.GiveUp "a lambda of match arms"
+    // `{ | pattern -> ... }`: arms, matched against as many arguments as the most patterns an arm has.
+    let matchArms () =
+        let written = arms c
+        skipLayout c
+        fun span ->
+            let made kind = Expression.at span kind
+            let arity = written |> List.map (fun (patterns, _) -> patterns.Length) |> List.max
+            let names = [ 1..arity ] |> List.map (fun index -> ($"arg{index}", None))
+            Lambda(names, made (Match(names |> List.map (fun (name, _) -> made (IdentifierExpr name)), written)), false)
+    if nextCodeIs c Bar then matchArms () else
     match c.Attempt empty with
     | Some kind -> kind
     | None ->
@@ -332,18 +483,3 @@ and lambda (c: Cursor) : Expression =
     let lambda = Expression.at span (kind span)
     c.Declare LambdaParameters lambda.Id names
     lambda
-
-/// Fills the forward references the files before this one read lambdas through.
-let fill () = lambdaRef.Value <- lambda
-
-/// A def's value, `= value` read from after the `=`: what is on its line, or the block on the lines after it.
-let defValueAfterEquals (c: Cursor) : Expression =
-    fill ()
-    match c.At -1 with
-    | Indent _ -> indentedBlock c
-    | _ -> DescentExpressions.defValue c
-
-/// A statement's expression, read as `exprWithoutCrossingNewlines` reads it.
-let statementValue (c: Cursor) : Expression =
-    fill ()
-    expression Inline c

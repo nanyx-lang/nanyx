@@ -1,7 +1,6 @@
 /// The recursive-descent parser's patterns: the grammar of `Patterns.fs`, read from the layout pass's tokens, trying the
-/// alternatives in the order `fillPatternRef` lists them. It gives up at a pattern that holds an expression other than a
-/// literal (a guard's lambda, a custom pattern's arguments), which the expression parser will read once it is written
-/// (see the Work in progress page "The parser"), and at text the FParsec parser reads only to fail later.
+/// alternatives in the order `fillPatternRef` lists them. A guard's lambda and a custom pattern's arguments are
+/// expressions, read through `Forward`. It gives up at text the FParsec parser reads only to fail later.
 module Parser.Program.DescentPatterns
 
 open Parser.Program.Lexer
@@ -126,7 +125,10 @@ and private listPattern (c: Cursor) =
 
 /// A guard: a lambda, which is an expression, or the older bare form, `> 5`, which is the shorthand lambda `{ > 5 }`.
 and private guardPattern (c: Cursor) =
-    if c.Is LeftBrace then c.GiveUp "a guard, which is a lambda"
+    if c.Is LeftBrace then
+        let lambda = Forward.lambda.Value c
+        Pattern.at lambda.Span (GuardPattern lambda)
+    else
     let isGuardOperator text = List.contains text [ ">="; "<="; "=="; "!="; ">"; "<" ]
     match c.Token with
     | Some token when token.Kind = Operator && isGuardOperator (c.Text token) ->
@@ -166,16 +168,33 @@ and private tagPattern (c: Cursor) =
         let gap = c.Source.Substring(c.LastEnd, c.Start - c.LastEnd)
         if gap = "" || gap |> Seq.exists (fun ch -> ch <> ' ' && ch <> '\t') || c.Is Keyword then raise NoMatch
         singlePattern c
-    let bracketed = c.Adjacent && c.Is LeftParen
-    let payload =
-        if bracketed then
-            c.Attempt(fun () -> first c [ (fun () -> unitPattern c); (fun () -> recordMemberPattern c); parenPayload ])
+    let bracketedPayload () = first c [ (fun () -> unitPattern c); (fun () -> recordMemberPattern c); parenPayload ]
+    let payload () =
+        if c.Adjacent && c.Is LeftParen then c.Attempt bracketedPayload
         else c.Attempt inlinePayload
-    // A custom pattern's arguments come in brackets before its payload's (see `ArgumentTagPattern`), and are
-    // expressions: brackets that aren't a payload, or a second pair after it, are its arguments.
-    if PatternSyntax.isPatternTag tagName && ((bracketed && payload.IsNone) || c.Is LeftParen) then
-        c.GiveUp "a custom pattern's arguments, which are expressions"
-    Pattern.at (c.SpanFrom start) (TagPattern(tagName, payload))
+    // A custom pattern's arguments are expressions in brackets, before its payload's if it has one (see
+    // `ArgumentTagPattern`): one, or several as a tuple.
+    let arguments () =
+        if not (c.Adjacent && c.Is LeftParen) then raise NoMatch
+        let open' = c.Take()
+        let values = sepBy1 c (fun () -> Forward.expression.Value c) (fun () -> c.Expect Comma |> ignore)
+        c.Expect RightParen |> ignore
+        match values with
+        | [ single ] -> single
+        | several -> Expression.at (c.SpanFrom open'.Start) (TupleExpr several)
+    let kind =
+        if PatternSyntax.isPatternTag tagName then
+            let withPayload () =
+                let args = arguments ()
+                if not (c.Adjacent && c.Is LeftParen) then raise NoMatch
+                ArgumentTagPattern(tagName, args, Some(bracketedPayload ()))
+            let payloadOnly () =
+                let payload = payload ()
+                if c.Is LeftParen then raise NoMatch
+                TagPattern(tagName, payload)
+            first c [ withPayload; payloadOnly; (fun () -> ArgumentTagPattern(tagName, arguments (), None)) ]
+        else TagPattern(tagName, payload ())
+    Pattern.at (c.SpanFrom start) kind
 
 /// One pattern, not an and-pattern (`Patterns.fs`'s `singlePattern`).
 and singlePattern (c: Cursor) : Pattern =
