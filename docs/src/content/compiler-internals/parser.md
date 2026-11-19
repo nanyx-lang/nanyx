@@ -1,12 +1,12 @@
 ---
 title: "The parser"
-description: "The parser corpus, the differential test, the lexer and the layout pass"
+description: "The parser corpus, the differential test, the lexer, the layout pass and the recursive-descent parser so far"
 order: 12
 ---
 
 The parser (`compiler/Nanyx.Parser`) is written with [FParsec](https://www.quanttec.com/fparsec/) combinators. It is to
 move to a lexer and a hand-written recursive-descent parser, in the stages [The parser](../work-in-progress/parser) in
-Work in progress describes. This page says what stages 0 to 2 built:
+Work in progress describes. This page says what stages 0 to 2 built, and what stage 3 has built so far:
 
 - **The corpus** (`Corpus.fs` in `compiler/Nanyx.Parser.Corpus`, a library only the test projects reference): every
   `.nyx` file in the repository, every ` ```nanyx ` block in the docs, and every triple-quoted string in the test
@@ -31,6 +31,16 @@ Work in progress describes. This page says what stages 0 to 2 built:
   the offset it starts at, keeping only the items that start their line and the groups of two items or more. A few
   pieces differ on purpose, each listed with why in the test: where the two read text differently is listed in
   [The parser](../work-in-progress/parser) in Work in progress.
+- **The recursive-descent parser** (`DescentCursor.fs` and a file per part of the grammar, so far `DescentTypes.fs`):
+  the FParsec parser's grammar read from the layout pass's tokens. `DescentCursor` has the cursor, which reads the
+  tokens and goes back for an alternative (`NoMatch`, which `Cursor.Attempt` catches, as FParsec's `attempt` and `<|>`
+  do), and the names and documentable starts the FParsec parser keeps in `ParseState`. At anything it doesn't read yet,
+  and at any mistake, it gives up (`GiveUp`) and the FParsec parser reads the text instead, so that errors are still
+  reported as they were. It reads types, and gives up at one that holds an expression (a field's default or attribute,
+  a `where` constraint). `parseTypeSignature`, which `nanyx search` reads a query's type with, uses it. `CorpusTests.fs`
+  checks it against the FParsec parser on every def's annotation and type definition's body in the corpus
+  (`DescentCheck.fs` in the corpus project): each must read to the same tree with the same spans, or give up at an
+  expression.
 
 # The layout rules
 

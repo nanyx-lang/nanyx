@@ -407,12 +407,11 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
         let innerTy, next = typeExprToTy state inner
         match innerTy with
         // A type generic in contexts carries those written in front of it, `[FileSystem] Stream(string)`.
-        | TyNominal(id, args, _, _) when (match List.tryLast args with Some (FunctionContexts.Carried _) -> true | _ -> false) ->
-            match next.TypeDefs |> Map.tryPick (fun _ info -> if TypeDefInfo.nominalId info = id then Some info else None) with
+        | FunctionContexts.CarryingNominal(id, ownArgs, carried) ->
+            match tryFindNominalDef id next with
             | Some info ->
-                let own = match List.last args with FunctionContexts.Carried own -> own | _ -> []
-                match WrittenContexts.withContexts typeExprToTy next contexts (TyFunc(TyPrimitive "unit", TyPrimitive "unit", own)) with
-                | TyFunc(_, _, written), next -> nominalType info (List.truncate (args.Length - 1) args @ writtenContexts info written), next
+                match WrittenContexts.withContexts typeExprToTy next contexts (TyFunc(TyPrimitive "unit", TyPrimitive "unit", carried)) with
+                | TyFunc(_, _, written), next -> nominalType info (ownArgs @ writtenContexts info written), next
                 | _, next -> innerTy, next
             | None -> innerTy, next
         | _ -> WrittenContexts.withContexts typeExprToTy next contexts innerTy
@@ -536,7 +535,7 @@ let private unknownTypeErrors (state: InferState) (parameters: Set<Identifier>) 
                     match Unifier.unalias (fst (typeExprToTy state inner)) with
                     | TyFunc _
                     | TyVar _ -> None
-                    | TyNominal(_, args, _, _) when (match List.tryLast args with Some (FunctionContexts.Carried _) -> true | _ -> false) -> None
+                    | FunctionContexts.CarryingNominal _ -> None
                     | TyNominal _ as ty ->
                         Some (Diagnostics.at DiagnosticCodes.ContextsOnValueType (SourceSpan.between first.Span (List.last written).Span)
                                   $"'{Unifier.tyToString ty}' doesn't take contexts: only a function type does, or a type declared with a context variable, as in `type Stream(a) = [k] protected (...)`")

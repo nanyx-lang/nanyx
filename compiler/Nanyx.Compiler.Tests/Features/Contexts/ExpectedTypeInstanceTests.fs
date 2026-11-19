@@ -62,3 +62,14 @@ let ``A call at a type an instance in scope is not for is an error`` (definition
 let ``A call finds the instance in scope at the type its result is expected to have`` (definition: string) =
     let result = Compiler.compile (normalized (monoid + definition + "\n"))
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+[<Fact>]
+let ``A function named as a value at the type the def writes needs an instance of that type (#2017)`` () =
+    let source =
+        """context Decode(a) = (decode: string -> a)
+def des: [Decode(a)] string -> a = { text -> decode(text) }
+def apply: (string -> a), string -> a = { f, text -> f(text) }
+def u: bool = apply(des, "ab")
+"""
+    let diagnostic = Assert.Single((Compiler.compile (normalized source)).Diagnostics)
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+    Assert.StartsWith("'des' requires the context 'Decode(bool)', which is not loaded here", diagnostic.Message)

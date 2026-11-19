@@ -180,6 +180,10 @@ type InferState =
             DeferredContextUses: DeferredContextUse list;
             /// The calls whose instances are found once the def around them is inferred (see `PendingContextInstance`).
             PendingContextInstances: PendingContextInstance list;
+            /// The nodes of the functions named as values among `PendingContextInstances`: one whose type is still open
+            /// once it is resolved is never called at that type, and needs no instance (see
+            /// `ContextInstances.resolvePendingInstances`).
+            PendingReferences: Set<NodeId>;
             /// The arithmetic operators left to be read once the def around them is inferred (see `PendingArithmetic`).
             PendingArithmetic: PendingArithmetic list;
             /// The number literals of the module so far, the latest first, to be checked against their types once those
@@ -412,6 +416,7 @@ let emptyState =
             ScriptEntryValues = Set.empty;
             DeferredContextUses = [];
             PendingContextInstances = [];
+            PendingReferences = Set.empty;
             PendingArithmetic = [];
             NumericLiterals = [];
             UnsettledLiterals = [];
@@ -588,6 +593,10 @@ let internal recordSymbolType (symbol: SymbolId option) (ty: Ty) (state: InferSt
     match symbol with
     | Some symbol -> { state with SymbolTypes = state.SymbolTypes |> Map.add symbol ty }
     | None -> state
+
+/// The definition of the nominal type `nominal` among those `state` knows, by whichever name it is known.
+let internal tryFindNominalDef (nominal: NominalId) (state: InferState) : TypeDefInfo option =
+    state.TypeDefs |> Map.tryPick (fun _ info -> if TypeDefInfo.nominalId info = nominal then Some info else None)
 
 /// Records the type inference gave an expression, so it can be looked up by node once unification has resolved it.
 let internal recordExprType (result: Result<TypedExpr * InferState, Diagnostic list>) =
