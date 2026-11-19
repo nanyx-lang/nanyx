@@ -241,7 +241,6 @@ and private tag (c: Cursor) : Expression =
 and private bracketItems (c: Cursor) : Choice<Choice<Expression list, Expression> list, Expression list> * SourceSpan =
     let start = c.Start
     c.Expect LeftBracket |> ignore
-    if c.Adjacent && c.Is Bar then c.GiveUp "a table literal"
     let item () =
         if c.Is Ellipsis then
             c.Take() |> ignore
@@ -270,8 +269,41 @@ and private bracketItems (c: Cursor) : Choice<Choice<Expression list, Expression
         Choice2Of2(entries |> List.map (fun (key, value) -> Expression.from key (TupleExpr [ key; value ]))), span
     else c.GiveUp "a map literal with an item that isn't an entry, which is a mistake"
 
+/// `[| a | b |` and then rows of cells, a table: the list of a record for each row, with the header's fields
+/// (`Expressions.tableExpr`). Each row is on a line of its own, and spans its `|`s.
+and private table (c: Cursor) : Expression =
+    let start = c.Start
+    c.Expect LeftBracket |> ignore
+    c.Expect Bar |> ignore
+    let header = ResizeArray()
+    while c.OnSameLine && (c.Is Name || c.Is Keyword || c.Is BacktickedName) do
+        header.Add(name c)
+        c.Expect Bar |> ignore
+    if header.Count = 0 then raise NoMatch
+    let rows = ResizeArray()
+    while c.Is Bar && not c.OnSameLine do
+        let rowStart = c.Start
+        c.Take() |> ignore
+        let cells = ResizeArray()
+        while c.OnSameLine && not (c.Is RightBracket) do
+            cells.Add(expression Crossing c)
+            if not c.OnSameLine then raise NoMatch
+            c.Expect Bar |> ignore
+        if cells.Count <> header.Count then c.GiveUp "a table's row with a different number of cells, which is a mistake"
+        let fields =
+            Seq.zip header cells
+            |> Seq.map (fun ((field, fieldSpan), value) ->
+                c.Declare NamedFieldValue value.Id [ field, fieldSpan ]
+                NamedField(field, value))
+            |> List.ofSeq
+        rows.Add(Expression.at (c.SpanFrom rowStart) (RecordExpr fields))
+    if rows.Count = 0 then c.GiveUp "a table with no rows, which is a mistake"
+    c.Expect RightBracket |> ignore
+    Expression.at (c.SpanFrom start) (ListExpr(List.ofSeq rows))
+
 /// `[a, b]`, `[a, ...xs]` or `[k => v]`: a list, a concatenation of its runs and spreads, or a map.
 and private list (c: Cursor) : Expression =
+    if (match c.At 1 with Code next -> next.Kind = Bar && next.Start = c.Start + 1 | _ -> false) then table c else
     match bracketItems c with
     | Choice1Of2 segments, span ->
         let segments = segments |> List.map (function Choice1Of2 elements -> Expression.at span (ListExpr elements) | Choice2Of2 spread -> spread)
@@ -605,3 +637,35 @@ let defValue (c: Cursor) : Expression =
     match items with
     | [ single ] -> single
     | several -> Expression.at (c.SpanFrom start) (TupleExpr several)
+
+/// An attribute's argument, written straight after its name as a tag's payload is: linter rules, `(default/unused)`,
+/// whose `/` has no spaces round it, `()`, or arguments as a call's (`TopLevel`'s `attributeArgumentRef`).
+let attributeArgument (c: Cursor) : Expression =
+    let linterRules () =
+        let start = c.Start
+        c.Expect LeftParen |> ignore
+        let rule () =
+            let ruleStart = c.Start
+            let linter, linterSpan = identifierWithSpan c
+            let slash = c.Expect(Operator, LinterRuleSyntax.separator)
+            if slash.Start <> linterSpan.End then raise NoMatch
+            if not c.Adjacent then raise NoMatch
+            let ruleName, ruleSpan = identifierWithSpan c
+            Expression.at (c.SpanFrom ruleStart)
+                (BinaryOp(LinterRuleSyntax.separator, Some(c.SpanOf slash), Expression.at linterSpan (IdentifierExpr linter), Expression.at ruleSpan (IdentifierExpr ruleName)))
+        let rules = sepBy1 c rule (fun () -> c.Expect Comma |> ignore)
+        c.Expect RightParen |> ignore
+        match rules with
+        | [ single ] -> single
+        | several -> Expression.at (c.SpanFrom start) (TupleExpr several)
+    match c.Attempt linterRules with
+    | Some rules -> rules
+    | None ->
+        if c.Is LeftParen && (match c.At 1 with Code next -> next.Kind = RightParen | _ -> false) then
+            let start = c.Start
+            c.Take() |> ignore
+            c.Take() |> ignore
+            Expression.at (c.SpanFrom start) UnitExpr
+        else
+            let fields, span = parenFields c
+            fieldsToExpr fields span

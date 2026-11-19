@@ -37,8 +37,8 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   tokens and goes back for an alternative (`NoMatch`, which `Cursor.Attempt` catches, as FParsec's `attempt` and `<|>`
   do), and the names and documentable starts the FParsec parser keeps in `ParseState`. At anything it doesn't read yet,
   and at any mistake, it gives up (`GiveUp`) and the FParsec parser reads the text instead, so that errors are still
-  reported as they were. It reads types, and gives up at one that holds an expression (a field's default or attribute,
-  a `where` constraint). `parseTypeSignature`, which `nanyx search` reads a query's type with, uses it. `CorpusTests.fs`
+  reported as they were. It reads types, with a field's default and attribute read as expressions, and gives up at a
+  `where` constraint. `parseTypeSignature`, which `nanyx search` reads a query's type with, uses it. `CorpusTests.fs`
   checks it against the FParsec parser on every def's annotation and type definition's body in the corpus
   (`DescentCheck.fs` in the corpus project): each must read to the same tree with the same spans, or give up at an
   expression. It reads literals as the FParsec parser does, with a `+` or `-` written straight before a number as its
@@ -52,7 +52,8 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   side by side. It reads as either of the FParsec parser's operator tables does (`Lines`): `Crossing` goes on after an
   operator at the end of a line, and `Inline`, for a statement, doesn't. `DescentBlocks.fs` reads lambdas, a def's
   value written as an indented block, a match's arms, and the statements of a block: `def`, `export def`, `rec`, `mut`,
-  `use` and expressions, several on a line after `;`. A lambda's statements are any number at any column until its
+  `use`, attributes, destructuring defs (desugared by `Destructuring.fs`'s helpers, which both parsers share) and
+  expressions, several on a line after `;`. A lambda's statements are any number at any column until its
   `}`, as the FParsec parser reads them, and a block's run from the `Indent` that opens it to the `Dedent` that closes
   it, with a line indented further that its statement before didn't take as a statement of its own. Arms run as the
   layout pass lays them out, but a first arm on the line after, at the column of an enclosing match's arms, takes the
@@ -60,8 +61,8 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   with a keyword: `match`, `if` (with `is`, and with arms), `for`, `while`, `do`, `use ... in`, `return`, `try`,
   `yield` and `name!`, `mut x` as an argument and `type T`. The files before it read lambdas, expressions, arms and
   these through forward references (`DescentCursor.Forward`), which `DescentControl.fill` fills, as the FParsec parser's
-  `Refs.fs` are. It gives up at a destructuring def, an `import`, a local type or an attribute in a block, a table
-  literal, and a lambda that names its context's instance or writes its result type. `CorpusTests.fs` checks it on
+  `Refs.fs` are. A type's field defaults and attributes, and a table literal, are read too. It gives up at an `import`
+  and a local type in a block, which come with the top level. `CorpusTests.fs` checks it on
   every def's value and every statement in the corpus, and `DescentExpressionTests.fs`, `DescentBlockTests.fs` and
   `DescentControlTests.fs` on the places where reading one takes care. Nothing reads with the pattern, expression and
   block parsers yet but those tests.

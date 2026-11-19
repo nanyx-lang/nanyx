@@ -8,9 +8,9 @@ open Parser.Program
 // `def (x, y) = value`, or `def x, y = value` without the brackets, binds each element of a tuple. It is desugared
 // in the parser into a binding of the whole value plus one `def` per element (`def x = __tuple.0`), so the rest of
 // the compiler only ever sees plain defs. This form takes only names, `_` and nested tuples, which cannot fail to
-// match; any other pattern is bound through a match instead (see `matchingBindings`).
-let private destructuringBindings (position: Position) (pattern: Pattern) (value: Expression) : (Identifier * Expression) list option =
-    let temp = DestructuringSyntax.temp position.Line position.Column
+// match; any other pattern is bound through a match instead (see `matchingBindings`). The whole value is bound to
+// `temp`, a made-up name (see `DestructuringSyntax.temp`). The recursive-descent parser builds them too.
+let internal destructuringBindings (temp: Identifier) (pattern: Pattern) (value: Expression) : (Identifier * Expression) list option =
     let rec bind (pattern: Pattern) (source: Expression) =
         match pattern.Kind with
         | IdentifierPattern name -> Some [ name, source ]
@@ -31,8 +31,7 @@ let private destructuringBindings (position: Position) (pattern: Pattern) (value
 // the tuple form uses, as the match's result, which is the tuple of the names the pattern binds, and then one
 // `def` per name takes its element. Whether the pattern is total is for the type checker to say, as it does
 // for any other match.
-let private matchingBindings (position: Position) (pattern: Pattern) (names: Identifier list) (value: Expression) : Expression * (Identifier * Expression) list =
-    let temp = DestructuringSyntax.temp position.Line position.Column
+let internal matchingBindings (temp: Identifier) (pattern: Pattern) (names: Identifier list) (value: Expression) : Expression * (Identifier * Expression) list =
     let made kind = Expression.from value kind
     let body =
         match names with
@@ -73,10 +72,11 @@ let destructuringDefWith (lineStart: Position) (exprParser: Parser<Expression, P
         match pattern.Kind with
         | IdentifierPattern _ -> fail "A destructuring def takes a pattern, not a name"
         | _ ->
-            match destructuringBindings position pattern value with
+            let temp = DestructuringSyntax.temp position.Line position.Column
+            match destructuringBindings temp pattern value with
             | Some bindings -> declareBindings bindings >>% (isExport, bindings)
             | None ->
                 let boundNames = names |> List.map fst |> List.distinct
-                let body, bindings = matchingBindings position pattern boundNames value
+                let body, bindings = matchingBindings temp pattern boundNames value
                 // The arm's body declares the names the pattern binds, as any match arm's does.
                 declare ArmBody body.Id names >>. declareBindings bindings >>% (isExport, bindings)

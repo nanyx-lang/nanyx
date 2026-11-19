@@ -75,6 +75,7 @@ let private checkEach (file: string) (parsed: SourceModule) (node: 'root -> 'nod
 let checkTypes (file: string) (parsed: SourceModule) (roots: (TypeEntry * TypeExpr) list) : Outcome list =
     roots
     |> checkEach file parsed snd (fun (root: TypeExpr) -> root.Span.Start) (fun cursor (entry, _) ->
+        DescentControl.fill ()
         match entry with
         | Annotation -> DescentTypes.typeSignature cursor
         | TypeBody -> DescentTypes.typeExpr cursor)

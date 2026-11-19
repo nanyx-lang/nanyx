@@ -217,6 +217,8 @@ module Forward =
     let arms: (Cursor -> MatchArm list) ref = ref (unfilled "match arms")
     /// What follows `except`: arms, or one arm without its `|` (`DescentBlocks.exceptArms`).
     let exceptArms: (Cursor -> MatchArm list) ref = ref (unfilled "`except` arms")
+    /// An attribute's argument, written straight after its name (`DescentExpressions.attributeArgument`).
+    let attributeArgument: (Cursor -> Expression) ref = ref (unfilled "an attribute's argument")
     /// An expression that starts with a keyword: `if`, `match`, `for`, `while`, `do`, `use ... in`, `return`, `try`,
     /// `yield`, `mut x` and `type T` (`DescentControl.keywordExpression`).
     let keywordExpression: (Cursor -> Expression) ref = ref (unfilled "a keyword's expression")

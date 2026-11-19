@@ -82,3 +82,12 @@ let ``An expression the descent parser doesn't read is left to the FParsec parse
         let outcomes = DescentCheck.checkExpressions "t.nyx" parsed (DescentCheck.expressionRoots parsed)
         Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.GaveUp reason ], outcomes)
     | Result.Error _ -> Assert.Equal("a < b < c", value)
+
+[<Fact>]
+let ``A type's field defaults and attributes are read as expressions`` () =
+    let source = "type Options = (\n  retries: int = 3\n  @customKeywordType(#bind)\n  bind: () -> () = { () }\n  label: string = \"x {retries}\"\n)\n"
+    match parseModuleWithTrivia "t.nyx" source with
+    | Result.Ok parsed ->
+        let roots = DescentCheck.typeRoots parsed
+        Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.Same ], DescentCheck.checkTypes "t.nyx" parsed roots)
+    | Result.Error error -> failwith error.Message

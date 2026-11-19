@@ -84,9 +84,21 @@ and private typeArgument (c: Cursor) =
     | TypeVar _ -> TypeExpr.at (c.SpanFrom start) (TypeArgument operand)
     | _ -> c.GiveUp "a positional type parameter that isn't a type variable"
 
-/// `name: T` in a record type, with the names it declares noted for the record (`declared`).
-and private typeField (c: Cursor) (declared: ResizeArray<Identifier * SourceSpan>) =
-    if c.Is At then c.GiveUp "a field's attribute, whose argument is an expression"
+/// `@name(argument)` before a field, on its line or the one above (see `TypeFieldAttribute`).
+and private fieldAttribute (c: Cursor) =
+    let start = c.Start
+    c.Expect At |> ignore
+    if not c.Adjacent then raise NoMatch
+    let attributeName = identifier c
+    let argument = if c.Adjacent && c.Is LeftParen then Some(Forward.attributeArgument.Value c) else None
+    let span = c.SpanFrom start
+    c.Across(fun c -> c.Token.IsSome) |> ignore
+    TypeFieldAttribute(attributeName, argument, span)
+
+/// `name: T` in a record type, with its default after `=` if it has one, and the attributes before it, with the names
+/// it declares noted for the record (`declared`).
+and private typeField (c: Cursor) (declared: ResizeArray<Identifier * SourceSpan>) : TypeRecordField list =
+    let attributes = many c (fun () -> fieldAttribute c)
     let fieldStart = c.Start
     let isMut =
         if c.IsKeyword "mut" then
@@ -105,15 +117,20 @@ and private typeField (c: Cursor) (declared: ResizeArray<Identifier * SourceSpan
             let token = c.Take()
             TypeExpr.at (c.SpanOf token) TypeKeyword
         else typeExpr c
-    if across c Equals None then c.GiveUp "a field's default, which is an expression"
+    let defaultValue =
+        if across c Equals None then
+            c.Take() |> ignore
+            c.Across(fun c -> c.Token.IsSome) |> ignore
+            Some(Forward.expression.Value c)
+        else None
     c.Declare NamedFieldValue value.Id [ fieldName, nameSpan ]
-    TypeField(fieldName, isMut, Some value, None)
+    attributes @ [ TypeField(fieldName, isMut, Some value, defaultValue) ]
 
 /// The fields of a record type, each after a `,` or on a line of its own.
 and private namedTypeFields (c: Cursor) (declared: ResizeArray<Identifier * SourceSpan>) =
     let separator () =
         if not (c.Skip Comma) && c.Adjacent then raise NoMatch
-    sepBy1 c (fun () -> typeField c declared) separator
+    sepBy1 c (fun () -> typeField c declared) separator |> List.concat
 
 /// A record type in brackets: positional fields, then named ones, then `...` or `...r` if it is open.
 and private typeRecord (c: Cursor) =

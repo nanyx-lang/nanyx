@@ -65,10 +65,25 @@ let ``Lambdas nest in arguments over several lines`` () =
     allSame "def v = items \\map { item ->\n  def price = item.price\n  price * 2\n} \\filter { > 0 }\n"
 
 [<Theory>]
-[<InlineData("{ context l -> l }", "a lambda that names its context's instance")>]
-[<InlineData("{ (x: int): int -> x }", "a lambda's result type")>]
-let ``A lambda the descent parser doesn't read yet is left to the FParsec parser`` (value: string, reason: string) =
-    Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.GaveUp reason ], outcomesIn $"def v = {value}\n")
+[<InlineData("{ context l -> l }")>]
+[<InlineData("{ context m: Memory, context l: Log, x -> x }")>]
+[<InlineData("{ context l, (a, b) -> a }")>]
+[<InlineData("{ (x: int): int -> x }")>]
+[<InlineData("{ x: int, y: int: int -> x + y }")>]
+let ``A lambda that names its context's instance or writes its result type is read as the FParsec parser reads it`` (value: string) =
+    allSame $"def v = {value}\n"
+
+[<Fact>]
+let ``A destructuring def is read as the defs it desugars into`` () =
+    allSame "def f = { p ->\n  def (a, b) = p\n  def x, y = p\n  def Money(pence) = m\n  export def [first, ...rest] = xs\n  a\n}\n"
+
+[<Fact>]
+let ``An attribute statement is read before the def it applies to`` () =
+    allSame "def f = {\n  @allow(default/unusedBindings, default/unusedResults)\n  def x = 1\n  @test()\n  def y = 2\n  @entry\n  x\n}\n"
+
+[<Fact>]
+let ``A table literal is the list of a record for each row`` () =
+    allSame "def people = [| name     | age |\n                | \"Alex\"   | 22  |\n                | \"Taylor\" | 30  |]\n"
 
 [<Theory>]
 [<InlineData("{\n  | #a -> 1\n  | _ -> 2\n}")>]
