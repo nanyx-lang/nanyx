@@ -108,4 +108,6 @@ let ``a pattern tag with two groups takes its arguments, then its payload`` () =
 
 [<Fact>]
 let ``a lower-case tag never takes arguments`` () =
-    Assert.True(isError (parseModule "def f = { | #split(\",\")(a, b) -> 1 }"))
+    // `#split(",")` is read as a tag with a payload, so its second group is where an arm's `->` belongs.
+    let reported, _ = parseErrorOf "def f = { | #split(\",\")(a, b) -> 1 }"
+    Assert.Contains("Ln: 1 Col: 24 def f = { | #split(\",\")(a, b) -> 1 } ^ Expecting: '->'", reported)
