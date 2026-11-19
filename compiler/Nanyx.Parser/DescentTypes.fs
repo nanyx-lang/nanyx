@@ -21,6 +21,7 @@ let private dotName (c: Cursor) =
     if not c.Adjacent then raise NoMatch
     c.Expect Dot |> ignore
     if not c.Adjacent then raise NoMatch
+    noDollar c
     identifier c
 
 /// A name qualified with dots, written with no spaces: `m.Email`.
@@ -29,16 +30,21 @@ let private dottedName (c: Cursor) =
     let tail = many c (fun () -> dotName c)
     String.concat "." (head :: tail)
 
-/// A `?` straight after a type or a field's name, which is reported.
-let private noOptionalMarker (c: Cursor) =
-    if c.Adjacent && c.Is(Operator, "?") then c.GiveUp "an optional marker, which is a mistake"
+/// A `?` straight after a type or a field's name, which is reported with `message`: a value that may be absent has its
+/// absence in its type.
+let private noOptionalMarker (c: Cursor) (message: string) =
+    if c.Adjacent && c.Is(Operator, "?") then c.Report c.Start message
+
+/// The message for a `?` after the field `name`.
+let private optionalField (name: Identifier) =
+    $"A field can't be marked optional with `?`: write one that may be absent as `{Names.written name}: #some(T) | #none`"
 
 /// Whether the code token at the cursor, after any line breaks FParsec's `ws` would cross, is `kind` (with `text`).
 let private across (c: Cursor) (kind: TokenKind) (text: string option) =
     c.Across(fun c -> c.Is(kind, ?text = text))
 
 let private typeIdentifier (c: Cursor) =
-    if c.Is Dollar then c.GiveUp "a `$` before a type's name, which is a mistake"
+    noDollar c
     let start = c.Start
     let name = dottedName c
     let kind =
@@ -82,7 +88,7 @@ and private typeArgument (c: Cursor) =
     let operand = typeIdentifier c
     match operand.Kind with
     | TypeVar _ -> TypeExpr.at (c.SpanFrom start) (TypeArgument operand)
-    | _ -> c.GiveUp "a positional type parameter that isn't a type variable"
+    | _ -> c.Report operand.Span.Start "A positional type parameter is written with a type variable, as in `type a`: a named one is written `into: type`"
 
 /// `@name(argument)` before a field, on its line or the one above (see `TypeFieldAttribute`).
 and private fieldAttribute (c: Cursor) =
@@ -107,7 +113,7 @@ and private typeField (c: Cursor) (declared: ResizeArray<Identifier * SourceSpan
         else false
     let fieldName, nameSpan = name c
     declared.Add((fieldName, nameSpan))
-    noOptionalMarker c
+    noOptionalMarker c (optionalField fieldName)
     if isMut then c.NoteDocumentable fieldStart nameSpan.Start
     if not c.OnSameLine || not (c.Is Colon || c.Is DoubleColon) then raise NoMatch
     c.Take() |> ignore
@@ -188,7 +194,7 @@ and private typeTag (c: Cursor) =
                     let fieldsStart = c.Start
                     let field () =
                         let fieldName = identifier c
-                        noOptionalMarker c
+                        noOptionalMarker c (optionalField fieldName)
                         if not c.OnSameLine || not (c.Is Colon || c.Is DoubleColon) then raise NoMatch
                         c.Take() |> ignore
                         TypeField(fieldName, false, Some(typeExpr c), None)
@@ -300,7 +306,8 @@ and private typeAtom (c: Cursor) : TypeExpr =
           fun () -> contextSet c
           fun () -> typeRecord c
           fun () -> typeTupleOrParen c
-          fun () -> typeIdentifier c ]
+          fun () -> typeIdentifier c
+          fun () -> c.Fail "a type" ]
 
 /// A type, `mut T` (a cell's type), and no `?` after it.
 and internal typePostfix (c: Cursor) =
@@ -311,7 +318,7 @@ and internal typePostfix (c: Cursor) =
             let held = typeAtom c
             TypeExpr.at (c.SpanFrom start) (TypeApply(CellPassingSyntax.typeName, [ held ]))
         else typeAtom c
-    noOptionalMarker c
+    noOptionalMarker c "A type can't be marked optional with `?`: write a value that may be absent as `#some(T) | #none`"
     atom
 
 and private typeIntersection (c: Cursor) =
@@ -386,4 +393,5 @@ let readTypeSignature (source: string) : TypeExpr option =
         if c.Is EndOfFile then Some read else None
     with
     | GiveUp _
+    | Reported _
     | NoMatch -> None

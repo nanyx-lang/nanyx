@@ -8,7 +8,7 @@ open Nanyx.Parser
 
 /// Each def's value and statement of `source` reads to the FParsec parser's tree.
 let private allSame (source: string) =
-    match parseModuleWithTrivia "t.nyx" source with
+    match parseModuleWithTriviaByFParsec "t.nyx" source with
     | Result.Ok parsed ->
         let outcomes = DescentCheck.checkExpressions "t.nyx" parsed (DescentCheck.expressionRoots parsed)
         Assert.NotEmpty(outcomes)

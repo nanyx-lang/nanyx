@@ -101,9 +101,9 @@ let ``A pipe chain in a match arm's block continues on more indented lines`` () 
 
 [<Fact>]
 let ``A pipe at the indent of the statement's line does not continue it`` () =
-    match parseModule "def f = { n ->\n  n\n  \\add(2)\n}" with
-    | Result.Error err -> err |> should haveSubstring "Ln: 3"
-    | other -> failwith $"Expected a parse error, got: %A{other}"
+    let reported, text = parseErrorOf "def f = { n ->\n  n\n  \\add(2)\n}"
+    Assert.Equal("Expected an expression, found `\\`", reported)
+    Assert.Equal("\\add(2)", text)
 
 [<Fact>]
 let ``except may start a more indented line after a pipe chain in a lambda body`` () =

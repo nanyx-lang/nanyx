@@ -53,11 +53,9 @@ let ``a keyword other than try applied to a value is reported where it is writte
         + "    x\n"
         + "  }\n"
         + "}\n"
-    match parseModule source with
-    | Result.Error err ->
-        err |> should haveSubstring "Ln: 3 Col: 13"
-        err |> should haveSubstring "`emit` is applied to a value without parentheses"
-    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    let reported, text = parseErrorOf source
+    reported |> should haveSubstring "`emit` is applied to a value without parentheses"
+    Assert.Equal("emit n", text)
 
 [<Fact>]
 let ``a name followed by a keyword operator is not a workflow keyword`` () =

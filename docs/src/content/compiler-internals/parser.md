@@ -73,10 +73,22 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   `DescentControlTests.fs` and `DescentTopLevelTests.fs` on the places where reading one takes care.
   `Api.runModuleParser`, which every parse goes through, reads with it (`DescentTopLevel.tryReadModuleWithState`, which
   gives the items and the `ParseState` the FParsec parser would keep beside them: the names nodes declare from the
-  cursor, comments from the lexer's trivia), and with the FParsec parser where it gives up, which reports any mistake
-  as it always has. `CorpusTests.fs` checks the two read every piece the same, side state included
-  (`DescentCheck.checkModuleWithState`, through `Api.readWithBothParsers`), and that the new parser gives up on every
-  piece the FParsec parser rejects, so that it never reads a mistake the FParsec parser would report.
+  cursor, comments from the lexer's trivia), and reports what it gives up at as the syntax error.
+- **Its errors.** A mistake the FParsec parser has a message of its own for is reported with that message where it
+  is (`Reported`, raised by `Cursor.Report`, as the FParsec parser's `reportFocused` is): an operator that isn't
+  spaced, `&&`, a prefix `!`, two operators that can't be written side by side, a `$` before a type's name, an escape
+  that isn't one, a `_` not between two digits, and the rest. The lexer's own mistakes (a string or a block comment
+  never closed) are reported as the lexer words them. Anything else is reported where the furthest reading failed,
+  as what was expected there and what was found (`Cursor.Unexpected`): each reading notes what it expected when it
+  fails (`Cursor.Fail`, and `Cursor.Expect` for a token), and those at the furthest token are listed, as FParsec
+  merges its errors at the furthest position.
+- **The FParsec parser behind a switch.** With the environment variable `NANYX_PARSER` set to `fparsec`, every parse
+  reads with the FParsec parser instead, as before the new one, for a release, so that a regression can be checked
+  against it; stage 6 of [The parser](../work-in-progress/parser) removes it, and the switch with it. The corpus
+  check reads with it whatever the switch says (`Api.parseModuleWithTriviaByFParsec`): `CorpusTests.fs` checks the
+  two read every piece the same, side state included (`DescentCheck.checkModuleWithState`, through
+  `Api.readWithBothParsers`), and that the new parser fails on every piece the FParsec parser rejects, so that no
+  mistake it reported reads without one.
 
 # The layout rules
 

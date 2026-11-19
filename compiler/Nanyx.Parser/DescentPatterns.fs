@@ -74,7 +74,7 @@ let rec private tuplePattern (c: Cursor) =
 /// `Name(p1, p2, ...)`: a record's fields by position, or what a nominal type wraps.
 and private recordPatternByPosition (c: Cursor) =
     let start = c.Start
-    if c.Is Dollar then c.GiveUp "a `$` before a type's name, which is a mistake"
+    noDollar c
     let typeName, _ = identifierWithSpan c
     if not c.Adjacent then raise NoMatch
     c.Expect LeftParen |> ignore
@@ -210,7 +210,8 @@ and singlePattern (c: Cursor) : Pattern =
           fun () -> unitPattern c
           fun () -> tuplePattern c
           fun () -> wildcardPattern c
-          fun () -> identifierPattern c ]
+          fun () -> identifierPattern c
+          fun () -> c.Fail "a pattern" ]
 
 /// A pattern: single patterns joined by `&`, an and-pattern (`Patterns.fs`'s `pattern`).
 and pattern (c: Cursor) : Pattern =

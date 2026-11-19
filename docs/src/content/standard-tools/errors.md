@@ -43,7 +43,8 @@ file is the one compiled.
 # NYX0001: Syntax error
 
 The file could not be parsed: the text at the position shown is not what the grammar allows there. The message
-names what the parser expected.
+names what the parser expected and what it found, as in "Expected `)`, found the end of the file", or says what the
+mistake is and what to write instead.
 
 ```nanyx
 def total = (1 + 2  -- error NYX0001: the closing parenthesis is missing

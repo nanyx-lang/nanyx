@@ -24,6 +24,27 @@ let private isInteger (text: string) =
     let lower = text.ToLowerInvariant()
     lower.StartsWith "0x" || lower.StartsWith "0o" || lower.StartsWith "0b" || not (text.Contains '.' || lower.Contains 'e')
 
+/// Reports the first run of digits and `_`s in `token`, a number, whose `_` isn't between two digits, as the FParsec
+/// parser's `digitGroups` does: the whole number's digits, then its fraction's, then its exponent's.
+let private reportBadGroups (c: Cursor) (token: Token) =
+    let text = c.Text token
+    let groups =
+        let runAt (offset: int) =
+            let mutable finish = offset
+            while finish < text.Length && (Char.IsAsciiDigit text[finish] || text[finish] = '_') do
+                finish <- finish + 1
+            offset, text.Substring(offset, finish - offset)
+        let whole = runAt 0
+        let fraction = match text.IndexOf '.' with -1 -> [] | dot -> [ runAt (dot + 1) ]
+        let exponent =
+            match text.IndexOfAny [| 'e'; 'E' |] with
+            | -1 -> []
+            | e -> [ runAt (if e + 1 < text.Length && (text[e + 1] = '+' || text[e + 1] = '-') then e + 2 else e + 1) ]
+        whole :: fraction @ exponent
+    match groups |> List.tryFind (fun (_, digits) -> digits <> "" && not (wellGrouped digits)) with
+    | Some(offset, digits) -> c.Report (token.Start + offset) $"A `_` in a number goes between two digits: '{digits}' is not a number"
+    | None -> ()
+
 /// An integer, with its sign if one is written straight before it.
 let intLiteral (c: Cursor) : Literal * SourceSpan =
     let start = c.Start
@@ -48,7 +69,7 @@ let intLiteral (c: Cursor) : Literal * SourceSpan =
                 with _ -> c.GiveUp "a hexadecimal, octal or binary number too large for 64 bits"
             bigint (if signText = "-" then -magnitude else magnitude)
         else
-            if not (wellGrouped text) then c.GiveUp "a `_` in a number that isn't between two digits"
+            reportBadGroups c token
             Numerics.BigInteger.Parse(signText + text.Replace("_", ""), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture)
     IntLit value, c.SpanFrom start
 
@@ -65,12 +86,19 @@ let private floatLiteral (c: Cursor) : Literal * SourceSpan =
             // `1.`: the lexer reads the `.` apart, since no digit follows it.
             if not (c.Adjacent && c.Is Dot) then raise NoMatch
             c.Take() |> ignore
+            // `1._5`: the lexer reads `_5` as a name, where the FParsec parser reads the fraction's digits.
+            match c.Token with
+            | Some next when c.Adjacent && next.Kind = Name && (c.Text next).StartsWith "_" ->
+                let written = c.Text next
+                let digits = written.Substring(0, (written |> Seq.takeWhile (fun ch -> Char.IsAsciiDigit ch || ch = '_') |> Seq.length))
+                c.Report next.Start $"A `_` in a number goes between two digits: '{digits}' is not a number"
+            | _ -> ()
             if c.Adjacent then c.GiveUp "a `.` after a number with a name or number straight after it"
             text + "."
         elif not (text.Contains '.') then c.GiveUp "a number with an exponent and no fraction"
         else text
     let parts = written.Split([| '.'; 'e'; 'E'; '+'; '-' |])
-    if parts |> Array.exists (fun part -> part <> "" && not (wellGrouped part)) then c.GiveUp "a `_` in a number that isn't between two digits"
+    if parts |> Array.exists (fun part -> part <> "" && not (wellGrouped part)) then reportBadGroups c token
     FloatLit(Double.Parse(signText + written.Replace("_", ""), CultureInfo.InvariantCulture)), c.SpanFrom start
 
 /// A string with no holes, double-quoted with its escapes decoded, or single-quoted and raw.
@@ -84,7 +112,7 @@ let stringLiteral (c: Cursor) : Literal * SourceSpan =
         else
             match StringEscapes.decode inner with
             | Some decoded -> decoded
-            | None -> c.GiveUp "a backslash in a string that isn't an escape"
+            | None -> reportBadEscape c (token.Start + 1) inner
     StringLit value, c.SpanOf token
 
 /// A literal: an integer, a float, `true` or `false`, or a string with no holes (`Lexical.literalNoWs`).

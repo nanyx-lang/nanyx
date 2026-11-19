@@ -80,7 +80,10 @@ let rec statement (c: Cursor) : Statement =
             c.Take() |> ignore
             definition c start true
         | "rec" -> wrappedDefinition c start RecSyntax.builtIn
-        | "mut" when (match c.At 1 with Code next -> next.Kind = Name | _ -> false) -> wrappedDefinition c start MutSyntax.builtIn
+        | "mut" when (match c.At 1 with Code next -> next.Kind = Name || next.Kind = BacktickedName | _ -> false) -> wrappedDefinition c start MutSyntax.builtIn
+        | "mut" when (match c.At 1 with Code next -> next.Kind <> Operator && next.Kind <> Equals | _ -> false) ->
+            c.Take() |> ignore
+            c.Report c.Start "`mut` declares one cell, by name: take a value apart with `def` first, then declare a cell for each part"
         | "use" ->
             match c.Attempt(fun () -> useStatement c start) with
             | Some statement -> statement
@@ -139,7 +142,9 @@ and internal destructuringDefinition (c: Cursor) (start: int) : Statement list =
                 match sepBy1 c (fun () -> DescentPatterns.pattern c) (fun () -> c.Expect Comma |> ignore) with
                 | [ single ] -> single
                 | several -> Pattern.at (c.SpanFrom patternStart) (TuplePattern several)
-            with GiveUp _ -> raise NoMatch)
+            with
+            | GiveUp _
+            | Reported _ -> raise NoMatch)
     match pattern.Kind with
     | IdentifierPattern _ -> raise NoMatch
     | _ -> ()
@@ -199,7 +204,11 @@ and internal useValue (c: Cursor) : Expression =
         let arguments = sepBy1 c typeArgument (fun () -> c.Expect Comma |> ignore)
         c.Expect RightParen |> ignore
         let context = TypeExpr.at (c.SpanFrom start) (TypeApply(contextName, arguments))
-        if c.Is Equals then c.GiveUp "`use C(T) = ...`, which is a mistake"
+        if c.Is Equals then
+            let head = c.Source.Substring(start, c.LastEnd - start)
+            c.Report start
+                ($"`use {head} = ...` is not a way to load an instance: write `use {head}(...)`, or define the instance "
+                 + $"with `def name: {head} = (...)` and load it with `use name`")
         if not (c.Adjacent && c.Is LeftParen) then raise NoMatch
         let fields, membersSpan = parenFields c
         let span = c.SpanFrom start
@@ -207,9 +216,29 @@ and internal useValue (c: Cursor) : Expression =
         let definition = Statement.at span (DefStatement(false, UseInstanceSyntax.name, Some context, members))
         let result = Statement.at span (ExprStatement(Expression.at span (IdentifierExpr UseInstanceSyntax.name)))
         Expression.at span (Block [ definition; result ])
+    // `use C(T) = ...`, an older way to load an instance, fails at the context's name.
+    let oldInstance () =
+        let start = c.Start
+        identifierWithSpan c |> ignore
+        if c.Adjacent && c.Is LeftParen then
+            let mutable depth = 0
+            let mutable going = true
+            while going do
+                let token = c.Take()
+                if token.Kind = LeftParen then depth <- depth + 1
+                elif token.Kind = RightParen then
+                    depth <- depth - 1
+                    if depth = 0 then going <- false
+        if not (c.Is Equals) then raise NoMatch
+        let head = c.Source.Substring(start, c.LastEnd - start)
+        c.Report start
+            ($"`use {head} = ...` is not a way to load an instance: write `use {head}(...)`, or define the instance "
+             + $"with `def name: {head} = (...)` and load it with `use name`")
     match c.Attempt instance with
     | Some instance -> instance
-    | None -> expression Crossing c
+    | None ->
+        c.Attempt oldInstance |> ignore
+        expression Crossing c
 
 /// Arms read by `arm`, each from its `|`, run as the layout pass lays them out: on the line, or each starting a line of
 /// the block of arms the first opens. A first arm on the line after, at the column of the arms of an enclosing match,
@@ -236,10 +265,11 @@ and internal armsWith (c: Cursor) (isLast: 'a -> bool) (arm: unit -> 'a list) : 
     let arms = ResizeArray(arm ())
     while not (arms |> Seq.exists isLast) && atBar () do
         arms.AddRange(arm ())
+    // In brackets, what follows the arms on their line, a `,`, comes before the `Dedent`, which the brackets' items skip.
     for _ in 1..opened do
         match c.At 0 with
         | Dedent _ -> c.Index <- c.Index + 1
-        | _ -> c.GiveUp "a block of arms the layout pass closes somewhere else"
+        | _ -> ()
     List.ofSeq arms
 
 /// One arm: its alternatives, each patterns separated by commas, and the body they share after `->`, which declares
@@ -261,7 +291,7 @@ and private arm (c: Cursor) : MatchArm list =
                     all.Add(alternative ())
                 | _ -> going <- false
             List.ofSeq all)
-    if not (c.Is Arrow) then raise NoMatch
+    if not (c.Is Arrow) then c.Fail "`->`"
     c.Take() |> ignore
     let body = armBody c
     c.Declare ArmBody body.Id names
@@ -314,17 +344,29 @@ and private wrappedDefinition (c: Cursor) (start: int) (builtIn: Identifier) =
 /// destructuring def.
 and internal nameAndType (c: Cursor) : Identifier * SourceSpan * TypeExpr option =
     let start = c.Start
+    noDollar c
     let first = c.Attempt(fun () -> name c)
     let parts = ResizeArray(Option.toList (Option.map fst first))
     while first.IsSome && c.Adjacent && c.Is Dot do
         c.Take() |> ignore
         parts.Add(fst (name c))
+    if first.IsNone then
+        match c.Token with
+        | Some token -> c.Report token.Start $"Expected a name after `def`, found {describeToken c.Source token}"
+        | None -> raise NoMatch
     let nameSpan = c.SpanFrom start
-    if first.IsNone || not (c.Is Colon || c.Is Equals) then c.GiveUp "a destructuring def"
+    // A def with nothing after its name on the line is a declaration with no type, which the type checker reports.
+    let lineEnds = c.Is EndOfFile || (c.Token.IsNone || not c.OnSameLine) && not (c.Is Colon || c.Is Equals)
+    if not (c.Is Colon || c.Is Equals || lineEnds) then c.GiveUp "a destructuring def"
     // An operator Nanyx doesn't have, or `??`, which is syntax, can't be defined (`Types.definableName`).
     let last = parts[parts.Count - 1]
-    if last = coalesceOperator || (Names.isOperator last && not (isDefinableOperator last)) then
-        c.GiveUp "a def of an operator Nanyx doesn't have, which is a mistake"
+    let full = String.concat "." parts
+    let operatorAt = start + (Names.written full).Length - (Names.written last).Length
+    if last = coalesceOperator then
+        c.Report operatorAt $"`{last}` is built in, so it cannot be defined: `a ?? b` is the value inside `a`'s `#some`, or else `b`"
+    elif Names.isOperator last && not (isDefinableOperator last) then
+        let operators = binaryOperators |> List.filter (fun op -> isDefinableOperator op.Text) |> List.map (fun op -> $"`{op.Text}`")
+        c.Report operatorAt $"""`{last}` is not one of Nanyx's operators, so it cannot be defined: the operators are {String.concat ", " operators}"""
     String.concat "." parts, nameSpan, defType c
 
 /// `= value` after a def's name and type: on the line, or at the start of a line indented further than the def's. The
@@ -357,13 +399,19 @@ and indentedBlock (c: Cursor) : Expression =
         | _ -> going <- false
     blockOf c start (List.ofSeq statements)
 
+/// Takes the `;` at the cursor, between two statements on a line, and reports one with no statement after it
+/// (`Expressions.statementSeparator`).
+and private separator (c: Cursor) =
+    let semicolon = c.Take()
+    if c.Is Semicolon && c.OnSameLine then c.Report c.Start "Two `;` in a row: a `;` separates two statements, so write one between them"
+    if not c.OnSameLine || c.Is EndOfFile || c.Is RightBrace || c.Is RightParen || c.Is RightBracket then
+        c.Report semicolon.Start "A `;` must have a statement after it: it separates statements, so leave out the one at the end"
+
 /// The statements on one line: one, and then each after a `;` (`Expressions.statementsOnLine`).
 and private statementsOnLine (c: Cursor) : Statement list =
     let statements = ResizeArray(statementItems c)
     while c.Is Semicolon && c.OnSameLine do
-        c.Take() |> ignore
-        if not c.OnSameLine || c.Is Semicolon || c.Is RightBrace || c.Is RightParen || c.Is RightBracket then
-            c.GiveUp "a `;` with no statement after it, which is a mistake"
+        separator c
         statements.AddRange(statementItems c)
     List.ofSeq statements
 
@@ -375,9 +423,7 @@ and internal sameLineBody (c: Cursor) (value: Cursor -> Expression) : Expression
     let leading = if defines then Choice1Of2(statementItems c) else Choice2Of2(value c)
     let rest = ResizeArray()
     while c.Is Semicolon && c.OnSameLine do
-        c.Take() |> ignore
-        if not c.OnSameLine || c.Is Semicolon || c.Is RightBrace || c.Is RightParen || c.Is RightBracket then
-            c.GiveUp "a `;` with no statement after it, which is a mistake"
+        separator c
         rest.AddRange(statementItems c)
     match leading, List.ofSeq rest with
     | Choice2Of2 value, [] -> value
@@ -406,7 +452,7 @@ and private lambdaBody (c: Cursor) : Expression =
             statements.AddRange(statementsOnLine c)
             // A statement after another on its line, with no `;` between them, is a mistake the FParsec parser
             // reports (a name applied to a value, as only a workflow keyword is).
-            if c.OnSameLine && not (c.Is RightBrace) then c.GiveUp "a statement after another on its line, which is a mistake"
+            if c.OnSameLine && not (c.Is RightBrace) then c.Fail "a line break or a `;` between statements"
             skipLayout c
         blockOf c start (List.ofSeq statements)
 
@@ -435,6 +481,8 @@ and private parameters (c: Cursor) : Choice<Identifier * TypeExpr option, Patter
     let one () =
         if c.IsKeyword "mut" then
             c.Take() |> ignore
+            if not (c.Is Name || c.Is BacktickedName || c.Is Keyword) then
+                c.Report c.Start "`mut` on a parameter takes a single name, not a pattern: take the cell as `mut cell`, and its value apart in the body"
             let name, held = parameter c DescentTypes.typeUnion
             Choice1Of2(name, Some(CellPassingSyntax.parameterType held))
         else
@@ -446,7 +494,9 @@ and private parameters (c: Cursor) : Choice<Identifier * TypeExpr option, Patter
                 let patternParameter () =
                     let pattern, names =
                         try c.Collecting(fun () -> DescentPatterns.pattern c)
-                        with GiveUp _ -> raise NoMatch
+                        with
+                        | GiveUp _
+                        | Reported _ -> raise NoMatch
                     match pattern.Kind with
                     | IdentifierPattern _
                     | WildcardPattern -> raise NoMatch
@@ -603,9 +653,11 @@ and lambda (c: Cursor) : Expression =
     let kind, names =
         c.Collecting(fun () ->
             c.Expect LeftBrace |> ignore
+            c.LambdaDepth <- c.LambdaDepth + 1
             let kind = lambdaKind c
             skipLayout c
             c.Expect RightBrace |> ignore
+            c.LambdaDepth <- c.LambdaDepth - 1
             kind)
     let span = c.SpanFrom start
     let lambda = Expression.at span (kind span)
