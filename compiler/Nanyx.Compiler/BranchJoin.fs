@@ -185,4 +185,14 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
                         acc |> Map.add key fieldTy, next) (Map.empty, state)
                 TyRecord(joined, (match Unifier.unalias head with TyRecord(_, order) -> order | _ -> FieldOrder.none)), nextState
             | _ ->
-                head, tail |> List.fold (fun st ty -> addConstraint head ty st) state
+                // A branch the constraints so far settle to a type named without arguments, whose declaration fixes
+                // what it is, is constrained as that type, not as its variable. Solved afresh, newest first, the
+                // variable would otherwise be made the other branch's type before the older constraints that settle
+                // it are solved: an arm `v` of a `map.get(m, k)` whose values are `J` would make them `#null` beside
+                // an arm `#null` (#2070). Any other type, such as a union of tags, may still be widened.
+                let settled ty =
+                    match resolveSoFar state ty with
+                    | TyAlias(_, [], _)
+                    | TyNominal(_, [], _, _) as named -> named
+                    | _ -> ty
+                head, tail |> List.fold (fun st ty -> addConstraint (settled head) (settled ty) st) state
