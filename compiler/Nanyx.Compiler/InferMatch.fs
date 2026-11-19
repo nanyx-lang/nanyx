@@ -262,6 +262,9 @@ let internal inferMatch
         // For the exhaustiveness check, the scrutinees' types are resolved before the arms add their constraints.
         let resolvedScrutineeTypes = ScrutineeRests.resolve env current scrutineeTypes
         let missingWitnesses = PatternSpace.missingCase (arms |> List.map fst) (resolvedScrutineeTypes |> List.map Some)
+        // An arm for a tag the scrutinee's closed union doesn't have can never match: it is reported, and the arms
+        // are not typed, so the tag it names isn't added to the union as well.
+        errors <- UnknownTagArms.ofArms resolvedScrutineeTypes arms
         let mutable scrutineeOverrides: Map<int, Ty> = Map.empty
         for (index, scrutineeTy) in scrutineeTypes |> List.indexed do
             // The arms describe the scrutinee's union, payloads included (`ArmUnion`). With a catch-all arm they
