@@ -381,12 +381,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 let valueTy = unconstrainedAsUnit (substitute subst input.ExprTypes.[expr.Id])
                 let printer = printerTools.PrinterOf (CoreIrLowerDbg.Showing valueTy)
                 // Where `dbg` is written, which for `\dbg` at the end of a pipeline is not where the call starts.
-                let location = AString (CoreIrLowerDbg.location root (nameSpan |> Option.defaultValue expr.Span))
+                let site = CoreIrLowerDbg.site root (nameSpan |> Option.defaultValue expr.Span)
                 this.Complex scope value (fun lowered ->
                     let held = newVar (uniqueName "__dbg_value") Local lowered.Type
                     let text = newTemp IrString
                     let rest = k (Expr.make (Atom(AVar held)) held.Type)
-                    let printed = Expr.make (Let(text, Expr.make (Call(printer, [ AVar held ])) IrString, Expr.make (Dbg(location, AVar text)) IrUnit)) IrUnit
+                    let printed = Expr.make (Let(text, Expr.make (Call(printer, [ AVar held ])) IrString, Expr.make (Dbg(site, AVar text)) IrUnit)) IrUnit
                     Expr.make (Let(held, lowered, Expr.make (Do(printed, rest)) rest.Type)) rest.Type)
         | WithSyntax.Call(record, Kind (RecordExpr updates)) ->
             // `record with f = v, ...`: a copy of the record with those fields replaced.

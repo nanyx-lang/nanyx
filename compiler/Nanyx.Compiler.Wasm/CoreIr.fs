@@ -217,9 +217,10 @@ and ExprKind =
     | CallClosure of Var * Atom list * ClosureEntry
     /// Builds an interpolated string from its text and its holes, which are already evaluated into their locals.
     | Interpolate of InterpolationPart list
-    /// What `dbg(value)` prints in a debug build: the second string, the value's text (see `CoreIrLowerDbg`), after the
-    /// first, where the `dbg` was called (`[main.nyx:12] `), then a newline. It is unit.
-    | Dbg of location: Atom * text: Atom
+    /// What `dbg(value)` prints in a debug build: the value's text (see `CoreIrLowerDbg`), after where the `dbg` is
+    /// written (`[main.nyx:12] `), then a newline, on the program's stderr, or wherever the runtime's `nanyx:debug`
+    /// `dbg` puts it (see `CoreIrEmit`). It is unit.
+    | Dbg of site: DbgSite * text: Atom
     /// A float constant: an `f64`, or an `f32` where the expression is an `F32`.
     | FloatConstant of float
     /// An error deferred to run time, or a crash: writes these messages to stderr and ends the program, with a trap in
@@ -259,6 +260,15 @@ and ExprKind =
     | FreeToken of token: Var * Expr
 
 /// Where a probe is (see `Probe`).
+/// Where a `dbg` is written: the file, as the program names it (see `shownFile`), and the line and column, counted from 1.
+and DbgSite =
+    { File: string
+      Line: int
+      Column: int }
+
+    /// What the program writes before the value: `[main.nyx:12] `, or `[12] ` for a file with no name.
+    member this.Prefix = if this.File = "" then $"[{this.Line}] " else $"[{this.File}:{this.Line}] "
+
 and ProbeKind =
     /// The start of the function of this name, where the runtime pushes a frame onto its shadow stack.
     | Entry of functionName: string
@@ -801,7 +811,7 @@ module Print =
                 | Hole(v, _) -> "{" + v.Name + "}")
             |> String.concat ""
             |> sprintf "\"%s\""
-        | Dbg(location, text) -> $"dbg({atom location}, {atom text})"
+        | Dbg(site, text) -> $"dbg({site.Prefix.Trim()}, {atom text})"
         | FloatConstant value -> string value
         | Crash messages -> $"""crash({messages |> String.concat ""})"""
         | Probe(kind, locals) -> $"""probe {kind}({locals |> List.map _.Var.Name |> String.concat ", "})"""

@@ -54,6 +54,7 @@ module WasmServer =
     /// `gate` is held while what the instance wrote to redirected streams is copied to them.
     let private answer engine (module': Module) (table: SpanTable option) io arguments (gate: obj) (report: string -> unit) (context: HttpListenerContext) =
         let request = incoming context
+        let what = $"{context.Request.HttpMethod} {context.Request.Url.PathAndQuery}"
         let response = ref None
         let mutable finish = ignore
         let outcome =
@@ -74,6 +75,10 @@ module WasmServer =
                     CallerAction<int, int>(fun caller address length ->
                         response.Value <- Some((caller.GetMemory "memory").GetSpan(int64 address, length).ToArray())))
                 Probing.define linker table None
+                // What the handler's `dbg` prints goes to the server's log, with the request, and never into the response.
+                Probing.defineDbg linker (fun hit ->
+                    report $"dbg ({what}): {hit}"
+                    true)
                 finish <- WasmRunner.configureIo io arguments [] store
                 try
                     linker.Instantiate(store, module') |> ignore
@@ -91,7 +96,6 @@ module WasmServer =
                     | other -> Error(string other)
             finally
                 lock gate finish
-        let what = $"{context.Request.HttpMethod} {context.Request.Url.PathAndQuery}"
         match outcome, response.Value |> Option.bind HttpImport.responseOf with
         | Ok(), Some(status, headers, body) -> reply context status headers body
         | Ok(), None ->

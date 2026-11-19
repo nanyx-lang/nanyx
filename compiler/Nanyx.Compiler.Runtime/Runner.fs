@@ -61,7 +61,7 @@ type Program =
 ///
 /// The backend turns top-level expressions into a WebAssembly start function, so instantiating the module
 /// runs the program. The program's output goes to its stdout (see `ProgramIo`) through WASI `fd_write`, from
-/// the console host (which declares it with `@extern`) and from `dbg`.
+/// the console host (which declares it with `@extern`); what `dbg` prints goes to its stderr (see `Probing.defineDbg`).
 module WasmRunner =
     /// The name a program knows the directory `directory` by: its absolute path, written with `/`.
     let private guestName (directory: string) =
@@ -247,6 +247,7 @@ module WasmRunner =
             linker.DefineWasi()
             HttpImport.define linker
             Probing.define linker (spanTable program) listener
+            Probing.defineDbg linker (fun _ -> false)
             configure store
             let mutable instantiated = None
             let outcome =

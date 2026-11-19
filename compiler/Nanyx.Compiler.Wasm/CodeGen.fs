@@ -76,7 +76,8 @@ type WasmOptions =
       Places: bool
       /// Put debug probes in the code (see `CoreIrProbes`), which import `nanyx:debug` from the runtime: what a debug
       /// build the runtime runs has, and the debugger is built on. A release build has none, and nor does a module written
-      /// to a file, which another WebAssembly runtime may run. They need `Places`, to say where each probe is.
+      /// to a file, which another WebAssembly runtime may run. They need `Places`, to say where each probe is. A `dbg`
+      /// in such a module gives what it prints to the runtime's `nanyx:debug` `dbg` too (see `EmitContext.DbgToRuntime`).
       Probes: bool }
 
     static member Default = { CheckMemory = false; Inline = true; Release = false; SourceRoot = None; Places = false; Probes = false }
@@ -847,7 +848,8 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
           CheckMemory = false
           ShownFile = None
           TakesOver = (fun _ _ -> false)
-          ProbeId = (fun () -> 0) }
+          ProbeId = (fun () -> 0)
+          DbgToRuntime = false }
     let lowered =
         let input: CoreIrLowerInput.LowerInput =
             { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
@@ -1150,7 +1152,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           CheckMemory = options.CheckMemory
           ShownFile = if options.Places then Some(CoreIr.shownFile options.SourceRoot) else None
           TakesOver = fun name index -> CoreIrCounting.parameterUse ownership name index = Owned
-          ProbeId = fun () -> (probes.Value <- probes.Value + 1; probes.Value) }
+          ProbeId = fun () -> (probes.Value <- probes.Value + 1; probes.Value)
+          DbgToRuntime = options.Probes }
 
     let specialisations = lowered.Specialisations |> Map.values |> Seq.concat |> Seq.map (fun (func, _) -> func.Name) |> Set.ofSeq
 
@@ -1306,14 +1309,16 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     // Imports must precede every function definition in a WebAssembly module, so the foreign functions and the prelude,
     // which imports WASI's functions, come first.
-    // What a module with probes imports from the runtime, and the global it keeps whether it is probing in.
+    // What a module with probes imports from the runtime, and the global it keeps whether it is probing in; and `dbg`,
+    // which a module the runtime runs gives what it prints to (see `EmitContext.DbgToRuntime`).
     let probeImports =
-        if facts.UsesProbes then
-            [ $"""  (import "{CoreIrEmit.probeModule}" "enabled" (func ${CoreIrEmit.probingEnabled} (result i32)))"""
+        [ if facts.UsesProbes then
+              $"""  (import "{CoreIrEmit.probeModule}" "enabled" (func ${CoreIrEmit.probingEnabled} (result i32)))"""
               $"""  (import "{CoreIrEmit.probeModule}" "probe" (func ${CoreIrEmit.probeCall} (param i32) (result i32)))"""
-              $"""  (import "{CoreIrEmit.probeModule}" "local" (func ${CoreIrEmit.probeLocal} (param i32 i32)))""" ]
-            |> String.concat "\n"
-        else ""
+              $"""  (import "{CoreIrEmit.probeModule}" "local" (func ${CoreIrEmit.probeLocal} (param i32 i32)))"""
+          if facts.UsesDbgHelpers && options.Probes then
+              $"""  (import "{CoreIrEmit.probeModule}" "dbg" (func ${CoreIrEmit.dbgImport} (param i32 i32 i32 i32) (result i32)))""" ]
+        |> String.concat "\n"
     let probeGlobal = if facts.UsesProbes then $"  (global ${CoreIrEmit.probing} (mut i32) (i32.const 0))" else ""
 
     let allImports =

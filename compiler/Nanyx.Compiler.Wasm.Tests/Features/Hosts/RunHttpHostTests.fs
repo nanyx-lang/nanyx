@@ -110,6 +110,22 @@ def main: Request -> Response = { request ->
     Assert.Contains("error: the program stopped while answering GET /divide", outcome.StandardError)
 
 [<Fact>]
+let ``What a handler's dbg prints goes to the server's log with its request, not into the response (#2058)`` () =
+    use directory = new TempDirectory()
+    let port = freePort ()
+    writePackage directory.Path port """module main
+
+@entry
+def main: Request -> Response = { request ->
+  def path = dbg(Request.path(request))
+  Response.text(200, "at {path}")
+}
+"""
+    let outcome = serving directory.Path port (fun client -> Assert.Equal((200, "at /seen"), get client "/seen"))
+    Assert.Contains("dbg (GET /seen): [src/main.nyx:5] \"/seen\"\n", outcome.StandardError)
+    Assert.DoesNotContain("dbg", outcome.StandardOutput)
+
+[<Fact>]
 let ``A handler makes requests of its own, through Http`` () =
     use directory = new TempDirectory()
     let port = freePort ()

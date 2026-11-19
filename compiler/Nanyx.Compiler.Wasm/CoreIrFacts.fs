@@ -16,7 +16,7 @@ type ModuleFacts =
       StaticClosures: (string * int) list
       /// Every foreign function a call is made to (see `CallImport`), in the order the functions' IR first names them.
       Imports: NyxCompiler.Extern list
-      /// Whether some `dbg` prints through `$dbg_str`.
+      /// Whether some `dbg` prints, through `$dbg_str` or the runtime's `nanyx:debug` `dbg`.
       UsesDbgHelpers: bool
       /// Whether some function reads the address of the block the module sets aside for its host.
       UsesHostState: bool
@@ -104,8 +104,11 @@ let collect (functions: Function list) : ModuleFacts =
                 | Hole(_, ty) -> holeType ty
                 | Text text when Interpolation.copiesText text -> strings.Add text
                 | Text _ -> ())
-        | Dbg(location, text) ->
-            atom location
+        // The file's name is passed to the runtime, and what the program writes before the value written if the runtime
+        // leaves it to the program (see `CoreIrEmit`).
+        | Dbg(site, text) ->
+            strings.Add site.File
+            strings.Add site.Prefix
             atom text
             usesDbgHelpers.Value <- true
         | Crash messages -> strings.AddRange messages
