@@ -10,7 +10,7 @@ describes. This page says how the compiler checks one and what it compiles to. W
 
 # Checking
 
-`Infer.inferMatch` hands a match whose one value is a `Type(a)` to `TypeMatches.infer`. The tags a description has, and
+`InferMatch.inferMatch` hands a match whose one value is a `Type(a)` to `TypeMatches.infer`. The tags a description has, and
 the built-in description types (`RecordInfo(a)`, `UnionInfo(a)`, `NominalInfo`, `Field(a)`, `Case(a)`, `SomeType`)
 with their members, are in `TypeValues`, which the backend reads too.
 
