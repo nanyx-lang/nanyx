@@ -158,3 +158,24 @@ let ``The recursive-descent parser reads every type it reads as the FParsec pars
     // It gives up only at what holds an expression, which it doesn't read yet.
     let gaveUp = outcomes |> Array.choose (function _, DescentCheck.GaveUp reason -> Some reason | _ -> None) |> Array.distinct |> Array.sort
     Assert.Equal<string array>([| "a field's attribute, whose argument is an expression"; "a field's default, which is an expression" |], gaveUp)
+
+[<Fact>]
+let ``The recursive-descent parser reads every pattern it reads as the FParsec parser does`` () =
+    let outcomes =
+        parses.Value
+        |> Array.ofList
+        |> Array.Parallel.collect (fun (piece, parse) ->
+            match parse with
+            | Result.Error _ -> [||]
+            | Result.Ok parsed ->
+                let roots = DescentCheck.patternRoots parsed
+                DescentCheck.checkPatterns piece.Name parsed roots |> List.map (fun outcome -> piece.Name, outcome) |> Array.ofList)
+    let differing =
+        outcomes |> Array.choose (function
+            | name, DescentCheck.Differs(fparsec, descent) -> Some $"{name}:\n--- FParsec\n{fparsec}--- descent\n{descent}"
+            | _ -> None)
+    Assert.True(outcomes.Length > 3500, $"Only {outcomes.Length} patterns are compared")
+    Assert.True(differing.Length = 0, $"{differing.Length} of {outcomes.Length} patterns differ:\n\n" + (differing |> Array.truncate 5 |> String.concat "\n\n"))
+    // It gives up only at what holds an expression, which it doesn't read yet.
+    let gaveUp = outcomes |> Array.choose (function _, DescentCheck.GaveUp reason -> Some reason | _ -> None) |> Array.distinct |> Array.sort
+    Assert.Equal<string array>([| "a custom pattern's arguments, which are expressions"; "a guard, which is a lambda" |], gaveUp)

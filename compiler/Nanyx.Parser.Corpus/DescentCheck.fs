@@ -70,3 +70,45 @@ let checkTypes (file: string) (parsed: SourceModule) (roots: (TypeEntry * TypeEx
                 with
                 | GiveUp reason -> GaveUp reason
                 | NoMatch -> GaveUp "no reading matched")
+
+/// The patterns in the FParsec parser's tree of `parsed` that a part of the grammar reads whole: each pattern of each
+/// arm of a match or an `except`, with the arms the parser makes up for an `if ... is`, a lambda's pattern parameter and
+/// a destructuring def. A pattern it makes up is left out: one with no span, and the `_` of the arm an `if ... is`
+/// with an `else` makes, which is spanned at what follows the `else`.
+let patternRoots (parsed: SourceModule) : Pattern list =
+    let roots = ResizeArray()
+    let written (pattern: Pattern) =
+        not (SourceSpan.isNone pattern.Span)
+        && (pattern.Kind <> WildcardPattern || parsed.Source.Substring(pattern.Span.Start, pattern.Span.End - pattern.Span.Start) = "_")
+    let rec walk (value: obj) =
+        match value with
+        | :? Expression as expr ->
+            match expr.Kind with
+            | Match(_, arms)
+            | Except(_, arms) ->
+                for patterns, _ in arms do
+                    roots.AddRange(patterns |> List.filter written)
+            | _ -> ()
+        | _ -> ()
+        for child in BlockStructure.children value do
+            walk child
+    walk parsed.Items
+    List.ofSeq roots
+
+/// How the new parser reads each of `roots`, the patterns `patternRoots` finds in `parsed`, from the file at `file`.
+let checkPatterns (file: string) (parsed: SourceModule) (roots: Pattern list) : Outcome list =
+    match (try Ok(cursorOf file parsed.Source) with GiveUp reason -> Error reason) with
+    | Error reason -> roots |> List.map (fun _ -> GaveUp reason)
+    | Ok cursor ->
+        roots
+        |> List.map (fun root ->
+            if not (seek cursor root.Span.Start) then GaveUp "no token starts where the pattern does"
+            else
+                try
+                    let read = DescentPatterns.pattern cursor
+                    let expected = SyntaxDump.dump root
+                    let actual = SyntaxDump.dump read
+                    if expected = actual then Same else Differs(expected, actual)
+                with
+                | GiveUp reason -> GaveUp reason
+                | NoMatch -> GaveUp "no reading matched")
