@@ -8,6 +8,53 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.31.0
+
+*20 November 2026*
+
+A release about packages and errors. A package can now depend on published packages by name and version: `nanyx
+install` adds one, the lockfile is written for you, and `nanyx publish` releases a new version, refusing a version
+bump too small for what changed. Every error now has a short headline that names what it's about, with the details
+below it. Programs can run in a web page, under a new playground host, and the old parser is gone.
+
+**Language**
+
+- An error now shows a short headline, its code's title and the one name it's about, such as `Missing context
+  'Console'`, with the details on the next line, in the editor and in the terminal. Every error and linter message has
+  been rewritten to fit ([Compiler errors](../standard-tools/errors)).
+- **This breaks** anything that relied on the old parser behind `NANYX_PARSER=fparsec`: FParsec and the switch are
+  gone. After a syntax error, the parser carries on at the next top-level item, so the rest of the file is still
+  checked.
+
+**Standard library**
+
+- `nanyx/clock`: a `Clock` context with `now` (Unix milliseconds) and `ticks` (milliseconds that never go
+  backwards), provided by the console and HTTP hosts ([Clock](../stdlib/clock)). **This breaks code** that declares
+  its own context named `Clock`.
+- `nanyx.playground`, a host that stands in for the console host in a web page, providing `Console`, `Random` and
+  `Clock`, with a runner that runs a program in a web worker ([Hosts](../advanced/hosts)).
+
+**Tools**
+
+- `nanyx install <name>` adds a dependency from the package index at its newest usable version, and `nanyx pull`,
+  `build` and `run` write `nanyx.lock` when the manifest asks for something it doesn't lock. Versions are chosen with
+  PubGrub, and a conflict (`NYX0047`) is explained step by step. `nanyx build --locked` fails on a stale lockfile, for CI
+  ([Package dependencies](../tour/packages#package-dependencies), [`nanyx install`](../standard-tools/command-line#nanyx-install)).
+- `nanyx publish` checks, packs and releases a package on its GitHub repository, refusing a version bump too small
+  for what changed, and registers its first version with the index. `nanyx yank` withdraws a version. A manifest
+  names its repository with `repository = "owner/name"` ([Publishing](../tour/packages#publishing)).
+- `nanyx api-check` compares two versions of a package's API, as the index does for each release
+  ([`nanyx api-check`](../standard-tools/command-line#nanyx-api-check)).
+- `NYX0048` (Dependency not locked) replaces the old error for a dependency the lockfile doesn't lock, and says to
+  run `nanyx pull`.
+- The formatter keeps a union type written over several lines, one case per line starting with `|`, and wraps a long
+  type definition ([Formatter](../standard-tools/formatter)).
+
+**Performance**
+
+- The checked standard library is read with a typed reader per type, its maps built straight from their sorted items:
+  `nanyx check` of a one-line program allocates about 70 MB, from 138 MB, and is faster to start.
+
 # 0.30.0
 
 *20 November 2026*
