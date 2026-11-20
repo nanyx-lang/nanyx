@@ -187,6 +187,18 @@ let ``A map or set read back is built from its sorted items and works as one bui
         Assert.True(set |> Set.forall readSet.Contains)
         Assert.Equal<Set<int64>>(set.Add(100L).Remove 7L, readSet.Add(100L).Remove 7L)
 
+[<Fact>]
+let ``Thousands of values held twice are shared when read back, in their part and from a later one`` () =
+    let items = [ for i in 1 .. 5000 -> [ $"item{i}" ] ]
+    let value = (items, lazy items, items)
+    use stream = new MemoryStream()
+    use writer = new BinaryWriter(stream)
+    BinaryData.write writer id (value.GetType()) value
+    let before, later, after = BinaryData.read (stream.ToArray()) 0 id (value.GetType()) :?> string list list * Lazy<string list list> * string list list
+    Assert.Equal<string list list>(items, after)
+    Assert.True(List.forall2 (fun a b -> obj.ReferenceEquals(a, b)) before after)
+    Assert.True(List.forall2 (fun a b -> obj.ReferenceEquals(a, b)) before later.Value)
+
 // The build checks the packages the compiler ships too (#1637), so a loose script does not check the console host.
 
 let private consoleFile = Path.Combine(ShippedPackages.directoryOf "nanyx.console.core", "src", "console.nyx")

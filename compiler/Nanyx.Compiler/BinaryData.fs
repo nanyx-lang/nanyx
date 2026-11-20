@@ -185,12 +185,26 @@ module internal BinaryData =
 
     /// The values a read has seen, by number: the first `outerCount` of the part around the one it is reading, then its
     /// own.
+    ///
+    /// Its own are kept in chunks of a fixed size, so that none is copied as they grow: a part of the checked library
+    /// sees hundreds of thousands.
     type private Seen<'T>(outer: Seen<'T> option, outerCount: int) =
-        let own = ResizeArray<'T>()
-        member _.Count = outerCount + own.Count
-        member _.Add(value: 'T) = own.Add value
+        static let chunkBits = 10
+        static let chunkSize = 1 <<< chunkBits
+        let chunks = ResizeArray<'T[]>()
+        let mutable count = 0
+        member _.Count = outerCount + count
+        member _.Add(value: 'T) =
+            if count &&& (chunkSize - 1) = 0 then chunks.Add(Array.zeroCreate chunkSize)
+            chunks[count >>> chunkBits][count &&& (chunkSize - 1)] <- value
+            count <- count + 1
         member _.Item
-            with get (index: int) : 'T = if index < outerCount then outer.Value[index] else own[index - outerCount]
+            with get (index: int) : 'T =
+                if index < outerCount then
+                    outer.Value[index]
+                else
+                    let own = index - outerCount
+                    chunks[own >>> chunkBits][own &&& (chunkSize - 1)]
 
     /// A delegate of type `'D` that runs the IL `emit` writes, taking `parameters` and giving `result`. It may use what
     /// is internal to another assembly.
