@@ -70,8 +70,11 @@ median of 1.22 s against 1.61 s on a slower machine (Release, 15 runs of each, i
 `BinaryData` reads each type with a reader of its own, which it emits as IL (a `DynamicMethod`) the first time a read
 meets the type, and keeps for the process: the reader reads each field straight from the file's bytes, a primitive
 without boxing it, and calls the record's constructor or the union case's with them, where reading through reflection
-boxed each primitive and made an array of the fields for each value. A list, set or map is built from its items as
-they are read. The first `nanyx check` of `def x = 1` in a process allocates about 114 MB against 138 MB, and takes a
+boxed each primitive and made an array of the fields for each value. A list is built from its items as they are read.
+A map or set is written in order, so its tree is built from its items straight away, balanced, with FSharp.Core's own
+(internal) tree types (`SortedMaps`, `SortedSets`), where adding the items one by one made a new path to each; items
+read out of order, which a key compared differently from when it was written would give, are added one by one. That
+takes the first `nanyx check` of `def x = 1` from about 114 MB allocated to 83 MB, in the same time. The first `nanyx check` of `def x = 1` in a process allocates about 114 MB against 138 MB, and takes a
 median of 1.28 s against 1.39 s (Release, 9 runs of each, interleaved); in the browser, under the runtime's
 interpreter, the playground's first compile takes 3.2 s against 4.5 s.
 
