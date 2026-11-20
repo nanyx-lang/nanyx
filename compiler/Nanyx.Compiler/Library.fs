@@ -42,7 +42,18 @@ module Compiler =
     let private parseWithDocs (filePath: string) (source: string) =
         match parseModuleFileWithDocsRecovering filePath source with
         | Result.Ok ((((items, _, _), _) as parsed), errors) ->
-            let syntax = errors |> List.collect (syntaxErrors filePath source) |> List.distinctBy (fun diagnostic -> diagnostic.Code, diagnostic.Span)
+            // An error at a character an earlier look-alike's fix rewrites, as the second of a pair of curly quotes
+            // is, is that diagnostic's.
+            let fixedBy (diagnostic: Diagnostic) (error: ParseError) =
+                diagnostic.Fixes |> List.exists (fun fix -> fix.Edits |> List.exists (fun edit -> edit.Span.Start <= error.Span.Start && error.Span.Start < edit.Span.End))
+            let syntax =
+                errors
+                |> List.fold
+                    (fun (found: Diagnostic list) error ->
+                        if found |> List.exists (fun diagnostic -> fixedBy diagnostic error) then found
+                        else found @ syntaxErrors filePath source error)
+                    []
+                |> List.distinctBy (fun diagnostic -> diagnostic.Code, diagnostic.Span)
             match ContextSeparators.check (normalizeSource source) items with
             | [] -> Ok (parsed, syntax)
             | separators -> Error (syntax @ separators)
