@@ -8,12 +8,13 @@
   `nanyx run` serves the program on the port the host's `port` setting gives, 3000 by default.
 
   The host provides [`Http`], for requests the handler makes, written on the runtime's
-  `nanyx:http`, `Async`, so that the handler can wait on them, and [`Random`], which draws from the
-  operating system's random source, and nothing else: no `Console` and no `FileSystem`.
+  `nanyx:http`, `Async`, so that the handler can wait on them, [`Random`], which draws from the
+  operating system's random source, and [`Clock`], which reads its clocks, and nothing else: no `Console` and no `FileSystem`.
 export module http.host
 
 import (
   nanyx/async as (Async)
+  nanyx/clock as (Clock)
   nanyx/host.memory
   nanyx/host.runtime
   nanyx/random as (Random)
@@ -41,8 +42,12 @@ def respond: [HostRuntime] I32, I32 -> ()
 @extern("wasi_snapshot_preview1", "random_get")
 def randomGet: [HostRuntime] I32, I32 -> I32
 
--- The host keeps two things in the block the module sets aside for it (see `hostState`): at 0, what
--- kind of answer a request the handler made had; and at 8, the bits `random_get` last gave.
+@extern("wasi_snapshot_preview1", "clock_time_get")
+def clockTimeGet: [HostRuntime] I32, I64, I32 -> I32
+
+-- The host keeps three things in the block the module sets aside for it (see `hostState`): at 0,
+-- what kind of answer a request the handler made had; at 8, the bits `random_get` last gave; and at
+-- 16, the time `clock_time_get` last gave.
 
 --| 64 bits from the operating system's random source, through WASI's `random_get`. The console
   host does the same, for the reason `sendThroughRuntime` gives.
@@ -50,6 +55,15 @@ def systemBits: [HostRuntime] () -> int = { _ ->
   def at = I32.wrappingAdd(hostState(), 8)
   ignore(randomGet(at, 8))
   readI64(at)
+}
+
+--| The time in milliseconds on WASI's clock `clock`: 0, the time of day, or 1, the monotonic clock,
+  which never goes backwards. The console host does the same, for the reason `sendThroughRuntime`
+  gives.
+def millisecondsOn: [HostRuntime] I32 -> int = { clock ->
+  def at = I32.wrappingAdd(hostState(), 16)
+  ignore(clockTimeGet(clock, 1_000_000, at))
+  readI64(at) / 1_000_000
 }
 
 --| Sends `request` through `nanyx:http`, and gives its response, or why there is none. The console
@@ -94,12 +108,16 @@ def answer: [HostRuntime] Response -> () = { response ->
 
 --| Answers the request this instance was started for with `handle`, the program's entry point, in
   an `Http` that makes requests through the runtime and a `Random` that draws from the operating
-  system. A request the runtime wrote wrongly is answered with a 400.
-export def run: [HostRuntime, Async] ([Async, Http, Random] Request -> Response) -> () = { handle ->
-  use Http(sendRequest = { request -> sendThroughRuntime(request) })
-  use Random(bits = { _ -> systemBits() })
+  system, and a `Clock` that reads its clocks. A request the runtime wrote wrongly is answered with
+  a 400.
+export def run
+  : [HostRuntime, Async] ([Async, Clock, Http, Random] Request -> Response) -> ()
+  = { handle ->
+    use Http(sendRequest = { request -> sendThroughRuntime(request) })
+    use Random(bits = { _ -> systemBits() })
+    use Clock(now = { _ -> millisecondsOn(0) }, ticks = { _ -> millisecondsOn(1) })
 
-  match incoming()
-    | #some(request) -> answer(handle(request))
-    | #malformed -> answer(Response.text(400, "Bad Request"))
-}
+    match incoming()
+      | #some(request) -> answer(handle(request))
+      | #malformed -> answer(Response.text(400, "Bad Request"))
+  }
