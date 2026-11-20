@@ -168,6 +168,15 @@ let ``Each kind of value is read back as it was written`` () =
     Assert.Equal({ value with Maybe = None; Shapes = [] }, roundTrip { value with Maybe = None; Shapes = [] })
 
 [<Fact>]
+let ``FSharp.Core still has the internal tree types a map or set read back is built with`` () =
+    Assert.True(
+        BinaryData.treesBuiltDirectly (),
+        "FSharp.Core's internal MapTree, MapTreeNode, SetTree or SetTreeNode constructors, or Map's or Set's constructor "
+        + "from a comparer and a tree, were not found (has FSharp.Core been upgraded?). Reading the checked library still "
+        + "works, but builds each map and set by adding its items one by one: see SortedMaps in BinaryData.fs."
+    )
+
+[<Fact>]
 let ``A map or set read back is built from its sorted items and works as one built by adding them`` () =
     let roundTrip (value: 'T) =
         use stream = new MemoryStream()
