@@ -4,8 +4,9 @@ description: Working with JSON in Nanyx
 order: 2
 ---
 
-The compiler ships a package for reading and writing JSON, `nanyx.json`. It reads text into a `Json` value, a tag union
-you match on like any other, and writes one back out. Its reference is the [json](../stdlib/json) page.
+`nanyx.json` is a package for reading and writing JSON, published to the package index from
+[nanyx-lang/json](https://github.com/nanyx-lang/json). It reads text into a `Json` value, a tag union you match on like
+any other, and writes one back out. Its guide is the [json](../stdlib/json) page.
 
 # Setup
 
@@ -15,10 +16,12 @@ cd json_parsing
 nanyx install nanyx.json
 ```
 
-A script names it in a `::dependency` line instead:
+`nanyx install` adds `(package = "nanyx.json", version = "0.1")` to the manifest's `dependencies`, locks the newest
+0.1 version in `nanyx.lock` and downloads it. A script names the exact version it uses in a `::dependency` line
+instead, which `nanyx run` downloads:
 
 ```nanyx fragment
-::dependency nanyx.json
+::dependency nanyx.json 0.1.0
 ```
 
 Import its module under a name, `json`, so that its `print` doesn't clash with the console's.
@@ -30,7 +33,7 @@ Import its module under a name, `json`, so that its `print` doesn't clash with t
 it needs:
 
 ```nanyx
-::dependency nanyx.json
+::dependency nanyx.json 0.1.0
 
 import nanyx.json/json as json
 
@@ -84,7 +87,7 @@ A decoder reads a `Json` value into a type of your own, and says where a documen
 record a member at a time, each with `try`, and an encoder from `nanyx.json/encode` writes it back:
 
 ```nanyx
-::dependency nanyx.json
+::dependency nanyx.json 0.1.0
 
 import (
   nanyx.json/encode as encode

@@ -57,7 +57,9 @@ provides `Http`:
 The HTTP host, `nanyx.http`, serves a program whose entry point is a `Request -> Response` handler: see the
 [HTTP server cookbook](../cookbook/http-server).
 
-It also ships `nanyx.json`, which a program names in its dependencies to read and write JSON:
+`nanyx.json`, for reading and writing JSON, is not shipped: it is published to the package index from
+[nanyx-lang/json](https://github.com/nanyx-lang/json), and a program names it in its dependencies,
+`(package = "nanyx.json", version = "0.1")`:
 
 - [json](./json) — the `Json` value, parsing and printing (`nanyx.json/json`)
 - [json, decoders](./json-typed) — reading JSON into types of your own (`nanyx.json/json`)

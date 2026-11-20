@@ -100,7 +100,7 @@ println(zeros((n = 3, s = "x", xs = [true], b = false), type (n: int, s: string,
 [<Fact>]
 let ``Run - a generic encoder writes JSON for any record, union, list and built-in type`` () =
     let source =
-        """::dependency nanyx.json
+        """::dependency nanyx.json 0.1.0
 
 import nanyx.json/json as json
 
