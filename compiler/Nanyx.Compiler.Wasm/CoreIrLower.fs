@@ -109,10 +109,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let ofContexts (contexts: Ty list) = contexts |> List.choose (function TyVar v -> Some v.Id | _ -> None) |> Set.ofList
         let returned (result: Ty) =
             match Unifier.unalias result with
-            | TyNominal(_, args, _, _) ->
-                match List.tryLast args with
-                | Some (FunctionContexts.Carried contexts) -> contexts
-                | _ -> []
+            | FunctionContexts.CarryingNominal(_, _, contexts) -> contexts
+            | TyNominal _ -> []
             | result -> requiredContexts result
         match input.DefinitionTypes |> Map.tryFind name |> Option.map Unifier.unalias with
         | Some (TyFunc(_, result, own)) -> Set.difference (ofContexts (returned result)) (ofContexts own)
