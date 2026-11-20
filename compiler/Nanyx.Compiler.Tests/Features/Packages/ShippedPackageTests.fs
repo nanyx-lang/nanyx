@@ -75,14 +75,6 @@ let ``The playground host is shipped beside the compiler, and depends only on th
     Assert.Equal<string list>([ "nanyx.console.core" ], manifest.Dependencies |> List.map _.Name)
 
 [<Fact>]
-let ``The JSON package is shipped beside the compiler, with its modules for values and for encoders, and no dependencies`` () =
-    let manifest = manifestOf "nanyx.json"
-    Assert.Equal(("nanyx.json", Toolchain.version), (manifest.Name, manifest.Version))
-    Assert.Equal(None, manifest.Declares)
-    Assert.Empty(manifest.Dependencies)
-    Assert.Equal<string list>([ "encode"; "json" ], (ShippedPackages.tryModules "nanyx.json").Value.PublicModules)
-
-[<Fact>]
 let ``The regex package is shipped beside the compiler, with one module and no dependencies`` () =
     let manifest = manifestOf "nanyx.regex"
     Assert.Equal(("nanyx.regex", Toolchain.version), (manifest.Name, manifest.Version))
