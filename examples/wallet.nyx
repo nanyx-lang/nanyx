@@ -5,7 +5,16 @@ import nanyx/encoding
 -- Classifying bitcoin addresses and deriving the script hash that an
 -- Electrum-style server indexes them by.
 
-export type AddressType = #p2pkh | #p2sh | #p2wpkh | #p2tr | #p2pkhTestnet | #p2shTestnet | #p2wpkhTestnet | #p2trTestnet | #unknown
+export type AddressType =
+  | #p2pkh
+  | #p2sh
+  | #p2wpkh
+  | #p2tr
+  | #p2pkhTestnet
+  | #p2shTestnet
+  | #p2wpkhTestnet
+  | #p2trTestnet
+  | #unknown
 
 export def addressType: string -> AddressType = { address ->
   if

@@ -13,7 +13,11 @@ export type Todo = (
   dateAdded: Instant
 )
 
-export type TodoError = #todoDoesNotExist | #insertNotSuccessful | #updateNotSuccessful | #deleteNotSuccessful
+export type TodoError =
+  | #todoDoesNotExist
+  | #insertNotSuccessful
+  | #updateNotSuccessful
+  | #deleteNotSuccessful
 
 export type DeleteResult = #deleted | #deleteError(TodoError)
 export type UpdateResult = #updated(Todo) | #updateError(TodoError)

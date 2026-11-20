@@ -30,7 +30,10 @@ def AttestationCache.needsRefresh: [Clock] AttestationCache -> bool = { cache ->
 }
 
 -- The service that produces attestations is a dependency, so it is a context
-context Attester = (getChallenge: () -> string, generateCertificateChain: string -> #some(list(string)) | #error(#attestationFailed))
+context Attester = (
+  getChallenge: () -> string
+  generateCertificateChain: string -> #some(list(string)) | #error(#attestationFailed)
+)
 
 -- Retry an operation, waiting between attempts
 def retry

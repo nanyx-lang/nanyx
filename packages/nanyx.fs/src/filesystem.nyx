@@ -17,7 +17,13 @@ import (
   the program may not reach it (a path outside the directories the host gave it is this too); it
   is a directory where a file was meant, or the other way round; or there is something at the path
   already. Anything else is `#other`, with what the host said.
-export type FsError = #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+export type FsError =
+  | #notFound
+  | #permissionDenied
+  | #isDirectory
+  | #notDirectory
+  | #alreadyExists
+  | #other(string)
 
 --| The file system, which a host supplies. Its members are the operations a host implements; code
   calls the functions of [`file`](file) and [`dir`](dir), which are written on them.

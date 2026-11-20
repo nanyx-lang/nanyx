@@ -116,7 +116,14 @@ type Assertion = #textStart | #textEnd | #lineStart | #lineEnd | #wordBoundary |
 --| A pattern, read: what matches nothing, a set of characters, an assertion, patterns one after
   another, alternatives, a capturing group with its number, and a pattern repeated from a least to
   a most number of times (`-1` for no most), greedily or lazily.
-type Node = #empty | #chars(list((int, int))) | #assert(Assertion) | #concat(list(Node)) | #alt(list(Node)) | #group(int, Node) | #repeat(Node, int, int, bool)
+type Node =
+  | #empty
+  | #chars(list((int, int)))
+  | #assert(Assertion)
+  | #concat(list(Node))
+  | #alt(list(Node))
+  | #group(int, Node)
+  | #repeat(Node, int, int, bool)
 
 --| The flags in force where the reader is: `i`, `m` and `s`.
 type Flags = (fold: bool, multiline: bool, dotAll: bool)

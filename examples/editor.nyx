@@ -11,7 +11,11 @@ type TextDocument = (lineCount: int, lineAt: int -> TextLine)
 export type Direction = #backwards | #forwards
 export type Change = #greaterThan | #lessThan
 
-export type RelativeIndentation = #noIndentation | #lessIndentation | #moreIndentation | #sameIndentation
+export type RelativeIndentation =
+  | #noIndentation
+  | #lessIndentation
+  | #moreIndentation
+  | #sameIndentation
 
 def TextLine.isBlank = { line -> line.text \trim == "" }
 

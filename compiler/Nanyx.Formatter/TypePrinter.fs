@@ -62,16 +62,16 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
 
     and unionType (t: TypeExpr) : Doc =
         match t.Kind with
-        | TypeUnion items ->
-            items
-            |> List.map (fun item ->
-                match item.Kind with
-                | TypeUnion _
-                | TypeFunc _
-                | TypeWithContext _ -> parenType item
-                | _ -> intersectionType item)
-            |> Doc.join (text " | ")
+        | TypeUnion items -> items |> List.map unionCase |> Doc.join (text " | ")
         | _ -> intersectionType t
+
+    /// One case of a union, bracketed where it would otherwise be read as more than one case or as a function.
+    and unionCase (item: TypeExpr) : Doc =
+        match item.Kind with
+        | TypeUnion _
+        | TypeFunc _
+        | TypeWithContext _ -> parenType item
+        | _ -> intersectionType item
 
     and intersectionType (t: TypeExpr) : Doc =
         match t.Kind with
@@ -197,6 +197,9 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
 
     /// A def's annotation, or anywhere the parser reads a list of types.
     member _.Signature t = signature t
+
+    /// One case of a union, as `UnionType` writes it between its `|`s.
+    member _.UnionCase t = unionCase t
 
     /// A type anywhere a single type is read.
     member _.TypeExpr t = typeExpr t

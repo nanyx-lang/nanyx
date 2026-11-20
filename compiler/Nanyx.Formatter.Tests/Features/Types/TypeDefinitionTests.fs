@@ -43,3 +43,36 @@ let ``A protected or private type keeps its word after the =`` () =
 let ``A type in a scoped context's scope keeps its context before its kind`` () =
     unchanged "export type Cursor = [Tx] protected (row: int)\n"
     Assert.Equal("type MRef(a) = [Memory] protected (value: a)\n", format "type MRef(a) =   [ Memory ]   protected (value: a)")
+[<Fact>]
+let ``A union written over several lines keeps one case per line, each starting with a bar`` () =
+    let written = lines [ "type Shape ="; "  | #circle(radius: float)"; "  | #rectangle(width: float, height: float)" ]
+    unchanged written
+    Assert.Equal(written, format "type Shape = #circle(radius: float)\n  | #rectangle(width: float, height: float)")
+
+[<Fact>]
+let ``A union written on one line that fits stays on it`` () =
+    unchanged "type Answer = #yes | #no | #maybe\n"
+    Assert.Equal("type Answer = #yes | #no\n", format "type Answer = | #yes | #no")
+
+[<Fact>]
+let ``A union too long for one line has one case per line, each starting with a bar`` () =
+    Assert.Equal(
+        lines [ "export type FsError ="; "  | #notFound"; "  | #permissionDenied"; "  | #isDirectory"; "  | #notDirectory"; "  | #alreadyExists"; "  | #other(string)"; "  | #unknown" ],
+        format "export type FsError = #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string) | #unknown")
+
+[<Fact>]
+let ``A broken union keeps the word after the = on its line`` () =
+    unchanged (lines [ "type Token = private"; "  | #word(string)"; "  | #number(int)" ])
+
+[<Fact>]
+let ``A record type too long for one line has one field per line`` () =
+    Assert.Equal(
+        lines [ "type Client = ("; "  baseUrl: string"; "  ingest: (channel: string, event: string) -> #some(id: string) | #error(string)"; ")" ],
+        format "type Client = (baseUrl: string, ingest: (channel: string, event: string) -> #some(id: string) | #error(string))")
+
+[<Fact>]
+let ``Any other type too long for one line goes on the next one, indented`` () =
+    Assert.Equal(
+        lines [ "type Handler ="; "  (SomeLongRequestTypeName, AnotherLongContextTypeName, YetAnotherLongTypeName) -> SomeResponseType" ],
+        format "type Handler = (SomeLongRequestTypeName, AnotherLongContextTypeName, YetAnotherLongTypeName) -> SomeResponseType")
+    unchanged "type Handler = (int, string) -> int\n"

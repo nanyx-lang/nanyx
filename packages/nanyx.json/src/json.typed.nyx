@@ -16,7 +16,10 @@ export type DecodeError = (path: list(PathStep), message: string)
 --| What reads an `a` from a [`Json`] value, or says why it can't. The decoders here make one, and
   [`decode`] and [`decodeValue`] run one. A missing member is the decoder's to read too: only
   [`optional`] reads one, as `#none`.
-export type Decoder(a) = private (run: Json -> #some(a) | #failed(list(PathStep), string), absent: #some(a) | #none)
+export type Decoder(a) = private (
+  run: Json -> #some(a) | #failed(list(PathStep), string)
+  absent: #some(a) | #none
+)
 
 --| What `decoder` reads from `value`, or the path to what didn't fit, from `value`, and why.
 def runOn: Decoder(a), Json -> #some(a) | #failed(list(PathStep), string) = { decoder, v ->
