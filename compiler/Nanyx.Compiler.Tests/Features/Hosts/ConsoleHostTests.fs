@@ -18,7 +18,7 @@ def main = { name: string -> println("Hello, {name}!") }
     let code, message, text = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.EntryDoesNotFitHost.Code, code)
     Assert.Equal(
-        """The entry point 'main' doesn't fit the host 'nanyx.console/console.host'
+        """It doesn't fit the host 'nanyx.console/console.host'
   expected: [Async, Console, Env, FileSystem, Http, Random] () -> a
   found:    string -> ()""".ReplaceLineEndings "\n",
         message)

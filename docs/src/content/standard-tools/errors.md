@@ -1485,7 +1485,7 @@ message names both types and the contexts only one of them carries.
 A type alias names itself other than in the payload of one of its tags, so the type would have no end.
 
 ```nanyx
-type Pair = (int, Pair)  -- error NYX0228: The type 'Pair' refers to itself outside a tag: ...
+type Pair = (int, Pair)  -- error NYX0228: It refers to itself outside a tag: ...
 ```
 
 To fix it, put the recursion inside a tag, as in `type List = #empty | #cons(int, List)`.
@@ -1555,7 +1555,7 @@ An argument is passed with `mut`, as a cell, but it is not one.
 def inc = { mut cell -> cell := cell + 1 }
 def total = memory {
   def count = 0
-  inc(mut count)  -- error NYX0234: 'count' is not a cell, so `mut count` cannot pass it: ...
+  inc(mut count)  -- error NYX0234: `mut` passes only a cell, a name declared with `mut` or a `mut` parameter
   count
 }
 ```
@@ -1604,7 +1604,7 @@ under the console host, `nanyx.console/console.host`, whose entry point takes no
 module main
 
 @entry
-def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: The entry point 'main' doesn't fit the host 'nanyx.console/console.host' ...
+def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: It doesn't fit the host 'nanyx.console/console.host' ...
 ```
 
 The error is reported at `@entry`, and shows the type the host expects and the type the entry point has. To fix it,
@@ -1740,7 +1740,7 @@ instance whoever calls the lambda supplies, which is never a value: it can't be 
 context Log = (log: string -> ())
 
 def keep: [Log] () -> () = { context l ->
-  def saved = l  -- error NYX0245: 'l' names a context instance, which can only be loaded with `use l`
+  def saved = l  -- error NYX0245: It names a context instance, which can only be loaded with `use l`
   ()
 }
 ```

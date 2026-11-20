@@ -156,4 +156,4 @@ def main = { x -> x + 1 }
     // The editor compiles a package's file as `Package.compileSourceWith` does.
     let result = Package.compileSourceWith Linters.none path source
     let mismatch = result.Diagnostics |> List.find (fun diagnostic -> diagnostic.Code = DiagnosticCodes.EntryDoesNotFitHost.Code)
-    Assert.StartsWith("The entry point 'main' doesn't fit the host 'nanyx.console/console.host'", mismatch.Message)
+    Assert.StartsWith("It doesn't fit the host 'nanyx.console/console.host'", mismatch.Message)

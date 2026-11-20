@@ -174,7 +174,7 @@ let inferArgument (infer: TypeEnv -> InferState -> Expression -> Result<TypedExp
             mkTypedExpr expr (FunctionContexts.cellType typedCell.Type scope) None None None, next)
     | IdentifierExpr name ->
         Error [ Diagnostics.at DiagnosticCodes.NotACellArgument cell.Span
-                    $"'{name}' is not a cell, so `mut {name}` cannot pass it: only a name declared with `mut`, or a `mut` parameter, is one" ]
+                    $"`mut` passes only a cell, a name declared with `mut` or a `mut` parameter" |> Diagnostics.about name ]
     | _ -> Error [ Diagnostics.at DiagnosticCodes.NotACellArgument cell.Span "Only a cell can be passed with `mut`: a name declared with `mut name = value`" ]
 
 /// The errors for each `mut T` in `typeOpt`, a def's annotation, that is not a function's parameter: a cell can be passed

@@ -63,7 +63,7 @@ main()
 """
     let outcome = runSource (source.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
-    assertDiagnostic "NYX0236" "Context on a type no parameter or result has" ":4:18" "" outcome.StandardError
+    assertDiagnostic "NYX0236" "Context on a type no parameter or result has 'ToString'" ":4:18" "" outcome.StandardError
     Assert.DoesNotContain("NYX0301", outcome.StandardError)
     Assert.DoesNotContain("NYX0205", outcome.StandardError)
 

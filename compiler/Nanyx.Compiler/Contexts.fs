@@ -375,7 +375,8 @@ let internal ensureContextTypesDetermined (state: InferState) (name: Identifier)
                     |> List.filter (written.Contains >> not)
                     |> List.map (fun var ->
                         Diagnostics.at DiagnosticCodes.UndeterminedContextType ctx.Span
-                            $"'{var}' in '{contextText ctxName args}' is not the type of any parameter of '{name}' or of its result, so no call can supply '{contextText ctxName args}'")
+                            $"'{var}' in '{contextText ctxName args}' is not the type of any parameter of '{name}' or of its result, so no call can supply '{contextText ctxName args}'"
+                        |> Diagnostics.about ctxName)
                 | _ -> [])
         if errors.IsEmpty then Ok () else Error errors
     | _ -> Ok ()
@@ -702,7 +703,7 @@ let internal checkContextUse (call: NodeId option) (env: TypeEnv) (state: InferS
     | Some ctxName ->
         let message =
             $"'{name}' is a member of the private context '{ctxName}', which only its own module can call: call a function that module exports instead"
-        Error [ Diagnostics.at DiagnosticCodes.PrivateContextMember span message ]
+        Error [ Diagnostics.at DiagnosticCodes.PrivateContextMember span message |> Diagnostics.about name ]
     | None -> checkMemberContextUse call env state name span
 
 /// Checks that `contexts`, which `name` requires, are available at `span`. A context with a member not in scope at all,

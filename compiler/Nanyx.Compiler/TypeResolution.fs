@@ -522,7 +522,8 @@ let private unknownTypeErrors (state: InferState) (parameters: Set<Identifier>) 
                 // The name only, not a context's arguments.
                 let span = { span with End = min span.End (span.Start + name.Length) }
                 Some (Diagnostics.at DiagnosticCodes.ContextAsType span
-                          $"'{name}' is a context, not a type: it can only be required, as in `[{name}]`, or loaded with `use`")
+                          $"'{name}' is a context, not a type: it can only be required, as in `[{name}]`, or loaded with `use`"
+                      |> Diagnostics.about name)
             | _ -> None)
     // Only a function type carries contexts (see `WrittenContexts.withContexts`); a type a declaration puts in a scoped
     // context's scope says so on the declaration, not where it is used.
@@ -647,7 +648,8 @@ let internal unnominalScopedContext (name: Identifier) (modifiers: TypeDefModifi
     match TypeDefModifier.scopedSpan modifiers with
     | Some span when not (TypeDefModifier.isNominal modifiers) ->
         [ Diagnostics.at DiagnosticCodes.ScopedContextNotProtected span
-            $"The scoped context '{name}' must be either protected or private, as in `scoped context {Names.written name} = protected (...)`, so that only its own module can make its instances" ]
+            $"The scoped context '{name}' must be either protected or private, as in `scoped context {Names.written name} = protected (...)`, so that only its own module can make its instances"
+          |> Diagnostics.about name ]
     | _ -> []
 
 /// The errors for the contexts the type `name`'s declaration says its values belong to the scope of (see

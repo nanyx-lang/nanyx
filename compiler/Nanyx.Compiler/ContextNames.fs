@@ -46,18 +46,18 @@ let bind (env: TypeEnv) (state: InferState) (lambda: Expression) (body: Expressi
             match contexts |> List.tryFind (fun (_, info, _) -> state.TypeDefs |> Map.tryFind ctxName |> Option.exists (fun named -> named.Symbol = info.Symbol)) with
             | Some found -> Ok found
             | None when contexts.IsEmpty ->
-                Error [ Diagnostics.at DiagnosticCodes.UnknownContextName span $"'{name}' names the context '{ctxName}', but this lambda is given no context to name" ]
+                Error [ Diagnostics.at DiagnosticCodes.UnknownContextName span $"'{name}' names the context '{ctxName}', but this lambda is given no context to name" |> Diagnostics.about name ]
             | None ->
-                Error [ Diagnostics.at DiagnosticCodes.UnknownContextName span $"'{name}' names the context '{ctxName}', which this lambda isn't given: it is given {Diagnostics.listed quoted}" ]
+                Error [ Diagnostics.at DiagnosticCodes.UnknownContextName span $"'{name}' names the context '{ctxName}', which this lambda isn't given: it is given {Diagnostics.listed quoted}" |> Diagnostics.about name ]
         | Some written ->
-            Error [ Diagnostics.at DiagnosticCodes.UnknownContextName written.Span $"'{name}' can name only a context, written by its name, as in `context {name}: Log`" ]
+            Error [ Diagnostics.at DiagnosticCodes.UnknownContextName written.Span $"'{name}' can name only a context, written by its name, as in `context {name}: Log`" |> Diagnostics.about name ]
         | None ->
             match contexts with
             | [ found ] -> Ok found
-            | [] -> Error [ Diagnostics.at DiagnosticCodes.UnknownContextName span $"'{name}' names no context: this lambda is given none to name" ]
+            | [] -> Error [ Diagnostics.at DiagnosticCodes.UnknownContextName span $"'{name}' names no context: this lambda is given none to name" |> Diagnostics.about name ]
             | (first, _, _) :: _ ->
                 Error [ Diagnostics.at DiagnosticCodes.UnknownContextName span
-                            $"'{name}' could name any of {Diagnostics.listed quoted}, which this lambda is given: say which, as in `context {name}: {first}`" ]
+                            $"'{name}' could name any of {Diagnostics.listed quoted}, which this lambda is given: say which, as in `context {name}: {first}`" |> Diagnostics.about name ]
     names
     |> List.fold (fun result (name, written, span) ->
         result
