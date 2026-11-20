@@ -106,16 +106,18 @@ module internal AssociatedTypes =
     let rewrite (typeDefs: Map<string, TypeDefInfo>) (module': Module) : Module * Diagnostic list =
         let errors = ResizeArray<Diagnostic>()
         let report code (span: SourceSpan) message = errors.Add(Diagnostics.at code span message)
+        // The error `code` about `subject`, which its headline names.
+        let reportAbout code (span: SourceSpan) (subject: string) message = errors.Add(Diagnostics.at code span message |> Diagnostics.about subject)
         let shapes = Map.ofList (importedShapes typeDefs @ declaredShapes module')
 
         // The error for the named argument `arg` of the context `context`, which has no associated type of its name.
         let unknownNamed (context: Identifier) (shape: Shape option) (arg: TypeExpr) =
             match arg.Kind, shape with
             | TypeNamedArgument(name, _), Some shape when shape.Members.Contains name ->
-                report DiagnosticCodes.UnknownAssociatedType arg.Span
-                    $"'{name}' is a member of '{context}', not one of its associated types: only an associated type is fixed by name in a context's arguments"
+                reportAbout DiagnosticCodes.UnknownAssociatedType arg.Span name
+                    $"It is a member of '{context}', not one of its associated types: only an associated type is fixed by name in a context's arguments"
             | TypeNamedArgument(name, _), _ ->
-                report DiagnosticCodes.UnknownAssociatedType arg.Span $"'{context}' has no associated type '{name}'"
+                reportAbout DiagnosticCodes.UnknownAssociatedType arg.Span name $"'{context}' has none of this name"
             | _ -> ()
 
         // What the bare name `name`, written at `t`, stands for among `scope`: the associated type of that name of the one
@@ -127,7 +129,7 @@ module internal AssociatedTypes =
             | several ->
                 let qualified = several |> List.map (fun entry -> $"`{written entry.Context entry.Arguments}.{name}`")
                 let contexts = several |> List.map (fun entry -> $"'{written entry.Context entry.Arguments}'")
-                report DiagnosticCodes.AmbiguousAssociatedType t.Span
+                reportAbout DiagnosticCodes.AmbiguousAssociatedType t.Span name
                     $"""'{name}' is an associated type of {Diagnostics.listed contexts}: write which one, as {String.concat " or " qualified}"""
                 { t with Kind = TypeVar name }
 
@@ -143,10 +145,10 @@ module internal AssociatedTypes =
                         $"'{written context args}' is not one of the contexts required here, so its '{name}' can't be named: add it to the contexts, as in `[{written context args}]`"
                     ownName
                 | _, Some shape when shape.Members.Contains name ->
-                    report DiagnosticCodes.UnknownAssociatedType t.Span $"'{name}' is a member of '{context}', not one of its associated types"
+                    reportAbout DiagnosticCodes.UnknownAssociatedType t.Span name $"It is a member of '{context}', not one of its associated types"
                     ownName
                 | _ ->
-                    report DiagnosticCodes.UnknownAssociatedType t.Span $"'{context}' has no associated type '{name}'"
+                    reportAbout DiagnosticCodes.UnknownAssociatedType t.Span name $"'{context}' has none of this name"
                     ownName
             | None ->
                 report DiagnosticCodes.UnknownAssociatedType t.Span $"Only a context has associated types, as in `Iter(c).{name}`"
@@ -273,13 +275,13 @@ module internal AssociatedTypes =
                     match field with
                     | TypeField(member', _, Some keyword, defaultOpt) when keyword.Kind = TypeKeyword ->
                         if defaultOpt.IsSome then
-                            report DiagnosticCodes.InvalidAssociatedType keyword.Span
-                                $"The associated type '{member'}' can't have a default: each instance fixes it, by its members' types or with `type T.{member'} = ...`"
+                            reportAbout DiagnosticCodes.InvalidAssociatedType keyword.Span member'
+                                $"An associated type can't have a default: each instance fixes it, by its members' types or with `type T.{member'} = ...`"
                         if TypeResolution.isBuiltInTypeName member' then
-                            report DiagnosticCodes.InvalidAssociatedType keyword.Span $"'{member'}' is a built-in type, so it can't be the name of an associated type"
+                            reportAbout DiagnosticCodes.InvalidAssociatedType keyword.Span member' $"'{member'}' is a built-in type, so it can't be the name of an associated type"
                         elif member'.Length < 2 || not (System.Char.IsLower member'[0]) then
-                            report DiagnosticCodes.InvalidAssociatedType keyword.Span
-                                $"An associated type's name is lowercase and longer than one letter, so '{member'}' can't be one"
+                            reportAbout DiagnosticCodes.InvalidAssociatedType keyword.Span member'
+                                $"An associated type's name is lowercase and longer than one letter"
                     | _ -> ()
                 let own =
                     { Context = name

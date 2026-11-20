@@ -1888,7 +1888,7 @@ An operator is defined by a lambda that takes other than two parameters. An oper
 left and right operands ([Defining operators](../tour/operators#defining-operators)).
 
 ```nanyx
-def `<+>` = { a, b, c -> a + b * c }  -- error NYX0255: '`<+>`' is an operator, so it takes exactly two arguments, its left and right operands, but the lambda that defines it takes 3
+def `<+>` = { a, b, c -> a + b * c }  -- error NYX0255: An operator takes exactly two arguments, its left and right operands, but the lambda that defines it takes 3
 ```
 
 To fix it, take two parameters. To pass an operator more values, make one operand a tuple or a record, as in
@@ -2047,7 +2047,7 @@ can't be one: a built-in type's, such as `list`, or one that isn't lowercase and
 written as the type of something other than a context's member.
 
 ```nanyx
-context Container(c) = (elem: type = int, get: c -> elem)  -- error NYX0265: The associated type 'elem' can't have a default
+context Container(c) = (elem: type = int, get: c -> elem)  -- error NYX0265: An associated type can't have a default
 ```
 
 To fix it, leave the default out: each instance fixes the associated type, by its members' types or with an attached
@@ -2074,7 +2074,7 @@ isn't a type, as `Iter(c, next = int)`; or a signature names the associated type
 ```nanyx
 context Iter(c) = (elem: type, next: c -> #some(elem, c) | #done)
 
-def total: [Iter(c, item = int)] c -> int = { xs -> 0 }  -- error NYX0267: 'Iter' has no associated type 'item'
+def total: [Iter(c, item = int)] c -> int = { xs -> 0 }  -- error NYX0267: 'Iter' has none of this name
 ```
 
 To fix it, name an associated type the context declares, or add the context whose associated type the signature
@@ -2204,7 +2204,7 @@ is.
 ```nanyx
 type Nest(a) = #leaf(a) | #deeper(Nest(list(a)))
 
-def depth: Nest(int) -> int = { t -> 1 }  -- error NYX0301: The WebAssembly backend cannot compile a recursive type that holds itself at other type arguments yet
+def depth: Nest(int) -> int = { t -> 1 }  -- error NYX0301: It can't compile a recursive type that holds itself at other type arguments yet
 ```
 
 To fix it, write the code another way until the backend supports it.

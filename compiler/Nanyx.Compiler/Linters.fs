@@ -82,7 +82,10 @@ type Report =
       Span: SourceSpan
       Message: string
       Related: (SourceSpan * string) list
-      Fixes: Fix list }
+      Fixes: Fix list
+      /// The one name the diagnostic's headline shows after the rule's title: the binding an `unusedBindings`
+      /// report is about. None for a headline that is the title alone.
+      Subject: string option }
 
 /// A set of rules, run over each module the compiler checks. Linters are compiled into the compiler for now: there
 /// is no way yet to write one in Nanyx (#107).
@@ -148,13 +151,13 @@ module UnusedBindings =
 
     let private messageFor (symbol: Symbol) =
         match symbol.Kind with
-        | Parameter -> $"Argument `{symbol.Name}` is never used"
-        | PatternVariable -> $"`{symbol.Name}` is introduced by a pattern but never used"
+        | Parameter -> "The parameter is never used"
+        | PatternVariable -> "A pattern introduces it, but it is never used"
         | LocalValue
         | TopLevelValue
         | ImportedModule
         | TypeDefinition
-        | ContextMember -> $"`{symbol.Name}` is never used"
+        | ContextMember -> "It is never used"
 
     let lint (model: SemanticModel) : Report list =
         let referenced = model.References |> Map.values |> Set.ofSeq
@@ -183,6 +186,7 @@ module UnusedBindings =
         |> Seq.sortBy (fun symbol -> symbol.Declaration.Start)
         |> Seq.map (fun symbol ->
             { Rule = rule.Id
+              Subject = Some symbol.Name
               Span = symbol.Declaration
               Message = messageFor symbol
               Related = []
@@ -302,6 +306,7 @@ module NonTailRecursion =
                         let why = why |> Option.defaultValue "it is not the last thing the function does"
                         Some
                             { Rule = rule.Id
+                              Subject = None
                               Span = call.Span
                               Message =
                                 $"`{symbol.Name}` calls itself here, but not in tail position: {why}. Each call keeps a stack frame until it returns, so a deep enough input runs out of stack."
@@ -373,6 +378,7 @@ module UnreachableArms =
                                 | [ _ ] -> "This arm can never match: an arm before it matches every value it does."
                                 | _ -> "This arm can never match: the arms before it match every value it does between them."
                             { Rule = rule.Id
+                              Subject = None
                               Span = spanOf patterns
                               Message = message
                               Related =
@@ -435,8 +441,9 @@ module UnusedImports =
                 items |> List.tryFind (fun item -> item.Span = symbol.Declaration) |> Option.map (fun item -> statement, items, item))
             |> Option.map (fun (statement, items, item) ->
                 { Rule = rule.Id
+                  Subject = Some symbol.Name
                   Span = item.Span
-                  Message = $"`{symbol.Name}` is imported but never used"
+                  Message = "It is imported but never used"
                   Related = []
                   Fixes = [ { Title = $"Remove the import of `{symbol.Name}`"; Edits = [ removal model.Source statement items item ] } ] }))
         |> List.ofSeq
@@ -483,13 +490,13 @@ module UnusedPrivateDefinitions =
 
     let private messageFor (symbol: Symbol) =
         match symbol.Kind with
-        | TypeDefinition -> $"Type `{symbol.Name}` is never used"
-        | ContextMember -> $"Context member `{symbol.Name}` is never used"
+        | TypeDefinition -> "The type is never used"
+        | ContextMember -> "The context's member is never used"
         | TopLevelValue
         | LocalValue
         | Parameter
         | PatternVariable
-        | ImportedModule -> $"`{symbol.Name}` is never used"
+        | ImportedModule -> "It is never used"
 
     let lint (model: SemanticModel) : Report list =
         let definitions = definitionsOf model.Syntax
@@ -537,6 +544,7 @@ module UnusedPrivateDefinitions =
         |> Seq.sortBy (fun (symbol, _) -> symbol.Declaration.Start)
         |> Seq.map (fun (symbol, definition) ->
             { Rule = rule.Id
+              Subject = Some symbol.Name
               Span = symbol.Declaration
               Message = messageFor symbol
               Related = []
@@ -584,6 +592,7 @@ module NoTagInCommon =
                         let always = if op = EqualityOperators.equals then "false" else "true"
                         Some
                             { Rule = rule.Id
+                              Subject = None
                               Span = expr.Span
                               Message = $"'{tys.[0]}' and '{tys.[1]}' have no tag in common, so this is always {always}"
                               Related = []
@@ -635,6 +644,7 @@ module UnreachableCode =
                 let unreachable = arguments |> List.skip (index + 1)
                 let callee = if MadeUpNames.isMadeUp name then "the call" else $"`{name}`"
                 { Rule = rule.Id
+                  Subject = None
                   Span = SourceSpan.between (List.head unreachable).Span (List.last unreachable).Span
                   Message = $"This code never runs: {whyNever diverging}, so the arguments after it are never evaluated and {callee} is never called"
                   Related = [ diverging.Span, "never gives a value" ]
@@ -663,6 +673,7 @@ module UnreachableCode =
                     | ExprStatement _ -> [ { Title = "Remove the unreachable code"; Edits = [ SourceEdits.removal model.Source span ] } ]
                     | _ -> []
                 { Rule = rule.Id
+                  Subject = None
                   Span = span
                   Message = $"This code never runs: {whyNever value}"
                   Related = [ diverging.Span, "never gives a value" ]
@@ -690,6 +701,7 @@ module UseInBraces =
             | UseIn(_, (Kind (Lambda([], _, false)) as body)) ->
                 Some
                     { Rule = rule.Id
+                      Subject = None
                       Span = body.Span
                       Message =
                         "The braces make this a function of no arguments, not a block run with the context loaded: put the statements on the lines after `in`, indented"
@@ -725,6 +737,7 @@ module StrayDocComments =
         |> List.map (fun comment ->
             let written = model.Source.Substring(comment.Span.Start, comment.Span.End - comment.Span.Start)
             { Rule = rule.Id
+              Subject = None
               Span = comment.Span
               Message =
                 "This doc comment documents nothing: put it on the line before a definition, a type, a field or a tag, or make it an ordinary comment with `--`"
@@ -778,8 +791,9 @@ module UnannotatedExports =
                 let written = Signatures.typeWithContexts model.TypeDefs Source (named ty) (List.map named contexts)
                 let afterName = symbol.Declaration.End
                 { Rule = rule.Id
+                  Subject = Some symbol.Name
                   Span = symbol.Declaration
-                  Message = $"`{symbol.Name}` is exported but does not write its type: {written}"
+                  Message = $"Its type isn't written: write `: {written}` after its name"
                   Related = []
                   Fixes =
                     [ { Title = $"Write the type of `{symbol.Name}`"
@@ -927,6 +941,7 @@ module UnusedResults =
         |> List.map (fun (_, value, ty, what) ->
             let written = model.Source.Substring(value.Span.Start, value.Span.End - value.Span.Start)
             { Rule = rule.Id
+              Subject = None
               Span = value.Span
               Message = $"{what}, of type '{Unifier.tyToDisplayString Ascii ty}', is never used: bind it to a name, or pass it to `ignore`"
               Related = []
@@ -948,6 +963,7 @@ module UselessExpressions =
         |> List.filter (fun (_, value, _, _) -> Purity.isPure model value)
         |> List.map (fun (statement, value, ty, what) ->
             { Rule = rule.Id
+              Subject = None
               Span = value.Span
               Message = $"{what}, of type '{Unifier.tyToDisplayString Ascii ty}', does nothing and is never used: remove it, or use its value"
               Related = []
@@ -997,8 +1013,9 @@ module ShadowedPreludeNames =
             |> Seq.sortBy (fun symbol -> symbol.Declaration.Start)
             |> Seq.map (fun symbol ->
                 { Rule = rule.Id
+                  Subject = Some symbol.Name
                   Span = symbol.Declaration
-                  Message = $"`{symbol.Name}` hides the prelude's `{symbol.Name}`, which can't be named where it is in scope"
+                  Message = $"The prelude's '{symbol.Name}' can't be named where it is in scope"
                   Related = []
                   Fixes = [] })
             |> List.ofSeq
@@ -1051,6 +1068,7 @@ module Semicolons =
             |> List.choose (fun (before, after) -> separator model.Source block before after)
             |> List.map (fun (span, fixes) ->
                 { Rule = rule.Id
+                  Subject = None
                   Span = span
                   Message = "Put each statement on a line of its own, rather than separating them with `;`"
                   Related = []
@@ -1144,8 +1162,9 @@ module UnconstructibleTypes =
                         let kind = if info.IsPrivate then "private" else "protected"
                         let owner = moduleName |> Option.map (fun moduleName -> $"'{moduleName}'") |> Option.defaultValue "its module"
                         { Rule = rule.Id
+                          Subject = Some name
                           Span = symbol.Declaration
-                          Message = $"'{name}' is {kind}, and nothing {owner} exports returns one, so no code outside {owner} can get a '{name}'."
+                          Message = $"'{name}' is {kind}, and nothing {owner} exports returns one, so no code outside {owner} can get a '{name}'"
                           Related = []
                           Fixes = [ ofStub model item name parameters body ] })
                 | _ -> None))
@@ -1296,7 +1315,8 @@ module Linters =
             | None ->
                 reports
                 |> List.choose (fun report ->
-                    diagnostic options linter rules.[report.Rule] (Some report.Span) report.Message report.Related report.Fixes)
+                    diagnostic options linter rules.[report.Rule] (Some report.Span) report.Message report.Related report.Fixes
+                    |> Option.map (fun diagnostic -> { diagnostic with Subject = report.Subject }))
 
     /// `diagnostics` without those an `@allow` suppresses, and, when the official linter runs, its `unusedAllows`
     /// diagnostics for each rule an `@allow` names that suppressed nothing (see `Allows`).

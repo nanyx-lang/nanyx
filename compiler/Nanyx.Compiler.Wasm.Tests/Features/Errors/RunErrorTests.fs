@@ -25,7 +25,7 @@ def main = { println(depth(#leaf(1))) }
     Assert.Equal("", outcome.StandardOutput)
     // The code and headline, then the place, at the function, the line with the function underlined, and the body.
     Assert.Matches(
-        "error NYX0301: Not supported by the WebAssembly backend\\r?\\n  --> .*:4:31\\r?\\n   \\|\\r?\\n 4 \\| def depth: Nest\\(int\\) -> int = \\{ t ->\\r?\\n   \\| {31}\\^+\\r?\\n   = The WebAssembly backend cannot compile a recursive type that holds itself at other type arguments yet\\r?\\n$",
+        "error NYX0301: Not supported by the WebAssembly backend\\r?\\n  --> .*:4:31\\r?\\n   \\|\\r?\\n 4 \\| def depth: Nest\\(int\\) -> int = \\{ t ->\\r?\\n   \\| {31}\\^+\\r?\\n   = It can't compile a recursive type that holds itself at other type arguments yet\\r?\\n$",
         outcome.StandardError)
 
 [<Fact>]

@@ -15,7 +15,7 @@ exception BackendFailure of Diagnostic
 /// What a broken invariant of the backend (see `CoreIr.InternalError`) says to the user: the one place it gets its
 /// prefix, and asks for a bug report.
 let private internalErrorMessage (reason: string) =
-    $"Internal error in the compiler ({reason}): report it at https://github.com/nanyx-lang/nanyx/issues"
+    $"The compiler broke one of its own rules ({reason}): report it at https://github.com/nanyx-lang/nanyx/issues"
 
 /// A broken invariant of the backend, at `span` if it is known.
 let private internalErrorDiagnostic (reason: string) (span: SourceSpan option) =
@@ -29,9 +29,9 @@ let lowerFailureDiagnostic (failure: CoreIrLowerInput.LowerFailure) (span: Sourc
     match failure, span with
     | CoreIrLowerInput.Internal reason, _ -> internalErrorDiagnostic reason span
     | CoreIrLowerInput.NotYet reason, Some span ->
-        Diagnostics.at DiagnosticCodes.UnsupportedByBackend span $"The WebAssembly backend cannot compile {reason} yet"
+        Diagnostics.at DiagnosticCodes.UnsupportedByBackend span $"It can't compile {reason} yet"
     | CoreIrLowerInput.NotYet reason, None ->
-        Diagnostics.general DiagnosticCodes.UnsupportedByBackend $"The WebAssembly backend cannot compile {reason} yet"
+        Diagnostics.general DiagnosticCodes.UnsupportedByBackend $"It can't compile {reason} yet"
 
 type private ContextFn = string * int * int
 

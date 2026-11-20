@@ -99,9 +99,9 @@ def y = #none >>= { n -> #some(n * 10) }
     Assert.Equal("#none | #some(int)", Unifier.tyToString (typed.Types |> Map.find "y"))
 
 [<Theory>]
-[<InlineData("def `<+>` = { a, b, c -> a + b * c }\n", "'`<+>`' is an operator, so it takes exactly two arguments, its left and right operands, but the lambda that defines it takes 3", "`<+>` = { a, b, c -> a + b * c }")>]
-[<InlineData("type P = protected (x: int)\ndef P.`-` = { (p: P) -> p }\n", "'`-`' is an operator, so it takes exactly two arguments, its left and right operands, but the lambda that defines it takes one", "P.`-` = { (p: P) -> p }")>]
-[<InlineData("def f = {\n  def `<>` = { () -> 1 }\n  2\n}\n", "'`<>`' is an operator, so it takes exactly two arguments, its left and right operands, but the lambda that defines it takes none", "`<>` = { () -> 1 }")>]
+[<InlineData("def `<+>` = { a, b, c -> a + b * c }\n", "An operator takes exactly two arguments, its left and right operands, but the lambda that defines it takes 3", "`<+>` = { a, b, c -> a + b * c }")>]
+[<InlineData("type P = protected (x: int)\ndef P.`-` = { (p: P) -> p }\n", "An operator takes exactly two arguments, its left and right operands, but the lambda that defines it takes one", "P.`-` = { (p: P) -> p }")>]
+[<InlineData("def f = {\n  def `<>` = { () -> 1 }\n  2\n}\n", "An operator takes exactly two arguments, its left and right operands, but the lambda that defines it takes none", "`<>` = { () -> 1 }")>]
 let ``An operator defined by a lambda that does not take two parameters is an error at its name`` (source: string) (message: string) (at: string) =
     let code, reported, text = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.OperatorArity.Code, code)

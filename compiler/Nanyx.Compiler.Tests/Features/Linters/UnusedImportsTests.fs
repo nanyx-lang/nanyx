@@ -43,7 +43,7 @@ let ``An import used through a name it selects is not reported`` () =
 
 [<Fact>]
 let ``An import that selects names nothing uses is reported`` () =
-    Assert.Equal<(string * string) list>([ "`nanyx/math` is imported but never used", "nanyx/math as (abs)" ], reported "import nanyx/math as (abs)\ndef x = 3\n")
+    Assert.Equal<(string * string) list>([ "It is imported but never used", "nanyx/math as (abs)" ], reported "import nanyx/math as (abs)\ndef x = 3\n")
 
 [<Fact>]
 let ``An import used only through a name the module re-exports is not reported`` () =
@@ -71,7 +71,7 @@ let ``A module imported by the file and by a module block is used by each where 
     Assert.Empty(reported ("import nanyx/text\n" + block + (withFinalNewline """def b = string.trim(" y ")""")))
     // The block's import is its own: a use in the block does not use the file's, nor one outside it the block's.
     Assert.Equal<(string * string) list>(
-        [ "`nanyx/text` is imported but never used", "nanyx/text" ],
+        [ "It is imported but never used", "nanyx/text" ],
         reported ("import nanyx/text\n" + block + "def b = 1\n"))
     let source = withFinalNewline """import nanyx/text
 module inner =
@@ -88,8 +88,8 @@ def b = string.trim(" y ")"""
 let ``An unused import is reported at the import, under its alias or its module`` () =
     let source = "import (\n  nanyx/math as m\n  nanyx/text as s\n  nanyx/host.memory\n)\ndef x = m.abs(3)\n"
     Assert.Equal<(string * string) list>(
-        [ "`s` is imported but never used", "nanyx/text as s"
-          "`nanyx/host.memory` is imported but never used", "nanyx/host.memory" ],
+        [ "It is imported but never used", "nanyx/text as s"
+          "It is imported but never used", "nanyx/host.memory" ],
         reported source)
 
 [<Fact>]
@@ -106,7 +106,7 @@ let ``An unused import in a file that imports it by path is reported`` () =
 def answer = 2"""
         File.WriteAllText(mainPath, source)
         let result = Compiler.compileFileWith Linters.everyLinter mainPath
-        Assert.Equal<(string * string) list>([ "`lib` is imported but never used", "\"./lib.nyx\" as lib" ], unusedImportsIn result source))
+        Assert.Equal<(string * string) list>([ "It is imported but never used", "\"./lib.nyx\" as lib" ], unusedImportsIn result source))
 
 [<Fact>]
 let ``The rule's severity can be configured, or the rule turned off`` () =

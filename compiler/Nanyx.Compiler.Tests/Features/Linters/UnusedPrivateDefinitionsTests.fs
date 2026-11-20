@@ -37,10 +37,10 @@ context Logger = (log: string -> ())
 export def area = { w, h -> w * h }
 """
     Assert.Equal<(string * string) list>(
-        [ "`scale` is never used", "scale"
-          "Type `Corner` is never used", "Corner"
-          "Type `Logger` is never used", "Logger"
-          "Context member `log` is never used", "log" ],
+        [ "It is never used", "scale"
+          "The type is never used", "Corner"
+          "The type is never used", "Logger"
+          "The context's member is never used", "log" ],
         reported source)
 
 [<Fact>]
@@ -69,7 +69,7 @@ let ``A member of a used context that nothing calls is reported`` () =
 context Scale = (factor: () -> int, offset: () -> int)
 export def scaled: [Scale] int -> int = { n -> n * factor() }
 """
-    Assert.Equal<(string * string) list>([ "Context member `offset` is never used", "offset" ], reported source)
+    Assert.Equal<(string * string) list>([ "The context's member is never used", "offset" ], reported source)
 
 [<Fact>]
 let ``A def that only calls itself, or a type that only names itself, is unused`` () =
@@ -80,7 +80,7 @@ type Tree = #leaf | #node(Tree, Tree)
 export def x = 1
 """
     Assert.Equal<(string * string) list>(
-        [ "`countdown` is never used", "countdown"; "Type `Tree` is never used", "Tree" ],
+        [ "It is never used", "countdown"; "The type is never used", "Tree" ],
         reported source)
 
 [<Fact>]

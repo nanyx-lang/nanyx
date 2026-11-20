@@ -89,7 +89,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
                     .Where(item => item.Kind.IsDef)
                     .Select(item => new Report(
                         "everyDef", item.Span, "a def",
-                        FSharpList<Tuple<Parser.Program.SourceSpan, string>>.Empty, FSharpList<Fix>.Empty)))));
+                        FSharpList<Tuple<Parser.Program.SourceSpan, string>>.Empty, FSharpList<Fix>.Empty, FSharpOption<string>.None)))));
         var uri = DocumentUri.FromFileSystemPath(TempPath("analyzed.nyx"));
 
         async Task<Diagnostic> PublishedWith(FSharpMap<string, FSharpOption<Severity>> severities)

@@ -54,7 +54,7 @@ type Nest(a) = #leaf(a) | #deeper(Nest(list(a)))
 def depth: Nest(int) -> int = { t -> 1 }
 """
     Assert.Equal(
-        "The WebAssembly backend cannot compile a recursive type that holds itself at other type arguments yet",
+        "It can't compile a recursive type that holds itself at other type arguments yet",
         backendError (source.ReplaceLineEndings "\n"))
 
 /// The functions in `report` but the printers `dbg` prints through.
@@ -454,6 +454,6 @@ let ``A broken invariant in the emitter is an internal error, said once, that as
         let diagnostic = lowerFailureDiagnostic failure span
         Assert.Equal(DiagnosticCodes.BackendInternalError.Code, diagnostic.Code)
         Assert.Equal(
-            "Internal error in the compiler (a temporary in the core IR is never used): report it at https://github.com/nanyx-lang/nanyx/issues",
+            "The compiler broke one of its own rules (a temporary in the core IR is never used): report it at https://github.com/nanyx-lang/nanyx/issues",
             diagnostic.Message)
     | failures -> Assert.Fail $"Expected one failure in f, got %A{failures}"

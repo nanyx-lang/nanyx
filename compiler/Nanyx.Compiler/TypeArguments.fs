@@ -40,13 +40,13 @@ let private parameterErrors (annotation: TypeExpr) : Diagnostic list =
     |> List.collect (fun (name, isMutable, keyword, defaultOpt) ->
         [ if TypeResolution.isBuiltInTypeName name then
               Diagnostics.at DiagnosticCodes.InvalidTypeParameter keyword.Span
-                  $"'{name}' is a built-in type, so it can't be the name of a type parameter"
+                  $"'{name}' is a built-in type, so it can't be the name of a type parameter" |> Diagnostics.about name
           if isMutable then
-              Diagnostics.at DiagnosticCodes.InvalidTypeParameter keyword.Span $"The type parameter '{name}' can't be `mut`"
+              Diagnostics.at DiagnosticCodes.InvalidTypeParameter keyword.Span "A type parameter can't be `mut`" |> Diagnostics.about name
           match defaultOpt with
           | Some value ->
               Diagnostics.at DiagnosticCodes.InvalidTypeParameter value.Span
-                  $"The type parameter '{name}' can't have a default: a type argument is always passed, as `{name} = type Point`"
+                  $"A type parameter can't have a default: a type argument is always passed, as `{name} = type Point`" |> Diagnostics.about name
           | None -> () ])
 
 /// `t` with each name in `names`, the named type parameters in scope, written as the type variable it is, and each

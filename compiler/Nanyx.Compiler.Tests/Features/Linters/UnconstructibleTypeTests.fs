@@ -28,7 +28,7 @@ let ``A private type that nothing its module exports returns is reported at its 
 
   export def UserId.toString: UserId -> string = { id -> "user" }"""
     Assert.Equal<(string * string) list>(
-        [ "'UserId' is private, and nothing 'noms' exports returns one, so no code outside 'noms' can get a 'UserId'.", "UserId" ],
+        [ "'UserId' is private, and nothing 'noms' exports returns one, so no code outside 'noms' can get a 'UserId'", "UserId" ],
         reported source)
 
 [<Fact>]
@@ -40,7 +40,7 @@ export type Email = protected string
 
 export def Email.length: Email -> int = { e -> string.length(e) }"""
     Assert.Equal<(string * string) list>(
-        [ "'Email' is protected, and nothing 'emails' exports returns one, so no code outside 'emails' can get a 'Email'.", "Email" ],
+        [ "'Email' is protected, and nothing 'emails' exports returns one, so no code outside 'emails' can get a 'Email'", "Email" ],
         reported source)
 
 [<Fact>]
