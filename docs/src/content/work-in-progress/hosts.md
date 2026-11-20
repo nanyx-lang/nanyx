@@ -77,14 +77,15 @@ On the WASM backend, a host maps directly onto a set of imports and exports: the
 
 A browser can be the embedder for two different hosts. Neither works today.
 
-## `ConsoleHost` in a page
+## Console programs in a page
 
-A console program can run in a page unchanged, with the page standing in for the terminal. This is what a [playground](./playground) on the docs site needs. The host is still `ConsoleHost`; only the embedder differs. The module the backend emits is close to runnable there: it uses linear memory with its own allocator, and it imports only `fd_write`, `fd_read` and `proc_exit` from `wasi_snapshot_preview1`. A page can provide all of those in a few lines of JavaScript. Four things stand in the way:
+A console program can run in a page unchanged, with the page standing in for the terminal. This is what a [playground](./playground) on the docs site needs. It runs under a host of its own, `nanyx.playground`, a stand-in for the console host whose imports a page implements, rather than under the console host with the page faking WASI ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)).
 
 - Done: **the toolchain writes `.wasm`** ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)). `nanyx wasm` and `nanyx build` write the binary format, which a browser loads, and WebAssembly text with `--wat`.
-- **The program runs in the module's start function.** A browser runs the start function while it instantiates the module, before the page can reach the exported memory, so the page's `fd_write` can't read the bytes it is asked to print. For a browser the module has to export its entry for the page to call, or import its memory.
-- **`proc_exit` has to unwind.** The page's `proc_exit` throws, and the code that called the entry catches it and reads the exit code.
-- **Reading stdin blocks.** `fd_read` returns its bytes before the program carries on, and a page can't wait for input on its main thread. The program would have to run in a worker, or `Console` input would have to be unavailable.
+- Done: **the host.** `nanyx.playground` provides `Console` and `Random` on its own imports, `nanyx:playground` (see [Compiler internals](../compiler-internals/hosts)), and nothing else, so a program that needs `FileSystem`, `Env`, `Http` or `Async` is an error naming it.
+- **The program runs in the module's start function.** A browser runs the start function while it instantiates the module, before the page can reach the exported memory, so the page can't read the bytes it is asked to print. For a browser the module has to export its entry for the page to call.
+- **Exiting has to unwind.** The runtime's `proc_exit`, which a crash or a deferred error ends with, throws in the page, and the code that called the entry catches it and reads the exit code.
+- **Reading input blocks**, and a page can't wait for input on its main thread, so the program runs in a worker ([#2151](https://github.com/nanyx-lang/nanyx/issues/2151)).
 
 The backend also emits `return_call` for [tail calls](../compiler-internals/tail-calls), which needs Safari 18.2 or later; Chrome and Firefox have had it for longer.
 
@@ -273,8 +274,9 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
 1. **More contexts for the console host**, as they are added: `Clock`. [`Random`](../stdlib/random) is done
    ([#1237](https://github.com/nanyx-lang/nanyx/issues/1237)), and so is `FileSystem` ([Files, HTTP and JSON](./files-http-json), [#1783](https://github.com/nanyx-lang/nanyx/issues/1783)),
    and so is `Http` ([#1785](https://github.com/nanyx-lang/nanyx/issues/1785)).
-2. **Console in a page**, for the [playground](./playground): the embedder changes in "`ConsoleHost` in a page"
-   above; writing `.wasm` is done ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).
+2. **Console in a page**, for the [playground](./playground): what is left in "Console programs in a page" above;
+   writing `.wasm` ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)) and the host itself are done
+   ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)).
 3. **The browser host**: `init`, `update` and `view`, with `Dom`, `Clock` and `Log`, and the JavaScript it ships
    beside the module. The [Nim demo](./nim-demo) is its first user.
 4. **The test host**, with [Testing](./testing).

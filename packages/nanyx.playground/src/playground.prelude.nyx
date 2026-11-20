@@ -1,0 +1,7 @@
+--| What every module of a program the playground host runs sees without importing it: the page's
+  output, `Console`, with `print`, `println`, `eprint` and `eprintln`; and `Random`, the source of
+  random numbers.
+export module playground.prelude
+
+export nanyx.console.core/console (Console, IoError, print, println, eprint, eprintln)
+export nanyx/random (Random)
