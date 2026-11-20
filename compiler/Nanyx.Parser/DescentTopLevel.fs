@@ -423,6 +423,75 @@ let tryReadModuleWithState (file: string) (source: string) : Result<TopLevelItem
     | GiveUp reason -> Error { Reason = reason; Error = directiveAfterCode blanked (cursor.Value.Unexpected()) }
     | NoMatch -> Error { Reason = "no reading matched"; Error = directiveAfterCode blanked (cursor.Value.Unexpected()) }
 
+/// The offset in `source` of the start of the line `offset` is on.
+let private lineStartOf (source: string) (offset: int) =
+    if offset = 0 then 0 else source.LastIndexOf('\n', offset - 1) + 1
+
+/// Whether `token` starts a line at the first column, where a top-level item can start, and isn't a closing bracket or
+/// brace, which ends what an item above it opened.
+let private startsTopLevelLine (source: string) (token: Token) =
+    token.Start = lineStartOf source token.Start && not (List.contains token.Kind [ RightParen; RightBracket; RightBrace ])
+
+/// The items of `source`, the text of the file at `file`, read past each mistake (stage 5 of the move to the new
+/// parser): an item that doesn't read is left out, its error is noted, and reading goes on at the first line after the
+/// item's start, from the error's line on, that starts at the first column, as the next top-level item. So an item left
+/// open, as `def b = (1 +` is, loses only itself when the error is found on the line of the item after it, and an item
+/// read before the error that runs on into its line is left out too. The lexer's mistakes are noted too, and an
+/// error at or after the first of them, which has taken the rest of the line or the file, isn't. The errors are in the
+/// order they are in the text.
+let readModuleRecovering (file: string) (source: string) : TopLevelItem list * ParseState * ParseError list =
+    fill ()
+    let blanked = Header.Directives.blank source
+    let lexed = Lexer.lex file blanked
+    let c = Cursor(file, blanked, Layout.layout blanked lexed.Tokens)
+    let errors = ResizeArray(lexed.Errors)
+    let lexerErrorAt = lexed.Errors |> List.tryHead |> Option.map _.Span.Start
+    let note (error: ParseError) =
+        if lexerErrorAt |> Option.forall (fun at -> error.Span.Start < at) then errors.Add error
+    let all = ResizeArray<TopLevelItem>()
+    // Where reading last went on after a mistake: it only ever goes on further down, so it ends.
+    let mutable resumedAt = -1
+    skipLayout c
+    while not (c.Is EndOfFile) do
+        let itemStart = c.Start
+        let failedAt =
+            try
+                all.AddRange(items c false)
+                None
+            with
+            | Reported error -> Some error
+            | GiveUp _
+            | NoMatch -> Some(directiveAfterCode blanked (c.Unexpected()))
+        match failedAt with
+        | Some error ->
+            note error
+            // An item read before the mistake may have run on into the line it is on, as `def d = c +` does into a
+            // `def` under it: it goes too, and reading goes on at that line, though it is before where this read began.
+            let errorLine = lineStartOf blanked (min error.Span.Start blanked.Length)
+            let runOn = all |> Seq.filter (fun item -> item.Span.Start >= resumedAt && item.Span.End > errorLine) |> List.ofSeq
+            all.RemoveAll(fun item -> List.contains item runOn) |> ignore
+            let from = runOn |> List.fold (fun from item -> min from item.Span.Start) itemStart
+            c.Index <- 0
+            let resumes () =
+                match c.Token with
+                | Some token ->
+                    token.Kind = EndOfFile
+                    || (token.Start > from && token.Start > resumedAt && token.Start >= errorLine && startsTopLevelLine blanked token)
+                | None -> false
+            while not (resumes ()) do
+                c.Index <- c.Index + 1
+            resumedAt <- c.Start
+        | None -> ()
+        skipLayout c
+    let state =
+        { ParseState.empty () with
+            Declared = c.Declared
+            DocumentableStarts = c.DocumentableStarts
+            StringTexts = c.StringTexts
+            Comments = c.Comments
+            ModuleBlocks = c.ModuleBlocks }
+    List.ofSeq all, state, errors |> Seq.sortBy _.Span.Start |> List.ofSeq
+
 /// The items of `source`, the text of the file at `file`, if the descent parser reads all of it, or why it doesn't.
 let tryReadModule (file: string) (source: string) : Result<TopLevelItem list, string> =
     tryReadModuleWithState file source |> Result.map fst |> Result.mapError _.Reason

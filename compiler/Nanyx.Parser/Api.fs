@@ -61,6 +61,22 @@ let readWithBothParsers (filePath: string) (input: string) =
     let normalized = normalizeSource input
     runFParsec filePath normalized, DescentTopLevel.tryReadModuleWithState filePath normalized |> Result.mapError _.Reason
 
+/// Parses the source of the file at `filePath` as `parseModuleFileWithDocs` does, reading past each mistake: the items
+/// that read, with every syntax error found (see `DescentTopLevel.readModuleRecovering`), which may be none. An item
+/// with a mistake in it is left out. With `NANYX_PARSER` set to `fparsec`, the FParsec parser reads it, which stops at
+/// the first mistake: that one is the error.
+let parseModuleFileWithDocsRecovering (filePath: string) (input: string)
+    : Result<((Module * DeclaredNames * (ModuleName * SourceSpan) list) * Lazy<FileDocComments>) * ParseError list, ParseError> =
+    let normalized = normalizeSource input
+    let read =
+        if usesFParsec.Value then runFParsec filePath normalized |> Result.map (fun (items, state) -> items, state, [])
+        else Result.Ok(DescentTopLevel.readModuleRecovering filePath normalized)
+    read
+    |> Result.map (fun (items, state, errors) ->
+        ((expandMidFileModules items, state.Declared, state.ModuleBlocks),
+         lazy (DocComments.attach filePath normalized items state.Declared state.DocumentableStarts state.Comments)),
+        errors)
+
 /// Parses the source of the file at `filePath`, as `parseModuleFileWithNames` does, together with its doc comments,
 /// each attached to what it documents, which are found the first time they are asked for.
 let parseModuleFileWithDocs (filePath: string) (input: string) : Result<(Module * DeclaredNames * (ModuleName * SourceSpan) list) * Lazy<FileDocComments>, ParseError> =

@@ -82,6 +82,16 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   as what was expected there and what was found (`Cursor.Unexpected`): each reading notes what it expected when it
   fails (`Cursor.Fail`, and `Cursor.Expect` for a token), and those at the furthest token are listed, as FParsec
   merges its errors at the furthest position.
+- **Reading past mistakes.** The compiler reads a file with `Api.parseModuleFileWithDocsRecovering`
+  (`DescentTopLevel.readModuleRecovering`), which goes on after a mistake: the top-level item it is in is left out,
+  the error is noted, and reading goes on at the first line after the item's start, from the error's line on, that
+  starts at the first column. An item read before the error that runs on into its line, as `def d = c +` does into a
+  `def` under it, is left out with it. Every error is reported, the lexer's too, except a parse error after the first
+  of the lexer's, which has taken the rest of its line or the file. The items that read are typed, so the editor has
+  hover, completion and the outline around the mistake, but only the syntax errors are reported (`compileChecked`), as
+  the errors that come of the items left out aren't the user's to fix, and the module can't be run or imported. The
+  language server reads such a compile only when no earlier text of the file parsed (`OpenDocument.LastGood`): while
+  the user is typing, the item being typed is the one left out, and the last text that parsed still has it.
 - **The FParsec parser behind a switch.** With the environment variable `NANYX_PARSER` set to `fparsec`, every parse
   reads with the FParsec parser instead, as before the new one, for a release, so that a regression can be checked
   against it; stage 6 of [The parser](../work-in-progress/parser) removes it, and the switch with it. The corpus
