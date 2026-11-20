@@ -163,7 +163,7 @@ import (
   jsonParser
 )
 
--- Error: `parse` is ambiguous between `csvParser.parse` and `jsonParser.parse`
+-- error NYX0105: Ambiguous name 'parse': it could be 'csvParser.parse' or 'jsonParser.parse'
 def data = parse(input)
 ```
 

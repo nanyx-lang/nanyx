@@ -103,7 +103,7 @@ def f: [logs.Logger] () -> () = { log("x") }
 def g: [Logger] () -> () = { log("x") }"""))
         let diagnostic = single (Compiler.compileFile mainPath)
         Assert.Equal(DiagnosticCodes.UnknownContext.Code, diagnostic.Code)
-        Assert.Contains("Unknown context 'Logger' in the signature of 'g'", diagnostic.Message))
+        Assert.Contains("The signature of 'g' names it, but it is not in scope", diagnostic.Message))
 
 [<Fact>]
 let ``An aliased import's functions cannot be called without the alias`` () =

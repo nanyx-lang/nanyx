@@ -43,8 +43,8 @@ let hint (exports: Map<string, string list>) (name: string) : string =
 
 /// The error `code` for `name`, written at `span`, which is not in scope, with `message`. When a standard-library
 /// module exports `name` (`exports`), the message goes on to say which import brings it in; otherwise it asks about
-/// the names of `candidates` closest to it, as `NameSuggestions.unknown` does.
+/// the names of `candidates` closest to it, as `NameSuggestions.unknown` does. Its headline names `name`.
 let unknown (exports: Map<string, string list>) (code: DiagnosticCode) (span: SourceSpan) (message: string) (candidates: string seq) (name: string) : Diagnostic =
     match hint exports name with
     | "" -> NameSuggestions.unknown code span message candidates name
-    | found -> Diagnostics.at code span (message + found)
+    | found -> Diagnostics.at code span (message + found) |> Diagnostics.about name

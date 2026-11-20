@@ -16,10 +16,9 @@ common errors offer fixes. What is left:
 - **Rewriting the messages** ([#2098](https://github.com/nanyx-lang/nanyx/issues/2098)). Every error is shown as a
   headline, its code's fixed title plus at most one name in single quotes (`Missing context 'Console'`), kept as the
   diagnostic's `Subject`, and a body that doesn't repeat it. The editor shows the headline, then the body on the next
-  line; the terminal shows the code and headline, then the underlined source line, then the body. NYX0101 and NYX0205
-  are the first codes with a name in their headline. The other messages are rewritten to this a phase at a time:
-  reading a module ([#2132](https://github.com/nanyx-lang/nanyx/issues/2132)), resolving names
-  ([#2133](https://github.com/nanyx-lang/nanyx/issues/2133)), types
+  line; the terminal shows the code and headline, then the underlined source line, then the body. The codes for
+  resolving names (NYX01xx) and NYX0205 are written this way. The other messages are rewritten to it a phase at a
+  time: reading a module ([#2132](https://github.com/nanyx-lang/nanyx/issues/2132)), types
   ([#2134](https://github.com/nanyx-lang/nanyx/issues/2134)), and the rest
   ([#2135](https://github.com/nanyx-lang/nanyx/issues/2135)). Until then, many bodies still start with their headline.
 - **Related locations.** Few errors use them yet. An error should point, where it helps, at the code that explains it

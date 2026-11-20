@@ -835,7 +835,7 @@ A function is called that nothing in scope defines, or a value is piped to a nam
 scope nor attached to the value's type ([Piping](../tour/piping)).
 
 ```nanyx
-def loud = shout("hi")  -- error NYX0102: Unknown function 'shout'
+def loud = shout("hi")  -- error NYX0102: 'shout' is not in scope
 ```
 
 When a standard library module exports the function, the message says which import brings it in, and an editor
@@ -843,8 +843,8 @@ offers to add it. A name qualified by the module's own name is imported under th
 exports lists each of them.
 
 ```nanyx
-def larger = max(1, 2)  -- error NYX0102: Unknown function 'max', and 'max' is defined in 'nanyx/math': add `import nanyx/math`
-def size = math.abs(-1)  -- error NYX0102: Unknown function 'math.abs', and 'abs' is defined in 'nanyx/math': add `import nanyx/math as math`
+def larger = max(1, 2)  -- error NYX0102: 'max' is not in scope, and 'max' is defined in 'nanyx/math': add `import nanyx/math`
+def size = math.abs(-1)  -- error NYX0102: 'math.abs' is not in scope, and 'abs' is defined in 'nanyx/math': add `import nanyx/math as math`
 ```
 
 To fix it, correct the name, define the function, or import the module that exports it.
@@ -855,7 +855,7 @@ A record is read or updated with a field it does not have.
 
 ```nanyx
 def point = (x = 1, y = 2)
-def moved = point with (z = 3)  -- error NYX0103: Record has no member 'z' to update
+def moved = point with (z = 3)  -- error NYX0103: The record has no member 'z' to update
 ```
 
 To fix it, use one of the record's fields, or add the field to its type.
@@ -883,7 +883,7 @@ A name is exported by more than one of the modules a file imports, so the compil
 import english
 import french
 
-def greeting = hello  -- error NYX0105: 'hello' is ambiguous between 'english.hello' and 'french.hello': import all but one of them with `as`
+def greeting = hello  -- error NYX0105: It could be 'english.hello' or 'french.hello': import all but one of them with `as`
 -- file: english.nyx
 module english
 
@@ -906,7 +906,7 @@ A value is piped to a name that more than one imported module attaches to its ty
 import loud
 import louder
 
-def shouted = "hi" \shout  -- error NYX0106: 'shout' is ambiguous for 'string': 'string.shout' is defined in 'loud' and 'louder'; ...
+def shouted = "hi" \shout  -- error NYX0106: For a 'string', it is 'string.shout', which is defined in 'loud' and 'louder': ...
 -- file: loud.nyx
 module loud
 
@@ -924,7 +924,7 @@ To fix it, import all but one of the modules with `as`.
 A definition is attached to a type (`def Shape.area`) that is not defined.
 
 ```nanyx
-def Shape.area: int -> int = { x -> x }  -- error NYX0107: Unknown attached type 'Shape' for definition 'Shape.area'
+def Shape.area: int -> int = { x -> x }  -- error NYX0107: 'Shape.area' is attached to 'Shape', which names no type in scope
 ```
 
 To fix it, define the type, or correct its name.
@@ -935,7 +935,7 @@ A definition's type requires a context that is not defined, or requires an opera
 has.
 
 ```nanyx
-def greet: [Telegraph] () -> () = { () }  -- error NYX0108: Unknown context 'Telegraph' in the signature of 'greet'
+def greet: [Telegraph] () -> () = { () }  -- error NYX0108: The signature of 'greet' names it, but it is not in scope
 ```
 
 When a standard library module exports the context, the message says which import brings it in, and an editor offers
@@ -949,7 +949,7 @@ A type is named that is not defined. When a standard library module exports the 
 brings it in, and an editor offers to add it.
 
 ```nanyx
-def name: Strng = "Ada"  -- error NYX0109: Unknown type 'Strng'
+def name: Strng = "Ada"  -- error NYX0109: 'Strng' is not in scope
 ```
 
 To fix it, correct the type's name, define it, or import the module that exports it.
@@ -974,7 +974,7 @@ The program has `???`, which stands for code not written yet. It type-checks as 
 can be checked, but it cannot be run in a release build.
 
 ```nanyx
-def total: int -> int = { x -> ??? }  -- error NYX0111: Not implemented: `???` stands for code not written yet
+def total: int -> int = { x -> ??? }  -- error NYX0111: `???` stands for code not written yet
 ```
 
 To fix it, write the code.
@@ -996,7 +996,7 @@ A type is written `Int`, `Float` or `Bool`. Those are not types: the built-in ty
 editor offers to write the right name.
 
 ```nanyx
-def count: Int = 3  -- error NYX0114: 'Int' is not a type: write 'int'
+def count: Int = 3  -- error NYX0114: A built-in type's name is in lower case: write 'int'
 ```
 
 To fix it, write the type in lower case.

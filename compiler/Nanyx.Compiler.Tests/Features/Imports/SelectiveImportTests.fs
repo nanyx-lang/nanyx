@@ -24,7 +24,7 @@ let ``A selection does not bring in the names it leaves out`` () =
     let source = "module main\nimport util as (double)\ndef value = triple(1)"
     let code, message, at = onlyDiagnosticIn source (compileImportingAll util source)
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
-    Assert.Equal("Unknown function 'triple'", message)
+    Assert.Equal("'triple' is not in scope", message)
     Assert.Equal("triple", at)
 
 [<Fact>]

@@ -62,16 +62,13 @@ module NameSuggestions =
         match suggestions with
         | [] -> ""
         | _ ->
-            let quoted = suggestions |> List.map (fun name -> $"'{name}'")
-            let joined =
-                match quoted with
-                | [ only ] -> only
-                | _ -> String.concat ", " (List.truncate (quoted.Length - 1) quoted) + " or " + List.last quoted
-            $": did you mean {joined}?"
+            let quoted = suggestions |> List.map (fun name -> "'" + name + "'")
+            $": did you mean {Diagnostics.listedOr quoted}?"
 
     /// The error `code` for `name`, written at `span`, which is not in scope, with `message`, then the names of
-    /// `candidates` closest to it as a question at the end and a fix that writes each of them instead.
+    /// `candidates` closest to it as a question at the end and a fix that writes each of them instead. Its headline
+    /// names `name`.
     let unknown (code: DiagnosticCode) (span: SourceSpan) (message: string) (candidates: string seq) (name: string) : Diagnostic =
         let suggestions = closest candidates name
-        { Diagnostics.at code span (message + question suggestions) with
+        { (Diagnostics.at code span (message + question suggestions) |> Diagnostics.about name) with
             Fixes = suggestions |> List.map (fun suggestion -> { Title = $"Write `{suggestion}`"; Edits = [ { Span = span; NewText = suggestion } ] }) }

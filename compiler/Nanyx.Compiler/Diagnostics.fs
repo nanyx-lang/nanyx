@@ -287,6 +287,13 @@ module Diagnostics =
         | [ only ] -> only
         | _ -> String.concat ", " (List.truncate (items.Length - 1) items) + " and " + List.last items
 
+    /// `items` as a message offers them: "a", "a or b", "a, b or c".
+    let listedOr (items: string list) =
+        match items with
+        | [] -> ""
+        | [ only ] -> only
+        | _ -> String.concat ", " (List.truncate (items.Length - 1) items) + " or " + List.last items
+
     let isError (diagnostic: Diagnostic) =
         match diagnostic.Severity with
         | Severity.Critical

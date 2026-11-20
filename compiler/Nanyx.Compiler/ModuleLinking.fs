@@ -308,8 +308,8 @@ module internal ModuleLinking =
             let errors =
                 errors
                 @ (clashes
-                   |> List.map (fun (_, message, earlier) ->
-                       { Diagnostics.at DiagnosticCodes.ReExportClash item.Span message with Fixes = fixes }
+                   |> List.map (fun (name, message, earlier) ->
+                       { (Diagnostics.at DiagnosticCodes.ReExportClash item.Span message |> Diagnostics.about name) with Fixes = fixes }
                        |> Diagnostics.withRelated earlier "Re-exported here too"))
             Map.fold (fun acc name source -> acc |> Map.add name (source, item)) given sources, errors) (Map.empty, [])
         |> snd

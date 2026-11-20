@@ -118,7 +118,7 @@ let ``An error for Int is the only one when the alias would check`` () =
     let result = Compiler.compile "def n: Int = 3"
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.NotABuiltInType.Code, diagnostic.Code)
-    Assert.Equal("'Int' is not a type: write 'int'", diagnostic.Message)
+    Assert.Equal("A built-in type's name is in lower case: write 'int'", diagnostic.Message)
 
 [<Fact>]
 let ``A type the module defines with a capitalised name is that type`` () =

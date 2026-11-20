@@ -44,7 +44,7 @@ def n = double(3)
 """
     Assert.Equal(
         (DiagnosticCodes.UnknownFunction.Code,
-         "Unknown function 'duoble': did you mean 'double'?",
+         "'duoble' is not in scope: did you mean 'double'?",
          [ "Write `double`", fixedSource.ReplaceLineEndings "\n" ]),
         suggested source)
     compileClean fixedSource |> ignore
@@ -83,7 +83,7 @@ def n = alpha3
 let ``A name far from every name in scope offers nothing`` () =
     let code, message, fixes = suggested "def n = frobnicate(1)\n"
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
-    Assert.Equal("Unknown function 'frobnicate'", message)
+    Assert.Equal("'frobnicate' is not in scope", message)
     Assert.Empty fixes
 
 [<Fact>]

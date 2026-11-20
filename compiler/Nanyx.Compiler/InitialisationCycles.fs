@@ -35,6 +35,6 @@ let check (declared: DeclaredNames) (module': TopLevelItem list) : Diagnostic li
                 match others |> List.map (fun other -> $"'{fst (definition other)}'") with
                 | [] -> ""
                 | names -> $", through {Diagnostics.listed names}"
-            Some (Diagnostics.at DiagnosticCodes.InitialisationCycle span $"'{name}' needs its own value to be built{through}")
+            Some (Diagnostics.at DiagnosticCodes.InitialisationCycle span $"'{name}' needs its own value to be built{through}" |> Diagnostics.about name)
         | _ -> None)
     |> List.ofSeq

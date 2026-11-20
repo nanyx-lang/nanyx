@@ -40,7 +40,8 @@ let private unknownType (lookup: Lookup) (attached: string list) : Diagnostic op
     found
     |> Option.map (fun (missed, example) ->
         Diagnostics.at DiagnosticCodes.UnknownFunction lookup.At
-            $"The type of the value piped to '{lookup.Written}' is not known here, so the pipe {missed}: annotate the value's type, or name the definition, as in `\\{example}`")
+            $"The type of the value piped to '{lookup.Written}' is not known here, so the pipe {missed}: annotate the value's type, or name the definition, as in `\\{example}`"
+        |> Diagnostics.about lookup.Written)
 
 /// The error for piping a value of a named type to a name none of its names attaches and nothing in scope is called.
 /// It says where the definition is when the pipe cannot reach it: under the alias of a module imported with `as`, or
@@ -76,6 +77,7 @@ let private notAttached (env: TypeEnv) (state: InferState) (isTypeName: string -
         |> Option.defaultValue ""
     Diagnostics.at DiagnosticCodes.UnknownFunction lookup.At
         $"'{Unifier.tyToString lookup.PipedType}' has no attached '{name}', and there is no function '{name}' in scope{hint}"
+    |> Diagnostics.about name
 
 /// The error for piping a value of a named type that attaches nothing under the pipe's name to the plain function of
 /// that name, when the function does not take the value: what it takes instead. For a qualified name, which is never
@@ -121,7 +123,8 @@ let private ambiguous (env: TypeEnv) (state: InferState) (lookup: Lookup) : Diag
     | Some (symbol, candidates), Some scheme when scheme.Symbol = Some symbol ->
         let modules = candidates |> List.map (fun candidate -> $"'{candidate.Substring(0, candidate.Length - called.Length - 1)}'")
         Some (Diagnostics.at DiagnosticCodes.AmbiguousAttachedFunction lookup.At
-                $"'{lookup.Written}' is ambiguous for '{Unifier.tyToString lookup.PipedType}': '{called}' is defined in {Diagnostics.listed modules}: import all but one of them with `as`")
+                $"For a '{Unifier.tyToString lookup.PipedType}', it is '{called}', which is defined in {Diagnostics.listed modules}: import all but one of them with `as`"
+              |> Diagnostics.about lookup.Written)
     | _ -> None
 
 /// `diagnostics`, the errors of the call a pipe made, with the error for a name the call found nothing for, or more

@@ -196,10 +196,12 @@ than its `Compiled …` line, `run` puts what it says in an open-sided box, and 
 ```text
 ╭─ nanyx run emails ───────────────────
 │ Compiled emails (3 files) in 1.9s
-│ src/main.nyx:12:5: error NYX0102: Unknown function 'lookup'
+│ error NYX0102: Unknown function 'lookup'
+│   --> src/main.nyx:12:5
 │    |
 │ 12 |     lookup(id)
 │    |     ^^^^^^
+│    = 'lookup' is not in scope
 │ Running with 1 deferred error
 ╰─ output ─────────────────────────────
 invalid user id

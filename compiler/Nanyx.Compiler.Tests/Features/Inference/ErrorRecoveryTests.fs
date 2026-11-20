@@ -79,7 +79,7 @@ let ``A failed expression is compiled to a trap with its error`` () =
         |> List.choose (function
             | Kind (Def (ValueDef(_, "f", _, Kind (Lambda(_, Kind (FunctionCall("__crash", _, [ Kind (LiteralExpr (StringLit message)) ])), _))))) -> Some message
             | _ -> None)
-    Assert.Equal<string list>([ "1:16: error NYX0102: Unknown function: Unknown function 'missing' (deferred from compile time)\n" ], crashes)
+    Assert.Equal<string list>([ "1:16: error NYX0102: Unknown function 'missing': 'missing' is not in scope (deferred from compile time)\n" ], crashes)
 
 [<Fact>]
 let ``A module with no errors has nothing deferred`` () =
@@ -121,7 +121,7 @@ let ``??? is reported as not implemented, deferred, and typed ???`` () =
     let result = Compiler.compile "def area = { r -> ??? }\ndef total: int = area(2) + 1"
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.NotImplemented.Code, diagnostic.Code)
-    Assert.Equal("Not implemented: `???` stands for code not written yet", diagnostic.Message)
+    Assert.Equal("`???` stands for code not written yet", diagnostic.Message)
     Assert.True(result.ErrorsDeferred)
     // Its uses check: `area(2) + 1` is an int.
     Assert.EndsWith("-> ???", Unifier.tyToString result.Typed.Value.Types.["area"])
@@ -150,7 +150,7 @@ let ``The error type agrees with every type`` () =
 let ``Every error inside a def is reported`` () =
     let result = Compiler.compile "def f = { x ->\n  def a = missing1(x)\n  def b = missing2(x)\n  def s: string = 1\n  a + b\n}"
     Assert.Equal<string list>(
-        [ "Unknown function 'missing1'"; "Unknown function 'missing2'"; "Type mismatch: 'int' vs 'string'" ],
+        [ "'missing1' is not in scope"; "'missing2' is not in scope"; "Type mismatch: 'int' vs 'string'" ],
         result.Diagnostics |> List.map (fun diag -> diag.Message))
 
 [<Fact>]
@@ -179,7 +179,7 @@ let ``The uses of a def that fails to check are not errors too`` () =
 def a = broken(1)
 def b = broken("s")""")
     let diag = Assert.Single(result.Diagnostics)
-    Assert.Contains("Unknown function 'missing'", diag.Message)
+    Assert.Contains("'missing' is not in scope", diag.Message)
 
 [<Fact>]
 let ``A type error in one def does not make a later match on tags an error too`` () =
@@ -216,7 +216,7 @@ def main = {
 """
     let result = Compiler.compile source
     Assert.Equal<(string * string * int) list>(
-        [ DiagnosticCodes.UnknownFunction.Code, "Unknown function 'missing'", 6
+        [ DiagnosticCodes.UnknownFunction.Code, "'missing' is not in scope", 6
           DiagnosticCodes.TypeMismatch.Code, "Type mismatch: 'int' vs '#some(string)'", 2 ],
         result.Diagnostics |> List.map (fun diag -> diag.Code, diag.Message, diag.Span.Value.StartLine))
 

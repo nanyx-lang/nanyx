@@ -83,10 +83,11 @@ module internal CustomPatterns =
     /// case, as an ordinary tag is.
     let private unknownPattern (tag: Identifier) (span: SourceSpan) =
         let lowered = string (System.Char.ToLowerInvariant tag[0]) + tag.Substring 1
-        { Diagnostics.at
-            DiagnosticCodes.UnknownPattern
-            span
-            $"No pattern in scope returns `#{tag}`, and a capitalised tag is a custom pattern's: write an ordinary tag in lower case, as `#{lowered}`" with
+        { (Diagnostics.at
+               DiagnosticCodes.UnknownPattern
+               span
+               $"No pattern in scope returns `#{tag}`, and a capitalised tag is a custom pattern's: write an ordinary tag in lower case, as `#{lowered}`"
+           |> Diagnostics.about $"#{tag}") with
             Fixes = [ { Title = $"Write `#{lowered}`"; Edits = [ { Span = firstLetter span; NewText = string lowered[0] } ] } ] }
 
     let private ambiguousPattern (tag: Identifier) (span: SourceSpan) (sources: string list) =
@@ -94,6 +95,7 @@ module internal CustomPatterns =
             DiagnosticCodes.AmbiguousPattern
             span
             $"More than one pattern in scope returns `#{tag}`, from {Diagnostics.listed sources}, so a match can't tell which to run"
+        |> Diagnostics.about $"#{tag}"
 
     /// Each capitalised tag written in `items`, with where it is written: in a value, a pattern or a type, but not in a
     /// pattern's own type, which declares its tags.
@@ -138,7 +140,7 @@ module internal CustomPatterns =
             let errors =
                 match clash with
                 | Some tag ->
-                    errors @ [ Diagnostics.at DiagnosticCodes.AmbiguousPattern span $"Another pattern in this module returns `#{tag}` too, so a match couldn't tell which to run" ]
+                    errors @ [ Diagnostics.at DiagnosticCodes.AmbiguousPattern span $"Another pattern in this module returns `#{tag}` too, so a match couldn't tell which to run" |> Diagnostics.about $"#{tag}" ]
                 | None -> errors
             (pattern.Shape.Tags |> List.fold (fun acc tag -> if acc |> Map.containsKey tag then acc else acc |> Map.add tag pattern) seen), errors) (Map.empty, [])
         |> snd

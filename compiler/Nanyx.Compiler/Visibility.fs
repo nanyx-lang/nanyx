@@ -155,10 +155,10 @@ let internal blockIsolationAt (state: InferState) (name: string) (symbolId: Symb
             match exprBlock with
             | _ when visible -> []
             | Some (blockName, _) ->
-                [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock span $"'{name}' is imported outside module '{blockName}', which sees only what it imports itself: import it in the block too" ]
+                [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock span $"'{name}' is imported outside module '{blockName}', which sees only what it imports itself: import it in the block too" |> Diagnostics.about name ]
             | None ->
                 let blockName = sites |> List.tryPick (fun site -> blockAround state.ModuleBlocks site |> Option.map fst) |> Option.defaultValue ""
-                [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock span $"'{name}' is only imported in module '{blockName}', and a module block's imports are its own: import it here too" ]
+                [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock span $"'{name}' is only imported in module '{blockName}', and a module block's imports are its own: import it here too" |> Diagnostics.about name ]
         | None when (symbol.Kind = TopLevelValue || symbol.Kind = TypeDefinition) && symbol.Declaration.File = span.File ->
             match exprBlock with
             | Some (blockName, block) when not (SourceSpan.contains block symbol.Declaration) ->
@@ -172,6 +172,7 @@ let internal blockIsolationAt (state: InferState) (name: string) (symbolId: Symb
                 if imported then []
                 else
                     [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock span $"'{name}' is defined outside module '{blockName}', which sees only its own definitions and what it imports"
+                      |> Diagnostics.about name
                       |> Diagnostics.withRelated symbol.Declaration $"'{name}' is declared here" ]
             | _ -> []
         | None -> []
@@ -192,6 +193,7 @@ let internal privateReference (expr: Expression) (scheme: TypeScheme) (state: In
         match outside with
         | Some (blockName, _) ->
             [ Diagnostics.at DiagnosticCodes.NotExported expr.Span $"'{symbol.Name}' is not exported from module '{blockName}'"
+              |> Diagnostics.about symbol.Name
               |> Diagnostics.withRelated symbol.Declaration $"'{symbol.Name}' is declared here" ]
         | None -> []
     | _ -> []
@@ -202,7 +204,7 @@ let internal ambiguousReference (name: string) (expr: Expression) (scheme: TypeS
     match state.AmbiguousImports |> Map.tryFind name with
     | Some (symbol, candidates) when scheme.Symbol = Some symbol ->
         let quoted = candidates |> List.map (fun candidate -> $"'{candidate}'")
-        [ Diagnostics.at DiagnosticCodes.AmbiguousName expr.Span $"'{name}' is ambiguous between {Diagnostics.listed quoted}: import all but one of them with `as`" ]
+        [ Diagnostics.at DiagnosticCodes.AmbiguousName expr.Span $"It could be {Diagnostics.listedOr quoted}: import all but one of them with `as`" |> Diagnostics.about name ]
     | _ -> []
 
 /// The error for `expr`, a reference to `name` bound to `scheme`, if `name` is what a lambda's `context name` binds:

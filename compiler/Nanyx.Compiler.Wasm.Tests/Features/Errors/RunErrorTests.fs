@@ -82,7 +82,7 @@ println("never")""")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
     // The code and headline, then the place, at the type, then the body.
-    assertDiagnostic "NYX0109" "Unknown type" ":1:14" "Unknown type 'Missing'" outcome.StandardError
+    assertDiagnostic "NYX0109" "Unknown type 'Missing'" ":1:14" "'Missing' is not in scope" outcome.StandardError
     Assert.DoesNotContain("deferred", outcome.StandardError)
 
 [<Fact>]
@@ -95,7 +95,7 @@ println("fine")
     let outcome = runSource source
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal("fine\n", outcome.StandardOutput)
-    assertDiagnostic "NYX0102" "Unknown function" ":1:21" "Unknown function 'missing'" outcome.StandardError
+    assertDiagnostic "NYX0102" "Unknown function 'missing'" ":1:21" "'missing' is not in scope" outcome.StandardError
     Assert.Contains("Running with 1 deferred error", outcome.StandardError)
     Assert.DoesNotContain("(deferred from compile time)", outcome.StandardError)
 
@@ -111,7 +111,7 @@ println("after")
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("before\n", outcome.StandardOutput)
-    Assert.Contains(":1:21: error NYX0102: Unknown function: Unknown function 'missing' (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":1:21: error NYX0102: Unknown function 'missing': 'missing' is not in scope (deferred from compile time)", outcome.StandardError)
     // The error says why the program stopped: there is no trap report after it.
     Assert.DoesNotContain("Runtime error", outcome.StandardError)
 
@@ -136,7 +136,7 @@ let ``Run - a package with deferred errors runs its entry`` () =
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("before\n", outcome.StandardOutput)
     Assert.Contains("Running with 2 deferred errors", outcome.StandardError)
-    Assert.Contains("main.nyx:6:3: error NYX0102: Unknown function: Unknown function 'missing' (deferred from compile time)", outcome.StandardError)
+    Assert.Contains("main.nyx:6:3: error NYX0102: Unknown function 'missing': 'missing' is not in scope (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``Build - a debug build writes a package with deferred errors, and a release build refuses it`` () =
@@ -227,7 +227,7 @@ println("never")
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("start\n", outcome.StandardOutput)
-    Assert.Contains(":1:78: error NYX0111: Not implemented: Not implemented: `???` stands for code not written yet (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":1:78: error NYX0111: Not implemented: `???` stands for code not written yet (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``Run - interpolating a call to a function with a deferred error runs up to the call`` () =
@@ -249,7 +249,7 @@ println("dist = {a \dist}")
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("x = 5, y = 4\n", outcome.StandardOutput)
-    Assert.Contains(":7:25: error NYX0102: Unknown function: Unknown function 'hypot' (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":7:25: error NYX0102: Unknown function 'hypot': 'hypot' is not in scope (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``Run - interpolating a value of no known type that does not stop the program stops it there`` () =

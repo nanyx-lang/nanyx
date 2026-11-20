@@ -122,7 +122,7 @@ let ``Typecheck rejects attached def with missing type`` () =
     let result = Compiler.compile source
     assertReports DiagnosticCodes.UnknownAttachedType result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-    Assert.Contains("Unknown attached type", message)
+    Assert.Contains("names no type in scope", message)
 
 [<Fact>]
 let ``Typecheck allows attached defs on built-in types`` () =
@@ -313,7 +313,7 @@ def b = s.startsWith("nan")""")
     // A record type with an attached definition and no field of that name.
     let _, message, _ =
         onlyDiagnostic "type Point = (x: int, y: int)\ndef Point.length = { p -> p.x + p.y }\ndef p = Point(x = 3, y = 4)\ndef n = p.length\n"
-    Assert.Equal("Record 'p' has no member 'length', but 'Point.length' is attached to its type: call it with a pipe, as in `p \\length`", message)
+    Assert.Equal("The record 'p' has no member 'length', but 'Point.length' is attached to its type: call it with a pipe, as in `p \\length`", message)
     // Nothing attached: the property is just missing.
     Assert.Equal((DiagnosticCodes.UnknownMember.Code, "'string' has no property 'size'", "size"), onlyDiagnostic (withFinalNewline """def s = "x"
 def n = s.size"""))
