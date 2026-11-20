@@ -102,3 +102,34 @@ module Resolution =
             let message = String.concat "\n" lines
             Result.Error(Conflict(Diagnostics.general DiagnosticCodes.VersionConflict message |> Diagnostics.about manifest.Name))
         | IndexFailed message -> Result.Error(IndexUnreadable message)
+
+    /// What `requirements` ask for that `lockfile` doesn't satisfy, each a line naming it: a package it doesn't lock, one
+    /// it locks at a version the requirement doesn't accept, or one a locked package depends on that it doesn't lock.
+    /// None when it satisfies them all, and a resolution has nothing to change.
+    let unsatisfied (requirements: RootRequirement list) (lockfile: Lockfile) : string list =
+        let required =
+            requirements
+            |> List.choose (fun requirement ->
+                match Lockfile.tryFind requirement.Package lockfile with
+                | None -> Some $"'{requirement.From}' depends on '{requirement.Package}' {requirement.Requirement}, which it doesn't lock"
+                | Some locked when not (VersionRequirement.accepts requirement.Requirement locked.Version) ->
+                    Some $"'{requirement.From}' depends on '{requirement.Package}' {requirement.Requirement}, which it locks at {locked.Version}"
+                | Some _ -> None)
+        let reached =
+            lockfile.Packages
+            |> List.collect (fun locked ->
+                locked.Dependencies
+                |> List.filter (fun name -> (Lockfile.tryFind name lockfile).IsNone)
+                |> List.map (fun name -> $"'{locked.Name}' {locked.Version} depends on '{name}', which it doesn't lock"))
+        List.distinct (required @ reached)
+
+    /// The newest version of `name` in the index of `store` that a new resolution could choose, if there is one; or why
+    /// the index can't be read.
+    let newest (store: PackageStore) (name: string) : Result<SemanticVersion option, string> =
+        PackageIndex.versions store.Index name
+        |> Result.map (fun (_, listed) ->
+            listed
+            |> List.map (candidate None)
+            |> List.filter (fun version -> version.Unusable.IsNone && version.Version.PreRelease.IsEmpty)
+            |> List.map _.Version
+            |> List.tryLast)

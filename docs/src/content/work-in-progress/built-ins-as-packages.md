@@ -36,16 +36,17 @@ severities, configuration and suppression. The rules themselves go
 console host, so an offline install with nothing downloaded builds, runs and lints a program. It is not a default: a
 package is linted only when its manifest names a linter (`linters`, a field of its own, since a linter is never
 imported), and `nanyx new` writes the entry. A linter's settings are to be typed by the linter, as a host's are
-([The package manifest](./package-manifest#whats-not-built)). Once versions are chosen and the lockfile is written
-([#864](https://github.com/nanyx-lang/nanyx/issues/864)), it records shipped packages like any other; today it
-records none.
+([The package manifest](./package-manifest#whats-not-built)). Resolution
+([#864](https://github.com/nanyx-lang/nanyx/issues/864)) leaves shipped packages out of the lockfile, since their
+version is the compiler's.
 
 # What it needs
 
 - **Packages that resolve.** Local dependencies are done ([#862](https://github.com/nanyx-lang/nanyx/issues/862)),
   which is all a shipped source directory needs. The `.nyxpkg` format and the package cache are built
   ([#863](https://github.com/nanyx-lang/nanyx/issues/863)), but shipped packages are still source directories, and
-  taking a newer one from the index waits for resolution ([#864](https://github.com/nanyx-lang/nanyx/issues/864)). See
+  resolution ([#864](https://github.com/nanyx-lang/nanyx/issues/864)) leaves them to the compiler: taking a newer one
+  from the index isn't built. See
   [Packaging](./packaging).
 - **The public linter contract** ([#107](https://github.com/nanyx-lang/nanyx/issues/107)): how a linter written in
   Nanyx sees the semantic model and reports diagnostics, run on the embedded Wasmtime engine.

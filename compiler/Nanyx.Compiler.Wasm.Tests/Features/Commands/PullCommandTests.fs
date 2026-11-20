@@ -1,5 +1,7 @@
 /// `nanyx pull`: a package's dependencies made available to build (#1471): a dependency found by its path, a package
-/// the compiler ships, or one `nanyx.lock` locks, downloaded from the index into the cache (#863).
+/// the compiler ships, or one `nanyx.lock` locks, downloaded from the index into the cache (#863), whose versions are
+/// chosen from the index when the manifest asks for something the lockfile doesn't lock (#864); and a build doing the
+/// same, unless `--locked` refuses to.
 module TranspilerWasmTests.Features.Commands.Pull
 
 open System.IO
@@ -40,15 +42,77 @@ let ``A package with no dependencies says so`` () =
     Assert.Equal("app has no dependencies\n", outcome.StandardOutput.ReplaceLineEndings "\n")
     Assert.Equal(0, outcome.ExitCode)
 
+/// A store whose cache and index are directories in `directory`.
+let private storeIn (directory: TempDirectory) =
+    { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = GitHub.unsupported }
+
+/// The library acme.core at `version`, in a directory of its own, `core-<version>`, published to the index of `store`.
+let private publishCore (directory: TempDirectory) (store: PackageStore) (version: string) (fields: string) =
+    directory.Write $"core-{version}/core.nyxp" $"(package = (name = \"acme.core\", version = \"{version}\"))\n"
+    directory.Write $"core-{version}/core.nyx" "export module core\n\nexport def answer = 42\n"
+    publishToIndex store (Path.Combine(directory.Path, $"core-{version}")) [] fields |> ignore
+
 [<Fact>]
-let ``A dependency named by its version can't be downloaded yet`` () =
+let ``Dependencies no versions satisfy are explained, and nothing is written`` () =
     use directory = new TempDirectory()
-    let app = appWith directory """(package = "acme.json", version = "1.2.0")"""
-    let outcome = nanyxIn app [ "pull" ]
-    Assert.Equal(
-        "error: 'acme.json' 1.2.0 is named by its version, but it isn't locked in 'nanyx.lock', and choosing a version to lock isn't supported yet: give the directory it is in, with `path`\n",
-        outcome.StandardError.ReplaceLineEndings "\n")
+    let store = storeIn directory
+    publishCore directory store "1.0.0" ""
+    directory.Write "web/web.nyxp" "(package = (name = \"acme.web\", version = \"1.0.0\"), dependencies = [(package = \"acme.core\", version = \"1.0\")])\n"
+    directory.Write "web/web.nyx" "export module web\n\nexport def page = 1\n"
+    publishToIndex store (Path.Combine(directory.Path, "web")) [ "acme.core", "1.0" ] "" |> ignore
+    publishCore directory store "2.0.0" ""
+    let app = appWith directory """(package = "acme.web", version = "1.0"), (package = "acme.core", version = "2.0")"""
+    let outcome = nanyxInStore store app [ "pull" ]
+    Assert.Contains("error NYX0047: Version conflict 'app'", outcome.StandardError)
+    Assert.Contains(
+        "Because acme.web 1.0.0 depends on acme.core 1.0 and app depends on acme.web 1.0, acme.core 1.0.0 is required.",
+        outcome.StandardError)
+    Assert.Contains("And because app depends on acme.core 2.0, the dependencies can't all be satisfied.", outcome.StandardError)
     Assert.Equal(1, outcome.ExitCode)
+    Assert.False(File.Exists(Path.Combine(app, "nanyx.lock")))
+
+[<Fact>]
+let ``A yanked version is passed over for a new lock, but kept where it is locked already`` () =
+    use directory = new TempDirectory()
+    let store = storeIn directory
+    publishCore directory store "1.0.0" ""
+    publishCore directory store "1.1.0" ", \"yanked\": true"
+    let app = appWith directory """(package = "acme.core", version = "1.0")"""
+    let pulled = nanyxInStore store app [ "pull" ]
+    Assert.Equal("", pulled.StandardError)
+    Assert.Equal("Locked acme.core 1.0.0\nacme.core 1.0.0 (downloaded)\n", pulled.StandardOutput.ReplaceLineEndings "\n")
+    let hash =
+        match Lockfile.read (Path.Combine(app, "nanyx.lock")) with
+        | Result.Ok(Some lockfile) -> (Lockfile.tryFind "acme.core" lockfile).Value.Sha256
+        | other -> failwith $"{other}"
+    let yanked = File.ReadAllBytes(Path.Combine(directory.Path, "index", "artifacts", "acme.core-1.1.0.nyxpkg")) |> PackageArchive.sha256
+    File.WriteAllText(
+        Path.Combine(app, "nanyx.lock"),
+        Lockfile.write { Packages = [ { Name = "acme.core"; Version = (SemanticVersion.tryParse "1.1.0").Value; Sha256 = yanked; Dependencies = [] } ] })
+    Assert.NotEqual<string>(hash, yanked)
+    let kept = nanyxInStore store app [ "pull" ]
+    Assert.Equal("", kept.StandardError)
+    Assert.Equal("acme.core 1.1.0 (downloaded)\n", kept.StandardOutput.ReplaceLineEndings "\n")
+
+[<Fact>]
+let ``A build locks what the manifest adds, and with --locked refuses a lockfile that doesn't lock it`` () =
+    use directory = new TempDirectory()
+    let store = storeIn directory
+    publishCore directory store "1.0.0" ""
+    let app = appWith directory ""
+    Assert.Equal(0, (nanyxInStore store app [ "pull" ]).ExitCode)
+    File.WriteAllText(Path.Combine(app, "app.nyxp"), (File.ReadAllText(Path.Combine(app, "app.nyxp"))).Replace("dependencies = []", "dependencies = [(package = \"acme.core\", version = \"1.0\")]"))
+    let refused = nanyxInStore store app [ "build"; "--locked" ]
+    Assert.Equal(
+        "error: 'nanyx.lock' doesn't satisfy what 'app.nyxp' asks for, and `--locked` keeps it as it is: run `nanyx pull` to update it\n"
+        + "error: 'app' depends on 'acme.core' 1.0, which it doesn't lock\n",
+        refused.StandardError.ReplaceLineEndings "\n")
+    Assert.Equal(1, refused.ExitCode)
+    Assert.False(File.Exists(Path.Combine(app, "nanyx.lock")))
+    let built = nanyxInStore store app [ "build" ]
+    Assert.Equal("Locked acme.core 1.0.0\n", built.StandardError.ReplaceLineEndings "\n")
+    Assert.Equal(0, built.ExitCode)
+    Assert.Equal(0, (nanyxInStore store app [ "build"; "--locked" ]).ExitCode)
 
 [<Fact>]
 let ``A dependency whose directory holds a package of another name is an error, as for a build`` () =
@@ -64,17 +128,8 @@ let ``A locked dependency is downloaded from the index into the cache, and the p
     use directory = new TempDirectory()
     let app = appWith directory """(package = "acme.util", version = "0.3")"""
     File.WriteAllText(Path.Combine(app, "main.nyx"), "module main\n\nimport acme.util/strings\n\n@entry\ndef main = { println(shout(\"hi\")) }\n")
-    let index = Path.Combine(directory.Path, "index")
-    let store = { Cache = Path.Combine(directory.Path, "cache"); Index = index; GitHub = GitHub.unsupported }
-    let packed = nanyxInStore store directory.Path [ "pack"; "util"; "--out"; Path.Combine(index, "artifacts") ]
-    Assert.Equal(0, packed.ExitCode)
-    let hash = packed.StandardOutput.ReplaceLineEndings("\n").Split('\n') |> Array.find (fun line -> line.StartsWith "sha256 ") |> fun line -> line.Substring 7
-    File.WriteAllText(Path.Combine(index, "config.json"), """{ "format": 1, "index": "index/" }""")
-    Directory.CreateDirectory(Path.Combine(index, "index", "acme")) |> ignore
-    File.WriteAllText(
-        Path.Combine(index, "index", "acme", "acme.util.json"),
-        $$"""{ "name": "acme.util", "versions": [{ "version": "0.3.0", "url": "../../artifacts/acme.util-0.3.0.nyxpkg", "sha256": "{{hash}}", "yanked": false, "available": true }] }"""
-    )
+    let store = storeIn directory
+    let hash = publishToIndex store (Path.Combine(directory.Path, "util")) [] ""
     File.WriteAllText(
         Path.Combine(app, "nanyx.lock"),
         Lockfile.write { Packages = [ { Name = "acme.util"; Version = (SemanticVersion.tryParse "0.3.0").Value; Sha256 = hash; Dependencies = [] } ] }

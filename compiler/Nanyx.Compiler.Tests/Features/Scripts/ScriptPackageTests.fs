@@ -100,7 +100,7 @@ println("hi")"""
 [<InlineData("::host", "NYX0009", "`::host` takes a host and where it is found")>]
 [<InlineData("::host nanyx.console ../console extra", "NYX0009", "`::host` takes a host and where it is found")>]
 [<InlineData("::host nanyx.console latest", "NYX0009", "'latest' is neither a version, which starts with a digit, as `1.2.0`, nor a directory")>]
-[<InlineData("::dependency acme.util 1.2.0", "NYX0024", "is not locked in 'nanyx.lock', and choosing a version to lock isn't supported yet")>]
+[<InlineData("::dependency acme.util 1.2.0", "NYX0024", "is named by its version, but a script has no 'nanyx.lock' to lock it in yet")>]
 [<InlineData("::dependency acme.util ../nowhere", "NYX0023", "The dependency 'acme.util' can't be read")>]
 [<InlineData("::dependency acme.other ../util", "NYX0023", "is named 'acme.util', not 'acme.other'")>]
 [<InlineData("::dependency acme.util", "NYX0009", "The compiler ships no package 'acme.util': give the directory it is in, as in `../util`")>]

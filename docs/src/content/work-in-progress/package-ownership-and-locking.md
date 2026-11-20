@@ -4,7 +4,7 @@ description: "Who can publish under a package name, what the lockfile records, a
 order: 6
 ---
 
-> **Status: proposal, partly built.** Depending on a file or a package on GitHub is built ([#1472](https://github.com/nanyx-lang/nanyx/issues/1472), [#1742](https://github.com/nanyx-lang/nanyx/issues/1742)), and so is the lockfile, except writing it ([#863](https://github.com/nanyx-lang/nanyx/issues/863)); ownership is not: the package index checks a namespace against its owner's current GitHub login, and doesn't record the owner's ID. It fills in three parts of the [packaging design](./packaging) that are only sketched there: who owns a package name, what `nanyx.lock` holds, and whether a program can depend on one file rather than a package. The packaging work's issues carry the [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packaging) label, and the package index is [#209](https://github.com/nanyx-lang/nanyx/issues/209). See [Open questions](#open-questions) at the end.
+> **Status: proposal, partly built.** Depending on a file or a package on GitHub is built ([#1472](https://github.com/nanyx-lang/nanyx/issues/1472), [#1742](https://github.com/nanyx-lang/nanyx/issues/1742)), and so is the lockfile ([#863](https://github.com/nanyx-lang/nanyx/issues/863), [#864](https://github.com/nanyx-lang/nanyx/issues/864)); ownership is not: the package index checks a namespace against its owner's current GitHub login, and doesn't record the owner's ID. It fills in three parts of the [packaging design](./packaging) that are only sketched there: who owns a package name, what `nanyx.lock` holds, and whether a program can depend on one file rather than a package. The packaging work's issues carry the [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packaging) label, and the package index is [#209](https://github.com/nanyx-lang/nanyx/issues/209). See [Open questions](#open-questions) at the end.
 
 [Packages and projects](../tour/packages) describes what a user writes: a `.nyxp` manifest, `dependencies` such as `(package = "acme.core", version = "2.1")`, and imports such as `acme.web/http`. This page is about what sits behind those names.
 
@@ -59,18 +59,17 @@ Names are lower case, and two names that differ only in case, in `-` and `_`, or
 # The lockfile
 
 `nanyx.lock` records every package a build uses: its exact version, where it came from and the SHA-256 of what was
-downloaded. Reading it, and builds and `nanyx pull` using it, are built
-([#863](https://github.com/nanyx-lang/nanyx/issues/863)) and described in
-[Packages and projects](../tour/packages#package-dependencies) and [`nanyx pull`](../standard-tools/command-line#nanyx-pull).
-It is a Nanyx record, as the manifest is. Choosing the versions it locks, and so writing it, comes with resolution
-([#864](https://github.com/nanyx-lang/nanyx/issues/864)). What is planned for it then:
+downloaded. It is a Nanyx record, as the manifest is. Reading and writing it are built
+([#863](https://github.com/nanyx-lang/nanyx/issues/863), [#864](https://github.com/nanyx-lang/nanyx/issues/864)) and
+described in [Packages and projects](../tour/packages#package-dependencies) and
+[`nanyx pull`](../standard-tools/command-line#nanyx-pull): it is committed, written only when the manifest asks for
+something it doesn't satisfy, sorted by name with one package to a line, never upgrades a version as a side effect,
+and `nanyx build --locked` makes a stale one an error. What is still planned:
 
 - **One lockfile per build.** A package on its own has `nanyx.lock` beside its `.nyxp`. In a [project](../tour/packages#projects) the lockfile is beside the `.nyxproj` and covers every package in it, because a build has [one version of each package](./packaging#versions-and-resolution) and packages built together must agree.
-- **It is committed**, for libraries as well as programs, so that a library's own tests and CI build the same thing every time. A dependant ignores a library's lockfile and resolves for itself.
-- **It changes only when it must.** `nanyx install` and `nanyx pull` write it. `nanyx build` and `nanyx run` use it as it is, and only update it when the manifest asks for something the lockfile does not satisfy, such as a new dependency. A version already locked is never upgraded as a side effect: `nanyx update` does that, for one package or all of them.
-- **`--locked` makes a stale lockfile an error.** CI runs `nanyx build --locked`, so a manifest change pushed without its lockfile fails instead of resolving something new.
-- **Entries are sorted by name**, one to a line, so two branches adding different dependencies rarely conflict, and when they do, `nanyx pull` can redo the resolution from the manifests.
-- **Path dependencies and [project references](../tour/packages#packages-developed-together) are not locked.** Their source is on disk and changes with the code around it, so there is nothing to pin.
+- **`nanyx update`** upgrades a locked version on purpose, for one package or all of them.
+- **A dependant ignores a library's lockfile** and resolves for itself; a library commits its lockfile so that its own tests and CI build the same thing every time.
+- **Path dependencies and [project references](../tour/packages#packages-developed-together) are not locked.** Their source is on disk and changes with the code around it, so there is nothing to pin. Their own dependencies named by version are resolved and locked with the build's.
 - **GitHub references.** Every locked package comes from the index today, so an entry has no `source`. One is added when a GitHub reference with a tag in its `rev` is locked by its commit, and the lockfile records the SHA-256 of what was downloaded for a GitHub reference too.
 
 ## Scripts

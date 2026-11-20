@@ -149,9 +149,9 @@ let ``Pull downloads a locked package into the cache, and the build uses it`` ()
     use package = new TempPackage(util @ app [ """(package = "acme.util", version = "1.0")""" ])
     lock package [ publish package "util/acme.util.nyxp" ]
     let store = storeOf package
-    Assert.Equal<string list>([ "acme.util 1.0.0 (downloaded)" ], okOf (PackageDependencies.pull store (package.Path "app/app.nyxp")))
+    Assert.Equal<string list>([ "acme.util 1.0.0 (downloaded)" ], okOf (pullFrom store (package.Path "app/app.nyxp")))
     Assert.True(File.Exists(package.Path "cache/acme.util/1.0.0/strings.nyx"))
-    Assert.Equal<string list>([ "acme.util 1.0.0 (in the cache)" ], okOf (PackageDependencies.pull store (package.Path "app/app.nyxp")))
+    Assert.Equal<string list>([ "acme.util 1.0.0 (in the cache)" ], okOf (pullFrom store (package.Path "app/app.nyxp")))
     let build = Package.build (okOf (Package.ofManifestFrom store (package.Path "app/app.nyxp")))
     Assert.Empty(build.Diagnostics)
 
@@ -168,11 +168,11 @@ export def loud = { s: string -> shout(s) }"""
     let utilLocked = publish package "util/acme.util.nyxp"
     // acme.web is built against the acme.util its own lockfile locks before it is packed.
     File.WriteAllText(package.Path "web/nanyx.lock", Lockfile.write { Packages = [ utilLocked ] })
-    okOf (PackageDependencies.pull store (package.Path "web/acme.web.nyxp")) |> ignore
+    okOf (pullFrom store (package.Path "web/acme.web.nyxp")) |> ignore
     let webLocked = publish package "web/acme.web.nyxp"
     Assert.Equal<string list>([ "acme.util" ], webLocked.Dependencies)
     lock package [ utilLocked; webLocked ]
-    let pulled = okOf (PackageDependencies.pull store (package.Path "app/app.nyxp"))
+    let pulled = okOf (pullFrom store (package.Path "app/app.nyxp"))
     Assert.Equal<string list>([ "acme.web 2.1.0 (downloaded)"; "acme.util 1.0.0 (in the cache)" ], pulled)
     Assert.Empty((Package.build (okOf (Package.ofManifestFrom store (package.Path "app/app.nyxp")))).Diagnostics)
 
@@ -181,7 +181,7 @@ let ``A download whose SHA-256 isn't the locked one is refused`` () =
     use package = new TempPackage(util @ app [ """(package = "acme.util", version = "1.0")""" ])
     let locked = publish package "util/acme.util.nyxp"
     lock package [ { locked with Sha256 = hashOf 'c' } ]
-    let error = errorsOf (PackageDependencies.pull (storeOf package) (package.Path "app/app.nyxp")) |> List.exactlyOne
+    let error = errorsOf (pullFrom (storeOf package) (package.Path "app/app.nyxp")) |> List.exactlyOne
     Assert.Contains($"but 'nanyx.lock' locks {hashOf 'c'}", error)
     Assert.False(Directory.Exists(package.Path "cache/acme.util"))
 
@@ -190,16 +190,38 @@ let ``A version the index doesn't list can't be downloaded`` () =
     use package = new TempPackage(util @ app [ """(package = "acme.util", version = "1.0")""" ])
     let locked = publish package "util/acme.util.nyxp"
     lock package [ { locked with Version = version "1.0.1" } ]
-    let error = errorsOf (PackageDependencies.pull (storeOf package) (package.Path "app/app.nyxp")) |> List.exactlyOne
+    let error = errorsOf (pullFrom (storeOf package) (package.Path "app/app.nyxp")) |> List.exactlyOne
     Assert.Contains("has no 'acme.util' 1.0.1", error)
 
 [<Fact>]
-let ``A dependency the lockfile doesn't lock can't be had yet`` () =
+let ``A dependency the lockfile doesn't lock is an error for a build, and pull locks it`` () =
     use package = new TempPackage(util @ app [ """(package = "acme.util", version = "1.0")""" ])
-    let error = errorsOf (PackageDependencies.pull (storeOf package) (package.Path "app/app.nyxp")) |> List.exactlyOne
-    Assert.Contains("isn't locked in 'nanyx.lock', and choosing a version to lock isn't supported yet", error)
-    let diagnostic = (Package.compileManifestFrom (storeOf package) (package.Path "app/app.nyxp") (File.ReadAllText(package.Path "app/app.nyxp"))).Diagnostics |> List.exactlyOne
-    Assert.Equal(DiagnosticCodes.UnsupportedManifestField.Code, diagnostic.Code)
+    let locked = publish package "util/acme.util.nyxp"
+    let store = storeOf package
+    let manifest () = Package.compileManifestFrom store (package.Path "app/app.nyxp") (File.ReadAllText(package.Path "app/app.nyxp"))
+    let diagnostic = (manifest ()).Diagnostics |> List.exactlyOne
+    Assert.Equal(DiagnosticCodes.DependencyNotLocked.Code, diagnostic.Code)
+    Assert.Contains("is not locked in 'nanyx.lock': run `nanyx pull` to choose its version and lock it", diagnostic.Message)
+    Assert.Equal<string list>([ "Locked acme.util 1.0.0"; "acme.util 1.0.0 (downloaded)" ], okOf (pullFrom store (package.Path "app/app.nyxp")))
+    Assert.Equal<LockedPackage list>([ locked ], (okOf (Lockfile.read (package.Path "app/nanyx.lock"))).Value.Packages)
+    Assert.Empty((manifest ()).Diagnostics)
+    Assert.Equal<string list>([ "acme.util 1.0.0 (in the cache)" ], okOf (pullFrom store (package.Path "app/app.nyxp")))
+
+[<Fact>]
+let ``A changed requirement is locked again, and the build no longer needs what it drops`` () =
+    use package = new TempPackage(util @ app [ """(package = "acme.util", version = "1.0")""" ])
+    let locked = publish package "util/acme.util.nyxp"
+    lock package [ locked; { locked with Name = "acme.gone" } ]
+    let store = storeOf package
+    File.WriteAllText(package.Path "util/acme.util.nyxp", "(package = (name = \"acme.util\", version = \"2.0.0\"))\n")
+    let newer = publish package "util/acme.util.nyxp"
+    File.WriteAllText(package.Path "app/app.nyxp", (File.ReadAllText(package.Path "app/app.nyxp")).Replace("\"1.0\"", "\"2.0\""))
+    let pulled = okOf (pullFrom store (package.Path "app/app.nyxp"))
+    Assert.Equal<string list>(
+        [ "Locked acme.util 2.0.0, in place of 1.0.0"; "Unlocked acme.gone 1.0.0, which the build no longer needs"; "acme.util 2.0.0 (downloaded)" ],
+        pulled
+    )
+    Assert.Equal<LockedPackage list>([ newer ], (okOf (Lockfile.read (package.Path "app/nanyx.lock"))).Value.Packages)
 
 [<Fact>]
 let ``A locked version the dependency doesn't accept is an error at its version`` () =

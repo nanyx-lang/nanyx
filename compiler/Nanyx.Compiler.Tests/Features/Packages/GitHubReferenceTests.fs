@@ -219,7 +219,7 @@ let ``Pull fetches a file and a package from GitHub into the cache, and the buil
     use package = new TempPackage(repositories @ [ app [ retry; web ]; mainImporting "acme.web/http" "ignore(status)" ])
     let asked = Collections.Generic.List<string>()
     let cache = package.Path "cache"
-    let pulled = okOf (PackageDependencies.pull (storeWith package (GitHub.downloadingWith (fakeGitHub package asked) cache)) (package.Path "app/app.nyxp"))
+    let pulled = okOf (pullFrom (storeWith package (GitHub.downloadingWith (fakeGitHub package asked) cache)) (package.Path "app/app.nyxp"))
     Assert.Contains("acme.web 1.2.0 (", pulled |> String.concat "\n")
     Assert.True(System.IO.File.Exists(GitHub.fileIn cache { Owner = "acme"; Name = "snippets" } commit "retry.nyx"))
     Assert.True(System.IO.File.Exists(System.IO.Path.Combine(GitHub.treeIn cache { Owner = "acme"; Name = "web" } commit, "web.nyxp")))
@@ -227,7 +227,7 @@ let ``Pull fetches a file and a package from GitHub into the cache, and the buil
     let store = storeWith package (GitHub.cachedWith (fakeGitHub package asked) cache)
     Assert.Empty((Package.build (okOf (Package.ofManifestFrom store (package.Path "app/app.nyxp")))).Diagnostics)
     // Pulling again finds both in the cache.
-    okOf (PackageDependencies.pull (storeWith package (GitHub.downloadingWith (fakeGitHub package asked) cache)) (package.Path "app/app.nyxp")) |> ignore
+    okOf (pullFrom (storeWith package (GitHub.downloadingWith (fakeGitHub package asked) cache)) (package.Path "app/app.nyxp")) |> ignore
     Assert.Equal(fetched, asked.Count)
 
 [<Fact>]
