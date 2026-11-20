@@ -267,7 +267,7 @@ Each directive is a name and the words it takes, separated by spaces: `::linter 
 import acme.util/strings
 ```
 
-A package's name is followed by where it is found: a directory, which starts with `.` or `/`, relative to the script, or a version, which starts with a digit. A package the compiler ships needs neither: it is at the compiler's version. Without `::host`, a script runs under `nanyx.console`. The directives are listed in [Files and projects](../getting-started/files-and-projects). A file in a package cannot have directives: they go in the package's manifest instead.
+A package's name is followed by where it is found: a directory, which starts with `.` or `/`, relative to the script, or a version, which starts with a digit. A package from the index is named at the exact version the script uses, `::dependency acme.json 1.2.0`: a script has no lockfile, so that version is its pin, and `nanyx run` downloads it. A package the compiler ships needs neither: it is at the compiler's version. Without `::host`, a script runs under `nanyx.console`. The directives are listed in [Files and projects](../getting-started/files-and-projects). A file in a package cannot have directives: they go in the package's manifest instead.
 
 Script modules and named package modules are distinct. A named module is imported through its package or module identity; an anonymous script module is imported by file path.
 

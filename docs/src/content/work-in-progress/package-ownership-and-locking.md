@@ -74,7 +74,7 @@ and `nanyx build --locked` makes a stale one an error. What is still planned:
 
 ## Scripts
 
-A script has no manifest, and its `::dependency` directives stand in for `dependencies`. Where its lockfile goes is [open](#open-questions). The proposal is a `hello.nyx.lock` beside `hello.nyx`, written the first time the script runs with a dependency. A script without one still runs and resolves its dependencies each time, which is what someone running a one-off script expects.
+A script has no manifest, and its `::dependency` directives stand in for `dependencies`. It has no lockfile either, and needs none: a directive that names a package from the index writes the exact version the script uses, `::dependency nanyx.json 0.1.0`, and that version is its pin, so the script stays one file. This is built, and described in [Files and projects](../getting-started/files-and-projects): `nanyx run` and `nanyx pull` on a script find that version in the index, download it into the cache and check its SHA-256 against the index's, as a lockfile entry's is checked (`ScriptDependencies.pull`); the packages it depends on are chosen as a package's are (`Resolution.resolvePinned`), and a build reads them all from the cache alone (`ScriptDependencies.cached`). A yanked version still resolves where a script names it. A `::dependency` on a package from the index with no version is an error, whose fix writes in the newest version the index has.
 
 # Dependencies on GitHub
 
@@ -92,7 +92,6 @@ packages, so `nanyx publish` refuses a package that has one (`NYX0039`).
 - **Organisations that never claim their namespace.** A popular user could publish under their own namespace something an organisation would want to own, or an organisation's namespace could stay unclaimed. Is "first claim by the account of the same name" enough, or should well-known organisations be reserved?
 - **Frozen namespaces.** When an owner's GitHub account is deleted, what does it take for the maintainers to hand the namespace to someone else, and are its old packages kept under the old owner?
 - **Other identity providers.** GitLab or Codeberg accounts, or a domain proved by DNS as Maven Central does. Each would need a prefix, such as `gitlab-acme`, or a rule about which provider a bare name belongs to.
-- **Script lockfiles.** A file beside the script, the cache, or a lock written into the script's own `::` directives so the script stays one file?
 - **Copying files into published packages.** Should `nanyx publish` copy a file from GitHub into the package rather than refusing it, and if so, how is the licence handled?
 - **Are file dependencies worth having?** Copying a file into a program already works. What a `module` entry adds is a record of where the file came from and an easy update. Is that enough to justify a second kind of dependency, its lockfile entries and its rules?
 - **Files from other hosts.** Should `github =` have siblings, such as `gist =` or `gitlab =`, or is `url =` enough? Resolving a tag or branch to a commit needs the host's git protocol, which a plain `url` does not have, so `url` files would be pinned by hash only.

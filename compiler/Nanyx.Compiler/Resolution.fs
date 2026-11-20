@@ -70,11 +70,17 @@ module Resolution =
           Dependencies = dependencies |> List.choose (fun (name, requirement) -> requirement |> Option.map (fun requirement -> name, requirement))
           Unusable = unusable }
 
-    /// Resolves the dependencies of the package `manifest` describes against the index of `store`, keeping each version
-    /// `lockfile` locks while it is still allowed: the lockfile that records the versions chosen, or why there are none.
-    let resolve (store: PackageStore) (manifest: Manifest) (lockfile: Lockfile) : Result<Lockfile, ResolutionError> =
+    /// Resolves `requirements`, those of `root`, against the index of `store`, keeping each version `locked` gives while it
+    /// is still allowed, and choosing only the version `pinned` gives of each package it names: the lockfile that records
+    /// the versions chosen, or why there are none.
+    let private resolveWith
+        (store: PackageStore)
+        (root: string)
+        (requirements: RootRequirement list)
+        (locked: Map<string, SemanticVersion>)
+        (pinned: Map<string, SemanticVersion>)
+        : Result<Lockfile, ResolutionError> =
         let listings = Dictionary<string, IndexedVersion list>()
-        let locked = lockfile.Packages |> List.map (fun package -> package.Name, package.Version) |> Map.ofList
         let versions (name: string) =
             if isShipped name then
                 Result.Ok None
@@ -82,10 +88,14 @@ module Resolution =
                 PackageIndex.versions store.Index name
                 |> Result.map (fun (_, listed) ->
                     listings.[name] <- listed
+                    let listed =
+                        match pinned.TryFind name with
+                        | Some version -> listed |> List.filter (fun indexed -> indexed.Version = version)
+                        | None -> listed
                     Some(listed |> List.map (candidate (locked.TryFind name))))
         let input =
-            { Root = manifest.Name
-              Requirements = requirements store manifest
+            { Root = root
+              Requirements = requirements
               Versions = versions
               Locked = locked }
         match VersionSolver.solve input with
@@ -100,8 +110,24 @@ module Resolution =
             Result.Ok { Packages = chosen |> List.map entry }
         | NoSolution lines ->
             let message = String.concat "\n" lines
-            Result.Error(Conflict(Diagnostics.general DiagnosticCodes.VersionConflict message |> Diagnostics.about manifest.Name))
+            Result.Error(Conflict(Diagnostics.general DiagnosticCodes.VersionConflict message |> Diagnostics.about root))
         | IndexFailed message -> Result.Error(IndexUnreadable message)
+
+    /// Resolves the dependencies of the package `manifest` describes against the index of `store`, keeping each version
+    /// `lockfile` locks while it is still allowed: the lockfile that records the versions chosen, or why there are none.
+    let resolve (store: PackageStore) (manifest: Manifest) (lockfile: Lockfile) : Result<Lockfile, ResolutionError> =
+        let locked = lockfile.Packages |> List.map (fun package -> package.Name, package.Version) |> Map.ofList
+        resolveWith store manifest.Name (requirements store manifest) locked Map.empty
+
+    /// Resolves the dependencies of the script `script` (its name, for messages) against the index of `store`: each of
+    /// `pins` at exactly the version it gives, which may be yanked, since the script names it, and the packages they
+    /// depend on as a package's are. A script has no lockfile: the versions its directives write are its pins.
+    let resolvePinned (store: PackageStore) (script: string) (pins: (string * SemanticVersion) list) : Result<Lockfile, ResolutionError> =
+        let requirements =
+            pins
+            |> List.map (fun (name, version) -> { From = script; Package = name; Requirement = { Minimum = version; Written = string version } })
+        let pinned = Map.ofList pins
+        resolveWith store script requirements pinned pinned
 
     /// What `requirements` ask for that `lockfile` doesn't satisfy, each a line naming it: a package it doesn't lock, one
     /// it locks at a version the requirement doesn't accept, or one a locked package depends on that it doesn't lock.

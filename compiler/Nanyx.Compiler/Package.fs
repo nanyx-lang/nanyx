@@ -134,20 +134,16 @@ module Package =
         |> all
 
     /// What a build reads the packages it depends on from: the store, and the lockfile of the package it builds, which
-    /// every package of the build shares, since a build has one version of each package; none for a script, which has no
-    /// lockfile yet.
-    type private Lookup = { Store: PackageStore; Locked: Lockfile option }
+    /// every package of the build shares, since a build has one version of each package. A script's is the versions its
+    /// directives pin (see `ScriptDependencies.cached`).
+    type private Lookup = { Store: PackageStore; Locked: Lockfile }
 
     /// The directory of `dependency`, which accepts the versions `requirement` gives: that of the version the lockfile
     /// locks, in the cache; or why it can't be: it isn't locked, the version locked isn't one it accepts, or that version
     /// isn't in the cache, which `nanyx pull` fills.
     let private locked (lookup: Lookup) (dependency: Dependency) (requirement: VersionRequirement) : Result<string, Problem list> =
         let error code message = Result.Error [ AtManifest(Diagnostics.at code dependency.SourceSpan message |> Diagnostics.about dependency.Name) ]
-        match lookup.Locked |> Option.bind (Lockfile.tryFind dependency.Name) with
-        | None when lookup.Locked.IsNone ->
-            error
-                DiagnosticCodes.UnsupportedManifestField
-                $"The dependency '{dependency.Name}' {requirement} is named by its version, but a script has no '{Lockfile.fileName}' to lock it in yet: give the directory the package is in"
+        match Lockfile.tryFind dependency.Name lookup.Locked with
         | None ->
             error
                 DiagnosticCodes.DependencyNotLocked
@@ -271,7 +267,7 @@ module Package =
     /// the manifest, if it has one; or what is wrong with the lockfile.
     let private lookupFor (store: PackageStore) (manifest: Manifest) : Result<Lookup, string list> =
         Lockfile.read (Lockfile.pathIn manifest.Root)
-        |> Result.map (fun locked -> { Store = store; Locked = Some(defaultArg locked Lockfile.empty) })
+        |> Result.map (fun locked -> { Store = store; Locked = defaultArg locked Lockfile.empty })
 
     /// The package whose manifest is at `manifestPath`, with the packages it depends on, found in `store` and its
     /// lockfile, or what is wrong with them.
@@ -313,7 +309,7 @@ module Package =
                 let lookup, lockfileErrors =
                     match lookupFor store manifest with
                     | Result.Ok lookup -> lookup, []
-                    | Result.Error messages -> { Store = store; Locked = Some Lockfile.empty }, messages |> List.map (fun message -> AboutPackage(DiagnosticCodes.InvalidLockfile, message))
+                    | Result.Error messages -> { Store = store; Locked = Lockfile.empty }, messages |> List.map (fun message -> AboutPackage(DiagnosticCodes.InvalidLockfile, message))
                 let problems =
                     lockfileErrors
                     @ errorsOf (referencedFiles store.GitHub (PackageModules.ofFiles manifest.Name manifest.Root None (sources manifest)).Modules manifest.Files)
@@ -336,7 +332,7 @@ module Package =
                 { Package = packageName; Path = Some full; Span = SourceSpan.none; Settings = [] }
             else
                 { Package = name; Path = None; Span = SourceSpan.none; Settings = [] }
-        match hostIn { Store = PackageStore.user (); Locked = Some Lockfile.empty } (Reached()) (Some entry) with
+        match hostIn { Store = PackageStore.user (); Locked = Lockfile.empty } (Reached()) (Some entry) with
         | Result.Ok host -> Result.Ok { package with Host = host |> Option.map fst; HostPackage = host |> Option.map snd }
         | Result.Error problems -> Result.Error(problems |> List.map describe |> String.concat "; ")
 
@@ -399,7 +395,7 @@ module Package =
             | Result.Ok manifest when selects manifest filePath ->
                 let reached = reachedFrom manifest
                 let store = PackageStore.user ()
-                let lookup = lookupFor store manifest |> Result.defaultValue { Store = store; Locked = Some Lockfile.empty }
+                let lookup = lookupFor store manifest |> Result.defaultValue { Store = store; Locked = Lockfile.empty }
                 let dependencies =
                     match dependenciesIn lookup reached [ manifest.Path, manifest.Name ] manifest.Dependencies with
                     | Result.Ok dependencies -> dependencies
@@ -423,12 +419,13 @@ module Package =
 
     /// The build of the script at `filePath`, which runs under the host `host` names, the host the compiler ships as the
     /// package `defaultHost` if it names none, and imports from the packages `dependencies` lists and the files from GitHub `files` lists, as
-    /// its `::host` and `::dependency` directives say (see `Script`), found in `store`; or what is wrong with them, each
-    /// at the directive it is about, or at `span` for what is about a package as a whole. A script has no lockfile yet,
-    /// so a dependency named by its version is an error.
+    /// its `::host` and `::dependency` directives say (see `Script`), found in `store`, at the versions `locked` gives
+    /// those named by their version; or what is wrong with them, each at the directive it is about, or at `span` for
+    /// what is about a package as a whole.
     let scriptModules
         (defaultHost: string)
         (store: PackageStore)
+        (locked: Lockfile)
         (filePath: string)
         (span: SourceSpan)
         (host: HostEntry option)
@@ -437,7 +434,7 @@ module Package =
         : Result<PackageModules, Diagnostic list> =
         let host = host |> Option.defaultValue { Package = defaultHost; Path = None; Span = span; Settings = [] }
         let reached = Reached()
-        let lookup = { Store = store; Locked = None }
+        let lookup = { Store = store; Locked = locked }
         let diagnostics problems =
             problems |> List.map (diagnosticOf span)
         match hostIn lookup reached (Some host), dependenciesIn lookup reached [] dependencies, referencedFiles store.GitHub Map.empty files with
