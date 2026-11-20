@@ -58,7 +58,8 @@ let internal read
         match typeOpt, expr.Kind with
         | Some ({ Kind = TypeContext _ } as annotation), kind when (match kind with Lambda _ -> false | _ -> true) ->
             Error [ Diagnostics.at DiagnosticCodes.ContextsWithoutType annotation.Span
-                        $"'{name}' is not a lambda, so it does not run in the contexts its annotation writes: write them on its function type, as in '[Console] string -> ()'" ]
+                        $"'{name}' is not a lambda, so it does not run in the contexts its annotation writes: write them on its function type, as in '[Console] string -> ()'"
+                    |> Diagnostics.about name ]
         | _ -> Ok ()
     // An operator takes its two operands as two arguments, so the lambda that defines one takes two parameters.
     let operatorArity =

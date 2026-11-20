@@ -73,7 +73,8 @@ module Hosts =
         Diagnostics.at
             DiagnosticCodes.EntryDoesNotFitHost
             entry.Argument
-            $"The entry point '{entry.Name}' doesn't fit the host '{entry.Host.Import}'\n  expected: {shown.[0]}\n  found:    {shown.[1]}"
+            $"It doesn't fit the host '{entry.Host.Import}'\n  expected: {shown.[0]}\n  found:    {shown.[1]}"
+        |> Diagnostics.about entry.Name
 
     /// Whether `ty` is the context `HostRuntime`, as the module names it (`HostRuntime`, or `r.HostRuntime` under an
     /// alias).
