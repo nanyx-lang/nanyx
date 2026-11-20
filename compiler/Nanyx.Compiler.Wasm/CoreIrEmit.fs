@@ -50,8 +50,9 @@ type EmitContext =
       /// A new probe's number, unique in the module, which the runtime knows it by (see `WasmBinary.spanTableName`).
       ProbeId: unit -> int
       /// Whether a `dbg` gives what it prints to the runtime's `nanyx:debug` `dbg` first, which a module the runtime runs
-      /// has (see `WasmOptions.Probes`): the host decides where it goes. Without it, or where the runtime leaves it to
-      /// the program, the program writes it to its stderr through `$dbg_str`.
+      /// has (see `WasmOptions.Probes`), and a page asks for (`WasmOptions.DbgToEmbedder`): the host decides where it
+      /// goes. Without it, or where the runtime leaves it to the program, the program writes it to its stderr through
+      /// `$dbg_str`.
       DbgToRuntime: bool }
 
 /// The marker that says the code after it, up to the next one, was made from source at `place`: a line comment,
