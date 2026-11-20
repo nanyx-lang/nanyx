@@ -96,7 +96,7 @@ type RunOutcome =
 /// Runs `command` in this process, in a shell (see `Shell`) whose directory is `workingDirectory` and whose program
 /// reads `standardInput` and sees the environment variables `variables`. What the command and the program write to
 /// stdout is captured, and so is what they write to stderr, in the order written.
-let private inProcessWith (store: NyxCompiler.PackageStore option) (stop: Threading.CancellationToken) (workingDirectory: string) (standardInput: string) (variables: (string * string) list) (command: Shell -> int) : RunOutcome =
+let private inProcessWith (store: NyxCompiler.PackageStore option) (github: NyxCompiler.GitHubClient option) (stop: Threading.CancellationToken) (workingDirectory: string) (standardInput: string) (variables: (string * string) list) (command: Shell -> int) : RunOutcome =
     let inputFile = Path.Combine(Path.GetTempPath(), $"nanyx-stdin-{Guid.NewGuid():N}.txt")
     File.WriteAllText(inputFile, standardInput)
     try
@@ -106,7 +106,16 @@ let private inProcessWith (store: NyxCompiler.PackageStore option) (stop: Thread
         use outputs = new StreamWriter(output, Text.UTF8Encoding(false), AutoFlush = true)
         use errors = new StreamWriter(error, Text.UTF8Encoding(false), AutoFlush = true)
         let shell = Shell(workingDirectory, outputs, errors, Nanyx.Runtime.ProgramIo.Redirected(inputFile, output, error, variables))
-        let shell = Shell(shell.Directory, shell.Out, shell.Error, shell.Io, Packages = (store |> Option.defaultValue shell.Packages), Stop = stop)
+        let shell =
+            Shell(
+                shell.Directory,
+                shell.Out,
+                shell.Error,
+                shell.Io,
+                Packages = (store |> Option.defaultValue shell.Packages),
+                Stop = stop,
+                GitHub = (match github with Some github -> github | None -> Unchecked.defaultof<_>)
+            )
         let exitCode = command shell
         { ExitCode = exitCode
           StandardOutput = Text.Encoding.UTF8.GetString(output.ToArray())
@@ -116,7 +125,7 @@ let private inProcessWith (store: NyxCompiler.PackageStore option) (stop: Thread
 
 /// `inProcessWith` the user's package store.
 let private inProcess (workingDirectory: string) (standardInput: string) (variables: (string * string) list) (command: Shell -> int) : RunOutcome =
-    inProcessWith None Threading.CancellationToken.None workingDirectory standardInput variables command
+    inProcessWith None None Threading.CancellationToken.None workingDirectory standardInput variables command
 
 /// The `nanyx` command `arguments` names, with its options, as a call of what the CLI runs for it (see `CliCommands`).
 /// Only the commands and options the tests use are read. As in the CLI, `--` ends the options: what follows it
@@ -183,6 +192,8 @@ let private command (arguments: string list) : Shell -> int =
     | "pull" :: path -> fun shell -> CliCommands.PullIn(shell, Array.ofList path)
     | "bump" :: path -> fun shell -> CliCommands.BumpIn(shell, Array.ofList path)
     | [ "api-check"; older; newer ] -> fun shell -> CliCommands.ApiCheckIn(shell, older, newer)
+    | "publish" :: path -> fun shell -> CliCommands.PublishIn(shell, Array.ofList path)
+    | [ "yank"; package; version ] -> fun shell -> CliCommands.YankIn(shell, package, version)
     | "pack" :: rest ->
         let outputPath, _, _, _, path = options (null, false, false, null, []) rest
         fun shell -> CliCommands.PackIn(shell, outputPath, path)
@@ -212,11 +223,15 @@ let nanyxIn (directory: string) (arguments: string list) : RunOutcome =
 /// `nanyxIn` for a command that serves a program until `stop` is cancelled, as `nanyx run` does one whose host
 /// answers HTTP requests.
 let nanyxInUntil (stop: Threading.CancellationToken) (directory: string) (arguments: string list) : RunOutcome =
-    inProcessWith None stop directory "" [] (command arguments)
+    inProcessWith None None stop directory "" [] (command arguments)
 
 /// `nanyxIn`, with the package cache and index of `store` in place of the user's.
 let nanyxInStore (store: NyxCompiler.PackageStore) (directory: string) (arguments: string list) : RunOutcome =
-    inProcessWith (Some store) Threading.CancellationToken.None directory "" [] (command arguments)
+    inProcessWith (Some store) None Threading.CancellationToken.None directory "" [] (command arguments)
+
+/// `nanyxInStore`, with `github` in place of GitHub: what `nanyx publish` and `nanyx yank` send their requests to.
+let nanyxWithGitHub (store: NyxCompiler.PackageStore) (github: NyxCompiler.GitHubClient) (directory: string) (arguments: string list) : RunOutcome =
+    inProcessWith (Some store) (Some github) Threading.CancellationToken.None directory "" [] (command arguments)
 
 /// Pulls the dependencies of the package in `packageDirectory` and packs it with `nanyx pack` into the `artifacts` directory of the index of `store`, a
 /// directory on disk, and lists it in the index after the versions listed already, as a release would, with

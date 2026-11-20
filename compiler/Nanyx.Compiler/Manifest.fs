@@ -66,6 +66,9 @@ type Manifest =
       Version: string
       /// Globs relative to `Root`: `**/*.nyx` unless the manifest says otherwise.
       Sources: string list
+      /// The GitHub repository whose releases are the package's versions, `repository = "acme/web"`, which
+      /// `nanyx publish` creates them in; none if the manifest doesn't say.
+      Repository: GitHubRepository option
       /// Where its `package` is written, which an error about the package as a whole is reported at.
       PackageSpan: SourceSpan
       /// The packages it depends on, in the order `dependencies` lists them.
@@ -89,7 +92,7 @@ module Manifest =
     /// The fields a manifest may have. `formatter` is the formatter's, which checks what is in it.
     let private fields = [ "package"; "dependencies"; "linters"; "host"; "formatter" ]
 
-    let private packageFields = [ "name"; "version"; "sources"; HostPackages.field ]
+    let private packageFields = [ "name"; "version"; "sources"; "repository"; HostPackages.field ]
 
     /// The fields of an entry of `linters`.
     let private entryFields = [ "package"; "version"; "settings" ]
@@ -102,6 +105,9 @@ module Manifest =
 
     /// What `namePattern` asks of a name, to finish "must be ...".
     let internal nameRule = "lower case, with words separated by dots, as `acme.web`"
+
+    /// A GitHub repository, `owner/name`.
+    let private repositoryPattern = Regex(@"^[A-Za-z0-9-]+/[A-Za-z0-9_.-]+$")
 
     let private versionPattern = Regex(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$")
 
@@ -603,14 +609,17 @@ module Manifest =
                     if manifest.Data.IsDataRecord then
                         problems.AddAbout DiagnosticCodes.MissingManifestField manifest.Location "package" "The manifest has no `package`, which needs at least a name and a version"
                     None
-            let name, version, sources =
+            let name, version, sources, repository =
                 match package with
                 | Some (fields, span) ->
                     let name = problems.RequiredText "package" span fields "name" namePattern nameRule
                     let version = problems.RequiredText "package" span fields "version" versionPattern "a semantic version, `1.2.0`"
                     DataValue.field HostPackages.field fields |> Option.iter (fun field -> checkHostDeclaration problems field.Value)
-                    name, version, problems.Strings "package" fields "sources" |> Option.map (List.map fst)
-                | None -> None, None, None
+                    let repository =
+                        problems.Text "package" fields "repository" repositoryPattern "a GitHub repository, `owner/name`, as `acme/web`"
+                        |> Option.map (fun text -> let parts = text.Split '/' in { Owner = parts[0]; Name = parts[1] })
+                    name, version, problems.Strings "package" fields "sources" |> Option.map (List.map fst), repository
+                | None -> None, None, None, None
             let linters = field "linters" |> Option.map (fun field -> readLinters problems field.Value)
             let host = field "host" |> Option.bind (fun field -> readHost problems (Path.GetDirectoryName path) field.Value)
             match problems.All with
@@ -621,6 +630,7 @@ module Manifest =
                       Name = defaultArg name ""
                       Version = defaultArg version ""
                       Sources = defaultArg sources [ "**/*.nyx" ]
+                      Repository = repository
                       PackageSpan = package |> Option.map snd |> Option.defaultValue manifest.Location
                       Dependencies = dependencies |> Option.map fst |> Option.defaultValue []
                       Files = dependencies |> Option.map snd |> Option.defaultValue []

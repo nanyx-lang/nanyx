@@ -50,12 +50,12 @@ compiler ships ([Packages and projects](../tour/packages),
 ([The package manifest](./package-manifest)); GitHub references; the lockfile, the `.nyxpkg` format and the package
 cache, read by builds and filled by `nanyx pull`; `api.json` and `nanyx bump`
 ([Versions](../tour/packages#versions)); and `nanyx new`, `migrate`, `install`, `pull`, `pack`, `bump` and `manifest`
-([Packages](../standard-tools/command-line#packages)); and choosing versions with PubGrub, writing the lockfile, and
-`nanyx build --locked` ([#864](https://github.com/nanyx-lang/nanyx/issues/864)). A program compiles to one WebAssembly module: imported modules
+([Packages](../standard-tools/command-line#packages)); choosing versions with PubGrub, writing the lockfile, and
+`nanyx build --locked` ([#864](https://github.com/nanyx-lang/nanyx/issues/864)); and `nanyx publish`, `yank` and
+`api-check` ([#865](https://github.com/nanyx-lang/nanyx/issues/865)). A program compiles to one WebAssembly module: imported modules
 are checked separately and their items inlined, so there is no compiled artifact per module or package.
 
-Not built: publishing and yanking
-([#865](https://github.com/nanyx-lang/nanyx/issues/865)); projects (`.nyxproj`,
+Not built: the index's check of a release's API (in nanyx-lang/packages, part of #865); projects (`.nyxproj`,
 [#1386](https://github.com/nanyx-lang/nanyx/issues/1386)); `nanyx manifest` beyond `--json`; and the editor's side. How
 the package commands are built is on [The nanyx command](../compiler-internals/command-line#packages).
 # Goals
@@ -129,8 +129,8 @@ that need a bigger one, and the index refuses a release that skipped the check.
 compiler release and run it on each new release against the newest version recorded below it, reporting a release that
 fails rather than recording it.
 
-**Left for #865:** `nanyx publish` running the check against the newest version published below the one it publishes,
-and the index's sync running `nanyx api-check`.
+`nanyx publish` runs the same check against the newest version published below the one it publishes
+(`PackageApi.publishCheck`). **Left for #865:** the index's sync running `nanyx api-check`.
 ## What a package is
 
 A published package is a `.nyxpkg` file, built ([#863](https://github.com/nanyx-lang/nanyx/issues/863)): a zip of the
@@ -141,7 +141,7 @@ manifest, at its root, the source files its `sources` select, and `api.json`, pa
   compiled form to ship yet, and source works for every compiler version that supports the package's language
   level. A cached compiled form can be added later, as an optimisation the cache owns.
 - **Not built:** the readme and licence in the archive, and the manifest's `package` gaining `nanyx = "0.14"` (the
-  minimum compiler version) and `license`, `description` and `repository`, which the index requires.
+  minimum compiler version), `license` and `description`. Its `repository` is built: `nanyx publish` needs it.
 - `api.json` is what the API comparison and the package website read, so neither has to compile the package.
 ## Where packages live
 
@@ -185,9 +185,10 @@ What this gives up: because nothing is mirrored, an author who deletes a release
 need it. The hash protects integrity, not availability. Mirroring can be added later behind the same `url` field,
 with no client change.
 
-**Next**, `nanyx publish` ([plan item 2](#plan)) will build the asset, create the release on the package's own
-repository, and open the registration pull request for a package's first version. When pull requests become the
-bottleneck, a small service can take over registration and syncing behind an upload API with tokens, and keep
+**Publishing is built** ([#865](https://github.com/nanyx-lang/nanyx/issues/865)): `nanyx publish` builds the asset,
+creates the release on the package's own repository, and opens the registration pull request for a package's first
+version, and `nanyx yank` opens the pull request that yanks a version
+([`nanyx publish`](../standard-tools/command-line#nanyx-publish)). When pull requests become the bottleneck, a small service can take over registration and syncing behind an upload API with tokens, and keep
 writing the same static index. The client, the lockfile and every existing package are unaffected.
 
 Alternatives considered:
@@ -243,8 +244,8 @@ the lockfile and the cache ([#863](https://github.com/nanyx-lang/nanyx/issues/86
 
 1. **The official linter as a shipped package**, once its contract exists
    ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)).
-2. **Publishing.** `nanyx publish` and `yank`, with the version check
-   ([#865](https://github.com/nanyx-lang/nanyx/issues/865), [#1470](https://github.com/nanyx-lang/nanyx/issues/1470)).
+2. **Publishing.** `nanyx publish` and `yank` are built; the index's check of a release's API, in its sync
+   ([#865](https://github.com/nanyx-lang/nanyx/issues/865)), is left.
 3. **The index:** recording owners' account IDs, and mirroring artifacts.
 4. **Projects** (`.nyxproj`, project references) when a workspace of several packages needs them
    ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).

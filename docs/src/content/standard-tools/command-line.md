@@ -21,6 +21,8 @@ nanyx install <package> [--path <directory> | --version <version>]
 nanyx pack [--out <directory>] [<package>]
 nanyx bump [<package>]
 nanyx api-check <older.nyxpkg> <newer.nyxpkg>
+nanyx publish [<package>]
+nanyx yank <package> <version>
 nanyx manifest --json [<package>]
 nanyx search <query>
 nanyx lsp [<options>]
@@ -336,6 +338,30 @@ nanyx api-check acme.util-1.0.0.nyxpkg acme.util-1.1.0.nyxpkg
 It lists the changes as `nanyx bump` does, then says the bump is big enough. When it isn't, it lists on stderr the
 changes that need a bigger one and exits with 1; so it does for a `.nyxpkg` with no `api.json`, and for two different
 packages.
+
+## `nanyx publish`
+
+`nanyx publish` publishes the version a package's manifest gives, saying what it is doing at each step and stopping
+at the first that fails:
+
+1. it checks that the package builds and that its files are formatted;
+2. it compares its API with the newest version published below it, as [`nanyx api-check`](#nanyx-api-check) does, and
+   refuses a version published already or a bump too small for the changes, listing them;
+3. it packs the package, as [`nanyx pack`](#nanyx-pack) does;
+4. it creates the release `v<version>` on the GitHub repository the manifest's `repository` names, with the
+   `.nyxpkg` as its asset;
+5. for a package the index hasn't registered yet, it opens the pull request on
+   [nanyx-lang/packages](https://github.com/nanyx-lang/packages) that registers it, from a fork in your account.
+
+The index's sync records the release within the hour (for a new package, once a maintainer has merged its
+registration). `publish` signs in to GitHub with `GITHUB_TOKEN`, if it is set, or else with the GitHub CLI's login
+(`gh auth login`); the token must be able to create releases on the repository and pull requests.
+
+## `nanyx yank`
+
+`nanyx yank acme.web 1.2.0` opens the pull request on the package index that marks a version yanked. Once it is
+merged, no new resolution chooses the version, but a lockfile that locks it keeps building. It signs in as `publish`
+does, and refuses a version the index doesn't have or has yanked already.
 
 ## `nanyx manifest`
 
