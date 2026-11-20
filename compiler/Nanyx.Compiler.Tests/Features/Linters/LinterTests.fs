@@ -74,7 +74,7 @@ let ``A rule can be given another severity, turned off, or promoted to an error`
 let ``The linters do not look at a module that does not type-check`` () =
     let result = Compiler.compileWith (options [ everyDef ] []) "def one = missing\ndef two = 2"
     let diagnostic = Assert.Single(result.Diagnostics)
-    Assert.Equal("Unknown identifier 'missing'", diagnostic.Message)
+    Assert.Equal("'missing' is not in scope", diagnostic.Message)
 
 [<Fact>]
 let ``Configuring another code leaves a rule at its default`` () =

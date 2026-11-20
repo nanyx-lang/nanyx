@@ -39,10 +39,11 @@ module internal DeferredErrors =
         if span.File = "" then $"{span.StartLine + 1}:{span.StartColumn + 1}: "
         else $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: "
 
-    /// What a deferred error writes when it is reached: the diagnostic as `nanyx` prints it, marked as deferred.
+    /// What a deferred error writes when it is reached, on one line: its place, its code and headline, then its body,
+    /// marked as deferred.
     let internal deferredMessage (diagnostic: Diagnostic) =
         let location = diagnostic.Span |> Option.map deferredLocation |> Option.defaultValue ""
-        $"{location}error {diagnostic.Code}: {diagnostic.Message} (deferred from compile time)\n"
+        $"{location}error {diagnostic.Code}: {Diagnostics.oneLine diagnostic} (deferred from compile time)\n"
 
     /// `expr` with each expression that failed to check replaced by a call to `__crash`, which writes the errors
     /// and traps when it is reached, so a debug build runs the code around it, and the diagnostics placed so. An

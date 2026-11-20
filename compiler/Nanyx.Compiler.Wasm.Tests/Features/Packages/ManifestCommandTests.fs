@@ -63,7 +63,7 @@ let ``A manifest with errors prints them and no JSON`` () =
     let outcome = withManifest """(package = (name = "demo"))""" [ "manifest"; "--json"; "demo.nyxp" ]
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
-    Assert.Contains("error NYX0022: Package has no version, which it needs", outcome.StandardError)
+    assertDiagnostic "NYX0022" "Missing manifest field" "" "Package has no version, which it needs" outcome.StandardError
 
 [<Fact>]
 let ``Without --json it is a usage error`` () =

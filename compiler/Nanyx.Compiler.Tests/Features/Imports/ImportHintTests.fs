@@ -32,7 +32,7 @@ let ``A name qualified by a module's name says to import the module under that n
 let ``An unknown identifier says which import brings it in, instead of asking about names in scope`` () =
     Assert.Equal(
         (DiagnosticCodes.UnknownIdentifier.Code,
-         """Unknown identifier 'abs', and 'abs' is defined in 'nanyx/math': add `import nanyx/math`""",
+         """'abs' is not in scope, and 'abs' is defined in 'nanyx/math': add `import nanyx/math`""",
          "abs",
          [ "Add `import nanyx/math`" ]),
         reported "def f = abs\n")
@@ -66,4 +66,4 @@ let ``A name two modules export lists both, with an import for each`` () =
 let ``A name no standard-library module exports still asks about the names in scope`` () =
     let code, message, _, _ = reported "def one = 1\ndef two = onee\n"
     Assert.Equal(DiagnosticCodes.UnknownIdentifier.Code, code)
-    Assert.Equal("Unknown identifier 'onee': did you mean 'one'?", message)
+    Assert.Equal("'onee' is not in scope: did you mean 'one'?", message)

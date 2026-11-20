@@ -109,8 +109,8 @@ module internal ArithmeticOperators =
     type private LiteralReading =
         /// The member of the context the function requires that it is written as.
         | AsMember of Expression
-        /// An error: the literal cannot be of the type it is used at.
-        | Wrong of DiagnosticCode * string * Fix list
+        /// The error at the literal: it cannot be of the type it is used at.
+        | Wrong of Diagnostic
 
     /// What the literal `literal` is, an operand of an arithmetic operator or a comparison whose other operand is of the
     /// type `otherTy`, where that is a type variable of the type the function around it writes, in a function that
@@ -135,11 +135,15 @@ module internal ArithmeticOperators =
             | IntLit n ->
                 OperatorContexts.smallest state fromInt
                 |> Option.map (fun context ->
-                    Wrong (DiagnosticCodes.MissingContextMembers, $"'{n}' is an '{tyText}' here, which needs {context}({tyText}): add [{context}({tyText})] to the type of '{defName}'", ContextFixes.addToType state defName $"{context}({tyText})"))
+                    Diagnostics.at DiagnosticCodes.MissingContextMembers literal.Span
+                        $"'{n}' is an '{tyText}' here, which needs {context}({tyText}): add [{context}({tyText})] to the type of '{defName}'"
+                    |> Diagnostics.about context
+                    |> ContextFixes.withAddToType state defName $"{context}({tyText})"
+                    |> Wrong)
             | FloatLit x ->
                 let text = x.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
                 let text = if text.Contains '.' || text.Contains 'E' then text else text + ".0"
-                Some (Wrong (DiagnosticCodes.TypeMismatch, $"'{text}' cannot be an '{tyText}', which may be an integer type: take the value as a parameter", []))
+                Some (Wrong (Diagnostics.at DiagnosticCodes.TypeMismatch literal.Span $"'{text}' cannot be an '{tyText}', which may be an integer type: take the value as a parameter"))
             | _ -> None
         | _ -> None
 
@@ -160,8 +164,7 @@ module internal ArithmeticOperators =
             | BinaryOp(op, _, _, _), Some (AsMember asMember) when readsLiterals op ->
                 infer state asMember
                 |> Result.map (fun (typed, next) -> typed, { next with ReadAs = next.ReadAs |> Map.add asMember.Id asMember })
-            | BinaryOp(op, _, _, _), Some (Wrong(code, message, fixes)) when readsLiterals op ->
-                let error = { Diagnostics.at code operand.Expr.Span message with Fixes = fixes }
+            | BinaryOp(op, _, _, _), Some (Wrong error) when readsLiterals op ->
                 Ok ({ operand with Type = other.Type }, { state with FailedExprs = (operand.Expr.Id, [ error ]) :: state.FailedExprs })
             | _ -> Ok (operand, state)
         reread left right state

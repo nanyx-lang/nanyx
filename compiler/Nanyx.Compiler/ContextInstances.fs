@@ -317,9 +317,9 @@ let private derivedEquality
         match derived with
         | Some derived -> Some (Ok derived)
         | None when isHash && readsParts ->
-            Some (Error (WellKnownContexts.error span (WellKnownContexts.noInstanceAtCall wellKnown calleeName ty "its parts' own hash cannot be read where the caller chooses more of its tags")))
+            Some (Error (WellKnownContexts.error wellKnown.Context span (WellKnownContexts.noInstanceAtCall wellKnown calleeName ty "its parts' own hash cannot be read where the caller chooses more of its tags")))
         | None when not (TypeEnv.freeTyVars ty).IsEmpty && StructuralInstances.holdsCollection ty ->
-            Some (Error (WellKnownContexts.error span (EqualityOperators.collectionAtGenericCall calleeName ty)))
+            Some (Error (WellKnownContexts.error wellKnown.Context span (EqualityOperators.collectionAtGenericCall calleeName ty)))
         | None -> None
 
 /// The instance in scope in `env` of `ctxName` of the type variable `var`, as a derived instance is passed it.
@@ -344,7 +344,7 @@ let private derivedInstance
     derivableType env ctxName argTys
     |> Option.bind (fun ty -> StructuralInstances.instance rigid (partInstanceIn env state ctxName) instanceOf (InterpolationHoles.isHole calleeName) call span ctxName ty state)
     |> Option.map (Result.mapError (fun failure ->
-        let missingContext message = Diagnostics.at DiagnosticCodes.MissingContextMembers span message
+        let missingContext message = Diagnostics.at DiagnosticCodes.MissingContextMembers span message |> Diagnostics.about ctxName
         match failure with
         | StructuralInstances.NoInstanceOf missing when InterpolationHoles.isHole calleeName ->
             [ missingContext (InterpolationHoles.undeclared state (TyVar missing) annotatedDef) |> InterpolationHoles.addToStringFix state (TyVar missing) annotatedDef ]
@@ -383,6 +383,7 @@ let private otherInstanceInScope (env: TypeEnv) (state: InferState) (ctxName: Id
 let private unsettledBesideOther (name: Identifier) (ctxName: Identifier) (other: Ty) (span: SourceSpan) : Diagnostic =
     Diagnostics.at DiagnosticCodes.MissingContextMembers span
         $"'{name}' requires the context '{ctxName}' at a type nothing here settles, and the instance in scope is a '{Unifier.tyToString other}': write the type the call gives, or load an instance of '{ctxName}' for it with `use`"
+    |> Diagnostics.about ctxName
 
 /// `state` with what each associated type of the context `ctxName`, which the callee of `call` requires written with
 /// `args`, is at the call, `argTys`, by the name the callee's signature gives it (see `TypedModule.AssociatedArguments`).
@@ -488,7 +489,7 @@ let private fixedTwoWays (state: InferState) (ctxName: Identifier) (argTys: Ty l
 let rec private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: Identifier) (ctxName: Identifier) (argTys: Ty list) (span: SourceSpan) : Result<ContextInstance * InferState, Diagnostic list> =
     let ctxText = instanceText state ctxName argTys
     let requirer = InterpolationHoles.requirer calleeName argTys
-    let fail message = Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
+    let fail message = Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message |> Diagnostics.about ctxName ]
     match argTys, contextMemberTypes state ctxName argTys with
     | forType :: _, Some members ->
         // The name a definition for the type is attached under: `Point`, `Money`, `int`.
@@ -644,6 +645,7 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                                 |> List.truncate 1
                                 |> List.map (fun var ->
                                     Diagnostics.at DiagnosticCodes.MissingContextMembers calleeSpan (InterpolationHoles.undeclaredPart current name argTys.Head (TyVar var) annotatedDef)
+                                    |> Diagnostics.about ctxName
                                     |> InterpolationHoles.addToStringFix current (TyVar var) annotatedDef)
                             let pending =
                                 { Def = def; Call = call.Id; Callee = name; Index = found.Length; Count = contexts.Length
@@ -929,7 +931,7 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
             match wellKnownInstanceAtCall env pending.Context argTys hasInstance with
             | Some (_, WellKnownContexts.Open _) -> Some (Error pending.Errors)
             | Some (wellKnown, WellKnownContexts.NoInstance reason) ->
-                Some (Error (WellKnownContexts.error pending.Span (WellKnownContexts.noInstanceAtCall wellKnown pending.Callee (List.head argTys) reason)))
+                Some (Error (WellKnownContexts.error wellKnown.Context pending.Span (WellKnownContexts.noInstanceAtCall wellKnown pending.Callee (List.head argTys) reason)))
             | Some (wellKnown, WellKnownContexts.BuiltIn) ->
                 match derivedEquality scopeEnv current rigid instanceOf wellKnown WellKnownContexts.BuiltIn pending.Callee pending.Call pending.Span (List.head argTys) with
                 | Some derived -> Some (derived |> Result.map (fun (instance, next) -> Some instance, next))
@@ -974,7 +976,7 @@ let internal checkComparisonsAt (env: TypeEnv) (state: InferState) (call: Expres
                     let hasInstance ty = (instanceInScope env current ctxName [ ty ]).IsSome
                     match wellKnownInstanceAtCall env ctxName [ ty ] hasInstance with
                     | Some (wellKnown, _) when wellKnown.Context = EqualityOperators.context && StructuralInstances.holdsCollection ty ->
-                        Error (WellKnownContexts.error calleeSpan (EqualityOperators.collectionPassedNothing name ty))
+                        Error (WellKnownContexts.error wellKnown.Context calleeSpan (EqualityOperators.collectionPassedNothing name ty))
                     | Some (wellKnown, instance) -> WellKnownContexts.checkLocalCall wellKnown env current call name calleeSpan ty instance
                     | None -> Ok current)) result) (Ok state)
     | _ -> Ok state

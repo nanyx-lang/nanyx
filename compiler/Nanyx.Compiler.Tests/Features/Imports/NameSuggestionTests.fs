@@ -25,7 +25,7 @@ def n = total + 1
 """
     Assert.Equal(
         (DiagnosticCodes.UnknownIdentifier.Code,
-         "Unknown identifier 'totl': did you mean 'total'?",
+         "'totl' is not in scope: did you mean 'total'?",
          [ "Write `total`", fixedSource.ReplaceLineEndings "\n" ]),
         suggested source)
     compileClean fixedSource |> ignore
@@ -61,7 +61,7 @@ def f: int -> int = { count -> count + 1 }
 """
     Assert.Equal(
         (DiagnosticCodes.UnknownIdentifier.Code,
-         "Unknown identifier 'cuont': did you mean 'count'?",
+         "'cuont' is not in scope: did you mean 'count'?",
          [ "Write `count`", fixedSource.ReplaceLineEndings "\n" ]),
         suggested source)
     compileClean fixedSource |> ignore
@@ -76,7 +76,7 @@ def n = alpha3
 """
     let code, message, fixes = suggested source
     Assert.Equal(DiagnosticCodes.UnknownIdentifier.Code, code)
-    Assert.Equal("Unknown identifier 'alpha3': did you mean 'alpha1' or 'alpha2'?", message)
+    Assert.Equal("'alpha3' is not in scope: did you mean 'alpha1' or 'alpha2'?", message)
     Assert.Equal<string list>([ "Write `alpha1`"; "Write `alpha2`" ], fixes |> List.map fst)
 
 [<Fact>]

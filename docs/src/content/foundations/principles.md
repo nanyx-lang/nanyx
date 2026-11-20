@@ -35,21 +35,23 @@ A Nanyx error should include:
 
 ## Friendly errors
 
-In Nanyx error messages are matter of fact, with no "I" or "you": they say what _was found_, rather than addressing the user or directing blame. A message starts with a capital letter, has no full stop at the end, puts names and types in single quotes and code in backticks, and gives any advice after a colon, as an instruction.
+In Nanyx error messages are matter of fact, with no "I" or "you": they say what _was found_, rather than addressing the user or directing blame.
+
+Most of the time the user has seen an error before, so each error leads with a short headline that is the same every time: its code's title, plus at most one name, in single quotes. Below it, the body gives the details. The body starts with a capital letter, has no full stop at the end, puts names and types in single quotes and code in backticks, gives any advice after a colon, as an instruction, and doesn't repeat the headline.
 
 | Preferred | Not preferred |
 |--------------|-----------|
 | Type mismatch: 'string' vs 'int' | You cannot pass a string to a function that expects an int |
 | Duplicate definition 'foo' | I found two definitions of foo |
-| Unknown identifier 'totl': did you mean 'total'? | "You forgot to handle the `#error` case in this match expression", or "Illegal foo".|
+| Unknown identifier 'totl' | "You forgot to handle the `#error` case in this match expression", or "Illegal foo".|
 
-An example of a good error message:
+Examples of good errors:
 
-| Title | Message | Suggestions | Fixes |
-|-------|---------|-------------|-------|
-| `E001: Type mismatch at 10:5` | Expected type 'int' but found type 'string' in the expression `x + 1` | Convert 'x' to an int with `int(x)` | Apply the `int(x)` conversion |
-| `E002: Unsatisfied context at 115:8` | 'println' requires the context 'Console', which 'main' does not declare | Add the context 'Console' to the type of 'main' | Add context 'Console' to 'main' |
-| `E003: Non-exhaustive pattern match at 42:3` | The match does not handle `#error(#databaseError)` of the type '#some(Customer) \| #error(#notFound \| #databaseError)' | Handle the `#databaseError` case | Add a case for `#error(#databaseError)` |
+| Headline | Body | Suggestions | Fixes |
+|----------|------|-------------|-------|
+| `NYX0201: Type mismatch` | Expected type 'int' but found type 'string' in the expression `x + 1` | Convert 'x' to an int with `int(x)` | Apply the `int(x)` conversion |
+| `NYX0205: Missing context 'Console'` | 'println' requires the context 'Console', which 'main' does not declare: add [Console] to the type of 'main' | Add the context 'Console' to the type of 'main' | Add context 'Console' to 'main' |
+| `NYX0203: Non-exhaustive match` | The match does not handle `#error(#databaseError)` of the type '#some(Customer) \| #error(#notFound \| #databaseError)' | Handle the `#databaseError` case | Add a case for `#error(#databaseError)` |
 
 ## Structural type errors
 

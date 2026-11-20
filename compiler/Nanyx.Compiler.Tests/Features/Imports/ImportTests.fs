@@ -41,7 +41,7 @@ let ``Import with alias does not bring unqualified names`` () =
         let result = Compiler.compileFile mainPath
         assertReports DiagnosticCodes.UnknownIdentifier result
         let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-        Assert.Contains("Unknown identifier", message))
+        Assert.Contains("is not in scope", message))
 
 let private csvAndJson =
     [ "csvParser.nyx", "module csvParser\nexport def parse = { s -> 1 }\nexport def csvOnly = 1"
@@ -185,7 +185,7 @@ def a = "x" \ shout""")
 let ``Import does not bring private definitions into scope`` () =
     let result = compileImporting "module mod\nexport def foo = 1\ndef bar = 2" "module main\nimport mod\ndef value = bar"
     assertReports DiagnosticCodes.UnknownIdentifier result
-    Assert.Contains("Unknown identifier", (result.Diagnostics |> List.head).Message)
+    Assert.Contains("is not in scope", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]
 let ``Import with alias does not expose private definitions`` () =

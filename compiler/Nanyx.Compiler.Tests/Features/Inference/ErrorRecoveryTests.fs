@@ -56,7 +56,7 @@ def b: string = 1""")
 let ``A def that fails to check does not hide errors in the defs after it`` () =
     let result = Compiler.compile "def a = missing\ndef b: string = 1"
     Assert.Equal(2, result.Diagnostics.Length)
-    Assert.Contains("Unknown identifier", result.Diagnostics.[0].Message)
+    Assert.Contains("is not in scope", result.Diagnostics.[0].Message)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, result.Diagnostics.[1].Code)
 
 [<Fact>]
@@ -79,7 +79,7 @@ let ``A failed expression is compiled to a trap with its error`` () =
         |> List.choose (function
             | Kind (Def (ValueDef(_, "f", _, Kind (Lambda(_, Kind (FunctionCall("__crash", _, [ Kind (LiteralExpr (StringLit message)) ])), _))))) -> Some message
             | _ -> None)
-    Assert.Equal<string list>([ "1:16: error NYX0102: Unknown function 'missing' (deferred from compile time)\n" ], crashes)
+    Assert.Equal<string list>([ "1:16: error NYX0102: Unknown function: Unknown function 'missing' (deferred from compile time)\n" ], crashes)
 
 [<Fact>]
 let ``A module with no errors has nothing deferred`` () =
@@ -114,7 +114,7 @@ let ``A module that imports one with errors is not typed`` () =
     let result = compileImporting "module mod\nexport def foo = missing" "module main\nimport mod\ndef value = foo"
     Assert.True(result.Typed.IsNone)
     Assert.False(result.TypeChecked)
-    Assert.Equal("Unknown identifier 'missing'", (Assert.Single result.Diagnostics).Message)
+    Assert.Equal("'missing' is not in scope", (Assert.Single result.Diagnostics).Message)
 
 [<Fact>]
 let ``??? is reported as not implemented, deferred, and typed ???`` () =
@@ -164,13 +164,13 @@ let ``The uses of an expression that fails to check are not errors too`` () =
   a
 }""")
     let diag = Assert.Single(result.Diagnostics)
-    Assert.Equal("Unknown identifier 'nope'", diag.Message)
+    Assert.Equal("'nope' is not in scope", diag.Message)
 
 [<Fact>]
 let ``The arguments of a pipe from an expression that fails to check are still checked`` () =
     let result = Compiler.compile "def f = { x ->\n  def y = nope\n  y \\contains(other)\n}"
     Assert.Equal<string list>(
-        [ "Unknown identifier 'nope'"; "Unknown identifier 'other'" ],
+        [ "'nope' is not in scope"; "'other' is not in scope" ],
         result.Diagnostics |> List.map (fun diag -> diag.Message))
 
 [<Fact>]

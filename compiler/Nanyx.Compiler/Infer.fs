@@ -245,7 +245,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 // A function named as a value is checked as a call to it would be, at the type it is passed as.
                 checkComparisonsAt env next expr name expr.Span ty
                 |> Result.map (fun next -> mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name)
-        | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownIdentifier expr.Span $"Unknown identifier '{name}'" env.Names.Keys name ]
+        | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownIdentifier expr.Span $"'{name}' is not in scope" env.Names.Keys name |> Diagnostics.about name ]
     | SpreadSyntax.Call parts -> RecordSpread.infer inferExpr env state expr parts
     | FunctionCall(name, spanOpt, args) -> InferCalls.inferCall inferExpr inferLambdaWithExpected env (ExpectedLiterals.intoMapEntries state expr) expr name spanOpt args
     | Lambda(args, body, _) ->

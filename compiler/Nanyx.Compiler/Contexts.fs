@@ -811,7 +811,10 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
             match unprovided |> List.map (fun (ctxName, _) -> $"'{ctxName}'") with
             | [ single ] -> $"the context {single}"
             | names -> $"the contexts {Diagnostics.listed names}"
-        Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span $"'{name}' requires {contextsText}, which the host '{hostImport}' does not provide" ]
+        let diagnostic = Diagnostics.at DiagnosticCodes.MissingContextMembers span $"'{name}' requires {contextsText}, which the host '{hostImport}' does not provide"
+        match unprovided with
+        | [ ctxName, _ ] -> Error [ diagnostic |> Diagnostics.about ctxName ]
+        | _ -> Error [ diagnostic ]
     elif reportMissing && not unsupplied.IsEmpty then
         Error [ unsupplied.Head ]
     elif reportMissing && not forged.IsEmpty then
@@ -819,7 +822,7 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
         let kind = if info.IsPrivate then "private" else "protected"
         let message =
             $"'{name}' requires the context '{ctxName}', which is not available here: '{ctxName}' is {kind}, so only an instance its own module makes serves for it, not another context with the same members"
-        Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
+        Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message |> Diagnostics.about ctxName ]
     elif missing.IsEmpty || not reportMissing then
         // Every member is in scope, but one the ambient instance supplies is only available where its context is.
         requiredMembers
@@ -840,8 +843,9 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
             missing
             |> List.partition (fun (ctx, _) -> match ctx.Kind with TypeName _ | TypeApply _ -> true | _ -> false)
         let quoted names = names |> List.distinct |> List.map (fun name -> $"'{name}'")
-        let contextNames =
-            named |> List.choose (fun (ctx, _) -> match ctx.Kind with TypeName ctxName | TypeApply(ctxName, _) -> Some ctxName | _ -> None) |> quoted
+        let namedContexts =
+            named |> List.choose (fun (ctx, _) -> match ctx.Kind with TypeName ctxName | TypeApply(ctxName, _) -> Some ctxName | _ -> None) |> List.distinct
+        let contextNames = quoted namedContexts
         let memberNames = unnamed |> List.collect snd |> quoted
         let message =
             match contextNames, memberNames with
@@ -862,7 +866,9 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
             addable
             |> List.fold (fun diagnostic (defName, ctxName) -> ContextFixes.withAddToType state defName ctxName diagnostic)
                 (Diagnostics.at DiagnosticCodes.MissingContextMembers span message)
-        Error [ diagnostic ]
+        match namedContexts, memberNames with
+        | [ single ], [] -> Error [ diagnostic |> Diagnostics.about single ]
+        | _ -> Error [ diagnostic ]
 
 /// What it takes for the operator `expr` to call `callee`, the definition attached to its operand's type: the
 /// contexts its type requires, `Memory` for `` MList.`+=` ``, are required where the operator is written, as a call to it

@@ -50,6 +50,18 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task An_error_is_shown_as_its_headline_then_its_body()
+    {
+        var uri = DocumentUri.FromFileSystemPath(TempPath("missing-context.nyx"));
+
+        Open(uri, "context Log = (log: string -> ())\ndef g: [Log] () -> () = { log(\"hi\") }\ndef h = { g() }\n");
+
+        var diagnostic = Assert.Single((await NextPublished(uri)).Diagnostics!);
+        Assert.Equal("NYX0205", diagnostic.Code?.String);
+        Assert.Equal("Missing context 'Log'\n'g' requires the context 'Log', which is not available here", diagnostic.Message.String);
+    }
+
+    [Fact]
     public void A_compile_s_diagnostics_are_converted_once()
     {
         // The info view and code actions read them on every move of the cursor.
@@ -93,7 +105,8 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
         var byDefault = await PublishedWith(MapModule.Empty<string, FSharpOption<Severity>>());
         Assert.Equal(DiagnosticSeverity.Warning, byDefault.Severity);
         Assert.Equal("test/everyDef", byDefault.Code?.String);
-        Assert.Equal("a def", byDefault.Message.String);
+        // A linter's diagnostic is shown as a compiler's is: its rule's title, then its message.
+        Assert.Equal("Every def\na def", byDefault.Message.String);
         Assert.Equal(new Range(0, 0, 0, 11), byDefault.Range);
 
         var asInfo = await PublishedWith(MapModule.OfSeq([Tuple.Create("test/everyDef", FSharpOption<Severity>.Some(Severity.Info))]));

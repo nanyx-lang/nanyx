@@ -4,27 +4,32 @@ description: "Every error the compiler reports, by code: when it is reported and
 order: 4
 ---
 
-Every error the compiler reports has a code, such as `NYX0201`, and a short title, such as "Type mismatch". The
-command line shows both before the message, and an editor links the code to its section on this page.
+Every error the compiler reports has a code, such as `NYX0201`, and a headline. The headline is the code's title, such
+as "Type mismatch", the same for every error with that code, and for some codes the one name the error is about, in
+single quotes: `Missing context 'Console'`, `Unknown identifier 'totl'`. Most of the time you have seen the error
+before, and the headline is enough to know it. The body after it gives the details, and any advice after a colon. An
+editor shows the headline, then the body on the next line, and links the code to its section on this page.
 
-The command line shows each error with the file, line and column it is at, then the line of source with the code it
-is about underlined:
+The command line shows the code and headline first, then the file, line and column the error is at, the line of source
+with the code it is about underlined, and then the body:
 
 ```text
-shapes.nyx:3:39: error NYX0201: 'string' is not a number, so it cannot be used with *
-  |
-3 | def perimeter: int -> int = { side -> side * "4" }
-  |                                       ^^^^^^^^^^
+error NYX0201: Type mismatch
+  --> shapes.nyx:3:39
+   |
+ 3 | def perimeter: int -> int = { side -> side * "4" }
+   |                                       ^^^^^^^^^^
+   = 'string' is not a number, so it cannot be used with *
 ```
 
-On a terminal, the severity and the underline are coloured, unless the `NO_COLOR` environment variable is set.
+On a terminal, the headline and the underline are coloured, unless the `NO_COLOR` environment variable is set.
 
-Where the compiler can tell what was meant, the message says so. An unknown name is followed by the names in scope
-closest to it (`Unknown identifier 'totl': did you mean 'total'?`), and a character that only looks like one Nanyx
-reads, such as U+2212 for `-`, is named. In an editor, these and other errors come with a fix that makes the edit for
-you: writing the name suggested, importing the standard library module that exports an unknown name, adding the arms a
-match is missing, adding a context a definition needs to its type, naming the arguments of a call that passes named
-parameters by position, or writing the character a look-alike stands for.
+Where the compiler can tell what was meant, the body says so. An unknown name is followed by the names in scope closest
+to it (`'totl' is not in scope: did you mean 'total'?`), and a character that only looks like one Nanyx reads, such as
+U+2212 for `-`, is named. In an editor, these and other errors come with a fix that makes the edit for you: writing the
+name suggested, importing the standard library module that exports an unknown name, adding the arms a match is
+missing, adding a context a definition needs to its type, naming the arguments of a call that passes named parameters
+by position, or writing the character a look-alike stands for.
 
 Most errors, such as type errors and unknown names, don't stop a debug build: see
 [Deferred errors](../tour/error-handling#deferred-errors).
@@ -819,7 +824,7 @@ message suggests it, and an editor offers to write it.
 
 ```nanyx
 def total = 1
-def doubled = totl * 2  -- error NYX0101: Unknown identifier 'totl': did you mean 'total'?
+def doubled = totl * 2  -- error NYX0101: 'totl' is not in scope: did you mean 'total'?
 ```
 
 To fix it, correct the name, define it, or import the module that exports it.
@@ -1184,7 +1189,12 @@ call: a library that writes `[Console]` or `[FileSystem]` can't be used under a 
 ([Hosts](../advanced/hosts)).
 
 ```text
-main.nyx:6:1: error NYX0205: 'greet' requires the context 'Console', which the host 'acme.quiet/quiet.host' does not provide
+error NYX0205: Missing context 'Console'
+  --> main.nyx:6:1
+   |
+ 6 | greet("Ada")
+   | ^^^^^
+   = 'greet' requires the context 'Console', which the host 'acme.quiet/quiet.host' does not provide
 ```
 
 To fix it, run the program under a host that provides the context, or don't call the function.

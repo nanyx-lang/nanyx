@@ -39,7 +39,7 @@ public static partial class BrowserCompiler
         var stopwatch = Stopwatch.StartNew();
         var result = Compiler.compile(source);
         var checkMs = stopwatch.Elapsed.TotalMilliseconds;
-        var diagnostics = result.Diagnostics.Select(d => $"{d.Code}: {d.Message}").ToList();
+        var diagnostics = result.Diagnostics.Select(d => $"{d.Code}: {Diagnostics.oneLine(d)}").ToList();
         string? wasm = null;
         double emitMs = 0, assembleMs = 0;
         if (FSharpOption<TypedModule>.get_IsSome(result.Typed) && !result.Diagnostics.Any(Diagnostics.isError))
@@ -49,7 +49,7 @@ public static partial class BrowserCompiler
             emitMs = stopwatch.Elapsed.TotalMilliseconds;
             if (emitted.IsError)
             {
-                diagnostics.Add($"{emitted.ErrorValue.Code}: {emitted.ErrorValue.Message}");
+                diagnostics.Add($"{emitted.ErrorValue.Code}: {Diagnostics.oneLine(emitted.ErrorValue)}");
             }
             else
             {

@@ -141,7 +141,7 @@ FAIL geometry.`scales points`  src/geometry.nyx:18:3
     scale(p, 2) = Point(x = 2, y = 5)
     p = Point(x = 1, y = 2)
 FAIL geometry.`parses a point`  src/geometry.nyx:24:14
-  src/geometry.nyx:24:14: error NYX0201: 'string' is not a number, so it cannot be used with + (deferred from compile time)
+  src/geometry.nyx:24:14: error NYX0201: Type mismatch: 'string' is not a number, so it cannot be used with + (deferred from compile time)
 
 1 passed, 2 failed
 ```

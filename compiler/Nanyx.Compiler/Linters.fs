@@ -1272,6 +1272,7 @@ module Linters =
             { Code = code linter rule.Id
               Severity = severity
               Title = rule.Title
+              Subject = None
               Message = message
               Span = span |> Option.filter (SourceSpan.isNone >> not)
               Related = related |> List.filter (fst >> SourceSpan.isNone >> not)

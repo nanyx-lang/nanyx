@@ -13,12 +13,15 @@ Every compiler error has a code and title from the table in `Diagnostics.fs` (`D
 it is about, and a message in the house style. The CLI shows it with the line of source and an underline, and the
 common errors offer fixes. What is left:
 
-- **A headline and a body** ([#2098](https://github.com/nanyx-lang/nanyx/issues/2098)). Decided: an error's headline
-  is its code's fixed title, plus at most one name in single quotes (`Missing context 'Console'`, `Type mismatch`),
-  kept as a typed field on the diagnostic. The body is the message, which doesn't repeat the headline. The editor
-  shows the headline, then the body on the next line. The terminal shows the code and headline, then the underlined
-  source line, then the body. The display comes first ([#2131](https://github.com/nanyx-lang/nanyx/issues/2131)),
-  then the messages are rewritten a phase at a time (#2132 to #2135).
+- **Rewriting the messages** ([#2098](https://github.com/nanyx-lang/nanyx/issues/2098)). Every error is shown as a
+  headline, its code's fixed title plus at most one name in single quotes (`Missing context 'Console'`), kept as the
+  diagnostic's `Subject`, and a body that doesn't repeat it. The editor shows the headline, then the body on the next
+  line; the terminal shows the code and headline, then the underlined source line, then the body. NYX0101 and NYX0205
+  are the first codes with a name in their headline. The other messages are rewritten to this a phase at a time:
+  reading a module ([#2132](https://github.com/nanyx-lang/nanyx/issues/2132)), resolving names
+  ([#2133](https://github.com/nanyx-lang/nanyx/issues/2133)), types
+  ([#2134](https://github.com/nanyx-lang/nanyx/issues/2134)), and the rest
+  ([#2135](https://github.com/nanyx-lang/nanyx/issues/2135)). Until then, many bodies still start with their headline.
 - **Related locations.** Few errors use them yet. An error should point, where it helps, at the code that explains it
   as well: "expected because of this annotation", "first defined here". The CLI shows a related location as one line,
   with no excerpt.
