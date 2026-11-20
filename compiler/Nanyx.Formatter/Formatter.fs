@@ -465,17 +465,17 @@ let format (options: Options) (parsed: SourceModule) : string =
 
     and typeDefDoc (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) : Doc =
         let kind =
-            if List.contains Private modifiers then text "private "
-            elif List.contains Protected modifiers then text "protected "
-            else Doc.empty
+            if List.contains Private modifiers then [ text "private" ]
+            elif List.contains Protected modifiers then [ text "protected" ]
+            else []
         // `context Name = ...` and `context type Name = ...` both give `[Context]`; the modifiers' order is kept.
         // `scoped` only comes before `context`, and is written first.
         let scoped = if List.exists TypeDefModifier.isScoped modifiers then text "scoped " else Doc.empty
         // `[Tx] protected (...)`: the contexts whose scope a value belongs to come before the kind.
         let inScopeOf =
             match TypeDefModifier.scopeContexts modifiers with
-            | [] -> Doc.empty
-            | contexts -> text $"""[{contexts |> List.map fst |> String.concat ", "}] """
+            | [] -> []
+            | contexts -> [ text $"""[{contexts |> List.map fst |> String.concat ", "}]""" ]
         let isHeadModifier m =
             match m with
             | Private
@@ -510,11 +510,19 @@ let format (options: Options) (parsed: SourceModule) : string =
             match parameters with
             | [] -> Doc.empty
             | _ -> cat [ text "("; commaJoin (List.map parameter parameters); text ")" ]
-        cat [ head; parametersDoc; text " = "; inScopeOf; kind; typeBody body ]
+        cat [ head; parametersDoc; text " ="; typeBody (inScopeOf @ kind) body ]
 
-    /// The type a type or context definition stands for. A record of more than three fields, or with a comment among
-    /// them, has one field per line, named fields separated by newlines and positional ones followed by commas (the
-    /// parser takes nothing else after them):
+    /// The type a type or context definition stands for, after its `=` and the modifiers that follow it.
+    ///
+    /// A union written over more than one line, or too long for one, has one case per line, each starting with `|`:
+    ///
+    ///   type Shape =
+    ///     | #circle(radius: float)
+    ///     | #rectangle(width: float, height: float)
+    ///
+    /// A union written on one line that fits stays on it. A record of more than three fields, or with a comment among
+    /// them, or too long for one line, has one field per line, named fields separated by newlines and positional ones
+    /// followed by commas (the parser takes nothing else after them):
     ///
     ///   type Product = (
     ///     sku: string
@@ -525,30 +533,53 @@ let format (options: Options) (parsed: SourceModule) : string =
     ///
     /// A record with an attribute among its fields is laid out so too, each attribute on a line of its own above its
     /// field.
-    and typeBody (body: TypeExpr) : Doc =
+    ///
+    /// Any other type too long for the line goes on the next one, indented.
+    and typeBody (modifiers: Doc list) (body: TypeExpr) : Doc =
         let hasAttribute fields = fields |> List.exists (function TypeFieldAttribute _ -> true | _ -> false)
+        let afterEquals = cat [ for m in modifiers -> cat [ text " "; m ] ]
         match body.Kind with
         | TypeRecord fields when fields.Length > 3 || hasAttribute fields || (sourceText.Valid body.Span && hasCommentsIn body.Span.Start body.Span.End) ->
-            let isPositional field =
-                match field with
-                | TypeField(n, false, Some _, None) -> n.Length > 0 && Seq.forall Char.IsDigit n
-                | _ -> false
-            // A field's own text is not kept; its type's span stands in for where it is.
-            let spanOf field =
-                match field with
-                | TypeField(_, _, Some t, defaultValue) ->
-                    let finish = match defaultValue with Some value when sourceText.Valid value.Span -> value.Span.End | _ -> t.Span.End
-                    t.Span.Start, finish
-                | _ -> -1, -1
-            let children =
-                TypeRecordField.withAttributes fields
-                |> List.map (fun (attributes, field) ->
-                    let start, finish = spanOf field
-                    let start = match attributes with (_, _, span) :: _ when sourceText.Valid span -> span.Start | _ -> start
-                    let attributeLines = [ for name, argument, span in attributes -> cat [ attributeDoc name argument span; hard ] ]
-                    start, finish, fun () -> cat (attributeLines @ [ recordTypeField field; (if isPositional field then text "," else Doc.empty) ]))
-            cat [ text "("; nest (cat [ hard; sequence false body.Span.Start body.Span.End children ]); hard; text ")" ]
-        | _ -> typeExpr body
+            cat [ afterEquals; text " "; recordPerLine body fields ]
+        // Laying the record out one field per line places the comments up to the end of its line, so it is only offered
+        // where the line has none.
+        | TypeRecord fields when sourceText.Valid body.Span && not (hasCommentsIn body.Span.Start (sourceText.LineEnd(max body.Span.Start (body.Span.End - 1)) + 1)) ->
+            cat [ afterEquals; text " "; Doc.group (Doc.IfBreak(recordPerLine body fields, typeExpr body)) ]
+        | TypeUnion cases ->
+            let writtenOnLines = sourceText.Valid body.Span && sourceText.LineOf body.Span.Start <> sourceText.LineOf(max body.Span.Start (body.Span.End - 1))
+            let separator = if writtenOnLines then hard else Doc.line
+            let caseLines =
+                cases
+                |> List.mapi (fun index case ->
+                    let bar = if index = 0 then Doc.IfBreak(text "| ", Doc.empty) else text "| "
+                    cat [ separator; bar; (types ()).UnionCase case ])
+            cat [ afterEquals; Doc.group (nest (cat caseLines)) ]
+        | _ ->
+            let written = typeExpr body
+            if Doc.hasHardLine written then cat [ afterEquals; text " "; written ]
+            else Doc.group (cat [ afterEquals; nest (cat [ Doc.line; written ]) ])
+
+    /// A record type with one field per line (see `typeBody`).
+    and recordPerLine (body: TypeExpr) (fields: TypeRecordField list) : Doc =
+        let isPositional field =
+            match field with
+            | TypeField(n, false, Some _, None) -> n.Length > 0 && Seq.forall Char.IsDigit n
+            | _ -> false
+        // A field's own text is not kept; its type's span stands in for where it is.
+        let spanOf field =
+            match field with
+            | TypeField(_, _, Some t, defaultValue) ->
+                let finish = match defaultValue with Some value when sourceText.Valid value.Span -> value.Span.End | _ -> t.Span.End
+                t.Span.Start, finish
+            | _ -> -1, -1
+        let children =
+            TypeRecordField.withAttributes fields
+            |> List.map (fun (attributes, field) ->
+                let start, finish = spanOf field
+                let start = match attributes with (_, _, span) :: _ when sourceText.Valid span -> span.Start | _ -> start
+                let attributeLines = [ for name, argument, span in attributes -> cat [ attributeDoc name argument span; hard ] ]
+                start, finish, fun () -> cat (attributeLines @ [ recordTypeField field; (if isPositional field then text "," else Doc.empty) ]))
+        cat [ text "("; nest (cat [ hard; sequence false body.Span.Start body.Span.End children ]); hard; text ")" ]
 
     and importDoc (start: int) (finish: int) (items: ImportItem list) : Doc = imports.ImportDoc start finish items
 

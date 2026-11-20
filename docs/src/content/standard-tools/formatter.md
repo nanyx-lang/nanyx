@@ -107,7 +107,8 @@ def id: a -> a = { x -> x }
 def upTo: int -> list(int) = { n -> 1..n }
 ```
 
-A type or context whose body is a record of more than three fields puts each field on its own line:
+A type or context whose body is a record of more than three fields, or one too long for the line, puts each field on
+its own line:
 
 ```nanyx
 type Product = (
@@ -117,6 +118,19 @@ type Product = (
   stock: int
 )
 ```
+
+A union written over more than one line, or too long for one, puts each case on its own line, starting with `|` and
+indented once. A union written on one line that fits stays on it:
+
+```nanyx
+type Shape =
+  | #circle(radius: float)
+  | #rectangle(width: float, height: float)
+
+type Answer = #yes | #no
+```
+
+Any other type too long for the line goes on the line after the `=`, indented once.
 
 ## Lambdas and matches
 

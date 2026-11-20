@@ -7,7 +7,11 @@ type SqlPrimitive = #sqlInt(int) | #sqlString(string)
 
 type SqlError = #duplicateKey | #sqlError(string)
 
-type PreparedStatement = (setInt: (int, int) -> (), setString: (int, string) -> (), executeUpdate: () -> #some(int) | #error(SqlError))
+type PreparedStatement = (
+  setInt: (int, int) -> ()
+  setString: (int, string) -> ()
+  executeUpdate: () -> #some(int) | #error(SqlError)
+)
 
 context Connection = (prepare: string -> PreparedStatement)
 

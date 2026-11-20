@@ -19,7 +19,10 @@ type Options = (token: string, baseUrl: #some(string) | #none)
 
 type IngestError = #httpError(int) | #badResponse
 
-type Client = (baseUrl: string, ingest: [Http] (channel: string, event: Event) -> #some(id: string) | #error(IngestError))
+type Client = (
+  baseUrl: string
+  ingest: [Http] (channel: string, event: Event) -> #some(id: string) | #error(IngestError)
+)
 
 def checkOk: Response -> #some(Response) | #error(#httpError(int)) = { response ->
   if response.ok then #some(response) else #error(#httpError(response.status))

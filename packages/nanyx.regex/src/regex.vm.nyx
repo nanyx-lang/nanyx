@@ -18,7 +18,14 @@ import nanyx/marray
 --| One instruction of a program: match one character, or one of a set of them; go on at both of two
   places, the first with the higher priority; go on at another place; note where the text is in a
   group slot; check an assertion; or report a match.
-type Inst = #char(int) | #chars(array((int, int))) | #split(int, int) | #jump(int) | #save(int) | #check(Assertion) | #match
+type Inst =
+  | #char(int)
+  | #chars(array((int, int)))
+  | #split(int, int)
+  | #jump(int)
+  | #save(int)
+  | #check(Assertion)
+  | #match
 
 --| A program, how many group slots its threads have: two for each group, its start and its end,
   with the whole match as group 0, and each name given to a group with the group's number.

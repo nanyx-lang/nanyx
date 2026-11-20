@@ -39,7 +39,11 @@ export def defaultOptions = DecodingOptions(
   withoutTimestamps = false
 )
 
-export type OptionsError = #beamSizeAndBestOf | #bestOfWithGreedySampling | #patienceWithoutBeamSize | #lengthPenaltyOutOfRange
+export type OptionsError =
+  | #beamSizeAndBestOf
+  | #bestOfWithGreedySampling
+  | #patienceWithoutBeamSize
+  | #lengthPenaltyOutOfRange
 
 export def verifyOptions
   : DecodingOptions -> #some(DecodingOptions) | #error(OptionsError)

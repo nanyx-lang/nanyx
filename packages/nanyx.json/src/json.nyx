@@ -27,7 +27,13 @@ import (
 
 --| A JSON value: `null`, a boolean, a number, a string, an array of values, or an object, whose
   members are values each named by a string.
-export type Json = #null | #bool(bool) | #number(float) | #string(string) | #array(list(Json)) | #object(map(string, Json))
+export type Json =
+  | #null
+  | #bool(bool)
+  | #number(float)
+  | #string(string)
+  | #array(list(Json))
+  | #object(map(string, Json))
 
 --| Why [`parse`] read no value: where the text stops being JSON, and what it found there.
   `position` is the byte the problem is at, counting from 0, and `line` and `column` say where
