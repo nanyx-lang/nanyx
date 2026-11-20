@@ -25,10 +25,16 @@ from `nanyx/clock`:
 ```nanyx
 import nanyx/clock as (Clock)
 
-def stamp: [Clock] string -> string = { text -> "{now()}: {text}" }
+def stamp: [Clock] string -> string = { text ->
+  "{now()}: {text}"
+}
 
-use Clock(now = { _ -> 1_700_000_000_000 }, ticks = { _ -> 0 })
-println(stamp("started"))
+def stamped = { _ ->
+  use Clock(now = { _ -> 1_700_000_000_000 }, ticks = { _ -> 0 })
+  stamp("started")
+}
+
+println(stamped())
 -- 1700000000000: started
 ```
 

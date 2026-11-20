@@ -132,7 +132,7 @@ let ``A handler reads the time through the host's Clock`` () =
     writePackage directory.Path port """module main
 
 @entry
-def main: Request -> Response = { _ ->
+def main: [Clock] Request -> Response = { _ ->
   def start = ticks()
   Response.text(200, "{now()} {ticks() >= start}")
 }
