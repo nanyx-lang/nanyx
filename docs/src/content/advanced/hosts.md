@@ -112,8 +112,8 @@ settings it takes, each with its default, so a setting it doesn't take is an err
 
 The playground host, `nanyx.playground`, runs a console program in a web page, as the [playground](../work-in-progress/playground)
 will. It stands in for the console host: it provides the same `Console`, from `nanyx.console.core`, whose output goes
-to the page, and `Random`, drawn from a generator the page seeds, so a program that needs only those compiles under it
-unchanged. It provides nothing else, no `Env`, `FileSystem`, `Http` or `Async`, so a program that needs one of them is
+to the page, `Random`, drawn from a generator the page seeds, and `Clock`, the browser's time, so a program that needs
+only those compiles under it unchanged. It provides nothing else, no `Env`, `FileSystem`, `Http` or `Async`, so a program that needs one of them is
 an error naming the host:
 
 ```
