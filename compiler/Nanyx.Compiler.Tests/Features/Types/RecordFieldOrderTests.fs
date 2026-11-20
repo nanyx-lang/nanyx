@@ -36,10 +36,10 @@ let ``The annotation's order wins over the value's`` () =
 [<Fact>]
 let ``A record and a tag's payload are written in order in an error message`` () =
     Assert.Equal(
-        (DiagnosticCodes.TypeMismatch.Code, "Type mismatch: '(zeta: int, alpha: int)' vs 'int'", "(zeta = 1, alpha = 2)"),
+        (DiagnosticCodes.TypeMismatch.Code, "'(zeta: int, alpha: int)' vs 'int'", "(zeta = 1, alpha = 2)"),
         onlyDiagnostic "def n: int = (zeta = 1, alpha = 2)\n")
     Assert.Equal(
-        (DiagnosticCodes.TypeMismatch.Code, "Type mismatch: '#box(width: int, height: int)' vs 'int'", "#box(width = 1, height = 2)"),
+        (DiagnosticCodes.TypeMismatch.Code, "'#box(width: int, height: int)' vs 'int'", "#box(width = 1, height = 2)"),
         onlyDiagnostic "def t: int = #box(width = 1, height = 2)\n")
 
 [<Fact>]

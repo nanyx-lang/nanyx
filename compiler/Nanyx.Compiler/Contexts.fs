@@ -499,14 +499,17 @@ let internal undeclaredContext (state: InferState) (defName: Identifier) (ctxNam
     | Some { Kind = TypeWithContext([], _) } ->
         Diagnostics.at DiagnosticCodes.UndeclaredContext span
             $"{what} the context '{ctxName}', but the type of '{defName}' says with [] that it requires no contexts: load an instance with `use`, or call something that requires none"
+        |> Diagnostics.about ctxName
     | _ ->
         Diagnostics.at DiagnosticCodes.UndeclaredContext span
             $"{what} the context '{ctxName}', which '{defName}' does not declare: add [{ctxName}] to the type of '{defName}', or load an instance with `use`"
+        |> Diagnostics.about ctxName
 
 /// `what` (which ends "requires", say) the context `ctxName` at `span`, in the value `valueName` of a named module,
 /// which cannot have one.
 let internal contextInValue (valueName: Identifier) (ctxName: Identifier) (what: string) (span: SourceSpan) =
     Diagnostics.at DiagnosticCodes.UndeclaredContext span $"{what} the context '{ctxName}', which '{valueName}' cannot have: a named module's top-level values are built without contexts, so make '{valueName}' a function"
+    |> Diagnostics.about ctxName
 
 /// The error for naming `valueName` at `span`, a value the script computes as it runs (see
 /// `InferState.ScriptEntryValues`), where it is not computed yet: in a function (`inFunction`), or before its def.
@@ -522,6 +525,7 @@ let internal scriptRunValue (valueName: Identifier) (inFunction: bool) (span: So
 let internal valueWithoutEntry (valueName: Identifier) (ctxName: Identifier) (span: SourceSpan) =
     Diagnostics.at DiagnosticCodes.UndeclaredContext span
         $"'{valueName}' needs the context '{ctxName}' to be computed, which only a script's statements run in: compute it in a statement, or make '{valueName}' a function"
+    |> Diagnostics.about ctxName
 
 /// `infer` run on `state`, but at the top level's ambient contexts where `state` is in a top-level value, a named
 /// module's or a script's: for a lambda written in the value, which building the value does not run, so the contexts

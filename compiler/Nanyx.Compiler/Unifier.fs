@@ -83,7 +83,7 @@ module Unifier =
         | StandardLibraryModule name -> $"the standard library's '{name}'"
         | InMemory -> "this module"
 
-    /// Says that two types are not the same: `Type mismatch: 'int' vs 'string'`. Two nominal types of the same name from
+    /// Says that two types are not the same: `'int' vs 'string'`, under the headline "Type mismatch". Two nominal types of the same name from
     /// different modules are written alike, so it says where each is defined.
     let private mismatchMessage left right =
         let homes =
@@ -91,7 +91,7 @@ module Unifier =
             | TyNominal(l, _, _, _), TyNominal(r, _, _, _) when l.Name = r.Name && l.Home <> r.Home ->
                 $", defined in {moduleText l.Home} and {moduleText r.Home}"
             | _ -> ""
-        $"Type mismatch: '{tyToString left}' vs '{tyToString right}'{homes}"
+        $"'{tyToString left}' vs '{tyToString right}'{homes}"
 
     /// `items`, each in single quotes, as a message lists them.
     let private quotedList (items: Ty list) =
@@ -610,7 +610,7 @@ module Unifier =
                 | TyVar v, ty
                 | ty, TyVar v ->
                     if occurs v.Id ty then
-                        Error ($"Type mismatch: '{tyToString (TyVar v)}' vs '{tyToString ty}', which contains it, so the type would be infinite", origin, TypesDiffer)
+                        Error ($"'{tyToString (TyVar v)}' vs '{tyToString ty}', which contains it, so the type would be infinite", origin, TypesDiffer)
                     else
                         if madeUpBefore v then restTaken <- true
                         let newSubst = subst |> Map.add v.Id ty

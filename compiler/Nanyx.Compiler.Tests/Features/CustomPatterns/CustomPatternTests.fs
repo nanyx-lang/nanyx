@@ -96,7 +96,7 @@ def parity = {{ n: int ->
     let code, message, text = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, code)
     Assert.Equal("match n", text)
-    Assert.Contains("missing `#Odd`", message)
+    Assert.Contains("Missing `#Odd`", message)
 
 [<Fact>]
 let ``A total pattern's tags make a match exhaustive, alone or with ordinary patterns`` () =
@@ -161,7 +161,7 @@ def describe = { (num: int) ->
     let code, message, text = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, code)
     Assert.Equal("match num", text)
-    Assert.Contains("missing a `_` arm for the values the pattern doesn't match", message)
+    Assert.Contains("Missing a `_` arm for the values the pattern doesn't match", message)
 
 [<Fact>]
 let ``A partial pattern with several tags names the tags a match leaves out, and the _ arm`` () =
@@ -182,7 +182,7 @@ def parse = { (s: string) ->
             .ReplaceLineEndings "\n"
     let code, message, _ = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, code)
-    Assert.Contains("missing `#ParseBool`, which the pattern returns too, and a `_` arm", message)
+    Assert.Contains("Missing `#ParseBool`, which the pattern returns too, and a `_` arm", message)
 
 [<Fact>]
 let ``_ as a value outside a pattern's body is an error of its own`` () =

@@ -224,7 +224,7 @@ def x: #some(int) | #notFound = #notFound
 """
     let result = Compiler.compile missing
     assertReports DiagnosticCodes.NonExhaustiveMatch result
-    Assert.Contains("missing tags: notFound", (List.head result.Diagnostics).Message)
+    Assert.Contains("Missing tags: notFound", (List.head result.Diagnostics).Message)
 
 [<Fact>]
 let ``Typecheck rejects a tag union with a rest where a string is expected`` () =
@@ -239,7 +239,7 @@ def x: #some(int) | #notFound = #notFound
 def y = takesString(x \mapSome { n -> "{n}" })"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.TypeMismatch result
-    Assert.Contains("mismatch", (List.head result.Diagnostics).Message)
+    Assert.Contains("' vs '", (List.head result.Diagnostics).Message)
 
 [<Fact>]
 let ``Typecheck joins the tags of if branches into a union`` () =
@@ -308,14 +308,14 @@ let ``Typecheck still rejects same-named tags with different payloads across bra
     let source = """def f = { c -> if c then #some(1) else #some("one") }"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.TypeMismatch result
-    Assert.Contains("mismatch", (List.head result.Diagnostics).Message)
+    Assert.Contains("' vs '", (List.head result.Diagnostics).Message)
 
 [<Fact>]
 let ``Typecheck still rejects branches of different non-tag types`` () =
     let source = """def f = { c -> if c then 1 else "one" }"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.TypeMismatch result
-    Assert.Contains("Type mismatch", (List.head result.Diagnostics).Message)
+    Assert.Contains("' vs '", (List.head result.Diagnostics).Message)
 
 [<Fact>]
 let ``Typecheck leaves the scrutinee union open when a match has a catch-all arm`` () =
@@ -381,7 +381,7 @@ let ``Typecheck joins the tags inside a list literal's tuples field by field`` (
 let ``Typecheck still rejects list elements that are same-named tags with different payloads`` () =
     let result = Compiler.compile """def f = [#some(1), #some("one")]"""
     let diagnostic = Assert.Single result.Diagnostics
-    Assert.Equal("Type mismatch: 'int' vs 'string'", diagnostic.Message)
+    Assert.Equal("'int' vs 'string'", diagnostic.Message)
 
 [<Fact>]
 let ``Typecheck joins the tag payloads of same-named tags across branches`` () =

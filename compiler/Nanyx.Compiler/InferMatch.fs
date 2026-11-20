@@ -108,7 +108,8 @@ let internal inferMatch
                         Diagnostics.at
                             DiagnosticCodes.NameBoundTwiceInPattern
                             pattern.Span
-                            $"The name '{name}' is bound by more than one part of this and-pattern: bind it in one part only" ]
+                            $"More than one part of this and-pattern binds it: bind it in one part only"
+                      |> Diagnostics.about name ]
                 | [] ->
                     let step result part =
                         result
@@ -192,7 +193,7 @@ let internal inferMatch
                 if not isolation.IsEmpty then
                     Error isolation
                 elif info.IsPrivate && not (inNominalHome state' (TypeDefInfo.nominalId info) pattern.Span) then
-                    Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule pattern.Span $"The private type '{typeName}' can only be taken apart in the module that defines it: use a function that module exports instead" ]
+                    Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule pattern.Span $"A private type can only be taken apart in the module that defines it: use a function that module exports instead" |> Diagnostics.about typeName ]
                 else
                     let nominalTy, underlying, _, instantiated = freshNominalType state' info
                     let constrained = addConstraint scrutineeTy nominalTy instantiated

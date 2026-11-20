@@ -52,7 +52,7 @@ let private checkAnnotationIsRigid (state: InferState) (name: Identifier) (span:
                 Ok ()
             else
                 let details = Diagnostics.listed problems
-                Error [ Diagnostics.at DiagnosticCodes.AnnotationTooGeneral span $"The annotation of '{name}' is more general than its inferred type, where {details}" ]
+                Error [ Diagnostics.at DiagnosticCodes.AnnotationTooGeneral span $"The annotation of '{name}' is more general than its inferred type, where {details}" |> Diagnostics.about name ]
 
 /// `item` with the ambient contexts it was inferred to require (`required`, by the def's name) in its annotation, where
 /// it is a def that does not write its type: after the parameterised contexts it was given, or on their own

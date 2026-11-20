@@ -32,6 +32,10 @@ module MatchExhaustiveness =
             let missing = $"""{written |> List.map (fun tag -> $"`#{tag}`") |> Diagnostics.listed}, which the pattern returns too"""
             if isPartial then $"missing {missing}, and {noMatch}" else $"missing {missing}"
 
+    /// `text` with its first letter a capital, as a message starts.
+    let private capitalised (text: string) =
+        if text = "" then text else string (System.Char.ToUpperInvariant text[0]) + text.Substring 1
+
     /// The error for the match whose arms are `arms`, reported at `headSpan`, given `witnesses`, a value no arm matches
     /// for each scrutinee (see `PatternSpace.missingCase`), if there is one, and the scrutinees' types `scrutineeTypes`.
     /// The value is described as the one that makes the match incomplete, or as the combination of values. The
@@ -45,15 +49,16 @@ module MatchExhaustiveness =
             let missingResult = witnesses |> List.indexed |> List.tryFind (fun (index, witness) -> columns.Contains index && witness <> PatternSpace.Anything)
             let diagnostic =
                 match missingResult with
-                | Some (_, witness) -> Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match, {patternCaseMissing witness}"
+                | Some (_, witness) -> Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan (capitalised (patternCaseMissing witness))
                 | None ->
                     match written |> List.filter (fun (_, witness) -> witness <> PatternSpace.Anything) with
                     | [ index, witness ] ->
-                        let suffix = if written.Length > 1 then $" (scrutinee {index + 1})" else ""
-                        Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match{suffix}, {PatternSpace.whatIsMissing witness}"
+                        let prefix = if written.Length > 1 then $"In scrutinee {index + 1}, " else ""
+                        Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan (capitalised (prefix + PatternSpace.whatIsMissing witness))
+                        |> Diagnostics.about (PatternSpace.show witness)
                     | _ ->
                         let missing = written |> List.map (snd >> PatternSpace.show) |> String.concat ", "
-                        Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match, missing case: {missing}"
+                        Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Missing case: {missing}"
             let fixes =
                 if columns.IsEmpty then MatchArmFixes.unplaced arms (PatternSpace.missingArms (arms |> List.map fst) (scrutineeTypes |> List.map Some))
                 else []

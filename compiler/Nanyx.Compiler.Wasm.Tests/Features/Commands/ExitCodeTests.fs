@@ -56,7 +56,7 @@ let ``Exit codes - a script with an error fails check with 1`` () =
     File.WriteAllText(Path.Combine(directory.Path, "main.nyx"), "def answer: int = \"forty-two\"\n")
     let outcome = nanyxIn directory.Path [ "check"; "main.nyx" ]
     Assert.Equal(1, outcome.ExitCode)
-    assertDiagnostic "NYX0201" "Type mismatch" "main.nyx:1:19" "Type mismatch: 'string' vs 'int'" outcome.StandardOutput
+    assertDiagnostic "NYX0201" "Type mismatch" "main.nyx:1:19" "'string' vs 'int'" outcome.StandardOutput
 
 [<Fact>]
 let ``Exit codes - a script that checks exits with 0`` () =

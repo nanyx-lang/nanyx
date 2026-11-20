@@ -159,7 +159,7 @@ let ``Constraints in front of a checkpoint give what solving them afresh does`` 
     // One that fails, which is reported where solving afresh reports it.
     let onCheckpoint, afresh =
         onCheckpointAndAfresh [ 2 ] [ (w, TyPrimitive "int", Equal, spanAt 4); (w, TyPrimitive "string", Equal, spanAt 5) ] older
-    Assert.StartsWith("Type mismatch", afresh)
+    Assert.StartsWith("'int' vs 'string'", afresh)
     Assert.Equal(afresh, onCheckpoint)
     // Constraints on its variable, which solving afresh solves first: they are not solved on top of it.
     let onCheckpoint, afresh = onCheckpointAndAfresh [ 1 ] [ (TyTag("c", None), v, Assignable, spanAt 6) ] older
@@ -177,7 +177,7 @@ let ``A union's member that fits is not blamed for a failure in a later constrai
         match Solving.unify [ tagConstraint; conflict ] with
         | Ok _ -> Assert.Fail "Expected the conflict to fail"
         | Error (message, span) ->
-            Assert.Equal("Type mismatch: 'int' vs 'string'", message)
+            Assert.Equal("'int' vs 'string'", message)
             Assert.Equal(atConflict, span)
     // With every member failing at the union itself, the union is still what is reported.
     match Solving.unify [ (TyTag("other", None), union, Assignable, atTag) ] with

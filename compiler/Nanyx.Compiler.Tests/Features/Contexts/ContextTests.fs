@@ -221,7 +221,7 @@ let ``An instance is checked against the context's members at the type it is for
     match (Compiler.compile source).Diagnostics with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
-        Assert.Equal("Type mismatch: 'int' vs 'string'", diagnostic.Message)
+        Assert.Equal("'int' vs 'string'", diagnostic.Message)
     | other -> failwith $"Expected one diagnostic, got %A{other}"
 
 [<Fact>]

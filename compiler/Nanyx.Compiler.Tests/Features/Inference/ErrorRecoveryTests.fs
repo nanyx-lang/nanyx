@@ -150,7 +150,7 @@ let ``The error type agrees with every type`` () =
 let ``Every error inside a def is reported`` () =
     let result = Compiler.compile "def f = { x ->\n  def a = missing1(x)\n  def b = missing2(x)\n  def s: string = 1\n  a + b\n}"
     Assert.Equal<string list>(
-        [ "'missing1' is not in scope"; "'missing2' is not in scope"; "Type mismatch: 'int' vs 'string'" ],
+        [ "'missing1' is not in scope"; "'missing2' is not in scope"; "'int' vs 'string'" ],
         result.Diagnostics |> List.map (fun diag -> diag.Message))
 
 [<Fact>]
@@ -217,7 +217,7 @@ def main = {
     let result = Compiler.compile source
     Assert.Equal<(string * string * int) list>(
         [ DiagnosticCodes.UnknownFunction.Code, "'missing' is not in scope", 6
-          DiagnosticCodes.TypeMismatch.Code, "Type mismatch: 'int' vs '#some(string)'", 2 ],
+          DiagnosticCodes.TypeMismatch.Code, "'int' vs '#some(string)'", 2 ],
         result.Diagnostics |> List.map (fun diag -> diag.Code, diag.Message, diag.Span.Value.StartLine))
 
 [<Theory>]
@@ -262,7 +262,7 @@ def count: () -> int = {
 """
     let source = source.ReplaceLineEndings "\n"
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
-    Assert.Equal("Type mismatch: 'string' vs 'int'", diagnostic.Message)
+    Assert.Equal("'string' vs 'int'", diagnostic.Message)
     Assert.Equal("\"x\"", textAt source diagnostic.Span.Value)
 
 [<Fact>]
@@ -280,7 +280,7 @@ def h: [Console] list(int) -> list(int) = { numbers ->
 """
     let source = source.ReplaceLineEndings "\n"
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
-    Assert.Equal("Type mismatch: 'string' vs 'int'", diagnostic.Message)
+    Assert.Equal("'string' vs 'int'", diagnostic.Message)
     Assert.Equal("\"not an int\"", textAt source diagnostic.Span.Value)
 /// The codes and messages of the diagnostics compiling `source`, after a def that fails to check, gives besides that
 /// def's own mismatch (#1483).

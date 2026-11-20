@@ -111,11 +111,13 @@ let private unsuppliedAt (state: InferState) (subject: string) (instead: string)
         | DefScope(defName, false) ->
             Diagnostics.at DiagnosticCodes.UndeclaredContext span
                 $"{subject} requires the scoped context '{context}', which '{defName}' does not declare: add [{context}] to the type of '{defName}', or {instead} inside {supplier}"
+            |> Diagnostics.about context
             |> ContextFixes.withAddToType state defName context
             |> Some
         | ValueScope valueName ->
             Diagnostics.at DiagnosticCodes.UndeclaredContext span
                 $"{subject} requires the scoped context '{context}', which the value '{valueName}' cannot have: {instead} inside {supplier}"
+            |> Diagnostics.about context
             |> Some
         | AmbientScope
         | ScriptValueScope _ ->

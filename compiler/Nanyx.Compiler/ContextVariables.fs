@@ -59,7 +59,8 @@ let ensureBound (name: Identifier) (typeOpt: TypeExpr option) : Result<unit, Dia
         unbound
         |> List.map (fun (var, span) ->
             Diagnostics.at DiagnosticCodes.UnboundContextVariable span
-                $"The context variable '{var}' is not bound: add it to the contexts of '{name}', as in '[{var}] ...'")
+                $"Nothing binds it: add it to the contexts of '{name}', as in '[{var}] ...'"
+            |> Diagnostics.about var)
         |> Error
 /// The type at each context variable of `general`'s function types that `isVariable` picks, paired with what stands at
 /// the same place in `specific`, a type of the same shape: a callee's type as it is declared, against the same type
@@ -156,6 +157,7 @@ let require
                 else
                     Error [ Diagnostics.at DiagnosticCodes.UndeclaredContext span
                                 $"'{callee}' requires the contexts '{var}', which '{defName}' does not declare: add [{var}] to the type of '{defName}'"
+                            |> Diagnostics.about var
                             |> ContextFixes.withAddToType current defName var ]
             | TyVar _, DefScope(defName, true) ->
                 let inferred = current.InferredContextVars |> Map.tryFind defName |> Option.defaultValue []

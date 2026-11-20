@@ -79,8 +79,8 @@ let ``A decimal literal past the largest F32 is an error`` () =
 [<Theory>]
 [<InlineData("def d: float = 1", "'1' is an integer literal, so it cannot be a 'float': write '1.0'", "1")>]
 [<InlineData("def d = { (x: F32) -> x * 2 }", "'2' is an integer literal, so it cannot be a 'F32': write '2.0'", "2")>]
-[<InlineData("def e: string = 2", "Type mismatch: 'int' vs 'string'", "2")>]
-[<InlineData("def f: I32 = 2.5", "Type mismatch: 'float' vs 'I32'", "2.5")>]
+[<InlineData("def e: string = 2", "'int' vs 'string'", "2")>]
+[<InlineData("def f: I32 = 2.5", "'float' vs 'I32'", "2.5")>]
 let ``A literal is not of a type of another kind`` (source: string, message: string, text: string) =
     Assert.Equal((DiagnosticCodes.TypeMismatch.Code, message, text), onlyDiagnostic source)
 
