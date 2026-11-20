@@ -28,37 +28,16 @@ version, and programs that read input. The [Nim demo](./nim-demo) is planned as 
 
 # Running a program in the page
 
-**Decided (20 November): a host of its own, `nanyx.playground`**
-([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)), a browser stand-in for the console host. The page doesn't
-fake the console host's WASI calls. Done: the host package, with `Console`, `Random` and `Clock` on its own
-imports ([Compiler internals](../compiler-internals/hosts)); still to come are the runner and the browser compiler's
-default.
+Done: programs run under a host of their own, `nanyx.playground`, a browser stand-in for the console host
+([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)). It provides `Console`, `Random`, seeded by the page, and
+`Clock`, on imports of its own that the JavaScript the package ships implements, and nothing else, so a program that
+needs `FileSystem`, HTTP, `Env` or `Async` is a compile error naming the host. Programs are source-identical: the
+compiler built for the browser runs a script under it unless the script names another host. The program runs in a web
+worker, so Stop, or a time limit, terminates the worker, and what it prints, and what its `dbg`s print, reach the page
+as it prints them. How it works is on [Hosts](../compiler-internals/hosts) in Compiler internals.
 
-- Programs are source-identical: the host provides the same `Console` context, from `nanyx.console.core`, so every
-  tour example compiles unchanged. The browser compiler makes `nanyx.playground` a script's default host.
-- The first version provides `Console` (with `readLine`), `Random`, seeded by the page, and `Clock`. It doesn't
-  provide `FileSystem`, HTTP, `Env` or `Async`: a program that needs one is a compile error naming the host, by the
-  same check as for any host. This also settles which standard library modules a page offers: all of them, with
-  the ones it can't support reported when used.
-- Its imports are its own, not WASI, and the package ships the JavaScript that implements them, as the
-  [browser host](./hosts#a-browser-host) will. It is a small rehearsal for that host.
-- `dbg` output goes to the page apart from what the program prints.
-
-What the console host's route would have needed, and the host still needs in its own way:
-
-- Done: **the toolchain writes `.wasm`.** A browser loads only the binary format. The compiler assembles its
-  WebAssembly text itself (`WasmBinary.fs`), without Wasmtime, so a browser build of the compiler can do it too, and
-  `nanyx build` and `nanyx wasm` write `.wasm` for every embedder.
-- **The program runs in the module's start function**, before the page can reach the module's memory. For the page,
-  the module exports its entry for the page to call, or imports its memory.
-- **Exiting has to unwind.** The host's exit import throws, and the code that called the entry catches it and
-  reads the exit code.
-- **Reading input blocks.** See "Input" below.
-
-The program runs in a **web worker**, not on the page's thread. A program that loops forever then can't freeze the
-page: Stop, or a time limit, terminates the worker. The worker posts what the program prints back to the page as it
-prints it, so output appears while the program runs. A trap shows as the CLI shows it, with the deferred error's
-message when that is what trapped.
+Still open: a trap shows the message the program wrote, but not the stack the CLI shows, which needs the module's table
+of places read in the page; and reading input ("Input" below).
 
 **Browsers.** The backend emits `return_call` for [tail calls](../compiler-internals/tail-calls), which Safari has had since 18.2;
 Chrome and Firefox have had it for longer. An older browser gets a message saying so instead of a broken page.
@@ -130,10 +109,12 @@ the compiler is ready, while you read the example or start typing.
   and can't start another, so in the browser it runs the work on the calling thread instead. That thread's stack is
   the runtime's, much smaller, so code nested thousands deep, which the large stack is there for, may run out of
   stack in the browser. None of the examples came near it.
-- **Files.** The compiler reads the checked library and the packages it ships (`ShippedPackages`, the console host a
+- **Files.** The compiler reads the checked library and the packages it ships (`ShippedPackages`, the host a
   program's `println` comes from) from beside itself, `AppContext.BaseDirectory`, which in the browser is the
   runtime's in-memory file system. The SDK has no way to put files there, so the page fetches them and passes each to
-  `BrowserCompiler.AddFile`, which writes it there before the first compile. The standard library's sources are
+  `BrowserCompiler.AddFile`, which writes it there before the first compile. The build lists the packages' files in
+  `package-files.txt` beside the page, which `wwwroot/compiler.js` reads, so a file added to a package is handed over
+  without anyone listing it ([#2142](https://github.com/nanyx-lang/nanyx/issues/2142)). The standard library's sources are
   embedded in the compiler, as they are for the CLI.
 - **Trimming.** Only the framework is trimmed (`TrimMode` `partial`). Reading the checked library reflects over the
   compiler's F# types, which trimming the compiler's assemblies would break. Trimming them, with what `BinaryData`
@@ -158,6 +139,9 @@ Open `http://localhost:8123/` to see the times, or `http://localhost:8123/?run=c
 the cache when it is done. `serve.mjs` serves each file with brotli and appends each load's report to `results.jsonl`
 in the directory it runs in. `Nanyx.Browser/measure.ps1` runs the rounds above: it opens the page headless in each
 browser it is given, with a fresh profile, and waits for the reports (`-Library none` leaves out the checked library).
+`http://localhost:8123/run.html` compiles a program and runs it under the playground host, and
+`node Nanyx.Browser/playground-test.mjs` is the headless test of that (see
+[Hosts](../compiler-internals/hosts) in Compiler internals).
 
 **Building it.** The docs site is built on Vercel, which has no .NET SDK, so it can't build the compiler. Proposed:
 the Compiler workflow's `Release` job publishes the browser build as a release asset, `nanyx-browser.zip`, and the
@@ -190,7 +174,7 @@ and `Cross-Origin-Embedder-Policy`) on the playground's page. Those headers rest
    [#1234](https://github.com/nanyx-lang/nanyx/issues/1234)).
 2. Done: **Write `.wasm`.** The compiler writes the binary format, for `nanyx build` too, with tests that the binary runs as
    the text does ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).
-3. **The `nanyx.playground` host** and its runner in a worker, with the entry callable by the page
+3. Done: **The `nanyx.playground` host** and its runner in a worker, with the entry callable by the page
    ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)).
 4. **Input**, through an input line in the page ([#2151](https://github.com/nanyx-lang/nanyx/issues/2151)).
 5. **The browser build as a release asset**, fetched by the docs build. Decided: the playground runs the latest

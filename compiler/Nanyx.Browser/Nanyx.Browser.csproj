@@ -41,6 +41,22 @@
     <Content Include="..\..\packages\**\*" Link="wwwroot\packages\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!--
+    The list of the shipped packages' files the page hands the compiler (#2142): written from the packages/ directory as
+    it is, so that a file added to a package is on the list without anyone listing it. One path a line, relative to the
+    page, with `/`.
+  -->
+  <Target Name="ListPackageFiles" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <_PackageFile Include="..\..\packages\**\*.nyx;..\..\packages\**\*.nyxp" />
+      <_PackageFileLine Include="@(_PackageFile->'packages/%(RecursiveDir)%(Filename)%(Extension)'->Replace('\', '/'))" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(IntermediateOutputPath)package-files.txt" Lines="@(_PackageFileLine)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Content Include="$(IntermediateOutputPath)package-files.txt" Link="wwwroot\package-files.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
   <Target Name="PublishCheckedLibraryWithPage" AfterTargets="IncludeCheckedLibrary" BeforeTargets="AssignTargetPaths">
     <!-- Through a property, so that the item has none of the writer's metadata: its OriginalItemSpec, the writer's
          project, is what the compression reads. -->

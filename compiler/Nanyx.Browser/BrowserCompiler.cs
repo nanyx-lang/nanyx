@@ -29,15 +29,37 @@ public static partial class BrowserCompiler
     }
 
     /// <summary>
-    /// Compiles <paramref name="source"/> as <c>nanyx build</c> does, and gives a JSON object: <c>wasm</c>, the binary
-    /// in base 64 (absent when there are errors), <c>diagnostics</c>, and <c>checkMs</c>, <c>emitMs</c> and
+    /// Where a page's program is, as far as the compiler is concerned: a script of its own, in a directory of the
+    /// runtime's in-memory file system that holds nothing else, so that it imports only the standard library and the
+    /// packages its directives name.
+    /// </summary>
+    private const string ScriptPath = "/playground/main.nyx";
+
+    /// <summary>
+    /// Where the packages a script's directives name are found: none but those the compiler ships, since a page
+    /// downloads no others.
+    /// </summary>
+    private static readonly PackageStore Store = new("/playground/cache", "/playground/index", GitHub.unsupported);
+
+    /// <summary>
+    /// How a page's program is compiled: its start exported, so that the runner calls it once it can read the module's
+    /// memory, and what its <c>dbg</c>s print given to the page, apart from what it writes.
+    /// </summary>
+    private static readonly CodeGen.WasmOptions Options =
+        new(checkMemory: false, @inline: true, release: false, sourceRoot: FSharpOption<string>.None, places: false, probes: false, dbgToEmbedder: true, exportStart: true);
+
+    /// <summary>
+    /// Compiles <paramref name="source"/> as <c>nanyx build</c> compiles a script, but under the playground host,
+    /// <c>nanyx.playground</c>, unless its <c>::host</c> names another; and gives a JSON object: <c>wasm</c>, the
+    /// binary in base 64 (absent when there are errors), <c>diagnostics</c>, and <c>checkMs</c>, <c>emitMs</c> and
     /// <c>assembleMs</c>, the times of parsing and checking, lowering to WebAssembly text, and assembling the binary.
+    /// The module exports its start, as <c>__nanyx_start</c>, for the playground host's runner to call.
     /// </summary>
     [JSExport]
     public static string Compile(string source)
     {
         var stopwatch = Stopwatch.StartNew();
-        var result = Compiler.compile(source);
+        var result = Script.compileUnder(Hosts.playgroundPackage, Store, ScriptPath, source);
         var checkMs = stopwatch.Elapsed.TotalMilliseconds;
         var diagnostics = result.Diagnostics.Select(d => $"{d.Code}: {Diagnostics.oneLine(d)}").ToList();
         string? wasm = null;
@@ -45,7 +67,7 @@ public static partial class BrowserCompiler
         if (FSharpOption<TypedModule>.get_IsSome(result.Typed) && !result.Diagnostics.Any(Diagnostics.isError))
         {
             stopwatch.Restart();
-            var emitted = CodeGen.tryTranspileTypedModuleWith(CodeGen.WasmOptions.Default, result.Typed.Value);
+            var emitted = CodeGen.tryTranspileTypedModuleWith(Options, result.Typed.Value);
             emitMs = stopwatch.Elapsed.TotalMilliseconds;
             if (emitted.IsError)
             {

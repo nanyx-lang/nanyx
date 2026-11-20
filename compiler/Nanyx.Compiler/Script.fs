@@ -239,8 +239,10 @@ module Script =
 
     /// The build the `::host` and `::dependency` directives of `settings` make, if there are any, for the script at
     /// `filePath`, whose imports by path, and the directories its directives give, are relative to its directory, with
-    /// the packages they name found in `store`; or what is wrong with them.
-    let private build (store: PackageStore) (filePath: string) (settings: (Directive * DirectiveSetting) list) : Result<PackageModules option, Diagnostic list> =
+    /// the packages they name found in `store`; or what is wrong with them. A script that names no host runs under the
+    /// shipped host `defaultHost`; with no directives at all under the console host, it has no build of its own, and
+    /// under any other it has one that names `defaultHost`.
+    let private build (defaultHost: string) (store: PackageStore) (filePath: string) (settings: (Directive * DirectiveSetting) list) : Result<PackageModules option, Diagnostic list> =
         let root = if filePath = "" then Directory.GetCurrentDirectory() else Path.GetDirectoryName filePath
         let notShipped (package: DirectiveWord) place =
             match place with
@@ -251,7 +253,8 @@ module Script =
         let hosts = settings |> List.choose (function directive, HostSetting(package, place) -> Some (directive, package, place) | _ -> None)
         let dependencies = settings |> List.choose (function directive, DependencySetting(package, place) -> Some (directive, package, place) | _ -> None)
         match hosts, dependencies with
-        | [], [] -> Result.Ok None
+        | [], [] when defaultHost = Hosts.consolePackage -> Result.Ok None
+        | [], [] -> Package.scriptModules defaultHost store filePath SourceSpan.none None [] [] |> Result.map Some
         | (first, _, _) :: _, _
         | [], (first, _, _) :: _ ->
             let twice =
@@ -272,13 +275,14 @@ module Script =
                 else
                     [], [], []
             match twice @ unshipped @ hostErrors @ dependencyErrors with
-            | [] -> Package.scriptModules store filePath first.Span host dependencies files |> Result.map Some
+            | [] -> Package.scriptModules defaultHost store filePath first.Span host dependencies files |> Result.map Some
             | errors -> Result.Error errors
 
     /// The directives at the top of `source`, the text of the file at `filePath` (empty for one not on disk), with the
-    /// packages they name found in `store`. In a file of a package each is an error, since the package's manifest says
-    /// these things, and they give no linters.
-    let readFrom (store: PackageStore) (filePath: string) (source: string) : ScriptDirectives =
+    /// packages they name found in `store`, for a script that runs under the shipped host `defaultHost` unless it names
+    /// another. In a file of a package each is an error, since the package's manifest says these things, and they give
+    /// no linters.
+    let readFromUnder (defaultHost: string) (store: PackageStore) (filePath: string) (source: string) : ScriptDirectives =
         let filePath = if filePath = "" then "" else Path.GetFullPath filePath
         let directives = Directives.read filePath source
         let manifest =
@@ -287,19 +291,24 @@ module Script =
             | _ when not (Directory.Exists(Path.GetDirectoryName filePath)) -> None
             | _ -> Manifest.tryFind (Path.GetDirectoryName filePath) |> Result.defaultValue None
         match manifest with
-        | _ when directives.IsEmpty -> { Linters = None; Build = None; Diagnostics = [] }
+        | Some _ when directives.IsEmpty -> { Linters = None; Build = None; Diagnostics = [] }
         | Some manifest -> { Linters = None; Build = None; Diagnostics = Package.directiveErrors manifest filePath source }
+        | None when directives.IsEmpty && defaultHost = Hosts.consolePackage -> { Linters = None; Build = None; Diagnostics = [] }
         | None ->
             let results = settings directives
             let read = results |> List.choose (function directive, Result.Ok setting -> Some (directive, setting) | _, Result.Error _ -> None)
             let linters, linterErrors = linters read
             let build, buildErrors =
-                match build store filePath read with
+                match build defaultHost store filePath read with
                 | Result.Ok build -> build, []
                 | Result.Error errors -> None, errors
             { Linters = linters
               Build = build
               Diagnostics = (results |> List.choose (function _, Result.Error diagnostic -> Some diagnostic | _, Result.Ok _ -> None)) @ linterErrors @ buildErrors }
+
+    /// `readFromUnder` for a script that runs under the console host unless it names another, as `nanyx run` runs one.
+    let readFrom (store: PackageStore) (filePath: string) (source: string) : ScriptDirectives =
+        readFromUnder Hosts.consolePackage store filePath source
 
     /// `readFrom` the user's store.
     let read (filePath: string) (source: string) : ScriptDirectives = readFrom (PackageStore.user ()) filePath source
@@ -343,6 +352,14 @@ module Script =
     /// `compileSourceReporting`, telling nobody.
     let compileSource (filePath: string) (source: string) : CompileResult =
         compileSourceReporting CompileListener.none filePath source
+
+    /// `compileSource`, for a script that runs under the shipped host `defaultHost` unless its `::host` names another,
+    /// with the packages its directives name found in `store`: as the compiler built for the browser compiles a page's
+    /// program, under the playground host.
+    let compileUnder (defaultHost: string) (store: PackageStore) (filePath: string) (source: string) : CompileResult =
+        let directives = readFromUnder defaultHost store filePath source
+        compileSourceReading CompileListener.none File.ReadAllText directives (directives.Linters |> Option.defaultValue Linters.none) filePath source
+        |> withDirectives directives
 
     /// `compileSourceReporting` for the file at `filePath` as it is on disk.
     let compileFileReporting (listener: CompileListener) (filePath: string) : CompileResult =

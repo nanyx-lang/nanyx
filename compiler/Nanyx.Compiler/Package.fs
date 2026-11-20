@@ -416,12 +416,13 @@ module Package =
             | Result.Ok _ -> Result.Ok None
         | _ -> Result.Ok None
 
-    /// The build of the script at `filePath`, which runs under the host `host` names, the console host the compiler ships
-    /// if it names none, and imports from the packages `dependencies` lists and the files from GitHub `files` lists, as
+    /// The build of the script at `filePath`, which runs under the host `host` names, the host the compiler ships as the
+    /// package `defaultHost` if it names none, and imports from the packages `dependencies` lists and the files from GitHub `files` lists, as
     /// its `::host` and `::dependency` directives say (see `Script`), found in `store`; or what is wrong with them, each
     /// at the directive it is about, or at `span` for what is about a package as a whole. A script has no lockfile yet,
     /// so a dependency named by its version is an error.
     let scriptModules
+        (defaultHost: string)
         (store: PackageStore)
         (filePath: string)
         (span: SourceSpan)
@@ -429,7 +430,7 @@ module Package =
         (dependencies: Dependency list)
         (files: FileReference list)
         : Result<PackageModules, Diagnostic list> =
-        let host = host |> Option.defaultValue { Package = Hosts.consolePackage; Path = None; Span = span; Settings = [] }
+        let host = host |> Option.defaultValue { Package = defaultHost; Path = None; Span = span; Settings = [] }
         let reached = Reached()
         let lookup = { Store = store; Locked = Lockfile.empty }
         let diagnostics problems =

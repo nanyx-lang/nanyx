@@ -7,6 +7,7 @@ on:
       - "compiler/**"
       - "!compiler/**/*.md"
       - "stdlib/**"
+      - "packages/**"
       - "examples/**"
       # One of the tests formats the docs' code blocks.
       - "docs/src/content/**/*.md"
@@ -100,6 +101,34 @@ jobs:
 
       - name: Test
         run: dotnet test ${{ env.PROJECT }} --no-build --configuration Release
+
+  # The playground host's runner, in headless Chromium: the compiler built for the browser compiles programs under the
+  # playground host, and the runner runs them in a web worker (see compiler/Nanyx.Browser/playground-test.mjs).
+  browser-test:
+    name: Browser test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Publish the compiler built for the browser
+        run: dotnet publish Nanyx.Browser/Nanyx.Browser.csproj --configuration Release
+
+      - name: Install Playwright and Chromium
+        working-directory: compiler/Nanyx.Browser
+        run: |
+          npm install --no-save playwright@1.49.1
+          npx playwright install --with-deps chromium
+
+      - name: Test
+        run: node Nanyx.Browser/playground-test.mjs
 
   # Runs alongside the tests, not after them: only a release has to wait for both.
   publish:
