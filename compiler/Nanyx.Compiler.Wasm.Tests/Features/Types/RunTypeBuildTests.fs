@@ -97,11 +97,15 @@ def decodeAt: json.Json, type a -> #some(a) | #error(string) = { j, t ->
         | #object(o) ->
           match map.get(o, "tag")
             | #some(#string(tag)) ->
+              def payload =
+                match map.get(o, "value")
+                  | #some(v) -> v
+                  | _ -> #null
               def unknown: #some(a) | #error(string) = #error("unknown tag {tag}")
               u.cases
                 \list.fold(unknown, { found, c ->
                   if c.name == tag then
-                    match decodeAt(memberOr(o, "value"), c.type)
+                    match decodeAt(payload, c.type)
                       | #some(p) -> #some(c.build(p))
                       | #error(e) -> #error(e)
                   else found
@@ -109,12 +113,6 @@ def decodeAt: json.Json, type a -> #some(a) | #error(string) = { j, t ->
             | _ -> #error("expected a tag")
         | _ -> #error("expected an object")
     | else -> #error("can't decode this type")
-}
-
-def memberOr: map(string, json.Json), string -> json.Json = { members, name ->
-  match map.get(members, name)
-    | #some(v) -> v
-    | _ -> #null
 }
 
 def decodeAll: list(json.Json), type b -> #some(list(b)) | #error(string) = { items, t ->
