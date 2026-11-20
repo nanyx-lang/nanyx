@@ -54,7 +54,9 @@ the file's name and the text as strings, says whether the runtime has dealt with
 writes `[file:line] text` to its stderr itself, as a module without the import does (`EmitContext.DbgToRuntime`). The
 runtime's handler is the host's (`Probing.defineDbg`): `WasmRunner` leaves it to the program, so that it keeps its place
 among what else the program writes to stderr, and `WasmServer` writes it to the server's log with the request it came
-from ([Hosts](../advanced/hosts#where-dbg-prints)).
+from ([Hosts](../advanced/hosts#where-dbg-prints)). A module compiled with `WasmOptions.DbgToEmbedder` imports
+`nanyx:debug` `dbg` in the same way but none of the probes' imports, for an embedder that only wants `dbg`, such as a
+page.
 
 # What it costs
 

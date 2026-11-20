@@ -78,9 +78,25 @@ type WasmOptions =
       /// build the runtime runs has, and the debugger is built on. A release build has none, and nor does a module written
       /// to a file, which another WebAssembly runtime may run. They need `Places`, to say where each probe is. A `dbg`
       /// in such a module gives what it prints to the runtime's `nanyx:debug` `dbg` too (see `EmitContext.DbgToRuntime`).
-      Probes: bool }
+      Probes: bool
+      /// Give what a `dbg` prints to the embedder's `nanyx:debug` `dbg` first, as a module with `Probes` does, but with
+      /// no probes: what a page that runs the program imports, so that `dbg` is kept apart from what the program writes
+      /// to stderr (see `EmitContext.DbgToRuntime`).
+      DbgToEmbedder: bool
+      /// Export the start function, as `CheckedExports.start`, rather than running it when the module is instantiated, so
+      /// that the embedder can reach the module's memory before the program runs, and calls it itself: what a page does,
+      /// whose imports read the text the program writes from the memory the module exports. `CheckMemory` does it too.
+      ExportStart: bool }
 
-    static member Default = { CheckMemory = false; Inline = true; Release = false; SourceRoot = None; Places = false; Probes = false }
+    static member Default =
+        { CheckMemory = false
+          Inline = true
+          Release = false
+          SourceRoot = None
+          Places = false
+          Probes = false
+          DbgToEmbedder = false
+          ExportStart = false }
 
 /// The names a module compiled with `CheckMemory` exports.
 module CheckedExports =
@@ -1164,7 +1180,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           ShownFile = if options.Places then Some(CoreIr.shownFile options.SourceRoot) else None
           TakesOver = fun name index -> CoreIrCounting.parameterUse ownership name index = Owned
           ProbeId = fun () -> (probes.Value <- probes.Value + 1; probes.Value)
-          DbgToRuntime = options.Probes }
+          DbgToRuntime = options.Probes || options.DbgToEmbedder }
 
     let specialisations = lowered.Specialisations |> Map.values |> Seq.concat |> Seq.map (fun (func, _) -> func.Name) |> Set.ofSeq
 
@@ -1203,7 +1219,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 usedHelpers.Add helper |> ignore
             functionsTouchMemory <- functionsTouchMemory || emitted.UsesMemory
             let directive =
-                if options.CheckMemory then $"""  (export "{CheckedExports.start}" (func ${CoreIrLowerInput.startFunctionName}))"""
+                if options.CheckMemory || options.ExportStart then $"""  (export "{CheckedExports.start}" (func ${CoreIrLowerInput.startFunctionName}))"""
                 else $"  (start ${CoreIrLowerInput.startFunctionName})"
             emitted.Text, directive
         | None -> "", ""
@@ -1327,7 +1343,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               $"""  (import "{CoreIrEmit.probeModule}" "enabled" (func ${CoreIrEmit.probingEnabled} (result i32)))"""
               $"""  (import "{CoreIrEmit.probeModule}" "probe" (func ${CoreIrEmit.probeCall} (param i32) (result i32)))"""
               $"""  (import "{CoreIrEmit.probeModule}" "local" (func ${CoreIrEmit.probeLocal} (param i32 i32)))"""
-          if facts.UsesDbgHelpers && options.Probes then
+          if facts.UsesDbgHelpers && (options.Probes || options.DbgToEmbedder) then
               $"""  (import "{CoreIrEmit.probeModule}" "dbg" (func ${CoreIrEmit.dbgImport} (param i32 i32 i32 i32) (result i32)))""" ]
         |> String.concat "\n"
     let probeGlobal = if facts.UsesProbes then $"  (global ${CoreIrEmit.probing} (mut i32) (i32.const 0))" else ""
