@@ -123,9 +123,40 @@ let private inProcessWith (store: NyxCompiler.PackageStore option) (github: NyxC
     finally
         File.Delete inputFile
 
-/// `inProcessWith` the user's package store.
+/// The packages from the index that the tests' programs and the docs' examples use, though the compiler doesn't ship
+/// them, so that no test needs the network: `nanyx.json` 0.1.0, the `.nyxpkg` its release on nanyx-lang/json carries
+/// (`Packages/nanyx.json-0.1.0.nyxpkg`, packed by `nanyx pack`, which packs a version the same way every time). It is
+/// listed in an index on disk, in a directory of its own, and downloaded into the store's cache once, before any test
+/// reads it, so that tests run in parallel never unpack it at the same time.
+let private packagesForTests =
+    lazy
+        (let directory = Path.Combine(Path.GetTempPath(), $"nanyx-test-index-{Guid.NewGuid():N}")
+         let store =
+             { Cache = Path.Combine(directory, "cache")
+               Index = Path.Combine(directory, "index")
+               GitHub = GitHub.cached (Path.Combine(directory, "cache")) }
+         let bytes = File.ReadAllBytes(Path.Combine(__SOURCE_DIRECTORY__, "Packages", "nanyx.json-0.1.0.nyxpkg"))
+         let sha256 = PackageArchive.sha256 bytes
+         Directory.CreateDirectory(Path.Combine(store.Index, "artifacts")) |> ignore
+         Directory.CreateDirectory(Path.Combine(store.Index, "index", "nanyx")) |> ignore
+         File.WriteAllBytes(Path.Combine(store.Index, "artifacts", "nanyx.json-0.1.0.nyxpkg"), bytes)
+         File.WriteAllText(Path.Combine(store.Index, "config.json"), """{ "format": 1, "index": "index/" }""")
+         File.WriteAllText(
+             Path.Combine(store.Index, "index", "nanyx", "nanyx.json.json"),
+             $$"""{ "name": "nanyx.json", "versions": [{ "version": "0.1.0", "url": "../../artifacts/nanyx.json-0.1.0.nyxpkg", "sha256": "{{sha256}}", "dependencies": {}, "yanked": false, "available": true }] }"""
+         )
+         let locked = { Name = "nanyx.json"; Version = (SemanticVersion.tryParse "0.1.0").Value; Sha256 = sha256; Dependencies = [] }
+         match PackageIndex.download store locked with
+         | Result.Ok _ -> store
+         | Result.Error message -> failwith message)
+
+/// The package store the tests build and run with: an index on disk and a cache of their own, with the packages from
+/// the index the tests use (see `packagesForTests`), in place of the user's.
+let testStore () : PackageStore = packagesForTests.Value
+
+/// `inProcessWith` the tests' package store (see `testStore`).
 let private inProcess (workingDirectory: string) (standardInput: string) (variables: (string * string) list) (command: Shell -> int) : RunOutcome =
-    inProcessWith None None Threading.CancellationToken.None workingDirectory standardInput variables command
+    inProcessWith (Some(testStore ())) None Threading.CancellationToken.None workingDirectory standardInput variables command
 
 /// The `nanyx` command `arguments` names, with its options, as a call of what the CLI runs for it (see `CliCommands`).
 /// Only the commands and options the tests use are read. As in the CLI, `--` ends the options: what follows it

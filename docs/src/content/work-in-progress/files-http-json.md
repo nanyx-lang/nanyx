@@ -4,7 +4,8 @@ description: "What is still open for the file system, HTTP and JSON packages"
 order: 5
 ---
 
-The file system, the HTTP client, the HTTP host and JSON are built, as shipped packages. What a program uses is in the
+The file system, the HTTP client and the HTTP host are built, as shipped packages, and JSON as `nanyx.json`, published
+to the package index from [nanyx-lang/json](https://github.com/nanyx-lang/json). What a program uses is in the
 user docs: [filesystem](../stdlib/filesystem), [file](../stdlib/file), [dir](../stdlib/dir) and [path](../stdlib/path)
 for `nanyx.fs`; [client](../stdlib/client), [http](../stdlib/http), [request](../stdlib/request) and
 [response](../stdlib/response) for `nanyx.http.core`; [The HTTP host](../advanced/hosts#the-http-host) and the

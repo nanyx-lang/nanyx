@@ -106,8 +106,6 @@
     <Compile Include="Features\Hosts\ChooseHostTests.fs" />
     <Compile Include="Features\Hosts\RunPartialHostTests.fs" />
     <Compile Include="Features\Hosts\RunScriptTests.fs" />
-    <Compile Include="Features\Json\RunJsonTests.fs" />
-    <Compile Include="Features\Json\RunJsonDecodeTests.fs" />
     <Compile Include="Features\Regex\RunRegexTests.fs" />
     <Compile Include="Features\Lists\RunListTests.fs" />
     <Compile Include="Features\Lists\RunListKeyTests.fs" />

@@ -252,8 +252,25 @@ writes ([#867](https://github.com/nanyx-lang/nanyx/issues/867), see
 4. **Projects** (`.nyxproj`, project references) when a workspace of several packages needs them
    ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
 5. **Editor support.** Resolve packages in the language server; pull from the extension.
-6. **First packages.** Publish at least one official package (`nanyx.json`, say) end to end before launch, to
-   prove the whole path.
+6. **First packages.** Publish at least one official package end to end before launch, to prove the whole path.
+   `nanyx.json` is the trial ([#867](https://github.com/nanyx-lang/nanyx/issues/867)): it is no longer shipped, and
+   lives in [nanyx-lang/json](https://github.com/nanyx-lang/json), with its tests and a CI workflow that builds them
+   with the latest released compiler. What the trial turned up so far:
+   - A script couldn't depend on a package from the index, so no script, the docs' examples among them, could use a
+     package that isn't shipped. A script now pins the exact version it uses (#2179).
+   - The docs site's reference pages are generated from the standard library and the shipped packages only, so
+     `json`, `json, decoders` and `encode` keep their guides but link to the doc comments in nanyx-lang/json for the
+     reference ([#2178](https://github.com/nanyx-lang/nanyx/issues/2178)).
+   - A script in a package's directory is one of the package's files, and a package has one `@entry`, so a package's
+     tests can't be scripts beside it. nanyx-lang/json's test runner copies the package and its test scripts to a
+     directory of their own and compares what each prints with an `.expected` file, until `nanyx test`
+     ([Testing](./testing)) replaces it.
+   - `nanyx publish` creates the GitHub release before it opens the registration pull request on the index, and a
+     second run refuses a version whose release exists. If the pull request can't be opened, for example because
+     the token can't reach nanyx-lang/packages, the publish can't be finished by running it again.
+   - The compiler's tests need the package without the network: they read the `.nyxpkg` of its release, kept beside
+     them, from an index on disk. `nanyx pack` packs a version the same way every time, so that file is the one the
+     release carries.
 # Open questions
 
 - **A custom domain and mirroring.** The index is at `https://nanyx-lang.github.io/packages/` and points at
