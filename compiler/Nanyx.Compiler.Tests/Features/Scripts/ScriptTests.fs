@@ -95,7 +95,7 @@ let private directiveError (source: string) =
 [<InlineData("::linter nanyx.lint\n::lint unusedBindings error", "NYX0009", "error", "'error' is not a value")>]
 [<InlineData("::linter nanyx.lint\n::lint unusedBindings", "NYX0009", "::lint unusedBindings", "`::lint` takes a rule of the linter above it and a severity")>]
 [<InlineData("::format lineWidth", "NYX0009", "::format lineWidth", "`::format` takes a setting and its value")>]
-[<InlineData("::colour red", "NYX0009", "colour", "Unknown directive `::colour`: the directives are `::host`, `::dependency`, `::linter`, `::lint` and `::format`")>]
+[<InlineData("::colour red", "NYX0009", "colour", "Nanyx has no directive of this name: the directives are `::host`, `::dependency`, `::linter`, `::lint` and `::format`")>]
 [<InlineData("::", "NYX0009", "::", "`::` has no directive's name after it")>]
 let ``A directive written wrong is an error at the word it is about`` (directive: string, code: string, at: string, message: string) =
     let diagnostic, text = directiveError directive

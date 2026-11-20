@@ -111,4 +111,5 @@ module PartialModules =
                             [ Diagnostics.at
                                   DiagnosticCodes.DuplicateModule
                                   span
-                                  $"'{fragments.Display span.File}' declares the module '{name}', which {shown} declares too: to split a module across files, start each with @partial module {name}, which {unmarkedShown} not" ]
+                                  $"'{fragments.Display span.File}' declares the module '{name}', which {shown} declares too: to split a module across files, start each with @partial module {name}, which {unmarkedShown} not"
+                              |> Diagnostics.about name ]

@@ -49,7 +49,7 @@ module FileImports =
         if File.Exists fullPath then
             Ok (Path.GetFullPath fullPath)
         else
-            Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"There is no file '{rawPath}' to import")
+            Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span "There is no file at this path, which is read from the importing file's directory" |> Diagnostics.about rawPath)
 
     /// The error for a file-path import with no alias, which would bring the file's exports in unqualified.
     let missingAlias (item: ImportItem) : Diagnostic option =
@@ -57,7 +57,7 @@ module FileImports =
         | PathImport path, None ->
             let stem = Path.GetFileNameWithoutExtension path
             let example = if identifier.IsMatch stem then $""": write `import "{path}" as {stem}`""" else ""
-            Some (Diagnostics.at DiagnosticCodes.PathImportWithoutAlias item.Span $"This import of a file path has no alias{example}")
+            Some (Diagnostics.at DiagnosticCodes.PathImportWithoutAlias item.Span $"An import of a file path needs an alias for what the file exports{example}" |> Diagnostics.about path)
         | _ -> None
 
     /// The errors for importing, with `item`, a file that declares the module name `name` (if any) and is `syntax` as
@@ -70,11 +70,11 @@ module FileImports =
         let named =
             match item.Source, name with
             | PathImport path, Some name ->
-                [ Diagnostics.at DiagnosticCodes.NamedModuleImportedByPath item.Span $"'{path}' declares the module name '{name}', so it is imported by its name, not by file path: write `import {name}`" ]
+                [ Diagnostics.at DiagnosticCodes.NamedModuleImportedByPath item.Span $"'{path}' declares the module name '{name}', so it is imported by its name, not by file path: write `import {name}`" |> Diagnostics.about path ]
             | _ -> []
         let entrypoint =
             if syntax |> List.exists (function Kind (Expr _) -> true | _ -> false) then
-                [ Diagnostics.at DiagnosticCodes.EntrypointImported item.Span $"'{shown}' has top-level statements, so it is an entrypoint and cannot be imported: move the definitions to share into a file without top-level statements" ]
+                [ Diagnostics.at DiagnosticCodes.EntrypointImported item.Span $"'{shown}' has top-level statements, so it is an entrypoint and cannot be imported: move the definitions to share into a file without top-level statements" |> Diagnostics.about shown ]
             else
                 []
         named @ entrypoint

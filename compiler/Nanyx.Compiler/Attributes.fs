@@ -30,7 +30,12 @@ module Attributes =
         Diagnostics.at
             DiagnosticCodes.UnexpectedAttributeArgument
             span
-            $"Attribute '@{allowAttribute}' takes the linter rules it allows, separated by commas, as `@{allowAttribute}(default/unusedBindings)`"
+            $"It takes the linter rules it allows, separated by commas, as `@{allowAttribute}(default/unusedBindings)`"
+        |> Diagnostics.about $"@{allowAttribute}"
+
+    /// The error for the attribute `name`, written at `span`, that no definition follows.
+    let private misplaced (name: Identifier) (span: SourceSpan) =
+        Diagnostics.at DiagnosticCodes.MisplacedAttribute span "It must be followed by a definition" |> Diagnostics.about $"@{name}"
 
     /// The errors in the attributes of the blocks of `module'`: only `@allow` may be written in a block, with the rules
     /// it allows, and it must be followed by a def, perhaps after other attributes. They stay where they are.
@@ -46,11 +51,11 @@ module Attributes =
                     |> Option.exists (fun statement -> match statement.Kind with DefStatement _ -> true | _ -> false)
                 let error =
                     if name <> allowAttribute then
-                        Some (Diagnostics.at DiagnosticCodes.UnknownAttribute attribute.Span $"Unknown attribute '@{name}': in a block, only '@{allowAttribute}' can come before a def")
+                        Some (Diagnostics.at DiagnosticCodes.UnknownAttribute attribute.Span $"In a block, only '@{allowAttribute}' can come before a def" |> Diagnostics.about $"@{name}")
                     elif (allowedRules argument).IsNone then
                         Some (allowArgumentError attribute.Span)
                     elif not followedByDef then
-                        Some (Diagnostics.at DiagnosticCodes.MisplacedAttribute attribute.Span $"Attribute '@{name}' must be followed by a definition")
+                        Some (misplaced name attribute.Span)
                     else
                         None
                 Option.toList error @ inBlock rest
@@ -72,7 +77,7 @@ module Attributes =
                 match next with
                 | _ when (allowedRules argument).IsNone -> [ allowArgumentError attribute.Span ]
                 | Some (Kind (Def _)) -> []
-                | _ -> [ Diagnostics.at DiagnosticCodes.MisplacedAttribute attribute.Span $"Attribute '@{name}' must be followed by a definition" ]
+                | _ -> [ misplaced name attribute.Span ]
             others, error @ errors
         | Kind (ModuleBlock(name, blockItems)) as block :: rest ->
             let blockItems, blockErrors = withoutAllows blockItems
@@ -160,7 +165,8 @@ module Attributes =
             let tag = WorkflowSyntax.keywordKinds |> List.find (snd >> (=) kind) |> fst
             Some (
                 Diagnostics.at DiagnosticCodes.KeywordMemberType span
-                    $"'{memberName}' is a `#{tag}` keyword, which passes the expression after it as a function of no parameters, so its type must be of the form {expected}")
+                    $"'{memberName}' is a `#{tag}` keyword, which passes the expression after it as a function of no parameters, so its type must be of the form {expected}"
+                |> Diagnostics.about memberName)
 
     /// The attributes written before the fields of `module'`'s record type definitions, which a type's description
     /// gives to a library (see `FieldAttribute`): each with its argument and span.
@@ -205,7 +211,8 @@ module Attributes =
                 | Some _ -> None
                 | None ->
                     Some (Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument span
-                              $"Attribute '@{name}' on a field takes literals: a string, a number, a bool or a tag, or a record or tuple of them, as in `@{name}(name = \"id\")`"))
+                              $"On a field, it takes literals: a string, a number, a bool or a tag, or a record or tuple of them, as in `@{name}(name = \"id\")`"
+                          |> Diagnostics.about $"@{name}"))
         let types = (module' |> List.collect SyntaxTree.topLevelTypes) @ (expressions |> List.collect SyntaxTree.expressionTypes)
         let misplaced =
             types
@@ -217,16 +224,17 @@ module Attributes =
                     fields |> List.choose (function TypeFieldAttribute(name, _, span) when not (onMembers.Contains span) -> Some (name, span) | _ -> None)
                 | _ -> [])
             |> List.map (fun (name, span) ->
-                Diagnostics.at DiagnosticCodes.MisplacedAttribute span $"Attribute '@{name}' can only come before a field of a record type's definition or a member of a context declaration")
+                Diagnostics.at DiagnosticCodes.MisplacedAttribute span "It can only come before a field of a record type's definition or a member of a context declaration"
+                |> Diagnostics.about $"@{name}")
         let kinds = WorkflowSyntax.keywordKinds |> List.map (fun (kind, _) -> $"`#{kind}`") |> String.concat ", "
         let onMember ((name: Identifier, argument: Expression option, span: SourceSpan), field: TypeRecordField) =
             match argument, field with
             | _ when name <> customKeywordTypeAttribute ->
-                Some (Diagnostics.at DiagnosticCodes.UnknownAttribute span $"Unknown attribute '@{name}' on a context's member")
+                Some (Diagnostics.at DiagnosticCodes.UnknownAttribute span $"A context's member can have only '@{customKeywordTypeAttribute}'" |> Diagnostics.about $"@{name}")
             | KeywordKindTag kind, TypeField(memberName, _, typeOpt, _) -> keywordTypeError span memberName kind typeOpt
             | KeywordKindTag _, _ -> None
             | Some (Kind (TagExpr(kind, None))), _ ->
-                Some (Diagnostics.at DiagnosticCodes.UnknownKeywordKind span $"Unknown keyword kind '#{kind}': the kinds are {kinds}")
+                Some (Diagnostics.at DiagnosticCodes.UnknownKeywordKind span $"The kinds are {kinds}" |> Diagnostics.about $"#{kind}")
             | _ ->
                 Some (Diagnostics.at DiagnosticCodes.UnknownKeywordKind span $"Attribute '@{name}' takes the keyword's kind, as `@{name}(#bind)`: the kinds are {kinds}")
         misplaced @ unreadable @ List.choose onMember members
@@ -241,7 +249,8 @@ module Attributes =
                 [ Diagnostics.at
                       DiagnosticCodes.DefinitionWithoutValue
                       item.Span
-                      $"'{name}' has no value: write `= value` after it, or mark it `@{Externs.attribute}(\"module\", \"name\")` to declare a foreign function" ]
+                      $"'{name}' has no value: write `= value` after it, or mark it `@{Externs.attribute}(\"module\", \"name\")` to declare a foreign function"
+                  |> Diagnostics.about name ]
             | ModuleBlock(_, blockItems) -> bodilessErrors blockItems
             | _ -> [])
 
@@ -266,9 +275,13 @@ module Attributes =
                     loop rest (imported :: acc) entries ((defName, declared, def.Span) :: externs) errors
                 | Error diagnostics -> loop rest (def :: acc) entries externs (List.rev diagnostics @ errors)
             | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute && name <> Externs.attribute ->
-                loop rest acc entries externs (Diagnostics.at DiagnosticCodes.UnknownAttribute attribute.Span $"Unknown attribute '@{name}'" :: errors)
+                let error =
+                    Diagnostics.at DiagnosticCodes.UnknownAttribute attribute.Span
+                        $"A definition can have '@{entryAttribute}', '@{Externs.attribute}' or '@{allowAttribute}'"
+                    |> Diagnostics.about $"@{name}"
+                loop rest acc entries externs (error :: errors)
             | Kind (Attribute(name, Some argument)) :: rest when name = entryAttribute ->
-                let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span $"Attribute '@{name}' takes no argument"
+                let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span "It takes no argument" |> Diagnostics.about $"@{name}"
                 loop rest acc entries externs (error :: errors)
             | Kind (Attribute(attributeName, _)) as attribute :: (Kind (Def (ValueDef(_, name, _, _))) as def) :: rest when attributeName = entryAttribute && host.IsNone ->
                 let error =
@@ -276,6 +289,7 @@ module Attributes =
                         DiagnosticCodes.EntryInLibrary
                         attribute.Span
                         $"'{name}' is an entry point, but its package names no host, so it is a library, which has none: to make it an application, name the host its `@entry` runs under in its manifest, as `host = (package = \"{Hosts.consolePackage}\", version = \"{Toolchain.version}\")`"
+                    |> Diagnostics.about name
                 loop rest (def :: acc) entries externs (error :: errors)
             | Kind (Attribute(attributeName, _)) as attribute :: (Kind (Def (ValueDef(_, name, _, value))) as def) :: rest when attributeName = entryAttribute ->
                 // The call is made up for the def, and reported there. The entry point passed to `run` is at the
@@ -291,7 +305,7 @@ module Attributes =
                       Call = SyntaxTree.ofItem call |> List.collect SyntaxTree.expressionsWithin |> List.map _.Id }
                 loop rest (def :: acc) ((entry, call) :: entries) externs (List.rev (bodilessErrors [ def ]) @ errors)
             | Kind (Attribute(name, _)) as attribute :: rest ->
-                loop rest acc entries externs (Diagnostics.at DiagnosticCodes.MisplacedAttribute attribute.Span $"Attribute '@{name}' must be followed by a definition" :: errors)
+                loop rest acc entries externs (misplaced name attribute.Span :: errors)
             | item :: rest -> loop rest (item :: acc) entries externs (List.rev (bodilessErrors [ item ]) @ errors)
         let module', allowErrors = withoutAllows module'
         match loop module' [] [] [] (List.rev (fieldAttributeErrors module')) with

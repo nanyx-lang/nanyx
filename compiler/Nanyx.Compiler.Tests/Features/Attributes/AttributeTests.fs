@@ -29,7 +29,7 @@ def main = {
 let ``Unknown attribute is an error, reported at the attribute`` () =
     let result = Compiler.compile "def g = 2\n@inline\ndef f = { 1 }"
     let diagnostic = result.Diagnostics |> List.head
-    Assert.Contains("Unknown attribute '@inline'", diagnostic.Message)
+    Assert.Equal("Unknown attribute '@inline'", Diagnostics.headline diagnostic)
     let span = diagnostic.Span.Value
     Assert.Equal((10, 17, 1, 0), (span.Start, span.End, span.StartLine, span.StartColumn))
 
@@ -46,7 +46,8 @@ let ``Entry attribute with an argument is an error, reported at the argument`` (
     let result = Compiler.compile "@entry(#now)\ndef main = { 1 }"
     let diagnostic = result.Diagnostics |> List.head
     Assert.Equal(DiagnosticCodes.UnexpectedAttributeArgument.Code, diagnostic.Code)
-    Assert.Contains("Attribute '@entry' takes no argument", diagnostic.Message)
+    Assert.Equal("Unexpected attribute argument '@entry'", Diagnostics.headline diagnostic)
+    Assert.Equal("It takes no argument", diagnostic.Message)
     let span = diagnostic.Span.Value
     Assert.Equal((7, 11), (span.Start, span.End))
 
@@ -76,7 +77,8 @@ let ``An unknown keyword kind is an error, reported at the attribute`` () =
     let source = "context C = (\n  @customKeywordType(#later)\n  step: int\n)"
     let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.UnknownKeywordKind.Code, diagnostic.Code)
-    Assert.Equal("Unknown keyword kind '#later': the kinds are `#bind`, `#bindF`, `#delay`, `#yield`", diagnostic.Message)
+    Assert.Equal("Unknown keyword kind '#later'", Diagnostics.headline diagnostic)
+    Assert.Equal("The kinds are `#bind`, `#bindF`, `#delay`, `#yield`", diagnostic.Message)
     Assert.Equal((16, 42), (diagnostic.Span.Value.Start, diagnostic.Span.Value.End))
 
 [<Theory>]
@@ -153,7 +155,7 @@ let ``An attribute on a field of a record type that is not a definition is mispl
 """
     let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.MisplacedAttribute.Code, diagnostic.Code)
-    Assert.Equal("Attribute '@json' can only come before a field of a record type's definition or a member of a context declaration", diagnostic.Message)
+    Assert.Equal("It can only come before a field of a record type's definition or a member of a context declaration", diagnostic.Message)
 
 [<Fact>]
 let ``An attribute on a field takes literals`` () =
@@ -168,4 +170,4 @@ type T = (
 """
     let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.UnexpectedAttributeArgument.Code, diagnostic.Code)
-    Assert.StartsWith("Attribute '@json' on a field takes literals", diagnostic.Message)
+    Assert.StartsWith("On a field, it takes literals", diagnostic.Message)

@@ -179,7 +179,8 @@ let ``A library, a package with no host, checks and builds, but running it is an
     assertSucceeded (onLibrary files "build")
     let run = onLibrary files "run"
     Assert.Equal(1, run.ExitCode)
-    Assert.Contains("error NYX0045: 'acme.util' names no host, so it is a library, which can't be run", run.StandardError)
+    Assert.Contains("error NYX0045: Package with nothing to run 'acme.util'", run.StandardError)
+    Assert.Contains("= It names no host, so it is a library, which can't be run", run.StandardError)
 
 [<Theory>]
 [<InlineData("check")>]

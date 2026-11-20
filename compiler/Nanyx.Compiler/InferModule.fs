@@ -419,7 +419,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         // A block is a module, not a program, so it has no top-level code.
         | Expr expr when (blockAround state.ModuleBlocks expr.Span).IsSome ->
             let blockName = fst (blockAround state.ModuleBlocks expr.Span).Value
-            errors <- errors @ [ Diagnostics.at DiagnosticCodes.CodeInModuleBlock expr.Span $"Module '{blockName}' is a block, which can only hold definitions, types and imports, not code to run" ]
+            errors <- errors @ [ Diagnostics.at DiagnosticCodes.CodeInModuleBlock expr.Span $"'{blockName}' is a module block, which can only hold definitions, types and imports, not code to run" |> Diagnostics.about blockName ]
         | Expr expr ->
             match inferExpr env state expr with
             | Ok (typedExpr, next) ->
