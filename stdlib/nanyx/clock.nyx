@@ -1,0 +1,20 @@
+--| Time: a function that reads the time requires [`Clock`], and calls its members.
+
+  A host provides `Clock` to the program's entry point, as it provides `Console`: the console and
+  HTTP hosts read the operating system's clocks. A `use` of `Clock(now = ..., ticks = ...)` makes
+  any other, such as one that gives a test the time it needs.
+
+  The hosts' preludes make `now` and `ticks` names every module of a program sees; a library that
+  names `Clock` imports it with `import nanyx/clock as (Clock)`.
+module clock
+
+--| The time. A host supplies one; a `use` of `Clock(...)` makes any other.
+export context Clock = (
+  --| The time of day, as wall clocks read it: milliseconds since the start of 1970, UTC (Unix
+    time). It can jump, forwards or backwards, when the system's clock is set, so use [`ticks`]
+    to time something.
+  now: () -> int
+  --| Milliseconds since a start the host chooses, which never go backwards: the time between two
+    calls is how long passed between them. Only differences between its values mean anything.
+  ticks: () -> int
+)

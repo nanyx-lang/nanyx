@@ -126,6 +126,31 @@ def main: Request -> Response = { request ->
     Assert.DoesNotContain("dbg", outcome.StandardOutput)
 
 [<Fact>]
+let ``A handler reads the time through the host's Clock`` () =
+    use directory = new TempDirectory()
+    let port = freePort ()
+    writePackage directory.Path port """module main
+
+@entry
+def main: [Clock] Request -> Response = { _ ->
+  def start = ticks()
+  Response.text(200, "{now()} {ticks() >= start}")
+}
+"""
+    let before = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+    let outcome =
+        serving directory.Path port (fun client ->
+            let status, body = get client "/time"
+            let after = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            Assert.Equal(200, status)
+            match body.Split ' ' with
+            | [| time; rising |] ->
+                Assert.InRange(Int64.Parse time, before - 1000L, after + 1000L)
+                Assert.Equal("true", rising)
+            | _ -> Assert.Fail $"Unexpected body: {body}")
+    Assert.Equal(0, outcome.ExitCode)
+
+[<Fact>]
 let ``A handler makes requests of its own, through Http`` () =
     use directory = new TempDirectory()
     let port = freePort ()

@@ -31,8 +31,8 @@ instance: in a request handler, the HTTP host answers other requests meanwhile.
   want a constructor of that name as much as a client wants a reader. Both packages are built now, so this is open.
 - **Route patterns.** There is no `#Path('/hello/{name}')` pattern yet, which [Serving HTTP](./hosts#serving-http)
   sketches; the cookbook splits the path and matches the parts with a list pattern.
-- **More contexts for the HTTP host.** It provides `Http` only. `Env`, `Log` and `Clock`, which
-  [Hosts](./hosts#serving-http) lists, aren't provided: `Clock` and `Log` don't exist yet, and `Env`'s members are
+- **More contexts for the HTTP host.** It provides `Http`, `Random` and `Clock`. `Env` and `Log`, which
+  [Hosts](./hosts#serving-http) lists, aren't provided: `Log` doesn't exist yet, and `Env`'s members are
   written in the console host's root module, which another host can't share
   ([#1816](https://github.com/nanyx-lang/nanyx/issues/1816) is the start of that).
 - **Serving more widely.** A server bound to other addresses than `localhost`, streamed bodies, and serving as a

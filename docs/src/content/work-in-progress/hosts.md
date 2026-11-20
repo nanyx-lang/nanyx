@@ -55,7 +55,7 @@ A host provides the contexts the program's entry may require, and only those. Th
 
 | Host | Entry shape | Provides |
 | --- | --- | --- |
-| `ConsoleHost` | `() -> ()` | `Console & Env & FileSystem & Http & Random`; `Clock` as it is added |
+| `ConsoleHost` | `() -> ()` | `Console & Env & FileSystem & Http & Random & Clock` |
 | HTTP host | `Request -> Response` | `Log & Clock & Env & Random & Http` (see [Serving HTTP](#serving-http)) |
 | Browser host | a record of `init`, `update` and `view` | `Dom & Fetch & Clock & Log` |
 | Plugin / sandbox host | host-defined | only what the embedder grants |
@@ -271,9 +271,10 @@ The composite host runs each part under the right sub-host and coordinates start
 Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host (#1247), hosts on foreign functions
 (#1424, #1425, #1426), and any package as a host, with `::host` and `::dependency` (#1344, #1504).
 
-1. **More contexts for the console host**, as they are added: `Clock`. [`Random`](../stdlib/random) is done
-   ([#1237](https://github.com/nanyx-lang/nanyx/issues/1237)), and so is `FileSystem` ([Files, HTTP and JSON](./files-http-json), [#1783](https://github.com/nanyx-lang/nanyx/issues/1783)),
-   and so is `Http` ([#1785](https://github.com/nanyx-lang/nanyx/issues/1785)).
+1. Done: **more contexts for the console host**: [`Random`](../stdlib/random)
+   ([#1237](https://github.com/nanyx-lang/nanyx/issues/1237)), `FileSystem` ([Files, HTTP and JSON](./files-http-json), [#1783](https://github.com/nanyx-lang/nanyx/issues/1783)),
+   `Http` ([#1785](https://github.com/nanyx-lang/nanyx/issues/1785)) and [`Clock`](../stdlib/clock), which the HTTP
+   host provides too. `Clock` has no `sleep` yet, which belongs with `Async`.
 2. **Console in a page**, for the [playground](./playground): what is left in "Console programs in a page" above;
    writing `.wasm` ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)) and the host itself are done
    ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)).
