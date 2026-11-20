@@ -30,8 +30,8 @@ version, and programs that read input. The [Nim demo](./nim-demo) is planned as 
 
 **Decided (20 November): a host of its own, `nanyx.playground`**
 ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)), a browser stand-in for the console host. The page doesn't
-fake the console host's WASI calls. Done: the host package, with `Console` and `Random` on its own imports
-([Compiler internals](../compiler-internals/hosts)); still to come are `Clock`, the runner and the browser compiler's
+fake the console host's WASI calls. Done: the host package, with `Console`, `Random` and `Clock` on its own
+imports ([Compiler internals](../compiler-internals/hosts)); still to come are the runner and the browser compiler's
 default.
 
 - Programs are source-identical: the host provides the same `Console` context, from `nanyx.console.core`, so every

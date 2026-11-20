@@ -1,5 +1,5 @@
-/// The playground host, `nanyx.playground`, a stand-in for the console host in a web page, which provides `Console` and
-/// `Random` and nothing else (#2150, see docs/src/content/compiler-internals/hosts.md).
+/// The playground host, `nanyx.playground`, a stand-in for the console host in a web page, which provides `Console`,
+/// `Random` and `Clock` and nothing else (#2150, see docs/src/content/compiler-internals/hosts.md).
 module Nanyx.Compiler.Tests.Features.Hosts.PlaygroundHost
 
 open Xunit
@@ -13,7 +13,7 @@ let private diagnosticsOf (source: string) =
     (Script.compileSource path source).Diagnostics
 
 [<Fact>]
-let ``A console program that prints and draws random numbers compiles unchanged under the playground host, with the host's linters clean`` () =
+let ``A console program that prints, draws random numbers and reads the clock compiles unchanged under the playground host, with the host's linters clean`` () =
     let source =
         withFinalNewline """::host nanyx.playground
 
@@ -23,6 +23,7 @@ import nanyx/random as random
 def main = {
   println("Hello, world!")
   eprintln(random.between(1, 6))
+  println(now() + ticks())
 }"""
     Assert.Empty(diagnosticsOf source)
 
@@ -41,7 +42,7 @@ def main: [Console, Env] () -> () = { println("hi") }"""
         Assert.Equal(DiagnosticCodes.EntryDoesNotFitHost.Code, diagnostic.Code)
         Assert.StartsWith(
             """It doesn't fit the host 'nanyx.playground/playground.host'
-  expected: [Console, Random] () -> a
+  expected: [Clock, Console, Random] () -> a
 """.ReplaceLineEndings "\n",
             diagnostic.Message)
     | diagnostics -> Assert.Fail $"Expected one error, got %A{diagnostics}"
