@@ -8,6 +8,79 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.30.0
+
+*20 November 2026*
+
+A release about types you can look at and a parser you can build on. Functions take types as arguments, a `Type` can
+be matched on, and records and unions can be built from their descriptions, which is enough to write a generic JSON
+encoder and decoder in Nanyx. `dbg` says where it was called and goes to the host, crashes print a stack with file and
+line, and `nanyx run --profile` writes a profile. The parser is new: a lexer, a layout pass and a recursive-descent
+parser replace FParsec. Floats are no longer boxed, and the first compile of a program is faster. Several changes break
+existing code; they are marked below.
+
+**Language**
+
+- Type arguments: a function can take a type, as `type a`, and inspect it with a `match` on a `Type`; a record or a
+  union case can be built from its description with `build` ([Type arguments](../tour/functions#type-arguments),
+  [Inspecting a type](../tour/functions#inspecting-a-type), [Building a value](../tour/functions#building-a-value)).
+- `Typed(a)`: the compiler gives an instance for every type ([Typed(a)](../advanced/contexts#typeda)).
+- An associated type is also a type argument, `type Iter(c).elem`, and signatures write associated types by name, as
+  `Iter(c, elem = string)` ([Associated types](../advanced/contexts#associated-types)).
+- `Iterable(c)` in the prelude: a `for` loop walks anything `Iterable`, and a slice, a set, a `seq` or anything
+  `Iterable` can be spread into a collection literal ([Loops](../tour/loops)).
+- A structural type can be protected or private, with a constructor
+  ([Protected types](../advanced/nominal-and-protected-types#protected-types)).
+- A def that writes its type can call itself at other types
+  ([Type inference](../tour/type-inference-and-annotations)).
+- `export m` re-exports a whole module, and a file can re-export one of its own `module name =` blocks, which can
+  also be nested ([Re-exporting](../tour/modules#re-exporting)).
+- An `@extern` function can be passed as a value.
+- **This breaks code** that calls a parameter needing a scoped context without supplying it: that is now `NYX0211`,
+  unless the def loads an instance with `use` ([Contexts](../advanced/contexts)).
+- **This breaks code** with a match arm for a tag the matched union doesn't have: it is now a type error, with a fix
+  that removes the arm ([Pattern matching](../tour/pattern-matching)).
+- **This breaks code** that imports a block's names selectively and relies on getting the rest: only the named ones
+  come in, and an unknown one is `NYX0104`.
+- Parse errors come from the new parser. Where the old one had a focused message, the text and place are the same;
+  elsewhere, an error names what was expected and what was found, as ``Expected `]`, found `xs` ``.
+
+**Standard library**
+
+- `nanyx.regex`, a linear-time regular expression engine written in Nanyx, with `#Matches` and `#MatchesRegex` for
+  regexes in match arms ([Regex](../stdlib/regex)).
+- A `Random` context, supplied by the hosts and seedable ([Random](../stdlib/random)).
+- `seq` has every function `list` has. **This breaks code** that calls `concatMap`: it is `flatMap`
+  ([Sequences](../stdlib/prelude-sequences)).
+
+**Tools**
+
+- `dbg` prints the file and line it was called from, and release builds strip it. It goes to the host: the console
+  host writes it to stderr, the HTTP host to its log with the request. **This breaks** anything that read `dbg`
+  output from stdout ([Debug and release builds](../tour/error-handling#debug-and-release-builds)).
+- A crash, a deferred error or a runtime error prints the stack, with each frame's file and line.
+- `nanyx run --profile <file>` samples the run and writes a profile for the Firefox profiler, with each function's
+  file and line ([`nanyx run`](../standard-tools/command-line#nanyx-run)).
+- The linter reports a value that a `for` loop's body ends with as unused
+  ([Official linter](../standard-tools/official-linter)).
+- Rename a `module name =` block.
+- `NANYX_PARSER=fparsec` switches back to the old parser, for this release only.
+
+**Performance**
+
+- A `float` is an `f64` and an `F32` an `f32`, not a box on the heap: float arithmetic allocates nothing.
+- The checked standard library is read a module at a time, only when it is imported, and carries its exports: the
+  first compile of a one-line program allocates 146 MB instead of 261 MB, and `nanyx check` of it is about 25% faster.
+
+**Fixes**
+
+- A function that requires a parameterised context, named as a value, finds its instance when only the def's
+  annotation settles its type, instead of crashing the backend.
+- A match whose arms join a tag with a named union type checks whichever arm comes first, and no longer leaks memory
+  when a `map.get` match is followed by a call with a lambda.
+- A module block nested in a module block parses, and the outer block's later items stay in the outer module.
+- A package module with a parse error reports that error.
+
 # 0.29.0
 
 *17 November 2026*
