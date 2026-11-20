@@ -78,7 +78,7 @@ let internal ensureAttachedTypeExists (state: InferState) (currentModuleOpt: str
             if firstDot = lastDot then
                 match currentModuleOpt with
                 | Some currentModule when currentModule = candidateTypeName -> Ok ()
-                | _ -> Error [ Diagnostics.at DiagnosticCodes.UnknownAttachedType span $"Unknown attached type '{candidateTypeName}' for definition '{name}'" ]
+                | _ -> Error [ Diagnostics.at DiagnosticCodes.UnknownAttachedType span $"'{name}' is attached to '{candidateTypeName}', which names no type in scope" |> Diagnostics.about candidateTypeName ]
             else
                 Ok ()
 
@@ -130,8 +130,8 @@ let internal unknownMember (env: TypeEnv) (span: SourceSpan) (receiver: string o
         | _ -> false
     let missing =
         match receiver with
-        | Some name when isRecord ty -> $"Record '{name}' has no member '{memberName}'"
-        | None when isRecord ty -> $"Unknown member '{memberName}'"
+        | Some name when isRecord ty -> $"The record '{name}' has no member '{memberName}'"
+        | None when isRecord ty -> $"The record has no member '{memberName}'"
         | _ -> $"'{Unifier.tyToString ty}' has no property '{memberName}'"
     let message =
         match tryResolveAttachedFunction env ty memberName with
@@ -139,7 +139,7 @@ let internal unknownMember (env: TypeEnv) (span: SourceSpan) (receiver: string o
             let piped = receiver |> Option.defaultValue "x"
             $"{missing}, but '{attached}' is attached to its type: call it with a pipe, as in `{piped} \\{memberName}`"
         | None -> missing
-    Diagnostics.at DiagnosticCodes.UnknownMember span message
+    Diagnostics.at DiagnosticCodes.UnknownMember span message |> Diagnostics.about memberName
 
 /// The alias `name`, defined by `info`, written without arguments: a generic one is applied to its own parameters.
 let private aliasType (name: string) (info: TypeDefInfo) : Ty =
@@ -503,9 +503,11 @@ let private unknownTypeErrors (state: InferState) (parameters: Set<Identifier>) 
             if own.Length > 1 && System.Char.IsLower own[0] then
                 Diagnostics.at DiagnosticCodes.InvalidTypeName span
                     $"'{typeName}' is not a type: a type's name starts with a capital letter, and a lowercase name longer than one letter is reserved for associated types"
+                |> Diagnostics.about typeName
             else
                 Diagnostics.at DiagnosticCodes.UnknownType span
-                    ($"Unknown type '{typeName}'" + StandardLibraryImports.hint state.StandardLibraryExports.Value typeName))
+                    ($"'{typeName}' is not in scope" + StandardLibraryImports.hint state.StandardLibraryExports.Value typeName)
+                |> Diagnostics.about typeName)
     let outside =
         named
         |> List.choose (fun (name, span) -> tryFindTypeDef name state |> Option.map (fun info -> name, info, span))

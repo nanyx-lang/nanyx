@@ -35,7 +35,7 @@ let ``An importer does not get what the module imports but does not re-export`` 
     let source = "module main\nimport c\ndef value = triple(1)"
     let diagnostic = Assert.Single((compileImportingAll modules source).Diagnostics)
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, diagnostic.Code)
-    Assert.Equal("Unknown function 'triple'", diagnostic.Message)
+    Assert.Equal("'triple' is not in scope", diagnostic.Message)
 
 [<Fact>]
 let ``A selection can name what a module re-exports`` () =

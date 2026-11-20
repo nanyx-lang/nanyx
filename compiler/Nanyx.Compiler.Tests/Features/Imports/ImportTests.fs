@@ -54,13 +54,13 @@ import csvParser
 import jsonParser
 def data = parse("x")""")
     assertReports DiagnosticCodes.AmbiguousName result
-    Assert.Contains("'parse' is ambiguous between 'csvParser.parse' and 'jsonParser.parse'", (result.Diagnostics |> List.head).Message)
+    Assert.Contains("It could be 'csvParser.parse' or 'jsonParser.parse'", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]
 let ``A name two imports export is ambiguous as a value too`` () =
     let result = compileImportingAll csvAndJson "module main\nimport csvParser\nimport jsonParser\ndef f = parse"
     assertReports DiagnosticCodes.AmbiguousName result
-    Assert.Contains("'parse' is ambiguous", (result.Diagnostics |> List.head).Message)
+    Assert.Contains("It could be 'csvParser.parse'", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]
 let ``A name two imports export is not an error when unused`` () =
@@ -179,7 +179,7 @@ import one
 import two
 def a = "x" \ shout""")
     assertReports DiagnosticCodes.AmbiguousAttachedFunction result
-    Assert.Contains("'string.shout' is defined in 'one' and 'two'", (result.Diagnostics |> List.head).Message)
+    Assert.Contains("'string.shout', which is defined in 'one' and 'two'", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]
 let ``Import does not bring private definitions into scope`` () =

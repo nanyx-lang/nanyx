@@ -29,4 +29,4 @@ let definitionErrors (declared: DeclaredNames) : Diagnostic list =
                 $"'{name}' is a built-in type, so it cannot be defined again: a type's name starts with a capital letter"
             else
                 $"'{name}' cannot be a type's name, which starts with a capital letter: write '{capitalised name}'"
-        Diagnostics.at DiagnosticCodes.InvalidTypeName span message)
+        Diagnostics.at DiagnosticCodes.InvalidTypeName span message |> Diagnostics.about name)

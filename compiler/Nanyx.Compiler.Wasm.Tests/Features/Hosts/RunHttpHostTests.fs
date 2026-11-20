@@ -158,7 +158,7 @@ def main: Request -> Response = { request ->
 """
     let outcome = nanyxIn directory.Path [ "check" ]
     Assert.Equal(1, outcome.ExitCode)
-    assertDiagnostic "NYX0102" "Unknown function" "" "Unknown function 'println'" (outcome.StandardOutput + outcome.StandardError)
+    assertDiagnostic "NYX0102" "Unknown function 'println'" "" "'println' is not in scope" (outcome.StandardOutput + outcome.StandardError)
 
 [<Theory>]
 [<InlineData("(colour = \"red\")", "NYX0021", "The host 'nanyx.http' takes no setting 'colour': it takes port")>]

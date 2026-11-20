@@ -43,6 +43,7 @@ let check (declared: DeclaredNames) (module': TopLevelItem list) : TopLevelItem 
                     errors <-
                         errors
                         @ [ Diagnostics.at DiagnosticCodes.DuplicateDefinition span $"The {kind} '{name}' is already defined in this module"
+                            |> Diagnostics.about name
                             |> Diagnostics.withRelated firstSpan $"'{name}' is first defined here" ]
                     false)
     kept, errors

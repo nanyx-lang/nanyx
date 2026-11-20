@@ -334,8 +334,8 @@ let internal ensureContextsExist (state: InferState) (name: Identifier) (span: S
     | unknown ->
         unknown
         |> List.map (fun (ctxName, at) ->
-            let message = $"Unknown context '{ctxName}' in the signature of '{name}'" + StandardLibraryImports.hint state.StandardLibraryExports.Value ctxName
-            Diagnostics.at DiagnosticCodes.UnknownContext (at |> Option.defaultValue span) message)
+            let message = $"The signature of '{name}' names it, but it is not in scope" + StandardLibraryImports.hint state.StandardLibraryExports.Value ctxName
+            Diagnostics.at DiagnosticCodes.UnknownContext (at |> Option.defaultValue span) message |> Diagnostics.about ctxName)
         |> Error
 
 /// Whether each type variable a context in `typeOpt`, the annotation of `name`, is applied to is written in its type

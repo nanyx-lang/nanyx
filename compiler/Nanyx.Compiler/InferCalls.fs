@@ -89,7 +89,7 @@ let internal inferCall
                         match update with
                         | NamedField(fieldName, valueExpr) ->
                             match fields |> Map.tryFind fieldName with
-                            | None -> errors <- errors @ [ Diagnostics.at DiagnosticCodes.UnknownMember valueExpr.Span $"Record has no member '{fieldName}' to update" ]
+                            | None -> errors <- errors @ [ Diagnostics.at DiagnosticCodes.UnknownMember valueExpr.Span $"The record has no member '{fieldName}' to update" |> Diagnostics.about fieldName ]
                             | Some fieldTy ->
                                 match inferExpr env current valueExpr with
                                 | Ok (typedValue, next) -> current <- addConstraintAt valueExpr.Span typedValue.Type fieldTy next
@@ -422,5 +422,5 @@ let internal inferCall
                         | Some attached ->
                             $"'{receiver}' is a value, so '{name}' is not a function's name, but '{attached}' is attached to its type: call it with a pipe, as in `{receiver} \\{memberName}(...)`"
                         | None -> $"'{receiver}' is a value, so '{name}' is not a function's name, and '{Unifier.tyToString receiverTy}' has no '{memberName}' attached"
-                    Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message ]
-                | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" env.Names.Keys name ]
+                    Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message |> Diagnostics.about name ]
+                | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownFunction calleeSpan $"'{name}' is not in scope" env.Names.Keys name ]

@@ -113,4 +113,4 @@ let ``A type parameter has no default`` () =
 [<Fact>]
 let ``type names a type that exists`` () =
     let error = onlyError DiagnosticCodes.UnknownType (withDecode "\ndef t = type Pointt\n")
-    Assert.StartsWith("Unknown type 'Pointt'", error.Message)
+    Assert.StartsWith("'Pointt' is not in scope", error.Message)

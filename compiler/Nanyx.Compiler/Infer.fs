@@ -193,7 +193,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     | IdentifierExpr name
     | FunctionCall(name, _, _) when WorkflowMembers.isMissing env state expr.Id name -> Error [ WorkflowMembers.missing state expr.Id name ]
     | IdentifierExpr name when name = Parser.Program.ImplicitNames.notImplemented ->
-        Error [ Diagnostics.at DiagnosticCodes.NotImplemented expr.Span "Not implemented: `???` stands for code not written yet" ]
+        Error [ Diagnostics.at DiagnosticCodes.NotImplemented expr.Span "`???` stands for code not written yet" ]
     | IdentifierExpr name ->
         match TypeEnv.tryFind name env with
         | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
@@ -245,7 +245,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 // A function named as a value is checked as a call to it would be, at the type it is passed as.
                 checkComparisonsAt env next expr name expr.Span ty
                 |> Result.map (fun next -> mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name)
-        | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownIdentifier expr.Span $"'{name}' is not in scope" env.Names.Keys name |> Diagnostics.about name ]
+        | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownIdentifier expr.Span $"'{name}' is not in scope" env.Names.Keys name ]
     | SpreadSyntax.Call parts -> RecordSpread.infer inferExpr env state expr parts
     | FunctionCall(name, spanOpt, args) -> InferCalls.inferCall inferExpr inferLambdaWithExpected env (ExpectedLiterals.intoMapEntries state expr) expr name spanOpt args
     | Lambda(args, body, _) ->

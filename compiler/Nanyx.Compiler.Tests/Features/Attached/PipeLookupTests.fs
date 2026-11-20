@@ -124,7 +124,7 @@ import two
 def a = "x" \shout"""
     let code, message, at = onlyDiagnosticIn source (compileImportingAll shoutingModules source)
     Assert.Equal(DiagnosticCodes.AmbiguousAttachedFunction.Code, code)
-    Assert.Equal("'shout' is ambiguous for 'string': 'string.shout' is defined in 'one' and 'two': import all but one of them with `as`", message)
+    Assert.Equal("For a 'string', it is 'string.shout', which is defined in 'one' and 'two': import all but one of them with `as`", message)
     Assert.Equal("shout", at)
 
 [<Fact>]
@@ -133,4 +133,4 @@ let ``A pipe on a value whose type has no name keeps the unknown function error`
 def t = r \shout"""
     let code, message, _ = onlyDiagnosticIn source (Compiler.compile source)
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
-    Assert.Equal("Unknown function 'shout'", message)
+    Assert.Equal("'shout' is not in scope", message)

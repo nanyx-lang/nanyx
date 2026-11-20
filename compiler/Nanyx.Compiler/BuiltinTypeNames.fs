@@ -32,7 +32,7 @@ module internal BuiltinTypeNames =
 
     /// The error for `written`, which is not a type, at `span`, with the fix that writes `alias`.
     let private error (span: SourceSpan) (written: string) (alias: string) : Diagnostic =
-        { Diagnostics.at DiagnosticCodes.NotABuiltInType span $"'{written}' is not a type: write '{alias}'" with
+        { (Diagnostics.at DiagnosticCodes.NotABuiltInType span $"A built-in type's name is in lower case: write '{alias}'" |> Diagnostics.about written) with
             Fixes = [ { Title = $"Write `{alias}`"; Edits = [ { Span = span; NewText = alias } ] } ] }
 
     /// The part of `span`, where `name` is written, that its `length` characters from `offset` are written at.

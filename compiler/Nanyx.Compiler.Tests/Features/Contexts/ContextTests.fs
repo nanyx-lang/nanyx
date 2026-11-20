@@ -22,7 +22,7 @@ let ``Typecheck rejects an unknown context in a signature`` () =
 def greet: [Bogus] string -> () = { name -> p(name) }"""
     let result = Compiler.compile source
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-    Assert.Contains("Unknown context 'Bogus' in the signature of 'greet'", message)
+    Assert.Contains("The signature of 'greet' names it, but it is not in scope", message)
 
 [<Fact>]
 let ``Typecheck rejects an unknown context in a local signature`` () =
@@ -33,7 +33,7 @@ let ``Typecheck rejects an unknown context in a local signature`` () =
 }"""
     let result = Compiler.compile source
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-    Assert.Contains("Unknown context 'Bogus' in the signature of 'greet'", message)
+    Assert.Contains("The signature of 'greet' names it, but it is not in scope", message)
 
 [<Fact>]
 let ``Typecheck rejects missing context members`` () =
@@ -43,7 +43,7 @@ def sayHello = { log("hi") }"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.UnknownFunction result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-    Assert.Contains("Unknown", message)
+    Assert.Contains("is not in scope", message)
 
 [<Fact>]
 let ``Typecheck allows use statement to bring members into scope`` () =

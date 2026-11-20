@@ -18,7 +18,7 @@ let private repeated (declared: DeclaredNames) (fields: Field list) : Diagnostic
     fields
     |> List.fold (fun (seen, errors) (name, holder, span) ->
         if Set.contains name seen then
-            seen, errors @ [ Diagnostics.at DiagnosticCodes.DuplicateField (nameSpan holder span) $"'{name}' is named twice in this record" ]
+            seen, errors @ [ Diagnostics.at DiagnosticCodes.DuplicateField (nameSpan holder span) $"'{name}' is named twice in this record" |> Diagnostics.about name ]
         else
             Set.add name seen, errors) (Set.empty, [])
     |> snd

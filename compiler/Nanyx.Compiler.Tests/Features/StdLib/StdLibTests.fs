@@ -132,7 +132,7 @@ let ``Standard library private helpers are not imported`` () =
 
 def bad = indexFrom("abc", "b", 0)""")
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-    Assert.Contains("Unknown function 'indexFrom'", message)
+    Assert.Contains("'indexFrom' is not in scope", message)
 
 [<Fact>]
 let ``Compiler intrinsics are not in scope in user code`` () =
@@ -140,7 +140,7 @@ let ``Compiler intrinsics are not in scope in user code`` () =
 
 def bad = __nanyx_string_length("abc")""")
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-    Assert.Contains("Unknown function '__nanyx_string_length'", message)
+    Assert.Contains("'__nanyx_string_length' is not in scope", message)
 
 [<Fact>]
 let ``Calling an intrinsic from user code is an unknown name with no suggestion`` () =
@@ -150,8 +150,8 @@ def typo = __nanyx_exti(1)
 """
     let result = Compiler.compile (source.ReplaceLineEndings "\n")
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.UnknownFunction.Code, "Unknown function '__nanyx_exit'"
-          DiagnosticCodes.UnknownFunction.Code, "Unknown function '__nanyx_exti'" ],
+        [ DiagnosticCodes.UnknownFunction.Code, "'__nanyx_exit' is not in scope"
+          DiagnosticCodes.UnknownFunction.Code, "'__nanyx_exti' is not in scope" ],
         result.Diagnostics |> List.map (fun diagnostic -> diagnostic.Code, diagnostic.Message))
     Assert.All(result.Diagnostics, fun diagnostic -> Assert.Empty diagnostic.Fixes)
 
@@ -185,7 +185,7 @@ def called = string.trim(s)""")
     Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["called"])
     let bare = Compiler.compile (normalized """import nanyx/text
 def x = trim(" a ")""")
-    Assert.Contains("Unknown function 'trim'", (List.head bare.Diagnostics).Message)
+    Assert.Contains("'trim' is not in scope", (List.head bare.Diagnostics).Message)
 
 [<Fact>]
 let ``Unknown standard library module is an error`` () =
