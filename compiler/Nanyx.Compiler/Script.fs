@@ -268,7 +268,12 @@ module Script =
                 let atEnd = { package.Span with Start = package.Span.End; StartColumn = package.Span.StartColumn + length }
                 [ { diagnostic with Fixes = [ { Title = $"Use {package.Text} {version}"; Edits = [ { Span = atEnd; NewText = $" {version}" } ] } ] } ]
             | None -> [ diagnostic ]
-        | AtVersion version when not (isShipped package.Text) && (SemanticVersion.tryParse version.Text).IsNone ->
+        // One that isn't a version at all is the manifest's error, as `version = "1.x"` would be.
+        | AtVersion version when
+            not (isShipped package.Text)
+            && (SemanticVersion.tryParse version.Text).IsNone
+            && (VersionRequirement.tryParse version.Text).IsSome
+            ->
             [ invalid version.Span $"A script names the exact version of '{package.Text}' it uses, as in `1.2.0`, not the versions it accepts, '{version.Text}': it has no lockfile, so the version it writes is the one it uses" ]
         | _ -> []
 
