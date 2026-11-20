@@ -28,20 +28,28 @@ version, and programs that read input. The [Nim demo](./nim-demo) is planned as 
 
 # Running a program in the page
 
-A playground program is a console program, so the page stands in for the terminal. This is the "`ConsoleHost` in a
-page" case on the [Hosts](./hosts#consolehost-in-a-page) page, not the [browser host](./hosts#a-browser-host). The
-program keeps its `Console` and its `@entry`, and only the embedder changes. The console host declares the WASI
-functions it calls with `@extern` (`packages/nanyx.console`): `fd_write`, `fd_read` and `proc_exit` for a program
-that prints and reads, which a page can provide in a few lines of JavaScript, and others for arguments, the
-environment, files and HTTP, which a page would have to provide or stub. The Hosts
-page lists what stands in the way, and each of those is a step of the plan below:
+**Decided (20 November): a host of its own, `nanyx.playground`**
+([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)), a browser stand-in for the console host. The page doesn't
+fake the console host's WASI calls.
+
+- Programs are source-identical: the host provides the same `Console` context, from `nanyx.console.core`, so every
+  tour example compiles unchanged. The browser compiler makes `nanyx.playground` a script's default host.
+- The first version provides `Console` (with `readLine`), `Random`, seeded by the page, and `Clock`. It doesn't
+  provide `FileSystem`, HTTP, `Env` or `Async`: a program that needs one is a compile error naming the host, by the
+  same check as for any host. This also settles which standard library modules a page offers: all of them, with
+  the ones it can't support reported when used.
+- Its imports are its own, not WASI, and the package ships the JavaScript that implements them, as the
+  [browser host](./hosts#a-browser-host) will. It is a small rehearsal for that host.
+- `dbg` output goes to the page apart from what the program prints.
+
+What the console host's route would have needed, and the host still needs in its own way:
 
 - Done: **the toolchain writes `.wasm`.** A browser loads only the binary format. The compiler assembles its
   WebAssembly text itself (`WasmBinary.fs`), without Wasmtime, so a browser build of the compiler can do it too, and
   `nanyx build` and `nanyx wasm` write `.wasm` for every embedder.
 - **The program runs in the module's start function**, before the page can reach the module's memory. For the page,
   the module exports its entry for the page to call, or imports its memory.
-- **`proc_exit` has to unwind.** The page's `proc_exit` throws, and the code that called the entry catches it and
+- **Exiting has to unwind.** The host's exit import throws, and the code that called the entry catches it and
   reads the exit code.
 - **Reading input blocks.** See "Input" below.
 
@@ -170,7 +178,7 @@ inlay hints come later, from the same compile, once the compiler runs in the pag
 with `Atomics.wait` on a buffer it shares with the page, and the page fills the buffer when you type a line. Shared
 buffers need the site to be cross-origin isolated, which means two response headers (`Cross-Origin-Opener-Policy`
 and `Cross-Origin-Embedder-Policy`) on the playground's page. Those headers restrict what else the page can embed.
-The first version has no input: a program that reads it gets an end of input, and the page says so.
+**Decided: the first version has input** ([#2151](https://github.com/nanyx-lang/nanyx/issues/2151)): the output pane shows an input line when the program reads, and the playground's route is served with the two headers.
 
 # Plan
 
@@ -180,22 +188,21 @@ The first version has no input: a program that reads it gets an end of input, an
    [#1234](https://github.com/nanyx-lang/nanyx/issues/1234)).
 2. Done: **Write `.wasm`.** The compiler writes the binary format, for `nanyx build` too, with tests that the binary runs as
    the text does ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).
-3. **An entry the page can call.** The module exports its entry, or imports its memory, and `proc_exit` unwinds. A
-   runner script, in a worker, provides `fd_write`, `fd_read` and `proc_exit` and runs a module end to end in a
-   headless browser test.
-4. **The page.** `/playground` on the docs site: the editor, Run and Stop, the output, the examples menu and share
-   links, with the compiler from step 1 or a service. Tour examples link to it.
-5. **Diagnostics in the editor**, then the WebAssembly text pane.
-6. **Later:** input, hover and inlay hints, and a choice of compiler version.
+3. **The `nanyx.playground` host** and its runner in a worker, with the entry callable by the page
+   ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)).
+4. **Input**, through an input line in the page ([#2151](https://github.com/nanyx-lang/nanyx/issues/2151)).
+5. **The browser build as a release asset**, fetched by the docs build. Decided: the playground runs the latest
+   release, not also a build of `main` ([#2152](https://github.com/nanyx-lang/nanyx/issues/2152)).
+6. **The page.** `/playground` on the docs site: CodeMirror, Run and Stop, the output, examples and share links. Decided:
+   it downloads the compiler at page load and compiles a hello world at once, so the first Run is quick
+   ([#2153](https://github.com/nanyx-lang/nanyx/issues/2153)).
+7. **Diagnostics in the editor**, then the WebAssembly text pane
+   ([#2154](https://github.com/nanyx-lang/nanyx/issues/2154)).
+8. **Later:** files and HTTP emulated in the page, hover and inlay hints, and a choice of compiler version.
 
 # Open questions
 
-- **The size budget.** What download is acceptable before the first compile, and whether the page loads the compiler
-  only when you first press Run or start typing.
-- **Which standard library.** The compiler embeds the standard library, so every module is available. Are modules
-  whose contexts a page can't provide, such as file access once it exists, hidden, or reported when imported?
 - **Packages.** A program that imports a package needs its source. The first version supports only the standard
   library.
-- **Versions.** Pinned to the latest release, as proposed, or also a build of `main` for trying what's just merged?
 - **Sharing long programs.** A URL holds a few kilobytes of compressed code comfortably. Longer programs could be
   shared as a GitHub gist instead.
