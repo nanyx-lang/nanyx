@@ -138,6 +138,7 @@
     <Compile Include="Downloads.fs" />
     <Compile Include="GitHub.fs" />
     <Compile Include="SemanticVersions.fs" />
+    <Compile Include="VersionSolver.fs" />
     <Compile Include="Lockfile.fs" />
     <Compile Include="PackageStore.fs" />
     <Compile Include="Manifest.fs" />
@@ -145,6 +146,7 @@
     <Compile Include="Package.fs" />
     <Compile Include="PackageArchive.fs" />
     <Compile Include="PackageIndex.fs" />
+    <Compile Include="Resolution.fs" />
     <Compile Include="NewPackage.fs" />
     <Compile Include="Script.fs" />
     <Compile Include="Migration.fs" />

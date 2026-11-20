@@ -816,6 +816,23 @@ context Lazy = (
 To fix it, make the member take a function of no parameters, as `later: (() -> int) -> int`, or give it the kind that
 takes a value, `#bind`.
 
+# NYX0047: Version conflict
+
+Resolution chooses a version of each package a build needs from the package index, the newest that every dependency
+accepts, and there is none: two packages need versions of a third that no version satisfies both
+of, a dependency accepts only versions the index doesn't have, or every version it accepts is yanked or needs a newer
+compiler. A build has [one version of each package](../tour/packages#versions), so the conflict can't be settled by
+using two. The message explains it a step at a time, from the dependencies that cause it:
+
+```text
+Because acme.json 2.0.0 depends on acme.core 2.0 and acme.web 1.0.0 depends on acme.core 1.0, acme.json 2.0.0 is incompatible with acme.web 1.0.0.
+And because app depends on acme.web 1.0 and acme.json 2.0, the dependencies can't all be satisfied.
+```
+
+A step that later steps refer to is numbered, `(1)`, and they say `(1)` where they use it. To fix it, change the
+requirement of one of the packages the message names: depend on a version of `acme.web` that accepts `acme.core` 2, say,
+or on an older `acme.json`.
+
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which
